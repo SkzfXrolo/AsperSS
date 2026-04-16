@@ -458,7 +458,7 @@ def init_postgresql_db():
                         INSERT INTO users (username, email, password_hash, roles, company_id, created_by)
                         VALUES (%s, %s, %s, %s, %s, %s)
                     ''', ('arefy_admin', 'admin@arefy.com', _default_hash,
-                          '["empresa", "administrador"]', arefy_row['id'], 'system'))
+                          '["admin", "empresa", "administrador"]', arefy_row['id'], 'system'))
                     conn.commit()
                     print("✅ Usuario admin 'arefy_admin' creado (contraseña: arefy2024!)")
         except Exception as e:

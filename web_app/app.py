@@ -797,14 +797,8 @@ def api_deactivate_company_user(user_id):
         return jsonify({'success': False, 'error': 'No puedes desactivar tu propia cuenta'}), 400
     
     try:
-        import sqlite3
-        from auth import DATABASE
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        cursor.execute('UPDATE users SET is_active = 0 WHERE id = ?', (user_id,))
-        conn.commit()
-        conn.close()
-        
+        with get_api_db_cursor() as cursor:
+            cursor.execute(f'UPDATE users SET is_active = FALSE WHERE id = {_PH}', (user_id,))
         return jsonify({'success': True, 'message': 'Usuario desactivado exitosamente'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -826,14 +820,8 @@ def api_activate_company_user(user_id):
         return jsonify({'success': False, 'error': 'No tienes permiso para modificar este usuario'}), 403
     
     try:
-        import sqlite3
-        from auth import DATABASE
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        cursor.execute('UPDATE users SET is_active = 1 WHERE id = ?', (user_id,))
-        conn.commit()
-        conn.close()
-        
+        with get_api_db_cursor() as cursor:
+            cursor.execute(f'UPDATE users SET is_active = TRUE WHERE id = {_PH}', (user_id,))
         return jsonify({'success': True, 'message': 'Usuario activado exitosamente'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -859,14 +847,8 @@ def api_delete_company_user(user_id):
         return jsonify({'success': False, 'error': 'No puedes eliminar tu propia cuenta'}), 400
     
     try:
-        import sqlite3
-        from auth import DATABASE
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
-        conn.commit()
-        conn.close()
-        
+        with get_api_db_cursor() as cursor:
+            cursor.execute(f'DELETE FROM users WHERE id = {_PH}', (user_id,))
         return jsonify({'success': True, 'message': 'Usuario eliminado exitosamente'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1424,11 +1406,35 @@ def setup_admin():
             password_hash = _hl.sha256('arefy2024!'.encode()).hexdigest()
             _insert_id(cursor,
                 f'INSERT INTO users (username, email, password_hash, roles, company_id, created_by) VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH})',
-                ('arefy_admin', 'admin@arefy.com', password_hash, '["empresa", "administrador"]', company_id, 'system')
+                ('arefy_admin', 'admin@arefy.com', password_hash, '["admin", "empresa", "administrador"]', company_id, 'system')
             )
         return jsonify({'status': 'ok', 'message': 'Usuario arefy_admin creado. Contraseña: arefy2024!'}), 200
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/db-status', methods=['GET'])
+def api_db_status():
+    """Muestra qué backend de BD está activo — útil para verificar deploys"""
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute('SELECT COUNT(*) as count FROM users')
+            row = cursor.fetchone()
+            user_count = _row_get(row, 0, 'count')
+            cursor.execute('SELECT COUNT(*) as count FROM companies')
+            row = cursor.fetchone()
+            company_count = _row_get(row, 0, 'count')
+        backend = 'postgresql' if _USE_PG else ('mysql' if _USE_MYSQL else 'sqlite')
+        db_url_set = bool(os.environ.get('DATABASE_URL'))
+        return jsonify({
+            'backend': backend,
+            'DATABASE_URL_set': db_url_set,
+            'users': user_count,
+            'companies': company_count,
+            'persistent': _USE_PG or _USE_MYSQL,
+        })
+    except Exception as e:
+        return jsonify({'backend': 'error', 'error': str(e)}), 500
 
 
 @app.route('/api/validate-token', methods=['POST'])
