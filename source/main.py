@@ -432,11 +432,11 @@ class DetallesVentana:
         messagebox.showinfo("Copiado", f"Se copiaron {len(rutas)} elementos al portapapeles")
 
 
-class MinecraftSSApp:
+class ArgusApp:
     def __init__(self, root):
         self.root = root
         
-        # Aplicar estilo moderno de ASPERS PROJECTS
+        # Aplicar estilo moderno de ARGUS PROJECTS
         if UI_STYLE_AVAILABLE:
             ModernUI.apply_window_style(self.root)
         else:
@@ -452,7 +452,7 @@ class MinecraftSSApp:
                 width, height = 1550, 900
                 min_width, min_height = 1350, 800
             
-            self.root.title("Aspers Projects - Security Scanner Pro")
+            self.root.title("Argus Projects — Security Scanner Pro")
             self.root.geometry(f"{width}x{height}")
             self.root.minsize(min_width, min_height)
             self.root.configure(bg="#0d1117")
@@ -732,7 +732,7 @@ class MinecraftSSApp:
         """Carga lista blanca EXPANDIDA al 200% - Rutas legítimas para evitar falsos positivos"""
         return {
             # ========== APLICACIÓN PROPIA ==========
-            'aplicación de ss', 'minecraft ss tool', 'minecraftsstool.exe', 'aspers',
+            'aplicación de ss', 'minecraft ss tool', 'minecraftsstool.exe', 'argusscanner.exe', 'argus projects', 'aspers',
             'source\\dist', 'source\\build', 'source\\main.py', 'source\\ui_style.py',
             
             # ========== JUEGOS Y LAUNCHERS LEGÍTIMOS ==========
@@ -841,7 +841,7 @@ class MinecraftSSApp:
             return True
         
         # Excluir el ejecutable propio por nombre exacto
-        if filename in ['minecraftsstool.exe', 'ss_tool.exe', 'aspers_scanner.exe']:
+        if filename in ['minecraftsstool.exe', 'argusscanner.exe', 'ss_tool.exe', 'aspers_scanner.exe']:
             return True
         
         # ========== VERIFICACIÓN DE WHITELIST EXPANDIDA ==========
@@ -2395,7 +2395,7 @@ class MinecraftSSApp:
     
     def _create_ui_fallback(self):
         """Fallback UI si ModernUI no está disponible"""
-        self.root.title("Aspers Projects - Security Scanner Pro")
+        self.root.title("Argus Projects — Security Scanner Pro")
         self.root.geometry("1500x950")
         self.root.configure(bg="#0a0e27")
         
@@ -4528,9 +4528,9 @@ class MinecraftSSApp:
                     # Continuar con el flujo normal de autenticación
             
             # Si no hay token válido, mostrar ventana de autenticación
-            # Crear ventana de autenticación con estilo ASPERS PROJECTS
+            # Crear ventana de autenticación con estilo ARGUS PROJECTS
             auth_window = tk.Toplevel(self.root)
-            auth_window.title("Aspers Projects - Autenticación Requerida")
+            auth_window.title("Argus Projects — Autenticación Requerida")
             auth_window.geometry("600x500")
             if UI_STYLE_AVAILABLE:
                 auth_window.configure(bg=ModernUI.COLORS['bg_primary'])
@@ -4788,7 +4788,7 @@ class MinecraftSSApp:
                 auth_result[0] = False
                 auth_window.destroy()
             
-            # Crear interfaz de autenticación con estilo ASPERS PROJECTS
+            # Crear interfaz de autenticación con estilo ARGUS PROJECTS
             bg_color = ModernUI.COLORS['bg_primary'] if UI_STYLE_AVAILABLE else "#0d1117"
             card_color = ModernUI.COLORS['card'] if UI_STYLE_AVAILABLE else "#161b22"
             text_primary = ModernUI.COLORS['text_primary'] if UI_STYLE_AVAILABLE else "#f0f6fc"
@@ -6345,7 +6345,7 @@ def main():
         import tkinter.messagebox as messagebox
         
         root = tk.Tk()
-        app = MinecraftSSApp(root)
+        app = ArgusApp(root)
         root.mainloop()
     except KeyboardInterrupt:
         print("\n⚠️ Aplicación interrumpida por el usuario")

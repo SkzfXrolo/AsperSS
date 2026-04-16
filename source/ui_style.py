@@ -1,5 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, scrolledtext
+import os
+import sys
 
 class ModernUI:
     """
@@ -87,6 +89,20 @@ class ModernUI:
             root.attributes('-alpha', 1.0)
         except Exception:
             pass
+        # Ícono de ventana (taskbar + barra de título)
+        try:
+            ico_path = os.path.join(ModernUI._base_path(), 'assets', 'logo.ico')
+            if os.path.exists(ico_path):
+                root.iconbitmap(ico_path)
+        except Exception:
+            pass
+
+    # ── Ruta base para assets empaquetados o en desarrollo ───────────────────
+    @staticmethod
+    def _base_path():
+        if getattr(sys, 'frozen', False):
+            return sys._MEIPASS
+        return os.path.dirname(os.path.abspath(__file__))
 
     # ── Header ───────────────────────────────────────────────────────────────
     @staticmethod
@@ -95,26 +111,45 @@ class ModernUI:
         hdr = tk.Frame(parent, bg=C['bg_secondary'])
         hdr.pack(fill=tk.X)
 
-        # Línea cyan superior (accent bar)
+        # Línea superior degradada (accent bar)
         tk.Frame(hdr, bg=C['accent_primary'], height=2).pack(fill=tk.X)
 
         inner = tk.Frame(hdr, bg=C['bg_secondary'])
-        inner.pack(fill=tk.X, padx=24, pady=14)
+        inner.pack(fill=tk.X, padx=24, pady=12)
 
         left = tk.Frame(inner, bg=C['bg_secondary'])
         left.pack(side=tk.LEFT, fill=tk.Y)
 
-        # Logo (canvas shield)
-        logo_c = tk.Canvas(left, width=38, height=38, bg=C['bg_secondary'],
-                           highlightthickness=0)
-        logo_c.pack(side=tk.LEFT, padx=(0, 12))
-        logo_c.create_polygon(19, 2, 3, 9, 3, 20, 19, 36, 35, 20, 35, 9,
-                              fill='', outline=C['accent_primary'], width=2)
-        logo_c.create_oval(11, 10, 27, 26,
-                           fill='', outline=C['accent_secondary'], width=1)
-        logo_c.create_line(12, 18, 17, 24, 26, 13,
-                           fill=C['accent_primary'], width=2,
-                           joinstyle='round', capstyle='round')
+        # ── Logo: imagen real si existe, canvas SVG como fallback ─────────
+        logo_path = os.path.join(ModernUI._base_path(), 'assets', 'logo.png')
+        _logo_img = None  # referencia para evitar garbage-collection
+        try:
+            if os.path.exists(logo_path):
+                from tkinter import PhotoImage
+                raw = PhotoImage(file=logo_path)
+                # Escalar a 48×48 preservando aspecto sin PIL
+                ow, oh = raw.width(), raw.height()
+                target = 48
+                sx = max(1, ow // target)
+                sy = max(1, oh // target)
+                _logo_img = raw.subsample(sx, sy)
+                lbl = tk.Label(left, image=_logo_img, bg=C['bg_secondary'])
+                lbl.image = _logo_img  # ancla para GC
+                lbl.pack(side=tk.LEFT, padx=(0, 14))
+            else:
+                raise FileNotFoundError
+        except Exception:
+            # Canvas fallback (escudo vectorial)
+            logo_c = tk.Canvas(left, width=42, height=42, bg=C['bg_secondary'],
+                               highlightthickness=0)
+            logo_c.pack(side=tk.LEFT, padx=(0, 12))
+            logo_c.create_polygon(21, 2, 3, 10, 3, 22, 21, 40, 39, 22, 39, 10,
+                                  fill='', outline=C['accent_primary'], width=2)
+            logo_c.create_oval(12, 11, 30, 29,
+                               fill='', outline=C['accent_secondary'], width=1)
+            logo_c.create_line(13, 20, 19, 27, 29, 14,
+                               fill=C['accent_primary'], width=2,
+                               joinstyle='round', capstyle='round')
 
         text_col = tk.Frame(left, bg=C['bg_secondary'])
         text_col.pack(side=tk.LEFT)
