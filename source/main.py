@@ -506,7 +506,7 @@ class ArgusApp:
         self.db_integration = None
         try:
             from db_integration import DatabaseIntegration
-            api_url = self.config.get('api_url', 'https://aspers-app.onrender.com')
+            api_url = self.config.get('api_url', 'https://asperss.onrender.com')
             scan_token = self.config.get('scan_token', '')
             
             if scan_token:
@@ -578,7 +578,7 @@ class ArgusApp:
             from ai_analyzer import AIAnalyzer
             # Pasar ruta de BD y API para que cargue patrones aprendidos dinámicamente
             db_path = 'scanner_db.sqlite'
-            api_url = self.config.get('api_url', 'https://aspers-app.onrender.com')
+            api_url = self.config.get('api_url', 'https://asperss.onrender.com')
             scan_token = self.config.get('scan_token', '')
             
             self.ai_analyzer = AIAnalyzer(
@@ -2308,9 +2308,9 @@ class ArgusApp:
                 "discord_webhook": "",
                 "auth_token": "",
                 "scan_timeout": 300,
-                "api_url": "https://aspers-app.onrender.com",
+                "api_url": "https://asperss.onrender.com",
                 "scan_token": "",
-                "web_url": "https://aspers-app.onrender.com",
+                "web_url": "https://asperss.onrender.com",
                 "enable_db_integration": False,
                 "enable_ai_analysis": False,
                 "enable_discord_report": False,
@@ -4501,7 +4501,7 @@ class ArgusApp:
             scan_token = self.config.get('scan_token', '')
             if scan_token:
                 print(f"🔑 Token encontrado en config, verificando validez...")
-                api_url = self.config.get('api_url', 'https://aspers-app.onrender.com')
+                api_url = self.config.get('api_url', 'https://asperss.onrender.com')
                 
                 # Intentar validar el token sin mostrar ventana
                 try:
@@ -4557,7 +4557,7 @@ class ArgusApp:
                         self.config = self.load_config()
                     
                     # Obtener token desde la API web
-                    api_url = self.config.get('api_url', 'https://aspers-app.onrender.com')
+                    api_url = self.config.get('api_url', 'https://asperss.onrender.com')
                     web_url = self.config.get('web_url', 'http://localhost:8080')
                     
                     # Abrir navegador para que el staff genere el token desde el panel web
@@ -4585,7 +4585,7 @@ class ArgusApp:
                         self.config = self.load_config()
                     
                     # Obtener URL de la API desde la configuración
-                    api_url = self.config.get('api_url', 'https://aspers-app.onrender.com')
+                    api_url = self.config.get('api_url', 'https://asperss.onrender.com')
                     print(f"🔍 Validando token contra API: {api_url}")
                     print(f"🔍 Token recibido (primeros 20 chars): {token[:20]}...")
                     
@@ -4648,8 +4648,8 @@ class ArgusApp:
                                                 with open(config_path, 'r', encoding='utf-8') as f:
                                                     existing_config = json.load(f)
                                                 existing_config['scan_token'] = token
-                                                existing_config['api_url'] = self.config.get('api_url', existing_config.get('api_url', 'https://aspers-app.onrender.com'))
-                                                existing_config['web_url'] = self.config.get('web_url', existing_config.get('web_url', 'https://aspers-app.onrender.com'))
+                                                existing_config['api_url'] = self.config.get('api_url', existing_config.get('api_url', 'https://asperss.onrender.com'))
+                                                existing_config['web_url'] = self.config.get('web_url', existing_config.get('web_url', 'https://asperss.onrender.com'))
                                                 self.config = existing_config
                                             else:
                                                 # Si no existe, usar el config actual y agregar token
