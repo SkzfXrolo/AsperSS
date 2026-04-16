@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagnóstico Login</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1e2329;
+            color: #f0f6fc;
+        }
+        .test-section {
+            background: #0d1117;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border: 1px solid #30363d;
+        }
+        button {
+            background: #238636;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2ea043;
+        }
+        pre {
+            background: #0d1117;
+            padding: 10px;
+            border-radius: 6px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Diagnóstico de Login</h1>
+    
+    <div class="test-section">
+        <h2>Test 1: Verificar Usuario en BD</h2>
+        <button onclick="testUserExists()">Verificar Usuario</button>
+        <pre id="result1">Haz clic en el botón...</pre>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 2: Probar Login Directo</h2>
+        <button onclick="testLogin()">Probar Login</button>
+        <pre id="result2">Haz clic en el botón...</pre>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 3: Login desde Formulario</h2>
+        <form id="login-form" onsubmit="testFormLogin(event)">
+            <input type="text" id="username" placeholder="Usuario" value="arefy_admin" style="width: 100%; padding: 8px; margin: 5px 0; background: #0d1117; border: 1px solid #30363d; color: #f0f6fc; border-radius: 4px;">
+            <input type="password" id="password" placeholder="Contraseña" value="arefy2024!" style="width: 100%; padding: 8px; margin: 5px 0; background: #0d1117; border: 1px solid #30363d; color: #f0f6fc; border-radius: 4px;">
+            <select id="login-type" style="width: 100%; padding: 8px; margin: 5px 0; background: #0d1117; border: 1px solid #30363d; color: #f0f6fc; border-radius: 4px;">
+                <option value="individual">Individual</option>
+                <option value="empresa" selected>Empresarial</option>
+            </select>
+            <button type="submit">Probar Login</button>
+        </form>
+        <pre id="result3">Completa el formulario y haz clic...</pre>
+    </div>
+
+    <script>
+        async function testUserExists() {
+            try {
+                const response = await fetch('/api/admin/check-user?username=arefy_admin');
+                const data = await response.json();
+                document.getElementById('result1').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('result1').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function testLogin() {
+            try {
+                const response = await fetch('/api/test-login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        username: 'arefy_admin',
+                        password: 'arefy2024!',
+                        login_type: 'empresa'
+                    })
+                });
+                const data = await response.json();
+                document.getElementById('result2').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('result2').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function testFormLogin(event) {
+            event.preventDefault();
+            const formData = new FormData();
+            formData.append('username', document.getElementById('username').value);
+            formData.append('password', document.getElementById('password').value);
+            formData.append('login_type', document.getElementById('login-type').value);
+            
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.redirected) {
+                    document.getElementById('result3').textContent = '✅ ÉXITO - Redirigido a: ' + response.url;
+                } else {
+                    const text = await response.text();
+                    document.getElementById('result3').textContent = 'Respuesta: ' + text.substring(0, 500);
+                }
+            } catch (error) {
+                document.getElementById('result3').textContent = 'Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
+

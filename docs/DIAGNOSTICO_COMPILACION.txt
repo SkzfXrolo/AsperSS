@@ -1,0 +1,36 @@
+================================================================================
+  DIAGNOSTICO DE COMPILACION
+================================================================================
+
+Para ayudarte mejor, necesito saber el error EXACTO que ves.
+
+Por favor:
+1. Ejecuta: BAT\01-Compilar\COMPILAR_FINAL.bat
+2. Copia TODO el mensaje de error que aparece
+3. Especialmente la ultima parte que dice "ERROR durante la compilacion"
+
+O ejecuta: BAT\01-Compilar\TEST_COMPILAR.bat
+Y copia el error completo.
+
+================================================================================
+  CAMBIOS REALIZADOS
+================================================================================
+
+1. Excluido matplotlib y numpy completamente del .spec
+2. Simplificado el .spec para evitar conflictos
+3. Cambiado pathex de ['source'] a [] (PyInstaller detecta automaticamente)
+4. Reducido excludes a solo lo esencial
+
+================================================================================
+  SI SIGUE FALLANDO
+================================================================================
+
+Puede ser que el problema sea:
+1. Un modulo que no se puede importar
+2. Un error de sintaxis en main.py
+3. Un problema con PyInstaller mismo
+
+Por favor comparte el error completo para poder ayudarte mejor.
+
+================================================================================
+

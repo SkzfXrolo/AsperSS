@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Staff - ASPERS Projects</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body data-user-id="{{ user.id if user else 0 }}">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <span class="brand-icon">
+                <svg width="22" height="22" viewBox="0 0 26 26" fill="none">
+                    <path d="M13 2L4 7V13C4 18.55 7.84 23.74 13 25C18.16 23.74 22 18.55 22 13V7L13 2Z"
+                          stroke="#00c8ff" stroke-width="1.5" stroke-linejoin="round"/>
+                    <path d="M9 13L12 16L17 10" stroke="#00c8ff" stroke-width="1.5"
+                          stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </span>
+            <span class="brand-text">ASPERS</span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/panel" class="nav-item active" data-section="dashboard">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path d="M3 10L9 4L9 9L17 9L17 11L9 11L9 16L3 10Z" fill="currentColor"/>
+                </svg>
+                <span>Dashboard</span>
+            </a>
+            <a href="/panel" class="nav-item" data-section="generar-app">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path d="M10 3L10 17M3 10L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <span>Generar App</span>
+            </a>
+            <a href="/panel" class="nav-item" data-section="tokens">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+                    <path d="M10 7L10 13M7 10L13 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <span>Tokens</span>
+            </a>
+            <a href="/panel" class="nav-item" data-section="resultados">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path d="M3 3L17 17M3 17L17 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <span>Resultados</span>
+            </a>
+            <a href="/panel" class="nav-item" data-section="aprendizaje">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path d="M10 3C6.13 3 3 6.13 3 10C3 13.87 6.13 17 10 17C13.87 17 17 13.87 17 10C17 6.13 13.87 3 10 3ZM10 15C7.24 15 5 12.76 5 10C5 7.24 7.24 5 10 5C12.76 5 15 7.24 15 10C15 12.76 12.76 15 10 15Z" fill="currentColor"/>
+                    <path d="M10 7L10 10M10 13L10 13.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <span>Aprendizaje IA</span>
+            </a>
+            {% if user and ('admin' in user.roles or 'administrador' in user.roles) %}
+            <a href="/panel" class="nav-item" data-section="administracion">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path d="M10 2L12 8L18 8L13 12L15 18L10 14L5 18L7 12L2 8L8 8L10 2Z" fill="currentColor"/>
+                </svg>
+                <span>Administración</span>
+            </a>
+            {% endif %}
+            {% if user and user.company_id %}
+            <a href="/panel" class="nav-item" data-section="mi-empresa">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path d="M10 2L3 7L3 18L17 18L17 7L10 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>Mi Empresa</span>
+            </a>
+            {% endif %}
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-info-sidebar">
+                <span class="user-name-sidebar">{{ user.username if user else 'Usuario' }}</span>
+                {% if user and 'admin' in user.roles %}
+                <span class="user-role-badge">Admin</span>
+                {% elif user and 'administrador' in user.roles %}
+                <span class="user-role-badge">Admin Empresa</span>
+                {% elif user and 'empresa' in user.roles %}
+                <span class="user-role-badge">Empresa</span>
+                {% endif %}
+            </div>
+            <a href="/logout" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path d="M7 17L12 12L7 7M12 12L3 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>Cerrar Sesión</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="panel-header">
+            <h1 class="panel-title" id="section-title">Dashboard</h1>
+            <div class="header-actions">
+                <div class="user-info">
+                    <span class="user-name">{{ user.username if user else 'Usuario' }}</span>
+                    {% if user and 'admin' in user.roles %}
+                    <span class="user-role" style="background: #f59e0b; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-left: 8px;">Admin</span>
+                    {% elif user and 'administrador' in user.roles %}
+                    <span class="user-role" style="background: #3b82f6; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-left: 8px;">Admin Empresa</span>
+                    {% elif user and 'empresa' in user.roles %}
+                    <span class="user-role" style="background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-left: 8px;">Empresa</span>
+                    {% endif %}
+                </div>
+            </div>
+        </header>
+
+        <!-- Dashboard Section -->
+        <section class="panel-section active" id="dashboard-section">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="total-scans">0</div>
+                        <div class="stat-label">Escaneos Totales</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⚠️</div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="total-issues">0</div>
+                        <div class="stat-label">Issues Detectados</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🖥️</div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="unique-machines">0</div>
+                        <div class="stat-label">Máquinas Únicas</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🔑</div>
+                    <div class="stat-content">
+                        <div class="stat-value" id="active-tokens">0</div>
+                        <div class="stat-label">Tokens Activos</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="recent-activity">
+                <h2 class="section-subtitle">Actividad Reciente</h2>
+                <div class="activity-list" id="recent-scans">
+                    <div class="activity-item">
+                        <div class="activity-icon">⏳</div>
+                        <div class="activity-content">
+                            <div class="activity-title">Cargando...</div>
+                            <div class="activity-time">Espera un momento</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Generar App Section -->
+        <section class="panel-section" id="generar-app-section">
+            <div class="section-card">
+                <h2 class="section-subtitle">Gestión de Aplicación - ASPERS Projects</h2>
+                <p class="section-description">
+                    <strong>IMPORTANTE:</strong> Las actualizaciones de IA se descargan automáticamente sin necesidad de recompilar.
+                    Solo compila cuando hay cambios en el código del programa.
+                </p>
+                
+                <div class="app-actions-grid">
+                    <div class="app-action-card">
+                        <div class="action-icon">📥</div>
+                        <h3 class="action-title">Descargar Aplicación Actualizada</h3>
+                        <p class="action-description">
+                            Descarga el ejecutable más reciente sin compilar.
+                            Incluye todas las actualizaciones de IA descargadas automáticamente.
+                        </p>
+                        <button class="btn btn-primary btn-large" id="download-app-btn">
+                            <span>Descargar Aplicación</span>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M10 3L10 17M3 10L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="app-action-card">
+                        <div class="action-icon">🔨</div>
+                        <h3 class="action-title">Compilar Nueva Versión</h3>
+                        <p class="action-description">
+                            Solo usa esto si hay cambios en el código del programa.
+                            La compilación puede tardar varios minutos.
+                        </p>
+                        <button class="btn btn-secondary btn-large" id="compile-app-btn">
+                            <span>Compilar Ejecutable</span>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M10 3L10 17M3 10L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="generation-status" id="generation-status" style="display: none;">
+                    <div class="status-indicator">
+                        <div class="status-dot"></div>
+                        <span>Listo</span>
+                    </div>
+                </div>
+
+                <div class="progress-container" id="progress-container" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <div class="progress-text" id="progress-text">0%</div>
+                </div>
+
+                <div class="generation-log" id="generation-log" style="display: none;">
+                    <h3>Log de Compilación - ASPERS Projects</h3>
+                    <div class="log-content" id="log-content"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tokens Section -->
+        <section class="panel-section" id="tokens-section">
+            <div class="section-header-actions">
+                <h2 class="section-subtitle">Gestión de Tokens</h2>
+                <button class="btn btn-primary" id="create-token-btn">
+                    <span>Crear Nuevo Token</span>
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M10 3L10 17M3 10L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="tokens-table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Token</th>
+                            <th>Fecha Creación</th>
+                            <th>Creado Por</th>
+                            <th>Usos</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tokens-table-body">
+                        <tr>
+                            <td colspan="6" class="loading-cell">Cargando tokens...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Resultados Section -->
+        <section class="panel-section" id="resultados-section">
+            <div class="section-header-actions">
+                <h2 class="section-subtitle">Resultados de Escaneos - ASPERS Projects</h2>
+                <div class="filter-controls">
+                    <input type="text" class="search-input" id="search-results" placeholder="Buscar por máquina, archivo...">
+                    <select class="filter-select" id="filter-severity">
+                        <option value="">Todas las severidades</option>
+                        <option value="CRITICAL">Crítico</option>
+                        <option value="SOSPECHOSO">Sospechoso</option>
+                        <option value="POCO_SOSPECHOSO">Poco Sospechoso</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="results-table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Máquina</th>
+                            <th>Archivos Escaneados</th>
+                            <th>Issues</th>
+                            <th>Duración</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-table-body">
+                        <tr>
+                            <td colspan="7" class="loading-cell">Cargando resultados...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Vista Detallada de Issues -->
+        <section class="panel-section" id="issues-detail-section" style="display: none;">
+            <div class="section-header-actions">
+                <div>
+                    <h2 class="section-subtitle">Resultados del Escaneo</h2>
+                    <p class="section-description" id="scan-context">Escaneo #<span id="current-scan-id">-</span></p>
+                </div>
+                <div>
+                    <button class="btn btn-secondary" id="back-to-scans-btn">
+                        <span>← Volver a Escaneos</span>
+                    </button>
+                    <button class="btn btn-primary" id="download-report-btn">
+                        <span>📥 Descargar Reporte HTML</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Banner de Detección -->
+            <div class="detection-banner" id="detection-banner" style="display: none;">
+                <div class="detection-icon">⚠️</div>
+                <div class="detection-content">
+                    <h3 class="detection-title">Detectado</h3>
+                    <p class="detection-message">ASPERS Projects ha detectado indicadores de trampas. Revisa el análisis detallado a continuación.</p>
+                </div>
+            </div>
+
+            <!-- Tabs de Navegación de Subpáginas -->
+            <div class="scan-subnav">
+                <div class="subnav-row">
+                    <button class="subnav-item active" data-subpage="vista-general">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M10 2L3 7L3 18L17 18L17 7L10 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Vista general</span>
+                    </button>
+                    <button class="subnav-item" data-subpage="cuentas">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M16 7C16 9.20914 14.2091 11 12 11C9.79086 11 8 9.20914 8 7C8 4.79086 9.79086 3 12 3C14.2091 3 16 4.79086 16 7Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 14C8.13401 14 5 17.134 5 21H19C19 17.134 15.866 14 12 14Z" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        <span>Cuentas</span>
+                    </button>
+                    <button class="subnav-item" data-subpage="launcher-profiles">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M3 3H17V17H3V3Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M3 3L17 17M17 3L3 17" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        <span>Launcher Profiles</span>
+                    </button>
+                    <button class="subnav-item" data-subpage="resource-packs">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M3 3H17V17H3V3Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M3 3L17 17M17 3L3 17" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        <span>Resource Packs</span>
+                    </button>
+                    <button class="subnav-item" data-subpage="historial-archivos">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M3 3H7V7H3V3Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M13 3H17V7H13V3Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M3 13H7V17H3V13Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M13 13H17V17H13V13Z" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        <span>Historial de archivos</span>
+                    </button>
+                    <button class="subnav-item" data-subpage="utilities">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M10 2L12 8L18 8L13 12L15 18L10 14L5 18L7 12L2 8L8 8L10 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Utilities</span>
+                    </button>
+                    <button class="subnav-item" data-subpage="archivos-windows">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M3 3H9V9H3V3Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M11 3H17V9H11V3Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M3 11H9V17H3V11Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M11 11H17V17H11V11Z" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        <span>Archivos de Windows</span>
+                    </button>
+                    <button class="subnav-item" data-subpage="captura-pantalla">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M3 3H17V17H3V3Z" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M3 13L7 9L11 13L17 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <span>Captura de pantalla</span>
+                    </button>
+                </div>
+                <div class="subnav-row">
+                    <button class="subnav-item" data-subpage="detecciones-personalizadas">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M3 3L17 17M17 3L3 17" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        <span>Detecciones personalizadas</span>
+                    </button>
+                    <button class="subnav-item" data-subpage="escaneos-previos">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M12 5L7 10L12 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Escaneos previos</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Contenedor de Subpáginas -->
+            <div class="subpages-container">
+                <!-- Vista General (por defecto visible) -->
+                <div class="subpage-content active" id="subpage-vista-general">
+                    <!-- Layout de 3 Columnas Profesional -->
+            <div class="scan-results-layout">
+                <!-- Columna Izquierda: Información del Escaneo -->
+                <div class="scan-info-column">
+                    <h3 class="column-title">Información del Escaneo</h3>
+                    <div class="scan-info-list">
+                        <div class="info-item">
+                            <span class="info-label">ID:</span>
+                            <span class="info-value" id="detail-scan-id">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Sistema Operativo:</span>
+                            <span class="info-value" id="detail-os">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Máquina:</span>
+                            <span class="info-value" id="detail-machine-name">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">VM:</span>
+                            <span class="info-value" id="detail-vm">No</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Tipo de Conexión:</span>
+                            <span class="info-value" id="detail-connection">Residencial</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">País:</span>
+                            <span class="info-value" id="detail-country">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Username Minecraft:</span>
+                            <span class="info-value" id="detail-minecraft-username">-</span>
+                        </div>
+                        <div class="info-item" id="ban-history-item" style="display: none;">
+                            <span class="info-label">Historial de Bans:</span>
+                            <div class="ban-history-list" id="ban-history-list"></div>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Archivos Escaneados:</span>
+                            <span class="info-value" id="detail-files-count">0</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Velocidad de Escaneo:</span>
+                            <span class="info-value" id="detail-scan-speed">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Fecha:</span>
+                            <span class="info-value" id="detail-scan-date">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Columna Central: Gráfico de Indicaciones -->
+                <div class="scan-chart-column">
+                    <h3 class="column-title">Gráfico de Indicaciones</h3>
+                    <p class="column-subtitle">Representación visual de las indicaciones encontradas durante el escaneo</p>
+                    <div class="chart-container">
+                        <canvas id="severity-chart"></canvas>
+                    </div>
+                    <div class="chart-legend" id="chart-legend"></div>
+                </div>
+
+                <!-- Columna Derecha: Log de Indicaciones -->
+                <div class="scan-log-column">
+                    <h3 class="column-title">Log de Indicaciones</h3>
+                    <p class="column-subtitle">Log detallado de todas las indicaciones encontradas durante el escaneo</p>
+                    <div class="severity-summary">
+                        <div class="severity-box severity-clean">
+                            <div class="severity-icon">✓</div>
+                            <div class="severity-content">
+                                <div class="severity-label">Limpio</div>
+                                <div class="severity-count" id="count-clean">0</div>
+                            </div>
+                        </div>
+                        <div class="severity-box severity-alert">
+                            <div class="severity-icon">⚠</div>
+                            <div class="severity-content">
+                                <div class="severity-label">Alerta</div>
+                                <div class="severity-count" id="count-alert">0</div>
+                            </div>
+                        </div>
+                        <div class="severity-box severity-severe">
+                            <div class="severity-icon">✗</div>
+                            <div class="severity-content">
+                                <div class="severity-label">Severo</div>
+                                <div class="severity-count" id="count-severe">0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </div>
+
+                <!-- Cuentas -->
+                <div class="subpage-content" id="subpage-cuentas">
+                    <div class="subpage-placeholder">
+                        <h3>Cuentas</h3>
+                        <p>Información sobre las cuentas de Minecraft detectadas en este escaneo.</p>
+                        <p class="placeholder-note">Esta sección se mostrará cuando se implemente el análisis de cuentas.</p>
+                    </div>
+                </div>
+
+                <!-- Launcher Profiles -->
+                <div class="subpage-content" id="subpage-launcher-profiles">
+                    <div class="subpage-placeholder">
+                        <h3>Launcher Profiles</h3>
+                        <p>Perfiles del launcher de Minecraft detectados.</p>
+                        <p class="placeholder-note">Esta sección se mostrará cuando se implemente el análisis de perfiles.</p>
+                    </div>
+                </div>
+
+                <!-- Resource Packs -->
+                <div class="subpage-content" id="subpage-resource-packs">
+                    <div class="subpage-placeholder">
+                        <h3>Resource Packs</h3>
+                        <p>Resource packs instalados y analizados.</p>
+                        <p class="placeholder-note">Esta sección se mostrará cuando se implemente el análisis de resource packs.</p>
+                    </div>
+                </div>
+
+                <!-- Historial de Archivos -->
+                <div class="subpage-content" id="subpage-historial-archivos">
+                    <div class="subpage-placeholder">
+                        <h3>Historial de Archivos</h3>
+                        <p>Historial completo de archivos modificados y accedidos.</p>
+                        <p class="placeholder-note">Esta sección se mostrará cuando se implemente el análisis de historial.</p>
+                    </div>
+                </div>
+
+                <!-- Utilities -->
+                <div class="subpage-content" id="subpage-utilities">
+                    <div class="subpage-placeholder">
+                        <h3>Utilities</h3>
+                        <p>Utilidades y herramientas detectadas.</p>
+                        <p class="placeholder-note">Esta sección se mostrará cuando se implemente el análisis de utilities.</p>
+                    </div>
+                </div>
+
+                <!-- Archivos de Windows -->
+                <div class="subpage-content" id="subpage-archivos-windows">
+                    <div class="subpage-placeholder">
+                        <h3>Archivos de Windows</h3>
+                        <p>Archivos del sistema Windows analizados.</p>
+                        <p class="placeholder-note">Esta sección se mostrará cuando se implemente el análisis de archivos de Windows.</p>
+                    </div>
+                </div>
+
+                <!-- Captura de Pantalla -->
+                <div class="subpage-content" id="subpage-captura-pantalla">
+                    <div class="subpage-placeholder">
+                        <h3>Captura de Pantalla</h3>
+                        <p>Capturas de pantalla tomadas durante el escaneo.</p>
+                        <p class="placeholder-note">Esta sección se mostrará cuando se implemente la captura de pantalla.</p>
+                    </div>
+                </div>
+
+                <!-- Detecciones Personalizadas -->
+                <div class="subpage-content" id="subpage-detecciones-personalizadas">
+                    <div class="subpage-placeholder">
+                        <h3>Detecciones Personalizadas</h3>
+                        <p>Detecciones configuradas personalmente por el staff.</p>
+                        <p class="placeholder-note">Esta sección se mostrará cuando se implementen las detecciones personalizadas.</p>
+                    </div>
+                </div>
+
+                <!-- Escaneos Previos -->
+                <div class="subpage-content" id="subpage-escaneos-previos">
+                    <div class="subpage-placeholder">
+                        <h3>Escaneos Previos</h3>
+                        <p>Historial de escaneos anteriores de esta máquina.</p>
+                        <div id="previous-scans-list" class="previous-scans-container">
+                            <div class="loading-cell">Cargando escaneos previos...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Barra de acciones masivas -->
+            <div class="bulk-actions-bar" id="bulk-actions-bar" style="display: none;">
+                <div class="bulk-actions-info">
+                    <span id="selected-count">0</span> archivos seleccionados
+                </div>
+                <div class="bulk-actions-buttons">
+                    <button class="btn btn-sm btn-secondary" id="bulk-select-all-btn">
+                        ✓ Seleccionar Todos
+                    </button>
+                    <button class="btn btn-sm btn-secondary" id="bulk-deselect-all-btn">
+                        ✖️ Deseleccionar Todos
+                    </button>
+                    <button class="btn btn-sm btn-danger" id="bulk-mark-hack-btn" disabled>
+                        ⚠️ Marcar Seleccionados como Hack
+                    </button>
+                    <button class="btn btn-sm btn-success" id="bulk-mark-legitimate-btn" disabled>
+                        ✅ Marcar Seleccionados como Legítimo
+                    </button>
+                </div>
+            </div>
+
+            <div class="issues-list-container" id="issues-list-container">
+                <div class="loading-cell">Cargando issues...</div>
+            </div>
+        </section>
+
+        <!-- Aprendizaje IA Section -->
+        <section class="panel-section" id="aprendizaje-section">
+            <div class="section-card">
+                <div class="section-header-actions">
+                    <div>
+                        <h2 class="section-subtitle">Sistema de Aprendizaje Progresivo</h2>
+                        <p class="section-description">
+                            ASPERS Projects aprende continuamente de cada hack confirmado por el staff.
+                            Este sistema mejora automáticamente la detección con el tiempo.
+                            <strong>Los clientes descargan automáticamente los nuevos patrones sin necesidad de recompilar.</strong>
+                        </p>
+                    </div>
+                    <button class="btn btn-primary" id="update-model-btn">
+                        <span>Actualizar Modelo de IA</span>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M10 3L10 17M3 10L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="learning-stats">
+                    <div class="stat-card">
+                        <div class="stat-icon">🧠</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="learned-patterns-count">0</div>
+                            <div class="stat-label">Patrones Aprendidos</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">🔐</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="learned-hashes-count">0</div>
+                            <div class="stat-label">Hashes Aprendidos</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">✅</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="total-feedbacks-count">0</div>
+                            <div class="stat-label">Feedbacks del Staff</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="learned-patterns-container">
+                    <h3 class="subsection-title">Patrones Aprendidos por ASPERS Projects</h3>
+                    <div class="patterns-list" id="patterns-list">
+                        <div class="loading-cell">Cargando patrones aprendidos...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Administración Section (Solo para admins y administradores de empresa) -->
+        {% if user and ('admin' in user.roles or 'administrador' in user.roles) %}
+        <section class="panel-section" id="administracion-section">
+            <div class="section-content">
+                <h2 class="section-title">Administración - ASPERS Projects</h2>
+                <p class="section-description">Gestiona usuarios y tokens de registro</p>
+
+                {% if user and 'admin' in user.roles %}
+                <!-- Contenido para Super Admin -->
+                <!-- Generar Token de Registro -->
+                <div class="card">
+                    <h3 class="card-title">Generar Token de Registro</h3>
+                    <p class="card-description">Crea tokens de un solo uso para que nuevos usuarios se registren</p>
+                    <form id="registration-token-form">
+                        <div class="form-group">
+                            <label>Descripción (opcional)</label>
+                            <input type="text" id="reg-token-description" placeholder="Ej: Token para nuevo staff">
+                        </div>
+                        <div class="form-group">
+                            <label>Horas de validez (default: 24 horas)</label>
+                            <input type="number" id="reg-token-expires" value="24" min="1" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Generar Token</button>
+                    </form>
+                    <div id="registration-token-result" style="margin-top: 20px; display: none;">
+                        <div class="token-display">
+                            <code id="generated-registration-token"></code>
+                            <button class="btn btn-secondary" id="copy-registration-token-btn">Copiar</button>
+                        </div>
+                        <p class="warning-text">⚠️ Este token solo se mostrará una vez. Compártelo de forma segura.</p>
+                    </div>
+                </div>
+
+                <!-- Generar Enlace de Descarga Temporal -->
+                <div class="card" style="margin-top: 24px;">
+                    <h3 class="card-title">🔗 Generar Enlace de Descarga Temporal</h3>
+                    <p class="card-description">Crea enlaces temporales para compartir el ejecutable sin necesidad de iniciar sesión (similar a Ocean)</p>
+                    <form id="download-link-form">
+                        <div class="form-group">
+                            <label>Archivo</label>
+                            <select id="download-link-filename" required>
+                                <option value="MinecraftSSTool.exe">MinecraftSSTool.exe</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Horas de validez (default: 24 horas)</label>
+                            <input type="number" id="download-link-expires" value="24" min="1" max="168" required>
+                            <small>Máximo 7 días (168 horas)</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Máximo de descargas (default: 1)</label>
+                            <input type="number" id="download-link-max" value="1" min="1" max="100" required>
+                            <small>El enlace se desactivará después de alcanzar este límite</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Descripción (opcional)</label>
+                            <input type="text" id="download-link-description" placeholder="Ej: Enlace para usuario X">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Generar Enlace</button>
+                    </form>
+                    <div id="download-link-result" style="margin-top: 20px; display: none;">
+                        <div class="token-display">
+                            <input type="text" id="generated-download-link" readonly style="width: 100%; padding: 8px; font-family: monospace; border: 1px solid #30363d; background: #0d1117; color: #c9d1d9; border-radius: 4px;">
+                            <button class="btn btn-secondary" id="copy-download-link-btn" style="margin-top: 10px;">📋 Copiar Enlace</button>
+                        </div>
+                        <p class="warning-text" style="margin-top: 10px;">✅ Este enlace permite descargar el ejecutable sin iniciar sesión. Compártelo de forma segura.</p>
+                    </div>
+                </div>
+
+                <!-- Lista de Enlaces de Descarga -->
+                <div class="card" style="margin-top: 24px;">
+                    <h3 class="card-title">📋 Enlaces de Descarga Activos</h3>
+                    <div id="download-links-list">
+                        <p class="loading-text">Cargando enlaces...</p>
+                    </div>
+                </div>
+
+                <!-- Lista de Tokens de Registro -->
+                <div class="card" style="margin-top: 24px;">
+                    <h3 class="card-title">Tokens de Registro Activos</h3>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Token</th>
+                                    <th>Creado por</th>
+                                    <th>Fecha de Creación</th>
+                                    <th>Expira</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="registration-tokens-table-body">
+                                <tr>
+                                    <td colspan="5" class="loading-cell">Cargando tokens...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Lista de Usuarios -->
+                <div class="card" style="margin-top: 24px;">
+                    <h3 class="card-title">Usuarios Registrados</h3>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th>Email</th>
+                                    <th>Rol</th>
+                                    <th>Último Login</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-table-body">
+                                <tr>
+                                    <td colspan="5" class="loading-cell">Cargando usuarios...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if user and 'administrador' in user.roles %}
+                <!-- Contenido para Administradores de Empresa -->
+                <!-- Gestión de Usuarios de la Empresa -->
+                <div class="card">
+                    <h3 class="card-title">Gestión de Usuarios de la Empresa</h3>
+                    <p class="card-description">Administra los usuarios de tu empresa. Puedes desactivar usuarios que se retiren o eliminar cuentas innecesarias.</p>
+                    
+                    <div class="table-container" style="margin-top: 20px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th>Email</th>
+                                    <th>Roles</th>
+                                    <th>Último Login</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="company-users-admin-table-body">
+                                <tr>
+                                    <td colspan="6" class="loading-cell">Cargando usuarios de la empresa...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+        {% endif %}
+
+        <!-- Mi Empresa Section (Solo para usuarios de empresa) -->
+        {% if user and user.company_id %}
+        <section class="panel-section" id="mi-empresa-section">
+            <div class="section-content">
+                <h2 class="section-title">Mi Empresa - ASPERS Projects</h2>
+                <p class="section-description">Gestiona usuarios y tokens de tu empresa</p>
+
+                <!-- Información de la Empresa -->
+                <div class="card" id="company-info-card">
+                    <h3 class="card-title">Información de la Empresa</h3>
+                    <div class="loading-cell">Cargando información...</div>
+                </div>
+
+                <!-- Generar Token de Registro (Solo para admins de empresa) -->
+                {% if user and 'administrador' in user.roles %}
+                <div class="card" style="margin-top: 24px;">
+                    <h3 class="card-title">Generar Token de Registro</h3>
+                    <p class="card-description">Crea tokens para que nuevos usuarios se unan a tu empresa</p>
+                    <form id="company-registration-token-form">
+                        <div class="form-group">
+                            <label>Descripción (opcional)</label>
+                            <input type="text" id="company-reg-token-description" placeholder="Ej: Token para nuevo staff">
+                        </div>
+                        <div class="form-group">
+                            <label>Horas de validez (default: 24 horas)</label>
+                            <input type="number" id="company-reg-token-expires" value="24" min="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" id="company-reg-token-is-admin" style="cursor: pointer;"> 
+                                <span>Clickear aquí para generar token de administrador</span>
+                            </label>
+                            <small style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 4px; display: block;">
+                                ⚠️ Máximo 3 administradores por empresa
+                            </small>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Generar Token</button>
+                    </form>
+                    <div id="company-registration-token-result" style="margin-top: 20px; display: none;">
+                        <div class="token-display">
+                            <code id="generated-company-registration-token"></code>
+                            <button class="btn btn-secondary" id="copy-company-registration-token-btn">Copiar</button>
+                        </div>
+                        <p class="warning-text">⚠️ Este token solo se mostrará una vez. Compártelo de forma segura.</p>
+                    </div>
+                </div>
+
+                <!-- Lista de Tokens de Escaneo de la Empresa -->
+                <div class="card" style="margin-top: 24px;">
+                    <h3 class="card-title">Tokens de Escaneo de la Empresa</h3>
+                    <p class="card-description">Tokens de escaneo creados por usuarios de la empresa (incluyendo usados y expirados)</p>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Token</th>
+                                    <th>Usos</th>
+                                    <th>Fecha Creación</th>
+                                    <th>Creado Por</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="company-scan-tokens-table-body">
+                                <tr>
+                                    <td colspan="6" class="loading-cell">Cargando tokens...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Lista de Tokens de Registro de la Empresa -->
+                <div class="card" style="margin-top: 24px;">
+                    <h3 class="card-title">Tokens de Registro de la Empresa</h3>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Token</th>
+                                    <th>Tipo</th>
+                                    <th>Fecha de Creación</th>
+                                    <th>Expira</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="company-tokens-table-body">
+                                <tr>
+                                    <td colspan="5" class="loading-cell">Cargando tokens...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Lista de Usuarios de la Empresa -->
+                <div class="card" style="margin-top: 24px;">
+                    <h3 class="card-title">Usuarios de la Empresa</h3>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th>Email</th>
+                                    <th>Roles</th>
+                                    <th>Último Login</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="company-users-table-body">
+                                <tr>
+                                    <td colspan="5" class="loading-cell">Cargando usuarios...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+        {% endif %}
+    </main>
+
+    <!-- Modals -->
+    <div class="modal" id="token-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Crear Nuevo Token</h3>
+                <button class="modal-close" id="close-token-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="token-form">
+                    <div class="form-group">
+                        <label>Descripción</label>
+                        <input type="text" id="token-description" placeholder="Ej: Token para usuario X" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Días de expiración (0 = sin expiración)</label>
+                        <input type="number" id="token-expires" value="30" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Máximo de usos (-1 = ilimitado)</label>
+                        <input type="number" id="token-max-uses" value="-1" min="-1" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancel-token-btn">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Crear Token</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="token-result-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Token Creado</h3>
+                <button class="modal-close" id="close-token-result-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Token generado exitosamente. Copia este token y guárdalo en un lugar seguro:</p>
+                <div class="token-display">
+                    <code id="generated-token"></code>
+                    <button type="button" class="btn btn-secondary" id="copy-token-btn">Copiar Token</button>
+                </div>
+                <div id="download-link-section" style="margin-top: 20px; display: none;">
+                    <p style="margin-bottom: 10px;"><strong>🔗 Enlace de descarga pública:</strong></p>
+                    <div class="token-display">
+                        <input type="text" id="generated-download-link-from-token" readonly style="width: 100%; padding: 8px; font-family: monospace; border: 1px solid #30363d; background: #0d1117; color: #c9d1d9; border-radius: 4px;">
+                        <button class="btn btn-secondary" id="copy-download-link-from-token-btn" style="margin-top: 10px;">📋 Copiar Enlace</button>
+                    </div>
+                    <p class="warning-text" style="margin-top: 10px;">✅ Este enlace permite descargar el ejecutable sin iniciar sesión. Compártelo junto con el token.</p>
+                </div>
+                <p class="warning-text">⚠️ Este token solo se mostrará una vez</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Detalles de Escaneo -->
+    <div class="modal" id="scan-details-modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>Detalles del Escaneo - ASPERS Projects</h3>
+                <button class="modal-close" id="close-scan-details-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="scan-info-header">
+                    <div class="info-item">
+                        <span class="info-label">Máquina:</span>
+                        <span class="info-value" id="scan-machine-name">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Archivos Escaneados:</span>
+                        <span class="info-value" id="scan-files-count">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Issues Detectados:</span>
+                        <span class="info-value" id="scan-issues-count">-</span>
+                    </div>
+                </div>
+
+                <div class="scan-results-container">
+                    <h4 class="results-title">Resultados del Escaneo - Marca como Hack o Legítimo</h4>
+                    <p class="results-description">
+                        <strong>ASPERS Projects</strong> aprende de cada confirmación. Marca los resultados para mejorar la detección automática.
+                    </p>
+                    <div class="results-list" id="scan-results-list">
+                        <div class="loading-cell">Cargando resultados...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Feedback Mejorado -->
+    <div class="modal" id="feedback-modal">
+        <div class="modal-content feedback-modal-content">
+            <div class="modal-header">
+                <h3>🔍 Verificar Resultado del Escaneo</h3>
+                <button class="modal-close" id="close-feedback-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="feedback-file-preview">
+                    <div class="file-icon">📄</div>
+                    <div class="file-info">
+                        <div class="file-name" id="feedback-file-name">-</div>
+                        <div class="file-path" id="feedback-file-path">-</div>
+                    </div>
+                </div>
+                
+                <form id="feedback-form">
+                    <input type="hidden" id="feedback-result-id" name="result_id">
+                    <input type="hidden" id="feedback-scan-id" name="scan_id">
+                    <div class="feedback-verification-section">
+                        <label class="section-label">¿Qué es este archivo?</label>
+                        <div class="verification-cards">
+                            <label class="verification-card verification-card-hack">
+                                <input type="radio" name="verification" value="hack" required>
+                                <div class="card-content">
+                                    <div class="card-icon">⚠️</div>
+                                    <div class="card-title">Hack Confirmado</div>
+                                    <div class="card-description">Este archivo es un hack o mod malicioso</div>
+                                </div>
+                                <div class="card-checkmark">✓</div>
+                            </label>
+                            
+                            <label class="verification-card verification-card-legitimate">
+                                <input type="radio" name="verification" value="legitimate" required>
+                                <div class="card-content">
+                                    <div class="card-icon">✅</div>
+                                    <div class="card-title">Archivo Legítimo</div>
+                                    <div class="card-description">Este archivo es seguro y legítimo</div>
+                                </div>
+                                <div class="card-checkmark">✓</div>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="feedback-notes">
+                            <span>Notas adicionales</span>
+                            <small>(Opcional - Ayuda a mejorar el aprendizaje)</small>
+                        </label>
+                        <textarea 
+                            id="feedback-notes" 
+                            rows="4" 
+                            placeholder="Ej: Confirmado como Vape v4.2, es un hack de PvP muy conocido..."
+                        ></textarea>
+                    </div>
+                    
+                    <div class="feedback-impact">
+                        <div class="impact-icon">🧠</div>
+                        <div class="impact-text">
+                            <strong>Tu feedback mejora ASPERS Projects</strong>
+                            <p>Esta información ayudará a la IA a detectar mejor los hacks en el futuro</p>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancel-feedback-btn">Cancelar</button>
+                        <button type="submit" class="btn btn-primary btn-feedback-submit">
+                            <span>Confirmar y Aprender</span>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/panel.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/empresas.js') }}"></script>
+</body>
+</html>
+

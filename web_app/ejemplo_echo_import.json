@@ -1,0 +1,39 @@
+[
+  {
+    "echo_id": "dab8ea8d-7f75-4a0a-954e-5cf9bdcd14ee",
+    "machine_name": "vgbsmb",
+    "os": "Windows 10 Pro",
+    "country": "Perú",
+    "scan_date": "2025-03-15 19:30:00",
+    "scan_duration": 129,
+    "detections": [
+      {
+        "name": "Slinky Client [PU]",
+        "location": "en instancia",
+        "severity": "SEVERO",
+        "type": "client"
+      },
+      {
+        "name": "Slinky Loader [HS]",
+        "location": "fuera de instancia",
+        "file": "loader.exe",
+        "severity": "SEVERO",
+        "type": "loader"
+      },
+      {
+        "name": "Slinky Loader [HS]",
+        "location": "en instancia",
+        "file": "loader.exe",
+        "severity": "SEVERO",
+        "type": "loader"
+      },
+      {
+        "name": "Servicio SysMain",
+        "location": "detenido manualmente",
+        "severity": "Alerta",
+        "type": "service"
+      }
+    ]
+  }
+]
+

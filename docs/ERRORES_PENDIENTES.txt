@@ -1,0 +1,265 @@
+================================================================================
+  ERRORES PENDIENTES - ASPERS PROJECTS
+  Fecha: Pendiente de resolución
+================================================================================
+
+1. ERROR: No se puede descargar el .exe desde Render
+================================================================================
+
+PROBLEMA:
+---------
+El botón "Descargar Aplicación" en Render muestra el error:
+"No se encontró un ejecutable compilado"
+
+SITUACIÓN ACTUAL:
+-----------------
+✓ El .exe existe localmente en: source/dist/MinecraftSSTool.exe
+✓ El código busca en: downloads/, source/dist/, y raíz del proyecto
+✓ El .gitignore está configurado para permitir source/dist/*.exe
+✗ El .exe NO está en GitHub (por eso Render no lo encuentra)
+
+CAUSA RAÍZ:
+-----------
+El archivo .exe no se ha subido al repositorio de GitHub, por lo que cuando
+Render descarga el código, no encuentra el ejecutable.
+
+PASOS PARA SOLUCIONAR:
+----------------------
+1. Verificar que el .exe existe localmente:
+   - Ruta: source/dist/MinecraftSSTool.exe
+   - Si no existe, compilar primero: BAT\01-Compilar\COMPILAR_FINAL.bat
+
+2. Subir el .exe a GitHub:
+   Opción A - Script automático:
+   - Ejecutar: SUBIR_EXE_A_GITHUB.bat
+   - Abrir GitHub Desktop
+   - Hacer commit y push
+
+   Opción B - Manualmente:
+   - git add -f source/dist/MinecraftSSTool.exe
+   - git commit -m "Agregar ejecutable compilado"
+   - git push
+
+3. Verificar en GitHub:
+   - Ir a: https://github.com/aspersink-svg/aspersprojectsSS/tree/main/source/dist
+   - Debe aparecer MinecraftSSTool.exe
+
+4. Esperar a que Render se actualice (1-2 minutos)
+
+5. Probar la descarga nuevamente en Render
+
+ARCHIVOS RELACIONADOS:
+----------------------
+- web_app/app.py (línea ~1560-1620): Endpoint /api/get-latest-exe
+- web_app/static/js/panel.js (línea ~1274-1303): Función downloadApp()
+- .gitignore: Configurado para permitir source/dist/*.exe
+- docs/SOLUCION_DESCARGAR_EXE.md: Guía completa
+
+NOTAS IMPORTANTES:
+------------------
+- El .exe puede ser grande (50-100MB), GitHub permite hasta 100MB
+- Cada vez que se recompile, hay que volver a subirlo
+- Render se actualiza automáticamente cuando se hace push a GitHub
+
+
+2. ERROR: API no funciona en Render
+================================================================================
+
+PROBLEMA:
+---------
+Error al desplegar la API en Render:
+"Service Root Directory "/opt/render/project/src/source" is missing.
+builder.sh: line 51: cd: /opt/render/project/src/source: No such file or directory"
+
+SITUACIÓN ACTUAL:
+-----------------
+✓ Archivos de la API creados:
+  - source/Procfile
+  - source/gunicorn_config.py
+  - source/requirements.txt (con gunicorn)
+✓ source/api_server.py actualizado para usar puerto de Render
+✗ Root Directory mal configurado en Render
+✗ La API no se puede desplegar
+
+CAUSA RAÍZ:
+-----------
+El Root Directory en Render está configurado incorrectamente, o la carpeta
+source/ no está en GitHub, o hay un problema con la configuración del servicio.
+
+PASOS PARA SOLUCIONAR:
+----------------------
+1. Verificar que source/ está en GitHub:
+   - Ir a: https://github.com/aspersink-svg/aspersprojectsSS/tree/main
+   - Debe aparecer la carpeta source/
+   - Dentro debe haber:
+     * api_server.py
+     * requirements.txt
+     * Procfile
+     * gunicorn_config.py
+
+2. Si source/ NO está en GitHub:
+   - Subir la carpeta source/ completa a GitHub
+   - Usar: SUBIR_CARPETAS_BUILD_DIST.bat (también sube build y dist)
+   - O manualmente: git add source/ && git commit && git push
+
+3. Configurar Root Directory en Render:
+   Opción A - Root Directory = "source":
+   - En Render Dashboard → Settings
+   - Root Directory: source (sin barras, sin puntos)
+   - Build Command: pip install -r requirements.txt
+   - Start Command: gunicorn api_server:app --config gunicorn_config.py
+
+   Opción B - Root Directory vacío:
+   - Root Directory: (dejar vacío)
+   - Build Command: cd source && pip install -r requirements.txt
+   - Start Command: cd source && gunicorn api_server:app --config gunicorn_config.py
+
+4. Verificar Variables de Entorno en Render:
+   - API_SECRET_KEY: (generar una clave segura)
+   - PORT: (Render lo asigna automáticamente, no configurar)
+
+5. Verificar que el servicio esté "Live" (verde)
+
+6. Probar la API:
+   - URL: https://aspers-api.onrender.com/api/statistics
+   - Debe responder (puede requerir autenticación)
+
+7. Configurar el servicio web para usar la API:
+   - En el servicio web (app.py), agregar variable de entorno:
+     API_URL=https://aspers-api.onrender.com
+   - (Reemplazar con la URL real de la API)
+
+ARCHIVOS RELACIONADOS:
+----------------------
+- source/api_server.py: API principal
+- source/Procfile: Comando de inicio
+- source/gunicorn_config.py: Configuración de Gunicorn
+- source/requirements.txt: Dependencias (incluye gunicorn)
+- web_app/app.py: Configuración para conectar con API externa
+- docs/DESPLIEGUE_API_RENDER.md: Guía completa de despliegue
+- docs/SOLUCION_ERROR_ROOT_DIRECTORY.md: Solución específica del error
+
+NOTAS IMPORTANTES:
+------------------
+- La API debe estar en un servicio SEPARADO del servicio web
+- El servicio web necesita la variable API_URL para conectarse
+- En el plan gratuito, la API se apaga después de 15 min de inactividad
+- Considerar usar UptimeRobot o GitHub Actions para mantenerla despierta
+
+
+3. ERROR ADICIONAL: Carpetas build y dist no visibles en GitHub
+================================================================================
+
+PROBLEMA:
+---------
+Las carpetas source/build/ y source/dist/ no aparecen en GitHub, aunque
+existen localmente.
+
+SITUACIÓN ACTUAL:
+-----------------
+✓ Carpetas existen localmente
+✓ .gitignore configurado para permitirlas
+✗ No están en GitHub
+
+PASOS PARA SOLUCIONAR:
+----------------------
+1. Ejecutar: SUBIR_CARPETAS_BUILD_DIST.bat
+2. O manualmente:
+   git add -f source/build/
+   git add -f source/build/*
+   git add -f source/dist/
+   git add -f source/dist/*
+   git commit -m "Agregar carpetas build y dist"
+   git push
+
+ARCHIVOS RELACIONADOS:
+----------------------
+- docs/ANADIR_CARPETAS_MANUALMENTE.md: Guía completa
+- SUBIR_CARPETAS_BUILD_DIST.bat: Script automático
+
+
+================================================================================
+  RESUMEN DE PRIORIDADES
+================================================================================
+
+PRIORIDAD ALTA:
+1. Subir el .exe a GitHub (necesario para que funcione la descarga)
+2. Subir la carpeta source/ a GitHub (necesario para desplegar la API)
+3. Configurar correctamente el Root Directory en Render
+
+PRIORIDAD MEDIA:
+4. Verificar que la API se despliegue correctamente
+5. Configurar API_URL en el servicio web
+6. Probar que todo funcione end-to-end
+
+PRIORIDAD BAJA:
+7. Subir carpetas build/ y dist/ (no crítico para funcionamiento básico)
+
+
+================================================================================
+  CHECKLIST PARA MAÑANA
+================================================================================
+
+[ ] 1. Verificar que source/dist/MinecraftSSTool.exe existe localmente
+[ ] 2. Subir .exe a GitHub usando SUBIR_EXE_A_GITHUB.bat
+[ ] 3. Verificar en GitHub que el .exe está en source/dist/
+[ ] 4. Verificar que la carpeta source/ completa está en GitHub
+[ ] 5. Si falta source/, subirla a GitHub
+[ ] 6. En Render, verificar/corregir Root Directory del servicio API
+[ ] 7. Verificar Build Command y Start Command del servicio API
+[ ] 8. Verificar que API_SECRET_KEY está configurada en Render
+[ ] 9. Esperar a que la API se despliegue correctamente
+[ ] 10. Obtener la URL de la API (ej: https://aspers-api.onrender.com)
+[ ] 11. En el servicio web, agregar variable API_URL con la URL de la API
+[ ] 12. Probar descarga de .exe desde Render
+[ ] 13. Probar que la API responde correctamente
+[ ] 14. Verificar que el servicio web se conecta a la API
+
+
+================================================================================
+  COMANDOS ÚTILES
+================================================================================
+
+# Verificar estado de Git
+git status
+
+# Agregar .exe forzadamente
+git add -f source/dist/MinecraftSSTool.exe
+
+# Agregar carpetas completas
+git add -f source/build/
+git add -f source/dist/
+
+# Ver qué archivos se agregaron
+git status
+
+# Commit
+git commit -m "Agregar ejecutable y carpetas de compilación"
+
+# Push
+git push
+
+# Verificar que source/ está en GitHub
+# Ir a: https://github.com/aspersink-svg/aspersprojectsSS/tree/main/source
+
+
+================================================================================
+  CONTACTO Y REFERENCIAS
+================================================================================
+
+Repositorio GitHub:
+https://github.com/aspersink-svg/aspersprojectsSS
+
+Documentación:
+- docs/SOLUCION_DESCARGAR_EXE.md
+- docs/DESPLIEGUE_API_RENDER.md
+- docs/SOLUCION_ERROR_ROOT_DIRECTORY.md
+- docs/ANADIR_CARPETAS_MANUALMENTE.md
+
+Scripts útiles:
+- SUBIR_EXE_A_GITHUB.bat
+- SUBIR_CARPETAS_BUILD_DIST.bat
+- INICIAR_API.bat (para pruebas locales)
+
+================================================================================
+

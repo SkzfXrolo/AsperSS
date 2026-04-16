@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iniciar Sesión — ASPERS Projects</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:        #080b14;
+            --bg-2:      #0d1220;
+            --bg-card:   rgba(13, 20, 40, 0.85);
+            --border:    rgba(0, 200, 255, 0.12);
+            --border-h:  rgba(0, 200, 255, 0.40);
+            --accent:    #00c8ff;
+            --accent-d:  #0099cc;
+            --accent-g:  rgba(0, 200, 255, 0.08);
+            --text:      #e8f0fe;
+            --text-m:    #6b7fa3;
+            --text-d:    #3d4f6e;
+            --red:       #ff4757;
+            --red-g:     rgba(255,71,87,0.12);
+            --radius:    14px;
+            --transition: all 0.22s cubic-bezier(0.4,0,0.2,1);
+        }
+
+        html, body {
+            height: 100%;
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── Background grid ── */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(0,200,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,200,255,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── Radial glow behind card ── */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 700px;
+            height: 500px;
+            background: radial-gradient(ellipse at center,
+                rgba(0,200,255,0.08) 0%,
+                transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .page {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        /* ── Card ── */
+        .card {
+            width: 100%;
+            max-width: 420px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 40px 36px;
+            backdrop-filter: blur(24px);
+            box-shadow:
+                0 0 0 1px rgba(0,200,255,0.05),
+                0 32px 64px rgba(0,0,0,0.6),
+                0 0 80px rgba(0,200,255,0.04);
+            animation: cardIn 0.4s cubic-bezier(0.4,0,0.2,1) both;
+        }
+
+        @keyframes cardIn {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── Header ── */
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .logo {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 56px;
+            height: 56px;
+            margin-bottom: 18px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, rgba(0,200,255,0.15) 0%, rgba(0,200,255,0.05) 100%);
+            border: 1px solid rgba(0,200,255,0.25);
+            box-shadow: 0 0 24px rgba(0,200,255,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+
+        .logo svg { width: 26px; height: 26px; }
+
+        .header h1 {
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+
+        .header p {
+            font-size: 13px;
+            color: var(--text-m);
+            letter-spacing: 0.2px;
+        }
+
+        /* ── Tab selector ── */
+        .tabs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 3px;
+            margin-bottom: 28px;
+            gap: 3px;
+        }
+
+        .tab-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            padding: 9px 12px;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            color: var(--text-m);
+            font-size: 13px;
+            font-weight: 500;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .tab-btn:hover { color: var(--text); background: rgba(0,200,255,0.05); }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, rgba(0,200,255,0.18) 0%, rgba(0,150,204,0.12) 100%);
+            color: var(--accent);
+            box-shadow: 0 0 16px rgba(0,200,255,0.12);
+        }
+
+        .tab-btn svg { flex-shrink: 0; }
+
+        /* ── Error ── */
+        .alert-error {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--red-g);
+            border: 1px solid rgba(255,71,87,0.25);
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 22px;
+            font-size: 13px;
+            color: #ff8087;
+        }
+
+        /* ── Form ── */
+        .form { display: none; }
+        .form.active { display: block; }
+
+        .field { margin-bottom: 18px; }
+
+        .field label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: var(--text-m);
+            margin-bottom: 8px;
+        }
+
+        .field input {
+            width: 100%;
+            padding: 11px 14px;
+            background: rgba(0,0,0,0.35);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+            transition: var(--transition);
+        }
+
+        .field input::placeholder { color: var(--text-d); }
+
+        .field input:focus {
+            outline: none;
+            border-color: var(--border-h);
+            background: rgba(0,200,255,0.04);
+            box-shadow: 0 0 0 3px rgba(0,200,255,0.08), 0 0 20px rgba(0,200,255,0.06);
+        }
+
+        /* ── Submit button ── */
+        .btn-submit {
+            width: 100%;
+            margin-top: 6px;
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #00b4d8 0%, #0077a8 100%);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: var(--transition);
+            letter-spacing: 0.3px;
+            box-shadow: 0 4px 20px rgba(0,180,216,0.25);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-submit::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 60%);
+            pointer-events: none;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 28px rgba(0,180,216,0.4), 0 0 40px rgba(0,200,255,0.15);
+        }
+
+        .btn-submit:active { transform: translateY(0); }
+
+        /* ── Footer links ── */
+        .footer-links {
+            margin-top: 26px;
+            padding-top: 22px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .footer-links a {
+            font-size: 13px;
+            color: var(--text-m);
+            text-decoration: none;
+            transition: var(--transition);
+        }
+
+        .footer-links a:hover { color: var(--accent); }
+
+        .footer-links .register-link {
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        /* ── Version tag ── */
+        .version-tag {
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-d);
+            margin-top: 4px;
+        }
+
+        /* ── Scan line animation (subtle) ── */
+        .card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(0,200,255,0.6) 50%,
+                transparent 100%);
+            border-radius: 20px 20px 0 0;
+            pointer-events: none;
+        }
+
+        .card { position: relative; }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="card">
+
+            <div class="header">
+                <div class="logo">
+                    <svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M13 2L4 7V13C4 18.55 7.84 23.74 13 25C18.16 23.74 22 18.55 22 13V7L13 2Z"
+                              stroke="#00c8ff" stroke-width="1.5" stroke-linejoin="round"/>
+                        <path d="M9 13L12 16L17 10" stroke="#00c8ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <h1>ASPERS Projects</h1>
+                <p>Acceso al panel de control</p>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab-btn active" data-type="individual" onclick="switchTab('individual')">
+                    <svg width="15" height="15" viewBox="0 0 20 20" fill="none">
+                        <circle cx="10" cy="6" r="4" stroke="currentColor" stroke-width="1.8"/>
+                        <path d="M3 18C3 14.686 6.134 12 10 12C13.866 12 17 14.686 17 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                    Individual
+                </button>
+                <button class="tab-btn" data-type="empresa" onclick="switchTab('empresa')">
+                    <svg width="15" height="15" viewBox="0 0 20 20" fill="none">
+                        <rect x="2" y="6" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/>
+                        <path d="M6 6V4C6 2.9 6.9 2 8 2H12C13.1 2 14 2.9 14 4V6" stroke="currentColor" stroke-width="1.8"/>
+                        <path d="M2 11H18" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/>
+                    </svg>
+                    Empresa
+                </button>
+            </div>
+
+            {% if error %}
+            <div class="alert-error">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                    <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.8"/>
+                    <path d="M10 6V11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    <circle cx="10" cy="14" r="1" fill="currentColor"/>
+                </svg>
+                {{ error }}
+            </div>
+            {% endif %}
+
+            <!-- Formulario Individual -->
+            <form method="POST" action="/login" id="form-individual" class="form active">
+                <input type="hidden" name="login_type" value="individual">
+
+                <div class="field">
+                    <label for="u-ind">Usuario</label>
+                    <input type="text" id="u-ind" name="username"
+                           placeholder="Tu nombre de usuario" required autofocus>
+                </div>
+
+                <div class="field">
+                    <label for="p-ind">Contraseña</label>
+                    <input type="password" id="p-ind" name="password"
+                           placeholder="••••••••••" required>
+                </div>
+
+                <button type="submit" class="btn-submit">Iniciar Sesión</button>
+            </form>
+
+            <!-- Formulario Empresarial -->
+            <form method="POST" action="/login" id="form-empresa" class="form">
+                <input type="hidden" name="login_type" value="empresa">
+
+                <div class="field">
+                    <label for="u-emp">Usuario</label>
+                    <input type="text" id="u-emp" name="username"
+                           placeholder="Usuario empresarial" required>
+                </div>
+
+                <div class="field">
+                    <label for="p-emp">Contraseña</label>
+                    <input type="password" id="p-emp" name="password"
+                           placeholder="••••••••••" required>
+                </div>
+
+                <div class="field">
+                    <label for="c-emp">Empresa <span style="font-weight:400;text-transform:none;letter-spacing:0">(opcional)</span></label>
+                    <input type="text" id="c-emp" name="company_name"
+                           placeholder="Nombre de la empresa">
+                </div>
+
+                <button type="submit" class="btn-submit">Acceso Empresarial</button>
+            </form>
+
+            <div class="footer-links">
+                <a href="/register" class="register-link">Registrarse con token de invitación</a>
+                <a href="/">← Volver al inicio</a>
+                <span class="version-tag">ASPERS // SECURE ACCESS</span>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        function switchTab(type) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector(`[data-type="${type}"]`).classList.add('active');
+            document.querySelectorAll('.form').forEach(f => f.classList.remove('active'));
+            const form = document.getElementById(`form-${type}`);
+            form.classList.add('active');
+            form.querySelector('input[type="text"], input[type="password"]').focus();
+        }
+    </script>
+</body>
+</html>

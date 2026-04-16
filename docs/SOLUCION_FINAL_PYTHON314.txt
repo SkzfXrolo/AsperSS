@@ -1,0 +1,56 @@
+================================================================================
+  SOLUCION DEFINITIVA PARA PYTHON 3.14
+================================================================================
+
+PROBLEMA:
+PyInstaller 6.16.0 no tiene bootloader precompilado para Python 3.14
+
+================================================================================
+  OPCION 1: COMPILAR BOOTLOADER (REQUIERE COMPILADOR C++)
+================================================================================
+
+1. Instalar Visual Studio Build Tools:
+   https://visualstudio.microsoft.com/downloads/
+   (Seleccionar "Desktop development with C++")
+
+2. Ejecutar: BAT\01-Compilar\COMPILAR_BOOTLOADER.bat
+
+3. Esperar a que compile (puede tardar 5-10 minutos)
+
+4. Luego compilar normalmente con COMPILAR_FINAL.bat
+
+================================================================================
+  OPCION 2: USAR PYTHON 3.11 O 3.12 (RECOMENDADO - MAS RAPIDO)
+================================================================================
+
+Python 3.14 es muy nuevo. Para mejor compatibilidad:
+
+1. Descargar Python 3.11 o 3.12 desde python.org
+2. Instalar en otra ubicacion (ej: C:\Python311)
+3. Usar ese Python para compilar:
+   C:\Python311\python.exe -m pip install pyinstaller
+   C:\Python311\python.exe -m PyInstaller ...
+
+O crear entorno virtual:
+   C:\Python311\python.exe -m venv venv311
+   venv311\Scripts\activate
+   pip install -r source\requirements.txt
+   pip install pyinstaller
+   python -m PyInstaller ...
+
+================================================================================
+  OPCION 3: ESPERAR ACTUALIZACION DE PYINSTALLER
+================================================================================
+
+PyInstaller puede agregar soporte para Python 3.14 en futuras versiones.
+Mientras tanto, usar Python 3.11 o 3.12 es la mejor opcion.
+
+================================================================================
+  RECOMENDACION
+================================================================================
+
+La opcion mas rapida y estable es usar Python 3.11 o 3.12.
+Python 3.14 es muy nuevo y muchas herramientas aun no lo soportan completamente.
+
+================================================================================
+

@@ -1,0 +1,117 @@
+================================================================================
+  GUIA PARA PROBAR EL .EXE COMPILADO
+================================================================================
+
+================================================================================
+  UBICACION DEL ARCHIVO
+================================================================================
+
+Archivo: source\dist\MinecraftSSTool.exe
+Tamaño: ~39 MB
+
+================================================================================
+  COMO PROBARLO
+================================================================================
+
+1. Navega a: source\dist\
+2. Ejecuta: MinecraftSSTool.exe
+3. Deberia abrirse la ventana de autenticacion
+4. Ingresa un token valido o cancela para continuar
+
+================================================================================
+  QUE VERIFICAR
+================================================================================
+
+1. INTERFAZ:
+   - La ventana se abre correctamente
+   - El diseño se ve bien (sin errores visuales)
+   - Los botones funcionan
+   - La barra de progreso se muestra
+
+2. ESCANEO:
+   - Click en "Iniciar Escaneo Completo"
+   - La barra de progreso avanza suavemente (1, 2, 3...)
+   - No se cierra la aplicacion
+   - Muestra resultados al finalizar
+
+3. FUNCIONALIDADES:
+   - Boton "Ver Detalles" funciona
+   - Boton "Exportar Reporte" funciona
+   - Boton "Enviar a Discord" funciona (si esta configurado)
+
+================================================================================
+  PROBLEMAS COMUNES Y SOLUCIONES
+================================================================================
+
+PROBLEMA: Se abre y se cierra inmediatamente
+SOLUCION: 
+  - El .spec tiene console=True, deberias ver errores en consola
+  - Revisa los mensajes de error
+  - Verifica que todas las dependencias esten instaladas
+
+PROBLEMA: Error de autenticacion
+SOLUCION:
+  - Puedes cancelar la ventana de autenticacion
+  - O configurar un token en config.json
+
+PROBLEMA: La barra de progreso no avanza
+SOLUCION:
+  - Espera unos segundos, puede tardar en iniciar
+  - Verifica que no haya errores en consola
+
+PROBLEMA: No encuentra archivos o modulos
+SOLUCION:
+  - Verifica que config.json este en la misma carpeta que el .exe
+  - O copia config.json a source\dist\
+
+================================================================================
+  CONFIGURACION RECOMENDADA
+================================================================================
+
+Antes de probar, verifica que config.json este en source\dist\:
+
+1. Si no existe, copia config.json desde la raiz del proyecto
+2. O ejecuta desde la raiz del proyecto (el .exe buscara config.json alli)
+
+================================================================================
+  LOGS Y DEBUGGING
+================================================================================
+
+Como console=True esta activado:
+- Veras una ventana de consola con mensajes
+- Los errores se mostraran ahi
+- Puedes ver el progreso del escaneo en tiempo real
+
+Para desactivar la consola (cuando todo funcione):
+- Edita source\MinecraftSSTool.spec
+- Cambia console=True a console=False
+- Recompila
+
+================================================================================
+  REPORTAR PROBLEMAS
+================================================================================
+
+Si encuentras problemas:
+1. Anota el mensaje de error exacto
+2. Indica en que paso fallo (apertura, escaneo, etc.)
+3. Revisa los logs en la consola
+4. Verifica que config.json este presente
+
+================================================================================
+  SIGUIENTE PASO DESPUES DE PROBAR
+================================================================================
+
+Si todo funciona bien:
+- Cambiar console=False en .spec
+- Recompilar para version final
+- Probar en diferentes sistemas si es posible
+
+Si hay problemas:
+- Revisar errores en consola
+- Verificar dependencias
+- Ajustar configuracion
+
+================================================================================
+FIN DEL DOCUMENTO
+================================================================================
+

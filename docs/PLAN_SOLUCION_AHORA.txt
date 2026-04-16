@@ -1,0 +1,149 @@
+================================================================================
+  PLAN DE SOLUCIÓN - PASO A PASO
+  Fecha: Ahora
+================================================================================
+
+ESTADO ACTUAL VERIFICADO:
+-------------------------
+✓ El .exe existe: source/dist/MinecraftSSTool.exe
+✓ Las carpetas build/ y dist/ existen localmente
+✗ No hay repositorio Git local (probablemente usas GitHub Desktop)
+✗ El .exe no está en GitHub
+✗ La API no funciona en Render
+
+================================================================================
+  PASO 1: SUBIR ARCHIVOS A GITHUB
+================================================================================
+
+OPCIÓN A - Usando GitHub Desktop (RECOMENDADO):
+------------------------------------------------
+1. Abre GitHub Desktop
+2. Asegúrate de estar en el repositorio: aspersprojectsSS
+3. En la pestaña "Changes", deberías ver archivos pendientes
+4. Si NO ves source/dist/MinecraftSSTool.exe:
+   - Haz clic en "Repository" → "Open in Command Prompt"
+   - Ejecuta estos comandos:
+   
+   git add -f source/dist/MinecraftSSTool.exe
+   git add -f source/build/
+   git add -f source/dist/
+   git status
+   
+5. Vuelve a GitHub Desktop
+6. Verás todos los archivos en "Changes"
+7. Escribe mensaje: "Agregar ejecutable y carpetas build/dist"
+8. Haz clic en "Commit to main"
+9. Haz clic en "Push origin"
+
+OPCIÓN B - Si GitHub Desktop no funciona:
+-----------------------------------------
+1. Abre PowerShell en la carpeta del proyecto
+2. Ejecuta estos comandos uno por uno:
+
+cd "C:\Users\robin\Desktop\Tareas\Aplicación de SS"
+
+git add -f source/dist/MinecraftSSTool.exe
+git add -f source/build/
+git add -f source/build/*
+git add -f source/dist/
+git add -f source/dist/*
+git add -f source/Procfile
+git add -f source/gunicorn_config.py
+git add -f source/requirements.txt
+
+git status
+
+git commit -m "Agregar ejecutable, carpetas build/dist y archivos de API para Render"
+
+git push
+
+================================================================================
+  PASO 2: VERIFICAR EN GITHUB
+================================================================================
+
+1. Ve a: https://github.com/aspersink-svg/aspersprojectsSS
+2. Verifica que existan:
+   ✓ source/dist/MinecraftSSTool.exe
+   ✓ source/build/ (carpeta con contenido)
+   ✓ source/dist/ (carpeta con .exe y otros archivos)
+   ✓ source/Procfile
+   ✓ source/gunicorn_config.py
+   ✓ source/requirements.txt
+
+================================================================================
+  PASO 3: CONFIGURAR API EN RENDER
+================================================================================
+
+1. Ve a Render Dashboard: https://dashboard.render.com
+2. Ve a tu servicio de API (o créalo si no existe)
+
+3. En "Settings" → "Build & Deploy":
+   
+   Root Directory: source
+   (Solo la palabra "source", sin barras, sin puntos)
+   
+   Build Command: pip install -r requirements.txt
+   
+   Start Command: gunicorn api_server:app --config gunicorn_config.py
+
+4. En "Environment":
+   Agrega variable:
+   API_SECRET_KEY = [genera una clave aleatoria]
+   
+   Para generar clave:
+   - Usa: https://randomkeygen.com/
+   - O ejecuta en Python: import secrets; print(secrets.token_hex(32))
+
+5. Guarda los cambios
+6. Render reiniciará automáticamente
+
+================================================================================
+  PASO 4: CONFIGURAR SERVICIO WEB PARA USAR LA API
+================================================================================
+
+1. En Render, ve a tu servicio WEB (no el de API)
+2. En "Environment", agrega:
+   API_URL = https://aspers-api.onrender.com
+   (Reemplaza con la URL real de tu API)
+
+3. Guarda los cambios
+4. El servicio web se reiniciará
+
+================================================================================
+  PASO 5: VERIFICAR QUE TODO FUNCIONA
+================================================================================
+
+1. Espera 2-3 minutos a que Render termine los deploys
+
+2. Verifica la API:
+   - Ve a: https://aspers-api.onrender.com/api/statistics
+   - Debe responder (puede requerir autenticación)
+
+3. Verifica el servicio web:
+   - Ve a tu URL de Render
+   - Intenta descargar el .exe
+   - Debe funcionar ahora
+
+================================================================================
+  COMANDOS RÁPIDOS PARA COPIAR/PEGAR
+================================================================================
+
+# Agregar todo lo necesario a Git
+git add -f source/dist/MinecraftSSTool.exe
+git add -f source/build/
+git add -f source/dist/
+git add -f source/Procfile
+git add -f source/gunicorn_config.py
+git add -f source/requirements.txt
+
+# Ver qué se agregó
+git status
+
+# Commit
+git commit -m "Agregar ejecutable y archivos para Render"
+
+# Push
+git push
+
+================================================================================
+

@@ -1,0 +1,26 @@
+{
+  "version": "1.20251124230325",
+  "updated_at": "2025-11-24T23:03:25.250285",
+  "patterns": {
+    "high_risk": [
+      {
+        "value": "flux",
+        "confidence": 1.0,
+        "learned_from_count": 2
+      },
+      {
+        "value": "flux",
+        "confidence": 1.0,
+        "learned_from_count": 2
+      },
+      {
+        "value": "flux",
+        "confidence": 1.0,
+        "learned_from_count": 1
+      }
+    ],
+    "medium_risk": [],
+    "low_risk": []
+  },
+  "hashes": []
+}

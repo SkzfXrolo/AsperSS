@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+.eggs/
+
+# Entornos virtuales
+venv/
+env/
+ENV/
+.venv
+
+# Bases de datos locales (no subir datos de desarrollo)
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+
+# Compilación del .exe (son grandes y se regeneran con PyInstaller)
+source/build/
+source/dist/
+
+# Archivos sensibles
+.env
+tokens.json
+
+# config.json raíz (credenciales locales)
+/config.json
+/scanner_db.sqlite
+
+# Logs
+*.log
+logs/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Archivos de diagnóstico / desarrollo
+web_app/auth.db
+web_app/diagnostico_login.html
+

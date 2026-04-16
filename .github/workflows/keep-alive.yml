@@ -1,0 +1,19 @@
+name: Keep Render Server Alive
+
+on:
+  schedule:
+    # Ejecuta cada 10 minutos
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Permite ejecución manual desde GitHub
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Server Health Check
+        run: |
+          echo "🔄 Haciendo ping al servidor de Render..."
+          curl -f -m 30 https://aspersprojectsss.onrender.com/health || exit 1
+          echo "✅ Servidor respondió correctamente"
+        continue-on-error: true # Continúa aunque falle (para no spamear notificaciones)
+

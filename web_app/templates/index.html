@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASPERS Projects - Security Scanner Pro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Optimización: Preconnect para cargar fuentes más rápido -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- font-display=swap ya está en la URL, carga de forma no bloqueante -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <span class="brand-icon">🛡️</span>
+                <span class="brand-text">ASPERS PROJECTS</span>
+            </div>
+            <div class="nav-links">
+                <a href="/" class="nav-link active">Inicio</a>
+                <a href="#suscripciones" class="nav-link">Suscripciones</a>
+                <a href="/login" class="nav-link">Iniciar Sesión</a>
+                <a href="/register" class="nav-link">Registrarse</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-badge">
+                <span class="badge-dot"></span>
+                <span>Security Scanner Pro</span>
+            </div>
+            <h1 class="hero-title">
+                ASPERS Projects
+                <span class="gradient-text">Inteligencia Artificial</span>
+                para Detección Avanzada
+            </h1>
+            <p class="hero-description">
+                Sistema de análisis y detección que evoluciona constantemente mediante IA,
+                diseñado para identificar y prevenir comportamientos sospechosos con precisión milimétrica.
+            </p>
+            <div class="hero-actions">
+                <a href="/login" class="btn btn-primary">
+                    <span>Iniciar Sesión</span>
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </a>
+                <a href="/register" class="btn btn-secondary" style="margin-left: 12px;">
+                    <span>Registrarse</span>
+                </a>
+            </div>
+        </div>
+        <div class="hero-visual">
+            <div class="floating-card card-1">
+                <div class="card-icon">🔍</div>
+                <div class="card-title">Detección Avanzada</div>
+            </div>
+            <div class="floating-card card-2">
+                <div class="card-icon">🤖</div>
+                <div class="card-title">IA Evolutiva</div>
+            </div>
+            <div class="floating-card card-3">
+                <div class="card-icon">⚡</div>
+                <div class="card-title">Rendimiento Óptimo</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section class="about-section">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">¿Qué es ASPERS?</h2>
+                <p class="section-subtitle">Una herramienta de seguridad de nueva generación</p>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3 class="feature-title">Detección Precisa</h3>
+                    <p class="feature-description">
+                        Utiliza algoritmos de machine learning y análisis heurístico para identificar
+                        comportamientos sospechosos con una precisión superior al 95%.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🧠</div>
+                    <h3 class="feature-title">IA Evolutiva</h3>
+                    <p class="feature-description">
+                        El sistema aprende continuamente de cada análisis, mejorando sus capacidades
+                        de detección y adaptándose a nuevas amenazas automáticamente.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔄</div>
+                    <h3 class="feature-title">Actualizaciones Automáticas</h3>
+                    <p class="feature-description">
+                        La base de datos de detección se actualiza automáticamente, incorporando
+                        nuevos patrones y técnicas de identificación sin intervención manual.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3 class="feature-title">Rendimiento Optimizado</h3>
+                    <p class="feature-description">
+                        Escaneo ultra-rápido utilizando todos los recursos disponibles del sistema,
+                        sin comprometer la estabilidad o el rendimiento general.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3 class="feature-title">Seguridad Total</h3>
+                    <p class="feature-description">
+                        Sistema de autenticación robusto con tokens únicos, encriptación de datos
+                        y comunicación segura entre cliente y servidor.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3 class="feature-title">Análisis Detallado</h3>
+                    <p class="feature-description">
+                        Reportes completos con análisis de IA, niveles de confianza, patrones detectados
+                        y recomendaciones personalizadas para cada hallazgo.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="how-it-works">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">¿Cómo Funciona?</h2>
+                <p class="section-subtitle">Proceso de detección en 3 pasos</p>
+            </div>
+
+            <div class="steps-container">
+                <div class="step-item">
+                    <div class="step-number">01</div>
+                    <h3 class="step-title">Escaneo Exhaustivo</h3>
+                    <p class="step-description">
+                        El sistema realiza un análisis completo del sistema, revisando archivos,
+                        procesos, registros y conexiones de red en busca de patrones sospechosos.
+                    </p>
+                </div>
+
+                <div class="step-item">
+                    <div class="step-number">02</div>
+                    <h3 class="step-title">Análisis con IA</h3>
+                    <p class="step-description">
+                        Cada hallazgo es analizado por nuestro sistema de IA, que evalúa el nivel
+                        de riesgo, detecta ofuscación y proporciona un análisis detallado.
+                    </p>
+                </div>
+
+                <div class="step-item">
+                    <div class="step-number">03</div>
+                    <h3 class="step-title">Reporte y Acción</h3>
+                    <p class="step-description">
+                        Los resultados se envían al panel administrativo con recomendaciones
+                        específicas y niveles de severidad para una respuesta rápida y efectiva.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Suscripciones Section -->
+    <section class="subscriptions-section" id="suscripciones">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Planes y Suscripciones</h2>
+                <p class="section-subtitle">Elige el plan perfecto para tus necesidades</p>
+            </div>
+
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <div class="pricing-header">
+                        <h3 class="pricing-title">Plan Individual</h3>
+                    </div>
+                    <div class="pricing-price">
+                        <span class="price-amount">$5</span>
+                        <span class="price-period">USD / mes</span>
+                    </div>
+                    <ul class="pricing-features">
+                        <li>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>Acceso completo al scanner</span>
+                        </li>
+                        <li>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>Panel de gestión personal</span>
+                        </li>
+                        <li>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>Tokens de escaneo ilimitados</span>
+                        </li>
+                        <li>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>Soporte por email</span>
+                        </li>
+                    </ul>
+                    <a href="/login" class="btn btn-primary btn-block">
+                        <span>Suscribirse Individual</span>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </a>
+                </div>
+                
+                <div class="pricing-card">
+                    <div class="pricing-header">
+                        <h3 class="pricing-title">Plan Empresarial</h3>
+                        <div class="pricing-badge">Recomendado</div>
+                    </div>
+                    <div class="pricing-price">
+                        <span class="price-amount">$13</span>
+                        <span class="price-period">USD / mes</span>
+                    </div>
+                    <ul class="pricing-features">
+                        <li>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>Hasta 8 usuarios por empresa</span>
+                        </li>
+                        <li>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>Máximo 3 administradores</span>
+                        </li>
+                        <li>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>Panel de gestión completo</span>
+                        </li>
+                        <li>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>Tokens de registro ilimitados</span>
+                        </li>
+                        <li>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>Soporte prioritario</span>
+                        </li>
+                        <li>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>Actualizaciones automáticas</span>
+                        </li>
+                    </ul>
+                    <a href="/login" class="btn btn-primary btn-block">
+                        <span>Contactar para Suscripción</span>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </a>
+                    <p class="pricing-note">
+                        💡 Las suscripciones se gestionan desde el panel administrativo después de iniciar sesión
+                    </p>
+                </div>
+            </div>
+
+            <div class="subscription-info">
+                <h3 class="info-title">¿Cómo funciona?</h3>
+                <div class="info-steps">
+                    <div class="info-step">
+                        <div class="step-icon">1️⃣</div>
+                        <div class="step-content">
+                            <h4>Contacta con un Administrador</h4>
+                            <p>Inicia sesión y solicita la creación de una empresa para tu organización</p>
+                        </div>
+                    </div>
+                    <div class="info-step">
+                        <div class="step-icon">2️⃣</div>
+                        <div class="step-content">
+                            <h4>Configura tu Empresa</h4>
+                            <p>Un administrador creará tu empresa con hasta 8 usuarios y 3 administradores</p>
+                        </div>
+                    </div>
+                    <div class="info-step">
+                        <div class="step-icon">3️⃣</div>
+                        <div class="step-content">
+                            <h4>Gestiona tu Equipo</h4>
+                            <p>Genera tokens de registro para que tu equipo se una y comienza a usar el sistema</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="container">
+            <div class="cta-card">
+                <h2 class="cta-title">¿Listo para comenzar?</h2>
+                <p class="cta-description">
+                    Accede al panel administrativo para gestionar tokens, ver resultados
+                    y generar actualizaciones del sistema.
+                </p>
+                <a href="/login" class="btn btn-primary btn-large">
+                    <span>Iniciar Sesión</span>
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="brand-icon">🛡️</span>
+                    <span class="brand-text">ASPERS PROJECTS</span>
+                </div>
+                <p class="footer-text">
+                    Security Scanner Pro • Powered by Artificial Intelligence
+                </p>
+                <p class="footer-copyright">
+                    © 2024 Aspers Projects. Todos los derechos reservados.
+                </p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
+

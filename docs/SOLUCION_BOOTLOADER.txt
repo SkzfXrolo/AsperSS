@@ -1,0 +1,66 @@
+================================================================================
+  SOLUCION AL ERROR DE BOOTLOADER
+================================================================================
+
+PROBLEMA:
+PyInstaller no tiene bootloader precompilado para Python 3.14
+
+ERROR:
+"Fatal error: PyInstaller does not include a pre-compiled bootloader for your platform"
+
+================================================================================
+  SOLUCION 1: ACTUALIZAR PYINSTALLER (RECOMENDADO)
+================================================================================
+
+El script de compilacion ahora actualiza PyInstaller automaticamente.
+Si aun falla, ejecuta manualmente:
+
+pip install --upgrade pyinstaller
+
+Luego intenta compilar de nuevo.
+
+================================================================================
+  SOLUCION 2: COMPILAR BOOTLOADER MANUALMENTE
+================================================================================
+
+Si actualizar no funciona, compila el bootloader:
+
+1. Instalar Visual Studio Build Tools o C++ compiler
+2. Ejecutar:
+   python -m PyInstaller.utils.cliutils.makespec --bootloader
+
+O seguir instrucciones en:
+https://pyinstaller.readthedocs.io/en/stable/bootloader-building.html
+
+================================================================================
+  SOLUCION 3: USAR PYTHON 3.11 O 3.12 (MAS ESTABLE)
+================================================================================
+
+Python 3.14 es muy nuevo. Para mejor compatibilidad:
+
+1. Instalar Python 3.11 o 3.12 desde python.org
+2. Crear entorno virtual:
+   python3.11 -m venv venv
+   venv\Scripts\activate
+3. Instalar dependencias
+4. Compilar
+
+================================================================================
+  SOLUCION 4: USAR PYINSTALLER DESDE GIT (ULTIMA VERSION)
+================================================================================
+
+pip uninstall pyinstaller
+pip install https://github.com/pyinstaller/pyinstaller/archive/develop.zip
+
+Esto instala la version de desarrollo que puede tener soporte para Python 3.14
+
+================================================================================
+  RECOMENDACION
+================================================================================
+
+La solucion mas rapida es actualizar PyInstaller (ya actualizado en el script).
+
+Si no funciona, usar Python 3.11 o 3.12 es la opcion mas estable.
+
+================================================================================
+

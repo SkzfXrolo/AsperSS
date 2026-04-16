@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import sys; sys.stdout.reconfigure\\(encoding='utf-8'\\); import app\")",
+      "Bash(python -X utf8 -c ':*)",
+      "Bash(python -X utf8 app.py)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:5000/login)",
+      "Bash(curl -s -o /dev/null -w \" %{http_code}\" http://127.0.0.1:8080/login)",
+      "Bash(curl -s -o /dev/null -w \"5000:%{http_code}\" http://127.0.0.1:5000/)",
+      "Bash(curl -s -o /dev/null -w \" 8080:%{http_code}\" http://127.0.0.1:8080/)",
+      "Bash(start http://127.0.0.1:8080/login)",
+      "Bash(start http://127.0.0.1:8080/)",
+      "Bash(python -X utf8 create_arefy_admin.py)",
+      "Bash(python -X utf8 -c \"import ast, sys; ast.parse\\(open\\('app.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
+      "Bash(python -X utf8 -c \"import ast; ast.parse\\(open\\('app.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
+      "Bash(tasklist /FI \"PID eq 1188\" /FO CSV)",
+      "Bash(tasklist)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8080/ping)",
+      "Bash(pyinstaller --version)",
+      "Bash(python -m PyInstaller --version)",
+      "Read(//c/Users/robin/AppData/Roaming/ASPERSProjectsSS/**)",
+      "Bash(python -m PyInstaller --clean MinecraftSSTool.spec)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\robin\\AppData\\Roaming\\ASPERSProjectsSS"
+    ]
+  }
+}
