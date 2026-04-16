@@ -3,27 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Iniciar Sesión — ASPERS Projects</title>
+    <title>Iniciar Sesión — Argus Projects</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --bg:        #080b14;
-            --bg-2:      #0d1220;
-            --bg-card:   rgba(13, 20, 40, 0.85);
-            --border:    rgba(0, 200, 255, 0.12);
-            --border-h:  rgba(0, 200, 255, 0.40);
-            --accent:    #00c8ff;
-            --accent-d:  #0099cc;
-            --accent-g:  rgba(0, 200, 255, 0.08);
-            --text:      #e8f0fe;
-            --text-m:    #6b7fa3;
-            --text-d:    #3d4f6e;
-            --red:       #ff4757;
-            --red-g:     rgba(255,71,87,0.12);
+            --bg:        #09091C;
+            --bg-2:      #0E0E28;
+            --bg-card:   rgba(12, 12, 38, 0.92);
+            --border:    rgba(139, 92, 246, 0.15);
+            --border-h:  rgba(139, 92, 246, 0.50);
+            --accent:    #8B5CF6;
+            --accent-d:  #6D28D9;
+            --accent-g:  rgba(139, 92, 246, 0.10);
+            --accent2:   #10B981;
+            --text:      #E2E8F7;
+            --text-m:    #7C7FA6;
+            --text-d:    #3D3F6E;
+            --red:       #F43F5E;
+            --red-g:     rgba(244,63,94,0.12);
             --radius:    14px;
             --transition: all 0.22s cubic-bezier(0.4,0,0.2,1);
         }
@@ -42,8 +43,8 @@
             position: fixed;
             inset: 0;
             background-image:
-                linear-gradient(rgba(0,200,255,0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0,200,255,0.03) 1px, transparent 1px);
+                linear-gradient(rgba(139,92,246,0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(139,92,246,0.04) 1px, transparent 1px);
             background-size: 40px 40px;
             pointer-events: none;
             z-index: 0;
@@ -56,10 +57,11 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 700px;
-            height: 500px;
+            width: 800px;
+            height: 600px;
             background: radial-gradient(ellipse at center,
-                rgba(0,200,255,0.08) 0%,
+                rgba(139,92,246,0.12) 0%,
+                rgba(16,185,129,0.04) 50%,
                 transparent 70%);
             pointer-events: none;
             z-index: 0;
@@ -85,9 +87,9 @@
             padding: 40px 36px;
             backdrop-filter: blur(24px);
             box-shadow:
-                0 0 0 1px rgba(0,200,255,0.05),
-                0 32px 64px rgba(0,0,0,0.6),
-                0 0 80px rgba(0,200,255,0.04);
+                0 0 0 1px rgba(139,92,246,0.08),
+                0 32px 64px rgba(0,0,0,0.7),
+                0 0 80px rgba(139,92,246,0.08);
             animation: cardIn 0.4s cubic-bezier(0.4,0,0.2,1) both;
         }
 
@@ -106,23 +108,38 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 56px;
-            height: 56px;
-            margin-bottom: 18px;
-            border-radius: 16px;
-            background: linear-gradient(135deg, rgba(0,200,255,0.15) 0%, rgba(0,200,255,0.05) 100%);
-            border: 1px solid rgba(0,200,255,0.25);
-            box-shadow: 0 0 24px rgba(0,200,255,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+            width: 64px;
+            height: 64px;
+            margin-bottom: 20px;
+            border-radius: 18px;
+            background: linear-gradient(135deg, rgba(139,92,246,0.20) 0%, rgba(109,40,217,0.08) 100%);
+            border: 1px solid rgba(139,92,246,0.35);
+            box-shadow: 0 0 32px rgba(139,92,246,0.25), inset 0 1px 0 rgba(255,255,255,0.06);
         }
 
-        .logo svg { width: 26px; height: 26px; }
+        .logo svg { width: 30px; height: 30px; }
 
         .header h1 {
-            font-size: 22px;
-            font-weight: 700;
-            letter-spacing: -0.3px;
-            color: var(--text);
-            margin-bottom: 6px;
+            font-family: 'Syne', sans-serif;
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, #E2E8F7 0%, #8B5CF6 60%, #6D28D9 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .header .tagline {
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            opacity: 0.8;
+            margin-bottom: 4px;
         }
 
         .header p {
@@ -160,12 +177,12 @@
             transition: var(--transition);
         }
 
-        .tab-btn:hover { color: var(--text); background: rgba(0,200,255,0.05); }
+        .tab-btn:hover { color: var(--text); background: rgba(139,92,246,0.07); }
 
         .tab-btn.active {
-            background: linear-gradient(135deg, rgba(0,200,255,0.18) 0%, rgba(0,150,204,0.12) 100%);
+            background: linear-gradient(135deg, rgba(139,92,246,0.22) 0%, rgba(109,40,217,0.14) 100%);
             color: var(--accent);
-            box-shadow: 0 0 16px rgba(0,200,255,0.12);
+            box-shadow: 0 0 16px rgba(139,92,246,0.18);
         }
 
         .tab-btn svg { flex-shrink: 0; }
@@ -217,26 +234,27 @@
         .field input:focus {
             outline: none;
             border-color: var(--border-h);
-            background: rgba(0,200,255,0.04);
-            box-shadow: 0 0 0 3px rgba(0,200,255,0.08), 0 0 20px rgba(0,200,255,0.06);
+            background: rgba(139,92,246,0.05);
+            box-shadow: 0 0 0 3px rgba(139,92,246,0.12), 0 0 20px rgba(139,92,246,0.08);
         }
 
         /* ── Submit button ── */
         .btn-submit {
             width: 100%;
             margin-top: 6px;
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #00b4d8 0%, #0077a8 100%);
+            padding: 13px 24px;
+            background: linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);
             color: #fff;
             border: none;
             border-radius: 10px;
             font-size: 14px;
-            font-weight: 600;
-            font-family: 'Inter', sans-serif;
+            font-weight: 700;
+            font-family: 'Syne', 'Inter', sans-serif;
             cursor: pointer;
             transition: var(--transition);
-            letter-spacing: 0.3px;
-            box-shadow: 0 4px 20px rgba(0,180,216,0.25);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            box-shadow: 0 4px 24px rgba(139,92,246,0.40);
             position: relative;
             overflow: hidden;
         }
@@ -245,13 +263,13 @@
             content: '';
             position: absolute;
             inset: 0;
-            background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 60%);
+            background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 60%);
             pointer-events: none;
         }
 
         .btn-submit:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 6px 28px rgba(0,180,216,0.4), 0 0 40px rgba(0,200,255,0.15);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(139,92,246,0.55), 0 0 60px rgba(139,92,246,0.20);
         }
 
         .btn-submit:active { transform: translateY(0); }
@@ -278,7 +296,7 @@
 
         .footer-links .register-link {
             color: var(--accent);
-            font-weight: 500;
+            font-weight: 600;
         }
 
         /* ── Version tag ── */
@@ -296,10 +314,11 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 1px;
+            height: 2px;
             background: linear-gradient(90deg,
                 transparent 0%,
-                rgba(0,200,255,0.6) 50%,
+                rgba(139,92,246,0.8) 40%,
+                rgba(16,185,129,0.6) 60%,
                 transparent 100%);
             border-radius: 20px 20px 0 0;
             pointer-events: none;
@@ -314,13 +333,15 @@
 
             <div class="header">
                 <div class="logo">
-                    <svg viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M13 2L4 7V13C4 18.55 7.84 23.74 13 25C18.16 23.74 22 18.55 22 13V7L13 2Z"
-                              stroke="#00c8ff" stroke-width="1.5" stroke-linejoin="round"/>
-                        <path d="M9 13L12 16L17 10" stroke="#00c8ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M15 2L4 8V15C4 21.63 8.84 27.74 15 29C21.16 27.74 26 21.63 26 15V8L15 2Z"
+                              stroke="#8B5CF6" stroke-width="1.8" stroke-linejoin="round"/>
+                        <circle cx="15" cy="14" r="4" stroke="#10B981" stroke-width="1.2"/>
+                        <path d="M10 14L13 17L20 11" stroke="#8B5CF6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </div>
-                <h1>ASPERS Projects</h1>
+                <h1>ARGUS PROJECTS</h1>
+                <div class="tagline">All-Seeing. Always Watching.</div>
                 <p>Acceso al panel de control</p>
             </div>
 
@@ -401,7 +422,7 @@
             <div class="footer-links">
                 <a href="/register" class="register-link">Registrarse con token de invitación</a>
                 <a href="/">← Volver al inicio</a>
-                <span class="version-tag">ASPERS // SECURE ACCESS</span>
+                <span class="version-tag">ARGUS // SECURE ACCESS</span>
             </div>
 
         </div>

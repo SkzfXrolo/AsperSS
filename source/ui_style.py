@@ -3,7 +3,7 @@ from tkinter import ttk, scrolledtext
 
 class ModernUI:
     """
-    ASPERS Projects — Scanner UI
+    Argus Projects — Scanner UI
     Paleta oscura premium (midnight navy + cyan) alineada con el panel web.
     """
 
@@ -57,7 +57,7 @@ class ModernUI:
         except Exception:
             pass
         s.configure(
-            'Aspers.Horizontal.TProgressbar',
+            'Argus.Horizontal.TProgressbar',
             background=cls.COLORS['accent_primary'],
             troughcolor='#0d1a2e',
             borderwidth=0,
@@ -69,7 +69,7 @@ class ModernUI:
     # ── Aplicar ventana ──────────────────────────────────────────────────────
     @staticmethod
     def apply_window_style(root):
-        root.title("ASPERS Projects — Security Scanner Pro")
+        root.title("Argus Projects — Security Scanner Pro")
         sw = root.winfo_screenwidth()
         if sw <= 1366:
             w, h = 1150, 670
@@ -118,7 +118,7 @@ class ModernUI:
 
         text_col = tk.Frame(left, bg=C['bg_secondary'])
         text_col.pack(side=tk.LEFT)
-        tk.Label(text_col, text="ASPERS PROJECTS",
+        tk.Label(text_col, text="ARGUS PROJECTS",
                  font=ModernUI.FONTS['title'],
                  bg=C['bg_secondary'], fg=C['text_primary'],
                  anchor='w').pack(anchor='w')
@@ -178,7 +178,7 @@ class ModernUI:
         pb_frame.pack_propagate(False)
 
         pb = ttk.Progressbar(pb_frame, mode='determinate', maximum=100,
-                             style='Aspers.Horizontal.TProgressbar')
+                             style='Argus.Horizontal.TProgressbar')
         pb.pack(fill=tk.BOTH, expand=True)
 
         # Detalle

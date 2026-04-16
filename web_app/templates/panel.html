@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel Staff - ASPERS Projects</title>
+    <title>Panel Staff - Argus Projects</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,14 +16,18 @@
     <aside class="sidebar">
         <div class="sidebar-header">
             <span class="brand-icon">
-                <svg width="22" height="22" viewBox="0 0 26 26" fill="none">
-                    <path d="M13 2L4 7V13C4 18.55 7.84 23.74 13 25C18.16 23.74 22 18.55 22 13V7L13 2Z"
-                          stroke="#8B5CF6" stroke-width="1.5" stroke-linejoin="round"/>
-                    <path d="M9 13L12 16L17 10" stroke="#8B5CF6" stroke-width="1.5"
+                <svg width="26" height="26" viewBox="0 0 30 30" fill="none">
+                    <path d="M15 2L4 8V15C4 21.63 8.84 27.74 15 29C21.16 27.74 26 21.63 26 15V8L15 2Z"
+                          stroke="#8B5CF6" stroke-width="1.8" stroke-linejoin="round"/>
+                    <circle cx="15" cy="14" r="4" stroke="#10B981" stroke-width="1.2"/>
+                    <path d="M10 14L13 17L20 11" stroke="#8B5CF6" stroke-width="1.8"
                           stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             </span>
-            <span class="brand-text" style="font-family:'Syne',sans-serif;">ASPERS</span>
+            <div style="display:flex;flex-direction:column;line-height:1.1;">
+                <span class="brand-text" style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800;letter-spacing:2px;">ARGUS</span>
+                <span style="font-family:'JetBrains Mono','Consolas',monospace;font-size:9px;color:#8B5CF6;letter-spacing:1.5px;opacity:0.75;">PROJECTS</span>
+            </div>
         </div>
         <nav class="sidebar-nav">
             <a href="/panel" class="nav-item active" data-section="dashboard">
@@ -187,7 +191,7 @@
         <!-- Generar App Section -->
         <section class="panel-section" id="generar-app-section">
             <div class="section-card">
-                <h2 class="section-subtitle">Gestión de Aplicación - ASPERS Projects</h2>
+                <h2 class="section-subtitle">Gestión de Aplicación - Argus Projects</h2>
                 <p class="section-description">
                     <strong>IMPORTANTE:</strong> Las actualizaciones de IA se descargan automáticamente sin necesidad de recompilar.
                     Solo compila cuando hay cambios en el código del programa.
@@ -240,7 +244,7 @@
                 </div>
 
                 <div class="generation-log" id="generation-log" style="display: none;">
-                    <h3>Log de Compilación - ASPERS Projects</h3>
+                    <h3>Log de Compilación - Argus Projects</h3>
                     <div class="log-content" id="log-content"></div>
                 </div>
             </div>
@@ -282,7 +286,7 @@
         <!-- Resultados Section -->
         <section class="panel-section" id="resultados-section">
             <div class="section-header-actions">
-                <h2 class="section-subtitle">Resultados de Escaneos - ASPERS Projects</h2>
+                <h2 class="section-subtitle">Resultados de Escaneos - Argus Projects</h2>
                 <div class="filter-controls">
                     <input type="text" class="search-input" id="search-results" placeholder="Buscar por máquina, archivo...">
                     <select class="filter-select" id="filter-severity">
@@ -338,7 +342,7 @@
                 <div class="detection-icon">⚠️</div>
                 <div class="detection-content">
                     <h3 class="detection-title">Detectado</h3>
-                    <p class="detection-message">ASPERS Projects ha detectado indicadores de trampas. Revisa el análisis detallado a continuación.</p>
+                    <p class="detection-message">Argus Projects ha detectado indicadores de trampas. Revisa el análisis detallado a continuación.</p>
                 </div>
             </div>
 
@@ -636,7 +640,7 @@
                     <div>
                         <h2 class="section-subtitle">Sistema de Aprendizaje Progresivo</h2>
                         <p class="section-description">
-                            ASPERS Projects aprende continuamente de cada hack confirmado por el staff.
+                            Argus Projects aprende continuamente de cada hack confirmado por el staff.
                             Este sistema mejora automáticamente la detección con el tiempo.
                             <strong>Los clientes descargan automáticamente los nuevos patrones sin necesidad de recompilar.</strong>
                         </p>
@@ -674,7 +678,7 @@
                 </div>
 
                 <div class="learned-patterns-container">
-                    <h3 class="subsection-title">Patrones Aprendidos por ASPERS Projects</h3>
+                    <h3 class="subsection-title">Patrones Aprendidos por Argus Projects</h3>
                     <div class="patterns-list" id="patterns-list">
                         <div class="loading-cell">Cargando patrones aprendidos...</div>
                     </div>
@@ -686,7 +690,7 @@
         {% if user and ('admin' in user.roles or 'administrador' in user.roles) %}
         <section class="panel-section" id="administracion-section">
             <div class="section-content">
-                <h2 class="section-title">Administración - ASPERS Projects</h2>
+                <h2 class="section-title">Administración - Argus Projects</h2>
                 <p class="section-description">Gestiona usuarios y tokens de registro</p>
 
                 {% if user and 'admin' in user.roles %}
@@ -1142,7 +1146,7 @@
         {% if user and user.company_id %}
         <section class="panel-section" id="mi-empresa-section">
             <div class="section-content">
-                <h2 class="section-title">Mi Empresa - ASPERS Projects</h2>
+                <h2 class="section-title">Mi Empresa - Argus Projects</h2>
                 <p class="section-description">Gestiona usuarios y tokens de tu empresa</p>
 
                 <!-- Información de la Empresa -->
@@ -1320,7 +1324,7 @@
     <div class="modal" id="scan-details-modal">
         <div class="modal-content modal-large">
             <div class="modal-header">
-                <h3>Detalles del Escaneo - ASPERS Projects</h3>
+                <h3>Detalles del Escaneo - Argus Projects</h3>
                 <button class="modal-close" id="close-scan-details-modal">&times;</button>
             </div>
             <div class="modal-body">
@@ -1342,7 +1346,7 @@
                 <div class="scan-results-container">
                     <h4 class="results-title">Resultados del Escaneo - Marca como Hack o Legítimo</h4>
                     <p class="results-description">
-                        <strong>ASPERS Projects</strong> aprende de cada confirmación. Marca los resultados para mejorar la detección automática.
+                        <strong>Argus Projects</strong> aprende de cada confirmación. Marca los resultados para mejorar la detección automática.
                     </p>
                     <div class="results-list" id="scan-results-list">
                         <div class="loading-cell">Cargando resultados...</div>
@@ -1411,7 +1415,7 @@
                     <div class="feedback-impact">
                         <div class="impact-icon">🧠</div>
                         <div class="impact-text">
-                            <strong>Tu feedback mejora ASPERS Projects</strong>
+                            <strong>Tu feedback mejora Argus Projects</strong>
                             <p>Esta información ayudará a la IA a detectar mejor los hacks en el futuro</p>
                         </div>
                     </div>
