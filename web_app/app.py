@@ -46,16 +46,13 @@ RENDER_EXTERNAL_URL = os.environ.get('RENDER_EXTERNAL_URL')  # Render proporcion
 IS_RENDER = bool(RENDER_EXTERNAL_URL)
 
 if IS_RENDER:
-    # En Render, verificar si hay una API_URL configurada (servicio separado)
-    # Por defecto, usar la URL de la API en Render
+    # La API está integrada en esta misma app — usar la propia URL de Render
     api_url_env = os.environ.get('API_URL')
     if api_url_env:
-        # API en servicio separado de Render (configurado explícitamente)
         API_BASE_URL = api_url_env.rstrip('/')
     else:
-        # Por defecto en Render, usar la API separada
-        API_BASE_URL = 'https://ssapi-cfni.onrender.com'
-        print(f"⚠️ API_URL no configurada en Render, usando por defecto: {API_BASE_URL}")
+        API_BASE_URL = RENDER_EXTERNAL_URL.rstrip('/')
+        print(f"✅ API_URL apunta a esta misma app: {API_BASE_URL}")
 else:
     # En desarrollo local, usar localhost:5000
     API_BASE_URL = os.environ.get('API_URL', 'http://localhost:5000')
