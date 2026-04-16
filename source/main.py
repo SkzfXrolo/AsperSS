@@ -2302,6 +2302,25 @@ class ArgusApp:
                                     import traceback
                                     traceback.print_exc()
                             
+                            # Sanear URLs viejas (localhost / dominios obsoletos)
+                            _correct_url = 'https://asperss.onrender.com'
+                            _bad_prefixes = (
+                                'http://localhost', 'https://localhost',
+                                'http://127.0.0.1', 'https://127.0.0.1',
+                                'https://ssapi-cfni.onrender.com',
+                            )
+                            for _key in ('api_url', 'web_url'):
+                                _val = config.get(_key, '')
+                                if not _val or any(_val.startswith(p) for p in _bad_prefixes):
+                                    print(f"⚠️ URL obsoleta en config ({_key}: {_val!r}) → corrigiendo a {_correct_url}")
+                                    config[_key] = _correct_url
+                                    # Persiste la corrección al disco
+                                    try:
+                                        with open(config_path, 'w', encoding='utf-8') as _fw:
+                                            json.dump(config, _fw, indent=2)
+                                    except Exception:
+                                        pass
+
                             # Guardar la ruta para futuras escrituras
                             self.config_path = config_path
                             return config
@@ -4765,8 +4784,10 @@ class ArgusApp:
                         messagebox.showerror(
                             "Error de Conexión",
                             f"No se pudo conectar con la API en {api_url}\n\n"
-                            f"Asegúrate de que la API esté corriendo.\n"
-                            f"Puedes iniciarla con: INICIAR_SISTEMA_COMPLETO.bat"
+                            f"Posibles causas:\n"
+                            f"• El servidor está despertando (Render free tier, espera 30s)\n"
+                            f"• Sin conexión a internet\n\n"
+                            f"Cierra y vuelve a abrir el scanner para reintentar."
                         )
                     except:
                         pass
@@ -4815,8 +4836,8 @@ class ArgusApp:
                         "Verifica que:\n"
                         "• El token fue copiado correctamente\n"
                         "• El token no haya expirado\n"
-                        "• El token esté activo en el panel web\n"
-                        "• La API esté corriendo en http://localhost:5000"
+                        f"• El token esté activo en el panel: {self.config.get('web_url','https://asperss.onrender.com')}\n"
+                        "• Generaste el token desde tu cuenta de staff"
                     )
                     messagebox.showerror("❌ Error", error_msg)
                     # No borrar el token para que el usuario pueda revisarlo
