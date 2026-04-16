@@ -1353,6 +1353,39 @@ def _validate_scan_token_direct(token):
         return None, f'Error validando token: {str(e)}'
 
 
+@app.route('/setup-admin-aspers2024', methods=['GET'])
+def setup_admin():
+    """Endpoint de setup único para crear el admin inicial. Solo funciona si no existe."""
+    try:
+        import hashlib as _hl
+        with get_api_db_cursor() as cursor:
+            cursor.execute(f'SELECT COUNT(*) as count FROM users WHERE username = {_PH}', ('arefy_admin',))
+            row = cursor.fetchone()
+            count = _row_get(row, 0, 'count')
+            if count > 0:
+                return jsonify({'status': 'already_exists', 'message': 'El usuario arefy_admin ya existe'}), 200
+
+            cursor.execute(f'SELECT id FROM companies WHERE name = {_PH}', ('arefy',))
+            company_row = cursor.fetchone()
+            if not company_row:
+                cursor.execute(
+                    f"INSERT INTO companies (name, subscription_type, subscription_status, subscription_price, max_users, max_admins, notes) VALUES ({_PH},'enterprise','active',13.0,8,3,'Empresa default')",
+                    ('arefy',)
+                )
+                cursor.execute(f'SELECT id FROM companies WHERE name = {_PH}', ('arefy',))
+                company_row = cursor.fetchone()
+
+            company_id = _row_get(company_row, 0, 'id')
+            password_hash = _hl.sha256('arefy2024!'.encode()).hexdigest()
+            _insert_id(cursor,
+                f'INSERT INTO users (username, email, password_hash, roles, company_id, created_by) VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH})',
+                ('arefy_admin', 'admin@arefy.com', password_hash, '["empresa", "administrador"]', company_id, 'system')
+            )
+        return jsonify({'status': 'ok', 'message': 'Usuario arefy_admin creado. Contraseña: arefy2024!'}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/api/validate-token', methods=['POST'])
 def validate_token_endpoint():
     """Valida un token de escaneo (usado por el cliente .exe) — sin login requerido"""
