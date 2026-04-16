@@ -3,355 +3,980 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Argus Projects - Security Scanner Pro</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <!-- Optimización: Preconnect para cargar fuentes más rápido -->
+    <title>Argus Projects — Security Scanner Pro</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- font-display=swap ya está en la URL, carga de forma no bloqueante -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg0:        #080508;
+            --bg1:        #0D080C;
+            --bg2:        #130B10;
+            --bg3:        #1A0E15;
+            --card:       rgba(20, 10, 16, 0.9);
+            --border:     rgba(180, 20, 40, 0.18);
+            --border-h:   rgba(220, 30, 60, 0.50);
+            --red:        #C41E3A;
+            --red-bright: #E8243F;
+            --red-dim:    #7B1225;
+            --red-glow:   rgba(196, 30, 58, 0.20);
+            --gold:       #B8860B;
+            --gold-l:     #D4A017;
+            --text:       #F0E4E8;
+            --text-m:     #9A8490;
+            --text-d:     #4A3840;
+            --accent:     #C41E3A;
+            --radius:     12px;
+            --trans:      all 0.25s cubic-bezier(0.4,0,0.2,1);
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg0);
+            color: var(--text);
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
+
+        /* ── Ambient background ────────────────────────────────── */
+        body::before {
+            content: '';
+            position: fixed; inset: 0; z-index: 0;
+            background:
+                radial-gradient(ellipse 80% 50% at 50% -10%, rgba(180,20,40,0.12) 0%, transparent 60%),
+                radial-gradient(ellipse 40% 30% at 80% 80%, rgba(120,10,25,0.08) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        body::after {
+            content: '';
+            position: fixed; inset: 0; z-index: 0;
+            background-image:
+                linear-gradient(rgba(180,20,40,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(180,20,40,0.03) 1px, transparent 1px);
+            background-size: 48px 48px;
+            pointer-events: none;
+        }
+
+        * { position: relative; z-index: 1; }
+
+        /* ── Navbar ────────────────────────────────────────────── */
+        .navbar {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            background: rgba(8,5,8,0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .navbar::after {
+            content: '';
+            position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+        }
+
+        .nav-inner {
+            max-width: 1200px; margin: 0 auto;
+            padding: 0 32px;
+            height: 68px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+
+        .nav-brand {
+            display: flex; align-items: center; gap: 12px;
+            text-decoration: none;
+        }
+
+        .nav-brand img {
+            width: 36px; height: 36px; object-fit: contain;
+            filter: drop-shadow(0 0 8px rgba(196,30,58,0.5));
+        }
+
+        .nav-brand-text {
+            display: flex; flex-direction: column; line-height: 1.1;
+        }
+
+        .nav-brand-name {
+            font-family: 'Syne', sans-serif;
+            font-size: 14px; font-weight: 800;
+            letter-spacing: 3px;
+            background: linear-gradient(135deg, #F0E4E8, #C41E3A);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-brand-sub {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px; letter-spacing: 2px;
+            color: var(--red); opacity: 0.7;
+        }
+
+        .nav-links {
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        .nav-link {
+            padding: 8px 16px;
+            font-size: 13px; font-weight: 500;
+            color: var(--text-m);
+            text-decoration: none;
+            border-radius: 8px;
+            transition: var(--trans);
+        }
+
+        .nav-link:hover { color: var(--text); background: rgba(196,30,58,0.08); }
+
+        .nav-link.cta {
+            background: rgba(196,30,58,0.15);
+            border: 1px solid rgba(196,30,58,0.30);
+            color: #E8A0AA;
+            font-weight: 600;
+        }
+
+        .nav-link.cta:hover {
+            background: rgba(196,30,58,0.25);
+            border-color: var(--red);
+            color: var(--text);
+        }
+
+        /* ── Hero ──────────────────────────────────────────────── */
+        .hero {
+            min-height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            padding: 120px 32px 80px;
+            text-align: center;
+        }
+
+        .hero-inner { max-width: 860px; }
+
+        .hero-eyebrow {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 6px 16px;
+            background: rgba(196,30,58,0.10);
+            border: 1px solid rgba(196,30,58,0.25);
+            border-radius: 100px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px; letter-spacing: 2px;
+            color: #D06070;
+            margin-bottom: 40px;
+        }
+
+        .hero-eyebrow-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--red);
+            box-shadow: 0 0 8px var(--red);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%,100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        .hero-logo {
+            display: block; margin: 0 auto 40px;
+            width: 120px; height: 120px; object-fit: contain;
+            filter:
+                drop-shadow(0 0 24px rgba(196,30,58,0.50))
+                drop-shadow(0 0 60px rgba(196,30,58,0.20));
+            animation: floatLogo 6s ease-in-out infinite;
+        }
+
+        @keyframes floatLogo {
+            0%,100% { transform: translateY(0); filter: drop-shadow(0 0 24px rgba(196,30,58,0.50)) drop-shadow(0 0 60px rgba(196,30,58,0.20)); }
+            50%      { transform: translateY(-10px); filter: drop-shadow(0 0 36px rgba(196,30,58,0.70)) drop-shadow(0 0 80px rgba(196,30,58,0.30)); }
+        }
+
+        .hero-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(42px, 7vw, 80px);
+            font-weight: 800;
+            line-height: 1.0;
+            letter-spacing: -1px;
+            margin-bottom: 24px;
+        }
+
+        .hero-title-main {
+            display: block;
+            background: linear-gradient(135deg, #F0E4E8 0%, #FFFFFF 40%, #E8C0C8 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-title-accent {
+            display: block;
+            background: linear-gradient(135deg, #C41E3A 0%, #E8243F 50%, #B8860B 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 2px;
+        }
+
+        .hero-sub {
+            font-size: 17px; font-weight: 300; line-height: 1.7;
+            color: var(--text-m);
+            max-width: 580px; margin: 0 auto 48px;
+        }
+
+        .hero-actions {
+            display: flex; align-items: center; justify-content: center; gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .btn-hero-primary {
+            display: inline-flex; align-items: center; gap: 10px;
+            padding: 15px 36px;
+            background: linear-gradient(135deg, #C41E3A, #8B1220);
+            color: #fff;
+            font-family: 'Syne', sans-serif;
+            font-size: 14px; font-weight: 700;
+            letter-spacing: 1.5px; text-transform: uppercase;
+            text-decoration: none;
+            border-radius: 10px;
+            border: 1px solid rgba(220,50,70,0.4);
+            box-shadow: 0 4px 28px rgba(196,30,58,0.45), inset 0 1px 0 rgba(255,255,255,0.10);
+            transition: var(--trans);
+        }
+
+        .btn-hero-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 40px rgba(196,30,58,0.60), inset 0 1px 0 rgba(255,255,255,0.15);
+        }
+
+        .btn-hero-secondary {
+            display: inline-flex; align-items: center; gap: 10px;
+            padding: 15px 32px;
+            background: transparent;
+            color: var(--text-m);
+            font-size: 14px; font-weight: 500;
+            text-decoration: none;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            transition: var(--trans);
+        }
+
+        .btn-hero-secondary:hover {
+            color: var(--text);
+            border-color: rgba(196,30,58,0.35);
+            background: rgba(196,30,58,0.06);
+        }
+
+        /* ── Divider line ───────────────────────────────────────── */
+        .divider {
+            width: 100%; max-width: 1200px; margin: 0 auto;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--red-dim), transparent);
+        }
+
+        /* ── Stats bar ──────────────────────────────────────────── */
+        .stats-bar {
+            padding: 60px 32px;
+        }
+
+        .stats-inner {
+            max-width: 1000px; margin: 0 auto;
+            display: grid; grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            background: var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .stat-item {
+            background: var(--bg1);
+            padding: 36px 32px;
+            text-align: center;
+            transition: var(--trans);
+        }
+
+        .stat-item:hover { background: var(--bg2); }
+
+        .stat-value {
+            font-family: 'Syne', sans-serif;
+            font-size: 42px; font-weight: 800;
+            background: linear-gradient(135deg, #E8243F, #B8860B);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            font-size: 12px; font-weight: 500;
+            letter-spacing: 1.5px; text-transform: uppercase;
+            color: var(--text-m);
+        }
+
+        /* ── Section commons ────────────────────────────────────── */
+        .section { padding: 100px 32px; }
+
+        .section-inner { max-width: 1200px; margin: 0 auto; }
+
+        .section-header { text-align: center; margin-bottom: 64px; }
+
+        .section-eyebrow {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px; letter-spacing: 3px; text-transform: uppercase;
+            color: var(--red); opacity: 0.8;
+            margin-bottom: 16px;
+            display: block;
+        }
+
+        .section-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(28px, 4vw, 44px);
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: var(--text);
+            margin-bottom: 16px;
+        }
+
+        .section-title span {
+            background: linear-gradient(135deg, #C41E3A, #E8243F);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .section-subtitle {
+            font-size: 16px; color: var(--text-m);
+            max-width: 480px; margin: 0 auto;
+        }
+
+        /* ── Features grid ──────────────────────────────────────── */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            background: var(--border);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .feature-card {
+            background: var(--bg1);
+            padding: 40px 32px;
+            transition: var(--trans);
+        }
+
+        .feature-card:hover { background: var(--bg2); }
+
+        .feature-icon {
+            width: 48px; height: 48px;
+            border-radius: 12px;
+            background: rgba(196,30,58,0.10);
+            border: 1px solid rgba(196,30,58,0.20);
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .feature-icon svg { color: var(--red); }
+
+        .feature-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 17px; font-weight: 700;
+            color: var(--text);
+            margin-bottom: 12px;
+        }
+
+        .feature-desc {
+            font-size: 14px; line-height: 1.7;
+            color: var(--text-m);
+        }
+
+        /* ── How it works ───────────────────────────────────────── */
+        .how-section { background: var(--bg1); }
+
+        .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+
+        .step {
+            text-align: center; padding: 48px 24px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: var(--bg0);
+            transition: var(--trans);
+            position: relative; overflow: hidden;
+        }
+
+        .step::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            opacity: 0;
+            transition: var(--trans);
+        }
+
+        .step:hover { border-color: var(--border-h); }
+        .step:hover::before { opacity: 1; }
+
+        .step-num {
+            font-family: 'Syne', sans-serif;
+            font-size: 56px; font-weight: 800;
+            line-height: 1;
+            background: linear-gradient(135deg, rgba(196,30,58,0.15), rgba(196,30,58,0.05));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+        }
+
+        .step-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 18px; font-weight: 700;
+            color: var(--text); margin-bottom: 12px;
+        }
+
+        .step-desc { font-size: 14px; line-height: 1.7; color: var(--text-m); }
+
+        /* ── Pricing ────────────────────────────────────────────── */
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            max-width: 860px; margin: 0 auto;
+        }
+
+        .pricing-card {
+            background: var(--bg1);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 40px 36px;
+            transition: var(--trans);
+            position: relative; overflow: hidden;
+        }
+
+        .pricing-card::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red-dim), transparent);
+        }
+
+        .pricing-card.featured {
+            border-color: rgba(196,30,58,0.35);
+            background: linear-gradient(145deg, rgba(196,30,58,0.06), var(--bg1));
+        }
+
+        .pricing-card.featured::before {
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+        }
+
+        .pricing-card:hover { border-color: var(--border-h); transform: translateY(-2px); }
+
+        .pricing-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: rgba(196,30,58,0.15);
+            border: 1px solid rgba(196,30,58,0.30);
+            border-radius: 100px;
+            font-size: 11px; font-weight: 600;
+            letter-spacing: 1px; text-transform: uppercase;
+            color: #D06070;
+            margin-bottom: 24px;
+        }
+
+        .pricing-plan {
+            font-family: 'Syne', sans-serif;
+            font-size: 22px; font-weight: 800;
+            color: var(--text); margin-bottom: 8px;
+        }
+
+        .pricing-desc {
+            font-size: 13px; color: var(--text-m); margin-bottom: 28px;
+        }
+
+        .pricing-amount {
+            display: flex; align-items: baseline; gap: 4px;
+            margin-bottom: 32px;
+        }
+
+        .pricing-amount .price {
+            font-family: 'Syne', sans-serif;
+            font-size: 52px; font-weight: 800;
+            background: linear-gradient(135deg, #F0E4E8, #C41E3A);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+        }
+
+        .pricing-amount .currency {
+            font-size: 20px; color: var(--red); font-weight: 600;
+        }
+
+        .pricing-amount .period {
+            font-size: 14px; color: var(--text-m);
+        }
+
+        .pricing-features {
+            list-style: none;
+            margin-bottom: 36px;
+        }
+
+        .pricing-features li {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 0;
+            border-bottom: 1px solid rgba(180,20,40,0.08);
+            font-size: 14px; color: var(--text-m);
+        }
+
+        .pricing-features li:last-child { border-bottom: none; }
+
+        .pricing-features li svg { flex-shrink: 0; color: var(--red); }
+
+        .btn-pricing {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            width: 100%; padding: 13px;
+            font-family: 'Syne', sans-serif;
+            font-size: 13px; font-weight: 700;
+            letter-spacing: 1px; text-transform: uppercase;
+            text-decoration: none;
+            border-radius: 10px;
+            border: 1px solid rgba(196,30,58,0.35);
+            background: rgba(196,30,58,0.10);
+            color: #E8A0AA;
+            transition: var(--trans);
+        }
+
+        .btn-pricing:hover {
+            background: rgba(196,30,58,0.20);
+            border-color: var(--red);
+            color: var(--text);
+        }
+
+        .btn-pricing.solid {
+            background: linear-gradient(135deg, #C41E3A, #8B1220);
+            border-color: rgba(220,50,70,0.4);
+            color: #fff;
+            box-shadow: 0 4px 24px rgba(196,30,58,0.35);
+        }
+
+        .btn-pricing.solid:hover {
+            box-shadow: 0 6px 32px rgba(196,30,58,0.55);
+        }
+
+        /* ── CTA ────────────────────────────────────────────────── */
+        .cta-section { padding: 100px 32px; }
+
+        .cta-inner {
+            max-width: 800px; margin: 0 auto;
+            text-align: center;
+            padding: 80px 60px;
+            background: linear-gradient(135deg, rgba(196,30,58,0.08), rgba(139,18,32,0.04));
+            border: 1px solid rgba(196,30,58,0.25);
+            border-radius: 24px;
+            position: relative; overflow: hidden;
+        }
+
+        .cta-inner::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), var(--gold), transparent);
+        }
+
+        .cta-eyebrow {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px; letter-spacing: 3px; text-transform: uppercase;
+            color: var(--red); opacity: 0.8;
+            margin-bottom: 20px;
+        }
+
+        .cta-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(28px, 4vw, 44px); font-weight: 800;
+            color: var(--text); margin-bottom: 16px; line-height: 1.1;
+        }
+
+        .cta-sub { font-size: 16px; color: var(--text-m); margin-bottom: 40px; }
+
+        /* ── Footer ─────────────────────────────────────────────── */
+        .footer {
+            border-top: 1px solid var(--border);
+            padding: 48px 32px;
+            background: var(--bg1);
+        }
+
+        .footer-inner {
+            max-width: 1200px; margin: 0 auto;
+            display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 24px;
+        }
+
+        .footer-brand {
+            display: flex; align-items: center; gap: 12px;
+        }
+
+        .footer-brand img {
+            width: 28px; height: 28px; object-fit: contain;
+            filter: drop-shadow(0 0 6px rgba(196,30,58,0.4));
+        }
+
+        .footer-brand-name {
+            font-family: 'Syne', sans-serif;
+            font-size: 13px; font-weight: 800;
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, #F0E4E8, #C41E3A);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .footer-center {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px; letter-spacing: 1px;
+            color: var(--text-d);
+        }
+
+        .footer-copy { font-size: 12px; color: var(--text-d); }
+
+        /* ── Responsive ─────────────────────────────────────────── */
+        @media (max-width: 900px) {
+            .features-grid { grid-template-columns: 1fr 1fr; }
+            .steps { grid-template-columns: 1fr; }
+            .pricing-grid { grid-template-columns: 1fr; }
+            .stats-inner { grid-template-columns: 1fr; }
+            .footer-inner { flex-direction: column; text-align: center; }
+        }
+
+        @media (max-width: 600px) {
+            .features-grid { grid-template-columns: 1fr; }
+            .nav-links .nav-link:not(.cta) { display: none; }
+            .cta-inner { padding: 48px 24px; }
+        }
+
+        /* ── Scroll reveal ───────────────────────────────────────── */
+        .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
+        .reveal.visible { opacity: 1; transform: translateY(0); }
+    </style>
 </head>
 <body>
-    <!-- Navigation -->
+
+    <!-- NAVBAR -->
     <nav class="navbar">
-        <div class="nav-container">
-            <div class="nav-brand">
-                <span class="brand-icon">🛡️</span>
-                <span class="brand-text">ARGUS PROJECTS</span>
-            </div>
+        <div class="nav-inner">
+            <a href="/" class="nav-brand">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Argus">
+                <div class="nav-brand-text">
+                    <span class="nav-brand-name">ARGUS PROJECTS</span>
+                    <span class="nav-brand-sub">SECURITY SCANNER PRO</span>
+                </div>
+            </a>
             <div class="nav-links">
-                <a href="/" class="nav-link active">Inicio</a>
-                <a href="#suscripciones" class="nav-link">Suscripciones</a>
-                <a href="/login" class="nav-link">Iniciar Sesión</a>
-                <a href="/register" class="nav-link">Registrarse</a>
+                <a href="#que-es" class="nav-link">Sistema</a>
+                <a href="#como-funciona" class="nav-link">Proceso</a>
+                <a href="#planes" class="nav-link">Planes</a>
+                <a href="/login" class="nav-link cta">Acceder</a>
             </div>
         </div>
     </nav>
 
-    <!-- Hero Section -->
+    <!-- HERO -->
     <section class="hero">
-        <div class="hero-content">
-            <div class="hero-badge">
-                <span class="badge-dot"></span>
-                <span>Security Scanner Pro</span>
+        <div class="hero-inner">
+            <div class="hero-eyebrow">
+                <span class="hero-eyebrow-dot"></span>
+                ARGUS // SECURITY INTELLIGENCE
             </div>
+
+            <img src="{{ url_for('static', filename='img/logo.png') }}"
+                 alt="Argus Projects" class="hero-logo">
+
             <h1 class="hero-title">
-                Argus Projects
-                <span class="gradient-text">Inteligencia Artificial</span>
-                para Detección Avanzada
+                <span class="hero-title-main">All-Seeing.</span>
+                <span class="hero-title-accent">Always Watching.</span>
             </h1>
-            <p class="hero-description">
-                Sistema de análisis y detección que evoluciona constantemente mediante IA,
-                diseñado para identificar y prevenir comportamientos sospechosos con precisión milimétrica.
+
+            <p class="hero-sub">
+                Sistema de detección avanzada con inteligencia artificial evolutiva.
+                Identificamos amenazas con precisión quirúrgica y aprendemos de cada análisis.
             </p>
+
             <div class="hero-actions">
-                <a href="/login" class="btn btn-primary">
-                    <span>Iniciar Sesión</span>
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <a href="/login" class="btn-hero-primary">
+                    Acceder al Panel
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
                         <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </a>
-                <a href="/register" class="btn btn-secondary" style="margin-left: 12px;">
-                    <span>Registrarse</span>
+                <a href="#planes" class="btn-hero-secondary">
+                    Ver Planes
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                        <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
                 </a>
-            </div>
-        </div>
-        <div class="hero-visual">
-            <div class="floating-card card-1">
-                <div class="card-icon">🔍</div>
-                <div class="card-title">Detección Avanzada</div>
-            </div>
-            <div class="floating-card card-2">
-                <div class="card-icon">🤖</div>
-                <div class="card-title">IA Evolutiva</div>
-            </div>
-            <div class="floating-card card-3">
-                <div class="card-icon">⚡</div>
-                <div class="card-title">Rendimiento Óptimo</div>
             </div>
         </div>
     </section>
 
-    <!-- About Section -->
-    <section class="about-section">
-        <div class="container">
-            <div class="section-header">
-                <h2 class="section-title">¿Qué es ARGUS?</h2>
-                <p class="section-subtitle">Una herramienta de seguridad de nueva generación</p>
+    <div class="divider"></div>
+
+    <!-- STATS -->
+    <section class="stats-bar">
+        <div class="stats-inner">
+            <div class="stat-item reveal">
+                <div class="stat-value">+95%</div>
+                <div class="stat-label">Precisión de detección</div>
+            </div>
+            <div class="stat-item reveal">
+                <div class="stat-value">∞</div>
+                <div class="stat-label">Patrones aprendidos</div>
+            </div>
+            <div class="stat-item reveal">
+                <div class="stat-value">0ms</div>
+                <div class="stat-label">Actualización del modelo</div>
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- FEATURES -->
+    <section class="section" id="que-es">
+        <div class="section-inner">
+            <div class="section-header reveal">
+                <span class="section-eyebrow">El sistema</span>
+                <h2 class="section-title">¿Qué es <span>ARGUS</span>?</h2>
+                <p class="section-subtitle">Una herramienta de seguridad de nueva generación, diseñada para ver lo que otros no ven.</p>
             </div>
 
             <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">🎯</div>
+                <div class="feature-card reveal">
+                    <div class="feature-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                        </svg>
+                    </div>
                     <h3 class="feature-title">Detección Precisa</h3>
-                    <p class="feature-description">
-                        Utiliza algoritmos de machine learning y análisis heurístico para identificar
-                        comportamientos sospechosos con una precisión superior al 95%.
-                    </p>
+                    <p class="feature-desc">Algoritmos de machine learning y análisis heurístico para identificar comportamientos sospechosos con una precisión superior al 95%.</p>
                 </div>
 
-                <div class="feature-card">
-                    <div class="feature-icon">🧠</div>
+                <div class="feature-card reveal">
+                    <div class="feature-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                        </svg>
+                    </div>
                     <h3 class="feature-title">IA Evolutiva</h3>
-                    <p class="feature-description">
-                        El sistema aprende continuamente de cada análisis, mejorando sus capacidades
-                        de detección y adaptándose a nuevas amenazas automáticamente.
-                    </p>
+                    <p class="feature-desc">El sistema aprende de cada análisis, mejorando continuamente sus capacidades y adaptándose a nuevas amenazas en tiempo real.</p>
                 </div>
 
-                <div class="feature-card">
-                    <div class="feature-icon">🔄</div>
-                    <h3 class="feature-title">Actualizaciones Automáticas</h3>
-                    <p class="feature-description">
-                        La base de datos de detección se actualiza automáticamente, incorporando
-                        nuevos patrones y técnicas de identificación sin intervención manual.
-                    </p>
+                <div class="feature-card reveal">
+                    <div class="feature-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.18-4.76"/>
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">Actualización Automática</h3>
+                    <p class="feature-desc">La base de datos de detección se actualiza automáticamente sin necesidad de recompilar el cliente. El modelo vive en la nube.</p>
                 </div>
 
-                <div class="feature-card">
-                    <div class="feature-icon">⚡</div>
-                    <h3 class="feature-title">Rendimiento Optimizado</h3>
-                    <p class="feature-description">
-                        Escaneo ultra-rápido utilizando todos los recursos disponibles del sistema,
-                        sin comprometer la estabilidad o el rendimiento general.
-                    </p>
+                <div class="feature-card reveal">
+                    <div class="feature-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                        </svg>
+                    </div>
+                    <h3 class="feature-title">Rendimiento Óptimo</h3>
+                    <p class="feature-desc">Escaneo paralelo con todos los recursos disponibles. Velocidad máxima sin comprometer la estabilidad del sistema.</p>
                 </div>
 
-                <div class="feature-card">
-                    <div class="feature-icon">🔒</div>
+                <div class="feature-card reveal">
+                    <div class="feature-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                    </div>
                     <h3 class="feature-title">Seguridad Total</h3>
-                    <p class="feature-description">
-                        Sistema de autenticación robusto con tokens únicos, encriptación de datos
-                        y comunicación segura entre cliente y servidor.
-                    </p>
+                    <p class="feature-desc">Autenticación con tokens únicos, cifrado de datos y comunicación segura entre cliente y servidor.</p>
                 </div>
 
-                <div class="feature-card">
-                    <div class="feature-icon">📊</div>
+                <div class="feature-card reveal">
+                    <div class="feature-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+                        </svg>
+                    </div>
                     <h3 class="feature-title">Análisis Detallado</h3>
-                    <p class="feature-description">
-                        Reportes completos con análisis de IA, niveles de confianza, patrones detectados
-                        y recomendaciones personalizadas para cada hallazgo.
-                    </p>
+                    <p class="feature-desc">Reportes completos con análisis de IA, niveles de confianza, patrones detectados y recomendaciones por cada hallazgo.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- How It Works -->
-    <section class="how-it-works">
-        <div class="container">
-            <div class="section-header">
-                <h2 class="section-title">¿Cómo Funciona?</h2>
-                <p class="section-subtitle">Proceso de detección en 3 pasos</p>
+    <div class="divider"></div>
+
+    <!-- HOW IT WORKS -->
+    <section class="section how-section" id="como-funciona">
+        <div class="section-inner">
+            <div class="section-header reveal">
+                <span class="section-eyebrow">El proceso</span>
+                <h2 class="section-title">¿Cómo <span>Funciona</span>?</h2>
+                <p class="section-subtitle">Tres pasos. Cero concesiones.</p>
             </div>
 
-            <div class="steps-container">
-                <div class="step-item">
-                    <div class="step-number">01</div>
+            <div class="steps">
+                <div class="step reveal">
+                    <div class="step-num">01</div>
                     <h3 class="step-title">Escaneo Exhaustivo</h3>
-                    <p class="step-description">
-                        El sistema realiza un análisis completo del sistema, revisando archivos,
-                        procesos, registros y conexiones de red en busca de patrones sospechosos.
-                    </p>
+                    <p class="step-desc">El cliente analiza el sistema completo: archivos, procesos activos, registros del sistema y conexiones de red en busca de patrones sospechosos.</p>
                 </div>
-
-                <div class="step-item">
-                    <div class="step-number">02</div>
+                <div class="step reveal">
+                    <div class="step-num">02</div>
                     <h3 class="step-title">Análisis con IA</h3>
-                    <p class="step-description">
-                        Cada hallazgo es analizado por nuestro sistema de IA, que evalúa el nivel
-                        de riesgo, detecta ofuscación y proporciona un análisis detallado.
-                    </p>
+                    <p class="step-desc">Cada hallazgo es evaluado por el modelo de inteligencia artificial, que mide el nivel de riesgo, detecta ofuscación y genera un veredicto.</p>
                 </div>
-
-                <div class="step-item">
-                    <div class="step-number">03</div>
+                <div class="step reveal">
+                    <div class="step-num">03</div>
                     <h3 class="step-title">Reporte y Acción</h3>
-                    <p class="step-description">
-                        Los resultados se envían al panel administrativo con recomendaciones
-                        específicas y niveles de severidad para una respuesta rápida y efectiva.
-                    </p>
+                    <p class="step-desc">Los resultados llegan al panel con niveles de severidad, recomendaciones específicas y la opción de enviar feedback para entrenar el modelo.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Suscripciones Section -->
-    <section class="subscriptions-section" id="suscripciones">
-        <div class="container">
-            <div class="section-header">
-                <h2 class="section-title">Planes y Suscripciones</h2>
-                <p class="section-subtitle">Elige el plan perfecto para tus necesidades</p>
+    <div class="divider"></div>
+
+    <!-- PRICING -->
+    <section class="section" id="planes">
+        <div class="section-inner">
+            <div class="section-header reveal">
+                <span class="section-eyebrow">Acceso</span>
+                <h2 class="section-title">Planes y <span>Suscripciones</span></h2>
+                <p class="section-subtitle">Elige el nivel de cobertura que necesita tu operación.</p>
             </div>
 
             <div class="pricing-grid">
-                <div class="pricing-card">
-                    <div class="pricing-header">
-                        <h3 class="pricing-title">Plan Individual</h3>
-                    </div>
-                    <div class="pricing-price">
-                        <span class="price-amount">$5</span>
-                        <span class="price-period">USD / mes</span>
-                    </div>
-                    <ul class="pricing-features">
-                        <li>
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            <span>Acceso completo al scanner</span>
-                        </li>
-                        <li>
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            <span>Panel de gestión personal</span>
-                        </li>
-                        <li>
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            <span>Tokens de escaneo ilimitados</span>
-                        </li>
-                        <li>
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            <span>Soporte por email</span>
-                        </li>
-                    </ul>
-                    <a href="/login" class="btn btn-primary btn-block">
-                        <span>Suscribirse Individual</span>
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </a>
-                </div>
-                
-                <div class="pricing-card">
-                    <div class="pricing-header">
-                        <h3 class="pricing-title">Plan Empresarial</h3>
-                        <div class="pricing-badge">Recomendado</div>
-                    </div>
-                    <div class="pricing-price">
-                        <span class="price-amount">$13</span>
-                        <span class="price-period">USD / mes</span>
+                <!-- Individual -->
+                <div class="pricing-card reveal">
+                    <div class="pricing-plan">Plan Individual</div>
+                    <div class="pricing-desc">Para staff independiente</div>
+                    <div class="pricing-amount">
+                        <span class="currency">$</span>
+                        <span class="price">5</span>
+                        <span class="period">USD / mes</span>
                     </div>
                     <ul class="pricing-features">
                         <li>
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            <span>Hasta 8 usuarios por empresa</span>
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            Acceso completo al scanner
                         </li>
                         <li>
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            <span>Máximo 3 administradores</span>
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            Panel de gestión personal
                         </li>
                         <li>
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            <span>Panel de gestión completo</span>
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            Tokens de escaneo ilimitados
                         </li>
                         <li>
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            <span>Tokens de registro ilimitados</span>
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            Modelo IA actualizado
                         </li>
                         <li>
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            <span>Soporte prioritario</span>
-                        </li>
-                        <li>
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            <span>Actualizaciones automáticas</span>
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            Soporte por email
                         </li>
                     </ul>
-                    <a href="/login" class="btn btn-primary btn-block">
-                        <span>Contactar para Suscripción</span>
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
+                    <a href="/login" class="btn-pricing">
+                        Empezar Individual
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </a>
-                    <p class="pricing-note">
-                        💡 Las suscripciones se gestionan desde el panel administrativo después de iniciar sesión
-                    </p>
                 </div>
-            </div>
 
-            <div class="subscription-info">
-                <h3 class="info-title">¿Cómo funciona?</h3>
-                <div class="info-steps">
-                    <div class="info-step">
-                        <div class="step-icon">1️⃣</div>
-                        <div class="step-content">
-                            <h4>Contacta con un Administrador</h4>
-                            <p>Inicia sesión y solicita la creación de una empresa para tu organización</p>
-                        </div>
+                <!-- Empresarial -->
+                <div class="pricing-card featured reveal">
+                    <div class="pricing-badge">Recomendado</div>
+                    <div class="pricing-plan">Plan Empresarial</div>
+                    <div class="pricing-desc">Para equipos y organizaciones</div>
+                    <div class="pricing-amount">
+                        <span class="currency">$</span>
+                        <span class="price">13</span>
+                        <span class="period">USD / mes</span>
                     </div>
-                    <div class="info-step">
-                        <div class="step-icon">2️⃣</div>
-                        <div class="step-content">
-                            <h4>Configura tu Empresa</h4>
-                            <p>Un administrador creará tu empresa con hasta 8 usuarios y 3 administradores</p>
-                        </div>
-                    </div>
-                    <div class="info-step">
-                        <div class="step-icon">3️⃣</div>
-                        <div class="step-content">
-                            <h4>Gestiona tu Equipo</h4>
-                            <p>Genera tokens de registro para que tu equipo se una y comienza a usar el sistema</p>
-                        </div>
-                    </div>
+                    <ul class="pricing-features">
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            Hasta 8 usuarios por empresa
+                        </li>
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            Hasta 3 administradores
+                        </li>
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            Panel de gestión de equipo
+                        </li>
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            Tokens de registro ilimitados
+                        </li>
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            Modelo IA compartido
+                        </li>
+                        <li>
+                            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            Soporte prioritario
+                        </li>
+                    </ul>
+                    <a href="/login" class="btn-pricing solid">
+                        Contactar para Empresa
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </a>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- CTA Section -->
+    <div class="divider"></div>
+
+    <!-- CTA -->
     <section class="cta-section">
-        <div class="container">
-            <div class="cta-card">
-                <h2 class="cta-title">¿Listo para comenzar?</h2>
-                <p class="cta-description">
-                    Accede al panel administrativo para gestionar tokens, ver resultados
-                    y generar actualizaciones del sistema.
-                </p>
-                <a href="/login" class="btn btn-primary btn-large">
-                    <span>Iniciar Sesión</span>
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                        <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </a>
-            </div>
+        <div class="cta-inner reveal">
+            <div class="cta-eyebrow">// ARGUS PROJECTS</div>
+            <h2 class="cta-title">¿Listo para activar<br>la vigilancia total?</h2>
+            <p class="cta-sub">Accede al panel y comienza a gestionar tu equipo, tokens y análisis de seguridad.</p>
+            <a href="/login" class="btn-hero-primary" style="display:inline-flex;">
+                Iniciar Sesión
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+                    <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </a>
         </div>
     </section>
 
-    <!-- Footer -->
+    <!-- FOOTER -->
     <footer class="footer">
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-brand">
-                    <span class="brand-icon">🛡️</span>
-                    <span class="brand-text">ARGUS PROJECTS</span>
-                </div>
-                <p class="footer-text">
-                    Security Scanner Pro • Powered by Artificial Intelligence
-                </p>
-                <p class="footer-copyright">
-                    © 2024 Argus Projects. Todos los derechos reservados.
-                </p>
+        <div class="footer-inner">
+            <div class="footer-brand">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Argus">
+                <span class="footer-brand-name">ARGUS PROJECTS</span>
             </div>
+            <div class="footer-center">SECURITY SCANNER PRO // POWERED BY AI</div>
+            <div class="footer-copy">© 2025 Argus Projects. All rights reserved.</div>
         </div>
     </footer>
+
+    <script>
+        // Scroll reveal
+        const observer = new IntersectionObserver(entries => {
+            entries.forEach((e, i) => {
+                if (e.isIntersecting) {
+                    setTimeout(() => e.target.classList.add('visible'), i * 80);
+                    observer.unobserve(e.target);
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+        // Smooth scroll for nav links
+        document.querySelectorAll('a[href^="#"]').forEach(a => {
+            a.addEventListener('click', e => {
+                e.preventDefault();
+                const target = document.querySelector(a.getAttribute('href'));
+                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        });
+    </script>
 </body>
 </html>
-
