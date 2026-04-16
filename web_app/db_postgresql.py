@@ -442,7 +442,29 @@ def init_postgresql_db():
         except Exception as e:
             print(f"⚠️ Error creando empresa default 'arefy': {e}")
             # No es crítico, continuar
-        
+
+        # Crear usuario admin default "arefy_admin" si no existe
+        try:
+            cursor.execute('SELECT COUNT(*) as count FROM users WHERE username = %s', ('arefy_admin',))
+            result = cursor.fetchone()
+            count = result['count'] if result else 0
+            if count == 0:
+                cursor.execute('SELECT id FROM companies WHERE name = %s', ('arefy',))
+                arefy_row = cursor.fetchone()
+                if arefy_row:
+                    import hashlib as _hashlib
+                    _default_hash = _hashlib.sha256('arefy2024!'.encode()).hexdigest()
+                    cursor.execute('''
+                        INSERT INTO users (username, email, password_hash, roles, company_id, created_by)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    ''', ('arefy_admin', 'admin@arefy.com', _default_hash,
+                          '["empresa", "administrador"]', arefy_row['id'], 'system'))
+                    conn.commit()
+                    print("✅ Usuario admin 'arefy_admin' creado (contraseña: arefy2024!)")
+        except Exception as e:
+            print(f"⚠️ Error creando usuario admin default: {e}")
+            # No es crítico, continuar
+
     except Exception as e:
         if conn:
             conn.rollback()
