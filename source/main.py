@@ -648,6 +648,19 @@ class ArgusApp:
             print(f"⚠️ Error inicializando detector de inyección: {e}")
             self.java_injection_detector = None
 
+        # ── SS Forensics (historical evidence — survives scanner deletion) ──────
+        self.forensic_findings = []  # stored separately to bypass the false-positive filter
+        try:
+            from ss_forensics import SSForensics
+            self.ss_forensics = SSForensics()
+            print("✅ SS Forensics inicializado (14 técnicas del checklist manual)")
+        except ImportError:
+            print("⚠️ Módulo ss_forensics no disponible")
+            self.ss_forensics = None
+        except Exception as e:
+            print(f"⚠️ Error inicializando SS Forensics: {e}")
+            self.ss_forensics = None
+
         # ── Mouse weight / click-bug detector (Prison mode) ─────────────────
         # Initialized FIRST so the initial snapshot is taken as early as possible,
         # before the player has time to remove the weight or reconnect the mouse.
@@ -2891,6 +2904,7 @@ class ArgusApp:
         self.scanning = True
         self.issues_found = []
         self.mouse_findings = []
+        self.forensic_findings = []
         self.total_files_scanned = 0
         self.total_dirs_scanned = 0
 
@@ -3050,8 +3064,25 @@ class ArgusApp:
                 except Exception as ex:
                     print(f"⚠️ AstroSS: {ex}")
 
-            # Ejecutar todos los grupos en paralelo (6 workers)
-            secondary_workers = min(6, psutil.cpu_count() or 4)
+            # Grupo G — Análisis forense SS (checklist manual completo)
+            def _group_forensics():
+                if not self.ss_forensics:
+                    return
+                self._update_progress_safe(88, "🔬 Análisis forense SS", "USN Journal, BAM, UserAssist, AppCompat...")
+                try:
+                    findings = self.ss_forensics.scan_all()
+                    if findings:
+                        self.forensic_findings.extend(findings)
+                        print(f"✅ SS Forensics: {len(findings)} hallazgo(s) forenses")
+                        for ff in findings:
+                            print(f"   🔬 {ff.get('nombre','')} [{ff.get('alerta','')}]")
+                    else:
+                        print("✅ SS Forensics: sin hallazgos forenses sospechosos")
+                except Exception as ex:
+                    print(f"⚠️ SS Forensics: {ex}")
+
+            # Ejecutar todos los grupos en paralelo (7 workers)
+            secondary_workers = min(7, psutil.cpu_count() or 4)
             print(f"⚡ Ejecutando fases secundarias con {secondary_workers} workers en paralelo")
             with concurrent.futures.ThreadPoolExecutor(max_workers=secondary_workers) as sec_exec:
                 sec_futures = [
@@ -3061,6 +3092,7 @@ class ArgusApp:
                     sec_exec.submit(_group_hardware),
                     sec_exec.submit(_group_hack_locations),
                     sec_exec.submit(_group_advanced),
+                    sec_exec.submit(_group_forensics),
                 ]
                 for f in concurrent.futures.as_completed(sec_futures, timeout=300):
                     try:
@@ -5786,6 +5818,10 @@ class ArgusApp:
                             <div class="stat-number" style="color:{'#ff4444' if getattr(self,'mouse_findings',[]) else '#00ff00'};">{len(getattr(self,'mouse_findings',[]))}</div>
                             <div class="stat-label">🖱️ Alertas de Mouse</div>
                         </div>
+                        <div class="stat-card" style="{'background:linear-gradient(135deg,#1a0a3a,#2a0a5a);' if getattr(self,'forensic_findings',[]) else ''}">
+                            <div class="stat-number" style="color:{'#cc88ff' if getattr(self,'forensic_findings',[]) else '#00ff00'};">{len(getattr(self,'forensic_findings',[]))}</div>
+                            <div class="stat-label">🔬 Evidencia Forense</div>
+                        </div>
                     </div>
                     
                     <div class="section">
@@ -5826,6 +5862,8 @@ class ArgusApp:
                     </div>
                     
                     {self._generate_mouse_section()}
+
+                    {self._generate_forensic_section()}
 
                     <div class="section">
                         <h2>🚨 Archivos Ilegales Detectados</h2>
@@ -5916,6 +5954,48 @@ class ArgusApp:
                 <strong>click-bug activo</strong> o <strong>desconexión/reconexión de dispositivo</strong>
                 durante la sesión de SS. Estas técnicas se usan en prison mode para obtener
                 autoclick sin software detectable.
+            </p>
+            {rows}
+        </div>"""
+
+    def _generate_forensic_section(self):
+        """Genera la sección de análisis forense SS para el reporte HTML."""
+        ff = getattr(self, 'forensic_findings', [])
+        if not ff:
+            return """
+            <div class="section" style="border-left:4px solid #00ff00;">
+                <h2 style="color:#00ff00;">🔬 Análisis Forense SS (Checklist Manual)</h2>
+                <p style="color:#00ff00;">✅ Sin evidencia histórica de hacks, autoclickers ni herramientas de evasión.</p>
+            </div>"""
+
+        rows = ""
+        for item in ff:
+            color = "#cc88ff" if item.get('alerta') == 'CRITICAL' else "#66aaff"
+            icon  = "🔴" if item.get('alerta') == 'CRITICAL' else "🔬"
+            rows += f"""
+            <div class="issue" style="border-left:3px solid {color};background:rgba(80,0,120,0.15);margin-bottom:8px;padding:10px 14px;">
+                <div class="issue-title" style="color:{color};">{icon} {item.get('nombre','')}</div>
+                <div class="issue-details"><strong>Fuente:</strong> {item.get('tipo','')}</div>
+                <div class="issue-details"><strong>Detalle:</strong> {item.get('detalle','')}</div>
+                <div class="issue-details" style="color:#e0e0e0;">{item.get('descripcion','')}</div>
+                <div class="issue-details" style="color:#888;font-size:0.85em;">
+                    Severidad: <strong style="color:{color};">{item.get('alerta','')}</strong>
+                </div>
+            </div>"""
+
+        return f"""
+        <div class="section" style="border:1px solid rgba(180,80,255,0.4);background:rgba(50,0,80,0.15);">
+            <h2 style="color:#cc88ff;border-bottom-color:#cc88ff;">
+                🔬 Análisis Forense SS — Evidencia Histórica
+                <span style="font-size:0.6em;background:#cc88ff;color:#fff;
+                             padding:3px 10px;border-radius:10px;margin-left:12px;">
+                    {len(ff)} HALLAZGO(S)
+                </span>
+            </h2>
+            <p style="color:#d0a0ff;margin-bottom:16px;font-size:0.95em;">
+                ⚠️  Técnicas del checklist manual SS: USN Journal, BAM, AppCompat, UserAssist,
+                WinRAR, Prefetch, DisallowRun y más. Esta evidencia <strong>sobrevive la eliminación
+                del scanner</strong> y es recuperable incluso cuando el jugador lo borró.
             </p>
             {rows}
         </div>"""
@@ -6290,6 +6370,23 @@ class ArgusApp:
         else:
             self.results_text.insert(tk.END, "🖱️  Mouse: sin indicadores de peso o manipulación\n\n", "success")
 
+        # ── Sección de análisis forense SS ───────────────────────────────────
+        forensic_findings = getattr(self, 'forensic_findings', [])
+        if forensic_findings:
+            self.results_text.insert(tk.END, "━"*60 + "\n", "warning")
+            self.results_text.insert(tk.END, "🔬  ANÁLISIS FORENSE SS\n", "danger")
+            self.results_text.insert(tk.END, "━"*60 + "\n", "warning")
+            for ff in forensic_findings:
+                icon = "🔴" if ff.get('alerta') == 'CRITICAL' else "🟠"
+                self.results_text.insert(tk.END, f"{icon} {ff.get('nombre','')}\n", "danger")
+                if ff.get('detalle'):
+                    self.results_text.insert(tk.END, f"   └─ {ff['detalle']}\n", "warning")
+                if ff.get('descripcion'):
+                    self.results_text.insert(tk.END, f"   {ff['descripcion']}\n\n", "info")
+            self.results_text.insert(tk.END, "\n", "info")
+        else:
+            self.results_text.insert(tk.END, "🔬  Forense: sin evidencia histórica de hacks o autoclickers\n\n", "success")
+
         if self.issues_found:
             self.results_text.insert(tk.END, "ELEMENTOS ENCONTRADOS:\n\n", "warning")
             for i, issue in enumerate(self.issues_found[:50], 1):
@@ -6302,7 +6399,8 @@ class ArgusApp:
         win = tk.Toplevel(self.root)
         win.title("Resultado del Escaneo — Feedback para IA")
         _mf_count = len(getattr(self, 'mouse_findings', []))
-        _win_h = 420 + min(_mf_count, 3) * 22 + (30 if _mf_count > 0 else 0)
+        _ff_count = len(getattr(self, 'forensic_findings', []))
+        _win_h = 420 + min(_mf_count, 3) * 22 + (30 if _mf_count > 0 else 0) + min(_ff_count, 3) * 22 + (30 if _ff_count > 0 else 0)
         win.geometry(f"520x{_win_h}")
         win.configure(bg="#060912")
         win.resizable(False, False)
@@ -6340,6 +6438,30 @@ class ArgusApp:
                          text=f"  … y {len(_mf)-3} más (ver resultados completos)",
                          font=("Segoe UI", 9, "italic"),
                          bg=_mouse_bg, fg=_mouse_fg).pack(anchor="w")
+
+        # Forensic alert banner
+        _ff = getattr(self, 'forensic_findings', [])
+        if _ff:
+            _critical_ff = [f for f in _ff if f.get('alerta') == 'CRITICAL']
+            _ff_bg = "#1a0a2e" if _critical_ff else "#0a1a2e"
+            _ff_fg = "#cc88ff" if _critical_ff else "#66aaff"
+            _ff_icon = "🔴" if _critical_ff else "🔬"
+            ff_banner = tk.Frame(hdr, bg=_ff_bg, padx=8, pady=6)
+            ff_banner.pack(fill="x", pady=(8, 0))
+            tk.Label(ff_banner,
+                     text=f"{_ff_icon}  EVIDENCIA FORENSE SS: {len(_ff)} hallazgo(s)",
+                     font=("Segoe UI", 10, "bold"),
+                     bg=_ff_bg, fg=_ff_fg).pack(anchor="w")
+            for f in _ff[:3]:
+                tk.Label(ff_banner,
+                         text=f"  • {f.get('nombre','')}",
+                         font=("Segoe UI", 9),
+                         bg=_ff_bg, fg=_ff_fg).pack(anchor="w")
+            if len(_ff) > 3:
+                tk.Label(ff_banner,
+                         text=f"  … y {len(_ff)-3} más (ver resultados completos)",
+                         font=("Segoe UI", 9, "italic"),
+                         bg=_ff_bg, fg=_ff_fg).pack(anchor="w")
 
         sep = tk.Frame(win, bg="#0f1525", height=1)
         sep.pack(fill="x", padx=20, pady=12)
