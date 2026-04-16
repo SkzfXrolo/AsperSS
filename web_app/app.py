@@ -186,9 +186,15 @@ def login():
                 return jsonify({'success': False, 'error': error_msg}), 400
             return render_template('login.html', error=error_msg)
         
-        # Debug logging
-        result = authenticate_user(username, password)
-        
+        try:
+            result = authenticate_user(username, password)
+        except Exception as e:
+            print(f"❌ Error en authenticate_user: {e}")
+            error_msg = 'Error interno al conectar con la base de datos. Intenta de nuevo.'
+            if request.is_json:
+                return jsonify({'success': False, 'error': error_msg}), 500
+            return render_template('login.html', error=error_msg)
+
         if result['success']:
             user = result['user']
             
