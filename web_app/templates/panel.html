@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body data-user-id="{{ user.id if user else 0 }}">
@@ -18,12 +18,12 @@
             <span class="brand-icon">
                 <svg width="22" height="22" viewBox="0 0 26 26" fill="none">
                     <path d="M13 2L4 7V13C4 18.55 7.84 23.74 13 25C18.16 23.74 22 18.55 22 13V7L13 2Z"
-                          stroke="#00c8ff" stroke-width="1.5" stroke-linejoin="round"/>
-                    <path d="M9 13L12 16L17 10" stroke="#00c8ff" stroke-width="1.5"
+                          stroke="#8B5CF6" stroke-width="1.5" stroke-linejoin="round"/>
+                    <path d="M9 13L12 16L17 10" stroke="#8B5CF6" stroke-width="1.5"
                           stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             </span>
-            <span class="brand-text">ASPERS</span>
+            <span class="brand-text" style="font-family:'Syne',sans-serif;">ASPERS</span>
         </div>
         <nav class="sidebar-nav">
             <a href="/panel" class="nav-item active" data-section="dashboard">
@@ -112,14 +112,26 @@
         <header class="panel-header">
             <h1 class="panel-title" id="section-title">Dashboard</h1>
             <div class="header-actions">
+                <!-- Theme toggle -->
+                <button id="theme-toggle" onclick="toggleTheme()" title="Cambiar tema" style="
+                    background: var(--accent-bg);
+                    border: 1px solid var(--border-m);
+                    border-radius: var(--radius-sm);
+                    color: var(--accent);
+                    width: 36px; height: 36px;
+                    display: flex; align-items: center; justify-content: center;
+                    cursor: pointer; transition: var(--trans); font-size: 16px;
+                " onmouseover="this.style.background='var(--border-m)'" onmouseout="this.style.background='var(--accent-bg)'">
+                    <span id="theme-icon">☀️</span>
+                </button>
                 <div class="user-info">
                     <span class="user-name">{{ user.username if user else 'Usuario' }}</span>
                     {% if user and 'admin' in user.roles %}
-                    <span class="user-role" style="background: #f59e0b; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-left: 8px;">Admin</span>
+                    <span class="user-role" style="background: linear-gradient(135deg,#8B5CF6,#6D28D9); color: white; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; margin-left: 8px; letter-spacing: 0.3px;">ADMIN</span>
                     {% elif user and 'administrador' in user.roles %}
-                    <span class="user-role" style="background: #3b82f6; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-left: 8px;">Admin Empresa</span>
+                    <span class="user-role" style="background: linear-gradient(135deg,#3B82F6,#1D4ED8); color: white; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; margin-left: 8px;">EMPRESA ADM</span>
                     {% elif user and 'empresa' in user.roles %}
-                    <span class="user-role" style="background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-left: 8px;">Empresa</span>
+                    <span class="user-role" style="background: linear-gradient(135deg,#10B981,#059669); color: white; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; margin-left: 8px;">EMPRESA</span>
                     {% endif %}
                 </div>
             </div>
@@ -1617,6 +1629,21 @@
     }
 
     function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    // ── Theme Toggle ──────────────────────────────────────────
+    function toggleTheme() {
+        const isLight = document.body.classList.toggle('light-theme');
+        localStorage.setItem('aurora-theme', isLight ? 'light' : 'dark');
+        document.getElementById('theme-icon').textContent = isLight ? '🌙' : '☀️';
+    }
+    (function initTheme() {
+        const saved = localStorage.getItem('aurora-theme');
+        if (saved === 'light') {
+            document.body.classList.add('light-theme');
+            const icon = document.getElementById('theme-icon');
+            if (icon) icon.textContent = '🌙';
+        }
+    })();
     </script>
 </body>
 </html>

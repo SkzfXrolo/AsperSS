@@ -8,28 +8,28 @@ class ModernUI:
     """
 
     COLORS = {
-        # Fondos — idénticos al panel web
-        'bg_primary':   '#060912',
-        'bg_secondary': '#0a0e1a',
-        'bg_tertiary':  '#0f1525',
-        'card':         '#0d1220',
+        # Fondos — Aurora: espacio profundo índigo
+        'bg_primary':   '#09091C',
+        'bg_secondary': '#0E0E28',
+        'bg_tertiary':  '#141430',
+        'card':         '#0C0C26',
 
         # Textos
-        'text_primary':   '#dce8f5',
-        'text_secondary': '#5a7296',
-        'text_muted':     '#2d3f58',
+        'text_primary':   '#E2E8F7',
+        'text_secondary': '#7C7FA6',
+        'text_muted':     '#3D3F6E',
 
-        # Acentos — cyan principal igual que la web
-        'accent_primary':       '#00c8ff',
-        'accent_primary_hover': '#00a8d4',
-        'accent_secondary':     '#22d3a5',   # verde-teal para éxito
-        'accent_warning':       '#fbbf24',
-        'accent_danger':        '#ff4d6a',
-        'accent_info':          '#00c8ff',
+        # Acentos — Aurora: violeta eléctrico
+        'accent_primary':       '#8B5CF6',
+        'accent_primary_hover': '#6D28D9',
+        'accent_secondary':     '#10B981',
+        'accent_warning':       '#F59E0B',
+        'accent_danger':        '#F43F5E',
+        'accent_info':          '#38BDF8',
 
         # Bordes
-        'border':       '#0d1a2e',
-        'border_light': '#0a1220',
+        'border':       '#1A1A38',
+        'border_light': '#141430',
     }
 
     FONTS = {
@@ -110,6 +110,8 @@ class ModernUI:
         logo_c.pack(side=tk.LEFT, padx=(0, 12))
         logo_c.create_polygon(19, 2, 3, 9, 3, 20, 19, 36, 35, 20, 35, 9,
                               fill='', outline=C['accent_primary'], width=2)
+        logo_c.create_oval(11, 10, 27, 26,
+                           fill='', outline=C['accent_secondary'], width=1)
         logo_c.create_line(12, 18, 17, 24, 26, 13,
                            fill=C['accent_primary'], width=2,
                            joinstyle='round', capstyle='round')
