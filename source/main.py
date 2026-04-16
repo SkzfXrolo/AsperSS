@@ -4558,7 +4558,7 @@ class ArgusApp:
                     
                     # Obtener token desde la API web
                     api_url = self.config.get('api_url', 'https://asperss.onrender.com')
-                    web_url = self.config.get('web_url', 'http://localhost:8080')
+                    web_url = self.config.get('web_url', 'https://asperss.onrender.com')
                     
                     # Abrir navegador para que el staff genere el token desde el panel web
                     import webbrowser
@@ -6244,7 +6244,7 @@ class ArgusApp:
     def _submit_ai_feedback(self, verdict, notes):
         """Envía feedback al servidor y actualiza patrones locales."""
         try:
-            api_url = self.config.get('api_url', 'http://localhost:8080')
+            api_url = self.config.get('api_url', 'https://asperss.onrender.com')
             scan_id = None
             if self.db_integration and hasattr(self.db_integration, 'current_scan_id'):
                 scan_id = self.db_integration.current_scan_id

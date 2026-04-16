@@ -1,7 +1,7 @@
 """
 Aplicación Web Flask para Panel del Staff de ASPERS Projects
 """
-from flask import Flask, render_template, request, jsonify, session, Response, redirect, url_for, make_response
+from flask import Flask, render_template, request, jsonify, session, Response, redirect, url_for, make_response, flash
 from flask_cors import CORS
 import os
 import requests
@@ -370,6 +370,99 @@ def admin_subscriptions():
 def admin_subscriptions_logout():
     """Cerrar sesión de admin de suscripciones"""
     session.pop('admin_subscriptions', None)
+    return redirect('/admin/subscriptions')
+
+@app.route('/admin/subscriptions/create-company', methods=['POST'])
+def admin_subscriptions_create_company():
+    """Crea una nueva empresa desde el panel imperial"""
+    if not session.get('admin_subscriptions'):
+        return redirect('/admin/subscriptions')
+    from auth import create_company, update_company
+    name = request.form.get('name', '').strip()
+    if not name:
+        flash('El nombre de empresa es requerido', 'error')
+        return redirect('/admin/subscriptions')
+    contact_email = request.form.get('contact_email', '').strip() or None
+    try:
+        subscription_price = float(request.form.get('subscription_price', 13.0))
+    except (ValueError, TypeError):
+        subscription_price = 13.0
+    subscription_status = request.form.get('subscription_status', 'active')
+    try:
+        max_users = int(request.form.get('max_users', 8))
+    except (ValueError, TypeError):
+        max_users = 8
+    try:
+        max_admins = int(request.form.get('max_admins', 3))
+    except (ValueError, TypeError):
+        max_admins = 3
+    subscription_end_date = request.form.get('subscription_end_date') or None
+    notes = request.form.get('notes', '').strip() or None
+    result = create_company(
+        name=name,
+        contact_email=contact_email,
+        subscription_type='enterprise',
+        subscription_status=subscription_status,
+        subscription_price=subscription_price,
+        max_users=max_users,
+        max_admins=max_admins,
+        created_by=None,
+        notes=notes
+    )
+    if result.get('success'):
+        if subscription_end_date:
+            update_company(company_id=result['company_id'], subscription_end_date=subscription_end_date)
+        flash(f'Empresa "{name}" creada exitosamente', 'ok')
+    else:
+        flash(result.get('error', 'Error al crear empresa'), 'error')
+    return redirect('/admin/subscriptions')
+
+@app.route('/admin/subscriptions/update-company', methods=['POST'])
+def admin_subscriptions_update_company():
+    """Actualiza una empresa desde el panel imperial"""
+    if not session.get('admin_subscriptions'):
+        return redirect('/admin/subscriptions')
+    from auth import update_company
+    company_id = request.form.get('company_id')
+    if not company_id:
+        flash('ID de empresa requerido', 'error')
+        return redirect('/admin/subscriptions')
+    kwargs = {}
+    for field in ('name', 'contact_email', 'subscription_status', 'subscription_end_date'):
+        val = request.form.get(field, '').strip()
+        if val:
+            kwargs[field] = val
+    for field in ('subscription_price', 'max_users', 'max_admins'):
+        raw = request.form.get(field, '').strip()
+        if raw:
+            try:
+                kwargs[field] = float(raw) if field == 'subscription_price' else int(raw)
+            except (ValueError, TypeError):
+                pass
+    result = update_company(company_id=company_id, **kwargs)
+    if result.get('success'):
+        flash('Empresa actualizada exitosamente', 'ok')
+    else:
+        flash(result.get('error', 'Error al actualizar empresa'), 'error')
+    return redirect('/admin/subscriptions')
+
+@app.route('/admin/subscriptions/toggle-status', methods=['POST'])
+def admin_subscriptions_toggle_status():
+    """Cambia el estado activo/inactivo de una empresa"""
+    if not session.get('admin_subscriptions'):
+        return redirect('/admin/subscriptions')
+    from auth import update_company
+    company_id = request.form.get('company_id')
+    new_status = request.form.get('new_status', 'active')
+    if not company_id:
+        flash('ID de empresa requerido', 'error')
+        return redirect('/admin/subscriptions')
+    result = update_company(company_id=company_id, subscription_status=new_status)
+    if result.get('success'):
+        label = 'activada' if new_status == 'active' else 'suspendida'
+        flash(f'Empresa {label} exitosamente', 'ok')
+    else:
+        flash(result.get('error', 'Error al cambiar estado'), 'error')
     return redirect('/admin/subscriptions')
 
 # ============================================================

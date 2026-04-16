@@ -3,558 +3,679 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestión de Suscripciones - Argus Projects</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Control Imperial — Argus Projects</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg0:      #080508;
+            --bg1:      #0D080C;
+            --bg2:      #130B10;
+            --bg3:      #1A0E15;
+            --card:     rgba(20,10,16,0.95);
+            --border:   rgba(180,20,40,0.18);
+            --border-h: rgba(220,30,60,0.50);
+            --red:      #C41E3A;
+            --red-b:    #E8243F;
+            --red-d:    #7B1225;
+            --gold:     #B8860B;
+            --gold-l:   #D4A017;
+            --text:     #F0E4E8;
+            --text-m:   #9A8490;
+            --text-d:   #4A3840;
+            --green:    #10B981;
+            --amber:    #F59E0B;
+            --trans:    all 0.22s cubic-bezier(0.4,0,0.2,1);
+            --r:        10px;
+        }
+
         body {
-            background: var(--bg-primary);
-            padding: 20px;
+            font-family: 'Inter', sans-serif;
+            background: var(--bg0);
+            color: var(--text);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
         }
-        .admin-header {
-            max-width: 1400px;
-            margin: 0 auto 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.5rem;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
+
+        body::before {
+            content: ''; position: fixed; inset: 0; z-index: 0;
+            background:
+                radial-gradient(ellipse 70% 40% at 50% -5%, rgba(180,20,40,0.10) 0%, transparent 60%),
+                radial-gradient(ellipse 30% 20% at 90% 90%, rgba(120,10,25,0.06) 0%, transparent 50%);
+            pointer-events: none;
         }
-        .admin-header h1 {
-            color: var(--text-primary);
-            font-size: 2rem;
-            margin: 0;
+
+        body::after {
+            content: ''; position: fixed; inset: 0; z-index: 0;
+            background-image:
+                linear-gradient(rgba(180,20,40,0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(180,20,40,0.025) 1px, transparent 1px);
+            background-size: 48px 48px;
+            pointer-events: none;
         }
-        .admin-container {
-            max-width: 1400px;
-            margin: 0 auto;
+
+        .wrap { position: relative; z-index: 1; max-width: 1300px; margin: 0 auto; padding: 0 24px 60px; }
+
+        /* ── Top bar ── */
+        .topbar {
+            position: sticky; top: 0; z-index: 50;
+            background: rgba(8,5,8,0.90);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 40px;
         }
-        .subscription-section {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 2rem;
-            margin-bottom: 2rem;
+
+        .topbar::after {
+            content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
         }
-        .section-title {
-            color: var(--text-primary);
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 1.5rem;
+
+        .topbar-inner {
+            max-width: 1300px; margin: 0 auto; padding: 0 24px;
+            height: 64px; display: flex; align-items: center; justify-content: space-between;
         }
-        .subscription-form {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1.5rem;
+
+        .topbar-brand { display: flex; align-items: center; gap: 12px; }
+        .topbar-brand img { width: 32px; height: 32px; object-fit: contain; filter: drop-shadow(0 0 8px rgba(196,30,58,0.5)); }
+
+        .topbar-title {
+            font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 800;
+            letter-spacing: 3px;
+            background: linear-gradient(135deg, #F0E4E8, #C41E3A);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
-        .form-group {
-            display: flex;
-            flex-direction: column;
+
+        .topbar-sub {
+            font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 2px;
+            color: var(--red); opacity: 0.65; display: block;
         }
-        .form-group label {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-            margin-bottom: 0.5rem;
+
+        .topbar-right { display: flex; align-items: center; gap: 12px; }
+
+        .badge-secret {
+            padding: 4px 12px;
+            background: rgba(196,30,58,0.12); border: 1px solid rgba(196,30,58,0.25);
+            border-radius: 100px; font-family: 'JetBrains Mono', monospace;
+            font-size: 10px; letter-spacing: 1.5px; color: #D06070;
         }
-        .form-group input,
-        .form-group select {
-            padding: 0.75rem;
-            background: var(--bg-primary);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 0.9375rem;
+
+        .btn-logout {
+            padding: 7px 16px; background: transparent;
+            border: 1px solid var(--border); border-radius: var(--r);
+            color: var(--text-m); font-size: 12px; cursor: pointer; transition: var(--trans);
+            text-decoration: none;
         }
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: var(--accent-primary);
+        .btn-logout:hover { border-color: var(--red); color: var(--text); }
+
+        /* ── Page title ── */
+        .page-header { margin-bottom: 40px; }
+        .page-eyebrow {
+            font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 3px;
+            color: var(--red); opacity: 0.8; margin-bottom: 10px; display: block;
         }
-        .btn-create {
-            padding: 0.75rem 1.5rem;
-            background: var(--accent-primary);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.3s;
+        .page-title {
+            font-family: 'Syne', sans-serif; font-size: 34px; font-weight: 800;
+            color: var(--text); line-height: 1;
         }
-        .btn-create:hover {
-            background: var(--accent-primary-hover);
+        .page-title span {
+            background: linear-gradient(135deg, #C41E3A, #E8243F);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
-        .subscriptions-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
+
+        /* ── Stats grid ── */
+        .stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; margin-bottom: 40px; background: var(--border); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+
+        .stat { background: var(--bg1); padding: 28px 24px; transition: var(--trans); }
+        .stat:hover { background: var(--bg2); }
+        .stat-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-m); margin-bottom: 8px; }
+        .stat-val { font-family: 'Syne', sans-serif; font-size: 36px; font-weight: 800; line-height: 1; }
+        .stat-val.red    { background: linear-gradient(135deg,#E8243F,#C41E3A); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+        .stat-val.green  { background: linear-gradient(135deg,#10B981,#059669); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+        .stat-val.gold   { background: linear-gradient(135deg,#D4A017,#B8860B); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+        .stat-val.purple { background: linear-gradient(135deg,#8B5CF6,#6D28D9); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+
+        /* ── Tabs ── */
+        .tabs { display: flex; gap: 4px; margin-bottom: 32px; background: var(--bg1); border: 1px solid var(--border); border-radius: 12px; padding: 4px; width: fit-content; }
+
+        .tab {
+            padding: 9px 20px; border-radius: 9px; border: none; background: transparent;
+            color: var(--text-m); font-size: 13px; font-weight: 500; cursor: pointer; transition: var(--trans);
         }
-        .subscriptions-table th,
-        .subscriptions-table td {
-            padding: 1rem;
-            text-align: left;
+        .tab:hover { color: var(--text); background: rgba(196,30,58,0.06); }
+        .tab.active { background: rgba(196,30,58,0.14); color: #E8A0AA; border: 1px solid rgba(196,30,58,0.25); }
+
+        /* ── Panel ── */
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        /* ── Card ── */
+        .card {
+            background: var(--bg1); border: 1px solid var(--border);
+            border-radius: 14px; overflow: hidden; margin-bottom: 24px;
+        }
+
+        .card-head {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+
+        .card-title {
+            font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; color: var(--text);
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        .card-title::before {
+            content: ''; width: 3px; height: 16px;
+            background: var(--red); border-radius: 2px; flex-shrink: 0;
+        }
+
+        .card-body { padding: 24px; }
+
+        /* ── Table ── */
+        .tbl-wrap { overflow-x: auto; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+        th {
+            padding: 10px 14px; text-align: left;
+            font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1.5px;
+            text-transform: uppercase; color: var(--text-d);
             border-bottom: 1px solid var(--border);
         }
-        .subscriptions-table th {
-            color: var(--text-primary);
-            font-weight: 600;
-            background: var(--bg-secondary);
-        }
-        .subscriptions-table td {
-            color: var(--text-secondary);
-        }
+
+        td { padding: 12px 14px; border-bottom: 1px solid rgba(180,20,40,0.06); color: var(--text-m); vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(196,30,58,0.04); }
+        td strong { color: var(--text); font-weight: 600; }
+
+        /* ── Badges ── */
         .badge {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 600;
+            display: inline-block; padding: 3px 10px; border-radius: 100px;
+            font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
         }
-        .badge-active {
-            background: var(--accent-primary);
-            color: white;
+        .badge-active   { background: rgba(16,185,129,0.15); color: #34D399; border: 1px solid rgba(16,185,129,0.25); }
+        .badge-expired  { background: rgba(196,30,58,0.12); color: #F87171; border: 1px solid rgba(196,30,58,0.20); }
+        .badge-free     { background: rgba(184,134,11,0.12); color: #FCD34D; border: 1px solid rgba(184,134,11,0.20); }
+        .badge-cancelled{ background: rgba(100,100,120,0.12); color: #9CA3AF; border: 1px solid rgba(100,100,120,0.20); }
+        .badge-role     { background: rgba(139,92,246,0.12); color: #A78BFA; border: 1px solid rgba(139,92,246,0.20); }
+
+        /* ── Buttons ── */
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 16px; border-radius: var(--r); border: none;
+            font-size: 12px; font-weight: 600; cursor: pointer; transition: var(--trans);
+            text-decoration: none; white-space: nowrap;
         }
-        .badge-inactive {
-            background: var(--accent-danger);
-            color: white;
+        .btn-red  { background: linear-gradient(135deg,#C41E3A,#8B1220); color:#fff; box-shadow: 0 2px 16px rgba(196,30,58,0.30); }
+        .btn-red:hover  { box-shadow: 0 4px 24px rgba(196,30,58,0.50); transform: translateY(-1px); }
+        .btn-ghost { background: rgba(196,30,58,0.08); border: 1px solid rgba(196,30,58,0.20); color: #E8A0AA; }
+        .btn-ghost:hover { background: rgba(196,30,58,0.16); border-color: var(--red); }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-m); }
+        .btn-outline:hover { border-color: var(--border-h); color: var(--text); }
+        .btn-sm { padding: 5px 12px; font-size: 11px; }
+        .btn-green { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.25); color: #34D399; }
+        .btn-green:hover { background: rgba(16,185,129,0.22); }
+
+        /* ── Forms ── */
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+
+        .field { display: flex; flex-direction: column; gap: 6px; }
+
+        label { font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-m); }
+
+        input, select, textarea {
+            padding: 10px 14px;
+            background: rgba(0,0,0,0.35); border: 1px solid var(--border);
+            border-radius: var(--r); color: var(--text); font-size: 13px;
+            font-family: 'Inter', sans-serif; transition: var(--trans);
         }
-        .badge-individual {
-            background: #3b82f6;
-            color: white;
+
+        input:focus, select:focus, textarea:focus {
+            outline: none; border-color: var(--border-h);
+            background: rgba(196,30,58,0.05);
+            box-shadow: 0 0 0 3px rgba(196,30,58,0.10);
         }
-        .badge-enterprise {
-            background: #8b5cf6;
-            color: white;
+
+        select option { background: #130B10; }
+
+        /* ── Modal ── */
+        .modal-bg {
+            display: none; position: fixed; inset: 0; z-index: 200;
+            background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
+            align-items: center; justify-content: center;
         }
-        .price {
-            font-weight: 700;
-            color: var(--accent-primary);
+        .modal-bg.open { display: flex; }
+
+        .modal {
+            background: var(--bg2); border: 1px solid var(--border-h);
+            border-radius: 16px; width: 100%; max-width: 540px; max-height: 90vh; overflow-y: auto;
+            animation: modalIn 0.25s ease;
         }
-        .btn-action {
-            padding: 0.5rem 1rem;
-            margin-right: 0.5rem;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.875rem;
-            font-weight: 500;
-            transition: all 0.3s;
+
+        @keyframes modalIn { from{opacity:0;transform:scale(0.95) translateY(12px)} to{opacity:1;transform:none} }
+
+        .modal-head {
+            padding: 24px 28px 20px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
         }
-        .btn-edit {
-            background: var(--accent-secondary);
-            color: white;
+
+        .modal-title { font-family:'Syne',sans-serif; font-size:18px; font-weight:800; color:var(--text); }
+
+        .modal-close {
+            width:32px;height:32px; background:transparent; border:1px solid var(--border);
+            border-radius:8px; color:var(--text-m); font-size:18px; cursor:pointer;
+            display:flex;align-items:center;justify-content:center; transition:var(--trans);
         }
-        .btn-edit:hover {
-            background: var(--accent-secondary-hover);
+        .modal-close:hover { border-color:var(--red); color:var(--text); }
+
+        .modal-body { padding: 24px 28px; }
+        .modal-footer { padding: 16px 28px 24px; display:flex; gap:10px; justify-content:flex-end; }
+
+        /* ── Toast ── */
+        #toast {
+            position: fixed; bottom: 28px; right: 28px; z-index: 999;
+            padding: 14px 20px; border-radius: 12px; font-size: 13px; font-weight: 500;
+            max-width: 360px; pointer-events: none; opacity: 0; transform: translateY(8px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
         }
-        .btn-free {
-            background: #10b981;
-            color: white;
-        }
-        .btn-free:hover {
-            background: #059669;
-        }
-        .btn-secondary {
-            background: #6b7280;
-            color: white;
-        }
-        .btn-secondary:hover {
-            background: #4b5563;
-        }
-        .edit-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            padding: 20px;
-        }
-        .edit-modal-content {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 2rem;
-            max-width: 600px;
-            width: 100%;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-        .edit-modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-        }
-        .edit-modal-header h3 {
-            color: var(--text-primary);
-            font-size: 1.5rem;
-            margin: 0;
-        }
-        .close-modal {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            font-size: 2rem;
-            cursor: pointer;
-            padding: 0;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 6px;
-            transition: all 0.3s;
-        }
-        .close-modal:hover {
-            background: var(--bg-secondary);
-            color: var(--text-primary);
-        }
+        #toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+        #toast.ok  { background: rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.30); color:#34D399; }
+        #toast.err { background: rgba(196,30,58,0.15); border:1px solid rgba(196,30,58,0.30); color:#F87171; }
+
+        /* ── Misc ── */
+        .section-gap { margin-top: 32px; }
+        .empty { text-align:center; padding:40px; color:var(--text-d); font-size:14px; }
+        .money { font-family:'JetBrains Mono',monospace; font-size:13px; color:#FCD34D; }
+        .mono  { font-family:'JetBrains Mono',monospace; font-size:11px; }
+        .actions-row { display:flex; gap:6px; }
     </style>
 </head>
 <body>
-    <div class="admin-container">
-        <div class="admin-header">
-            <h1>🔐 Gestión de Suscripciones - Argus Projects</h1>
-            <a href="/admin/subscriptions/logout" class="btn btn-secondary">Cerrar Sesión</a>
-        </div>
 
-        <!-- Crear Nueva Suscripción -->
-        <div class="subscription-section">
-            <h2 class="section-title">Crear Nueva Suscripción</h2>
-            <form id="create-subscription-form" class="subscription-form">
-                <div class="form-group">
-                    <label>Tipo de Suscripción</label>
-                    <select id="subscription-type" required>
-                        <option value="individual">Individual ($5 USD/mes)</option>
-                        <option value="enterprise">Empresarial ($13 USD/mes)</option>
-                    </select>
-                </div>
-                <div class="form-group" id="company-name-group" style="display: none;">
-                    <label>Nombre de la Empresa</label>
-                    <input type="text" id="company-name" placeholder="Ej: Mi Empresa">
-                </div>
-                <div class="form-group" id="username-group">
-                    <label>Nombre de Usuario</label>
-                    <input type="text" id="username" placeholder="Nombre del usuario" required>
-                </div>
-                <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" id="email" placeholder="email@ejemplo.com">
-                </div>
-                <div class="form-group">
-                    <label>Precio (USD/mes)</label>
-                    <input type="number" id="price" step="0.01" value="5.00" required>
-                </div>
-                <div class="form-group">
-                    <label>Duración (meses, 0 = ilimitado)</label>
-                    <input type="number" id="duration" value="1" min="0">
-                </div>
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" id="is-free" style="margin-right: 0.5rem;">
-                        Suscripción Gratuita
-                    </label>
-                </div>
-                <div class="form-group" style="grid-column: 1 / -1;">
-                    <button type="submit" class="btn-create">Crear Suscripción</button>
-                </div>
-            </form>
+<!-- TOPBAR -->
+<div class="topbar">
+    <div class="topbar-inner">
+        <div class="topbar-brand">
+            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Argus">
+            <div>
+                <div class="topbar-title">ARGUS PROJECTS</div>
+                <span class="topbar-sub">CONTROL IMPERIAL // SUPER ADMIN</span>
+            </div>
         </div>
-
-        <!-- Suscripciones Empresariales -->
-        <div class="subscription-section">
-            <h2 class="section-title">Suscripciones Empresariales</h2>
-            <table class="subscriptions-table">
-                <thead>
-                    <tr>
-                        <th>Empresa</th>
-                        <th>Email</th>
-                        <th>Tipo</th>
-                        <th>Precio</th>
-                        <th>Usuarios</th>
-                        <th>Estado</th>
-                        <th>Acciones</th>
-                    </tr>
-                </thead>
-                <tbody id="companies-table-body">
-                    {% for company in companies %}
-                    <tr>
-                        <td><strong>{{ company.name }}</strong></td>
-                        <td>{{ company.contact_email or 'N/A' }}</td>
-                        <td><span class="badge badge-enterprise">Empresarial</span></td>
-                        <td class="price">${{ "%.2f"|format(company.subscription_price or 13.0) }}</td>
-                        <td>{{ company.current_users }} / {{ company.max_users }}</td>
-                        <td>
-                            <span class="badge {% if company.subscription_status == 'active' %}badge-active{% else %}badge-inactive{% endif %}">
-                                {{ company.subscription_status or 'active' }}
-                            </span>
-                        </td>
-                        <td>
-                            <button class="btn-action btn-edit" onclick="editCompany({{ company.id }})">Editar</button>
-                            <button class="btn-action btn-free" onclick="makeFree({{ company.id }}, 'company')">Gratis</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="topbar-right">
+            <span class="badge-secret">// ACCESO RESTRINGIDO</span>
+            <a href="/admin/subscriptions/logout" class="btn-logout">Cerrar sesión</a>
         </div>
+    </div>
+</div>
 
-        <!-- Suscripciones Individuales -->
-        <div class="subscription-section">
-            <h2 class="section-title">Suscripciones Individuales</h2>
-            <table class="subscriptions-table">
-                <thead>
-                    <tr>
-                        <th>Usuario</th>
-                        <th>Email</th>
-                        <th>Tipo</th>
-                        <th>Estado</th>
-                        <th>Último Login</th>
-                        <th>Acciones</th>
-                    </tr>
-                </thead>
-                <tbody id="individual-users-table-body">
-                    {% for user in individual_users %}
-                    <tr>
-                        <td><strong>{{ user.username }}</strong></td>
-                        <td>{{ user.email or 'N/A' }}</td>
-                        <td><span class="badge badge-individual">Individual</span></td>
-                        <td>
-                            <span class="badge {% if user.is_active %}badge-active{% else %}badge-inactive{% endif %}">
-                                {{ 'Activo' if user.is_active else 'Inactivo' }}
-                            </span>
-                        </td>
-                        <td>{{ user.last_login or 'Nunca' }}</td>
-                        <td>
-                            <button class="btn-action btn-free" onclick="makeFree({{ user.id }}, 'user')">Gratis</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+<div class="wrap">
+
+    <!-- PAGE TITLE -->
+    <div class="page-header">
+        <span class="page-eyebrow">// PANEL DE CONTROL IMPERIAL</span>
+        <h1 class="page-title">Gestión <span>Total</span></h1>
+    </div>
+
+    <!-- STATS -->
+    {% set total_rev = namespace(v=0) %}
+    {% set active_c = namespace(v=0) %}
+    {% set expired_c = namespace(v=0) %}
+    {% for c in companies %}
+        {% if c.subscription_status == 'active' and c.subscription_price and c.subscription_price > 0 %}
+            {% set total_rev.v = total_rev.v + c.subscription_price %}
+            {% set active_c.v = active_c.v + 1 %}
+        {% elif c.subscription_status == 'expired' %}
+            {% set expired_c.v = expired_c.v + 1 %}
+        {% endif %}
+    {% endfor %}
+
+    <div class="stats">
+        <div class="stat">
+            <div class="stat-label">Ingresos Mensuales</div>
+            <div class="stat-val gold">${{ "%.0f"|format(total_rev.v) }}</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">Empresas Activas</div>
+            <div class="stat-val green">{{ active_c.v }}</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">Suscripciones Expiradas</div>
+            <div class="stat-val red">{{ expired_c.v }}</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">Usuarios Totales</div>
+            <div class="stat-val purple">{{ (companies | sum(attribute='current_users')) + (individual_users | length) }}</div>
         </div>
     </div>
 
-    <script>
-        // Cambiar precio según tipo de suscripción
-        document.getElementById('subscription-type').addEventListener('change', function() {
-            const type = this.value;
-            const priceInput = document.getElementById('price');
-            const companyNameGroup = document.getElementById('company-name-group');
-            const usernameGroup = document.getElementById('username-group');
-            
-            if (type === 'individual') {
-                priceInput.value = '5.00';
-                companyNameGroup.style.display = 'none';
-                usernameGroup.style.display = 'flex';
-            } else {
-                priceInput.value = '13.00';
-                companyNameGroup.style.display = 'flex';
-                usernameGroup.style.display = 'flex';
-            }
-        });
+    <!-- TABS -->
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab('empresas')">Empresas</button>
+        <button class="tab" onclick="switchTab('usuarios')">Usuarios</button>
+        <button class="tab" onclick="switchTab('nueva-empresa')">Nueva Empresa</button>
+    </div>
 
-        // Formulario de creación
-        document.getElementById('create-subscription-form').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const type = document.getElementById('subscription-type').value;
-            const isFree = document.getElementById('is-free').checked;
-            const price = isFree ? 0 : parseFloat(document.getElementById('price').value);
-            const duration = parseInt(document.getElementById('duration').value);
-            
-            const data = {
-                subscription_type: type,
-                price: price,
-                duration: duration,
-                is_free: isFree
-            };
-            
-            if (type === 'enterprise') {
-                data.company_name = document.getElementById('company-name').value;
-                if (!data.company_name) {
-                    alert('El nombre de la empresa es requerido');
-                    return;
-                }
-            } else {
-                data.username = document.getElementById('username').value;
-                data.email = document.getElementById('email').value;
-            }
-            
-            try {
-                const response = await fetch('/api/admin/create-subscription', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(data)
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('Suscripción creada exitosamente');
-                    location.reload();
-                } else {
-                    alert('Error: ' + (result.error || 'Error desconocido'));
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Error al crear suscripción');
-            }
-        });
+    <!-- ── EMPRESAS ── -->
+    <div class="panel active" id="tab-empresas">
+        <div class="card">
+            <div class="card-head">
+                <span class="card-title">Empresas y Suscripciones ({{ companies | length }})</span>
+            </div>
+            <div class="tbl-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Empresa</th>
+                            <th>Estado</th>
+                            <th>Precio/mes</th>
+                            <th>Usuarios</th>
+                            <th>Expira</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in companies %}
+                        <tr>
+                            <td>
+                                <strong>{{ c.name }}</strong>
+                                {% if c.contact_email %}<br><span class="mono" style="color:var(--text-d)">{{ c.contact_email }}</span>{% endif %}
+                            </td>
+                            <td>
+                                {% if c.subscription_status == 'active' and c.subscription_price and c.subscription_price > 0 %}
+                                    <span class="badge badge-active">Activa</span>
+                                {% elif c.subscription_status == 'active' %}
+                                    <span class="badge badge-free">Gratuita</span>
+                                {% elif c.subscription_status == 'expired' %}
+                                    <span class="badge badge-expired">Expirada</span>
+                                {% else %}
+                                    <span class="badge badge-cancelled">Cancelada</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="money">
+                                    {% if c.subscription_price and c.subscription_price > 0 %}
+                                        ${{ "%.2f"|format(c.subscription_price) }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td class="mono">{{ c.current_users or 0 }} / {{ c.max_users or 8 }}</td>
+                            <td class="mono" style="font-size:11px">
+                                {{ c.subscription_end_date or '—' }}
+                            </td>
+                            <td>
+                                <div class="actions-row">
+                                    <button class="btn btn-ghost btn-sm" onclick="openEdit({{ c.id }}, '{{ c.name }}', {{ c.subscription_price or 0 }}, '{{ c.subscription_status }}', '{{ c.subscription_end_date or '' }}', {{ c.max_users or 8 }}, {{ c.max_admins or 3 }}, '{{ c.contact_email or '' }}')">Editar</button>
+                                    <button class="btn btn-green btn-sm" onclick="toggleStatus({{ c.id }}, '{{ c.name }}', '{{ c.subscription_status }}')">
+                                        {% if c.subscription_status == 'active' %}Suspender{% else %}Activar{% endif %}
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="empty">No hay empresas registradas</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 
-        let editingCompanyId = null;
-        let companiesData = {{ companies|tojson }};
+    <!-- ── USUARIOS ── -->
+    <div class="panel" id="tab-usuarios">
+        <div class="card">
+            <div class="card-head">
+                <span class="card-title">Usuarios de Empresa ({{ companies | sum(attribute='current_users') }})</span>
+            </div>
+            <div class="tbl-wrap">
+                <table>
+                    <thead>
+                        <tr><th>Usuario</th><th>Email</th><th>Empresa</th><th>Roles</th><th>Estado</th><th>Último acceso</th></tr>
+                    </thead>
+                    <tbody>
+                        {% set ns = namespace(company_map={}) %}
+                        {% for c in companies %}{% set ns.company_map = ns.company_map.update({c.id: c.name}) or ns.company_map %}{% endfor %}
+                        {% for u in company_users %}
+                        <tr>
+                            <td><strong>{{ u.username }}</strong></td>
+                            <td class="mono" style="font-size:11px">{{ u.email or '—' }}</td>
+                            <td>
+                                {% for c in companies if c.id == u.company_id %}
+                                    {{ c.name }}
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {% for r in u.roles %}
+                                <span class="badge badge-role" style="margin-right:2px">{{ r }}</span>
+                                {% endfor %}
+                            </td>
+                            <td>
+                                {% if u.is_active %}<span class="badge badge-active">Activo</span>
+                                {% else %}<span class="badge badge-expired">Inactivo</span>{% endif %}
+                            </td>
+                            <td class="mono" style="font-size:11px">{{ u.last_login or '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-        function editCompany(companyId) {
-            const company = companiesData.find(c => c.id === companyId);
-            if (!company) {
-                alert('Empresa no encontrada');
-                return;
-            }
-            
-            editingCompanyId = companyId;
-            
-            // Crear modal de edición
-            const modal = document.createElement('div');
-            modal.className = 'edit-modal';
-            modal.innerHTML = `
-                <div class="edit-modal-content">
-                    <div class="edit-modal-header">
-                        <h3>Editar Empresa: ${company.name}</h3>
-                        <button class="close-modal" onclick="closeEditModal()">&times;</button>
-                    </div>
-                    <form id="edit-company-form" onsubmit="saveCompany(event)">
-                        <div class="form-group">
-                            <label>Nombre de la Empresa</label>
-                            <input type="text" id="edit-name" value="${company.name}" required>
+        <div class="card section-gap">
+            <div class="card-head">
+                <span class="card-title">Usuarios Individuales ({{ individual_users | length }})</span>
+            </div>
+            <div class="tbl-wrap">
+                <table>
+                    <thead>
+                        <tr><th>Usuario</th><th>Email</th><th>Roles</th><th>Estado</th><th>Creado</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for u in individual_users %}
+                        <tr>
+                            <td><strong>{{ u.username }}</strong></td>
+                            <td class="mono" style="font-size:11px">{{ u.email or '—' }}</td>
+                            <td>{% for r in u.roles %}<span class="badge badge-role" style="margin-right:2px">{{ r }}</span>{% endfor %}</td>
+                            <td>{% if u.is_active %}<span class="badge badge-active">Activo</span>{% else %}<span class="badge badge-expired">Inactivo</span>{% endif %}</td>
+                            <td class="mono" style="font-size:11px">{{ u.created_at or '—' }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="empty">No hay usuarios individuales</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── NUEVA EMPRESA ── -->
+    <div class="panel" id="tab-nueva-empresa">
+        <div class="card">
+            <div class="card-head"><span class="card-title">Crear Nueva Empresa</span></div>
+            <div class="card-body">
+                <form method="POST" action="/admin/subscriptions/create-company">
+                    <div class="form-grid">
+                        <div class="field">
+                            <label>Nombre de empresa *</label>
+                            <input type="text" name="name" required placeholder="Nombre de la empresa">
                         </div>
-                        <div class="form-group">
-                            <label>Email de Contacto</label>
-                            <input type="email" id="edit-email" value="${company.contact_email || ''}">
+                        <div class="field">
+                            <label>Email de contacto</label>
+                            <input type="email" name="contact_email" placeholder="contacto@empresa.com">
                         </div>
-                        <div class="form-group">
-                            <label>Precio (USD/mes)</label>
-                            <input type="number" id="edit-price" step="0.01" value="${company.subscription_price || 13.0}" required>
+                        <div class="field">
+                            <label>Precio mensual (USD)</label>
+                            <input type="number" name="subscription_price" step="0.01" min="0" placeholder="13.00" value="13.00">
                         </div>
-                        <div class="form-group">
-                            <label>Máximo de Usuarios</label>
-                            <input type="number" id="edit-max-users" value="${company.max_users || 8}" min="1" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Máximo de Administradores</label>
-                            <input type="number" id="edit-max-admins" value="${company.max_admins || 3}" min="1" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Estado</label>
-                            <select id="edit-status" required>
-                                <option value="active" ${company.subscription_status === 'active' ? 'selected' : ''}>Activo</option>
-                                <option value="inactive" ${company.subscription_status === 'inactive' ? 'selected' : ''}>Inactivo</option>
-                                <option value="suspended" ${company.subscription_status === 'suspended' ? 'selected' : ''}>Suspendido</option>
+                        <div class="field">
+                            <label>Estado de suscripción</label>
+                            <select name="subscription_status">
+                                <option value="active">Activa</option>
+                                <option value="expired">Expirada</option>
+                                <option value="cancelled">Cancelada</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label>Fecha de Expiración (opcional)</label>
-                            <input type="date" id="edit-end-date" value="${company.subscription_end_date ? company.subscription_end_date.split('T')[0] : ''}">
+                        <div class="field">
+                            <label>Máx. usuarios</label>
+                            <input type="number" name="max_users" min="1" max="50" value="8">
                         </div>
-                        <div class="form-group" style="grid-column: 1 / -1; display: flex; gap: 1rem;">
-                            <button type="submit" class="btn-create">Guardar Cambios</button>
-                            <button type="button" class="btn-action btn-secondary" onclick="closeEditModal()">Cancelar</button>
+                        <div class="field">
+                            <label>Máx. administradores</label>
+                            <input type="number" name="max_admins" min="1" max="10" value="3">
                         </div>
-                    </form>
+                        <div class="field">
+                            <label>Fecha de expiración</label>
+                            <input type="date" name="subscription_end_date">
+                        </div>
+                        <div class="field">
+                            <label>Notas</label>
+                            <input type="text" name="notes" placeholder="Notas internas...">
+                        </div>
+                    </div>
+                    <div style="margin-top:24px">
+                        <button type="submit" class="btn btn-red">Crear Empresa</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+</div><!-- /wrap -->
+
+<!-- MODAL EDITAR EMPRESA -->
+<div class="modal-bg" id="modal-edit">
+    <div class="modal">
+        <div class="modal-head">
+            <span class="modal-title" id="modal-edit-title">Editar Empresa</span>
+            <button class="modal-close" onclick="closeModal('modal-edit')">×</button>
+        </div>
+        <form id="form-edit" method="POST" action="/admin/subscriptions/update-company">
+            <div class="modal-body">
+                <input type="hidden" name="company_id" id="edit-id">
+                <div class="form-grid">
+                    <div class="field">
+                        <label>Nombre</label>
+                        <input type="text" name="name" id="edit-name" required>
+                    </div>
+                    <div class="field">
+                        <label>Email contacto</label>
+                        <input type="email" name="contact_email" id="edit-email">
+                    </div>
+                    <div class="field">
+                        <label>Precio / mes (USD)</label>
+                        <input type="number" name="subscription_price" id="edit-price" step="0.01" min="0">
+                    </div>
+                    <div class="field">
+                        <label>Estado</label>
+                        <select name="subscription_status" id="edit-status">
+                            <option value="active">Activa</option>
+                            <option value="expired">Expirada</option>
+                            <option value="cancelled">Cancelada</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Máx. usuarios</label>
+                        <input type="number" name="max_users" id="edit-maxu" min="1" max="50">
+                    </div>
+                    <div class="field">
+                        <label>Máx. admins</label>
+                        <input type="number" name="max_admins" id="edit-maxa" min="1" max="10">
+                    </div>
+                    <div class="field" style="grid-column:1/-1">
+                        <label>Fecha expiración</label>
+                        <input type="date" name="subscription_end_date" id="edit-expiry">
+                    </div>
                 </div>
-            `;
-            document.body.appendChild(modal);
-        }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeModal('modal-edit')">Cancelar</button>
+                <button type="submit" class="btn btn-red">Guardar cambios</button>
+            </div>
+        </form>
+    </div>
+</div>
 
-        async function saveCompany(event) {
-            event.preventDefault();
-            
-            if (!editingCompanyId) return;
-            
-            const data = {
-                company_id: editingCompanyId,
-                name: document.getElementById('edit-name').value,
-                contact_email: document.getElementById('edit-email').value,
-                subscription_price: parseFloat(document.getElementById('edit-price').value),
-                max_users: parseInt(document.getElementById('edit-max-users').value),
-                max_admins: parseInt(document.getElementById('edit-max-admins').value),
-                subscription_status: document.getElementById('edit-status').value,
-                subscription_end_date: document.getElementById('edit-end-date').value || null
-            };
-            
-            try {
-                const response = await fetch('/api/admin/update-company', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(data)
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('Empresa actualizada exitosamente');
-                    closeEditModal();
-                    location.reload();
-                } else {
-                    alert('Error: ' + (result.error || 'Error desconocido'));
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Error al actualizar empresa');
-            }
-        }
+<!-- MODAL TOGGLE STATUS -->
+<div class="modal-bg" id="modal-toggle">
+    <div class="modal" style="max-width:400px">
+        <div class="modal-head">
+            <span class="modal-title" id="toggle-title">Cambiar estado</span>
+            <button class="modal-close" onclick="closeModal('modal-toggle')">×</button>
+        </div>
+        <form id="form-toggle" method="POST" action="/admin/subscriptions/toggle-status">
+            <div class="modal-body">
+                <input type="hidden" name="company_id" id="toggle-id">
+                <input type="hidden" name="new_status" id="toggle-new-status">
+                <p id="toggle-msg" style="color:var(--text-m);font-size:14px;line-height:1.6"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeModal('modal-toggle')">Cancelar</button>
+                <button type="submit" class="btn btn-red" id="toggle-btn">Confirmar</button>
+            </div>
+        </form>
+    </div>
+</div>
 
-        function closeEditModal() {
-            const modal = document.querySelector('.edit-modal');
-            if (modal) {
-                modal.remove();
-            }
-            editingCompanyId = null;
-        }
+<div id="toast"></div>
 
-        async function makeFree(id, type) {
-            if (!confirm('¿Hacer esta suscripción gratuita?')) return;
-            
-            try {
-                const response = await fetch('/api/admin/make-free', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        id: id,
-                        type: type
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('Suscripción marcada como gratuita');
-                    location.reload();
-                } else {
-                    alert('Error: ' + (result.error || 'Error desconocido'));
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Error al actualizar suscripción');
-            }
-        }
-    </script>
+<script>
+    function switchTab(name) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        document.querySelector(`[onclick="switchTab('${name}')"]`).classList.add('active');
+        document.getElementById('tab-' + name).classList.add('active');
+    }
+
+    function openEdit(id, name, price, status, expiry, maxu, maxa, email) {
+        document.getElementById('edit-id').value    = id;
+        document.getElementById('edit-name').value  = name;
+        document.getElementById('edit-price').value = price;
+        document.getElementById('edit-status').value= status;
+        document.getElementById('edit-expiry').value= expiry;
+        document.getElementById('edit-maxu').value  = maxu;
+        document.getElementById('edit-maxa').value  = maxa;
+        document.getElementById('edit-email').value = email;
+        document.getElementById('modal-edit-title').textContent = 'Editar: ' + name;
+        document.getElementById('modal-edit').classList.add('open');
+    }
+
+    function toggleStatus(id, name, currentStatus) {
+        const newStatus = currentStatus === 'active' ? 'expired' : 'active';
+        const action    = currentStatus === 'active' ? 'suspender' : 'activar';
+        document.getElementById('toggle-id').value         = id;
+        document.getElementById('toggle-new-status').value = newStatus;
+        document.getElementById('toggle-title').textContent= (currentStatus==='active' ? 'Suspender' : 'Activar') + ' empresa';
+        document.getElementById('toggle-msg').textContent  = `¿Deseas ${action} la empresa "${name}"?`;
+        document.getElementById('toggle-btn').textContent  = action.charAt(0).toUpperCase() + action.slice(1);
+        document.getElementById('modal-toggle').classList.add('open');
+    }
+
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+    document.querySelectorAll('.modal-bg').forEach(bg => {
+        bg.addEventListener('click', e => { if(e.target === bg) bg.classList.remove('open'); });
+    });
+
+    // Flash messages
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+        showToast('{{ msg }}', '{{ cat }}');
+        {% endfor %}
+    {% endwith %}
+
+    function showToast(msg, type='ok') {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'show ' + (type==='error'||type==='err'?'err':'ok');
+        clearTimeout(t._t);
+        t._t = setTimeout(() => t.className = '', 3500);
+    }
+</script>
 </body>
 </html>
-
-
