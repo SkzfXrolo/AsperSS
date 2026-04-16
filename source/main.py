@@ -647,6 +647,22 @@ class ArgusApp:
         except Exception as e:
             print(f"⚠️ Error inicializando detector de inyección: {e}")
             self.java_injection_detector = None
+
+        # ── Mouse weight / click-bug detector (Prison mode) ─────────────────
+        # Initialized FIRST so the initial snapshot is taken as early as possible,
+        # before the player has time to remove the weight or reconnect the mouse.
+        self.mouse_findings = []   # stored separately to bypass the false-positive filter
+        try:
+            from mouse_weight_detector import MouseWeightDetector
+            self.mouse_detector = MouseWeightDetector()
+            self.mouse_detector.start_monitoring()
+            print("✅ Detector de peso/manipulación de mouse inicializado (prison mode)")
+        except ImportError:
+            print("⚠️ Módulo mouse_weight_detector no disponible")
+            self.mouse_detector = None
+        except Exception as e:
+            print(f"⚠️ Error inicializando detector de mouse: {e}")
+            self.mouse_detector = None
     
     def load_known_hack_hashes(self):
         """Carga base de datos de hashes SHA256 de hacks conocidos - SISTEMA DE APRENDIZAJE CON ACTUALIZACIÓN DINÁMICA"""
@@ -2855,20 +2871,34 @@ class ArgusApp:
         
         self.scanning = True
         self.issues_found = []
+        self.mouse_findings = []
         self.total_files_scanned = 0
         self.total_dirs_scanned = 0
-        
+
+        # ── Mouse instant checks (run BEFORE anything else) ─────────────────
+        # We do this immediately so the player has no time to react.
+        if self.mouse_detector:
+            try:
+                instant = self.mouse_detector.run_instant_checks()
+                self.mouse_findings.extend(instant)
+                if instant:
+                    print(f"🖱️ Detección inmediata de mouse: {len(instant)} hallazgo(s) sospechoso(s)")
+                    for f in instant:
+                        print(f"   ⚠️  {f['nombre']} [{f['alerta']}]")
+            except Exception as _me:
+                print(f"⚠️ Error en detección inmediata de mouse: {_me}")
+
         # Iniciar cronómetro
         self.start_scan_timer()
-        
+
         try:
             # Configurar para uso MÁXIMO de recursos
             total_phases = 100
             current_progress = 0
-            
+
             # Inicializar contador global de archivos escaneados
             self.total_files_scanned = 0
-            
+
             print("🚀 INICIANDO ESCANEO ULTRA RÁPIDO - REVISIÓN COMPLETA DE TODA LA PC")
             print(f"🔧 CPU cores disponibles: {psutil.cpu_count()}")
             print(f"💾 Memoria disponible: {psutil.virtual_memory().available / (1024**3):.1f} GB")
@@ -3019,6 +3049,19 @@ class ArgusApp:
                     except Exception as ex:
                         print(f"⚠️ Error en grupo de escaneo: {ex}")
             
+            # ── Recolectar hallazgos de monitoreo de mouse ───────────────────
+            if self.mouse_detector:
+                try:
+                    self.mouse_detector.stop_monitoring()
+                    session = self.mouse_detector.get_session_findings()
+                    self.mouse_findings.extend(session)
+                    if session:
+                        print(f"🖱️ Hallazgos de sesión de mouse: {len(session)}")
+                        for f in session:
+                            print(f"   ⚠️  {f['nombre']} [{f['alerta']}]")
+                except Exception as _me:
+                    print(f"⚠️ Error recolectando hallazgos de mouse: {_me}")
+
             # Fase 9: Filtrado y clasificación (100%)
             self._update_progress_safe(100, "🔍 Filtrando resultados", "Aplicando filtros ultra estrictos...")
             
@@ -5718,6 +5761,10 @@ class ArgusApp:
                             <div class="stat-number system">{len(self.issues_found)}</div>
                             <div class="stat-label">📊 Total Analizados</div>
                         </div>
+                        <div class="stat-card" style="{'background:linear-gradient(135deg,#3a0000,#5a0000);' if getattr(self,'mouse_findings',[]) else ''}">
+                            <div class="stat-number" style="color:{'#ff4444' if getattr(self,'mouse_findings',[]) else '#00ff00'};">{len(getattr(self,'mouse_findings',[]))}</div>
+                            <div class="stat-label">🖱️ Alertas de Mouse</div>
+                        </div>
                     </div>
                     
                     <div class="section">
@@ -5757,6 +5804,8 @@ class ArgusApp:
                         </div>
                     </div>
                     
+                    {self._generate_mouse_section()}
+
                     <div class="section">
                         <h2>🚨 Archivos Ilegales Detectados</h2>
                         {self._generate_illegal_files_section(illegal_files[:10])}
@@ -5807,6 +5856,49 @@ class ArgusApp:
         except Exception as e:
             print(f"Error generando reporte HTML: {e}")
     
+    def _generate_mouse_section(self):
+        """Genera la sección de detección de manipulación de mouse para el reporte HTML."""
+        mf = getattr(self, 'mouse_findings', [])
+        if not mf:
+            return """
+            <div class="section" style="border-left:4px solid #00ff00;">
+                <h2 style="color:#00ff00;">🖱️ Detección de Mouse (Prison Mode)</h2>
+                <p style="color:#00ff00;">✅ Sin indicadores de peso, click-bug ni manipulación de mouse.</p>
+            </div>"""
+
+        rows = ""
+        for item in mf:
+            color  = "#ff4444" if item.get('alerta') == 'CRITICAL' else "#ffa500"
+            icon   = "🔴" if item.get('alerta') == 'CRITICAL' else "🟠"
+            rows += f"""
+            <div class="issue critical" style="border-left-color:{color};">
+                <div class="issue-title" style="color:{color};">{icon} {item.get('nombre','')}</div>
+                <div class="issue-details"><strong>Detalle:</strong> {item.get('detalle','')}</div>
+                <div class="issue-details" style="color:#e0e0e0;">{item.get('descripcion','')}</div>
+                <div class="issue-details" style="color:#888;font-size:0.85em;">
+                    Severidad: <strong style="color:{color};">{item.get('alerta','')}</strong>
+                    &nbsp;|&nbsp; Tipo: {item.get('tipo','')}
+                </div>
+            </div>"""
+
+        return f"""
+        <div class="section" style="border:1px solid rgba(255,68,68,0.4);background:rgba(120,0,0,0.15);">
+            <h2 style="color:#ff4444;border-bottom-color:#ff4444;">
+                🖱️ Detección de Manipulación de Mouse (Prison Mode)
+                <span style="font-size:0.6em;background:#ff4444;color:#fff;
+                             padding:3px 10px;border-radius:10px;margin-left:12px;">
+                    {len(mf)} ALERTA(S)
+                </span>
+            </h2>
+            <p style="color:#ffa0a0;margin-bottom:16px;font-size:0.95em;">
+                ⚠️  Se detectaron indicadores de <strong>peso sobre el mouse</strong>,
+                <strong>click-bug activo</strong> o <strong>desconexión/reconexión de dispositivo</strong>
+                durante la sesión de SS. Estas técnicas se usan en prison mode para obtener
+                autoclick sin software detectable.
+            </p>
+            {rows}
+        </div>"""
+
     def _generate_illegal_files_section(self, illegal_files):
         """Genera la sección de archivos ilegales"""
         if not illegal_files:
@@ -6160,6 +6252,23 @@ class ArgusApp:
         self.results_text.insert(tk.END, f"🟡 SOSPECHOSO: {len(sosp)}\n", "warning")
         self.results_text.insert(tk.END, f"🟢 Limpio: {limpio}\n\n", "success")
 
+        # ── Sección de detección de mouse (prison mode) ──────────────────────
+        mouse_findings = getattr(self, 'mouse_findings', [])
+        if mouse_findings:
+            self.results_text.insert(tk.END, "━"*60 + "\n", "warning")
+            self.results_text.insert(tk.END, "🖱️  DETECCIÓN DE MANIPULACIÓN DE MOUSE\n", "danger")
+            self.results_text.insert(tk.END, "━"*60 + "\n", "warning")
+            for mf in mouse_findings:
+                icon = "🔴" if mf.get('alerta') == 'CRITICAL' else "🟠"
+                self.results_text.insert(tk.END, f"{icon} {mf.get('nombre','')}\n", "danger")
+                if mf.get('detalle'):
+                    self.results_text.insert(tk.END, f"   └─ {mf['detalle']}\n", "warning")
+                if mf.get('descripcion'):
+                    self.results_text.insert(tk.END, f"   {mf['descripcion']}\n\n", "info")
+            self.results_text.insert(tk.END, "\n", "info")
+        else:
+            self.results_text.insert(tk.END, "🖱️  Mouse: sin indicadores de peso o manipulación\n\n", "success")
+
         if self.issues_found:
             self.results_text.insert(tk.END, "ELEMENTOS ENCONTRADOS:\n\n", "warning")
             for i, issue in enumerate(self.issues_found[:50], 1):
@@ -6171,7 +6280,9 @@ class ArgusApp:
         # ── Ventana de feedback ─────────────────────────────────────────
         win = tk.Toplevel(self.root)
         win.title("Resultado del Escaneo — Feedback para IA")
-        win.geometry("520x420")
+        _mf_count = len(getattr(self, 'mouse_findings', []))
+        _win_h = 420 + min(_mf_count, 3) * 22 + (30 if _mf_count > 0 else 0)
+        win.geometry(f"520x{_win_h}")
         win.configure(bg="#060912")
         win.resizable(False, False)
         win.grab_set()
@@ -6184,6 +6295,30 @@ class ArgusApp:
         summary = f"  {len(hacks)} HACKS  •  {len(sosp)} Sospechosos  •  {limpio} Limpios  •  {len(self.issues_found)} total"
         tk.Label(hdr, text=summary, font=("Segoe UI", 11),
                  bg="#060912", fg="#5a7296").pack(anchor="w", pady=(4, 0))
+
+        # Mouse hardware alert (shown prominently if any findings)
+        _mf = getattr(self, 'mouse_findings', [])
+        if _mf:
+            _critical_mouse = [m for m in _mf if m.get('alerta') == 'CRITICAL']
+            _mouse_bg = "#3a0808" if _critical_mouse else "#2a1a00"
+            _mouse_fg = "#ff6060" if _critical_mouse else "#ffb347"
+            _mouse_icon = "🔴" if _critical_mouse else "🟠"
+            mouse_banner = tk.Frame(hdr, bg=_mouse_bg, padx=8, pady=6)
+            mouse_banner.pack(fill="x", pady=(8, 0))
+            tk.Label(mouse_banner,
+                     text=f"{_mouse_icon}  MANIPULACIÓN DE MOUSE: {len(_mf)} alerta(s)",
+                     font=("Segoe UI", 10, "bold"),
+                     bg=_mouse_bg, fg=_mouse_fg).pack(anchor="w")
+            for m in _mf[:3]:
+                tk.Label(mouse_banner,
+                         text=f"  • {m.get('nombre','')}",
+                         font=("Segoe UI", 9),
+                         bg=_mouse_bg, fg=_mouse_fg).pack(anchor="w")
+            if len(_mf) > 3:
+                tk.Label(mouse_banner,
+                         text=f"  … y {len(_mf)-3} más (ver resultados completos)",
+                         font=("Segoe UI", 9, "italic"),
+                         bg=_mouse_bg, fg=_mouse_fg).pack(anchor="w")
 
         sep = tk.Frame(win, bg="#0f1525", height=1)
         sep.pack(fill="x", padx=20, pady=12)
