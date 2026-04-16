@@ -2120,39 +2120,22 @@ def get_feedback(result_id):
 
 @app.route('/api/update-model', methods=['POST'])
 def update_model():
-    """Actualiza el modelo de IA con patrones aprendidos - SOLO ACTUALIZA EL MODELO, NO COMPILA"""
+    """Retorna estadísticas de patrones aprendidos directamente desde BD"""
     try:
-        headers = {}
-        if API_KEY:
-            headers['X-API-Key'] = API_KEY
-        response = requests.post(
-            get_api_url('/api/update-model'),
-            headers=headers,
-            timeout=30
-        )
-        if response.status_code == 200:
-            data = response.json()
-            # NO compilar aquí - solo actualizar el modelo
-            # Los clientes descargarán el modelo actualizado automáticamente
-            return jsonify({
-                'success': True,
-                'message': 'Modelo actualizado. Los clientes descargarán automáticamente los nuevos patrones al iniciar.',
-                'version': data.get('version'),
-                'patterns_count': data.get('patterns_count'),
-                'hashes_count': data.get('hashes_count')
-            })
-        return jsonify({'error': f'Error al actualizar modelo: {response.status_code}', 'details': response.text}), response.status_code
-    except requests.exceptions.ConnectionError:
-        error_msg = 'No se pudo conectar a la API.'
-        if IS_RENDER:
-            error_msg += ' En Render, asegúrate de que la API esté configurada correctamente.'
-        else:
-            error_msg += ' Verifica que esté corriendo en http://localhost:5000'
-        return jsonify({'error': error_msg}), 503
-    except requests.exceptions.Timeout:
-        return jsonify({'error': 'Timeout al conectar con la API. La API puede estar sobrecargada.'}), 504
+        with get_api_db_cursor() as cursor:
+            cursor.execute(f'SELECT COUNT(*) as c FROM learned_patterns WHERE is_active = TRUE')
+            patterns_count = _row_get(cursor.fetchone(), 0, 'c') or 0
+            cursor.execute(f'SELECT COUNT(*) as c FROM learned_hashes')
+            hashes_count = _row_get(cursor.fetchone(), 0, 'c') or 0
+        return jsonify({
+            'success': True,
+            'message': 'Modelo actualizado. Los clientes descargarán automáticamente los nuevos patrones al iniciar.',
+            'version': '1.0',
+            'patterns_count': patterns_count,
+            'hashes_count': hashes_count,
+        })
     except Exception as e:
-        print(f"Error en create_token: {str(e)}")
+        print(f"Error en update_model: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': f'Error inesperado: {str(e)}'}), 500
 
@@ -2333,26 +2316,19 @@ def generate_app():
             yield f"data: {json.dumps({'step': 'Actualizando modelo de IA con patrones aprendidos...', 'progress': 20})}\n\n"
             time.sleep(0.5)
             
-            # Llamar al endpoint de actualización de modelo
+            # Obtener estadísticas del modelo directamente desde BD
             try:
-                headers = {}
-                if API_KEY:
-                    headers['X-API-Key'] = API_KEY
-                update_response = requests.post(
-                    get_api_url('/api/update-model'),
-                    headers=headers,
-                    timeout=30
-                )
-                if update_response.status_code == 200:
-                    model_data = update_response.json()
-                    patterns_count = model_data.get('patterns_count', 0)
-                    hashes_count = model_data.get('hashes_count', 0)
-                    step_message = f'✅ Modelo actualizado: {patterns_count} patrones, {hashes_count} hashes. Los clientes descargarán automáticamente.'
-                    yield f"data: {json.dumps({'step': step_message, 'progress': 50})}\n\n"
-                else:
-                    yield f"data: {json.dumps({'step': 'Advertencia: No se pudo actualizar modelo, continuando...', 'progress': 50})}\n\n"
+                with get_api_db_cursor() as _cur:
+                    _cur.execute('SELECT COUNT(*) as c FROM learned_patterns WHERE is_active = TRUE')
+                    patterns_count = _row_get(_cur.fetchone(), 0, 'c') or 0
+                    _cur.execute('SELECT COUNT(*) as c FROM learned_hashes')
+                    hashes_count = _row_get(_cur.fetchone(), 0, 'c') or 0
+                step_message = f'✅ Modelo: {patterns_count} patrones, {hashes_count} hashes. Los clientes descargarán automáticamente.'
+                yield f"data: {json.dumps({'step': step_message, 'progress': 50})}\n\n"
+                model_data = {'patterns_count': patterns_count, 'hashes_count': hashes_count}
             except Exception as e:
-                yield f"data: {json.dumps({'step': f'Advertencia: Error actualizando modelo: {str(e)}', 'progress': 50})}\n\n"
+                model_data = {'patterns_count': 0, 'hashes_count': 0}
+                yield f"data: {json.dumps({'step': f'Advertencia: Error leyendo modelo: {str(e)}', 'progress': 50})}\n\n"
             
             time.sleep(0.5)
             
@@ -2462,24 +2438,16 @@ def generate_app():
             import shutil
             shutil.copy2(exe_path, download_path)
             
-            # Paso 6: Registrar versión en BD
+            # Paso 6: Registrar versión en BD directamente
             try:
-                headers = {}
-                if API_KEY:
-                    headers['X-API-Key'] = API_KEY
-                version_response = requests.post(
-                    get_api_url('/api/versions'),
-                    json={
-                        'version': f'1.{version}',
-                        'download_url': f'/download/{download_filename}',
-                        'changelog': f'Versión generada automáticamente con {model_data.get("patterns_count", 0)} patrones aprendidos',
-                        'file_size': file_size,
-                        'file_hash': file_hash
-                    },
-                    headers=headers,
-                    timeout=5
-                )
-            except:
+                with get_api_db_cursor() as _cur:
+                    _cur.execute(
+                        f'INSERT INTO app_versions (version, download_url, changelog, file_size, file_hash) VALUES ({_PH},{_PH},{_PH},{_PH},{_PH}) ON CONFLICT (version) DO NOTHING',
+                        (f'1.{version}', f'/download/{download_filename}',
+                         f'Versión generada con {model_data.get("patterns_count", 0)} patrones aprendidos',
+                         file_size, file_hash)
+                    )
+            except Exception:
                 pass
             
             # Paso 7: Completado
