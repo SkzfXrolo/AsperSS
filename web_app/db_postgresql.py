@@ -18,8 +18,10 @@ POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD') or os.environ.get('DATAB
 POSTGRES_DATABASE = os.environ.get('POSTGRES_DATABASE') or os.environ.get('DATABASE_URL', '').split('/')[-1] if os.environ.get('DATABASE_URL') else None
 
 # Si Render proporciona DATABASE_URL directamente, usarla
-if os.environ.get('DATABASE_URL'):
-    DATABASE_URL = os.environ.get('DATABASE_URL')
+# Render usa 'postgres://' pero psycopg2 requiere 'postgresql://'
+_raw_url = os.environ.get('DATABASE_URL', '')
+if _raw_url:
+    DATABASE_URL = _raw_url.replace('postgres://', 'postgresql://', 1)
 else:
     DATABASE_URL = None
 

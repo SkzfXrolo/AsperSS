@@ -24,9 +24,13 @@ DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scanner_db.
 try:
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     # Verificar si está usando PostgreSQL o MySQL ANTES de importar
-    USE_POSTGRESQL = bool(os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_HOST'))
-    USE_MYSQL = bool(os.environ.get('MYSQL_HOST') and not USE_POSTGRESQL)
-    
+    _db_url = os.environ.get('DATABASE_URL', '').strip()
+    _pg_host = os.environ.get('POSTGRES_HOST', '').strip()
+    _mysql_host = os.environ.get('MYSQL_HOST', '').strip()
+    print(f"🔍 BD detection — DATABASE_URL={'sí ('+_db_url[:30]+'...)' if _db_url else 'NO'}, POSTGRES_HOST={'sí' if _pg_host else 'NO'}, MYSQL_HOST={'sí' if _mysql_host else 'NO'}")
+    USE_POSTGRESQL = bool(_db_url or _pg_host)
+    USE_MYSQL = bool(_mysql_host and not USE_POSTGRESQL)
+
     if USE_POSTGRESQL or USE_MYSQL:
         try:
             from db_mysql import (
@@ -45,6 +49,7 @@ try:
             USE_MYSQL = False
     else:
         print("⚠️ No hay BD configurada, usando SQLite como fallback")
+        print("⚠️ Variables de entorno disponibles con 'DB' o 'PG':", [k for k in os.environ if 'DB' in k or 'PG' in k or 'SQL' in k])
         USE_POSTGRESQL = False
         USE_MYSQL = False
 except Exception as e:
