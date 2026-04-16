@@ -813,42 +813,87 @@ def verify_registration_token(token):
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
-def get_user_by_id(user_id):
-    """Obtiene un usuario por ID con soporte para múltiples roles"""
-    import json
-    
-    try:
+def _auth_cursor():
+    """Devuelve un context manager de cursor apuntando a la BD correcta (PostgreSQL o SQLite)."""
+    if USE_POSTGRESQL or USE_MYSQL:
+        return get_db_cursor()
+    # SQLite fallback para desarrollo local
+    import contextlib
+
+    @contextlib.contextmanager
+    def _sqlite_ctx():
         conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT id, username, email, roles, is_active, created_at, last_login, company_id
-            FROM users
-            WHERE id = ?
-        ''', (user_id,))
-        
-        user = cursor.fetchone()
-        conn.close()
-        
-        if user:
-            # Parsear roles JSON
-            try:
-                roles = json.loads(user[3]) if user[3] else ['user']
-            except:
-                roles = [user[3]] if user[3] else ['user']
-            
-            return {
-                'id': user[0],
-                'username': user[1],
-                'email': user[2],
-                'roles': roles,
-                'is_active': bool(user[4]),
-                'created_at': user[5],
-                'last_login': user[6],
-                'company_id': user[7]
-            }
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        try:
+            yield cur
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    return _sqlite_ctx()
+
+
+def _ph():
+    """Placeholder correcto según el backend (%s para PG/MySQL, ? para SQLite)."""
+    return '%s' if (USE_POSTGRESQL or USE_MYSQL) else '?'
+
+
+def _parse_roles(raw):
+    import json
+    if isinstance(raw, list):
+        return raw
+    try:
+        return json.loads(raw) if raw else ['user']
+    except Exception:
+        return [raw] if raw else ['user']
+
+
+def _row_to_user(row):
+    """Convierte una fila (dict o tuple) al dict de usuario estándar."""
+    if isinstance(row, dict):
+        return {
+            'id':         row['id'],
+            'username':   row['username'],
+            'email':      row.get('email'),
+            'roles':      _parse_roles(row.get('roles')),
+            'is_active':  bool(row.get('is_active', True)),
+            'created_at': row.get('created_at'),
+            'last_login': row.get('last_login'),
+            'company_id': row.get('company_id'),
+        }
+    # tuple / sqlite3.Row
+    return {
+        'id':         row[0],
+        'username':   row[1],
+        'email':      row[2],
+        'roles':      _parse_roles(row[3]),
+        'is_active':  bool(row[4]),
+        'created_at': row[5],
+        'last_login': row[6],
+        'company_id': row[7],
+    }
+
+
+def get_user_by_id(user_id):
+    """Obtiene un usuario por ID — usa PostgreSQL o SQLite según configuración."""
+    if user_id is None:
         return None
+    try:
+        ph = _ph()
+        with _auth_cursor() as cursor:
+            cursor.execute(
+                f'SELECT id, username, email, roles, is_active, created_at, last_login, company_id'
+                f' FROM users WHERE id = {ph}',
+                (user_id,)
+            )
+            row = cursor.fetchone()
+        return _row_to_user(row) if row else None
     except Exception as e:
+        print(f"⚠️ get_user_by_id error: {e}")
         return None
 
 def has_role(user, role):
@@ -1025,195 +1070,179 @@ def list_users(company_id=None):
 # FUNCIONES DE GESTIÓN DE EMPRESAS
 # ============================================================
 
-def create_company(name, contact_email=None, contact_phone=None, subscription_type='enterprise', 
-                   subscription_status='active', subscription_price=13.0, max_users=8, max_admins=3, 
+def create_company(name, contact_email=None, contact_phone=None, subscription_type='enterprise',
+                   subscription_status='active', subscription_price=13.0, max_users=8, max_admins=3,
                    created_by=None, notes=None):
-    """Crea una nueva empresa"""
+    """Crea una nueva empresa — usa PostgreSQL o SQLite según configuración."""
     try:
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT INTO companies 
-            (name, contact_email, contact_phone, subscription_type, subscription_status, 
-             subscription_price, max_users, max_admins, created_by, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (name, contact_email, contact_phone, subscription_type, subscription_status,
-              subscription_price, max_users, max_admins, created_by, notes))
-        
-        company_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        
+        ph = _ph()
+        with _auth_cursor() as cursor:
+            if USE_POSTGRESQL:
+                cursor.execute(
+                    f'INSERT INTO companies (name, contact_email, contact_phone, subscription_type,'
+                    f' subscription_status, subscription_price, max_users, max_admins, created_by, notes)'
+                    f' VALUES ({ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph}) RETURNING id',
+                    (name, contact_email, contact_phone, subscription_type, subscription_status,
+                     subscription_price, max_users, max_admins, created_by, notes)
+                )
+                row = cursor.fetchone()
+                company_id = row['id'] if isinstance(row, dict) else row[0]
+            else:
+                cursor.execute(
+                    f'INSERT INTO companies (name, contact_email, contact_phone, subscription_type,'
+                    f' subscription_status, subscription_price, max_users, max_admins, created_by, notes)'
+                    f' VALUES ({ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph})',
+                    (name, contact_email, contact_phone, subscription_type, subscription_status,
+                     subscription_price, max_users, max_admins, created_by, notes)
+                )
+                company_id = cursor.lastrowid
         return {'success': True, 'company_id': company_id}
-    except sqlite3.IntegrityError:
-        return {'success': False, 'error': 'Empresa con ese nombre ya existe'}
     except Exception as e:
-        return {'success': False, 'error': str(e)}
+        err = str(e)
+        if 'unique' in err.lower() or 'duplicate' in err.lower():
+            return {'success': False, 'error': 'Empresa con ese nombre ya existe'}
+        return {'success': False, 'error': err}
+
 
 def get_company_by_id(company_id):
-    """Obtiene una empresa por ID"""
+    """Obtiene una empresa por ID — usa PostgreSQL o SQLite según configuración."""
     try:
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT id, name, contact_email, contact_phone, subscription_type, subscription_status,
-                   subscription_start_date, subscription_end_date, subscription_price,
-                   max_users, max_admins, created_at, created_by, is_active, notes
-            FROM companies
-            WHERE id = ?
-        ''', (company_id,))
-        
-        row = cursor.fetchone()
-        conn.close()
-        
-        if row:
-            # Contar usuarios actuales
-            conn = sqlite3.connect(DATABASE)
-            cursor = conn.cursor()
-            cursor.execute('SELECT COUNT(*) FROM users WHERE company_id = ? AND is_active = 1', (company_id,))
-            current_users = cursor.fetchone()[0]
-            
-            cursor.execute('''
-                SELECT COUNT(*) FROM users 
-                WHERE company_id = ? AND is_active = 1 
-                AND roles LIKE "%administrador%"
-            ''', (company_id,))
-            current_admins = cursor.fetchone()[0]
-            conn.close()
-            
-            return {
-                'id': row[0],
-                'name': row[1],
-                'contact_email': row[2],
-                'contact_phone': row[3],
-                'subscription_type': row[4] or 'enterprise',
-                'subscription_status': row[5],
-                'subscription_start_date': row[6],
-                'subscription_end_date': row[7],
-                'subscription_price': row[8] or 13.0,
-                'max_users': row[9],
-                'max_admins': row[10],
-                'created_at': row[11],
-                'created_by': row[12],
-                'is_active': bool(row[13]),
-                'notes': row[14],
-                'current_users': current_users,
-                'current_admins': current_admins
-            }
-        return None
+        ph = _ph()
+        with _auth_cursor() as cursor:
+            cursor.execute(
+                'SELECT id, name, contact_email, contact_phone, subscription_type, subscription_status,'
+                ' subscription_start_date, subscription_end_date, subscription_price,'
+                f' max_users, max_admins, created_at, created_by, is_active, notes'
+                f' FROM companies WHERE id = {ph}',
+                (company_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+            if isinstance(row, dict):
+                r = row
+                cid = r['id']
+            else:
+                r = {
+                    'id': row[0], 'name': row[1], 'contact_email': row[2], 'contact_phone': row[3],
+                    'subscription_type': row[4], 'subscription_status': row[5],
+                    'subscription_start_date': row[6], 'subscription_end_date': row[7],
+                    'subscription_price': row[8], 'max_users': row[9], 'max_admins': row[10],
+                    'created_at': row[11], 'created_by': row[12], 'is_active': row[13], 'notes': row[14],
+                }
+                cid = r['id']
+
+            cursor.execute(f'SELECT COUNT(*) as c FROM users WHERE company_id = {ph} AND is_active = TRUE', (cid,))
+            cu_row = cursor.fetchone()
+            current_users = (cu_row['c'] if isinstance(cu_row, dict) else cu_row[0]) if cu_row else 0
+
+            like_val = '%administrador%'
+            cursor.execute(
+                f'SELECT COUNT(*) as c FROM users WHERE company_id = {ph} AND is_active = TRUE AND roles LIKE {ph}',
+                (cid, like_val)
+            )
+            ca_row = cursor.fetchone()
+            current_admins = (ca_row['c'] if isinstance(ca_row, dict) else ca_row[0]) if ca_row else 0
+
+        return {
+            'id': r['id'], 'name': r['name'],
+            'contact_email': r['contact_email'], 'contact_phone': r['contact_phone'],
+            'subscription_type': r['subscription_type'] or 'enterprise',
+            'subscription_status': r['subscription_status'],
+            'subscription_start_date': r['subscription_start_date'],
+            'subscription_end_date': r['subscription_end_date'],
+            'subscription_price': r['subscription_price'] or 13.0,
+            'max_users': r['max_users'], 'max_admins': r['max_admins'],
+            'created_at': r['created_at'], 'created_by': r['created_by'],
+            'is_active': bool(r['is_active']), 'notes': r['notes'],
+            'current_users': current_users, 'current_admins': current_admins,
+        }
     except Exception as e:
+        print(f"⚠️ get_company_by_id error: {e}")
         return None
 
+
 def list_companies():
-    """Lista todas las empresas"""
+    """Lista todas las empresas — usa PostgreSQL o SQLite según configuración."""
     try:
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT id, name, contact_email, subscription_type, subscription_status, 
-                   subscription_start_date, subscription_end_date, subscription_price,
-                   max_users, max_admins, created_at, is_active
-            FROM companies
-            ORDER BY created_at DESC
-        ''')
-        
-        companies = []
-        for row in cursor.fetchall():
-            company_id = row[0]
-            
-            # Contar usuarios actuales
-            cursor.execute('SELECT COUNT(*) FROM users WHERE company_id = ? AND is_active = 1', (company_id,))
-            current_users = cursor.fetchone()[0]
-            
-            cursor.execute('''
-                SELECT COUNT(*) FROM users 
-                WHERE company_id = ? AND is_active = 1 
-                AND roles LIKE "%administrador%"
-            ''', (company_id,))
-            current_admins = cursor.fetchone()[0]
-            
-            companies.append({
-                'id': company_id,
-                'name': row[1],
-                'contact_email': row[2],
-                'subscription_type': row[3] or 'enterprise',
-                'subscription_status': row[4],
-                'subscription_start_date': row[5],
-                'subscription_end_date': row[6],
-                'subscription_price': row[7] or 13.0,
-                'max_users': row[8],
-                'max_admins': row[9],
-                'created_at': row[10],
-                'is_active': bool(row[11]),
-                'current_users': current_users,
-                'current_admins': current_admins
-            })
-        
-        conn.close()
+        ph = _ph()
+        with _auth_cursor() as cursor:
+            cursor.execute(
+                'SELECT id, name, contact_email, subscription_type, subscription_status,'
+                ' subscription_start_date, subscription_end_date, subscription_price,'
+                ' max_users, max_admins, created_at, is_active'
+                ' FROM companies ORDER BY created_at DESC'
+            )
+            rows = cursor.fetchall()
+
+            companies = []
+            for row in rows:
+                if isinstance(row, dict):
+                    cid = row['id']
+                else:
+                    cid = row[0]
+
+                cursor.execute(f'SELECT COUNT(*) as c FROM users WHERE company_id = {ph} AND is_active = TRUE', (cid,))
+                cu = cursor.fetchone()
+                current_users = (cu['c'] if isinstance(cu, dict) else cu[0]) if cu else 0
+
+                cursor.execute(
+                    f'SELECT COUNT(*) as c FROM users WHERE company_id = {ph} AND is_active = TRUE AND roles LIKE {ph}',
+                    (cid, '%administrador%')
+                )
+                ca = cursor.fetchone()
+                current_admins = (ca['c'] if isinstance(ca, dict) else ca[0]) if ca else 0
+
+                if isinstance(row, dict):
+                    companies.append({
+                        'id': row['id'], 'name': row['name'],
+                        'contact_email': row['contact_email'],
+                        'subscription_type': row['subscription_type'] or 'enterprise',
+                        'subscription_status': row['subscription_status'],
+                        'subscription_start_date': row['subscription_start_date'],
+                        'subscription_end_date': row['subscription_end_date'],
+                        'subscription_price': row['subscription_price'] or 13.0,
+                        'max_users': row['max_users'], 'max_admins': row['max_admins'],
+                        'created_at': str(row['created_at']), 'is_active': bool(row['is_active']),
+                        'current_users': current_users, 'current_admins': current_admins,
+                    })
+                else:
+                    companies.append({
+                        'id': row[0], 'name': row[1], 'contact_email': row[2],
+                        'subscription_type': row[3] or 'enterprise', 'subscription_status': row[4],
+                        'subscription_start_date': row[5], 'subscription_end_date': row[6],
+                        'subscription_price': row[7] or 13.0,
+                        'max_users': row[8], 'max_admins': row[9],
+                        'created_at': row[10], 'is_active': bool(row[11]),
+                        'current_users': current_users, 'current_admins': current_admins,
+                    })
         return companies
     except Exception as e:
+        print(f"⚠️ list_companies error: {e}")
         return []
+
 
 def update_company(company_id, name=None, contact_email=None, contact_phone=None,
                    subscription_type=None, subscription_status=None, subscription_price=None,
                    subscription_end_date=None, max_users=None, max_admins=None, is_active=None, notes=None):
-    """Actualiza una empresa"""
+    """Actualiza una empresa — usa PostgreSQL o SQLite según configuración."""
     try:
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        
-        updates = []
-        params = []
-        
-        if name is not None:
-            updates.append('name = ?')
-            params.append(name)
-        if contact_email is not None:
-            updates.append('contact_email = ?')
-            params.append(contact_email)
-        if contact_phone is not None:
-            updates.append('contact_phone = ?')
-            params.append(contact_phone)
-        if subscription_type is not None:
-            updates.append('subscription_type = ?')
-            params.append(subscription_type)
-        if subscription_status is not None:
-            updates.append('subscription_status = ?')
-            params.append(subscription_status)
-        if subscription_price is not None:
-            updates.append('subscription_price = ?')
-            params.append(subscription_price)
-        if subscription_end_date is not None:
-            updates.append('subscription_end_date = ?')
-            params.append(subscription_end_date)
-        if max_users is not None:
-            updates.append('max_users = ?')
-            params.append(max_users)
-        if max_admins is not None:
-            updates.append('max_admins = ?')
-            params.append(max_admins)
-        if is_active is not None:
-            updates.append('is_active = ?')
-            params.append(is_active)
-        if notes is not None:
-            updates.append('notes = ?')
-            params.append(notes)
-        
+        ph = _ph()
+        fields = {
+            'name': name, 'contact_email': contact_email, 'contact_phone': contact_phone,
+            'subscription_type': subscription_type, 'subscription_status': subscription_status,
+            'subscription_price': subscription_price, 'subscription_end_date': subscription_end_date,
+            'max_users': max_users, 'max_admins': max_admins, 'is_active': is_active, 'notes': notes,
+        }
+        updates = [(k, v) for k, v in fields.items() if v is not None]
         if not updates:
-            conn.close()
             return {'success': False, 'error': 'No hay campos para actualizar'}
-        
-        params.append(company_id)
-        cursor.execute(f'''
-            UPDATE companies SET {', '.join(updates)} WHERE id = ?
-        ''', params)
-        
-        conn.commit()
-        conn.close()
-        
+
+        set_clause = ', '.join(f'{k} = {ph}' for k, _ in updates)
+        params = [v for _, v in updates] + [company_id]
+        with _auth_cursor() as cursor:
+            cursor.execute(f'UPDATE companies SET {set_clause} WHERE id = {ph}', params)
         return {'success': True}
     except Exception as e:
         return {'success': False, 'error': str(e)}
