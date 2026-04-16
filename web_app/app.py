@@ -1120,6 +1120,51 @@ def api_admin_update_company():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+@app.route('/api/admin/update-subscription', methods=['POST'])
+@login_required
+def api_update_subscription():
+    """Actualiza suscripción de empresa (precio, estado, extensión). Solo para admins."""
+    user = get_user_by_id(session.get('user_id'))
+    if not user or 'admin' not in user.get('roles', []):
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+
+    data = request.json or {}
+    company_id = data.get('company_id')
+    if not company_id:
+        return jsonify({'success': False, 'error': 'company_id requerido'}), 400
+
+    try:
+        update_kwargs = {}
+        if 'subscription_price' in data:
+            update_kwargs['subscription_price'] = data['subscription_price']
+        if 'subscription_status' in data:
+            update_kwargs['subscription_status'] = data['subscription_status']
+        if data.get('notes'):
+            update_kwargs['notes'] = data['notes']
+
+        if data.get('extend_months', 0) > 0:
+            from datetime import datetime, timedelta
+            company = get_company_by_id(company_id)
+            if company:
+                current_end = company.get('subscription_end_date')
+                if current_end and str(current_end) > datetime.now().isoformat():
+                    base = datetime.fromisoformat(str(current_end).split('.')[0])
+                else:
+                    base = datetime.now()
+                new_end = base + timedelta(days=int(data['extend_months']) * 30)
+                update_kwargs['subscription_end_date'] = new_end.isoformat()
+                if data.get('subscription_status') != 'cancelled':
+                    update_kwargs['subscription_status'] = 'active'
+
+        result = update_company(company_id=company_id, **update_kwargs)
+        if result['success']:
+            return jsonify({'success': True, 'message': 'Suscripción actualizada'})
+        return jsonify({'success': False, 'error': result.get('error', 'Error')}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ============================================================
 # API PROXY - Conecta con la API REST
 # ============================================================

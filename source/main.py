@@ -2916,132 +2916,108 @@ class MinecraftSSApp:
                     except Exception as e:
                         print(f"⚠️ Error en escaneo de unidad: {e} - continuando...")
             
-            # Fase 2: Segundo scan en paralelo para doble verificación
-            self._update_progress_safe(80, "🔍 Segundo scan en paralelo", "Doble verificación de hacks...")
-            self.secondary_scan_parallel()
-            
-            # Fase 3: Análisis de procesos (85-90%)
-            self._update_progress_safe(85, "🔍 Analizando procesos", "Escaneando procesos activos...")
-            self.scan_processes()
-            
-            # Fase 3.1: Segunda revisión avanzada de procesos de Minecraft
-            self._update_progress_safe(86, "🔍 Segunda revisión de procesos de Minecraft", "Análisis profundo...")
-            self.advanced_minecraft_process_analysis()
-            
-            # Fase 2.1: Análisis avanzado de procesos
-            self._update_progress_safe(81, "🔍 Analizando procesos deshabilitados", "sc query dps...")
-            self.scan_disabled_processes()
-            
-            self._update_progress_safe(82, "🔍 Analizando caché DNS", "ipconfig/displaydns...")
-            self.scan_dns_cache()
-            
-            self._update_progress_safe(83, "🔍 Analizando procesos ejecutados", "tasklist...")
-            self.scan_running_processes()
-            
-            self._update_progress_safe(84, "🔍 Analizando archivos .exe", "dir /b/s *.exe...")
-            self.scan_exe_files()
-            
-            self._update_progress_safe(85, "🔍 Analizando archivos .jar", "dir /b/s *.jar...")
-            self.scan_jar_files()
-            
-            # Fase 3: Análisis de ventanas (85-87%)
-            self._update_progress_safe(85, "🔍 Analizando ventanas", "Detectando ventanas sospechosas...")
-            self.scan_windows()
-            
-            # Fase 3.1: Análisis avanzado de archivos
-            self._update_progress_safe(86, "🔍 Analizando archivos por fecha", "FORFILES...")
-            self.scan_files_by_date()
-            
-            self._update_progress_safe(87, "🔍 Analizando archivos borrados", "fsutil usn...")
-            self.scan_deleted_files()
-            
-            self._update_progress_safe(88, "🔍 Analizando archivos creados", "fsutil usn...")
-            self.scan_created_files()
-            
-            self._update_progress_safe(89, "🔍 Analizando archivos renombrados", "fsutil usn...")
-            self.scan_renamed_files()
-            
-            # Fase 3.2: Análisis de JNA
-            self._update_progress_safe(90, "🔍 Analizando prefetch JNA", "Prefetch...")
-            self.scan_prefetch_jna()
-            
-            self._update_progress_safe(91, "🔍 Analizando temp JNA", "Temp...")
-            self.scan_temp_jna()
-            
-            # Fase 3.3: Análisis de registro
-            self._update_progress_safe(92, "🔍 Analizando registro Windows", "Registry...")
-            self.scan_registry_suspicious()
-            
-            # Fase 3.4: Análisis de macros
-            self._update_progress_safe(93, "🔍 Analizando macros Logitech", "LGHUB...")
-            self.scan_logitech_macros()
-            
-            self._update_progress_safe(94, "🔍 Analizando macros Razer", "Synapse...")
-            self.scan_razer_macros()
-            
-            # Fase 3.5: Análisis de logs
-            self._update_progress_safe(95, "🔍 Analizando logs de eventos", "Event Viewer...")
-            self.scan_event_logs()
-            
-            # Fase 3.6: Análisis de ubicaciones comunes de hacks
-            self._update_progress_safe(96, "🔍 Analizando ubicaciones comunes de hacks", "Downloads, Desktop, Documents...")
-            self.scan_common_hack_locations()
-            
-            # Fase 3.7: Análisis de carpetas sospechosas
-            self._update_progress_safe(97, "🔍 Analizando carpetas sospechosas", "Buscando carpetas con nombres de hacks...")
-            self.scan_suspicious_folders()
-            
-            # Fase 3.8: Búsqueda de nombres exactos de hacks
-            self._update_progress_safe(97, "🎯 Buscando nombres exactos de hacks", "Flux, Vape, Entropy, etc...")
-            self.scan_exact_hack_names()
-            
-            # Fase 4: Análisis de registro (98-99%)
-            self._update_progress_safe(98, "🔍 Analizando registro", "Verificando entradas del registro...")
-            self.scan_registry()
-            
-            # Fase 5: Análisis de USBs y pendrives (99-100%)
-            self._update_progress_safe(99, "🔍 Analizando USBs y pendrives", "Escaneando dispositivos USB...")
-            usb_issues = self.scan_usb_devices()
-            self.issues_found.extend(usb_issues)
-            
-            # Fase 6: Análisis de archivos ocultos (100%)
-            self._update_progress_safe(100, "🔍 Analizando archivos ocultos", "Escaneando archivos ocultos...")
-            hidden_issues = self.scan_hidden_files()
-            self.issues_found.extend(hidden_issues)
-            
-            # Fase 7: Análisis de conexiones de red (100%)
-            self._update_progress_safe(100, "🔍 Analizando conexiones de red", "Verificando IPs y conexiones...")
-            network_issues = self.scan_network_connections()
-            self.issues_found.extend(network_issues)
-            
-            # Fase 8: Técnicas avanzadas de Silent-scanner + AstroSS (97-98%)
-            self._update_progress_safe(97, "🔍 Técnicas avanzadas Silent-scanner + AstroSS", "Detección de evasión avanzada...")
-            try:
-                from silent_scanner_techniques import SilentScannerTechniques
-                advanced_issues = SilentScannerTechniques.scan_all_advanced_techniques()
-                self.issues_found.extend(advanced_issues)
-                print(f"✅ Técnicas Silent-scanner: {len(advanced_issues)} detecciones")
-            except ImportError:
-                print("⚠️ Módulo silent_scanner_techniques no disponible - saltando técnicas avanzadas")
-            except Exception as e:
-                print(f"⚠️ Error en técnicas Silent-scanner: {e}")
-            
-            # Técnicas de AstroSS
-            try:
-                from astro_ss_techniques import AstroSSTechniques
-                astro = AstroSSTechniques()
-                astro_issues = astro.scan_all_astro_techniques()
-                self.issues_found.extend(astro_issues)
-                print(f"✅ Técnicas AstroSS: {len(astro_issues)} detecciones")
-            except ImportError:
-                print("⚠️ Módulo astro_ss_techniques no disponible - saltando técnicas de AstroSS")
-            except Exception as e:
-                print(f"⚠️ Error en técnicas AstroSS: {e}")
-            
-            # Fase 8.1: Configurar medidas de seguridad (DESACTIVADO)
-            # self._update_progress_safe(98, "🛡️ Configurando medidas de seguridad", "Autodestrucción y limpieza...")
-            # DESACTIVADO: setup_security_measures() - Causaba problemas de limpieza
-            # self.setup_security_measures()
+            # ── FASES SECUNDARIAS COMPLETAMENTE PARALELAS ─────────────────
+            # Todas las fases se ejecutan en paralelo para máxima velocidad.
+            # list.append() es thread-safe en CPython (GIL protege operaciones C).
+            self._update_progress_safe(80, "⚡ Fases paralelas iniciadas", "Procesos · DNS · Registro · Red · IA...")
+
+            def _run_safe(fn, *a, **kw):
+                """Ejecuta una función de escaneo sin propagación de excepciones."""
+                try:
+                    return fn(*a, **kw)
+                except Exception as ex:
+                    print(f"⚠️ Error en {fn.__name__}: {ex}")
+                    return []
+
+            def _extend_safe(result):
+                if result:
+                    self.issues_found.extend(result)
+
+            # Grupo A — Procesos y sistema (I/O bajo)
+            def _group_processes():
+                self._update_progress_safe(81, "⚡ Procesos", "Analizando procesos activos...")
+                _run_safe(self.secondary_scan_parallel)
+                _run_safe(self.scan_processes)
+                _run_safe(self.advanced_minecraft_process_analysis)
+                _run_safe(self.scan_disabled_processes)
+                _run_safe(self.scan_running_processes)
+                _run_safe(self.scan_dns_cache)
+                _run_safe(self.scan_windows)
+
+            # Grupo B — Archivos y fechas (I/O medio)
+            def _group_files():
+                self._update_progress_safe(83, "⚡ Archivos", "Analizando archivos modificados...")
+                _run_safe(self.scan_exe_files)
+                _run_safe(self.scan_jar_files)
+                _run_safe(self.scan_files_by_date)
+                _run_safe(self.scan_deleted_files)
+                _run_safe(self.scan_created_files)
+                _run_safe(self.scan_renamed_files)
+                _extend_safe(_run_safe(self.scan_hidden_files))
+
+            # Grupo C — Registro y JNA (I/O bajo)
+            def _group_registry():
+                self._update_progress_safe(85, "⚡ Registro y JNA", "Analizando entradas del registro...")
+                _run_safe(self.scan_prefetch_jna)
+                _run_safe(self.scan_temp_jna)
+                _run_safe(self.scan_registry_suspicious)
+                _run_safe(self.scan_registry)
+                _run_safe(self.scan_event_logs)
+
+            # Grupo D — Hardware y red (I/O alto)
+            def _group_hardware():
+                self._update_progress_safe(87, "⚡ Hardware y red", "Analizando dispositivos y conexiones...")
+                _run_safe(self.scan_logitech_macros)
+                _run_safe(self.scan_razer_macros)
+                _extend_safe(_run_safe(self.scan_usb_devices))
+                _extend_safe(_run_safe(self.scan_network_connections))
+
+            # Grupo E — Ubicaciones de hacks (I/O alto)
+            def _group_hack_locations():
+                self._update_progress_safe(89, "🎯 Ubicaciones de hacks", "Downloads, Desktop, Roaming...")
+                _run_safe(self.scan_common_hack_locations)
+                _run_safe(self.scan_suspicious_folders)
+                _run_safe(self.scan_exact_hack_names)
+
+            # Grupo F — Técnicas avanzadas
+            def _group_advanced():
+                self._update_progress_safe(92, "🧠 Técnicas avanzadas", "Silent-scanner + AstroSS...")
+                try:
+                    from silent_scanner_techniques import SilentScannerTechniques
+                    adv = SilentScannerTechniques.scan_all_advanced_techniques()
+                    if adv: self.issues_found.extend(adv)
+                    print(f"✅ Técnicas Silent-scanner: {len(adv)} detecciones")
+                except ImportError:
+                    pass
+                except Exception as ex:
+                    print(f"⚠️ Silent-scanner: {ex}")
+                try:
+                    from astro_ss_techniques import AstroSSTechniques
+                    astro_issues = AstroSSTechniques().scan_all_astro_techniques()
+                    if astro_issues: self.issues_found.extend(astro_issues)
+                    print(f"✅ Técnicas AstroSS: {len(astro_issues)} detecciones")
+                except ImportError:
+                    pass
+                except Exception as ex:
+                    print(f"⚠️ AstroSS: {ex}")
+
+            # Ejecutar todos los grupos en paralelo (6 workers)
+            secondary_workers = min(6, psutil.cpu_count() or 4)
+            print(f"⚡ Ejecutando fases secundarias con {secondary_workers} workers en paralelo")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=secondary_workers) as sec_exec:
+                sec_futures = [
+                    sec_exec.submit(_group_processes),
+                    sec_exec.submit(_group_files),
+                    sec_exec.submit(_group_registry),
+                    sec_exec.submit(_group_hardware),
+                    sec_exec.submit(_group_hack_locations),
+                    sec_exec.submit(_group_advanced),
+                ]
+                for f in concurrent.futures.as_completed(sec_futures, timeout=300):
+                    try:
+                        f.result()
+                    except Exception as ex:
+                        print(f"⚠️ Error en grupo de escaneo: {ex}")
             
             # Fase 9: Filtrado y clasificación (100%)
             self._update_progress_safe(100, "🔍 Filtrando resultados", "Aplicando filtros ultra estrictos...")
@@ -6162,24 +6138,156 @@ class MinecraftSSApp:
             return {'total_connections': 0, 'established_connections': 0, 'listening_ports': 0}
     
     def show_completion_message(self):
-        """Muestra mensaje de finalización"""
-        report_sent = []
-        if self.config.get('enable_discord_report', True):
-            report_sent.append("Discord")
-        if self.config.get('enable_web_report', True) and self.db_integration:
-            report_sent.append("Web/BD")
-        
-        report_text = " y ".join(report_sent) if report_sent else "localmente"
-        
-        messagebox.showinfo(
-            "Escaneo Completado",
-            f"✅ Escaneo completado exitosamente!\n\n"
-            f"📊 Elementos encontrados: {len(self.issues_found)}\n"
-            f"📄 Reporte generado y enviado a {report_text}"
-        )
-        
+        """Muestra ventana de finalización con opción de feedback para IA."""
+        import tkinter as tk
+
         # Habilitar botón de detalles
-        self.details_button.config(state=tk.NORMAL)
+        try:
+            self.details_button.config(state=tk.NORMAL)
+        except Exception:
+            pass
+
+        # Actualizar área de texto
+        self.results_text.delete(1.0, tk.END)
+        self.results_text.insert(tk.END, "✅ ESCANEO COMPLETADO\n\n", "success")
+        self.results_text.insert(tk.END, f"📊 Total de elementos: {len(self.issues_found)}\n\n", "info")
+
+        hacks    = [i for i in self.issues_found if i.get('alerta') in ('HACKS', 'CRITICAL')]
+        sosp     = [i for i in self.issues_found if i.get('alerta') == 'SOSPECHOSO']
+        limpio   = len(self.issues_found) - len(hacks) - len(sosp)
+
+        self.results_text.insert(tk.END, f"🔴 HACKS: {len(hacks)}\n", "danger")
+        self.results_text.insert(tk.END, f"🟡 SOSPECHOSO: {len(sosp)}\n", "warning")
+        self.results_text.insert(tk.END, f"🟢 Limpio: {limpio}\n\n", "success")
+
+        if self.issues_found:
+            self.results_text.insert(tk.END, "ELEMENTOS ENCONTRADOS:\n\n", "warning")
+            for i, issue in enumerate(self.issues_found[:50], 1):
+                self.results_text.insert(tk.END, f"{i}. {issue.get('nombre','N/A')} [{issue.get('alerta','?')}]\n", "info")
+                self.results_text.insert(tk.END, f"   {issue.get('ruta','')}\n\n", "info")
+        else:
+            self.results_text.insert(tk.END, "✅ Sin elementos sospechosos\n", "success")
+
+        # ── Ventana de feedback ─────────────────────────────────────────
+        win = tk.Toplevel(self.root)
+        win.title("Resultado del Escaneo — Feedback para IA")
+        win.geometry("520x420")
+        win.configure(bg="#060912")
+        win.resizable(False, False)
+        win.grab_set()
+
+        # Header
+        hdr = tk.Frame(win, bg="#060912")
+        hdr.pack(fill="x", padx=20, pady=(20, 0))
+        tk.Label(hdr, text="✅  Escaneo Completado", font=("Segoe UI", 16, "bold"),
+                 bg="#060912", fg="#dce8f5").pack(anchor="w")
+        summary = f"  {len(hacks)} HACKS  •  {len(sosp)} Sospechosos  •  {limpio} Limpios  •  {len(self.issues_found)} total"
+        tk.Label(hdr, text=summary, font=("Segoe UI", 11),
+                 bg="#060912", fg="#5a7296").pack(anchor="w", pady=(4, 0))
+
+        sep = tk.Frame(win, bg="#0f1525", height=1)
+        sep.pack(fill="x", padx=20, pady=12)
+
+        # Feedback prompt
+        fb_frame = tk.Frame(win, bg="#0a0e1a", bd=0)
+        fb_frame.pack(fill="x", padx=20)
+        tk.Label(fb_frame, text="🧠  Ayuda a la IA a mejorar", font=("Segoe UI", 13, "bold"),
+                 bg="#0a0e1a", fg="#00c8ff").pack(anchor="w", padx=14, pady=(12, 4))
+        tk.Label(fb_frame, text="¿El resultado es correcto? Tu feedback actualiza el modelo de detección.",
+                 font=("Segoe UI", 10), bg="#0a0e1a", fg="#5a7296",
+                 wraplength=460, justify="left").pack(anchor="w", padx=14, pady=(0, 10))
+
+        # Opciones
+        verdict_var = tk.StringVar(value="")
+        opts = [
+            ("correcto",    "✅  Correcto — todos los hallazgos son válidos",        "#22d3a5"),
+            ("falsos_pos",  "⚠️  Hay falsos positivos — algunos son legítimos",      "#fbbf24"),
+            ("limpio",      "🟢  Sin hacks — el usuario está limpio",                "#22d3a5"),
+            ("hack_real",   "🔴  Confirmado hack — reportar como caso de aprendizaje","#ff4d6a"),
+        ]
+        for val, label, color in opts:
+            rb = tk.Radiobutton(fb_frame, text=label, variable=verdict_var, value=val,
+                                bg="#0a0e1a", fg="#dce8f5", selectcolor="#060912",
+                                activebackground="#0a0e1a", activeforeground=color,
+                                font=("Segoe UI", 10), anchor="w", cursor="hand2")
+            rb.pack(fill="x", padx=14, pady=2)
+
+        tk.Label(fb_frame, text="Notas opcionales:", font=("Segoe UI", 10),
+                 bg="#0a0e1a", fg="#5a7296").pack(anchor="w", padx=14, pady=(10, 2))
+        notes_var = tk.Text(fb_frame, height=3, bg="#060912", fg="#dce8f5",
+                            insertbackground="#00c8ff", relief="flat",
+                            font=("Segoe UI", 10), bd=0)
+        notes_var.pack(fill="x", padx=14, pady=(0, 12))
+
+        # Botones
+        btn_frame = tk.Frame(win, bg="#060912")
+        btn_frame.pack(fill="x", padx=20, pady=12)
+
+        def _send_feedback():
+            verdict = verdict_var.get()
+            notes   = notes_var.get("1.0", "end").strip()
+            if verdict:
+                threading.Thread(
+                    target=self._submit_ai_feedback,
+                    args=(verdict, notes),
+                    daemon=True
+                ).start()
+            win.destroy()
+
+        tk.Button(btn_frame, text="Enviar Feedback", command=_send_feedback,
+                  bg="#00a8d4", fg="white", font=("Segoe UI", 11, "bold"),
+                  relief="flat", cursor="hand2", padx=16, pady=8).pack(side="right")
+        tk.Button(btn_frame, text="Omitir", command=win.destroy,
+                  bg="#0f1525", fg="#5a7296", font=("Segoe UI", 11),
+                  relief="flat", cursor="hand2", padx=16, pady=8).pack(side="right", padx=(0, 8))
+
+    def _submit_ai_feedback(self, verdict, notes):
+        """Envía feedback al servidor y actualiza patrones locales."""
+        try:
+            api_url = self.config.get('api_url', 'http://localhost:8080')
+            scan_id = None
+            if self.db_integration and hasattr(self.db_integration, 'current_scan_id'):
+                scan_id = self.db_integration.current_scan_id
+
+            # Construir feedback por cada issue encontrado
+            batch = []
+            for issue in self.issues_found:
+                staff_ver = 'hack' if verdict == 'hack_real' else \
+                            'legit' if verdict == 'limpio' else \
+                            'uncertain'
+                batch.append({
+                    'issue_name':  issue.get('nombre', ''),
+                    'issue_path':  issue.get('ruta', ''),
+                    'file_hash':   issue.get('hash', ''),
+                    'alert_level': issue.get('alerta', ''),
+                    'verification': staff_ver,
+                    'notes': notes,
+                    'scan_id': scan_id,
+                })
+
+            if batch:
+                import requests as _req
+                token = self.config.get('scan_token', '')
+                resp = _req.post(
+                    f"{api_url}/api/feedback/batch",
+                    json={'feedback': batch, 'verdict': verdict, 'notes': notes},
+                    headers={'Authorization': f'Bearer {token}'},
+                    timeout=10
+                )
+                if resp.status_code == 200:
+                    print(f"✅ Feedback enviado: {len(batch)} items, verdict={verdict}")
+                    # Actualizar modelo local si el server devuelve nuevos patrones
+                    data = resp.json()
+                    if data.get('learned_patterns') and self.ai_analyzer:
+                        try:
+                            self.ai_analyzer.load_learned_patterns()
+                            print("🧠 Patrones de IA actualizados desde feedback")
+                        except Exception:
+                            pass
+                else:
+                    print(f"⚠️ Error enviando feedback: {resp.status_code}")
+        except Exception as ex:
+            print(f"⚠️ Error en feedback IA: {ex}")
         
         # Actualizar resultados
         self.results_text.delete(1.0, tk.END)

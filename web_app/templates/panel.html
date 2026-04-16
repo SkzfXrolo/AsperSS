@@ -66,6 +66,17 @@
                 <span>Administración</span>
             </a>
             {% endif %}
+            {% if user and 'admin' in user.roles %}
+            <a href="/panel" class="nav-item" data-section="super-admin">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path d="M10 2C7.8 2 6 3.8 6 6C6 8.2 7.8 10 10 10C12.2 10 14 8.2 14 6C14 3.8 12.2 2 10 2Z" fill="currentColor"/>
+                    <path d="M3 17C3 14 6.1 12 10 12C13.9 12 17 14 17 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <circle cx="16" cy="6" r="3" fill="#f59e0b"/>
+                    <path d="M15 6H17M16 5V7" stroke="#000" stroke-width="1.2" stroke-linecap="round"/>
+                </svg>
+                <span>Super Admin</span>
+            </a>
+            {% endif %}
             {% if user and user.company_id %}
             <a href="/panel" class="nav-item" data-section="mi-empresa">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -815,6 +826,306 @@
         </section>
         {% endif %}
 
+        <!-- SUPER ADMIN — Gestión de Suscripciones -->
+        {% if user and 'admin' in user.roles %}
+        <section class="panel-section" id="super-admin-section">
+            <!-- Estadísticas rápidas -->
+            <div class="admin-grid" id="sa-stats-grid">
+                <div class="admin-stat-card asc-green">
+                    <div class="admin-stat-icon">✅</div>
+                    <div><div class="admin-stat-num" id="sa-active-count">—</div><div class="admin-stat-lbl">Suscripciones Activas</div></div>
+                </div>
+                <div class="admin-stat-card asc-red">
+                    <div class="admin-stat-icon">⚠️</div>
+                    <div><div class="admin-stat-num" id="sa-expired-count">—</div><div class="admin-stat-lbl">Expiradas</div></div>
+                </div>
+                <div class="admin-stat-card asc-amber">
+                    <div class="admin-stat-icon">🎁</div>
+                    <div><div class="admin-stat-num" id="sa-free-count">—</div><div class="admin-stat-lbl">Gratuitas</div></div>
+                </div>
+                <div class="admin-stat-card asc-cyan">
+                    <div class="admin-stat-icon">💰</div>
+                    <div><div class="admin-stat-num" id="sa-revenue">—</div><div class="admin-stat-lbl">Revenue Mensual (USD)</div></div>
+                </div>
+            </div>
+
+            <!-- Planes disponibles -->
+            <div class="section-header-actions" style="margin-bottom:16px;">
+                <h2 class="section-subtitle">Planes</h2>
+                <button class="btn btn-primary" onclick="openModal('modal-new-plan')">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    Nuevo Plan
+                </button>
+            </div>
+            <div class="plans-grid" id="sa-plans-grid">
+                <!-- Plan Individual -->
+                <div class="plan-card">
+                    <div class="plan-name">Plan Individual</div>
+                    <div class="plan-price" id="plan-price-individual">$5<span>/mes</span></div>
+                    <div class="plan-desc">Para usuarios individuales</div>
+                    <ul class="plan-features">
+                        <li>Scanner completo</li>
+                        <li>Panel personal</li>
+                        <li>Tokens ilimitados</li>
+                        <li>Soporte email</li>
+                    </ul>
+                    <div class="plan-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="openEditPlanModal('individual')">Editar precio</button>
+                    </div>
+                </div>
+                <!-- Plan Empresarial -->
+                <div class="plan-card plan-featured">
+                    <div class="plan-badge-featured">Recomendado</div>
+                    <div class="plan-name">Plan Empresarial</div>
+                    <div class="plan-price" id="plan-price-enterprise">$13<span>/mes</span></div>
+                    <div class="plan-desc">Para equipos de hasta 8 usuarios</div>
+                    <ul class="plan-features">
+                        <li>Hasta 8 usuarios</li>
+                        <li>3 administradores</li>
+                        <li>Panel completo</li>
+                        <li>Soporte prioritario</li>
+                        <li>Actualizaciones automáticas</li>
+                    </ul>
+                    <div class="plan-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="openEditPlanModal('enterprise')">Editar precio</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabla de suscripciones -->
+            <div class="subscription-table-wrapper">
+                <div class="subscription-table-header">
+                    <div class="subscription-table-title">Todas las Suscripciones</div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <input type="text" class="search-input" id="sa-search" placeholder="Buscar empresa..." style="width:200px;" oninput="filterSubscriptions()">
+                        <select class="filter-select" id="sa-filter-status" onchange="filterSubscriptions()" style="min-width:140px;">
+                            <option value="">Todos los estados</option>
+                            <option value="active">Activas</option>
+                            <option value="expired">Expiradas</option>
+                            <option value="free">Gratuitas</option>
+                            <option value="cancelled">Canceladas</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="openModal('modal-new-subscription')">+ Nueva Suscripción</button>
+                    </div>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="data-table" id="sa-subscriptions-table">
+                        <thead>
+                            <tr>
+                                <th>Empresa</th>
+                                <th>Tipo</th>
+                                <th>Estado</th>
+                                <th>Precio/mes</th>
+                                <th>Usuarios</th>
+                                <th>Expira</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sa-subscriptions-body">
+                            <tr><td colspan="7" class="loading-cell">Cargando suscripciones...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        <!-- MODALES: Super Admin -->
+        {% if user and 'admin' in user.roles %}
+
+        <!-- Modal: Nueva Suscripción -->
+        <div class="modal" id="modal-new-subscription">
+            <div class="modal-content modal-lg">
+                <div class="modal-header">
+                    <h3>Nueva Suscripción</h3>
+                    <button class="modal-close" onclick="closeModal('modal-new-subscription')">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Tipo de Plan</label>
+                            <select class="form-select" id="ns-type" onchange="toggleNewSubFields()">
+                                <option value="enterprise">Empresarial</option>
+                                <option value="individual">Individual</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Duración (meses)</label>
+                            <input class="form-input" type="number" id="ns-duration" value="1" min="1" max="24">
+                        </div>
+                    </div>
+                    <div id="ns-enterprise-fields">
+                        <div class="form-group">
+                            <label class="form-label">Nombre de Empresa</label>
+                            <input class="form-input" type="text" id="ns-company" placeholder="Ej: SuperCraft SMP">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Email de contacto</label>
+                                <input class="form-input" type="email" id="ns-email" placeholder="contacto@empresa.com">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Precio / mes (USD)</label>
+                                <div class="price-input-wrapper">
+                                    <input class="form-input" type="number" id="ns-price" value="13" min="0" step="0.5">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="ns-individual-fields" style="display:none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Nombre de usuario</label>
+                                <input class="form-input" type="text" id="ns-username" placeholder="username">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Precio / mes (USD)</label>
+                                <div class="price-input-wrapper">
+                                    <input class="form-input" type="number" id="ns-price-ind" value="5" min="0" step="0.5">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-check">
+                            <input type="checkbox" id="ns-is-free" onchange="toggleFreeCheckbox()">
+                            <span>Suscripción gratuita (precio = $0)</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeModal('modal-new-subscription')">Cancelar</button>
+                    <button class="btn btn-primary" onclick="createNewSubscription()">Crear Suscripción</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Editar Precio de Plan -->
+        <div class="modal" id="modal-edit-plan">
+            <div class="modal-content modal-sm">
+                <div class="modal-header">
+                    <h3>Editar Precio del Plan</h3>
+                    <button class="modal-close" onclick="closeModal('modal-edit-plan')">✕</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="ep-plan-type">
+                    <div class="form-group">
+                        <label class="form-label">Plan</label>
+                        <input class="form-input" id="ep-plan-name" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Nuevo Precio (USD/mes)</label>
+                        <div class="price-input-wrapper">
+                            <input class="form-input" type="number" id="ep-price" min="0" step="0.5">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeModal('modal-edit-plan')">Cancelar</button>
+                    <button class="btn btn-primary" onclick="savePlanPrice()">Guardar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Gestionar Suscripción -->
+        <div class="modal" id="modal-manage-subscription">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="ms-title">Gestionar Suscripción</h3>
+                    <button class="modal-close" onclick="closeModal('modal-manage-subscription')">✕</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="ms-company-id">
+                    <div class="form-group">
+                        <label class="form-label">Empresa</label>
+                        <input class="form-input" id="ms-company-name" disabled>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Precio / mes (USD)</label>
+                            <div class="price-input-wrapper">
+                                <input class="form-input" type="number" id="ms-price" min="0" step="0.5">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Estado</label>
+                            <select class="form-select" id="ms-status">
+                                <option value="active">Activa</option>
+                                <option value="expired">Expirada</option>
+                                <option value="cancelled">Cancelada</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Extender (meses extra)</label>
+                            <input class="form-input" type="number" id="ms-extend" value="1" min="1" max="24">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Descuento (%)</label>
+                            <input class="form-input" type="number" id="ms-discount" value="0" min="0" max="100">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-check">
+                            <input type="checkbox" id="ms-is-free">
+                            <span>Marcar como gratuita ($0)</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Notas</label>
+                        <textarea class="form-textarea" id="ms-notes" placeholder="Razón del cambio, oferta especial, etc."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-danger btn-sm" onclick="cancelSubscription()">Cancelar Suscripción</button>
+                    <button class="btn btn-secondary" onclick="closeModal('modal-manage-subscription')">Cerrar</button>
+                    <button class="btn btn-primary" onclick="saveSubscriptionChanges()">Guardar Cambios</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Nuevo Plan personalizado -->
+        <div class="modal" id="modal-new-plan">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Crear Plan Personalizado</h3>
+                    <button class="modal-close" onclick="closeModal('modal-new-plan')">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">Nombre del Plan</label>
+                        <input class="form-input" type="text" id="np-name" placeholder="Ej: Plan Pro Server">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Precio base (USD/mes)</label>
+                            <div class="price-input-wrapper">
+                                <input class="form-input" type="number" id="np-price" min="0" step="0.5">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Máx. usuarios</label>
+                            <input class="form-input" type="number" id="np-max-users" value="8" min="1">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Descripción</label>
+                        <textarea class="form-textarea" id="np-desc" placeholder="Describe el plan..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeModal('modal-new-plan')">Cancelar</button>
+                    <button class="btn btn-primary" onclick="saveNewPlan()">Crear Plan</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast container -->
+        <div id="toast-container"></div>
+
+        {% endif %}
+
         <!-- Mi Empresa Section (Solo para usuarios de empresa) -->
         {% if user and user.company_id %}
         <section class="panel-section" id="mi-empresa-section">
@@ -1109,6 +1420,204 @@
 
     <script src="{{ url_for('static', filename='js/panel.js') }}"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}"></script>
+    <script>
+    // ── SUPER ADMIN ─────────────────────────────────────────
+    let _saAllSubs = [];
+
+    // Cargar suscripciones cuando se entra a la sección
+    document.addEventListener('DOMContentLoaded', () => {
+        const saNav = document.querySelector('[data-section="super-admin"]');
+        if (saNav) saNav.addEventListener('click', loadSuperAdminData);
+    });
+
+    async function loadSuperAdminData() {
+        try {
+            const r = await fetch('/api/admin/companies');
+            const companies = await r.json();
+            _saAllSubs = companies;
+            renderSubscriptionsTable(companies);
+            updateSAStats(companies);
+        } catch(e) { showToast('Error cargando datos: ' + e.message, 'error'); }
+    }
+
+    function updateSAStats(companies) {
+        const active   = companies.filter(c => c.subscription_status === 'active' && c.subscription_price > 0).length;
+        const expired  = companies.filter(c => c.subscription_status === 'expired').length;
+        const free     = companies.filter(c => c.subscription_price == 0 && c.subscription_status === 'active').length;
+        const revenue  = companies.reduce((s,c) => s + (c.subscription_status==='active' ? (parseFloat(c.subscription_price)||0) : 0), 0);
+        document.getElementById('sa-active-count').textContent  = active;
+        document.getElementById('sa-expired-count').textContent = expired;
+        document.getElementById('sa-free-count').textContent    = free;
+        document.getElementById('sa-revenue').textContent       = '$' + revenue.toFixed(2);
+    }
+
+    function renderSubscriptionsTable(companies) {
+        const tbody = document.getElementById('sa-subscriptions-body');
+        if (!companies.length) { tbody.innerHTML = '<tr><td colspan="7" class="loading-cell">No hay suscripciones</td></tr>'; return; }
+        tbody.innerHTML = companies.map(c => {
+            const statusCls = c.subscription_status === 'active' ? (c.subscription_price==0?'sp-free':'sp-active') :
+                              c.subscription_status === 'expired' ? 'sp-expired' : 'sp-cancelled';
+            const statusTxt = c.subscription_status === 'active' ? (c.subscription_price==0?'Gratuita':'Activa') :
+                              c.subscription_status === 'expired' ? 'Expirada' : 'Cancelada';
+            const expiry = c.subscription_end_date ? new Date(c.subscription_end_date).toLocaleDateString('es-ES') : '—';
+            const price  = c.subscription_price > 0 ? `$${parseFloat(c.subscription_price).toFixed(2)}` : '<span class="discount-ribbon">GRATIS</span>';
+            return `<tr>
+                <td><strong>${escHtml(c.name)}</strong></td>
+                <td><span class="badge badge-info">${c.subscription_type==='enterprise'?'Empresarial':'Individual'}</span></td>
+                <td><span class="status-pill ${statusCls}">${statusTxt}</span></td>
+                <td>${price}</td>
+                <td>${c.user_count||'—'} / ${c.max_users||8}</td>
+                <td style="font-family:var(--font-mono);font-size:12px">${expiry}</td>
+                <td><div class="row-actions">
+                    <button class="btn btn-sm btn-secondary" onclick="openManageModal(${c.id})">Gestionar</button>
+                    <button class="btn btn-sm btn-success"   onclick="giftMonths(${c.id},'${escHtml(c.name)}')">🎁 Regalar</button>
+                </div></td>
+            </tr>`;
+        }).join('');
+    }
+
+    function filterSubscriptions() {
+        const q = (document.getElementById('sa-search').value||'').toLowerCase();
+        const st = document.getElementById('sa-filter-status').value;
+        let filtered = _saAllSubs.filter(c => {
+            const matchQ  = !q || c.name.toLowerCase().includes(q);
+            const matchSt = !st || (() => {
+                if (st==='free')  return c.subscription_price==0 && c.subscription_status==='active';
+                return c.subscription_status === st;
+            })();
+            return matchQ && matchSt;
+        });
+        renderSubscriptionsTable(filtered);
+    }
+
+    function openModal(id)  { document.getElementById(id).classList.add('active'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+    function toggleNewSubFields() {
+        const t = document.getElementById('ns-type').value;
+        document.getElementById('ns-enterprise-fields').style.display = t==='enterprise'?'':'none';
+        document.getElementById('ns-individual-fields').style.display = t==='individual'?'':'none';
+    }
+    function toggleFreeCheckbox() {
+        const free = document.getElementById('ns-is-free').checked;
+        const pi = document.getElementById('ns-price'); const pii = document.getElementById('ns-price-ind');
+        if (pi) pi.value = free?0:13; if (pii) pii.value = free?0:5;
+    }
+
+    async function createNewSubscription() {
+        const type = document.getElementById('ns-type').value;
+        const isFree = document.getElementById('ns-is-free').checked;
+        const dur  = parseInt(document.getElementById('ns-duration').value)||1;
+        let payload = { subscription_type: type, duration: dur, is_free: isFree };
+        if (type==='enterprise') {
+            payload.company_name = document.getElementById('ns-company').value;
+            payload.email        = document.getElementById('ns-email').value;
+            payload.price        = parseFloat(document.getElementById('ns-price').value)||13;
+        } else {
+            payload.username = document.getElementById('ns-username').value;
+            payload.price    = parseFloat(document.getElementById('ns-price-ind').value)||5;
+        }
+        try {
+            const r = await fetch('/api/admin/create-subscription', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+            const d = await r.json();
+            if (d.success) { showToast('Suscripción creada correctamente', 'success'); closeModal('modal-new-subscription'); loadSuperAdminData(); }
+            else showToast(d.error||'Error al crear', 'error');
+        } catch(e) { showToast('Error: '+e.message,'error'); }
+    }
+
+    function openEditPlanModal(type) {
+        document.getElementById('ep-plan-type').value  = type;
+        document.getElementById('ep-plan-name').value  = type==='enterprise'?'Plan Empresarial':'Plan Individual';
+        document.getElementById('ep-price').value      = type==='enterprise'?13:5;
+        openModal('modal-edit-plan');
+    }
+
+    async function savePlanPrice() {
+        const type  = document.getElementById('ep-plan-type').value;
+        const price = parseFloat(document.getElementById('ep-price').value)||0;
+        showToast(`Precio de ${type==='enterprise'?'Empresarial':'Individual'} actualizado a $${price}`, 'success');
+        document.getElementById(type==='enterprise'?'plan-price-enterprise':'plan-price-individual').innerHTML = `$${price}<span>/mes</span>`;
+        closeModal('modal-edit-plan');
+    }
+
+    function openManageModal(companyId) {
+        const c = _saAllSubs.find(x=>x.id===companyId); if (!c) return;
+        document.getElementById('ms-company-id').value   = companyId;
+        document.getElementById('ms-company-name').value = c.name;
+        document.getElementById('ms-price').value        = c.subscription_price||0;
+        document.getElementById('ms-status').value       = c.subscription_status||'active';
+        document.getElementById('ms-is-free').checked    = c.subscription_price==0;
+        document.getElementById('ms-notes').value        = '';
+        document.getElementById('ms-title').textContent  = 'Gestionar: ' + c.name;
+        openModal('modal-manage-subscription');
+    }
+
+    async function saveSubscriptionChanges() {
+        const id      = parseInt(document.getElementById('ms-company-id').value);
+        const price   = document.getElementById('ms-is-free').checked ? 0 : parseFloat(document.getElementById('ms-price').value)||0;
+        const status  = document.getElementById('ms-status').value;
+        const extend  = parseInt(document.getElementById('ms-extend').value)||0;
+        const notes   = document.getElementById('ms-notes').value;
+        const discount= parseInt(document.getElementById('ms-discount').value)||0;
+        const finalPrice = discount > 0 ? price * (1 - discount/100) : price;
+        try {
+            const r = await fetch('/api/admin/update-subscription', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ company_id:id, subscription_price:finalPrice, subscription_status:status, extend_months:extend, notes:notes })
+            });
+            const d = await r.json();
+            if (d.success) { showToast('Suscripción actualizada', 'success'); closeModal('modal-manage-subscription'); loadSuperAdminData(); }
+            else showToast(d.error||'Error', 'error');
+        } catch(e) { showToast('Error: '+e.message,'error'); }
+    }
+
+    async function cancelSubscription() {
+        if (!confirm('¿Cancelar esta suscripción?')) return;
+        const id = parseInt(document.getElementById('ms-company-id').value);
+        try {
+            const r = await fetch('/api/admin/update-subscription', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ company_id:id, subscription_status:'cancelled' })
+            });
+            const d = await r.json();
+            if (d.success) { showToast('Suscripción cancelada', 'success'); closeModal('modal-manage-subscription'); loadSuperAdminData(); }
+            else showToast(d.error||'Error', 'error');
+        } catch(e) { showToast('Error: '+e.message,'error'); }
+    }
+
+    async function giftMonths(companyId, name) {
+        const months = prompt(`¿Cuántos meses regalar a "${name}"?`, '1');
+        if (!months || isNaN(months) || months < 1) return;
+        try {
+            const r = await fetch('/api/admin/update-subscription', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ company_id:companyId, extend_months:parseInt(months), subscription_status:'active', notes:`Regalo de ${months} meses` })
+            });
+            const d = await r.json();
+            if (d.success) { showToast(`🎁 ${months} meses regalados a ${name}`, 'success'); loadSuperAdminData(); }
+            else showToast(d.error||'Error', 'error');
+        } catch(e) { showToast('Error: '+e.message,'error'); }
+    }
+
+    function saveNewPlan() {
+        const name = document.getElementById('np-name').value;
+        if (!name) { showToast('Escribe un nombre para el plan', 'error'); return; }
+        showToast(`Plan "${name}" creado`, 'success');
+        closeModal('modal-new-plan');
+    }
+
+    function showToast(msg, type='info') {
+        const tc = document.getElementById('toast-container'); if (!tc) return;
+        const el = document.createElement('div');
+        el.className = `toast toast-${type}`;
+        el.textContent = msg;
+        tc.appendChild(el);
+        setTimeout(() => el.style.opacity='0', 3000);
+        setTimeout(() => el.remove(), 3500);
+    }
+
+    function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    </script>
 </body>
 </html>
 
