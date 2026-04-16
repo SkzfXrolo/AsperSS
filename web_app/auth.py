@@ -22,7 +22,7 @@ import sqlite3
 DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scanner_db.sqlite')
 
 try:
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     # Verificar si está usando PostgreSQL o MySQL ANTES de importar
     USE_POSTGRESQL = bool(os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_HOST'))
     USE_MYSQL = bool(os.environ.get('MYSQL_HOST') and not USE_POSTGRESQL)

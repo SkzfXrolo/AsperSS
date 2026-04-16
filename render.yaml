@@ -5,16 +5,4 @@ services:
     rootDir: web_app
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn --config gunicorn_config.py app:app
-    envVars:
-      - key: SECRET_KEY
-        generateValue: true
-      - key: DATABASE_URL
-        fromDatabase:
-          name: aspers-db
-          property: connectionString
     autoDeploy: true
-
-databases:
-  - name: aspers-db
-    databaseName: aspers
-    user: aspers
