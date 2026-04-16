@@ -2296,14 +2296,73 @@ def get_latest_ai_model():
 @app.route('/api/generate-app', methods=['POST'])
 @admin_required
 def generate_app():
-    """Genera una nueva versión de la aplicación - COMPILA REALMENTE EL EJECUTABLE"""
-    # En Render no se puede compilar (requiere PyInstaller y herramientas de Windows)
+    """Genera una nueva versión de la aplicación.
+    En Render: sirve el exe pre-compilado + muestra modelo actualizado.
+    En local Windows: compila con PyInstaller.
+    """
+    # En Render no se puede compilar (Linux, sin PyInstaller).
+    # En cambio, servimos el exe pre-compilado que viene en el repo
+    # y mostramos las estadísticas del modelo (que el scanner descarga en runtime).
     if IS_RENDER:
-        return jsonify({
-            'success': False,
-            'error': 'No se puede compilar el ejecutable en Render. Debes compilarlo localmente en Windows usando PyInstaller.'
-        }), 400
-    
+        def generate_render():
+            try:
+                yield f"data: {json.dumps({'step': '🔍 Verificando modelo de IA...', 'progress': 20})}\n\n"
+
+                # Leer estadísticas del modelo
+                try:
+                    with get_api_db_cursor() as _cur:
+                        _cur.execute('SELECT COUNT(*) as c FROM learned_patterns WHERE is_active = TRUE')
+                        patterns_count = _row_get(_cur.fetchone(), 0, 'c') or 0
+                        _cur.execute('SELECT COUNT(*) as c FROM learned_hashes')
+                        hashes_count = _row_get(_cur.fetchone(), 0, 'c') or 0
+                except Exception:
+                    patterns_count = hashes_count = 0
+
+                yield f"data: {json.dumps({'step': f'✅ Modelo activo: {patterns_count} patrones aprendidos, {hashes_count} hashes confirmados', 'progress': 40})}\n\n"
+                yield f"data: {json.dumps({'step': '📡 El scanner descarga automáticamente el modelo actualizado en cada inicio — no requiere recompilar.', 'progress': 60})}\n\n"
+
+                # Buscar el exe pre-compilado en el repo
+                project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                exe_candidates = [
+                    os.path.join(project_root, 'source', 'dist', 'ArgusScanner.exe'),
+                    os.path.join(project_root, 'source', 'dist', 'MinecraftSSTool.exe'),
+                    os.path.join(project_root, 'ArgusScanner.exe'),
+                ]
+                exe_path = next((p for p in exe_candidates if os.path.exists(p)), None)
+
+                if not exe_path:
+                    yield f"data: {json.dumps({'step': '⚠️ No se encontró un ejecutable pre-compilado en el repositorio.\\n\\nPara distribuir el scanner:\\n1. Compila localmente: pyinstaller ArgusScanner.spec\\n2. Haz commit de source/dist/ArgusScanner.exe\\n3. Pushea a GitHub — Render lo incluirá en el siguiente deploy.', 'progress': 100, 'error': True})}\n\n"
+                    return
+
+                import hashlib
+                file_size = os.path.getsize(exe_path)
+                with open(exe_path, 'rb') as f:
+                    file_hash = hashlib.sha256(f.read()).hexdigest()
+                exe_name = os.path.basename(exe_path)
+
+                yield f"data: {json.dumps({'step': f'✅ Ejecutable listo: {exe_name} ({file_size / (1024*1024):.1f} MB)', 'progress': 90})}\n\n"
+
+                # Registrar en BD como versión disponible
+                import datetime as _dt
+                version = _dt.datetime.now().strftime('%Y%m%d_%H%M%S')
+                try:
+                    with get_api_db_cursor() as _cur:
+                        _cur.execute(
+                            f'INSERT INTO app_versions (version, download_url, changelog, file_size, file_hash) VALUES ({_PH},{_PH},{_PH},{_PH},{_PH}) ON CONFLICT (version) DO NOTHING',
+                            (f'1.{version}', f'/download/{exe_name}',
+                             f'Modelo: {patterns_count} patrones, {hashes_count} hashes. IA se actualiza automáticamente en runtime.',
+                             file_size, file_hash)
+                        )
+                except Exception:
+                    pass
+
+                yield f"data: {json.dumps({'step': f'✅ Listo para distribuir.\\n\\nArchivo: {exe_name}\\nTamaño: {file_size / (1024*1024):.1f} MB\\nModelo: {patterns_count} patrones + {hashes_count} hashes\\n\\n💡 El modelo de IA se actualiza automáticamente sin recompilar.', 'progress': 100, 'success': True, 'download_url': f'/download/{exe_name}', 'filename': exe_name})}\n\n"
+
+            except Exception as e:
+                yield f"data: {json.dumps({'step': f'ERROR: {str(e)}', 'progress': 100, 'error': True})}\n\n"
+
+        return Response(generate_render(), mimetype='text/event-stream')
+
     import subprocess
     import os
     import time
@@ -2332,34 +2391,27 @@ def generate_app():
             
             time.sleep(0.5)
             
-            # Paso 2: Compilar ejecutable (solo si se solicita explícitamente)
+            # Paso 2: Compilar ejecutable con PyInstaller
             yield f"data: {json.dumps({'step': 'Compilando ejecutable con PyInstaller (esto puede tardar varios minutos)...', 'progress': 60})}\n\n"
             time.sleep(0.5)
-            
-            # Ruta al script de compilación
+
             project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            compile_script = os.path.join(project_root, 'BAT', '01-Compilar', 'COMPILAR_FINAL.bat')
-            
-            yield f"data: {json.dumps({'step': f'Buscando script en: {compile_script}', 'progress': 55})}\n\n"
-            
-            if not os.path.exists(compile_script):
-                yield f"data: {json.dumps({'step': f'ERROR: Script de compilación no encontrado en: {compile_script}', 'progress': 100, 'error': True})}\n\n"
+            source_dir = os.path.join(project_root, 'source')
+
+            # Usar ArgusScanner.spec si existe, si no MinecraftSSTool.spec como fallback
+            spec_candidates = ['ArgusScanner.spec', 'MinecraftSSTool.spec']
+            spec_file = next((os.path.join(source_dir, s) for s in spec_candidates if os.path.exists(os.path.join(source_dir, s))), None)
+
+            if not spec_file:
+                yield f"data: {json.dumps({'step': 'ERROR: No se encontró ArgusScanner.spec en source/', 'progress': 100, 'error': True})}\n\n"
                 return
-            
-            yield f"data: {json.dumps({'step': f'✅ Script encontrado: {compile_script}', 'progress': 58})}\n\n"
-            
-            # Ejecutar compilación
-            yield f"data: {json.dumps({'step': 'Ejecutando compilación (esto puede tardar varios minutos)...', 'progress': 60})}\n\n"
-            
-            # Cambiar al directorio del script para ejecutarlo correctamente
-            compile_dir = os.path.dirname(compile_script)
-            compile_script_name = os.path.basename(compile_script)
-            
-            # Ejecutar en segundo plano y capturar salida
-            # Usar cmd.exe /c para ejecutar el .bat correctamente en Windows
+
+            yield f"data: {json.dumps({'step': f'✅ Spec encontrado: {os.path.basename(spec_file)}', 'progress': 58})}\n\n"
+            yield f"data: {json.dumps({'step': 'Ejecutando PyInstaller (puede tardar varios minutos)...', 'progress': 60})}\n\n"
+
             process = subprocess.Popen(
-                ['cmd.exe', '/c', compile_script_name],
-                cwd=compile_dir,
+                ['pyinstaller', '--noconfirm', spec_file],
+                cwd=source_dir,
                 shell=False,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,  # Combinar stderr con stdout
@@ -2379,7 +2431,7 @@ def generate_app():
                 if line:
                     output_lines.append(line.strip())
                     # Mostrar últimas líneas importantes
-                    if any(keyword in line.lower() for keyword in ['compilando', 'building', 'creating', 'success', 'error', 'completado']):
+                    if any(keyword in line.lower() for keyword in ['compilando', 'building', 'creating', 'success', 'error', 'completado', 'pyinstaller', 'copying']):
                         yield f"data: {json.dumps({'step': f'Compilando: {line.strip()[:100]}', 'progress': progress})}\n\n"
                 
                 # Actualizar progreso cada 3 segundos
@@ -2413,9 +2465,13 @@ def generate_app():
             # Paso 3: Buscar ejecutable compilado
             yield f"data: {json.dumps({'step': 'Buscando ejecutable compilado...', 'progress': 92})}\n\n"
             time.sleep(0.5)
-            
-            exe_path = os.path.join(project_root, 'source', 'dist', 'MinecraftSSTool.exe')
-            if not os.path.exists(exe_path):
+
+            exe_candidates_local = [
+                os.path.join(project_root, 'source', 'dist', 'ArgusScanner.exe'),
+                os.path.join(project_root, 'source', 'dist', 'MinecraftSSTool.exe'),
+            ]
+            exe_path = next((p for p in exe_candidates_local if os.path.exists(p)), None)
+            if not exe_path:
                 yield f"data: {json.dumps({'step': 'ERROR: Ejecutable no encontrado después de compilación', 'progress': 100, 'error': True})}\n\n"
                 return
             
@@ -2432,7 +2488,8 @@ def generate_app():
             os.makedirs(downloads_dir, exist_ok=True)
             
             version = datetime.now().strftime('%Y%m%d_%H%M%S')
-            download_filename = f'MinecraftSSTool_v{version}.exe'
+            base_name = os.path.splitext(os.path.basename(exe_path))[0]
+            download_filename = f'{base_name}_v{version}.exe'
             download_path = os.path.join(downloads_dir, download_filename)
             
             import shutil
@@ -2482,11 +2539,11 @@ def _send_file_download(filename):
     
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     
-    # Lista de ubicaciones posibles en orden de prioridad (optimizado)
+    # Lista de ubicaciones posibles en orden de prioridad
     possible_paths = [
         os.path.join(project_root, 'downloads', filename),
-        os.path.join(project_root, 'source', 'dist', filename) if filename == 'MinecraftSSTool.exe' else None,
-        os.path.join(project_root, filename)
+        os.path.join(project_root, 'source', 'dist', filename),
+        os.path.join(project_root, filename),
     ]
     
     # Buscar el primer archivo que exista (evita múltiples checks)
@@ -3019,21 +3076,25 @@ def get_latest_exe():
         except Exception as e:
             print(f"Error buscando en downloads: {e}")
     
-    # Si no hay en downloads, buscar en source/dist
+    # Si no hay en downloads, buscar en source/dist (priorizar ArgusScanner)
     if not latest_file:
-        exe_path = os.path.join(project_root, 'source', 'dist', 'MinecraftSSTool.exe')
-        if os.path.exists(exe_path):
-            latest_file = exe_path
-            latest_time = os.path.getmtime(exe_path)
-            latest_filename = 'MinecraftSSTool.exe'
-    
-    # También buscar en la raíz del proyecto (por si se subió directamente)
+        for candidate in ['ArgusScanner.exe', 'MinecraftSSTool.exe']:
+            p = os.path.join(project_root, 'source', 'dist', candidate)
+            if os.path.exists(p):
+                latest_file = p
+                latest_time = os.path.getmtime(p)
+                latest_filename = candidate
+                break
+
+    # También buscar en la raíz del proyecto
     if not latest_file:
-        root_exe = os.path.join(project_root, 'MinecraftSSTool.exe')
-        if os.path.exists(root_exe):
-            latest_file = root_exe
-            latest_time = os.path.getmtime(root_exe)
-            latest_filename = 'MinecraftSSTool.exe'
+        for candidate in ['ArgusScanner.exe', 'MinecraftSSTool.exe']:
+            p = os.path.join(project_root, candidate)
+            if os.path.exists(p):
+                latest_file = p
+                latest_time = os.path.getmtime(p)
+                latest_filename = candidate
+                break
     
     if latest_file and os.path.exists(latest_file):
         if not latest_filename:

@@ -3,6 +3,6 @@
     "auth_token": "",
     "scan_timeout": 300,
     "scan_token": "",
-    "api_url": "https://TU-APP.onrender.com",
-    "web_url": "https://TU-APP.onrender.com"
+    "api_url": "https://aspers-app.onrender.com",
+    "web_url": "https://aspers-app.onrender.com"
 }
