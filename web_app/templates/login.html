@@ -108,16 +108,10 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 64px;
-            height: 64px;
+            width: 74px;
+            height: 74px;
             margin-bottom: 20px;
-            border-radius: 18px;
-            background: linear-gradient(135deg, rgba(139,92,246,0.20) 0%, rgba(109,40,217,0.08) 100%);
-            border: 1px solid rgba(139,92,246,0.35);
-            box-shadow: 0 0 32px rgba(139,92,246,0.25), inset 0 1px 0 rgba(255,255,255,0.06);
         }
-
-        .logo svg { width: 30px; height: 30px; }
 
         .header h1 {
             font-family: 'Syne', sans-serif;
@@ -333,12 +327,9 @@
 
             <div class="header">
                 <div class="logo">
-                    <svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M15 2L4 8V15C4 21.63 8.84 27.74 15 29C21.16 27.74 26 21.63 26 15V8L15 2Z"
-                              stroke="#8B5CF6" stroke-width="1.8" stroke-linejoin="round"/>
-                        <circle cx="15" cy="14" r="4" stroke="#10B981" stroke-width="1.2"/>
-                        <path d="M10 14L13 17L20 11" stroke="#8B5CF6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
+                    <img src="{{ url_for('static', filename='img/logo.png') }}"
+                         alt="Argus Projects"
+                         style="width:54px;height:54px;object-fit:contain;filter:drop-shadow(0 0 12px rgba(139,92,246,0.5));">
                 </div>
                 <h1>ARGUS PROJECTS</h1>
                 <div class="tagline">All-Seeing. Always Watching.</div>
