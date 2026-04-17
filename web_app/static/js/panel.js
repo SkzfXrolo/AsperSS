@@ -759,10 +759,13 @@ async function viewScanDetails(scanId) {
             setupSubpageNavigation();
         }
         
-        // Mostrar issues individuales con botones de feedback
+        // Mostrar issues individuales con botones de feedback (solo CRITICAL y SOSPECHOSO)
         const issuesContainer = document.getElementById('issues-list-container');
-        if (data.results && data.results.length > 0) {
-            issuesContainer.innerHTML = data.results.map((result) => {
+        const relevantResults = (data.results || []).filter(r =>
+            r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO'
+        );
+        if (relevantResults.length > 0) {
+            issuesContainer.innerHTML = relevantResults.map((result) => {
                 const isCrit = result.alert_level === 'CRITICAL';
                 const isSusp = result.alert_level === 'SOSPECHOSO';
                 const borderColor = isCrit ? 'var(--red)' : isSusp ? 'var(--amber)' : 'var(--border-m)';
@@ -821,7 +824,7 @@ async function viewScanDetails(scanId) {
             }).join('');
             
             // Mostrar barra de acciones masivas si hay issues sin feedback
-            const hasUnprocessedIssues = data.results.some(r => !r.feedback_status);
+            const hasUnprocessedIssues = relevantResults.some(r => !r.feedback_status);
             if (hasUnprocessedIssues) {
                 document.getElementById('bulk-actions-bar').style.display = 'flex';
             }
@@ -897,7 +900,9 @@ async function viewScanDetails(scanId) {
             'utilities':          ['AUTOCLICK_TOOLS', 'autoclicker', 'injection', 'LOGITECH', 'RAZER', 'USB_DEVICES'],
             'archivos-windows':   ['PREFETCH', 'JNA', 'TEMP_FILES', 'SERVICES', 'PROCESSES', 'BACKGROUND_PROCESSES', 'DNS_CACHE', 'HIDDEN_FILES'],
         };
-        const allResults = data.results || [];
+        const allResults = (data.results || []).filter(r =>
+            r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO'
+        );
 
         Object.entries(TAB_CATEGORIES).forEach(([tab, cats]) => {
             const container = document.getElementById(`subpage-${tab}`);
