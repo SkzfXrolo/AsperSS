@@ -722,21 +722,6 @@ async function viewScanDetails(scanId) {
         document.getElementById('count-alert').textContent  = severityStats.alert;
         document.getElementById('count-severe').textContent = severityStats.severe;
 
-        // Indicator pills (Echo style)
-        const pillsEl = document.getElementById('scan-indicator-pills');
-        if (pillsEl) {
-            const cats = [
-                { key: 'i', cls: severityStats.severe > 0 ? 'active-red' : '' },
-                { key: 'h', cls: severityStats.alert  > 0 ? 'active-amber' : '' },
-                { key: 'a', cls: '' },
-                { key: 'θ', cls: severityStats.clean  > 0 ? 'active-green' : '' },
-                { key: 'p', cls: severityStats.severe > 0 ? 'active-violet' : '' },
-            ];
-            pillsEl.innerHTML = cats.map(c =>
-                `<span class="scan-indicator-pill ${c.cls}" title="${c.key}">${c.key}</span>`
-            ).join('');
-        }
-
         // Mostrar/ocultar banner de detección
         const detectionBanner = document.getElementById('detection-banner');
         if (severityStats.severe > 0 || severityStats.alert > 0) {
