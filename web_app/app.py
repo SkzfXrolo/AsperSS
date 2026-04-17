@@ -1630,12 +1630,12 @@ def list_scans():
         try:
             print(f"🔄 Intentando obtener escaneos directamente de la BD local...")
             with get_api_db_cursor() as cursor:
-                cursor.execute('''
+                cursor.execute(f'''
                     SELECT id, scan_token, started_at, completed_at, status,
                            total_files_scanned, issues_found, scan_duration, machine_name
                     FROM scans
                     ORDER BY started_at DESC
-                    LIMIT ? OFFSET ?
+                    LIMIT {_PH} OFFSET {_PH}
                 ''', (limit, offset))
                 
                 scans = []
@@ -1659,7 +1659,7 @@ def list_scans():
                 
                 # Calcular preview de severidad (una sola query optimizada)
                 if scan_ids:
-                    placeholders = ','.join(['?'] * len(scan_ids))
+                    placeholders = ','.join([_PH] * len(scan_ids))
                     cursor.execute(f'''
                         SELECT scan_id, 
                                SUM(CASE WHEN alert_level = 'CRITICAL' THEN 1 ELSE 0 END) as critical,
@@ -1786,7 +1786,7 @@ def get_scan(scan_id):
                            total_files_scanned, issues_found, scan_duration, machine_id, machine_name,
                            ip_address, country, minecraft_username
                     FROM scans
-                    WHERE id = ?
+                    WHERE id = %s
                 ''', (scan_id,))
                 
                 row = cursor.fetchone()
@@ -1816,7 +1816,7 @@ def get_scan(scan_id):
                            alert_level, confidence, detected_patterns, obfuscation_detected,
                            file_hash, ai_analysis, ai_confidence
                     FROM scan_results
-                    WHERE scan_id = ?
+                    WHERE scan_id = %s
                 ''', (scan_id,))
                 
                 results = []
@@ -1918,7 +1918,7 @@ def submit_feedback():
                 SELECT scan_id, issue_name, issue_path, file_hash, detected_patterns, 
                        obfuscation_detected, confidence
                 FROM scan_results
-                WHERE id = ?
+                WHERE id = %s
             ''', (result_id,))
             
             result = cursor.fetchone()
@@ -1932,7 +1932,7 @@ def submit_feedback():
                 INSERT INTO staff_feedback (
                     result_id, scan_id, staff_verification, staff_notes, verified_by,
                     file_hash, issue_name, issue_path
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ''', (result_id, scan_id, staff_verification, staff_notes, verified_by,
                   file_hash, issue_name, issue_path))
             
@@ -1954,9 +1954,9 @@ def submit_feedback():
                     cursor.execute('''
                         INSERT OR REPLACE INTO learned_hashes (
                             file_hash, is_hack, confirmed_count, last_confirmed_at, source_feedback_id
-                        ) VALUES (?, 1, 
-                            COALESCE((SELECT confirmed_count FROM learned_hashes WHERE file_hash = ?), 0) + 1,
-                            CURRENT_TIMESTAMP, ?
+                        ) VALUES (%s, 1, 
+                            COALESCE((SELECT confirmed_count FROM learned_hashes WHERE file_hash = %s), 0) + 1,
+                            CURRENT_TIMESTAMP, %s
                         )
                     ''', (file_hash, file_hash, feedback_id))
                 
@@ -1967,8 +1967,8 @@ def submit_feedback():
                         INSERT OR REPLACE INTO learned_patterns (
                             pattern_type, pattern_value, pattern_category, source_feedback_id,
                             learned_from_count, last_updated_at, is_active
-                        ) VALUES ('keyword', ?, 'high_risk', ?, 
-                            COALESCE((SELECT learned_from_count FROM learned_patterns WHERE pattern_value = ?), 0) + 1,
+                        ) VALUES ('keyword', %s, 'high_risk', %s, 
+                            COALESCE((SELECT learned_from_count FROM learned_patterns WHERE pattern_value = %s), 0) + 1,
                             CURRENT_TIMESTAMP, 1
                         )
                     ''', pattern_data)
@@ -1982,17 +1982,17 @@ def submit_feedback():
                 cursor.execute('''
                     INSERT OR REPLACE INTO learned_hashes (
                         file_hash, is_hack, confirmed_count, last_confirmed_at, source_feedback_id
-                    ) VALUES (?, 0, 
-                        COALESCE((SELECT confirmed_count FROM learned_hashes WHERE file_hash = ?), 0) + 1,
-                        CURRENT_TIMESTAMP, ?
+                    ) VALUES (%s, 0, 
+                        COALESCE((SELECT confirmed_count FROM learned_hashes WHERE file_hash = %s), 0) + 1,
+                        CURRENT_TIMESTAMP, %s
                     )
                 ''', (file_hash, file_hash, feedback_id))
             
             # Actualizar feedback con características extraídas
             cursor.execute('''
                 UPDATE staff_feedback
-                SET extracted_patterns = ?, extracted_features = ?
-                WHERE id = ?
+                SET extracted_patterns = %s, extracted_features = %s
+                WHERE id = %s
             ''', (json.dumps(extracted_patterns), json.dumps(extracted_features), feedback_id))
             
             # Limpiar caché relacionado
@@ -2055,7 +2055,7 @@ def submit_feedback_batch():
                     SELECT scan_id, issue_name, issue_path, file_hash, detected_patterns, 
                            obfuscation_detected, confidence
                     FROM scan_results
-                    WHERE id = ?
+                    WHERE id = %s
                 ''', (result_id,))
                 
                 result = cursor.fetchone()
@@ -2069,7 +2069,7 @@ def submit_feedback_batch():
                     INSERT INTO staff_feedback (
                         result_id, scan_id, staff_verification, staff_notes, verified_by,
                         file_hash, issue_name, issue_path
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ''', (result_id, scan_id, staff_verification, staff_notes, verified_by,
                       file_hash, issue_name, issue_path))
                 
@@ -2093,9 +2093,9 @@ def submit_feedback_batch():
                         cursor.execute('''
                             INSERT OR REPLACE INTO learned_hashes (
                                 file_hash, is_hack, confirmed_count, last_confirmed_at, source_feedback_id
-                            ) VALUES (?, 1, 
-                                COALESCE((SELECT confirmed_count FROM learned_hashes WHERE file_hash = ?), 0) + 1,
-                                CURRENT_TIMESTAMP, ?
+                            ) VALUES (%s, 1, 
+                                COALESCE((SELECT confirmed_count FROM learned_hashes WHERE file_hash = %s), 0) + 1,
+                                CURRENT_TIMESTAMP, %s
                             )
                         ''', (file_hash, file_hash, feedback_id))
                     
@@ -2106,8 +2106,8 @@ def submit_feedback_batch():
                             INSERT OR REPLACE INTO learned_patterns (
                                 pattern_type, pattern_value, pattern_category, source_feedback_id,
                                 learned_from_count, last_updated_at, is_active
-                            ) VALUES ('keyword', ?, 'high_risk', ?, 
-                                COALESCE((SELECT learned_from_count FROM learned_patterns WHERE pattern_value = ?), 0) + 1,
+                            ) VALUES ('keyword', %s, 'high_risk', %s, 
+                                COALESCE((SELECT learned_from_count FROM learned_patterns WHERE pattern_value = %s), 0) + 1,
                                 CURRENT_TIMESTAMP, 1
                             )
                         ''', pattern_data)
@@ -2121,17 +2121,17 @@ def submit_feedback_batch():
                     cursor.execute('''
                         INSERT OR REPLACE INTO learned_hashes (
                             file_hash, is_hack, confirmed_count, last_confirmed_at, source_feedback_id
-                        ) VALUES (?, 0, 
-                            COALESCE((SELECT confirmed_count FROM learned_hashes WHERE file_hash = ?), 0) + 1,
-                            CURRENT_TIMESTAMP, ?
+                        ) VALUES (%s, 0, 
+                            COALESCE((SELECT confirmed_count FROM learned_hashes WHERE file_hash = %s), 0) + 1,
+                            CURRENT_TIMESTAMP, %s
                         )
                     ''', (file_hash, file_hash, feedback_id))
                 
                 # Actualizar feedback con características extraídas
                 cursor.execute('''
                     UPDATE staff_feedback
-                    SET extracted_patterns = ?, extracted_features = ?
-                    WHERE id = ?
+                    SET extracted_patterns = %s, extracted_features = %s
+                    WHERE id = %s
                 ''', (json.dumps(extracted_patterns), json.dumps(extracted_features), feedback_id))
             
             # Limpiar caché relacionado
@@ -2161,7 +2161,7 @@ def get_feedback(result_id):
                 SELECT id, staff_verification, staff_notes, verified_by, verified_at,
                        extracted_patterns, extracted_features
                 FROM staff_feedback
-                WHERE result_id = ?
+                WHERE result_id = %s
                 ORDER BY verified_at DESC
                 LIMIT 1
             ''', (result_id,))
@@ -2800,7 +2800,7 @@ def get_scan_report_html(scan_id):
                 SELECT id, started_at, completed_at, status,
                        total_files_scanned, issues_found, scan_duration, machine_id, machine_name
                 FROM scans
-                WHERE id = ?
+                WHERE id = %s
             ''', (scan_id,))
             
             row = cursor.fetchone()
@@ -2827,7 +2827,7 @@ def get_scan_report_html(scan_id):
                        sf.staff_verification, sf.staff_notes, sf.verified_at
                 FROM scan_results sr
                 LEFT JOIN staff_feedback sf ON sr.id = sf.result_id
-                WHERE sr.scan_id = ?
+                WHERE sr.scan_id = %s
                 ORDER BY 
                     CASE sr.alert_level
                         WHEN 'CRITICAL' THEN 1
