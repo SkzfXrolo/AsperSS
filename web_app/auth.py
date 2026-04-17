@@ -509,7 +509,7 @@ def create_user(username, password, email=None, roles=None, company_id=None, cre
                 # Validar límites de empresa
                 if company_id:
                     cursor.execute(
-                        'SELECT COUNT(*) as cnt FROM users WHERE company_id = %s AND is_active = 1',
+                        'SELECT COUNT(*) as cnt FROM users WHERE company_id = %s AND is_active = TRUE',
                         (company_id,)
                     )
                     current_users = cursor.fetchone()['cnt']
@@ -520,7 +520,7 @@ def create_user(username, password, email=None, roles=None, company_id=None, cre
                             return {'success': False, 'error': f'La empresa ha alcanzado el límite de {company_data["max_users"]} usuarios'}
                         if 'administrador' in roles:
                             cursor.execute(
-                                "SELECT COUNT(*) as cnt FROM users WHERE company_id = %s AND is_active = 1 AND roles LIKE %s",
+                                "SELECT COUNT(*) as cnt FROM users WHERE company_id = %s AND is_active = TRUE AND roles LIKE %s",
                                 (company_id, '%administrador%')
                             )
                             current_admins = cursor.fetchone()['cnt']
@@ -725,7 +725,7 @@ def create_registration_token(created_by, company_id=None, expires_hours=24, des
                     max_admins = row['max_admins'] if isinstance(row, dict) else row[1]
 
                     cursor.execute(
-                        f'SELECT COUNT(*) as c FROM users WHERE company_id = {ph} AND is_active = 1',
+                        f'SELECT COUNT(*) as c FROM users WHERE company_id = {ph} AND is_active = TRUE',
                         (company_id,)
                     )
                     cu = cursor.fetchone()
@@ -735,7 +735,7 @@ def create_registration_token(created_by, company_id=None, expires_hours=24, des
 
                     if is_admin_token:
                         cursor.execute(
-                            f'SELECT COUNT(*) as c FROM users WHERE company_id = {ph} AND is_active = 1 AND roles LIKE {ph}',
+                            f'SELECT COUNT(*) as c FROM users WHERE company_id = {ph} AND is_active = TRUE AND roles LIKE {ph}',
                             (company_id, like_adm)
                         )
                         ca = cursor.fetchone()
