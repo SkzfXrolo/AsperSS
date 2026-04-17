@@ -904,7 +904,7 @@ async function viewScanDetails(scanId) {
             if (!container) return;
             const filtered = allResults.filter(r => cats.includes(r.issue_category));
             if (filtered.length === 0) {
-                container.innerHTML = `<div class="subpage-placeholder"><p style="color:var(--text-d);font-size:13px;">Sin hallazgos en esta categoría.</p></div>`;
+                container.innerHTML = `<div class="subpage-placeholder"><p style="color:var(--text-m);font-size:13px;padding:40px 0;">Sin hallazgos en esta categoría.</p></div>`;
                 return;
             }
             container.innerHTML = filtered.map(r => {
