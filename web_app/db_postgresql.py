@@ -141,8 +141,12 @@ def init_postgresql_db():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_status ON scans(status)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_started_at ON scans(started_at)')
 
-        # Migración: añadir columna si ya existe la tabla sin ella
+        # Migraciones: añadir/modificar columnas en tablas existentes
         cursor.execute('ALTER TABLE scans ADD COLUMN IF NOT EXISTS total_dirs_scanned INTEGER DEFAULT 0')
+        # Ampliar VARCHAR(255) a TEXT en scan_results para rutas/nombres largos
+        cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_type TYPE TEXT")
+        cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_name TYPE TEXT")
+        cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_category TYPE TEXT")
 
         # Tabla de historial de bans
         cursor.execute('''
@@ -168,10 +172,10 @@ def init_postgresql_db():
             CREATE TABLE IF NOT EXISTS scan_results (
                 id SERIAL PRIMARY KEY,
                 scan_id INTEGER,
-                issue_type VARCHAR(255),
-                issue_name VARCHAR(255),
+                issue_type TEXT,
+                issue_name TEXT,
                 issue_path TEXT,
-                issue_category VARCHAR(255),
+                issue_category TEXT,
                 alert_level VARCHAR(50),
                 confidence DECIMAL(5, 2),
                 detected_patterns TEXT,
