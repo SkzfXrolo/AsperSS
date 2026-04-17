@@ -705,105 +705,99 @@ def authenticate_user(username, password):
         return {'success': False, 'error': str(e)}
 
 def create_registration_token(created_by, company_id=None, expires_hours=24, description=None, is_admin_token=False):
-    """Crea un token de registro de un solo uso, opcionalmente vinculado a una empresa - OPTIMIZADO"""
+    """Crea un token de registro de un solo uso, opcionalmente vinculado a una empresa."""
     try:
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        
-        # Si es token de empresa, validar límites en UNA SOLA consulta optimizada
-        if company_id:
-            # Consulta única que obtiene toda la información necesaria
-            cursor.execute('''
-                SELECT 
-                    c.max_users,
-                    c.max_admins,
-                    (SELECT COUNT(*) FROM users WHERE company_id = ? AND is_active = 1) as current_users,
-                    (SELECT COUNT(*) FROM users WHERE company_id = ? AND is_active = 1 AND roles LIKE "%administrador%") as current_admins
-                FROM companies c
-                WHERE c.id = ?
-            ''', (company_id, company_id, company_id))
-            
-            company_data = cursor.fetchone()
-            if company_data:
-                max_users, max_admins, current_users, current_admins = company_data
-                
-                # Validar límite de usuarios
-                if current_users >= max_users:
-                    conn.close()
-                    return {'success': False, 'error': f'La empresa ha alcanzado el límite de {max_users} usuarios'}
-                
-                # Si es token de admin, validar límite de admins
-                if is_admin_token and current_admins >= max_admins:
-                    conn.close()
-                    return {'success': False, 'error': f'La empresa ha alcanzado el límite de {max_admins} administradores'}
-        
-        # Generar token y crear registro en una sola operación
+        ph = _ph()
+        like_adm = '%administrador%'
         token = secrets.token_urlsafe(32)
         expires_at = datetime.datetime.now() + datetime.timedelta(hours=expires_hours)
-        
-        cursor.execute('''
-            INSERT INTO registration_tokens 
-            (token, company_id, created_by, expires_at, description, is_admin_token)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (token, company_id, created_by, expires_at, description, is_admin_token))
-        
-        token_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        
+
+        with _auth_cursor() as cursor:
+            # Validar límites de empresa si corresponde
+            if company_id:
+                cursor.execute(
+                    f'SELECT max_users, max_admins FROM companies WHERE id = {ph}',
+                    (company_id,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    max_users  = row['max_users']  if isinstance(row, dict) else row[0]
+                    max_admins = row['max_admins'] if isinstance(row, dict) else row[1]
+
+                    cursor.execute(
+                        f'SELECT COUNT(*) as c FROM users WHERE company_id = {ph} AND is_active = 1',
+                        (company_id,)
+                    )
+                    cu = cursor.fetchone()
+                    current_users = (cu['c'] if isinstance(cu, dict) else cu[0]) if cu else 0
+                    if current_users >= max_users:
+                        return {'success': False, 'error': f'La empresa ha alcanzado el límite de {max_users} usuarios'}
+
+                    if is_admin_token:
+                        cursor.execute(
+                            f'SELECT COUNT(*) as c FROM users WHERE company_id = {ph} AND is_active = 1 AND roles LIKE {ph}',
+                            (company_id, like_adm)
+                        )
+                        ca = cursor.fetchone()
+                        current_admins = (ca['c'] if isinstance(ca, dict) else ca[0]) if ca else 0
+                        if current_admins >= max_admins:
+                            return {'success': False, 'error': f'La empresa ha alcanzado el límite de {max_admins} administradores'}
+
+            cursor.execute(
+                f'INSERT INTO registration_tokens (token, company_id, created_by, expires_at, description, is_admin_token)'
+                f' VALUES ({ph},{ph},{ph},{ph},{ph},{ph})',
+                (token, company_id, created_by, expires_at, description, is_admin_token)
+            )
+            token_id = getattr(cursor, 'lastrowid', None)
+
         return {'success': True, 'token': token, 'token_id': token_id, 'expires_at': expires_at}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
 def verify_registration_token(token):
-    """Verifica y marca como usado un token de registro, retorna información de empresa y tipo"""
+    """Verifica y marca como usado un token de registro, retorna información de empresa y tipo."""
     try:
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT id, company_id, created_by, expires_at, is_used, used_at, is_admin_token
-            FROM registration_tokens
-            WHERE token = ?
-        ''', (token,))
-        
-        token_data = cursor.fetchone()
-        
-        if not token_data:
-            conn.close()
-            return {'success': False, 'error': 'Token inválido'}
-        
-        token_id, company_id, created_by, expires_at_str, is_used, used_at, is_admin_token = token_data
-        
-        # Convertir is_admin_token a booleano correctamente
-        if isinstance(is_admin_token, int):
-            is_admin_token_bool = bool(is_admin_token)
-        elif isinstance(is_admin_token, str):
-            is_admin_token_bool = is_admin_token.lower() in ('true', '1', 'yes')
-        else:
-            is_admin_token_bool = bool(is_admin_token)
-        
-        if is_used:
-            conn.close()
-            return {'success': False, 'error': 'Token ya utilizado'}
-        
-        # Verificar expiración
-        if expires_at_str:
-            expires_at = datetime.datetime.fromisoformat(expires_at_str)
-            if datetime.datetime.now() > expires_at:
-                conn.close()
-                return {'success': False, 'error': 'Token expirado'}
-        
-        # Marcar como usado
-        cursor.execute('''
-            UPDATE registration_tokens
-            SET is_used = 1, used_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        ''', (token_id,))
-        
-        conn.commit()
-        conn.close()
-        
+        ph = _ph()
+        with _auth_cursor() as cursor:
+            cursor.execute(
+                f'SELECT id, company_id, created_by, expires_at, is_used, used_at, is_admin_token'
+                f' FROM registration_tokens WHERE token = {ph}',
+                (token,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return {'success': False, 'error': 'Token inválido'}
+
+            if isinstance(row, dict):
+                token_id     = row['id']
+                company_id   = row['company_id']
+                created_by   = row['created_by']
+                expires_at_v = row['expires_at']
+                is_used      = row['is_used']
+                is_admin_tok = row['is_admin_token']
+            else:
+                token_id, company_id, created_by, expires_at_v, is_used, _, is_admin_tok = row
+
+            # Normalizar booleanos
+            is_used = bool(is_used)
+            if isinstance(is_admin_tok, str):
+                is_admin_token_bool = is_admin_tok.lower() in ('true', '1', 'yes')
+            else:
+                is_admin_token_bool = bool(is_admin_tok)
+
+            if is_used:
+                return {'success': False, 'error': 'Token ya utilizado'}
+
+            if expires_at_v:
+                exp = expires_at_v if isinstance(expires_at_v, datetime.datetime) else datetime.datetime.fromisoformat(str(expires_at_v))
+                if datetime.datetime.now() > exp:
+                    return {'success': False, 'error': 'Token expirado'}
+
+            cursor.execute(
+                f'UPDATE registration_tokens SET is_used = 1, used_at = CURRENT_TIMESTAMP WHERE id = {ph}',
+                (token_id,)
+            )
+
         return {
             'success': True,
             'created_by': created_by,
@@ -934,64 +928,46 @@ def is_company_user(user):
     return False
 
 def list_registration_tokens(include_used=False, company_id=None):
-    """Lista tokens de registro, opcionalmente filtrados por empresa"""
+    """Lista tokens de registro, opcionalmente filtrados por empresa."""
     try:
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        
-        if company_id:
-            if include_used:
-                cursor.execute('''
-                    SELECT id, token, company_id, created_by, created_at, expires_at, 
-                           is_used, used_at, used_by, description, is_admin_token
-                    FROM registration_tokens
-                    WHERE company_id = ?
-                    ORDER BY created_at DESC
-                ''', (company_id,))
-            else:
-                cursor.execute('''
-                    SELECT id, token, company_id, created_by, created_at, expires_at, 
-                           is_used, used_at, used_by, description, is_admin_token
-                    FROM registration_tokens
-                    WHERE is_used = 0 AND company_id = ?
-                    ORDER BY created_at DESC
-                ''', (company_id,))
-        else:
-            if include_used:
-                cursor.execute('''
-                    SELECT id, token, company_id, created_by, created_at, expires_at, 
-                           is_used, used_at, used_by, description, is_admin_token
-                    FROM registration_tokens
-                    ORDER BY created_at DESC
-                ''')
-            else:
-                cursor.execute('''
-                    SELECT id, token, company_id, created_by, created_at, expires_at, 
-                           is_used, used_at, used_by, description, is_admin_token
-                    FROM registration_tokens
-                    WHERE is_used = 0
-                    ORDER BY created_at DESC
-                ''')
-        
+        ph = _ph()
+        with _auth_cursor() as cursor:
+            conditions = [] if include_used else ['is_used = 0']
+            params = []
+            if company_id:
+                conditions.append(f'company_id = {ph}')
+                params.append(company_id)
+
+            where = ('WHERE ' + ' AND '.join(conditions)) if conditions else ''
+            cursor.execute(
+                f'SELECT id, token, company_id, created_by, created_at, expires_at,'
+                f' is_used, used_at, used_by, description, is_admin_token'
+                f' FROM registration_tokens {where} ORDER BY created_at DESC',
+                params
+            )
+            rows = cursor.fetchall()
+
         tokens = []
-        for row in cursor.fetchall():
-            tokens.append({
-                'id': row[0],
-                'token': row[1],
-                'company_id': row[2],
-                'created_by': row[3],
-                'created_at': row[4],
-                'expires_at': row[5],
-                'is_used': bool(row[6]),
-                'used_at': row[7],
-                'used_by': row[8],
-                'description': row[9],
-                'is_admin_token': bool(row[10])
-            })
-        
-        conn.close()
+        for row in rows:
+            if isinstance(row, dict):
+                tokens.append({
+                    'id': row['id'], 'token': row['token'],
+                    'company_id': row['company_id'], 'created_by': row['created_by'],
+                    'created_at': str(row['created_at']), 'expires_at': str(row['expires_at']) if row['expires_at'] else None,
+                    'is_used': bool(row['is_used']), 'used_at': str(row['used_at']) if row['used_at'] else None,
+                    'used_by': row['used_by'], 'description': row['description'],
+                    'is_admin_token': bool(row['is_admin_token']),
+                })
+            else:
+                tokens.append({
+                    'id': row[0], 'token': row[1], 'company_id': row[2], 'created_by': row[3],
+                    'created_at': row[4], 'expires_at': row[5], 'is_used': bool(row[6]),
+                    'used_at': row[7], 'used_by': row[8], 'description': row[9],
+                    'is_admin_token': bool(row[10]),
+                })
         return tokens
     except Exception as e:
+        print(f"⚠️ list_registration_tokens error: {e}")
         return []
 
 def list_users(company_id=None):
