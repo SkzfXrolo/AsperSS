@@ -680,8 +680,8 @@ async function viewScanDetails(scanId) {
         const filesEl = document.getElementById('detail-files-count');
         if (filesEl) {
             const files = (data.total_files_scanned || 0).toLocaleString();
-            const dirs  = (data.total_dirs_scanned  || 0).toLocaleString();
-            filesEl.textContent = dirs > 0 ? `${files} arch. · ${dirs} carpetas` : files;
+            const dirsN = data.total_dirs_scanned || 0;
+            filesEl.textContent = dirsN > 0 ? `${files} arch. · ${dirsN.toLocaleString()} carpetas` : files;
         }
         
         const vmEl = document.getElementById('detail-vm');

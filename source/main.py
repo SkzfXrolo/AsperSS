@@ -2827,6 +2827,7 @@ class ArgusApp:
                     
                     if self.db_integration.scan_token:
                         try:
+                            self._update_progress_safe(99, "📤 Enviando resultados...", "Subiendo a servidor...")
                             success = self.db_integration.submit_results(
                                 self.issues_found,
                                 self.total_files_scanned,
@@ -2834,8 +2835,10 @@ class ArgusApp:
                                 getattr(self, 'total_dirs_scanned', 0)
                             )
                             if success:
+                                self._update_progress_safe(100, "✅ Escaneo completado", f"{len(self.issues_found)} hallazgos enviados")
                                 print("✅ Resultados enviados a Web/BD")
                             else:
+                                self._update_progress_safe(100, "⚠️ Error al enviar", "Revisa conexión y token")
                                 print("⚠️ Error al enviar resultados a Web/BD")
                         except Exception as e:
                             print(f"⚠️ Error al enviar a Web/BD: {e}")
@@ -3263,7 +3266,11 @@ class ArgusApp:
                             '.zip', '.rar', '.7z', '.tar', '.gz', '.msi', '.msm', '.msp'
                         )
                         relevant_files = [f for f in files if f.lower().endswith(relevant_extensions)]
-                        
+                        # Contar TODOS los archivos vistos (antes de filtrar por extensión)
+                        self.total_files_scanned += len(files)
+                        scanned_files += len(files)
+                        folder_scanned += len(files)
+
                         # Verificar carpetas sospechosas
                         for dir_name in dirs:
                             if any(pattern in dir_name.lower() for pattern in ['flux', 'vape', 'entropy', 'liquidbounce', 'wurst', 'impact', 'sigma', 'future', 'ghost', 'hack', 'cheat', 'mod', 'client']):
@@ -3288,10 +3295,6 @@ class ArgusApp:
                                         'tipo': 'file',
                                         'alerta': 'SOSPECHOSO'
                                     })
-                                
-                                scanned_files += 1
-                                folder_scanned += 1
-                                self.total_files_scanned += 1  # Actualizar contador global
                                 
                                 # Mostrar progreso cada 5000 archivos
                                 if scanned_files % 5000 == 0:
