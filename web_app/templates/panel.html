@@ -26,80 +26,96 @@
             </div>
         </div>
         <nav class="sidebar-nav">
+            <div class="nav-group-label">CUENTA</div>
             <a href="/panel" class="nav-item active" data-section="dashboard">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path d="M3 10L9 4L9 9L17 9L17 11L9 11L9 16L3 10Z" fill="currentColor"/>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <rect x="1" y="1" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+                    <rect x="11" y="1" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+                    <rect x="1" y="11" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+                    <rect x="11" y="11" width="6" height="6" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
                 </svg>
-                <span>Dashboard</span>
+                <span>Vista general</span>
             </a>
-            <a href="/panel" class="nav-item" data-section="generar-app">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path d="M10 3L10 17M3 10L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <a href="/panel" class="nav-item" data-section="resultados">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.6"/>
+                    <path d="M6 9L8.5 11.5L12.5 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
-                <span>Generar App</span>
+                <span>Escaneos</span>
             </a>
+
+            <div class="nav-group-label">HERRAMIENTAS</div>
             <a href="/panel" class="nav-item" data-section="tokens">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
-                    <path d="M10 7L10 13M7 10L13 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <path d="M11 3.5C12.933 3.5 14.5 5.067 14.5 7C14.5 8.933 12.933 10.5 11 10.5C10.18 10.5 9.426 10.22 8.83 9.75L4 14.5L3.5 14.5L3.5 12L5 12L5 10.5L6.5 10.5L6.5 9L8.25 9.17C8.04 8.49 7.5 6.93 7.5 7C7.5 5.067 9.067 3.5 11 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                    <circle cx="11.5" cy="6.5" r="1" fill="currentColor"/>
                 </svg>
                 <span>Tokens</span>
             </a>
-            <a href="/panel" class="nav-item" data-section="resultados">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path d="M3 3L17 17M3 17L17 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <a href="/panel" class="nav-item" data-section="generar-app">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <path d="M9 2L9 12M5 8L9 12L13 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M3 14H15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
                 </svg>
-                <span>Resultados</span>
+                <span>Generar App</span>
             </a>
             <a href="/panel" class="nav-item" data-section="aprendizaje">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path d="M10 3C6.13 3 3 6.13 3 10C3 13.87 6.13 17 10 17C13.87 17 17 13.87 17 10C17 6.13 13.87 3 10 3ZM10 15C7.24 15 5 12.76 5 10C5 7.24 7.24 5 10 5C12.76 5 15 7.24 15 10C15 12.76 12.76 15 10 15Z" fill="currentColor"/>
-                    <path d="M10 7L10 10M10 13L10 13.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <path d="M9 2C5.686 2 3 4.686 3 8C3 10.09 4.06 11.93 5.67 13.04L5 16L9 14.5L13 16L12.33 13.04C13.94 11.93 15 10.09 15 8C15 4.686 12.314 2 9 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                    <path d="M6.5 8.5L8 10L11.5 6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
                 <span>Aprendizaje IA</span>
             </a>
+
+            {% if user and ('admin' in user.roles or 'administrador' in user.roles or user.company_id) %}
+            <div class="nav-group-label">ADMIN</div>
+            {% endif %}
             {% if user and ('admin' in user.roles or 'administrador' in user.roles) %}
             <a href="/panel" class="nav-item" data-section="administracion">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path d="M10 2L12 8L18 8L13 12L15 18L10 14L5 18L7 12L2 8L8 8L10 2Z" fill="currentColor"/>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <circle cx="9" cy="6" r="3" stroke="currentColor" stroke-width="1.6"/>
+                    <path d="M2.5 16C2.5 13.015 5.462 10.5 9 10.5C12.538 10.5 15.5 13.015 15.5 16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
                 </svg>
                 <span>Administración</span>
             </a>
             {% endif %}
             {% if user and 'admin' in user.roles %}
             <a href="/panel" class="nav-item" data-section="super-admin">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path d="M10 2C7.8 2 6 3.8 6 6C6 8.2 7.8 10 10 10C12.2 10 14 8.2 14 6C14 3.8 12.2 2 10 2Z" fill="currentColor"/>
-                    <path d="M3 17C3 14 6.1 12 10 12C13.9 12 17 14 17 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <circle cx="16" cy="6" r="3" fill="#f59e0b"/>
-                    <path d="M15 6H17M16 5V7" stroke="#000" stroke-width="1.2" stroke-linecap="round"/>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <path d="M9 1.5L10.8 6.5H16L11.6 9.6L13.4 14.5L9 11.4L4.6 14.5L6.4 9.6L2 6.5H7.2L9 1.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
                 </svg>
                 <span>Super Admin</span>
             </a>
             {% endif %}
             {% if user and user.company_id %}
             <a href="/panel" class="nav-item" data-section="mi-empresa">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path d="M10 2L3 7L3 18L17 18L17 7L10 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <path d="M2 16V7.5L9 2L16 7.5V16H11V12H7V16H2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
                 </svg>
                 <span>Mi Empresa</span>
             </a>
             {% endif %}
         </nav>
         <div class="sidebar-footer">
-            <div class="user-info-sidebar">
-                <span class="user-name-sidebar">{{ user.username if user else 'Usuario' }}</span>
-                {% if user and 'admin' in user.roles %}
-                <span class="user-role-badge">Admin</span>
-                {% elif user and 'administrador' in user.roles %}
-                <span class="user-role-badge">Admin Empresa</span>
-                {% elif user and 'empresa' in user.roles %}
-                <span class="user-role-badge">Empresa</span>
-                {% endif %}
+            <div class="sidebar-user-avatar">
+                <div class="avatar-circle">
+                    {{ (user.username[0] if user and user.username else 'U') | upper }}
+                    <div class="avatar-online"></div>
+                </div>
+                <div class="avatar-info">
+                    <div class="avatar-name">{{ user.username if user else 'Usuario' }}</div>
+                    <div class="avatar-role">
+                        {% if user and 'admin' in user.roles %}Admin
+                        {% elif user and 'administrador' in user.roles %}Admin Empresa
+                        {% elif user and 'empresa' in user.roles %}Empresa
+                        {% else %}Staff{% endif %}
+                    </div>
+                </div>
             </div>
-            <a href="/logout" class="nav-item">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path d="M7 17L12 12L7 7M12 12L3 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <a href="/logout" class="nav-item nav-item-logout">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <path d="M7 15H3.5C3.5 15 2 15 2 13.5V4.5C2 3 3.5 3 3.5 3H7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                    <path d="M12 12L16 9L12 6M7 9H16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
                 <span>Cerrar Sesión</span>
             </a>
@@ -139,30 +155,74 @@
 
         <!-- Dashboard Section -->
         <section class="panel-section active" id="dashboard-section">
+
+            <!-- Greeting banner -->
+            <div class="greeting-banner">
+                <div class="greeting-content">
+                    <p class="greeting-label">ARGUS PROJECTS</p>
+                    <h2 class="greeting-title" id="greeting-text">Bienvenido, {{ user.username if user else 'Staff' }}!</h2>
+                    <p class="greeting-sub">
+                        <span class="greeting-dot"></span>
+                        <span id="greeting-date">Sistema activo</span>
+                    </p>
+                </div>
+                <div class="greeting-decoration" aria-hidden="true">
+                    <svg width="110" height="90" viewBox="0 0 110 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="55" cy="45" r="40" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 4"/>
+                        <circle cx="55" cy="45" r="26" stroke="currentColor" stroke-width="1"/>
+                        <circle cx="55" cy="45" r="6" fill="currentColor" opacity="0.5"/>
+                        <circle cx="55" cy="5" r="3" fill="currentColor"/>
+                        <circle cx="95" cy="45" r="3" fill="currentColor" opacity="0.6"/>
+                        <circle cx="55" cy="85" r="3" fill="currentColor" opacity="0.4"/>
+                        <circle cx="15" cy="45" r="3" fill="currentColor" opacity="0.6"/>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Stats grid -->
             <div class="stats-grid">
                 <div class="stat-card">
-                    <div class="stat-icon">📊</div>
+                    <div class="stat-icon-wrap">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                            <path d="M2 14L6 9L9 12L13 6L16 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
                     <div class="stat-content">
                         <div class="stat-value" id="total-scans">0</div>
                         <div class="stat-label">Escaneos Totales</div>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon">⚠️</div>
+                    <div class="stat-icon-wrap stat-icon-red">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                            <path d="M9 2L16.5 15H1.5L9 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                            <path d="M9 7V10M9 12.5V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                        </svg>
+                    </div>
                     <div class="stat-content">
                         <div class="stat-value" id="total-issues">0</div>
                         <div class="stat-label">Issues Detectados</div>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon">🖥️</div>
+                    <div class="stat-icon-wrap stat-icon-cyan">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                            <rect x="2" y="4" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.6"/>
+                            <path d="M6 17H12M9 14V17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                        </svg>
+                    </div>
                     <div class="stat-content">
                         <div class="stat-value" id="unique-machines">0</div>
                         <div class="stat-label">Máquinas Únicas</div>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon">🔑</div>
+                    <div class="stat-icon-wrap stat-icon-green">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                            <path d="M11 3.5C12.933 3.5 14.5 5.067 14.5 7C14.5 8.933 12.933 10.5 11 10.5C10.18 10.5 9.426 10.22 8.83 9.75L4 14.5H2.5V13L7.25 8.17C7.04 7.49 7 7.25 7 7C7 5.067 9.067 3.5 11 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                            <circle cx="11.5" cy="6.5" r="1" fill="currentColor"/>
+                        </svg>
+                    </div>
                     <div class="stat-content">
                         <div class="stat-value" id="active-tokens">0</div>
                         <div class="stat-label">Tokens Activos</div>
@@ -170,15 +230,29 @@
                 </div>
             </div>
 
-            <div class="recent-activity">
-                <h2 class="section-subtitle">Actividad Reciente</h2>
-                <div class="activity-list" id="recent-scans">
-                    <div class="activity-item">
-                        <div class="activity-icon">⏳</div>
-                        <div class="activity-content">
-                            <div class="activity-title">Cargando...</div>
-                            <div class="activity-time">Espera un momento</div>
+            <!-- Bottom: recent scans + chart -->
+            <div class="dashboard-bottom-grid">
+                <div class="dashboard-card">
+                    <div class="dashboard-card-header">
+                        <span class="dashboard-card-title">Escaneos recientes</span>
+                        <span class="dashboard-card-sub">Tus escaneos más recientes</span>
+                    </div>
+                    <div class="dashboard-card-body" id="recent-scans">
+                        <div class="echo-scan-row">
+                            <div class="scan-avatar-circle">—</div>
+                            <div class="scan-row-info">
+                                <div class="scan-row-machine">Cargando...</div>
+                            </div>
                         </div>
+                    </div>
+                </div>
+                <div class="dashboard-card">
+                    <div class="dashboard-card-header">
+                        <span class="dashboard-card-title">Escaneos mensuales</span>
+                        <span class="dashboard-card-sub">Tus escaneos de este mes</span>
+                    </div>
+                    <div class="dashboard-card-body" style="padding:18px 16px;">
+                        <canvas id="monthly-chart" height="180"></canvas>
                     </div>
                 </div>
             </div>
@@ -295,21 +369,19 @@
             </div>
 
             <div class="results-table-container">
-                <table class="data-table">
+                <table class="data-table echo-results-table">
                     <thead>
                         <tr>
-                            <th>Fecha</th>
-                            <th>Máquina</th>
-                            <th>Archivos Escaneados</th>
-                            <th>Issues</th>
-                            <th>Duración</th>
-                            <th>Estado</th>
+                            <th>Detalles</th>
+                            <th>Juego</th>
+                            <th>Resultado</th>
+                            <th>Indicaciones</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="results-table-body">
                         <tr>
-                            <td colspan="7" class="loading-cell">Cargando resultados...</td>
+                            <td colspan="5" class="loading-cell">Cargando resultados...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -318,24 +390,36 @@
 
         <!-- Vista Detallada de Issues -->
         <section class="panel-section" id="issues-detail-section" style="display: none;">
-            <div class="section-header-actions">
-                <div>
-                    <h2 class="section-subtitle">Resultados del Escaneo</h2>
-                    <p class="section-description" id="scan-context">Escaneo #<span id="current-scan-id">-</span></p>
-                </div>
-                <div>
-                    <button class="btn btn-secondary" id="back-to-scans-btn">
-                        <span>← Volver a Escaneos</span>
+
+            <!-- Scan page header (Echo style) -->
+            <div class="scan-page-header">
+                <div class="scan-page-header-left">
+                    <button class="btn btn-ghost scan-back-btn" id="back-to-scans-btn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M10 3L5 8L10 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        Volver
                     </button>
-                    <button class="btn btn-primary" id="download-report-btn">
-                        <span>📥 Descargar Reporte HTML</span>
+                    <div>
+                        <h2 class="scan-page-title">Resultados del escaneo</h2>
+                        <p class="scan-page-subtitle">Minecraft</p>
+                    </div>
+                </div>
+                <div class="scan-page-header-right">
+                    <div class="scan-indicator-pills" id="scan-indicator-pills"></div>
+                    <button class="btn btn-secondary" id="download-report-btn" style="font-size:12px;padding:7px 14px;">
+                        📥 Reporte
                     </button>
                 </div>
             </div>
 
-            <!-- Banner de Detección -->
-            <div class="detection-banner" id="detection-banner" style="display: none;">
-                <div class="detection-icon">⚠️</div>
+            <!-- Banner de Detección (Echo style) -->
+            <div class="detection-banner echo-detection-banner" id="detection-banner" style="display: none;">
+                <div class="echo-detection-icon">
+                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                        <path d="M7 7L15 15M15 7L7 15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                    </svg>
+                </div>
                 <div class="detection-content">
                     <h3 class="detection-title">Detectado</h3>
                     <p class="detection-message">Argus Projects ha detectado indicadores de trampas. Revisa el análisis detallado a continuación.</p>
@@ -443,51 +527,78 @@
             <div class="scan-results-layout">
                 <!-- Columna Izquierda: Información del Escaneo -->
                 <div class="scan-info-column">
-                    <h3 class="column-title">Información del Escaneo</h3>
-                    <div class="scan-info-list">
-                        <div class="info-item">
-                            <span class="info-label">ID:</span>
-                            <span class="info-value" id="detail-scan-id">-</span>
+                    <h3 class="column-title">Información del escaneo</h3>
+                    <p class="column-subtitle">Datos claves del escaneo</p>
+                    <div class="scan-info-list echo-info-list">
+                        <div class="echo-info-item">
+                            <span class="echo-info-icon" style="color:#8B5CF6">
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M4 7H10M4 5H10M4 9H7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                            </span>
+                            <span class="echo-info-label">ID</span>
+                            <span class="echo-info-value accent-text" id="detail-scan-id">-</span>
                         </div>
-                        <div class="info-item">
-                            <span class="info-label">Sistema Operativo:</span>
-                            <span class="info-value" id="detail-os">-</span>
+                        <div class="echo-info-item">
+                            <span class="echo-info-icon" style="color:#38BDF8">
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M4 13H10M7 10V13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                            </span>
+                            <span class="echo-info-label">Sistema Operativo</span>
+                            <span class="echo-info-value cyan-text" id="detail-os">-</span>
                         </div>
-                        <div class="info-item">
-                            <span class="info-label">Máquina:</span>
-                            <span class="info-value" id="detail-machine-name">-</span>
+                        <div class="echo-info-item">
+                            <span class="echo-info-icon" style="color:#8B5CF6">
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1L12.5 10.5H1.5L7 1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+                            </span>
+                            <span class="echo-info-label">VM</span>
+                            <span class="echo-info-value" id="detail-vm">No</span>
                         </div>
-                        <div class="info-item">
-                            <span class="info-label">VM:</span>
-                            <span class="info-value" id="detail-vm">No</span>
+                        <div class="echo-info-item">
+                            <span class="echo-info-icon" style="color:#8B5CF6">
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5C4 1.5 1.5 4 1.5 7C1.5 10 4 12.5 7 12.5C10 12.5 12.5 10 12.5 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M9 1.5H12.5V5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.5 1.5L7 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                            </span>
+                            <span class="echo-info-label">Tipo de conexión</span>
+                            <span class="echo-info-value cyan-text" id="detail-connection">Residencial</span>
                         </div>
-                        <div class="info-item">
-                            <span class="info-label">Tipo de Conexión:</span>
-                            <span class="info-value" id="detail-connection">Residencial</span>
+                        <div class="echo-info-item">
+                            <span class="echo-info-icon" style="color:#F59E0B">
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.4"/><path d="M7 3.5V7L9.5 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                            </span>
+                            <span class="echo-info-label">País</span>
+                            <span class="echo-info-value" id="detail-country">-</span>
                         </div>
-                        <div class="info-item">
-                            <span class="info-label">País:</span>
-                            <span class="info-value" id="detail-country">-</span>
+                        <div class="echo-info-item">
+                            <span class="echo-info-icon" style="color:#10B981">
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M2 12.5C2 10.015 4.24 8 7 8C9.76 8 12 10.015 12 12.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                            </span>
+                            <span class="echo-info-label">Username Minecraft</span>
+                            <span class="echo-info-value" id="detail-minecraft-username">-</span>
                         </div>
-                        <div class="info-item">
-                            <span class="info-label">Username Minecraft:</span>
-                            <span class="info-value" id="detail-minecraft-username">-</span>
-                        </div>
-                        <div class="info-item" id="ban-history-item" style="display: none;">
-                            <span class="info-label">Historial de Bans:</span>
+                        <div class="echo-info-item" id="ban-history-item" style="display: none;">
+                            <span class="echo-info-icon" style="color:#F43F5E">
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.4"/><path d="M3 3L11 11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                            </span>
+                            <span class="echo-info-label">Historial de Bans</span>
                             <div class="ban-history-list" id="ban-history-list"></div>
                         </div>
-                        <div class="info-item">
-                            <span class="info-label">Archivos Escaneados:</span>
-                            <span class="info-value" id="detail-files-count">0</span>
+                        <div class="echo-info-item">
+                            <span class="echo-info-icon" style="color:#38BDF8">
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 10L5 6L7.5 8.5L10 4L12 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </span>
+                            <span class="echo-info-label">Archivos Escaneados</span>
+                            <span class="echo-info-value" id="detail-files-count">0</span>
                         </div>
-                        <div class="info-item">
-                            <span class="info-label">Velocidad de Escaneo:</span>
-                            <span class="info-value" id="detail-scan-speed">-</span>
+                        <div class="echo-info-item">
+                            <span class="echo-info-icon" style="color:#8B5CF6">
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.4"/><path d="M7 4V7L9 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                            </span>
+                            <span class="echo-info-label">Scan Speed</span>
+                            <span class="echo-info-value cyan-text" id="detail-scan-speed">-</span>
                         </div>
-                        <div class="info-item">
-                            <span class="info-label">Fecha:</span>
-                            <span class="info-value" id="detail-scan-date">-</span>
+                        <div class="echo-info-item">
+                            <span class="echo-info-icon" style="color:#F59E0B">
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2.5" width="11" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5 1.5V3.5M9 1.5V3.5M1.5 6H12.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                            </span>
+                            <span class="echo-info-label">Date</span>
+                            <span class="echo-info-value" id="detail-scan-date">-</span>
                         </div>
                     </div>
                 </div>

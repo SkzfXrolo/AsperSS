@@ -152,43 +152,143 @@ function showSection(sectionName) {
 // ============================================================
 
 async function loadDashboard() {
+    // Greeting text
+    const greetEl = document.getElementById('greeting-text');
+    const dateEl  = document.getElementById('greeting-date');
+    if (greetEl) {
+        const h = new Date().getHours();
+        const saludo = h < 12 ? 'Buenos días' : h < 20 ? 'Buenas tardes' : 'Buenas noches';
+        const name = greetEl.textContent.replace(/^.*,\s*/, '').replace('!','').trim();
+        greetEl.textContent = `${saludo}, ${name}!`;
+    }
+    if (dateEl) {
+        const now = new Date();
+        dateEl.textContent = now.toLocaleDateString('es-ES', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    }
+
     try {
         const response = await fetch('/api/statistics');
         const data = await response.json();
-        
-        document.getElementById('total-scans').textContent = data.total_scans || 0;
-        document.getElementById('total-issues').textContent = data.total_issues || 0;
+
+        document.getElementById('total-scans').textContent    = data.total_scans    || 0;
+        document.getElementById('total-issues').textContent   = data.total_issues   || 0;
         document.getElementById('unique-machines').textContent = data.unique_machines || 0;
-        document.getElementById('active-tokens').textContent = data.active_tokens || 0;
+        document.getElementById('active-tokens').textContent  = data.active_tokens  || 0;
 
         loadRecentScans();
+        loadMonthlyChart();
     } catch (error) {
         console.error('Error cargando dashboard:', error);
     }
 }
 
+function _scanInitials(machineName) {
+    if (!machineName || machineName === 'N/A') return '??';
+    const parts = machineName.replace(/[_-]/g,' ').split(' ').filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return machineName.substring(0,2).toUpperCase();
+}
+
+function _resultBadge(scan) {
+    const s = scan.severity_summary || '';
+    if (s === 'CRITICO' || s === 'SOSPECHOSO')
+        return '<span class="result-badge result-detected">Detectado</span>';
+    if (s === 'POCO_SOSPECHOSO')
+        return '<span class="result-badge result-suspicious">Sospechoso</span>';
+    if (s === 'LIMPIO')
+        return '<span class="result-badge result-clean">Limpio</span>';
+    if (scan.status === 'completed')
+        return '<span class="result-badge result-pending">Revisado</span>';
+    return '<span class="result-badge result-pending">Pendiente</span>';
+}
+
+function _indicatorDots(scan) {
+    const issues = scan.issues_found || 0;
+    const sev    = scan.severity_summary || '';
+    if (issues === 0) return '<span class="indicator-dot dot-green"></span>';
+    const dots = [];
+    if (sev === 'CRITICO')           dots.push('<span class="indicator-dot dot-red"></span>');
+    if (sev === 'SOSPECHOSO')        dots.push('<span class="indicator-dot dot-amber"></span>');
+    if (sev === 'POCO_SOSPECHOSO')   dots.push('<span class="indicator-dot dot-amber"></span>');
+    for (let i = dots.length; i < Math.min(issues, 5); i++)
+        dots.push(`<span class="indicator-dot dot-${i < 2 ? 'red' : 'amber'}"></span>`);
+    return dots.slice(0,5).join('');
+}
+
 async function loadRecentScans() {
     try {
-        const response = await fetch('/api/scans?limit=5');
+        const response = await fetch('/api/scans?limit=6');
         const data = await response.json();
-        
         const container = document.getElementById('recent-scans');
         if (data.scans && data.scans.length > 0) {
             container.innerHTML = data.scans.map(scan => `
-                <div class="activity-item">
-                    <div class="activity-icon">🔍</div>
-                    <div class="activity-content">
-                        <div class="activity-title">Escaneo en ${scan.machine_name || 'N/A'}</div>
-                        <div class="activity-time">${formatDate(scan.started_at)} - ${scan.issues_found} issues</div>
+                <div class="echo-scan-row" onclick="viewScanDetails(${scan.id})">
+                    <div class="scan-avatar-circle">${_scanInitials(scan.machine_name)}</div>
+                    <div class="scan-row-info">
+                        <div class="scan-row-machine">${scan.machine_name || 'N/A'}</div>
+                        <div class="scan-row-date">${formatDate(scan.started_at)}</div>
                     </div>
+                    <div class="indicator-dots">${_indicatorDots(scan)}</div>
+                    ${_resultBadge(scan)}
                 </div>
             `).join('');
         } else {
-            container.innerHTML = '<div class="activity-item">No hay escaneos recientes</div>';
+            container.innerHTML = '<div class="echo-scan-row"><div class="scan-row-info"><div class="scan-row-machine" style="color:var(--text-d)">No hay escaneos recientes</div></div></div>';
         }
     } catch (error) {
         console.error('Error cargando escaneos recientes:', error);
     }
+}
+
+let monthlyChart = null;
+async function loadMonthlyChart() {
+    const canvas = document.getElementById('monthly-chart');
+    if (!canvas || !window.Chart) return;
+    try {
+        const response = await fetch('/api/scans?limit=50');
+        const data = await response.json();
+        // Agrupar por día (últimos 30 días)
+        const counts = {};
+        const now = new Date();
+        for (let i = 29; i >= 0; i--) {
+            const d = new Date(now); d.setDate(d.getDate() - i);
+            counts[d.toISOString().slice(0,10)] = 0;
+        }
+        if (data.scans) {
+            data.scans.forEach(s => {
+                if (!s.started_at) return;
+                const day = s.started_at.slice(0,10);
+                if (day in counts) counts[day]++;
+            });
+        }
+        const labels = Object.keys(counts).map(d => d.slice(5));
+        const values = Object.values(counts);
+        if (monthlyChart) monthlyChart.destroy();
+        monthlyChart = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    data: values,
+                    borderColor: '#8B5CF6',
+                    backgroundColor: 'rgba(139,92,246,0.10)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0.4,
+                    fill: true,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: { legend: { display: false }, tooltip: { callbacks: { title: i => i[0].label } } },
+                scales: {
+                    x: { display: false },
+                    y: { display: false, min: 0 }
+                }
+            }
+        });
+    } catch(e) { /* no chart data */ }
 }
 
 // ============================================================
@@ -491,34 +591,34 @@ async function loadScans() {
         
         const tbody = document.getElementById('results-table-body');
         if (data.scans && data.scans.length > 0) {
-            tbody.innerHTML = data.scans.map(scan => {
-                const previewText = scan.severity_summary === 'CRITICO' ? '🔴 CRÍTICO' :
-                                   scan.severity_summary === 'SOSPECHOSO' ? '🟠 SOSPECHOSO' :
-                                   scan.severity_summary === 'POCO_SOSPECHOSO' ? '🟡 POCO SOSPECHOSO' :
-                                   scan.severity_summary === 'LIMPIO' ? '🟢 LIMPIO' : '⚪ NORMAL';
-                
-                return `
-                <tr>
-                    <td>${formatDate(scan.started_at)}</td>
-                    <td>${scan.machine_name || 'N/A'}</td>
-                    <td>${scan.total_files_scanned || 0}</td>
-                    <td>${scan.issues_found || 0}</td>
-                    <td>${formatDuration(scan.scan_duration)}</td>
+            tbody.innerHTML = data.scans.map(scan => `
+                <tr style="cursor:pointer" onclick="viewScanDetails(${scan.id})">
                     <td>
-                        <span class="badge badge-${scan.status === 'completed' ? 'success' : 'warning'}">${scan.status}</span>
-                        <br>
-                        <span class="badge badge-${scan.severity_badge || 'secondary'}" style="margin-top: 4px;">${previewText}</span>
+                        <div class="scan-details-cell">
+                            <div class="scan-avatar-circle">${_scanInitials(scan.machine_name)}</div>
+                            <div>
+                                <div class="scan-machine-name">${scan.machine_name || 'N/A'}</div>
+                                <div class="scan-date-small">${formatDate(scan.started_at)}</div>
+                            </div>
+                        </div>
                     </td>
                     <td>
-                        <button class="btn btn-sm btn-primary" onclick="viewScanDetails(${scan.id})">
-                            Ver Detalles
+                        <span class="game-badge">
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="1" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M4 6H8M6 4V8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                            Minecraft
+                        </span>
+                    </td>
+                    <td>${_resultBadge(scan)}</td>
+                    <td><div class="indicator-dots">${_indicatorDots(scan)}</div></td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();viewScanDetails(${scan.id})">
+                            Ver detalles
                         </button>
                     </td>
                 </tr>
-            `;
-            }).join('');
+            `).join('');
         } else {
-            tbody.innerHTML = '<tr><td colspan="7" class="loading-cell">No hay escaneos</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No hay escaneos</td></tr>';
         }
     } catch (error) {
         console.error('Error cargando escaneos:', error);
@@ -618,10 +718,25 @@ async function viewScanDetails(scanId) {
         if (dateEl) dateEl.textContent = formatDate(data.started_at);
         
         // Actualizar contadores de severidad (columna derecha)
-        document.getElementById('count-clean').textContent = severityStats.clean;
-        document.getElementById('count-alert').textContent = severityStats.alert;
+        document.getElementById('count-clean').textContent  = severityStats.clean;
+        document.getElementById('count-alert').textContent  = severityStats.alert;
         document.getElementById('count-severe').textContent = severityStats.severe;
-        
+
+        // Indicator pills (Echo style)
+        const pillsEl = document.getElementById('scan-indicator-pills');
+        if (pillsEl) {
+            const cats = [
+                { key: 'i', cls: severityStats.severe > 0 ? 'active-red' : '' },
+                { key: 'h', cls: severityStats.alert  > 0 ? 'active-amber' : '' },
+                { key: 'a', cls: '' },
+                { key: 'θ', cls: severityStats.clean  > 0 ? 'active-green' : '' },
+                { key: 'p', cls: severityStats.severe > 0 ? 'active-violet' : '' },
+            ];
+            pillsEl.innerHTML = cats.map(c =>
+                `<span class="scan-indicator-pill ${c.cls}" title="${c.key}">${c.key}</span>`
+            ).join('');
+        }
+
         // Mostrar/ocultar banner de detección
         const detectionBanner = document.getElementById('detection-banner');
         if (severityStats.severe > 0 || severityStats.alert > 0) {
@@ -644,60 +759,56 @@ async function viewScanDetails(scanId) {
         // Mostrar issues individuales con botones de feedback
         const issuesContainer = document.getElementById('issues-list-container');
         if (data.results && data.results.length > 0) {
-            issuesContainer.innerHTML = data.results.map((result, index) => {
-                const alertClass = result.alert_level === 'CRITICAL' ? 'critical' : 
-                                 result.alert_level === 'SOSPECHOSO' ? 'suspicious' : 'low';
-                const severityBadge = result.alert_level === 'CRITICAL' ? 'danger' : 
-                                    result.alert_level === 'SOSPECHOSO' ? 'warning' : 'info';
-                
-                // Verificar si ya tiene feedback
+            issuesContainer.innerHTML = data.results.map((result) => {
+                const isCrit = result.alert_level === 'CRITICAL';
+                const isSusp = result.alert_level === 'SOSPECHOSO';
+                const borderColor = isCrit ? 'var(--red)' : isSusp ? 'var(--amber)' : 'var(--border-m)';
+                const iconColor   = isCrit ? 'var(--red)' : isSusp ? 'var(--amber)' : 'var(--text-d)';
                 const hasFeedback = result.feedback_status;
-                const feedbackBadge = hasFeedback === 'hack' ? '<span class="badge badge-danger">✓ Marcado como Hack</span>' :
-                                     hasFeedback === 'legitimate' ? '<span class="badge badge-success">✓ Marcado como Legítimo</span>' : '';
-                
-                // Escapar comillas simples en los strings para evitar errores de JavaScript
+
                 const issueNameEscaped = (result.issue_name || 'Issue Desconocido').replace(/'/g, "\\'");
                 const issuePathEscaped = (result.issue_path || 'N/A').replace(/'/g, "\\'");
-                
+
+                const feedbackTag = hasFeedback === 'hack'
+                    ? '<span class="result-badge result-detected" style="font-size:10px;padding:2px 8px;">✓ Hack</span>'
+                    : hasFeedback === 'legitimate'
+                    ? '<span class="result-badge result-clean" style="font-size:10px;padding:2px 8px;">✓ Legítimo</span>'
+                    : '';
+
                 return `
-                    <div class="issue-card issue-${alertClass}" data-result-id="${result.id}">
-                        <div class="issue-checkbox-wrapper">
-                            <input type="checkbox" class="issue-checkbox" data-result-id="${result.id}" ${hasFeedback ? 'disabled' : ''} onchange="updateBulkActions()">
+                    <div class="echo-issue-row" data-result-id="${result.id}" style="border-left-color:${borderColor}">
+                        <div class="echo-issue-icon-col">
+                            <input type="checkbox" class="issue-checkbox" data-result-id="${result.id}" ${hasFeedback ? 'disabled' : ''} onchange="updateBulkActions()" style="margin:0">
                         </div>
-                        <div class="issue-content">
-                            <div class="issue-header">
-                                <div class="issue-title-section">
-                                    <h3 class="issue-title">${result.issue_name || 'Issue Desconocido'}</h3>
-                                    <p class="issue-path">${result.issue_path || 'N/A'}</p>
-                                </div>
-                                <div class="issue-badges">
-                                    <span class="badge badge-${severityBadge}">${result.alert_level || 'N/A'}</span>
-                                    ${result.confidence ? `<span class="badge badge-info">Confianza: ${result.confidence}%</span>` : ''}
-                                    ${feedbackBadge}
-                                </div>
-                            </div>
-                            
-                            <div class="issue-details">
-                                ${result.ai_analysis ? `<div class="issue-analysis"><strong>Análisis IA:</strong> ${result.ai_analysis}</div>` : ''}
-                                ${result.detected_patterns && result.detected_patterns.length > 0 ? 
-                                    `<div class="issue-patterns"><strong>Patrones detectados:</strong> ${result.detected_patterns.join(', ')}</div>` : ''}
-                                ${result.file_hash ? `<div class="issue-hash"><strong>Hash:</strong> <code>${result.file_hash}</code></div>` : ''}
-                            </div>
-                            
-                            <div class="issue-actions">
-                                ${!hasFeedback ? `
-                                    <button class="btn btn-sm btn-danger" onclick="markAsHack(${result.id}, ${scanId}, '${issueNameEscaped}', '${issuePathEscaped}')">
-                                        ⚠️ Marcar como Hack
-                                    </button>
-                                    <button class="btn btn-sm btn-success" onclick="markAsLegitimate(${result.id}, ${scanId}, '${issueNameEscaped}', '${issuePathEscaped}')">
-                                        ✅ Marcar como Legítimo
-                                    </button>
-                                ` : `
-                                    <button class="btn btn-sm btn-secondary" onclick="changeFeedback(${result.id}, ${scanId})">
-                                        ✏️ Cambiar Feedback
-                                    </button>
-                                `}
-                            </div>
+                        <div class="echo-issue-x" style="color:${iconColor}">
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                                <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                            </svg>
+                        </div>
+                        <div class="echo-issue-body">
+                            <div class="echo-issue-name">${result.issue_name || 'Issue Desconocido'}</div>
+                            <div class="echo-issue-path">${result.issue_path || 'N/A'}</div>
+                            ${result.ai_analysis ? `<div class="echo-issue-analysis">${result.ai_analysis}</div>` : ''}
+                            ${result.detected_patterns && result.detected_patterns.length > 0
+                                ? `<div class="echo-issue-patterns">${result.detected_patterns.join(' · ')}</div>` : ''}
+                        </div>
+                        <div class="echo-issue-actions">
+                            ${feedbackTag}
+                            ${!hasFeedback ? `
+                                <button class="echo-action-btn echo-action-hack" title="Marcar como Hack"
+                                    onclick="markAsHack(${result.id}, ${scanId}, '${issueNameEscaped}', '${issuePathEscaped}')">
+                                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5L12.5 10.5H1.5L7 1.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+                                </button>
+                                <button class="echo-action-btn echo-action-legit" title="Marcar como Legítimo"
+                                    onclick="markAsLegitimate(${result.id}, ${scanId}, '${issueNameEscaped}', '${issuePathEscaped}')">
+                                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7L5.5 10L11.5 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                </button>
+                            ` : `
+                                <button class="echo-action-btn" title="Cambiar feedback"
+                                    onclick="changeFeedback(${result.id}, ${scanId})">
+                                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5L11.5 4.5L5 11H3V9L9.5 2.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+                                </button>
+                            `}
                         </div>
                     </div>
                 `;
