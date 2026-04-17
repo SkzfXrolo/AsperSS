@@ -2087,6 +2087,9 @@ class ArgusApp:
             # Editores (rutas específicas)
             '\\vscode\\', '\\.vscode\\', 'node_modules\\', '\\jdk\\',
             'visual studio\\', 'intellij idea\\', 'pycharm\\',
+            # Herramientas de edición de video y desarrollo
+            'wondershare\\', 'wondershare filmora', 'filmora\\',
+            'jetbrains\\', '\\jetbrains\\', 'rider\\', 'goland\\', 'webstorm\\', 'clion\\',
         ]
         
         # ============================================================
@@ -3284,6 +3287,7 @@ class ArgusApp:
                                     'ruta': root,
                                     'archivo': os.path.join(root, dir_name),
                                     'tipo': 'folder',
+                                    'categoria': 'HACKS',
                                     'alerta': 'SOSPECHOSO'
                                 })
                             
@@ -3298,6 +3302,7 @@ class ArgusApp:
                                         'ruta': root,
                                         'archivo': file_path,
                                         'tipo': 'file',
+                                        'categoria': 'HACKS',
                                         'alerta': 'SOSPECHOSO'
                                     })
                                 
@@ -3355,6 +3360,7 @@ class ArgusApp:
                         'ruta': root,
                         'archivo': file_path,
                         'tipo': 'file',
+                        'categoria': 'HACKS',
                         'alerta': 'SOSPECHOSO'
                     })
         except Exception as e:
@@ -3678,6 +3684,7 @@ class ArgusApp:
                                     'ruta': root,
                                     'archivo': os.path.join(root, dir_name),
                                     'tipo': 'hack_folder',
+                                    'categoria': 'HACKS',
                                     'alerta': 'CRITICAL'
                                 })
                                 break  # Solo agregar una vez por carpeta
@@ -3697,6 +3704,7 @@ class ArgusApp:
                                     'ruta': root,
                                     'archivo': file_path,
                                     'tipo': 'hack_file',
+                                    'categoria': 'HACKS',
                                     'alerta': 'CRITICAL'
                                 })
                                 break  # Solo agregar una vez por archivo
@@ -3769,6 +3777,7 @@ class ArgusApp:
                                                 'ruta': root,
                                                 'archivo': os.path.join(root, dir_name),
                                                 'tipo': 'hack_folder_common',
+                                                'categoria': 'HACKS',
                                                 'alerta': 'CRITICAL'
                                             })
                     except Exception as e:
@@ -3842,6 +3851,7 @@ class ArgusApp:
                                                 'ruta': root,
                                                 'archivo': os.path.join(root, dir_name),
                                                 'tipo': 'suspicious_folder',
+                                                'categoria': 'HACKS',
                                                 'alerta': 'CRITICAL'
                                             })
                                             
@@ -3855,6 +3865,7 @@ class ArgusApp:
                                                             'ruta': folder_path,
                                                             'archivo': os.path.join(folder_path, file),
                                                             'tipo': 'hack_file',
+                                                            'categoria': 'HACKS',
                                                             'alerta': 'CRITICAL'
                                                         })
                                                         print(f"🎯 ARCHIVO DE HACK ENCONTRADO: {file} en {folder_path}")
@@ -3943,6 +3954,7 @@ class ArgusApp:
                                             'ruta': root,
                                             'archivo': os.path.join(root, dir_name),
                                             'tipo': 'exact_hack_folder',
+                                            'categoria': 'HACKS',
                                             'alerta': 'CRITICAL'
                                         })
                                         
@@ -3957,6 +3969,7 @@ class ArgusApp:
                                                         'ruta': folder_path,
                                                         'archivo': file_path,
                                                         'tipo': 'hack_file',
+                                                        'categoria': 'HACKS',
                                                         'alerta': 'CRITICAL'
                                                     })
                                                     print(f"🚨 ARCHIVO DE HACK: {file}")
@@ -4046,12 +4059,13 @@ class ArgusApp:
                 if is_real_hack:
                     # Clasificar como HACK CRÍTICO
                     issue['alerta'] = 'CRITICAL'
-                    issue['categoria'] = 'HACKS'
+                    if not issue.get('categoria'):
+                        issue['categoria'] = 'HACKS'
                     filtered_issues.append(issue)
                     print(f"🚨 HACK REAL DETECTADO: {nombre} en {ruta}")
                 else:
-                    # Mantener como sospechoso o normal
-                    if issue.get('alerta') in ['SOSPECHOSO', 'POCO_SOSPECHOSO']:
+                    # Mantener si es sospechoso o ya tiene categoría asignada
+                    if issue.get('alerta') in ['SOSPECHOSO', 'POCO_SOSPECHOSO'] or issue.get('categoria'):
                         filtered_issues.append(issue)
             
             print(f"🔍 SEGUNDO FILTRO APLICADO: {len(filtered_issues)} elementos clasificados")
@@ -4097,6 +4111,7 @@ class ArgusApp:
                                                 'ruta': root,
                                                 'archivo': file_path,
                                                 'tipo': 'secondary_scan_file',
+                                                'categoria': 'HACKS',
                                                 'alerta': 'CRITICAL'
                                             })
                                             print(f"🔍 Segundo scan encontrado: {file}")
@@ -4118,6 +4133,7 @@ class ArgusApp:
                                     'ruta': proc.info['exe'] or 'Proceso en memoria',
                                     'archivo': f"PID: {proc.info['pid']}",
                                     'tipo': 'background_process',
+                                    'categoria': 'BACKGROUND_PROCESSES',
                                     'alerta': 'CRITICAL'
                                 })
                                 print(f"🔍 Segundo scan: Proceso sospechoso {proc.info['name']}")
@@ -4148,6 +4164,7 @@ class ArgusApp:
                                             'ruta': root,
                                             'archivo': file_path,
                                             'tipo': 'temp_hack_file',
+                                            'categoria': 'TEMP_FILES',
                                             'alerta': 'CRITICAL'
                                         })
                                         print(f"🔍 Segundo scan: Archivo temporal sospechoso {file}")
@@ -4217,6 +4234,7 @@ class ArgusApp:
                                             'ruta': os.path.dirname(dll.path),
                                             'archivo': dll.path,
                                             'tipo': 'injected_dll',
+                                            'categoria': 'HACKS',
                                             'alerta': 'CRITICAL'
                                         })
                                         print(f"🚨 DLL INYECTADA DETECTADA: {dll.path}")
@@ -4248,6 +4266,7 @@ class ArgusApp:
                                                     'ruta': f"PID: {proc.info['pid']}",
                                                     'archivo': f"Memoria: {memory_info.rss // 1024 // 1024}MB",
                                                     'tipo': 'suspicious_memory',
+                                                    'categoria': 'PROCESSES',
                                                     'alerta': 'CRITICAL'
                                                 })
                                                 print(f"🚨 MEMORIA SOSPECHOSA: {proc.info['name']} PID:{proc.info['pid']}")
@@ -4280,6 +4299,7 @@ class ArgusApp:
                                                 'ruta': f"PID: {proc.info['pid']}",
                                                 'archivo': proc.info['exe'] or 'Proceso en memoria',
                                                 'tipo': 'system_hooks',
+                                                'categoria': 'PROCESSES',
                                                 'alerta': 'CRITICAL'
                                             })
                                             print(f"🚨 HOOKS DEL SISTEMA: {proc.info['name']} PID:{proc.info['pid']}")
@@ -4309,6 +4329,7 @@ class ArgusApp:
                                                     'ruta': f"PID: {proc.info['pid']}",
                                                     'archivo': f"{conn.raddr.ip}:{conn.raddr.port}",
                                                     'tipo': 'suspicious_connection',
+                                                    'categoria': 'NETWORK_CONNECTIONS',
                                                     'alerta': 'CRITICAL'
                                                 })
                                                 print(f"🚨 CONEXIÓN SOSPECHOSA: {conn.raddr.ip}:{conn.raddr.port}")
@@ -4921,6 +4942,7 @@ class ArgusApp:
                             'ruta': 'Sistema',
                             'archivo': 'sc query dps',
                             'tipo': 'disabled_process',
+                            'categoria': 'PROCESSES',
                             'alerta': 'SOSPECHOSO'
                         })
         except Exception as e:
@@ -4950,6 +4972,7 @@ class ArgusApp:
                         'ruta': 'DNS Cache',
                         'archivo': 'ipconfig/displaydns',
                         'tipo': 'dns_cache',
+                        'categoria': 'DNS_CACHE',
                         'alerta': 'SOSPECHOSO'
                     })
         except Exception as e:
@@ -4979,6 +5002,7 @@ class ArgusApp:
                         'ruta': 'Procesos Activos',
                         'archivo': 'tasklist',
                         'tipo': 'running_process',
+                        'categoria': 'PROCESSES',
                         'alerta': 'SOSPECHOSO'
                     })
         except Exception as e:
@@ -5009,6 +5033,7 @@ class ArgusApp:
                             'ruta': os.path.dirname(exe),
                             'archivo': exe,
                             'tipo': 'suspicious_exe',
+                            'categoria': 'HACKS',
                             'alerta': 'SOSPECHOSO'
                         })
         except Exception as e:
@@ -5039,6 +5064,7 @@ class ArgusApp:
                             'ruta': os.path.dirname(jar),
                             'archivo': jar,
                             'tipo': 'suspicious_jar',
+                            'categoria': 'JAR_FILES',
                             'alerta': 'SOSPECHOSO'
                         })
         except Exception as e:
@@ -5069,6 +5095,7 @@ class ArgusApp:
                             'ruta': 'Sistema',
                             'archivo': file,
                             'tipo': 'suspicious_by_date',
+                            'categoria': 'HACKS',
                             'alerta': 'SOSPECHOSO'
                         })
         except Exception as e:
@@ -5098,6 +5125,7 @@ class ArgusApp:
                         'ruta': 'USN Journal',
                         'archivo': 'fsutil usn',
                         'tipo': 'deleted_files',
+                        'categoria': 'DELETED_FILES',
                         'alerta': 'SOSPECHOSO'
                     })
         except Exception as e:
@@ -5127,6 +5155,7 @@ class ArgusApp:
                         'ruta': 'USN Journal',
                         'archivo': 'fsutil usn',
                         'tipo': 'created_files',
+                        'categoria': 'NEW_FILES',
                         'alerta': 'SOSPECHOSO'
                     })
         except Exception as e:
@@ -5156,6 +5185,7 @@ class ArgusApp:
                         'ruta': 'USN Journal',
                         'archivo': 'fsutil usn',
                         'tipo': 'renamed_files',
+                        'categoria': 'RENAMED_FILES',
                         'alerta': 'SOSPECHOSO'
                     })
         except Exception as e:
@@ -5178,6 +5208,7 @@ class ArgusApp:
                             'ruta': prefetch_path,
                             'archivo': os.path.join(prefetch_path, file),
                             'tipo': 'prefetch_jna',
+                            'categoria': 'JNA',
                             'alerta': 'SOSPECHOSO'
                         })
         except Exception as e:
@@ -5201,6 +5232,7 @@ class ArgusApp:
                                 'ruta': root,
                                 'archivo': os.path.join(root, file),
                                 'tipo': 'temp_jna',
+                                'categoria': 'JNA',
                                 'alerta': 'SOSPECHOSO'
                             })
         except Exception as e:
@@ -5221,6 +5253,7 @@ class ArgusApp:
                     'ruta': 'Registry',
                     'archivo': 'HKEY_CURRENT_USER',
                     'tipo': 'registry_suspicious',
+                    'categoria': 'HACKS',
                     'alerta': 'SOSPECHOSO'
                 })
                 winreg.CloseKey(key)
@@ -5236,6 +5269,7 @@ class ArgusApp:
                     'ruta': 'Registry',
                     'archivo': 'HKEY_CURRENT_USER',
                     'tipo': 'registry_suspicious',
+                    'categoria': 'HACKS',
                     'alerta': 'SOSPECHOSO'
                 })
                 winreg.CloseKey(key)
@@ -5260,6 +5294,7 @@ class ArgusApp:
                     'ruta': os.path.dirname(lghub_path),
                     'archivo': lghub_path,
                     'tipo': 'logitech_macros',
+                    'categoria': 'LOGITECH',
                     'alerta': 'SOSPECHOSO'
                 })
         except Exception as e:
@@ -5280,6 +5315,7 @@ class ArgusApp:
                     'ruta': razer_path,
                     'archivo': 'Synapse Accounts',
                     'tipo': 'razer_macros',
+                    'categoria': 'RAZER',
                     'alerta': 'SOSPECHOSO'
                 })
         except Exception as e:
@@ -5317,6 +5353,7 @@ class ArgusApp:
                 'ruta': 'Event Viewer',
                 'archivo': 'eventvwr.msc',
                 'tipo': 'event_logs',
+                'categoria': 'DATE_CHANGES',
                 'alerta': 'SOSPECHOSO'
             })
         except Exception as e:
@@ -5336,6 +5373,7 @@ class ArgusApp:
                             'archivo': proc_info['name'],
                             'tipo': 'process',
                             'pid': proc_info['pid'],
+                            'categoria': 'PROCESSES',
                             'alerta': 'CRITICAL'
                         })
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -5391,6 +5429,7 @@ class ArgusApp:
                                 'ruta': 'N/A',
                                 'archivo': window_title,
                                 'tipo': 'window',
+                                'categoria': 'PROCESSES',
                                 'alerta': 'SOSPECHOSO'
                             })
                 return True
@@ -5449,6 +5488,7 @@ class ArgusApp:
                             'ruta': subkey_path,
                             'archivo': subkey_name,
                             'tipo': 'registry',
+                            'categoria': 'HACKS',
                             'alerta': 'SOSPECHOSO'
                         })
                     
