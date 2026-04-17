@@ -2045,51 +2045,36 @@ class ArgusApp:
             'speedhack', 'wtap', 'aimassist', 'bhop', 'nofall'
         ]
         
-        # PATRONES DE FALSOS POSITIVOS (MÁS AMPLIOS PARA EVITAR FALSOS POSITIVOS)
+        # PATRONES DE FALSOS POSITIVOS — solo nombres/rutas muy específicas de software legítimo.
+        # IMPORTANTE: NO incluir palabras genéricas como 'appdata', 'roaming', 'client', 'java',
+        # 'temp', etc. porque esas palabras aparecen en rutas de hack clients reales y los filtrarían.
         exclude_patterns = [
-            # Sistema Windows crítico
-            'system32', 'syswow64', 'windows\\system32', 'windows', 'program files',
-            'programdata', 'microsoft', 'adobe', 'google', 'mozilla', 'firefox', 'chrome',
-            'office', 'word', 'excel', 'powerpoint', 'outlook', 'nvidia', 'amd', 'intel',
-            'realtek', 'logitech', 'razer', 'steam', 'epic', 'origin', 'uplay', 'battle.net',
-            'discord', 'teamspeak', 'skype', 'zoom', 'teams',
-            
-            # Servidores y desarrollo
-            'xampp', 'tomcat', 'apache', 'mysql', 'php', 'websocket', 'webapps', 'examples',
-            'lib', 'classes', 'web-inf', 'webalizer', 'cygwin', 'bgd', 'wcmgr', 'zlib',
-            
-            # Juegos legítimos
-            'project zomboid', 'zomboid', 'shaders', 'textures', 'media',
-            
-            # Librerías Python legítimas
-            'vscode', 'pylance', 'skimage', 'measure', 'stubs', 'bundled', 'pyi',
-            
-            # Librerías Java legítimas
-            'gson', 'jackson', 'log4j', 'authlib', 'taglibs', 'standard-impl', 'standard-spec',
-            'gson-2.8', 'jackson-core', 'log4j-', 'authlib-',
-            
-            # Mods legítimos de Minecraft
-            'jei-', 'rubidium', 'oculus', 'create-', 'botania', 'cobblemon', 'custom curve',
-            'optifine', 'fabric', 'forge', 'modrinth', 'curseforge', 'minecraftforge',
-            'fabricloader', 'iris', 'sodium', 'lithium', 'phosphor', 'entity culling',
-            
+            # Sistema Windows (rutas completas específicas)
+            'windows\\system32', 'windows\\syswow64', 'windows\\winsxs',
+            '\\program files\\microsoft', '\\program files (x86)\\microsoft',
+            # Software legítimo (nombres de vendor específicos)
+            'adobe', 'google\\chrome', 'mozilla\\firefox',
+            'nvidia corporation', 'amd\\radeon', 'intel corporation',
+            'nvidia\\cubins', 'nvidia\\displaydriver',
+            'discord\\app-', 'teamspeak 3 client',
+            'skype\\', 'zoom\\', 'microsoft teams',
+            'steam\\steamapps', 'epicgames', 'origin games', 'ubisoft game launcher',
+            # Servidores web (no Minecraft)
+            'xampp\\', 'tomcat\\', '\\webapps\\', 'web-inf\\', 'webalizer',
+            # Librerías Java legítimas (nombres exactos con versión)
+            'gson-2.', 'jackson-core-', 'log4j-', 'authlib-',
+            # Mods legítimos de Minecraft (nombres exactos)
+            'optifine_', 'fabricloader-', 'forge-', 'minecraftforge-',
+            'iris-', 'sodium-', 'lithium-', 'phosphor-', 'rubidium-',
+            'jei-', 'create-', 'botania-', 'cobblemon-',
             # Launchers legítimos
-            'minecraft launcher', 'tlauncher-', 'prism', 'lunarclient', 'lunar', 'badlion',
-            
-            # Sistema crítico
+            'tlauncher-', 'prismlauncher', 'lunarclient\\', 'badlion client\\',
+            # DLLs del sistema Windows
             'api-ms-win-', 'msvcr', 'msvcp', 'vcruntime', 'ucrtbase',
             'kernel32.dll', 'user32.dll', 'advapi32.dll', 'shell32.dll',
-            
-            # Carpetas del sistema
-            'temp', 'tmp', 'cache', 'logs', 'backup', 'recycle', 'appdata', 'local', 'roaming',
-            
-            # Editores y entornos de desarrollo
-            'cursor', 'extensions', 'node_modules', 'client', 'jdk', 'jre', 'legal',
-            'nido', 'mapmode', 'out', 'gitlens', 'doxdocgen', 'code-runner',
-            'path-autocomplete', 'python', 'java', 'cmake', 'clang-format', 'visual studio',
-            'intellij', 'eclipse', 'netbeans', 'atom', 'sublime', 'notepad++', 'pycharm',
-            'webstorm', 'goland', 'clion', 'numpy', 'scipy', 'pandas', 'matplotlib',
-            'sklearn', 'tensorflow', 'pytorch', 'keras', 'theano', 'caffe'
+            # Editores (rutas específicas)
+            '\\vscode\\', '\\.vscode\\', 'node_modules\\', '\\jdk\\',
+            'visual studio\\', 'intellij idea\\', 'pycharm\\',
         ]
         
         # ============================================================
@@ -2129,9 +2114,9 @@ class ArgusApp:
                         is_false_positive = True
                         break
             
-            # Verificar falsos positivos específicos adicionales (menos estricto)
+            # Verificar falsos positivos específicos adicionales
             if not is_false_positive:
-                for false_positive in ['zomboid', 'shaders', 'textures', 'media', 'vscode', 'pylance', 'skimage', 'pyi', 'system32', 'program files', 'windows', 'microsoft', 'adobe']:
+                for false_positive in ['zomboid', 'shaders\\', '\\textures\\', 'system32', '\\program files\\', '\\windows\\system', 'microsoft\\', 'adobe\\']:
                     if false_positive in ruta or false_positive in archivo or false_positive in nombre:
                         is_false_positive = True
                         break
