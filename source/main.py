@@ -2278,7 +2278,7 @@ class ArgusApp:
                             if config.get('scan_token'):
                                 token_value = config.get('scan_token')
                                 print(f"🔑 Token encontrado en config: {token_value[:20]}...")
-                                
+
                                 # Guardar el config con el token en la ubicación persistente (AppData)
                                 # Esto asegura que el token esté disponible en futuras ejecuciones
                                 try:
@@ -2286,7 +2286,7 @@ class ArgusApp:
                                         appdata_dir = os.path.join(os.environ.get('APPDATA', ''), 'ASPERSProjectsSS')
                                         os.makedirs(appdata_dir, exist_ok=True)
                                         persistent_config_path = os.path.join(appdata_dir, 'config.json')
-                                        
+
                                         # Leer config existente en AppData si existe, o usar el actual
                                         persistent_config = config.copy()
                                         if os.path.exists(persistent_config_path):
@@ -2297,16 +2297,29 @@ class ArgusApp:
                                                     persistent_config.update(existing_config)
                                             except:
                                                 pass
-                                        
+
                                         # Asegurar que el token esté presente
                                         persistent_config['scan_token'] = token_value
-                                        
-                                        # Guardar config con el token
+
+                                        # ── Sanear URLs ANTES de guardar y retornar ──────────────
+                                        _correct_url = 'https://asperss.onrender.com'
+                                        _bad_prefixes = (
+                                            'http://localhost', 'https://localhost',
+                                            'http://127.0.0.1', 'https://127.0.0.1',
+                                            'https://ssapi-cfni.onrender.com',
+                                        )
+                                        for _key in ('api_url', 'web_url'):
+                                            _val = persistent_config.get(_key, '')
+                                            if not _val or any(_val.startswith(p) for p in _bad_prefixes):
+                                                print(f"⚠️ URL obsoleta en persistent_config ({_key}: {_val!r}) → {_correct_url}")
+                                                persistent_config[_key] = _correct_url
+
+                                        # Guardar config con el token y URLs saneadas
                                         with open(persistent_config_path, 'w', encoding='utf-8') as f:
                                             json.dump(persistent_config, f, indent=2)
                                         print(f"✅ Token guardado en config persistente: {persistent_config_path}")
                                         print(f"🔑 Token completo guardado: {token_value[:30]}...")
-                                        
+
                                         # Usar el config persistente como principal
                                         self.config_path = persistent_config_path
                                         return persistent_config
@@ -2322,17 +2335,19 @@ class ArgusApp:
                                 'http://127.0.0.1', 'https://127.0.0.1',
                                 'https://ssapi-cfni.onrender.com',
                             )
+                            _url_dirty = False
                             for _key in ('api_url', 'web_url'):
                                 _val = config.get(_key, '')
                                 if not _val or any(_val.startswith(p) for p in _bad_prefixes):
                                     print(f"⚠️ URL obsoleta en config ({_key}: {_val!r}) → corrigiendo a {_correct_url}")
                                     config[_key] = _correct_url
-                                    # Persiste la corrección al disco
-                                    try:
-                                        with open(config_path, 'w', encoding='utf-8') as _fw:
-                                            json.dump(config, _fw, indent=2)
-                                    except Exception:
-                                        pass
+                                    _url_dirty = True
+                            if _url_dirty:
+                                try:
+                                    with open(config_path, 'w', encoding='utf-8') as _fw:
+                                        json.dump(config, _fw, indent=2)
+                                except Exception:
+                                    pass
 
                             # Guardar la ruta para futuras escrituras
                             self.config_path = config_path
@@ -4678,8 +4693,15 @@ class ArgusApp:
                     if not hasattr(self, 'config') or not self.config:
                         self.config = self.load_config()
                     
-                    # Obtener URL de la API desde la configuración
-                    api_url = self.config.get('api_url', 'https://asperss.onrender.com')
+                    # Obtener URL de la API desde la configuración (con failsafe anti-localhost)
+                    _bad = ('http://localhost', 'https://localhost', 'http://127.0.0.1', 'https://127.0.0.1', 'https://ssapi-cfni.onrender.com')
+                    api_url = self.config.get('api_url', '') or ''
+                    if not api_url or any(api_url.startswith(p) for p in _bad):
+                        api_url = 'https://asperss.onrender.com'
+                        self.config['api_url'] = api_url
+                    web_url = self.config.get('web_url', '') or ''
+                    if not web_url or any(web_url.startswith(p) for p in _bad):
+                        self.config['web_url'] = 'https://asperss.onrender.com'
                     print(f"🔍 Validando token contra API: {api_url}")
                     print(f"🔍 Token recibido (primeros 20 chars): {token[:20]}...")
                     
