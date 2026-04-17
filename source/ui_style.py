@@ -194,8 +194,7 @@ class ModernUI:
         top = tk.Frame(content, bg=C['card'])
         top.pack(fill=tk.X, pady=(0, 6))
         tk.Label(top, text="PROGRESO", font=('Segoe UI', 8, 'bold'),
-                 bg=C['card'], fg=C['text_secondary'],
-                 letterSpacing=2 if False else 0).pack(side=tk.LEFT)
+                 bg=C['card'], fg=C['text_secondary']).pack(side=tk.LEFT)
         pct = tk.Label(top, text="0%",
                        font=('Consolas', 11, 'bold'),
                        bg=C['card'], fg=C['accent_primary'])
