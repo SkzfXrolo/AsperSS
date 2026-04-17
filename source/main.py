@@ -2793,20 +2793,8 @@ class ArgusApp:
                 
                 # Calcular duración del escaneo
                 scan_duration = time.time() - scan_start_time
-                
-                # Aplicar análisis de IA a los resultados
-                if self.ai_analyzer and self.issues_found:
-                    try:
-                        print("🤖 Aplicando análisis de IA a los resultados...")
-                        self.issues_found = self.ai_analyzer.analyze_batch(self.issues_found)
-                        print(f"✅ Análisis de IA completado - {len(self.issues_found)} issues analizados")
-                    except Exception as e:
-                        print(f"⚠️ Error en análisis de IA: {e}")
-                
-                # Filtrar resultados finales
-                self.issues_found = self.filter_false_positives(self.issues_found)
-                
-                # Envío a Web (Discord eliminado)
+
+                # Envío a Web (filtrado + IA ya se aplicaron dentro de execute_full_scan_silent)
                 print("📤 Enviando resultados a Web...")
                 
                 # Enviar a Web/BD
@@ -3110,8 +3098,8 @@ class ArgusApp:
                 except Exception as e:
                     print(f"⚠️ Error aplicando scoring: {e}")
             
-            # Finalizar
-            self._update_progress_safe(100, "✅ Escaneo completado", f"Encontrados {len(self.issues_found)} elementos")
+            # Finalizar (95% — el 100% lo pone el hilo principal tras enviar resultados)
+            self._update_progress_safe(95, "🔄 Preparando resultados", f"Encontrados {len(self.issues_found)} elementos")
             
             # Estadísticas finales
             if hasattr(self, 'scan_start_time'):
@@ -3128,7 +3116,7 @@ class ArgusApp:
             print(f"Error durante escaneo exhaustivo: {str(e)}")
             import traceback
             traceback.print_exc()
-            self._update_progress_safe(100, f"❌ Error: {str(e)}", "Error durante el escaneo")
+            self._update_progress_safe(95, f"❌ Error: {str(e)}", "Error durante el escaneo")
         finally:
             # Detener cronómetro
             self.stop_scan_timer()

@@ -18,9 +18,10 @@ ENV/
 *.sqlite-wal
 *.db
 
-# Compilación del .exe (son grandes y se regeneran con PyInstaller)
+# Compilación del .exe — ignorar archivos intermedios pero incluir el exe distribuible
 source/build/
-source/dist/
+source/dist/*
+!source/dist/ArgusScanner.exe
 
 # Archivos sensibles
 .env
