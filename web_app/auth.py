@@ -794,7 +794,7 @@ def verify_registration_token(token):
                     return {'success': False, 'error': 'Token expirado'}
 
             cursor.execute(
-                f'UPDATE registration_tokens SET is_used = 1, used_at = CURRENT_TIMESTAMP WHERE id = {ph}',
+                f'UPDATE registration_tokens SET is_used = TRUE, used_at = CURRENT_TIMESTAMP WHERE id = {ph}',
                 (token_id,)
             )
 
@@ -932,7 +932,7 @@ def list_registration_tokens(include_used=False, company_id=None):
     try:
         ph = _ph()
         with _auth_cursor() as cursor:
-            conditions = [] if include_used else ['is_used = 0']
+            conditions = [] if include_used else ['is_used = FALSE']
             params = []
             if company_id:
                 conditions.append(f'company_id = {ph}')

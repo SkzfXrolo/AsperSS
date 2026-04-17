@@ -550,7 +550,7 @@ def get_statistics():
                         (SELECT COUNT(DISTINCT machine_id) FROM scans WHERE machine_id IS NOT NULL AND machine_id != "") as unique_machines,
                         (SELECT COUNT(*) FROM scan_results WHERE alert_level = "CRITICAL") as severe_detections,
                         (SELECT COUNT(*) FROM scan_results) as total_results,
-                        (SELECT COUNT(*) FROM scan_tokens WHERE is_active = 1) as active_tokens,
+                        (SELECT COUNT(*) FROM scan_tokens WHERE is_active = TRUE) as active_tokens,
                         (SELECT COUNT(*) FROM ban_history) as total_bans
                 ''')
                 row = cursor.fetchone()
@@ -570,7 +570,7 @@ def get_statistics():
                     ('SELECT COUNT(DISTINCT machine_id) FROM scans WHERE machine_id IS NOT NULL AND machine_id != ""', 'unique_machines'),
                     ('SELECT COUNT(*) FROM scan_results WHERE alert_level = "CRITICAL"', 'severe_detections'),
                     ('SELECT COUNT(*) FROM scan_results', 'total_results'),
-                    ('SELECT COUNT(*) FROM scan_tokens WHERE is_active = 1', 'active_tokens'),
+                    ('SELECT COUNT(*) FROM scan_tokens WHERE is_active = TRUE', 'active_tokens'),
                     ('SELECT COUNT(*) FROM ban_history', 'total_bans')
                 ]:
                     try:
@@ -1325,7 +1325,7 @@ def create_token():
         if not is_admin(user):
             with get_api_db_cursor() as cursor:
                 cursor.execute(
-                    f'SELECT COUNT(*) FROM scan_tokens WHERE created_by = {_PH} AND is_active = 1',
+                    f'SELECT COUNT(*) FROM scan_tokens WHERE created_by = {_PH} AND is_active = TRUE',
                     (created_by,)
                 )
                 row = cursor.fetchone()
@@ -2239,7 +2239,7 @@ def get_learned_patterns():
                     SELECT pattern_type, pattern_value, pattern_category, confidence,
                            learned_from_count, first_learned_at, is_active
                     FROM learned_patterns
-                    WHERE is_active = 1
+                    WHERE is_active = TRUE
                     ORDER BY learned_from_count DESC, confidence DESC
                 ''')
             except sqlite3.OperationalError:
@@ -2302,7 +2302,7 @@ def get_latest_ai_model():
                 cursor.execute('''
                     SELECT pattern_value, pattern_category, confidence, learned_from_count
                     FROM learned_patterns
-                    WHERE is_active = 1
+                    WHERE is_active = TRUE
                     ORDER BY learned_from_count DESC
                 ''')
             except sqlite3.OperationalError:
