@@ -1933,55 +1933,65 @@ def submit_feedback():
             result = cursor.fetchone()
             if not result:
                 return jsonify({'error': f'Resultado con id {result_id} no encontrado'}), 404
-            
-            scan_id, issue_name, issue_path, file_hash, detected_patterns_json, obfuscation, confidence = result
-            
+
+            scan_id = _row_get(result, 0, 'scan_id')
+            issue_name = _row_get(result, 1, 'issue_name')
+            issue_path = _row_get(result, 2, 'issue_path')
+            file_hash = _row_get(result, 3, 'file_hash')
+            detected_patterns_json = _row_get(result, 4, 'detected_patterns')
+            obfuscation = _row_get(result, 5, 'obfuscation_detected')
+            confidence = _row_get(result, 6, 'confidence')
+
             # Guardar feedback
             cursor.execute('''
                 INSERT INTO staff_feedback (
                     result_id, scan_id, staff_verification, staff_notes, verified_by,
                     file_hash, issue_name, issue_path
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
             ''', (result_id, scan_id, staff_verification, staff_notes, verified_by,
                   file_hash, issue_name, issue_path))
-            
-            feedback_id = cursor.lastrowid
-            
+
+            row = cursor.fetchone()
+            feedback_id = _row_get(row, 0, 'id')
+
             # Extraer patrones si es hack
             extracted_patterns = []
             extracted_features = {}
-            
+
             if staff_verification == 'hack':
                 name_lower = (issue_name or '').lower()
                 path_lower = (issue_path or '').lower()
-                hack_keywords = re.findall(r'\b(vape|entropy|inject|bypass|killaura|aimbot|reach|velocity|scaffold|fly|xray|ghost|stealth|undetected|sigma|flux|future|astolfo|whiteout|liquidbounce|wurst|impact)\w*\b', 
+                hack_keywords = re.findall(r'\b(vape|entropy|inject|bypass|killaura|aimbot|reach|velocity|scaffold|fly|xray|ghost|stealth|undetected|sigma|flux|future|astolfo|whiteout|liquidbounce|wurst|impact)\w*\b',
                                           name_lower + ' ' + path_lower, re.IGNORECASE)
                 extracted_patterns = list(set(hack_keywords))
-                
+
                 # Guardar hash si existe
                 if file_hash:
                     cursor.execute('''
-                        INSERT OR REPLACE INTO learned_hashes (
+                        INSERT INTO learned_hashes (
                             file_hash, is_hack, confirmed_count, last_confirmed_at, source_feedback_id
-                        ) VALUES (%s, 1, 
-                            COALESCE((SELECT confirmed_count FROM learned_hashes WHERE file_hash = %s), 0) + 1,
-                            CURRENT_TIMESTAMP, %s
-                        )
-                    ''', (file_hash, file_hash, feedback_id))
-                
+                        ) VALUES (%s, 1, 1, CURRENT_TIMESTAMP, %s)
+                        ON CONFLICT (file_hash) DO UPDATE SET
+                            is_hack = 1,
+                            confirmed_count = learned_hashes.confirmed_count + 1,
+                            last_confirmed_at = CURRENT_TIMESTAMP,
+                            source_feedback_id = EXCLUDED.source_feedback_id
+                    ''', (file_hash, feedback_id))
+
                 # Guardar patrones aprendidos
-                if extracted_patterns:
-                    pattern_data = [(pattern, feedback_id, pattern) for pattern in extracted_patterns]
-                    cursor.executemany('''
-                        INSERT OR REPLACE INTO learned_patterns (
+                for pattern in extracted_patterns:
+                    cursor.execute('''
+                        INSERT INTO learned_patterns (
                             pattern_type, pattern_value, pattern_category, source_feedback_id,
                             learned_from_count, last_updated_at, is_active
-                        ) VALUES ('keyword', %s, 'high_risk', %s, 
-                            COALESCE((SELECT learned_from_count FROM learned_patterns WHERE pattern_value = %s), 0) + 1,
-                            CURRENT_TIMESTAMP, 1
-                        )
-                    ''', pattern_data)
-                
+                        ) VALUES ('keyword', %s, 'high_risk', %s, 1, CURRENT_TIMESTAMP, 1)
+                        ON CONFLICT (pattern_value) DO UPDATE SET
+                            learned_from_count = learned_patterns.learned_from_count + 1,
+                            last_updated_at = CURRENT_TIMESTAMP,
+                            is_active = 1
+                    ''', (pattern, feedback_id))
+
                 extracted_features = {
                     'obfuscation': bool(obfuscation),
                     'confidence': confidence or 0
@@ -1989,14 +1999,16 @@ def submit_feedback():
             elif staff_verification == 'legitimate' and file_hash:
                 # Si es legítimo, guardar hash en whitelist
                 cursor.execute('''
-                    INSERT OR REPLACE INTO learned_hashes (
+                    INSERT INTO learned_hashes (
                         file_hash, is_hack, confirmed_count, last_confirmed_at, source_feedback_id
-                    ) VALUES (%s, 0, 
-                        COALESCE((SELECT confirmed_count FROM learned_hashes WHERE file_hash = %s), 0) + 1,
-                        CURRENT_TIMESTAMP, %s
-                    )
-                ''', (file_hash, file_hash, feedback_id))
-            
+                    ) VALUES (%s, 0, 1, CURRENT_TIMESTAMP, %s)
+                    ON CONFLICT (file_hash) DO UPDATE SET
+                        is_hack = 0,
+                        confirmed_count = learned_hashes.confirmed_count + 1,
+                        last_confirmed_at = CURRENT_TIMESTAMP,
+                        source_feedback_id = EXCLUDED.source_feedback_id
+                ''', (file_hash, feedback_id))
+
             # Actualizar feedback con características extraídas
             cursor.execute('''
                 UPDATE staff_feedback
@@ -2070,8 +2082,14 @@ def submit_feedback_batch():
                 result = cursor.fetchone()
                 if not result:
                     continue  # Saltar si no existe
-                
-                scan_id, issue_name, issue_path, file_hash, detected_patterns_json, obfuscation, confidence = result
+
+                scan_id = _row_get(result, 0, 'scan_id')
+                issue_name = _row_get(result, 1, 'issue_name')
+                issue_path = _row_get(result, 2, 'issue_path')
+                file_hash = _row_get(result, 3, 'file_hash')
+                detected_patterns_json = _row_get(result, 4, 'detected_patterns')
+                obfuscation = _row_get(result, 5, 'obfuscation_detected')
+                confidence = _row_get(result, 6, 'confidence')
                 
                 # Guardar feedback
                 cursor.execute('''
@@ -2079,48 +2097,52 @@ def submit_feedback_batch():
                         result_id, scan_id, staff_verification, staff_notes, verified_by,
                         file_hash, issue_name, issue_path
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
                 ''', (result_id, scan_id, staff_verification, staff_notes, verified_by,
                       file_hash, issue_name, issue_path))
-                
-                feedback_id = cursor.lastrowid
+
+                row = cursor.fetchone()
+                feedback_id = _row_get(row, 0, 'id')
                 feedback_ids.append(feedback_id)
-                
+
                 # Extraer patrones si es hack
                 extracted_patterns = []
                 extracted_features = {}
-                
+
                 if staff_verification == 'hack':
                     name_lower = (issue_name or '').lower()
                     path_lower = (issue_path or '').lower()
-                    hack_keywords = re.findall(r'\b(vape|entropy|inject|bypass|killaura|aimbot|reach|velocity|scaffold|fly|xray|ghost|stealth|undetected|sigma|flux|future|astolfo|whiteout|liquidbounce|wurst|impact)\w*\b', 
+                    hack_keywords = re.findall(r'\b(vape|entropy|inject|bypass|killaura|aimbot|reach|velocity|scaffold|fly|xray|ghost|stealth|undetected|sigma|flux|future|astolfo|whiteout|liquidbounce|wurst|impact)\w*\b',
                                               name_lower + ' ' + path_lower, re.IGNORECASE)
                     extracted_patterns = list(set(hack_keywords))
                     all_extracted_patterns.extend(extracted_patterns)
-                    
+
                     # Guardar hash si existe
                     if file_hash:
                         cursor.execute('''
-                            INSERT OR REPLACE INTO learned_hashes (
+                            INSERT INTO learned_hashes (
                                 file_hash, is_hack, confirmed_count, last_confirmed_at, source_feedback_id
-                            ) VALUES (%s, 1, 
-                                COALESCE((SELECT confirmed_count FROM learned_hashes WHERE file_hash = %s), 0) + 1,
-                                CURRENT_TIMESTAMP, %s
-                            )
-                        ''', (file_hash, file_hash, feedback_id))
-                    
+                            ) VALUES (%s, 1, 1, CURRENT_TIMESTAMP, %s)
+                            ON CONFLICT (file_hash) DO UPDATE SET
+                                is_hack = 1,
+                                confirmed_count = learned_hashes.confirmed_count + 1,
+                                last_confirmed_at = CURRENT_TIMESTAMP,
+                                source_feedback_id = EXCLUDED.source_feedback_id
+                        ''', (file_hash, feedback_id))
+
                     # Guardar patrones aprendidos
-                    if extracted_patterns:
-                        pattern_data = [(pattern, feedback_id, pattern) for pattern in extracted_patterns]
-                        cursor.executemany('''
-                            INSERT OR REPLACE INTO learned_patterns (
+                    for pattern in extracted_patterns:
+                        cursor.execute('''
+                            INSERT INTO learned_patterns (
                                 pattern_type, pattern_value, pattern_category, source_feedback_id,
                                 learned_from_count, last_updated_at, is_active
-                            ) VALUES ('keyword', %s, 'high_risk', %s, 
-                                COALESCE((SELECT learned_from_count FROM learned_patterns WHERE pattern_value = %s), 0) + 1,
-                                CURRENT_TIMESTAMP, 1
-                            )
-                        ''', pattern_data)
-                    
+                            ) VALUES ('keyword', %s, 'high_risk', %s, 1, CURRENT_TIMESTAMP, 1)
+                            ON CONFLICT (pattern_value) DO UPDATE SET
+                                learned_from_count = learned_patterns.learned_from_count + 1,
+                                last_updated_at = CURRENT_TIMESTAMP,
+                                is_active = 1
+                        ''', (pattern, feedback_id))
+
                     extracted_features = {
                         'obfuscation': bool(obfuscation),
                         'confidence': confidence or 0
@@ -2128,14 +2150,16 @@ def submit_feedback_batch():
                 elif staff_verification == 'legitimate' and file_hash:
                     # Si es legítimo, guardar hash en whitelist
                     cursor.execute('''
-                        INSERT OR REPLACE INTO learned_hashes (
+                        INSERT INTO learned_hashes (
                             file_hash, is_hack, confirmed_count, last_confirmed_at, source_feedback_id
-                        ) VALUES (%s, 0, 
-                            COALESCE((SELECT confirmed_count FROM learned_hashes WHERE file_hash = %s), 0) + 1,
-                            CURRENT_TIMESTAMP, %s
-                        )
-                    ''', (file_hash, file_hash, feedback_id))
-                
+                        ) VALUES (%s, 0, 1, CURRENT_TIMESTAMP, %s)
+                        ON CONFLICT (file_hash) DO UPDATE SET
+                            is_hack = 0,
+                            confirmed_count = learned_hashes.confirmed_count + 1,
+                            last_confirmed_at = CURRENT_TIMESTAMP,
+                            source_feedback_id = EXCLUDED.source_feedback_id
+                    ''', (file_hash, feedback_id))
+
                 # Actualizar feedback con características extraídas
                 cursor.execute('''
                     UPDATE staff_feedback
