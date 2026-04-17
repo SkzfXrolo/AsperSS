@@ -2852,9 +2852,6 @@ class ArgusApp:
                 # Filtrar resultados finales
                 self.issues_found = self.filter_false_positives(self.issues_found)
                 
-                # Generar reporte HTML
-                self.generate_html_report()
-                
                 # Envío a Web (Discord eliminado)
                 print("📤 Enviando resultados a Web...")
                 
@@ -3166,10 +3163,6 @@ class ArgusApp:
                 print(f"   ⏱️ Tiempo total de escaneo: {total_time:.1f} segundos")
                 print(f"   🔧 CPU cores utilizados: {psutil.cpu_count()}")
                 print(f"   💾 Memoria disponible: {psutil.virtual_memory().available / (1024**3):.1f} GB")
-            
-            # Generar reporte HTML
-            print("📄 Generando reporte HTML...")
-            self.generate_html_report()
             
             print("✅ ESCANEO COMPLETADO")
             

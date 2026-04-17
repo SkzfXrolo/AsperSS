@@ -1044,30 +1044,19 @@
 
     <!-- Modals -->
     <div class="modal" id="token-modal">
-        <div class="modal-content">
+        <div class="modal-content" style="max-width:400px">
             <div class="modal-header">
-                <h3>Crear Nuevo Token</h3>
+                <h3>Crear Token</h3>
                 <button class="modal-close" id="close-token-modal">&times;</button>
             </div>
             <div class="modal-body">
-                <form id="token-form">
-                    <div class="form-group">
-                        <label>Descripción</label>
-                        <input type="text" id="token-description" placeholder="Ej: Token para usuario X" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Días de expiración (0 = sin expiración)</label>
-                        <input type="number" id="token-expires" value="30" min="0" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Máximo de usos (-1 = ilimitado)</label>
-                        <input type="number" id="token-max-uses" value="-1" min="-1" required>
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-secondary" id="cancel-token-btn">Cancelar</button>
-                        <button type="submit" class="btn btn-primary">Crear Token</button>
-                    </div>
-                </form>
+                <p style="margin-bottom:16px;color:var(--text-secondary)">
+                    Se generará un token de <strong>1 uso</strong> válido por <strong>30 minutos</strong>.
+                </p>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-token-btn">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="confirm-create-token-btn">Crear Token</button>
+                </div>
             </div>
         </div>
     </div>

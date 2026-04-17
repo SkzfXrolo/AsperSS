@@ -259,31 +259,21 @@ function setupEventListeners() {
     document.getElementById('create-token-btn')?.addEventListener('click', () => {
         document.getElementById('token-modal').classList.add('active');
     });
-    
     document.getElementById('close-token-modal')?.addEventListener('click', () => {
         document.getElementById('token-modal').classList.remove('active');
     });
-    
     document.getElementById('cancel-token-btn')?.addEventListener('click', () => {
         document.getElementById('token-modal').classList.remove('active');
     });
-    
-    // Prevenir doble envío del formulario
+
     let isCreatingToken = false;
-    document.getElementById('token-form')?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (isCreatingToken) {
-            console.log('Ya se está creando un token, ignorando...');
-            return;
-        }
+    document.getElementById('confirm-create-token-btn')?.addEventListener('click', async () => {
+        if (isCreatingToken) return;
         isCreatingToken = true;
         try {
             await createToken();
         } finally {
-            // Resetear después de un delay para permitir nuevo envío si es necesario
-            setTimeout(() => {
-                isCreatingToken = false;
-            }, 1000);
+            setTimeout(() => { isCreatingToken = false; }, 1000);
         }
     });
 
@@ -415,114 +405,49 @@ function setupEventListeners() {
 }
 
 async function createToken() {
-    const description = document.getElementById('token-description').value;
-    const expires = parseInt(document.getElementById('token-expires').value);
-    const maxUses = parseInt(document.getElementById('token-max-uses').value);
-
-    // Validar que maxUses sea válido
-    if (isNaN(maxUses) || maxUses < -1) {
-        alert('El máximo de usos debe ser -1 (ilimitado) o un número positivo');
-        return;
-    }
-
-    // Deshabilitar botón mientras se crea
-    const submitBtn = document.querySelector('#token-form button[type="submit"]');
-    const originalBtnText = submitBtn?.textContent;
-    if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Creando...';
-    }
+    const btn = document.getElementById('confirm-create-token-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Creando...'; }
 
     try {
-        // Convertir días a horas para el endpoint
-        const expires_hours = expires * 24;
-        
-        // Crear token de ESCANEO (para la aplicación .exe SS)
-        // NOTA: Este endpoint crea tokens de ESCANEO, NO de registro de usuarios
-        // Los tokens de registro están en /api/admin/registration-tokens
         const response = await fetch('/api/tokens', {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             credentials: 'same-origin',
-            body: JSON.stringify({
-                description,
-                expires_hours: expires_hours,
-                max_uses: maxUses === -1 ? -1 : maxUses
-            })
+            body: JSON.stringify({})
         });
 
-        // Verificar el Content-Type de la respuesta
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
-            // Si no es JSON, leer como texto para ver qué devolvió
             const text = await response.text();
-            console.error('Respuesta no es JSON:', text.substring(0, 200));
-            
-            if (response.status === 401 || response.status === 403) {
-                throw new Error('No tienes permisos para crear tokens. Verifica que seas administrador y que tu sesión no haya expirado.');
-            }
-            
             if (text.includes('<!DOCTYPE') || text.includes('<html')) {
-                throw new Error('El servidor devolvió una página HTML. Esto puede indicar que tu sesión expiró o no tienes permisos. Por favor, recarga la página e inicia sesión nuevamente.');
+                throw new Error('Sesión expirada. Recarga la página e inicia sesión nuevamente.');
             }
-            
-            throw new Error(`Error ${response.status}: El servidor devolvió: ${text.substring(0, 100)}`);
-        }
-
-        if (!response.ok) {
-            // Si la respuesta no es OK pero es JSON, leer el error
-            const errorData = await response.json();
-            const errorMessage = errorData.error || `Error ${response.status}: ${response.statusText}`;
-            throw new Error(errorMessage);
+            throw new Error(`Error ${response.status}`);
         }
 
         const data = await response.json();
-        // El endpoint devuelve {success: true, token: ..., download_url: ...}
+
         if (data.success && data.token) {
             document.getElementById('generated-token').textContent = data.token;
-            
-            // Mostrar enlace de descarga si está disponible
             const downloadLinkSection = document.getElementById('download-link-section');
             const downloadLinkInput = document.getElementById('generated-download-link-from-token');
             if (data.download_url && downloadLinkSection && downloadLinkInput) {
                 downloadLinkInput.value = data.download_url;
                 downloadLinkSection.style.display = 'block';
-            } else {
-                if (downloadLinkSection) {
-                    downloadLinkSection.style.display = 'none';
-                }
+            } else if (downloadLinkSection) {
+                downloadLinkSection.style.display = 'none';
             }
-            
             document.getElementById('token-modal').classList.remove('active');
-            // Limpiar formulario
-            document.getElementById('token-form').reset();
-            document.getElementById('token-expires').value = '30';
-            document.getElementById('token-max-uses').value = '-1';
-            // Mostrar modal de resultado
             document.getElementById('token-result-modal').classList.add('active');
-            // Recargar lista de tokens después de un pequeño delay para asegurar que la API procese la creación
-            setTimeout(() => {
-                loadTokens();
-            }, 500);
+            setTimeout(() => loadTokens(), 500);
         } else {
             alert('Error al crear token: ' + (data.error || 'Error desconocido'));
         }
     } catch (error) {
-        console.error('Error completo:', error);
-        let errorMessage = error.message;
-        if (error.message.includes('<!DOCTYPE')) {
-            errorMessage = 'El servidor devolvió una página HTML en lugar de JSON. Verifica que estés autenticado correctamente.';
-        }
-        alert('Error al crear token: ' + errorMessage);
+        console.error('Error creando token:', error);
+        alert('Error al crear token: ' + error.message);
     } finally {
-        // Rehabilitar botón
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = originalBtnText;
-        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Crear Token'; }
     }
 }
 

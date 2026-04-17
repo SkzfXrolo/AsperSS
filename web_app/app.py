@@ -1303,17 +1303,8 @@ def list_tokens():
 @app.route('/api/tokens', methods=['POST'])
 @login_required
 def create_token():
-    """Crea un nuevo token de ESCANEO (para la aplicación SS) - Cualquier usuario autenticado puede crear"""
+    """Crea un token de escaneo: 1 uso, 30 minutos. Requiere feedback pendiente = 0."""
     try:
-        data = request.json or {}
-
-        expires_days = data.get('expires_days', 30)
-        if 'expires_hours' in data:
-            expires_days = data.get('expires_hours', 24) / 24
-
-        max_uses = data.get('max_uses', -1)  # -1 = ilimitado
-        description = data.get('description', '')
-
         user = get_user_by_id(session.get('user_id'))
         if not user:
             return jsonify({'success': False, 'error': 'Usuario no encontrado'}), 401
@@ -1321,52 +1312,50 @@ def create_token():
         created_by = user.get('username', 'web_app')
         user_id = user.get('id')
 
-        # Verificar límite de 5 tokens activos por usuario no-admin
-        if not is_admin(user):
-            with get_api_db_cursor() as cursor:
-                cursor.execute(
-                    f'SELECT COUNT(*) FROM scan_tokens WHERE created_by = {_PH} AND is_active = TRUE',
-                    (created_by,)
-                )
-                row = cursor.fetchone()
-                try:
-                    token_count = row[0]
-                except TypeError:
-                    token_count = list(row.values())[0]
+        # Verificar feedback pendiente: scans completados sin feedback enviado
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f'''SELECT s.id FROM scans s
+                    JOIN scan_tokens st ON s.scan_token = st.token
+                    WHERE st.created_by = {_PH}
+                    AND s.status = 'completed'
+                    AND NOT EXISTS (
+                        SELECT 1 FROM staff_feedback sf WHERE sf.scan_id = s.id
+                    )
+                    LIMIT 1''',
+                (created_by,)
+            )
+            pending = cursor.fetchone()
 
-            if token_count >= 5:
-                return jsonify({
-                    'success': False,
-                    'error': 'Has alcanzado el limite de 5 tokens activos. Elimina uno antes de crear otro.'
-                }), 400
+        if pending:
+            return jsonify({
+                'success': False,
+                'error': 'Tienes un escaneo sin feedback. Envía el feedback desde la aplicación antes de crear un nuevo token.'
+            }), 400
 
+        # Token: 1 uso, 30 minutos
         scan_token = secrets.token_urlsafe(32)
-        expires_at = None
-        if expires_days and expires_days > 0:
-            expires_at = (datetime.datetime.now() + datetime.timedelta(days=expires_days)).isoformat()
+        expires_at = (datetime.datetime.now() + datetime.timedelta(minutes=30)).isoformat()
+        max_uses = 1
 
         with get_api_db_cursor() as cursor:
             token_id = _insert_id(
                 cursor,
-                f'INSERT INTO scan_tokens (token, expires_at, max_uses, description, created_by)'
-                f' VALUES ({_PH},{_PH},{_PH},{_PH},{_PH})',
-                (scan_token, expires_at, max_uses, description, created_by)
+                f'INSERT INTO scan_tokens (token, expires_at, max_uses, created_by)'
+                f' VALUES ({_PH},{_PH},{_PH},{_PH})',
+                (scan_token, expires_at, max_uses, created_by)
             )
 
         download_link = None
         try:
-            dl_hours = (expires_days * 24) if (expires_days and expires_days > 0) else 168
-            dl_expires = (datetime.datetime.now() + datetime.timedelta(hours=dl_hours)).isoformat()
+            dl_expires = (datetime.datetime.now() + datetime.timedelta(minutes=30)).isoformat()
             download_token = secrets.token_urlsafe(32)
-
             with get_api_db_cursor() as cursor:
                 cursor.execute(
-                    f'INSERT INTO download_links (token, filename, created_by, expires_at, max_downloads, description)'
-                    f' VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH})',
-                    (download_token, 'MinecraftSSTool.exe', user_id, dl_expires, -1,
-                     f'Enlace del token: {description or "Sin descripcion"}')
+                    f'INSERT INTO download_links (token, filename, created_by, expires_at, max_downloads)'
+                    f' VALUES ({_PH},{_PH},{_PH},{_PH},{_PH})',
+                    (download_token, 'MinecraftSSTool.exe', user_id, dl_expires, 1)
                 )
-
             base_url = os.environ.get('RENDER_EXTERNAL_URL', request.host_url).rstrip('/')
             download_link = f"{base_url}/d/{download_token}?token={scan_token}"
         except Exception as dl_err:
@@ -1378,14 +1367,13 @@ def create_token():
             'token_id': token_id,
             'expires_at': expires_at,
             'max_uses': max_uses,
-            'description': description,
             'created_by': created_by,
             'type': 'scan_token',
             'download_url': download_link
         }), 201
 
     except Exception as e:
-        print(f"ERROR create_token: {e}")
+        print(f"ERROR create_token: {type(e).__name__}: {e}")
         print(traceback.format_exc())
         return jsonify({'success': False, 'error': f'Error al crear token: {str(e)}'}), 500
 
