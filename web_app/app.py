@@ -1641,18 +1641,18 @@ def list_scans():
                 scans = []
                 scan_ids = []
                 for row in cursor.fetchall():
-                    scan_id = row[0]
+                    scan_id = _row_get(row, 0, 'id')
                     scan_ids.append(scan_id)
                     scans.append({
                         'id': scan_id,
-                        'scan_token': row[1],
-                        'started_at': row[2],
-                        'completed_at': row[3],
-                        'status': row[4],
-                        'total_files_scanned': row[5],
-                        'issues_found': row[6],
-                        'scan_duration': row[7],
-                        'machine_name': row[8]
+                        'scan_token': _row_get(row, 1, 'scan_token'),
+                        'started_at': _row_get(row, 2, 'started_at'),
+                        'completed_at': _row_get(row, 3, 'completed_at'),
+                        'status': _row_get(row, 4, 'status'),
+                        'total_files_scanned': _row_get(row, 5, 'total_files_scanned'),
+                        'issues_found': _row_get(row, 6, 'issues_found'),
+                        'scan_duration': _row_get(row, 7, 'scan_duration'),
+                        'machine_name': _row_get(row, 8, 'machine_name')
                     })
                 
                 print(f"📊 Escaneos encontrados en BD local: {len(scans)}")
@@ -1673,7 +1673,11 @@ def list_scans():
                     
                     severity_map = {}
                     for row in cursor.fetchall():
-                        scan_id, critical, suspicious, low, total = row
+                        scan_id = _row_get(row, 0, 'scan_id')
+                        critical = _row_get(row, 1, 'critical') or 0
+                        suspicious = _row_get(row, 2, 'suspicious') or 0
+                        low = _row_get(row, 3, 'low') or 0
+                        total = _row_get(row, 4, 'total') or 0
                         if critical > 0:
                             severity_map[scan_id] = {'summary': 'CRITICO', 'badge': 'danger'}
                         elif suspicious > 0:
@@ -1781,59 +1785,60 @@ def get_scan(scan_id):
     if API_DB_AVAILABLE_LOCALLY:
         try:
             with get_api_db_cursor() as cursor:
-                cursor.execute('''
+                cursor.execute(f'''
                     SELECT id, token_id, scan_token, started_at, completed_at, status,
                            total_files_scanned, issues_found, scan_duration, machine_id, machine_name,
                            ip_address, country, minecraft_username
                     FROM scans
-                    WHERE id = %s
+                    WHERE id = {_PH}
                 ''', (scan_id,))
-                
+
                 row = cursor.fetchone()
                 if not row:
                     return jsonify({'error': 'Escaneo no encontrado'}), 404
-                
+
                 scan = {
-                    'id': row[0],
-                    'token_id': row[1],
-                    'scan_token': row[2],
-                    'started_at': row[3],
-                    'completed_at': row[4],
-                    'status': row[5],
-                    'total_files_scanned': row[6],
-                    'issues_found': row[7],
-                    'scan_duration': row[8],
-                    'machine_id': row[9],
-                    'machine_name': row[10],
-                    'ip_address': row[11] if len(row) > 11 else None,
-                    'country': row[12] if len(row) > 12 else None,
-                    'minecraft_username': row[13] if len(row) > 13 else None
+                    'id': _row_get(row, 0, 'id'),
+                    'token_id': _row_get(row, 1, 'token_id'),
+                    'scan_token': _row_get(row, 2, 'scan_token'),
+                    'started_at': _row_get(row, 3, 'started_at'),
+                    'completed_at': _row_get(row, 4, 'completed_at'),
+                    'status': _row_get(row, 5, 'status'),
+                    'total_files_scanned': _row_get(row, 6, 'total_files_scanned'),
+                    'issues_found': _row_get(row, 7, 'issues_found'),
+                    'scan_duration': _row_get(row, 8, 'scan_duration'),
+                    'machine_id': _row_get(row, 9, 'machine_id'),
+                    'machine_name': _row_get(row, 10, 'machine_name'),
+                    'ip_address': _row_get(row, 11, 'ip_address'),
+                    'country': _row_get(row, 12, 'country'),
+                    'minecraft_username': _row_get(row, 13, 'minecraft_username')
                 }
                 
                 # Obtener resultados
-                cursor.execute('''
+                cursor.execute(f'''
                     SELECT id, issue_type, issue_name, issue_path, issue_category,
                            alert_level, confidence, detected_patterns, obfuscation_detected,
                            file_hash, ai_analysis, ai_confidence
                     FROM scan_results
-                    WHERE scan_id = %s
+                    WHERE scan_id = {_PH}
                 ''', (scan_id,))
-                
+
                 results = []
                 for r in cursor.fetchall():
+                    raw_patterns = _row_get(r, 7, 'detected_patterns')
                     results.append({
-                        'id': r[0],
-                        'issue_type': r[1],
-                        'issue_name': r[2],
-                        'issue_path': r[3],
-                        'issue_category': r[4],
-                        'alert_level': r[5],
-                        'confidence': r[6],
-                        'detected_patterns': json.loads(r[7]) if r[7] else [],
-                        'obfuscation_detected': bool(r[8]),
-                        'file_hash': r[9],
-                        'ai_analysis': r[10],
-                        'ai_confidence': r[11]
+                        'id': _row_get(r, 0, 'id'),
+                        'issue_type': _row_get(r, 1, 'issue_type'),
+                        'issue_name': _row_get(r, 2, 'issue_name'),
+                        'issue_path': _row_get(r, 3, 'issue_path'),
+                        'issue_category': _row_get(r, 4, 'issue_category'),
+                        'alert_level': _row_get(r, 5, 'alert_level'),
+                        'confidence': _row_get(r, 6, 'confidence'),
+                        'detected_patterns': json.loads(raw_patterns) if raw_patterns else [],
+                        'obfuscation_detected': bool(_row_get(r, 8, 'obfuscation_detected')),
+                        'file_hash': _row_get(r, 9, 'file_hash'),
+                        'ai_analysis': _row_get(r, 10, 'ai_analysis'),
+                        'ai_confidence': _row_get(r, 11, 'ai_confidence')
                     })
                 
                 scan['results'] = results
