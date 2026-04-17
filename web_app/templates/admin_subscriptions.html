@@ -308,7 +308,7 @@
         </div>
         <div class="topbar-right">
             <span class="badge-secret">// ACCESO RESTRINGIDO</span>
-            <a href="/admin/subscriptions/logout" class="btn-logout">Cerrar sesión</a>
+            <a href="/aspers-sa/logout" class="btn-logout">Cerrar sesión</a>
         </div>
     </div>
 </div>
@@ -499,7 +499,7 @@
         <div class="card">
             <div class="card-head"><span class="card-title">Crear Nueva Empresa</span></div>
             <div class="card-body">
-                <form method="POST" action="/admin/subscriptions/create-company">
+                <form method="POST" action="/aspers-sa/create-company">
                     <div class="form-grid">
                         <div class="field">
                             <label>Nombre de empresa *</label>
@@ -555,7 +555,7 @@
             <span class="modal-title" id="modal-edit-title">Editar Empresa</span>
             <button class="modal-close" onclick="closeModal('modal-edit')">×</button>
         </div>
-        <form id="form-edit" method="POST" action="/admin/subscriptions/update-company">
+        <form id="form-edit" method="POST" action="/aspers-sa/update-company">
             <div class="modal-body">
                 <input type="hidden" name="company_id" id="edit-id">
                 <div class="form-grid">
@@ -608,7 +608,7 @@
             <span class="modal-title" id="toggle-title">Cambiar estado</span>
             <button class="modal-close" onclick="closeModal('modal-toggle')">×</button>
         </div>
-        <form id="form-toggle" method="POST" action="/admin/subscriptions/toggle-status">
+        <form id="form-toggle" method="POST" action="/aspers-sa/toggle-status">
             <div class="modal-body">
                 <input type="hidden" name="company_id" id="toggle-id">
                 <input type="hidden" name="new_status" id="toggle-new-status">

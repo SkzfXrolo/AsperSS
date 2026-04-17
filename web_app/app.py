@@ -332,56 +332,45 @@ def panel():
             user['roles'] = [user.get('roles', 'user')]
     return render_template('panel.html', user=user)
 
-@app.route('/admin/subscriptions', methods=['GET', 'POST'])
+@app.route('/aspers-sa', methods=['GET', 'POST'])
 def admin_subscriptions():
-    """Página secreta de administrador para gestionar suscripciones"""
-    # Autenticación especial para esta página
+    """Panel SuperAdmin — acceso solo mediante URL directa (no linkada públicamente)"""
     if request.method == 'POST':
         username = request.form.get('username', '')
         password = request.form.get('password', '')
-        
-        # Verificar credenciales de admin (puedes cambiar esto)
-        if username == 'admin' and password == 'admin123':  # ⚠️ CAMBIAR EN PRODUCCIÓN
+        if username == 'Rodrigo' and password == 'Rodrigo@1':
             session['admin_subscriptions'] = True
-            return redirect('/admin/subscriptions')
+            return redirect('/aspers-sa')
         else:
             return render_template('admin_subscriptions_login.html', error='Credenciales incorrectas')
-    
-    # Verificar si está autenticado
+
     if not session.get('admin_subscriptions'):
         return render_template('admin_subscriptions_login.html')
-    
-    # Si está autenticado, mostrar panel de gestión
+
     from auth import list_companies, list_users, create_company, update_company
-    
     companies = list_companies()
     users = list_users()
-    
-    # Separar usuarios individuales (sin empresa) y usuarios de empresa
     individual_users = [u for u in users if not u.get('company_id')]
     company_users = [u for u in users if u.get('company_id')]
-    
-    return render_template('admin_subscriptions.html', 
-                         companies=companies, 
-                         individual_users=individual_users,
-                         company_users=company_users)
+    return render_template('admin_subscriptions.html',
+                           companies=companies,
+                           individual_users=individual_users,
+                           company_users=company_users)
 
-@app.route('/admin/subscriptions/logout')
+@app.route('/aspers-sa/logout')
 def admin_subscriptions_logout():
-    """Cerrar sesión de admin de suscripciones"""
     session.pop('admin_subscriptions', None)
-    return redirect('/admin/subscriptions')
+    return redirect('/aspers-sa')
 
-@app.route('/admin/subscriptions/create-company', methods=['POST'])
+@app.route('/aspers-sa/create-company', methods=['POST'])
 def admin_subscriptions_create_company():
-    """Crea una nueva empresa desde el panel imperial"""
     if not session.get('admin_subscriptions'):
-        return redirect('/admin/subscriptions')
+        return redirect('/aspers-sa')
     from auth import create_company, update_company
     name = request.form.get('name', '').strip()
     if not name:
         flash('El nombre de empresa es requerido', 'error')
-        return redirect('/admin/subscriptions')
+        return redirect('/aspers-sa')
     contact_email = request.form.get('contact_email', '').strip() or None
     try:
         subscription_price = float(request.form.get('subscription_price', 13.0))
@@ -415,18 +404,17 @@ def admin_subscriptions_create_company():
         flash(f'Empresa "{name}" creada exitosamente', 'ok')
     else:
         flash(result.get('error', 'Error al crear empresa'), 'error')
-    return redirect('/admin/subscriptions')
+    return redirect('/aspers-sa')
 
-@app.route('/admin/subscriptions/update-company', methods=['POST'])
+@app.route('/aspers-sa/update-company', methods=['POST'])
 def admin_subscriptions_update_company():
-    """Actualiza una empresa desde el panel imperial"""
     if not session.get('admin_subscriptions'):
-        return redirect('/admin/subscriptions')
+        return redirect('/aspers-sa')
     from auth import update_company
     company_id = request.form.get('company_id')
     if not company_id:
         flash('ID de empresa requerido', 'error')
-        return redirect('/admin/subscriptions')
+        return redirect('/aspers-sa')
     kwargs = {}
     for field in ('name', 'contact_email', 'subscription_status', 'subscription_end_date'):
         val = request.form.get(field, '').strip()
@@ -444,26 +432,25 @@ def admin_subscriptions_update_company():
         flash('Empresa actualizada exitosamente', 'ok')
     else:
         flash(result.get('error', 'Error al actualizar empresa'), 'error')
-    return redirect('/admin/subscriptions')
+    return redirect('/aspers-sa')
 
-@app.route('/admin/subscriptions/toggle-status', methods=['POST'])
+@app.route('/aspers-sa/toggle-status', methods=['POST'])
 def admin_subscriptions_toggle_status():
-    """Cambia el estado activo/inactivo de una empresa"""
     if not session.get('admin_subscriptions'):
-        return redirect('/admin/subscriptions')
+        return redirect('/aspers-sa')
     from auth import update_company
     company_id = request.form.get('company_id')
     new_status = request.form.get('new_status', 'active')
     if not company_id:
         flash('ID de empresa requerido', 'error')
-        return redirect('/admin/subscriptions')
+        return redirect('/aspers-sa')
     result = update_company(company_id=company_id, subscription_status=new_status)
     if result.get('success'):
         label = 'activada' if new_status == 'active' else 'suspendida'
         flash(f'Empresa {label} exitosamente', 'ok')
     else:
         flash(result.get('error', 'Error al cambiar estado'), 'error')
-    return redirect('/admin/subscriptions')
+    return redirect('/aspers-sa')
 
 # ============================================================
 # API PROXY - Conecta con la API REST
