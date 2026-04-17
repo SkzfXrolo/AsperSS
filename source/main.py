@@ -6420,16 +6420,40 @@ class ArgusApp:
         # ── Ventana de feedback ─────────────────────────────────────────
         win = tk.Toplevel(self.root)
         win.title("Resultado del Escaneo — Feedback para IA")
-        _mf_count = len(getattr(self, 'mouse_findings', []))
-        _ff_count = len(getattr(self, 'forensic_findings', []))
-        _win_h = 420 + min(_mf_count, 3) * 22 + (30 if _mf_count > 0 else 0) + min(_ff_count, 3) * 22 + (30 if _ff_count > 0 else 0)
-        win.geometry(f"520x{_win_h}")
+        win.geometry("540x620")
         win.configure(bg="#060912")
-        win.resizable(False, False)
+        win.resizable(True, True)
+        win.minsize(520, 500)
         win.grab_set()
 
-        # Header
-        hdr = tk.Frame(win, bg="#060912")
+        # ── Botones fijos al fondo (pack ANTES del scroll para que queden abajo) ──
+        btn_frame = tk.Frame(win, bg="#060912")
+        btn_frame.pack(side="bottom", fill="x", padx=20, pady=12)
+
+        # ── Canvas scrollable para el contenido ──────────────────────────────────
+        canvas = tk.Canvas(win, bg="#060912", highlightthickness=0)
+        scrollbar = tk.Scrollbar(win, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        scroll_frame = tk.Frame(canvas, bg="#060912")
+        scroll_window = canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+
+        def _on_frame_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        def _on_canvas_resize(event):
+            canvas.itemconfig(scroll_window, width=event.width)
+        scroll_frame.bind("<Configure>", _on_frame_configure)
+        canvas.bind("<Configure>", _on_canvas_resize)
+
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        win.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
+        # Header (dentro del scroll_frame)
+        hdr = tk.Frame(scroll_frame, bg="#060912")
         hdr.pack(fill="x", padx=20, pady=(20, 0))
         tk.Label(hdr, text="✅  Escaneo Completado", font=("Segoe UI", 16, "bold"),
                  bg="#060912", fg="#dce8f5").pack(anchor="w")
@@ -6485,11 +6509,11 @@ class ArgusApp:
                          font=("Segoe UI", 9, "italic"),
                          bg=_ff_bg, fg=_ff_fg).pack(anchor="w")
 
-        sep = tk.Frame(win, bg="#0f1525", height=1)
+        sep = tk.Frame(scroll_frame, bg="#0f1525", height=1)
         sep.pack(fill="x", padx=20, pady=12)
 
         # Feedback prompt
-        fb_frame = tk.Frame(win, bg="#0a0e1a", bd=0)
+        fb_frame = tk.Frame(scroll_frame, bg="#0a0e1a", bd=0)
         fb_frame.pack(fill="x", padx=20)
         tk.Label(fb_frame, text="🧠  Ayuda a la IA a mejorar", font=("Segoe UI", 13, "bold"),
                  bg="#0a0e1a", fg="#00c8ff").pack(anchor="w", padx=14, pady=(12, 4))
@@ -6518,10 +6542,6 @@ class ArgusApp:
                             insertbackground="#00c8ff", relief="flat",
                             font=("Segoe UI", 10), bd=0)
         notes_var.pack(fill="x", padx=14, pady=(0, 12))
-
-        # Botones
-        btn_frame = tk.Frame(win, bg="#060912")
-        btn_frame.pack(fill="x", padx=20, pady=12)
 
         def _send_feedback():
             verdict = verdict_var.get()
