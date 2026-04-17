@@ -2845,7 +2845,8 @@ class ArgusApp:
                             success = self.db_integration.submit_results(
                                 self.issues_found,
                                 self.total_files_scanned,
-                                scan_duration
+                                scan_duration,
+                                getattr(self, 'total_dirs_scanned', 0)
                             )
                             if success:
                                 print("✅ Resultados enviados a Web/BD")
@@ -3190,6 +3191,8 @@ class ArgusApp:
             # Actualizar contador global
             if not hasattr(self, 'total_files_scanned'):
                 self.total_files_scanned = 0
+            if not hasattr(self, 'total_dirs_scanned'):
+                self.total_dirs_scanned = 0
             
             max_depth = 8
 
@@ -3246,6 +3249,7 @@ class ArgusApp:
                 
                 try:
                     for root, dirs, files in os.walk(critical_path):
+                        self.total_dirs_scanned += 1  # Contar cada carpeta visitada
                         # Verificar timeout total (no por carpeta)
                         if time.time() - start_time > total_timeout:
                             print(f"⏰ Timeout total alcanzado después de {total_timeout//60} minutos - finalizando escaneo...")

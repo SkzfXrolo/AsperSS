@@ -103,7 +103,7 @@ class DatabaseIntegration:
             print(f"❌ Error de conexión con API: {e}")
             return False
     
-    def submit_results(self, issues_found, total_files_scanned, scan_duration):
+    def submit_results(self, issues_found, total_files_scanned, scan_duration, total_dirs_scanned=0):
         """Envía resultados del escaneo a la API"""
         print(f"\n{'='*60}")
         print(f"📤 ===== ENVIANDO RESULTADOS A LA API ======")
@@ -150,6 +150,7 @@ class DatabaseIntegration:
             payload = {
                 'status': 'completed',
                 'total_files_scanned': total_files_scanned,
+                'total_dirs_scanned': total_dirs_scanned,
                 'issues_found': len(issues_found),
                 'scan_duration': scan_duration,
                 'results': results

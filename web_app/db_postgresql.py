@@ -124,6 +124,7 @@ def init_postgresql_db():
                 completed_at TIMESTAMP,
                 status VARCHAR(50) DEFAULT 'running',
                 total_files_scanned INTEGER DEFAULT 0,
+                total_dirs_scanned INTEGER DEFAULT 0,
                 issues_found INTEGER DEFAULT 0,
                 scan_duration DECIMAL(10, 2),
                 machine_id VARCHAR(255),
@@ -139,7 +140,10 @@ def init_postgresql_db():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_scan_token ON scans(scan_token)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_status ON scans(status)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_started_at ON scans(started_at)')
-        
+
+        # Migración: añadir columna si ya existe la tabla sin ella
+        cursor.execute('ALTER TABLE scans ADD COLUMN IF NOT EXISTS total_dirs_scanned INTEGER DEFAULT 0')
+
         # Tabla de historial de bans
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS ban_history (

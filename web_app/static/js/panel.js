@@ -678,7 +678,11 @@ async function viewScanDetails(scanId) {
         if (machineEl) machineEl.textContent = data.machine_name || 'N/A';
         
         const filesEl = document.getElementById('detail-files-count');
-        if (filesEl) filesEl.textContent = data.total_files_scanned || 0;
+        if (filesEl) {
+            const files = (data.total_files_scanned || 0).toLocaleString();
+            const dirs  = (data.total_dirs_scanned  || 0).toLocaleString();
+            filesEl.textContent = dirs > 0 ? `${files} arch. · ${dirs} carpetas` : files;
+        }
         
         const vmEl = document.getElementById('detail-vm');
         if (vmEl) vmEl.textContent = data.is_vm ? 'Sí' : 'No';

@@ -1575,9 +1575,11 @@ def submit_scan_results(scan_id):
         with get_api_db_cursor() as cursor:
             cursor.execute(
                 f'UPDATE scans SET status = {_PH}, completed_at = CURRENT_TIMESTAMP,'
-                f' total_files_scanned = {_PH}, issues_found = {_PH}, scan_duration = {_PH}'
+                f' total_files_scanned = {_PH}, total_dirs_scanned = {_PH},'
+                f' issues_found = {_PH}, scan_duration = {_PH}'
                 f' WHERE id = {_PH}',
                 (data.get('status', 'completed'), data.get('total_files_scanned', 0),
+                 data.get('total_dirs_scanned', 0),
                  data.get('issues_found', 0), data.get('scan_duration', 0), scan_id)
             )
             if cursor.rowcount == 0:
@@ -1787,8 +1789,8 @@ def get_scan(scan_id):
             with get_api_db_cursor() as cursor:
                 cursor.execute(f'''
                     SELECT id, token_id, scan_token, started_at, completed_at, status,
-                           total_files_scanned, issues_found, scan_duration, machine_id, machine_name,
-                           ip_address, country, minecraft_username
+                           total_files_scanned, total_dirs_scanned, issues_found, scan_duration,
+                           machine_id, machine_name, ip_address, country, minecraft_username
                     FROM scans
                     WHERE id = {_PH}
                 ''', (scan_id,))
@@ -1805,13 +1807,14 @@ def get_scan(scan_id):
                     'completed_at': _row_get(row, 4, 'completed_at'),
                     'status': _row_get(row, 5, 'status'),
                     'total_files_scanned': _row_get(row, 6, 'total_files_scanned'),
-                    'issues_found': _row_get(row, 7, 'issues_found'),
-                    'scan_duration': _row_get(row, 8, 'scan_duration'),
-                    'machine_id': _row_get(row, 9, 'machine_id'),
-                    'machine_name': _row_get(row, 10, 'machine_name'),
-                    'ip_address': _row_get(row, 11, 'ip_address'),
-                    'country': _row_get(row, 12, 'country'),
-                    'minecraft_username': _row_get(row, 13, 'minecraft_username')
+                    'total_dirs_scanned': _row_get(row, 7, 'total_dirs_scanned'),
+                    'issues_found': _row_get(row, 8, 'issues_found'),
+                    'scan_duration': _row_get(row, 9, 'scan_duration'),
+                    'machine_id': _row_get(row, 10, 'machine_id'),
+                    'machine_name': _row_get(row, 11, 'machine_name'),
+                    'ip_address': _row_get(row, 12, 'ip_address'),
+                    'country': _row_get(row, 13, 'country'),
+                    'minecraft_username': _row_get(row, 14, 'minecraft_username')
                 }
                 
                 # Obtener resultados
