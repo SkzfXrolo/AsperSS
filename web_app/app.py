@@ -1935,8 +1935,8 @@ def submit_feedback():
                 return jsonify({'error': f'Resultado con id {result_id} no encontrado'}), 404
 
             scan_id = _row_get(result, 0, 'scan_id')
-            issue_name = _row_get(result, 1, 'issue_name')
-            issue_path = _row_get(result, 2, 'issue_path')
+            issue_name = (_row_get(result, 1, 'issue_name') or '')[:255]
+            issue_path = (_row_get(result, 2, 'issue_path') or '')[:255]
             file_hash = _row_get(result, 3, 'file_hash')
             detected_patterns_json = _row_get(result, 4, 'detected_patterns')
             obfuscation = _row_get(result, 5, 'obfuscation_detected')
@@ -2084,8 +2084,8 @@ def submit_feedback_batch():
                     continue  # Saltar si no existe
 
                 scan_id = _row_get(result, 0, 'scan_id')
-                issue_name = _row_get(result, 1, 'issue_name')
-                issue_path = _row_get(result, 2, 'issue_path')
+                issue_name = (_row_get(result, 1, 'issue_name') or '')[:255]
+                issue_path = (_row_get(result, 2, 'issue_path') or '')[:255]
                 file_hash = _row_get(result, 3, 'file_hash')
                 detected_patterns_json = _row_get(result, 4, 'detected_patterns')
                 obfuscation = _row_get(result, 5, 'obfuscation_detected')
