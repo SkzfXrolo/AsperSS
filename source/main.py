@@ -2422,30 +2422,13 @@ class ArgusApp:
                 style='primary',
                 icon='🚀'
             )
-            scan_btn_frame.pack(side=tk.LEFT, padx=(0, 8), fill=tk.X, expand=True)
-            # Obtener referencia al botón real
+            scan_btn_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
             self.scan_button = None
             for widget in scan_btn_frame.winfo_children():
                 if isinstance(widget, tk.Button):
                     self.scan_button = widget
                     break
-            
-            # Botón secundario compacto
-            details_btn_frame = ModernUI.create_button(
-                buttons_row,
-                "VER RESULTADOS",
-                self.show_details,
-                style='secondary',
-                icon='📊'
-            )
-            details_btn_frame.pack(side=tk.LEFT, padx=(0, 0), fill=tk.X, expand=True)
-            # Obtener referencia al botón real
             self.details_button = None
-            for widget in details_btn_frame.winfo_children():
-                if isinstance(widget, tk.Button):
-                    self.details_button = widget
-                    self.details_button.config(state=tk.DISABLED)
-                    break
             
             # Crear sección de resultados
             results_widgets = ModernUI.create_results_section(main_panel)
@@ -2558,21 +2541,7 @@ class ArgusApp:
         )
         self.scan_button.pack(expand=True, fill=tk.X, padx=20)
         
-        self.details_button = tk.Button(
-            button_frame,
-            text="📊 VER RESULTADOS DETALLADOS",
-            command=self.show_details,
-            bg="#21262d",
-            fg="#f0f6fc",
-            font=("Segoe UI", 11, "bold"),
-            padx=30,
-            pady=12,
-            relief=tk.FLAT,
-            state=tk.DISABLED,
-            cursor="hand2",
-            activebackground="#30363d"
-        )
-        self.details_button.pack(pady=(15, 0))
+        self.details_button = None
         
         # Resultados
         self.results_frame = tk.Frame(main_panel, bg="#161b22")
@@ -4724,8 +4693,10 @@ class ArgusApp:
                                 
                                 if data.get('valid', False):
                                     print(f"✅ Token válido verificado contra API")
-                                    # Guardar token en configuración para uso futuro
+                                    # Guardar token y dueño en configuración
                                     self.config['scan_token'] = token
+                                    if data.get('created_by'):
+                                        self.config['staff_name'] = data['created_by']
                                     
                                     # Actualizar también en db_integration inmediatamente
                                     if hasattr(self, 'db_integration') and self.db_integration:
@@ -6346,213 +6317,50 @@ class ArgusApp:
             return {'total_connections': 0, 'established_connections': 0, 'listening_ports': 0}
     
     def show_completion_message(self):
-        """Muestra ventana de finalización con opción de feedback para IA."""
+        """Muestra ventana simple de finalización: scan enviado a la web."""
         import tkinter as tk
 
-        # Habilitar botón de detalles
+        web_url  = self.config.get('web_url', 'https://asperss.onrender.com').rstrip('/')
+        staff    = self.config.get('staff_name', self.config.get('scan_token', '')[:8] + '...')
+
+        # Actualizar área de texto con estado mínimo
         try:
-            self.details_button.config(state=tk.NORMAL)
+            self.results_text.delete(1.0, tk.END)
+            self.results_text.insert(tk.END, "✅ Escaneo completado — resultados enviados a la página\n", "success")
         except Exception:
             pass
 
-        # Actualizar área de texto
-        self.results_text.delete(1.0, tk.END)
-        self.results_text.insert(tk.END, "✅ ESCANEO COMPLETADO\n\n", "success")
-        self.results_text.insert(tk.END, f"📊 Total de elementos: {len(self.issues_found)}\n\n", "info")
-
-        hacks    = [i for i in self.issues_found if i.get('alerta') in ('HACKS', 'CRITICAL')]
-        sosp     = [i for i in self.issues_found if i.get('alerta') == 'SOSPECHOSO']
-        limpio   = len(self.issues_found) - len(hacks) - len(sosp)
-
-        self.results_text.insert(tk.END, f"🔴 HACKS: {len(hacks)}\n", "danger")
-        self.results_text.insert(tk.END, f"🟡 SOSPECHOSO: {len(sosp)}\n", "warning")
-        self.results_text.insert(tk.END, f"🟢 Limpio: {limpio}\n\n", "success")
-
-        # ── Sección de detección de mouse (prison mode) ──────────────────────
-        mouse_findings = getattr(self, 'mouse_findings', [])
-        if mouse_findings:
-            self.results_text.insert(tk.END, "━"*60 + "\n", "warning")
-            self.results_text.insert(tk.END, "🖱️  DETECCIÓN DE MANIPULACIÓN DE MOUSE\n", "danger")
-            self.results_text.insert(tk.END, "━"*60 + "\n", "warning")
-            for mf in mouse_findings:
-                icon = "🔴" if mf.get('alerta') == 'CRITICAL' else "🟠"
-                self.results_text.insert(tk.END, f"{icon} {mf.get('nombre','')}\n", "danger")
-                if mf.get('detalle'):
-                    self.results_text.insert(tk.END, f"   └─ {mf['detalle']}\n", "warning")
-                if mf.get('descripcion'):
-                    self.results_text.insert(tk.END, f"   {mf['descripcion']}\n\n", "info")
-            self.results_text.insert(tk.END, "\n", "info")
-        else:
-            self.results_text.insert(tk.END, "🖱️  Mouse: sin indicadores de peso o manipulación\n\n", "success")
-
-        # ── Sección de análisis forense SS ───────────────────────────────────
-        forensic_findings = getattr(self, 'forensic_findings', [])
-        if forensic_findings:
-            self.results_text.insert(tk.END, "━"*60 + "\n", "warning")
-            self.results_text.insert(tk.END, "🔬  ANÁLISIS FORENSE SS\n", "danger")
-            self.results_text.insert(tk.END, "━"*60 + "\n", "warning")
-            for ff in forensic_findings:
-                icon = "🔴" if ff.get('alerta') == 'CRITICAL' else "🟠"
-                self.results_text.insert(tk.END, f"{icon} {ff.get('nombre','')}\n", "danger")
-                if ff.get('detalle'):
-                    self.results_text.insert(tk.END, f"   └─ {ff['detalle']}\n", "warning")
-                if ff.get('descripcion'):
-                    self.results_text.insert(tk.END, f"   {ff['descripcion']}\n\n", "info")
-            self.results_text.insert(tk.END, "\n", "info")
-        else:
-            self.results_text.insert(tk.END, "🔬  Forense: sin evidencia histórica de hacks o autoclickers\n\n", "success")
-
-        if self.issues_found:
-            self.results_text.insert(tk.END, "ELEMENTOS ENCONTRADOS:\n\n", "warning")
-            for i, issue in enumerate(self.issues_found[:50], 1):
-                self.results_text.insert(tk.END, f"{i}. {issue.get('nombre','N/A')} [{issue.get('alerta','?')}]\n", "info")
-                self.results_text.insert(tk.END, f"   {issue.get('ruta','')}\n\n", "info")
-        else:
-            self.results_text.insert(tk.END, "✅ Sin elementos sospechosos\n", "success")
-
-        # ── Ventana de feedback ─────────────────────────────────────────
         win = tk.Toplevel(self.root)
-        win.title("Resultado del Escaneo — Feedback para IA")
-        win.geometry("540x620")
+        win.title("Escaneo Finalizado")
+        win.geometry("460x200")
         win.configure(bg="#060912")
-        win.resizable(True, True)
-        win.minsize(520, 500)
+        win.resizable(False, False)
         win.grab_set()
 
-        # ── Botones fijos al fondo (pack ANTES del scroll para que queden abajo) ──
-        btn_frame = tk.Frame(win, bg="#060912")
-        btn_frame.pack(side="bottom", fill="x", padx=20, pady=12)
+        # Centrar
+        win.update_idletasks()
+        x = (win.winfo_screenwidth()  // 2) - 230
+        y = (win.winfo_screenheight() // 2) - 100
+        win.geometry(f"460x200+{x}+{y}")
 
-        # ── Canvas scrollable para el contenido ──────────────────────────────────
-        canvas = tk.Canvas(win, bg="#060912", highlightthickness=0)
-        scrollbar = tk.Scrollbar(win, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
+        inner = tk.Frame(win, bg="#060912")
+        inner.pack(fill="both", expand=True, padx=30, pady=24)
 
-        scroll_frame = tk.Frame(canvas, bg="#060912")
-        scroll_window = canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        tk.Label(inner, text="✅  Escaneo Finalizado",
+                 font=("Segoe UI", 15, "bold"), bg="#060912", fg="#22d3a5").pack(anchor="w")
 
-        def _on_frame_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-        def _on_canvas_resize(event):
-            canvas.itemconfig(scroll_window, width=event.width)
-        scroll_frame.bind("<Configure>", _on_frame_configure)
-        canvas.bind("<Configure>", _on_canvas_resize)
+        tk.Label(inner,
+                 text=f"Resultados enviados a  {web_url}",
+                 font=("Segoe UI", 10), bg="#060912", fg="#5a7296",
+                 wraplength=400, justify="left").pack(anchor="w", pady=(8, 2))
 
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
-        win.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>"))
+        tk.Label(inner,
+                 text=f"Staff:  {staff}",
+                 font=("Segoe UI", 10, "bold"), bg="#060912", fg="#dce8f5").pack(anchor="w")
 
-        # Header (dentro del scroll_frame)
-        hdr = tk.Frame(scroll_frame, bg="#060912")
-        hdr.pack(fill="x", padx=20, pady=(20, 0))
-        tk.Label(hdr, text="✅  Escaneo Completado", font=("Segoe UI", 16, "bold"),
-                 bg="#060912", fg="#dce8f5").pack(anchor="w")
-        summary = f"  {len(hacks)} HACKS  •  {len(sosp)} Sospechosos  •  {limpio} Limpios  •  {len(self.issues_found)} total"
-        tk.Label(hdr, text=summary, font=("Segoe UI", 11),
-                 bg="#060912", fg="#5a7296").pack(anchor="w", pady=(4, 0))
-
-        # Mouse hardware alert (shown prominently if any findings)
-        _mf = getattr(self, 'mouse_findings', [])
-        if _mf:
-            _critical_mouse = [m for m in _mf if m.get('alerta') == 'CRITICAL']
-            _mouse_bg = "#3a0808" if _critical_mouse else "#2a1a00"
-            _mouse_fg = "#ff6060" if _critical_mouse else "#ffb347"
-            _mouse_icon = "🔴" if _critical_mouse else "🟠"
-            mouse_banner = tk.Frame(hdr, bg=_mouse_bg, padx=8, pady=6)
-            mouse_banner.pack(fill="x", pady=(8, 0))
-            tk.Label(mouse_banner,
-                     text=f"{_mouse_icon}  MANIPULACIÓN DE MOUSE: {len(_mf)} alerta(s)",
-                     font=("Segoe UI", 10, "bold"),
-                     bg=_mouse_bg, fg=_mouse_fg).pack(anchor="w")
-            for m in _mf[:3]:
-                tk.Label(mouse_banner,
-                         text=f"  • {m.get('nombre','')}",
-                         font=("Segoe UI", 9),
-                         bg=_mouse_bg, fg=_mouse_fg).pack(anchor="w")
-            if len(_mf) > 3:
-                tk.Label(mouse_banner,
-                         text=f"  … y {len(_mf)-3} más (ver resultados completos)",
-                         font=("Segoe UI", 9, "italic"),
-                         bg=_mouse_bg, fg=_mouse_fg).pack(anchor="w")
-
-        # Forensic alert banner
-        _ff = getattr(self, 'forensic_findings', [])
-        if _ff:
-            _critical_ff = [f for f in _ff if f.get('alerta') == 'CRITICAL']
-            _ff_bg = "#1a0a2e" if _critical_ff else "#0a1a2e"
-            _ff_fg = "#cc88ff" if _critical_ff else "#66aaff"
-            _ff_icon = "🔴" if _critical_ff else "🔬"
-            ff_banner = tk.Frame(hdr, bg=_ff_bg, padx=8, pady=6)
-            ff_banner.pack(fill="x", pady=(8, 0))
-            tk.Label(ff_banner,
-                     text=f"{_ff_icon}  EVIDENCIA FORENSE SS: {len(_ff)} hallazgo(s)",
-                     font=("Segoe UI", 10, "bold"),
-                     bg=_ff_bg, fg=_ff_fg).pack(anchor="w")
-            for f in _ff[:3]:
-                tk.Label(ff_banner,
-                         text=f"  • {f.get('nombre','')}",
-                         font=("Segoe UI", 9),
-                         bg=_ff_bg, fg=_ff_fg).pack(anchor="w")
-            if len(_ff) > 3:
-                tk.Label(ff_banner,
-                         text=f"  … y {len(_ff)-3} más (ver resultados completos)",
-                         font=("Segoe UI", 9, "italic"),
-                         bg=_ff_bg, fg=_ff_fg).pack(anchor="w")
-
-        sep = tk.Frame(scroll_frame, bg="#0f1525", height=1)
-        sep.pack(fill="x", padx=20, pady=12)
-
-        # Feedback prompt
-        fb_frame = tk.Frame(scroll_frame, bg="#0a0e1a", bd=0)
-        fb_frame.pack(fill="x", padx=20)
-        tk.Label(fb_frame, text="🧠  Ayuda a la IA a mejorar", font=("Segoe UI", 13, "bold"),
-                 bg="#0a0e1a", fg="#00c8ff").pack(anchor="w", padx=14, pady=(12, 4))
-        tk.Label(fb_frame, text="¿El resultado es correcto? Tu feedback actualiza el modelo de detección.",
-                 font=("Segoe UI", 10), bg="#0a0e1a", fg="#5a7296",
-                 wraplength=460, justify="left").pack(anchor="w", padx=14, pady=(0, 10))
-
-        # Opciones
-        verdict_var = tk.StringVar(value="")
-        opts = [
-            ("correcto",    "✅  Correcto — todos los hallazgos son válidos",        "#22d3a5"),
-            ("falsos_pos",  "⚠️  Hay falsos positivos — algunos son legítimos",      "#fbbf24"),
-            ("limpio",      "🟢  Sin hacks — el usuario está limpio",                "#22d3a5"),
-            ("hack_real",   "🔴  Confirmado hack — reportar como caso de aprendizaje","#ff4d6a"),
-        ]
-        for val, label, color in opts:
-            rb = tk.Radiobutton(fb_frame, text=label, variable=verdict_var, value=val,
-                                bg="#0a0e1a", fg="#dce8f5", selectcolor="#060912",
-                                activebackground="#0a0e1a", activeforeground=color,
-                                font=("Segoe UI", 10), anchor="w", cursor="hand2")
-            rb.pack(fill="x", padx=14, pady=2)
-
-        tk.Label(fb_frame, text="Notas opcionales:", font=("Segoe UI", 10),
-                 bg="#0a0e1a", fg="#5a7296").pack(anchor="w", padx=14, pady=(10, 2))
-        notes_var = tk.Text(fb_frame, height=3, bg="#060912", fg="#dce8f5",
-                            insertbackground="#00c8ff", relief="flat",
-                            font=("Segoe UI", 10), bd=0)
-        notes_var.pack(fill="x", padx=14, pady=(0, 12))
-
-        def _send_feedback():
-            verdict = verdict_var.get()
-            notes   = notes_var.get("1.0", "end").strip()
-            if verdict:
-                threading.Thread(
-                    target=self._submit_ai_feedback,
-                    args=(verdict, notes),
-                    daemon=True
-                ).start()
-            win.destroy()
-
-        tk.Button(btn_frame, text="Enviar Feedback", command=_send_feedback,
+        tk.Button(inner, text="Aceptar", command=win.destroy,
                   bg="#00a8d4", fg="white", font=("Segoe UI", 11, "bold"),
-                  relief="flat", cursor="hand2", padx=16, pady=8).pack(side="right")
-        tk.Button(btn_frame, text="Omitir", command=win.destroy,
-                  bg="#0f1525", fg="#5a7296", font=("Segoe UI", 11),
-                  relief="flat", cursor="hand2", padx=16, pady=8).pack(side="right", padx=(0, 8))
+                  relief="flat", cursor="hand2", padx=20, pady=6).pack(anchor="e", pady=(18, 0))
 
     def _submit_ai_feedback(self, verdict, notes):
         """Envía feedback al servidor y actualiza patrones locales."""

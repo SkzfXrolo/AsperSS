@@ -1413,26 +1413,27 @@ def delete_token(token_id):
 # ============================================================
 
 def _validate_scan_token_direct(token):
-    """Valida un token de escaneo en la BD. Retorna (token_id, error_msg)."""
+    """Valida un token de escaneo en la BD. Retorna (token_id, error_msg, created_by)."""
     try:
         with get_api_db_cursor() as cursor:
             cursor.execute(
-                f'SELECT id, expires_at, used_count, max_uses, is_active FROM scan_tokens WHERE token = {_PH}',
+                f'SELECT id, expires_at, used_count, max_uses, is_active, created_by FROM scan_tokens WHERE token = {_PH}',
                 (token,)
             )
             row = cursor.fetchone()
 
         if not row:
-            return None, 'Token no encontrado'
+            return None, 'Token no encontrado', None
 
         token_id   = _row_get(row, 0, 'id')
         expires_at = _row_get(row, 1, 'expires_at')
         used_count = _row_get(row, 2, 'used_count') or 0
         max_uses   = _row_get(row, 3, 'max_uses')
         is_active  = _row_get(row, 4, 'is_active')
+        created_by = _row_get(row, 5, 'created_by')
 
         if not is_active:
-            return None, 'Token desactivado'
+            return None, 'Token desactivado', None
 
         if expires_at:
             if isinstance(expires_at, str):
@@ -1440,15 +1441,15 @@ def _validate_scan_token_direct(token):
             else:
                 exp = expires_at.replace(tzinfo=None) if hasattr(expires_at, 'tzinfo') else expires_at
             if datetime.datetime.now() > exp:
-                return None, 'Token expirado'
+                return None, 'Token expirado', None
 
         if max_uses and max_uses > 0 and used_count >= max_uses:
-            return None, 'Token ha alcanzado el limite de usos'
+            return None, 'Token ha alcanzado el limite de usos', None
 
-        return token_id, None
+        return token_id, None, created_by
     except Exception as e:
         print(f"Error validando token: {e}\n{traceback.format_exc()}")
-        return None, f'Error validando token: {str(e)}'
+        return None, f'Error validando token: {str(e)}', None
 
 
 @app.route('/setup-admin-aspers2024', methods=['GET'])
@@ -1517,11 +1518,11 @@ def validate_token_endpoint():
         if not token:
             return jsonify({'valid': False, 'error': 'Token no proporcionado'}), 400
 
-        token_id, error = _validate_scan_token_direct(token)
+        token_id, error, created_by = _validate_scan_token_direct(token)
         if error:
             return jsonify({'valid': False, 'error': error}), 200
 
-        return jsonify({'valid': True, 'token_id': token_id, 'message': 'Token valido'}), 200
+        return jsonify({'valid': True, 'token_id': token_id, 'created_by': created_by, 'message': 'Token valido'}), 200
     except Exception as e:
         print(f"Error en validate_token_endpoint: {e}\n{traceback.format_exc()}")
         return jsonify({'valid': False, 'error': str(e)}), 500
@@ -1539,7 +1540,7 @@ def start_scan():
         country      = data.get('country', '')
         mc_username  = data.get('minecraft_username', '')
 
-        token_id, error = _validate_scan_token_direct(scan_token)
+        token_id, error, _created_by = _validate_scan_token_direct(scan_token)
         if error:
             return jsonify({'error': error}), 401
 
