@@ -2243,8 +2243,12 @@ body.light-theme .scan-back-btn {
 }
 
 .echo-action-btn {
-    width: 28px;
+    width: auto;
     height: 28px;
+    padding: 0 10px;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 500;
     border-radius: 6px;
     display: flex;
     align-items: center;
@@ -2254,6 +2258,7 @@ body.light-theme .scan-back-btn {
     color: var(--text-m);
     cursor: pointer;
     transition: var(--trans);
+    white-space: nowrap;
 }
 
 .echo-action-btn:hover { background: var(--accent-bg); color: var(--accent); border-color: var(--border-h); }

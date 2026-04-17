@@ -140,21 +140,20 @@ class UserInfoCollector:
                 if not os.path.exists(minecraft_path):
                     continue
                 
-                # Buscar en launcher_profiles.json
+                # Buscar en launcher_profiles.json — authenticationDatabase tiene el username real
+                # NOTA: profiles[].name es el nombre del perfil del launcher (ej. "1.21.8 Fabric"),
+                #        NO el nombre de la cuenta de Minecraft. Usar authenticationDatabase.
                 launcher_profiles = os.path.join(minecraft_path, 'launcher_profiles.json')
                 if os.path.exists(launcher_profiles):
                     try:
                         with open(launcher_profiles, 'r', encoding='utf-8') as f:
                             data = json.load(f)
-                            
-                            # Buscar en profiles
-                            if 'profiles' in data:
-                                for profile_id, profile_data in data['profiles'].items():
-                                    if 'name' in profile_data:
-                                        username = profile_data['name']
-                                        if username and len(username) >= 3:
-                                            self.minecraft_username = username
-                                            return username
+                            auth_db = data.get('authenticationDatabase', {})
+                            for entry in auth_db.values():
+                                username = entry.get('displayName', '')
+                                if username and len(username) >= 3:
+                                    self.minecraft_username = username
+                                    return username
                     except:
                         pass
                 

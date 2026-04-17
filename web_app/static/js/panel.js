@@ -257,7 +257,7 @@ async function loadMonthlyChart() {
         if (data.scans) {
             data.scans.forEach(s => {
                 if (!s.started_at) return;
-                const day = s.started_at.slice(0,10);
+                const day = new Date(s.started_at).toISOString().slice(0,10);
                 if (day in counts) counts[day]++;
             });
         }
@@ -629,12 +629,16 @@ let severityChart = null;
 
 async function viewScanDetails(scanId) {
     currentScanId = scanId;
-    
-    // Ocultar sección de resultados y mostrar sección de detalles
-    document.getElementById('resultados-section').classList.remove('active');
-    document.getElementById('issues-detail-section').style.display = 'block';
-    document.getElementById('issues-detail-section').classList.add('active');
-    
+
+    // Ocultar todas las secciones y mostrar solo el detalle
+    document.querySelectorAll('.panel-section').forEach(s => {
+        s.classList.remove('active');
+        s.style.display = 'none';
+    });
+    const detailSection = document.getElementById('issues-detail-section');
+    detailSection.style.display = 'block';
+    detailSection.classList.add('active');
+
     // Actualizar navegación
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
     document.querySelector('[data-section="resultados"]')?.classList.add('active');
@@ -782,16 +786,19 @@ async function viewScanDetails(scanId) {
                             ${!hasFeedback ? `
                                 <button class="echo-action-btn echo-action-hack" title="Marcar como Hack"
                                     onclick="markAsHack(${result.id}, ${scanId}, '${issueNameEscaped}', '${issuePathEscaped}')">
-                                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5L12.5 10.5H1.5L7 1.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+                                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 1.5L12.5 10.5H1.5L7 1.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+                                    Hack
                                 </button>
                                 <button class="echo-action-btn echo-action-legit" title="Marcar como Legítimo"
                                     onclick="markAsLegitimate(${result.id}, ${scanId}, '${issueNameEscaped}', '${issuePathEscaped}')">
-                                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7L5.5 10L11.5 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7L5.5 10L11.5 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                    Legítimo
                                 </button>
                             ` : `
                                 <button class="echo-action-btn" title="Cambiar feedback"
                                     onclick="changeFeedback(${result.id}, ${scanId})">
-                                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5L11.5 4.5L5 11H3V9L9.5 2.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+                                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5L11.5 4.5L5 11H3V9L9.5 2.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+                                    Editar
                                 </button>
                             `}
                         </div>
@@ -866,6 +873,46 @@ async function viewScanDetails(scanId) {
                 forensicsList.innerHTML = '<p style="color:var(--text-m);font-size:13px;">✅ Sin evidencia forense histórica de hacks o autoclickers.</p>';
             }
         }
+
+        // ── Poblar tabs por categoría ─────────────────────────────────────────
+        const TAB_CATEGORIES = {
+            'cuentas':            ['MINECRAFT', 'MINECRAFT_CONFIGS', 'NETWORK_CONNECTIONS'],
+            'launcher-profiles':  ['JAR_FILES', 'JAVA_CMD', 'LAUNCHER'],
+            'resource-packs':     ['texture_modification', 'RESOURCE_PACKS'],
+            'historial-archivos': ['RECENT_FILES', 'DELETED_FILES', 'NEW_FILES', 'RENAMED_FILES', 'DATE_CHANGES'],
+            'utilities':          ['AUTOCLICK_TOOLS', 'autoclicker', 'injection', 'LOGITECH', 'RAZER', 'USB_DEVICES'],
+            'archivos-windows':   ['PREFETCH', 'JNA', 'TEMP_FILES', 'SERVICES', 'PROCESSES', 'BACKGROUND_PROCESSES', 'DNS_CACHE', 'HIDDEN_FILES'],
+        };
+        const allResults = data.results || [];
+
+        Object.entries(TAB_CATEGORIES).forEach(([tab, cats]) => {
+            const container = document.getElementById(`subpage-${tab}`);
+            if (!container) return;
+            const filtered = allResults.filter(r => cats.includes(r.issue_category));
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="subpage-placeholder"><p style="color:var(--text-d);font-size:13px;">Sin hallazgos en esta categoría.</p></div>`;
+                return;
+            }
+            container.innerHTML = filtered.map(r => {
+                const isCrit = r.alert_level === 'CRITICAL';
+                const isSusp = r.alert_level === 'SOSPECHOSO' || r.alert_level === 'HACKS';
+                const borderColor = isCrit ? 'var(--red)' : isSusp ? 'var(--amber)' : 'var(--border-m)';
+                const iconColor   = isCrit ? 'var(--red)' : isSusp ? 'var(--amber)' : 'var(--text-d)';
+                return `
+                    <div class="echo-issue-row" style="border-left-color:${borderColor}">
+                        <div class="echo-issue-x" style="color:${iconColor}">
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                                <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                            </svg>
+                        </div>
+                        <div class="echo-issue-body">
+                            <div class="echo-issue-name">${r.issue_name || r.issue_type || 'Hallazgo'}</div>
+                            <div class="echo-issue-path">${r.issue_path || ''}</div>
+                            ${r.ai_analysis ? `<div class="echo-issue-analysis">${r.ai_analysis}</div>` : ''}
+                        </div>
+                    </div>`;
+            }).join('');
+        });
 
     } catch (error) {
         console.error('Error cargando detalles:', error);
