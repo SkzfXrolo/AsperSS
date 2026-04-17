@@ -639,10 +639,20 @@ async function viewScanDetails(scanId) {
     detailSection.style.display = 'block';
     detailSection.classList.add('active');
 
+    // Resetear estado UI inmediatamente (evita que quede el estado del escaneo anterior)
+    const detectionBannerReset = document.getElementById('detection-banner');
+    if (detectionBannerReset) detectionBannerReset.style.display = 'none';
+    ['count-clean', 'count-alert', 'count-severe'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '0';
+    });
+    const issuesContainerReset = document.getElementById('issues-list-container');
+    if (issuesContainerReset) issuesContainerReset.innerHTML = '<div class="loading-cell">Cargando...</div>';
+
     // Actualizar navegación
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
     document.querySelector('[data-section="resultados"]')?.classList.add('active');
-    
+
     try {
         const response = await fetch(`/api/scans/${scanId}`);
         const data = await response.json();

@@ -640,6 +640,30 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Lista de todos los issues (solo visible en Vista General) -->
+                <div class="bulk-actions-bar" id="bulk-actions-bar" style="display: none;">
+                    <div class="bulk-actions-info">
+                        <span id="selected-count">0</span> archivos seleccionados
+                    </div>
+                    <div class="bulk-actions-buttons">
+                        <button class="btn btn-sm btn-secondary" id="bulk-select-all-btn">
+                            ✓ Seleccionar Todos
+                        </button>
+                        <button class="btn btn-sm btn-secondary" id="bulk-deselect-all-btn">
+                            ✖️ Deseleccionar Todos
+                        </button>
+                        <button class="btn btn-sm btn-danger" id="bulk-mark-hack-btn" disabled>
+                            ⚠️ Marcar Seleccionados como Hack
+                        </button>
+                        <button class="btn btn-sm btn-success" id="bulk-mark-legitimate-btn" disabled>
+                            ✅ Marcar Seleccionados como Legítimo
+                        </button>
+                    </div>
+                </div>
+                <div class="issues-list-container" id="issues-list-container">
+                    <div class="loading-cell">Cargando issues...</div>
+                </div>
                 </div>
 
                 <!-- Cuentas -->
@@ -761,30 +785,6 @@
                 </div>
             </div>
 
-            <!-- Barra de acciones masivas -->
-            <div class="bulk-actions-bar" id="bulk-actions-bar" style="display: none;">
-                <div class="bulk-actions-info">
-                    <span id="selected-count">0</span> archivos seleccionados
-                </div>
-                <div class="bulk-actions-buttons">
-                    <button class="btn btn-sm btn-secondary" id="bulk-select-all-btn">
-                        ✓ Seleccionar Todos
-                    </button>
-                    <button class="btn btn-sm btn-secondary" id="bulk-deselect-all-btn">
-                        ✖️ Deseleccionar Todos
-                    </button>
-                    <button class="btn btn-sm btn-danger" id="bulk-mark-hack-btn" disabled>
-                        ⚠️ Marcar Seleccionados como Hack
-                    </button>
-                    <button class="btn btn-sm btn-success" id="bulk-mark-legitimate-btn" disabled>
-                        ✅ Marcar Seleccionados como Legítimo
-                    </button>
-                </div>
-            </div>
-
-            <div class="issues-list-container" id="issues-list-container">
-                <div class="loading-cell">Cargando issues...</div>
-            </div>
         </section>
 
         <!-- Aprendizaje IA Section -->

@@ -1697,8 +1697,9 @@ def list_scans():
                             scan['severity_summary'] = severity_map[scan['id']]['summary']
                             scan['severity_badge'] = severity_map[scan['id']]['badge']
                         else:
-                            scan['severity_summary'] = 'LIMPIO' if scan['issues_found'] == 0 else 'SOSPECHOSO'
-                            scan['severity_badge'] = 'success' if scan['issues_found'] == 0 else 'warning'
+                            is_clean = not (scan.get('issues_found') or 0)
+                            scan['severity_summary'] = 'LIMPIO' if is_clean else 'SOSPECHOSO'
+                            scan['severity_badge'] = 'success' if is_clean else 'warning'
                 
                 result = {'scans': scans}
                 
