@@ -1547,7 +1547,7 @@ def start_scan():
         with get_api_db_cursor() as cursor:
             cursor.execute(
                 f'UPDATE scan_tokens SET used_count = used_count + 1,'
-                f' is_active = CASE WHEN max_uses > 0 AND (used_count + 1) >= max_uses THEN 0 ELSE is_active END'
+                f' is_active = CASE WHEN max_uses > 0 AND (used_count + 1) >= max_uses THEN FALSE ELSE is_active END'
                 f' WHERE id = {_PH}',
                 (token_id,)
             )

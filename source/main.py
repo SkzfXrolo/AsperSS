@@ -4586,7 +4586,8 @@ class ArgusApp:
                         data = response.json()
                         if data.get('valid', False):
                             print(f"✅ Token válido encontrado en config, autenticación automática exitosa")
-                            # Actualizar db_integration si existe
+                            if data.get('created_by'):
+                                self.config['staff_name'] = data['created_by']
                             if hasattr(self, 'db_integration') and self.db_integration:
                                 self.db_integration.scan_token = scan_token
                             return True
