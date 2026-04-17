@@ -14,7 +14,7 @@ a = Analysis(
         'requests', 'psutil',
         'flask', 'flask_cors',
         'db_integration', 'ai_analyzer', 'astro_ss_techniques', 'silent_scanner_techniques',
-        'ui_style'
+        'ui_style', 'mouse_weight_detector', 'ss_forensics',
     ],
     hookspath=[],
     hooksconfig={},

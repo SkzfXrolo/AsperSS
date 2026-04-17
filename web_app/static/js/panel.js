@@ -783,12 +783,69 @@ async function viewScanDetails(scanId) {
             if (hasUnprocessedIssues) {
                 document.getElementById('bulk-actions-bar').style.display = 'flex';
             }
-            
+
             updateBulkActions();
         } else {
             issuesContainer.innerHTML = '<div class="loading-cell">No se encontraron issues en este escaneo.</div>';
             document.getElementById('bulk-actions-bar').style.display = 'none';
         }
+
+        // ── Mouse & Forensics tab ─────────────────────────────────────────
+        const mouseFn = data.mouse_findings || [];
+        const forensicFn = data.forensic_findings || [];
+        const hasMF = mouseFn.length > 0 || forensicFn.length > 0;
+
+        const subnavBtn = document.getElementById('subnav-mouse-forensics');
+        if (subnavBtn) subnavBtn.style.display = hasMF ? '' : 'none';
+
+        const mfBadge = document.getElementById('mf-badge');
+        if (mfBadge) {
+            const criticals = [...mouseFn, ...forensicFn].filter(f => f.alerta === 'CRITICAL').length;
+            if (criticals > 0) { mfBadge.textContent = criticals; mfBadge.style.display = ''; }
+            else mfBadge.style.display = 'none';
+        }
+
+        // Mouse list
+        const mouseList = document.getElementById('mf-mouse-list');
+        const mouseBadge = document.getElementById('mf-mouse-badge');
+        if (mouseList) {
+            if (mouseFn.length > 0) {
+                if (mouseBadge) { mouseBadge.textContent = mouseFn.length + ' alerta(s)'; mouseBadge.style.display = ''; }
+                mouseList.innerHTML = mouseFn.map(f => {
+                    const color = f.alerta === 'CRITICAL' ? '#dc2626' : '#d97706';
+                    return `<div style="background:rgba(${f.alerta==='CRITICAL'?'220,38,38':'217,119,6'},0.08);border-left:3px solid ${color};border-radius:6px;padding:10px 14px;">
+                        <div style="font-weight:700;color:${color};font-size:13px;">${f.alerta==='CRITICAL'?'🔴':'🟠'} ${f.nombre||''}</div>
+                        ${f.detalle?`<div style="color:var(--text-m);font-size:12px;margin-top:4px;">${f.detalle}</div>`:''}
+                        ${f.descripcion?`<div style="color:var(--text-d);font-size:11px;margin-top:4px;">${f.descripcion}</div>`:''}
+                    </div>`;
+                }).join('');
+            } else {
+                if (mouseBadge) mouseBadge.style.display = 'none';
+                mouseList.innerHTML = '<p style="color:var(--text-m);font-size:13px;">✅ Sin indicadores de peso o manipulación de mouse.</p>';
+            }
+        }
+
+        // Forensics list
+        const forensicsList = document.getElementById('mf-forensics-list');
+        const forensicsBadge = document.getElementById('mf-forensics-badge');
+        if (forensicsList) {
+            if (forensicFn.length > 0) {
+                if (forensicsBadge) { forensicsBadge.textContent = forensicFn.length + ' hallazgo(s)'; forensicsBadge.style.display = ''; }
+                forensicsList.innerHTML = forensicFn.map(f => {
+                    const color = f.alerta === 'CRITICAL' ? '#9333ea' : '#6366f1';
+                    return `<div style="background:rgba(99,102,241,0.08);border-left:3px solid ${color};border-radius:6px;padding:10px 14px;">
+                        <div style="font-weight:700;color:${color};font-size:13px;">${f.alerta==='CRITICAL'?'🔴':'🔬'} ${f.nombre||''}</div>
+                        <div style="color:var(--text-m);font-size:11px;margin-top:2px;">Fuente: ${f.tipo||'—'}</div>
+                        ${f.detalle?`<div style="color:var(--text-m);font-size:12px;margin-top:4px;">${f.detalle}</div>`:''}
+                        ${f.descripcion?`<div style="color:var(--text-d);font-size:11px;margin-top:4px;">${f.descripcion}</div>`:''}
+                    </div>`;
+                }).join('');
+            } else {
+                if (forensicsBadge) forensicsBadge.style.display = 'none';
+                forensicsList.innerHTML = '<p style="color:var(--text-m);font-size:13px;">✅ Sin evidencia forense histórica de hacks o autoclickers.</p>';
+            }
+        }
+
     } catch (error) {
         console.error('Error cargando detalles:', error);
         alert('Error al cargar detalles del escaneo: ' + error.message);
