@@ -3,6 +3,18 @@ from tkinter import ttk, scrolledtext, messagebox, Toplevel
 import threading
 import os
 import sys
+
+# ── Log a archivo para debugging (AppData/Roaming/ASPERSProjectsSS/scanner.log) ──
+try:
+    _log_dir = os.path.join(os.environ.get('APPDATA', ''), 'ASPERSProjectsSS')
+    os.makedirs(_log_dir, exist_ok=True)
+    _log_path = os.path.join(_log_dir, 'scanner.log')
+    _log_file = open(_log_path, 'w', encoding='utf-8', buffering=1)
+    sys.stdout = _log_file
+    sys.stderr = _log_file
+    print(f"[INICIO] ArgusScanner iniciado - log en {_log_path}")
+except Exception:
+    pass
 import psutil
 import winreg
 import json
@@ -3073,12 +3085,17 @@ class ArgusApp:
 
             # Fase 9: Filtrado y clasificación (100%)
             self._update_progress_safe(100, "🔍 Filtrando resultados", "Aplicando filtros ultra estrictos...")
-            
+            print(f"[FILTRO] Issues antes de filtrar: {len(self.issues_found)} | Archivos escaneados: {self.total_files_scanned} | Dirs: {self.total_dirs_scanned}")
+
             # Aplicar filtro ultra inteligente
+            pre_filter = len(self.issues_found)
             self.issues_found = self.filter_false_positives(self.issues_found)
-            
+            print(f"[FILTRO] Después de filter_false_positives: {len(self.issues_found)} (eliminados: {pre_filter - len(self.issues_found)})")
+
             # Aplicar segundo filtro más inteligente
+            pre_secondary = len(self.issues_found)
             self.issues_found = self.secondary_filter(self.issues_found)
+            print(f"[FILTRO] Después de secondary_filter: {len(self.issues_found)} (eliminados: {pre_secondary - len(self.issues_found)})")
             
             # Aplicar análisis de IA si está disponible
             if self.ai_analyzer and self.issues_found:
