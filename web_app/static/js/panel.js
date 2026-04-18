@@ -900,9 +900,7 @@ async function viewScanDetails(scanId) {
             'utilities':          ['AUTOCLICK_TOOLS', 'autoclicker', 'injection', 'LOGITECH', 'RAZER', 'USB_DEVICES'],
             'archivos-windows':   ['PREFETCH', 'JNA', 'TEMP_FILES', 'SERVICES', 'PROCESSES', 'BACKGROUND_PROCESSES', 'DNS_CACHE', 'HIDDEN_FILES'],
         };
-        const allResults = (data.results || []).filter(r =>
-            r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO'
-        );
+        const allResults = data.results || [];
 
         Object.entries(TAB_CATEGORIES).forEach(([tab, cats]) => {
             const container = document.getElementById(`subpage-${tab}`);
