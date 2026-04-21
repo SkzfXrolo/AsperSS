@@ -2176,29 +2176,30 @@ class ArgusApp:
             # 5. CLASIFICAR POR SEVERIDAD (usando análisis de contenido si está disponible)
             if is_potential_hack or is_in_suspicious_folder or content_confidence >= 60:
                 # Usar análisis de contenido para determinar severidad si está disponible
+                # IMPORTANTE: no sobreescribir categoria si ya fue asignada por el scanner
                 if content_confidence >= 80:
                     item['alerta'] = 'CRITICAL'
-                    item['categoria'] = 'HACKS'
+                    if not item.get('categoria'): item['categoria'] = 'HACKS'
                     hacks_critical.append(item)
                 elif content_confidence >= 60:
                     item['alerta'] = 'SOSPECHOSO'
-                    item['categoria'] = 'HACKS'
+                    if not item.get('categoria'): item['categoria'] = 'HACKS'
                     hacks_sospechoso.append(item)
                 elif any(hack in archivo for hack in ['vape', 'entropy', 'whiteout', 'injector', 'dllinjector']):
                     item['alerta'] = 'CRITICAL'
-                    item['categoria'] = 'HACKS'
+                    if not item.get('categoria'): item['categoria'] = 'HACKS'
                     hacks_critical.append(item)
                 elif any(hack in archivo for hack in ['liquidbounce', 'wurst', 'impact', 'inject', 'killaura', 'aimbot']):
                     item['alerta'] = 'SOSPECHOSO'
-                    item['categoria'] = 'HACKS'
+                    if not item.get('categoria'): item['categoria'] = 'HACKS'
                     hacks_sospechoso.append(item)
                 elif any(hack in archivo for hack in ['sigma', 'flux', 'future', 'ghost', 'bypass']):
                     item['alerta'] = 'POCO_SOSPECHOSO'
-                    item['categoria'] = 'HACKS'
+                    if not item.get('categoria'): item['categoria'] = 'HACKS'
                     hacks_poco_sospechoso.append(item)
                 else:
                     item['alerta'] = 'NORMAL'
-                    item['categoria'] = 'HACKS'
+                    if not item.get('categoria'): item['categoria'] = 'HACKS'
                     hacks_normal.append(item)
                 
                 filtered.append(item)
