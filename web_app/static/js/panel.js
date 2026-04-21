@@ -901,6 +901,9 @@ async function viewScanDetails(scanId) {
             'archivos-windows':   ['PREFETCH', 'JNA', 'TEMP_FILES', 'SERVICES', 'PROCESSES', 'BACKGROUND_PROCESSES', 'DNS_CACHE', 'HIDDEN_FILES'],
         };
         const allResults = data.results || [];
+        console.log('[TABS DEBUG] Total resultados:', allResults.length);
+        const cats_debug = allResults.map(r => r.issue_category);
+        console.log('[TABS DEBUG] issue_category values:', [...new Set(cats_debug)]);
 
         Object.entries(TAB_CATEGORIES).forEach(([tab, cats]) => {
             const container = document.getElementById(`subpage-${tab}`);
