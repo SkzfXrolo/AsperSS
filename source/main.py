@@ -4006,14 +4006,12 @@ class ArgusApp:
                 'ghost', 'ghost client', 'ghostclient'
             ]
             
-            # Patrones de archivos de hacks
-            hack_file_patterns = [
-                '.jar', '.exe', '.dll', '.class', '.minecraft', '.mods', '.config'
-            ]
-            
-            # Ubicaciones sospechosas donde los hacks son más probables
+            # Patrones de archivos de hacks (solo extensiones realmente sospechosas fuera de minecraft)
+            hack_file_patterns = ['.jar', '.exe']
+
+            # Ubicaciones donde los hacks suelen estar (excluye appdata porque .minecraft vive ahí)
             suspicious_locations = [
-                'documents', 'downloads', 'desktop', 'appdata', 'temp', 'tmp'
+                'documents', 'downloads', 'desktop'
             ]
             
             filtered_issues = []
@@ -4048,14 +4046,14 @@ class ArgusApp:
                 if not is_real_hack and tipo in ['hack_file', 'exact_hack_folder']:
                     is_real_hack = True
                 
-                # 4. Verificar si contiene palabras clave de hacks
-                hack_keywords = ['hack', 'cheat', 'client', 'mod', 'cracked', 'premium', 'vip']
+                # 4. Verificar palabras clave específicas de hacks (NO usar 'mod'/'client' - demasiado genéricas)
+                hack_keywords = ['hack', 'cheat', 'cracked', 'killaura', 'aimbot', 'wallhack', 'triggerbot']
                 if not is_real_hack:
                     for keyword in hack_keywords:
                         if keyword in nombre or keyword in archivo:
                             is_real_hack = True
                             break
-                
+
                 if is_real_hack:
                     # Clasificar como HACK CRÍTICO
                     issue['alerta'] = 'CRITICAL'
