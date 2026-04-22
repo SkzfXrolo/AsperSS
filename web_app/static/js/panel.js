@@ -901,6 +901,11 @@ async function viewScanDetails(scanId) {
             'archivos-windows':   ['PREFETCH', 'JNA', 'TEMP_FILES', 'SERVICES', 'PROCESSES', 'BACKGROUND_PROCESSES', 'DNS_CACHE', 'HIDDEN_FILES'],
         };
         const allResults = data.results || [];
+        const _cats = allResults.map(r => r.issue_category);
+        const _counts = {};
+        _cats.forEach(c => { _counts[c||'(vacío)'] = (_counts[c||'(vacío)']||0)+1; });
+        console.log('[DEBUG] Categorías:', JSON.stringify(_counts));
+
         Object.entries(TAB_CATEGORIES).forEach(([tab, cats]) => {
             const container = document.getElementById(`subpage-${tab}`);
             if (!container) return;
