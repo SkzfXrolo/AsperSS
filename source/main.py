@@ -2940,10 +2940,10 @@ class ArgusApp:
                 for i, drive in enumerate(drives):
                     start_progress = i * progress_per_drive
                     end_progress = (i + 1) * progress_per_drive
-                    
-                    # Buscar hacks específicos primero
-                    self._scan_for_specific_hacks(drive)
-                    
+
+                    # Hack-name scan en paralelo (no bloquea la barra de progreso)
+                    executor.submit(self._scan_for_specific_hacks, drive)
+
                     future = executor.submit(self.scan_drive_exhaustive, drive, start_progress, end_progress)
                     futures.append(future)
                 
@@ -3233,6 +3233,7 @@ class ArgusApp:
             
             scanned_files = 0
             max_files_per_folder = None  # Sin límite de archivos por carpeta (solo timeout total)
+            last_progress_update = start_time
             
             # Actualizar contador global
             if not hasattr(self, 'total_files_scanned'):
@@ -3356,9 +3357,11 @@ class ArgusApp:
                                         'alerta': 'SOSPECHOSO'
                                     })
                                 
-                                # Mostrar progreso cada 2000 archivos
-                                if scanned_files % 2000 == 0:
-                                    elapsed = time.time() - start_time
+                                # Actualizar progreso cada 2000 archivos O cada 3 segundos
+                                _now = time.time()
+                                if scanned_files % 2000 == 0 or (_now - last_progress_update) >= 3:
+                                    last_progress_update = _now
+                                    elapsed = _now - start_time
                                     rate = scanned_files / elapsed if elapsed > 0 else 0
                                     remaining = total_timeout - elapsed
                                     print(f"📁 {drive}: {scanned_files} archivos ({rate:.0f} arch/s) - Tiempo restante: {remaining:.0f}s...")
@@ -3759,7 +3762,20 @@ class ArgusApp:
                 'athlon', 'phenom', 'fx', 'a', 'e', 'pro', 'threadripper', 'epyc'
             ]
             
+            import time as _t
+            _hacks_start = _t.time()
+            _max_depth = 5
+            _timeout = 25  # segundos máximo para esta función
+
             for root, dirs, files in os.walk(drive):
+                # Límite de tiempo y profundidad
+                if _t.time() - _hacks_start > _timeout:
+                    break
+                depth = root.count(os.sep) - drive.count(os.sep)
+                if depth > _max_depth:
+                    dirs[:] = []
+                    continue
+
                 # Buscar en nombres de carpetas
                 for dir_name in dirs:
                     dir_lower = dir_name.lower()
