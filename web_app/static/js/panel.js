@@ -1266,23 +1266,84 @@ function setupSubpageNavigation() {
     subnavItems.forEach(item => {
         item.addEventListener('click', () => {
             const subpage = item.dataset.subpage;
-            
-            // Remover active de todos los items
+
             subnavItems.forEach(i => i.classList.remove('active'));
             item.classList.add('active');
-            
-            // Ocultar todas las subpáginas
+
             document.querySelectorAll('.subpage-content').forEach(page => {
                 page.classList.remove('active');
             });
-            
-            // Mostrar la subpágina seleccionada
+
             const targetPage = document.getElementById(`subpage-${subpage}`);
-            if (targetPage) {
-                targetPage.classList.add('active');
+            if (targetPage) targetPage.classList.add('active');
+
+            // Cargar notas cuando se abre esa pestaña
+            if (subpage === 'notas' && currentScanId) {
+                loadScanNotes(currentScanId);
             }
         });
     });
+}
+
+// ============================================================
+// NOTAS DE ESCANEO
+// ============================================================
+
+async function loadScanNotes(scanId) {
+    const container = document.getElementById('scan-notes-list');
+    if (!container) return;
+    container.innerHTML = '<div style="color:var(--text-d);font-size:13px;">Cargando notas...</div>';
+    try {
+        const res  = await fetch(`/api/scans/${scanId}/notes`);
+        const data = await res.json();
+        const notes = data.notes || [];
+        if (notes.length === 0) {
+            container.innerHTML = '<div style="color:var(--text-d);font-size:13px;padding:8px 0;">Aún no hay notas para este escaneo.</div>';
+            return;
+        }
+        container.innerHTML = notes.map(n => `
+            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-size:12px;font-weight:700;color:var(--accent);">${n.author}</span>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span style="font-size:11px;color:var(--text-d);">${formatDate(n.created_at)}</span>
+                        <button onclick="deleteScanNote(${scanId},${n.id},this)"
+                            style="background:none;border:none;cursor:pointer;color:var(--text-d);font-size:12px;padding:2px 6px;border-radius:4px;transition:color .15s;"
+                            title="Eliminar nota">✕</button>
+                    </div>
+                </div>
+                <div style="font-size:13px;color:var(--text-s);white-space:pre-wrap;line-height:1.6;">${n.body.replace(/</g,'&lt;')}</div>
+            </div>`).join('');
+    } catch (e) {
+        container.innerHTML = '<div style="color:#ef4444;font-size:13px;">Error cargando notas</div>';
+    }
+}
+
+async function submitScanNote() {
+    if (!currentScanId) return;
+    const textarea = document.getElementById('new-note-body');
+    const body = (textarea?.value || '').trim();
+    if (!body) return;
+    try {
+        const res = await fetch(`/api/scans/${currentScanId}/notes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ body }),
+        });
+        if (res.ok) {
+            textarea.value = '';
+            loadScanNotes(currentScanId);
+        }
+    } catch(e) { console.error('Error al agregar nota:', e); }
+}
+
+async function deleteScanNote(scanId, noteId, btn) {
+    btn.disabled = true;
+    try {
+        const res = await fetch(`/api/scans/${scanId}/notes/${noteId}`, { method: 'DELETE' });
+        if (res.ok) loadScanNotes(scanId);
+        else btn.disabled = false;
+    } catch(e) { btn.disabled = false; }
 }
 
 async function loadPreviousScans(machineName) {

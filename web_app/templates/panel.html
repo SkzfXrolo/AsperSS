@@ -468,6 +468,13 @@
                         </svg>
                         <span>General</span>
                     </button>
+                    <button class="subnav-item" data-subpage="notas">
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                            <path d="M4 4H16V14L12 18H4V4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                            <path d="M7 8H13M7 11H11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                        </svg>
+                        <span>Notas</span>
+                    </button>
                     <button class="subnav-item" data-subpage="captura-pantalla">
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
                             <path d="M3 3H17V17H3V3Z" stroke="currentColor" stroke-width="2"/>
@@ -616,6 +623,28 @@
                     </div>
 
                 </div>
+                </div>
+
+                <!-- Notas del Staff -->
+                <div class="subpage-content" id="subpage-notas">
+                    <div style="padding:24px;max-width:720px;">
+                        <h3 style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:18px;">Notas del Staff</h3>
+
+                        <!-- Formulario nueva nota -->
+                        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:22px;">
+                            <textarea id="new-note-body" rows="3"
+                                placeholder="Escribe una nota sobre este escaneo..."
+                                style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;resize:vertical;outline:none;font-family:inherit;box-sizing:border-box;"></textarea>
+                            <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+                                <button class="btn btn-primary btn-sm" onclick="submitScanNote()">Agregar nota</button>
+                            </div>
+                        </div>
+
+                        <!-- Lista de notas -->
+                        <div id="scan-notes-list">
+                            <div style="color:var(--text-d);font-size:13px;">Cargando notas...</div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Captura de Pantalla -->

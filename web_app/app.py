@@ -3490,6 +3490,81 @@ def import_echo_scan():
             'traceback': traceback.format_exc()
         }), 500
 
+# ============================================================
+# NOTAS DE ESCANEO
+# ============================================================
+
+@app.route('/api/scans/<int:scan_id>/notes', methods=['GET'])
+@login_required
+def get_scan_notes(scan_id):
+    """Obtiene las notas de staff para un escaneo."""
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f'SELECT id, author, body, created_at FROM scan_notes WHERE scan_id = {_PH} ORDER BY created_at ASC',
+                (scan_id,)
+            )
+            notes = []
+            for row in cursor.fetchall():
+                notes.append({
+                    'id':         _row_get(row, 0, 'id'),
+                    'author':     _row_get(row, 1, 'author'),
+                    'body':       _row_get(row, 2, 'body'),
+                    'created_at': str(_row_get(row, 3, 'created_at') or ''),
+                })
+        return jsonify({'notes': notes}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/scans/<int:scan_id>/notes', methods=['POST'])
+@login_required
+def add_scan_note(scan_id):
+    """Agrega una nota de staff a un escaneo."""
+    data = request.json or {}
+    body = (data.get('body') or '').strip()
+    if not body:
+        return jsonify({'error': 'El cuerpo de la nota no puede estar vacío'}), 400
+    user = session.get('username', 'staff')
+    try:
+        with get_api_db_cursor() as cursor:
+            note_id = _insert_id(
+                cursor,
+                f'INSERT INTO scan_notes (scan_id, author, body) VALUES ({_PH},{_PH},{_PH})',
+                (scan_id, user, body)
+            )
+        return jsonify({'success': True, 'note_id': note_id}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/scans/<int:scan_id>/notes/<int:note_id>', methods=['DELETE'])
+@login_required
+def delete_scan_note(scan_id, note_id):
+    """Elimina una nota de staff (solo el autor o admin)."""
+    user = session.get('username', '')
+    roles = session.get('roles', [])
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f'SELECT author FROM scan_notes WHERE id = {_PH} AND scan_id = {_PH}',
+                (note_id, scan_id)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'error': 'Nota no encontrada'}), 404
+            author = _row_get(row, 0, 'author')
+            if author != user and 'admin' not in roles and 'owner' not in roles:
+                return jsonify({'error': 'No tienes permiso para eliminar esta nota'}), 403
+            cursor.execute(
+                f'DELETE FROM scan_notes WHERE id = {_PH}',
+                (note_id,)
+            )
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     print("🌐 Iniciando aplicación web de ASPERS Projects...")
     api_url_display = os.environ.get('API_URL') or (API_BASE_URL if IS_RENDER else API_BASE_URL)

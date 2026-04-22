@@ -642,7 +642,19 @@ def init_mysql_db():
                 INDEX idx_active (is_active)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ''')
-        
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS scan_notes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                scan_id INT NOT NULL,
+                author VARCHAR(100) NOT NULL,
+                body TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (scan_id) REFERENCES scans(id) ON DELETE CASCADE,
+                INDEX idx_scan_notes_scan_id (scan_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ''')
+
         conn.commit()
         print("✅ Base de datos MySQL inicializada correctamente")
         

@@ -422,7 +422,18 @@ def init_postgresql_db():
         
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_version ON ai_model_versions(version)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_active ON ai_model_versions(is_active)')
-        
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS scan_notes (
+                id SERIAL PRIMARY KEY,
+                scan_id INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+                author VARCHAR(100) NOT NULL,
+                body TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_scan_notes_scan_id ON scan_notes(scan_id)')
+
         conn.commit()
         print("✅ Base de datos PostgreSQL inicializada correctamente")
         
