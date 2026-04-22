@@ -4830,11 +4830,11 @@ class ArgusApp:
             
             # Crear interfaz de autenticación con estilo ARGUS PROJECTS
             bg_color = ModernUI.COLORS['bg_primary'] if UI_STYLE_AVAILABLE else "#0d1117"
-            card_color = ModernUI.COLORS['card'] if UI_STYLE_AVAILABLE else "#161b22"
+            card_color = ModernUI.COLORS['bg_card'] if UI_STYLE_AVAILABLE else "#161b22"
             text_primary = ModernUI.COLORS['text_primary'] if UI_STYLE_AVAILABLE else "#f0f6fc"
             text_secondary = ModernUI.COLORS['text_secondary'] if UI_STYLE_AVAILABLE else "#8b949e"
-            accent_blue = ModernUI.COLORS['accent_secondary'] if UI_STYLE_AVAILABLE else "#1f6feb"
-            accent_green = ModernUI.COLORS['accent_primary'] if UI_STYLE_AVAILABLE else "#238636"
+            accent_blue = ModernUI.COLORS['blue'] if UI_STYLE_AVAILABLE else "#1f6feb"
+            accent_green = ModernUI.COLORS['green'] if UI_STYLE_AVAILABLE else "#238636"
             
             # Header con estilo moderno
             header_frame = tk.Frame(auth_window, bg=card_color, height=120)
