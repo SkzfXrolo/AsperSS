@@ -62,11 +62,14 @@ async function pollForNewScans() {
         const data = await res.json();
         if (!data.scans || data.scans.length === 0) return;
 
-        const latestId = data.scans[0].id;
+        const latestId   = data.scans[0].id;
+        const latestName = data.scans[0].machine_name || 'desconocido';
         if (_lastKnownScanId !== null && latestId > _lastKnownScanId) {
             _newScansCount += (latestId - _lastKnownScanId);
             _lastKnownScanId = latestId;
             showNewScansBadge(_newScansCount);
+            showToast(`Nuevo scan de ${latestName}`, 'info', latestId);
+            playNotificationSound();
 
             // Si el usuario está viendo el dashboard, refrescar automáticamente
             const activeSection = document.querySelector('.panel-section.active');
@@ -88,6 +91,43 @@ function clearNewScansBadge() {
     _newScansCount = 0;
     const badge = document.getElementById('new-scans-badge');
     if (badge) badge.style.display = 'none';
+}
+
+let _toastContainer = null;
+function showToast(message, type = 'info', scanId = null) {
+    if (!_toastContainer) {
+        _toastContainer = document.createElement('div');
+        _toastContainer.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+        document.body.appendChild(_toastContainer);
+    }
+    const colors = { info: '#8B5CF6', success: '#10b981', error: '#ef4444' };
+    const toast  = document.createElement('div');
+    toast.style.cssText = `background:var(--bg-card,#1e1e2e);border:1px solid ${colors[type]||colors.info};border-left:3px solid ${colors[type]||colors.info};border-radius:10px;padding:12px 16px;font-size:13px;color:var(--text,#e2e8f0);box-shadow:0 4px 20px rgba(0,0,0,0.3);pointer-events:all;cursor:${scanId?'pointer':'default'};max-width:280px;animation:slideInRight .25s ease;`;
+    toast.innerHTML = `<div style="font-weight:600;margin-bottom:2px;">Argus Projects</div><div style="color:var(--text-s,#94a3b8);">${message}</div>`;
+    if (scanId) toast.onclick = () => { viewScanDetails(scanId); toast.remove(); };
+    _toastContainer.appendChild(toast);
+    setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity .4s'; setTimeout(() => toast.remove(), 400); }, 5000);
+}
+
+let _soundEnabled = localStorage.getItem('notif-sound') !== 'false';
+function playNotificationSound() {
+    if (!_soundEnabled) return;
+    try {
+        const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.4);
+    } catch(_) {}
+}
+
+function toggleNotifSound() {
+    _soundEnabled = !_soundEnabled;
+    localStorage.setItem('notif-sound', _soundEnabled ? 'true' : 'false');
+    showToast(_soundEnabled ? 'Sonido de notificaciones activado' : 'Sonido de notificaciones desactivado');
 }
 
 // ============================================================
