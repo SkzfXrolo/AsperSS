@@ -2389,14 +2389,16 @@ class ArgusApp:
     def create_ui(self):
         """Crea la interfaz de usuario con estilo moderno ASPERS PROJECTS"""
         if UI_STYLE_AVAILABLE:
-            # Usar sistema de estilos moderno
             main_panel = tk.Frame(self.root, bg=ModernUI.COLORS['bg_primary'])
             main_panel.pack(fill=tk.BOTH, expand=True)
-            
-            # Crear header moderno
+
+            # Header
             ModernUI.create_header(main_panel)
-            
-            # Crear sección de progreso
+
+            # Stat cards row
+            ModernUI.create_stat_cards(main_panel)
+
+            # Progress section
             progress_widgets = ModernUI.create_progress_section(main_panel)
             self.progress_frame = progress_widgets['container']
             self.progress_label = progress_widgets['status']
@@ -2405,39 +2407,34 @@ class ArgusApp:
             self.timer_label = progress_widgets['timer']
             self.resources_label = progress_widgets['resources']
             self.progress_percent_label = progress_widgets.get('percent', None)
+            self._progress_canvas = progress_widgets.get('_canvas', None)
             self.progress_value = 0
-            
-            # Crear botones de acción ultra compactos en línea horizontal
-            button_container = tk.Frame(main_panel, bg=ModernUI.COLORS['bg_primary'])
-            button_container.pack(fill=tk.X, pady=8, padx=15)
-            
-            # Contenedor horizontal para botones lado a lado
-            buttons_row = tk.Frame(button_container, bg=ModernUI.COLORS['bg_primary'])
-            buttons_row.pack(fill=tk.X)
-            
-            # Botón principal compacto
+
+            # Scan button
+            btn_container = tk.Frame(main_panel, bg=ModernUI.COLORS['bg_primary'])
+            btn_container.pack(fill=tk.X, pady=(6, 0), padx=18)
+
             scan_btn_frame = ModernUI.create_button(
-                buttons_row,
+                btn_container,
                 "INICIAR ESCANEO",
                 self.full_scan_with_discord,
                 style='primary',
                 icon='🚀'
             )
-            scan_btn_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            scan_btn_frame.pack(fill=tk.X)
             self.scan_button = None
             for widget in scan_btn_frame.winfo_children():
                 if isinstance(widget, tk.Button):
                     self.scan_button = widget
                     break
             self.details_button = None
-            
-            # Crear sección de resultados
+
+            # Results section
             results_widgets = ModernUI.create_results_section(main_panel)
             self.results_frame = results_widgets['container']
             self.results_text = results_widgets['text']
             self.results_label = results_widgets['title']
         else:
-            # Fallback al estilo anterior si no está disponible el módulo
             self._create_ui_fallback()
     
     def _create_ui_fallback(self):
@@ -2653,9 +2650,11 @@ class ArgusApp:
                             if hasattr(self, 'progress_bar'):
                                 self.progress_bar['value'] = next_value
                             if hasattr(self, 'progress_label'):
-                                self.progress_label.config(text=f"{last_message} ({next_value}%)")
+                                self.progress_label.config(text=f"{last_message}")
                             if hasattr(self, 'progress_percent_label') and self.progress_percent_label:
                                 self.progress_percent_label.config(text=f"{next_value}%")
+                            if hasattr(self, '_progress_canvas') and self._progress_canvas:
+                                ModernUI.update_canvas_bar(self._progress_canvas, next_value)
                         except:
                             pass
                     
@@ -2771,6 +2770,8 @@ class ArgusApp:
             try:
                 # Activar modo silencioso (sin logs en UI)
                 self.scanning_mode = True
+                if UI_STYLE_AVAILABLE:
+                    ModernUI.set_status_badge("ESCANEANDO", ModernUI.COLORS['amber'])
                 
                 # Iniciar escaneo en BD si está disponible
                 scan_start_time = time.time()
@@ -3136,8 +3137,24 @@ class ArgusApp:
                 except Exception as e:
                     print(f"⚠️ Error aplicando scoring: {e}")
             
+            # Actualizar contadores en la UI
+            if UI_STYLE_AVAILABLE:
+                counts = {'critical': 0, 'suspicious': 0, 'low': 0, 'clean': 0}
+                for iss in self.issues_found:
+                    lvl = iss.get('alerta', '').upper()
+                    if lvl == 'CRITICAL':
+                        counts['critical'] += 1
+                    elif lvl == 'SOSPECHOSO':
+                        counts['suspicious'] += 1
+                    elif lvl == 'POCO_SOSPECHOSO':
+                        counts['low'] += 1
+                    else:
+                        counts['clean'] += 1
+                for k, v in counts.items():
+                    ModernUI.update_counter(k, v)
+
             # Finalizar (95% — el 100% lo pone el hilo principal tras enviar resultados)
-            self._update_progress_safe(95, "🔄 Preparando resultados", f"Encontrados {len(self.issues_found)} elementos")
+            self._update_progress_safe(95, "Preparando resultados", f"Encontrados {len(self.issues_found)} elementos")
             
             # Estadísticas finales
             if hasattr(self, 'scan_start_time'):
@@ -3159,6 +3176,8 @@ class ArgusApp:
             # Detener cronómetro
             self.stop_scan_timer()
             self.scanning = False
+            if UI_STYLE_AVAILABLE:
+                ModernUI.set_status_badge("LISTO", ModernUI.COLORS['green'])
     
     def scan_drive_exhaustive(self, drive, start_progress, end_progress):
         """Escanea una unidad completa - VERSIÓN OPTIMIZADA CON LÍMITES"""

@@ -2,51 +2,58 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext
 import os
 import sys
+import threading
+import time
+
 
 class ModernUI:
     """
-    Argus Projects — Scanner UI
-    Paleta oscura premium (midnight navy + cyan) alineada con el panel web.
+    Argus Projects — Scanner UI v3
+    Rediseño completo: two-column layout, live counters, canvas progress bar.
     """
 
     COLORS = {
-        # Fondos — Aurora: espacio profundo índigo
-        'bg_primary':   '#09091C',
-        'bg_secondary': '#0E0E28',
-        'bg_tertiary':  '#141430',
-        'card':         '#0C0C26',
+        'bg_primary':   '#07071A',
+        'bg_secondary': '#0B0B22',
+        'bg_card':      '#0E0E2A',
+        'bg_hover':     '#13133A',
 
-        # Textos
         'text_primary':   '#E2E8F7',
-        'text_secondary': '#7C7FA6',
-        'text_muted':     '#3D3F6E',
+        'text_secondary': '#6B6E9A',
+        'text_muted':     '#2E3060',
 
-        # Acentos — Aurora: violeta eléctrico
-        'accent_primary':       '#8B5CF6',
-        'accent_primary_hover': '#6D28D9',
-        'accent_secondary':     '#10B981',
-        'accent_warning':       '#F59E0B',
-        'accent_danger':        '#F43F5E',
-        'accent_info':          '#38BDF8',
+        'accent':         '#8B5CF6',
+        'accent_hover':   '#7C3AED',
+        'accent_dim':     'rgba(139,92,246,0.12)',
+        'green':          '#10B981',
+        'amber':          '#F59E0B',
+        'red':            '#F43F5E',
+        'blue':           '#38BDF8',
 
-        # Bordes
-        'border':       '#1A1A38',
-        'border_light': '#141430',
+        'border':         '#14143A',
+        'border_bright':  '#1E1E50',
+        'separator':      '#0F0F30',
     }
 
     FONTS = {
-        'title':     ('Segoe UI', 22, 'bold'),
+        'title':     ('Segoe UI', 20, 'bold'),
         'subtitle':  ('Segoe UI', 9),
-        'heading':   ('Segoe UI', 11, 'bold'),
+        'heading':   ('Segoe UI', 10, 'bold'),
         'body':      ('Segoe UI', 10),
         'body_bold': ('Segoe UI', 10, 'bold'),
-        'small':     ('Segoe UI', 9),
+        'small':     ('Segoe UI', 8),
         'mono':      ('Consolas', 10),
-        'button':    ('Segoe UI', 10, 'bold'),
+        'button':    ('Segoe UI', 11, 'bold'),
+        'counter':   ('Segoe UI', 26, 'bold'),
+        'label_sm':  ('Segoe UI', 7, 'bold'),
     }
 
-    # ── Estilos ttk ──────────────────────────────────────────────────────────
     _style_applied = False
+
+    # ── public counters (updated by scanner) ─────────────────────────────────
+    _counter_labels = {}   # {'critical': tk.Label, ...}
+    _status_badge = None
+    _phase_label = None
 
     @classmethod
     def _apply_ttk_style(cls):
@@ -60,36 +67,30 @@ class ModernUI:
             pass
         s.configure(
             'Argus.Horizontal.TProgressbar',
-            background=cls.COLORS['accent_primary'],
-            troughcolor='#0d1a2e',
+            background=cls.COLORS['accent'],
+            troughcolor=cls.COLORS['bg_secondary'],
             borderwidth=0,
-            lightcolor=cls.COLORS['accent_primary'],
-            darkcolor=cls.COLORS['accent_primary'],
-            thickness=6,
+            lightcolor=cls.COLORS['accent'],
+            darkcolor=cls.COLORS['accent'],
+            thickness=4,
         )
 
-    # ── Aplicar ventana ──────────────────────────────────────────────────────
     @staticmethod
     def apply_window_style(root):
         root.title("Argus Projects — Security Scanner Pro")
         sw = root.winfo_screenwidth()
         if sw <= 1366:
-            w, h = 1150, 670
-            mw, mh = 960, 560
+            w, h = 1100, 680
+            mw, mh = 900, 580
         elif sw <= 1920:
-            w, h = 1380, 820
-            mw, mh = 1150, 660
+            w, h = 1360, 820
+            mw, mh = 1100, 660
         else:
-            w, h = 1560, 920
-            mw, mh = 1380, 800
+            w, h = 1540, 920
+            mw, mh = 1360, 800
         root.geometry(f"{w}x{h}")
         root.minsize(mw, mh)
         root.configure(bg=ModernUI.COLORS['bg_primary'])
-        try:
-            root.attributes('-alpha', 1.0)
-        except Exception:
-            pass
-        # Ícono de ventana (taskbar + barra de título)
         try:
             ico_path = os.path.join(ModernUI._base_path(), 'assets', 'logo.ico')
             if os.path.exists(ico_path):
@@ -97,141 +98,218 @@ class ModernUI:
         except Exception:
             pass
 
-    # ── Ruta base para assets empaquetados o en desarrollo ───────────────────
     @staticmethod
     def _base_path():
         if getattr(sys, 'frozen', False):
             return sys._MEIPASS
         return os.path.dirname(os.path.abspath(__file__))
 
-    # ── Header ───────────────────────────────────────────────────────────────
-    @staticmethod
-    def create_header(parent):
-        C = ModernUI.COLORS
+    # ─────────────────────────────────────────────────────────────────────────
+    #  HEADER
+    # ─────────────────────────────────────────────────────────────────────────
+    @classmethod
+    def create_header(cls, parent):
+        C = cls.COLORS
         hdr = tk.Frame(parent, bg=C['bg_secondary'])
         hdr.pack(fill=tk.X)
 
-        # Línea superior degradada (accent bar)
-        tk.Frame(hdr, bg=C['accent_primary'], height=2).pack(fill=tk.X)
+        # Accent top line
+        tk.Frame(hdr, bg=C['accent'], height=2).pack(fill=tk.X)
 
         inner = tk.Frame(hdr, bg=C['bg_secondary'])
-        inner.pack(fill=tk.X, padx=24, pady=12)
+        inner.pack(fill=tk.X, padx=22, pady=10)
 
+        # ── Logo + brand ─────────────────────────────────────────────────────
         left = tk.Frame(inner, bg=C['bg_secondary'])
         left.pack(side=tk.LEFT, fill=tk.Y)
 
-        # ── Logo: imagen real si existe, canvas SVG como fallback ─────────
-        logo_path = os.path.join(ModernUI._base_path(), 'assets', 'logo.png')
-        _logo_img = None  # referencia para evitar garbage-collection
+        logo_path = os.path.join(cls._base_path(), 'assets', 'logo.png')
         try:
             if os.path.exists(logo_path):
                 from tkinter import PhotoImage
                 raw = PhotoImage(file=logo_path)
-                # Escalar a 48×48 preservando aspecto sin PIL
                 ow, oh = raw.width(), raw.height()
-                target = 48
-                sx = max(1, ow // target)
-                sy = max(1, oh // target)
-                _logo_img = raw.subsample(sx, sy)
-                lbl = tk.Label(left, image=_logo_img, bg=C['bg_secondary'])
-                lbl.image = _logo_img  # ancla para GC
+                sx = max(1, ow // 44)
+                sy = max(1, oh // 44)
+                img = raw.subsample(sx, sy)
+                lbl = tk.Label(left, image=img, bg=C['bg_secondary'])
+                lbl.image = img
                 lbl.pack(side=tk.LEFT, padx=(0, 14))
             else:
                 raise FileNotFoundError
         except Exception:
-            # Canvas fallback (escudo vectorial)
-            logo_c = tk.Canvas(left, width=42, height=42, bg=C['bg_secondary'],
-                               highlightthickness=0)
-            logo_c.pack(side=tk.LEFT, padx=(0, 12))
-            logo_c.create_polygon(21, 2, 3, 10, 3, 22, 21, 40, 39, 22, 39, 10,
-                                  fill='', outline=C['accent_primary'], width=2)
-            logo_c.create_oval(12, 11, 30, 29,
-                               fill='', outline=C['accent_secondary'], width=1)
-            logo_c.create_line(13, 20, 19, 27, 29, 14,
-                               fill=C['accent_primary'], width=2,
-                               joinstyle='round', capstyle='round')
+            c = tk.Canvas(left, width=40, height=40, bg=C['bg_secondary'],
+                          highlightthickness=0)
+            c.pack(side=tk.LEFT, padx=(0, 12))
+            c.create_polygon(20, 2, 2, 10, 2, 22, 20, 38, 38, 22, 38, 10,
+                             fill='', outline=C['accent'], width=2)
+            c.create_line(12, 19, 18, 26, 28, 13,
+                          fill=C['accent'], width=2, joinstyle='round', capstyle='round')
 
-        text_col = tk.Frame(left, bg=C['bg_secondary'])
-        text_col.pack(side=tk.LEFT)
-        tk.Label(text_col, text="ARGUS PROJECTS",
-                 font=ModernUI.FONTS['title'],
+        brand = tk.Frame(left, bg=C['bg_secondary'])
+        brand.pack(side=tk.LEFT)
+        tk.Label(brand, text="ARGUS PROJECTS",
+                 font=cls.FONTS['title'],
                  bg=C['bg_secondary'], fg=C['text_primary'],
                  anchor='w').pack(anchor='w')
-        tk.Label(text_col,
+        tk.Label(brand,
                  text="Security Scanner Pro  •  Advanced Anti-Bypass Detection",
-                 font=ModernUI.FONTS['subtitle'],
+                 font=cls.FONTS['subtitle'],
                  bg=C['bg_secondary'], fg=C['text_secondary'],
                  anchor='w').pack(anchor='w', pady=(2, 0))
 
-        # Badge derecho
-        badge = tk.Label(inner, text="● READY",
-                         font=('Segoe UI', 9, 'bold'),
-                         bg=C['bg_secondary'], fg=C['accent_secondary'],
-                         padx=0)
-        badge.pack(side=tk.RIGHT, padx=4)
+        # ── Right: status badge ───────────────────────────────────────────────
+        right = tk.Frame(inner, bg=C['bg_secondary'])
+        right.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Línea inferior
-        tk.Frame(hdr, bg='#0d1a2e', height=1).pack(fill=tk.X)
+        badge_frame = tk.Frame(right, bg=C['bg_card'],
+                               highlightbackground=C['border_bright'], highlightthickness=1)
+        badge_frame.pack(side=tk.RIGHT, pady=2)
+        badge = tk.Label(badge_frame, text="●  LISTO",
+                         font=('Segoe UI', 9, 'bold'),
+                         bg=C['bg_card'], fg=C['green'],
+                         padx=12, pady=6)
+        badge.pack()
+        cls._status_badge = badge
+
+        tk.Frame(hdr, bg=C['separator'], height=1).pack(fill=tk.X)
         return hdr
 
-    # ── Sección de progreso ──────────────────────────────────────────────────
-    @staticmethod
-    def create_progress_section(parent):
-        ModernUI._apply_ttk_style()
-        C = ModernUI.COLORS
+    # ─────────────────────────────────────────────────────────────────────────
+    #  STAT CARDS ROW  (live counters: Critical / Suspicious / Low / Clean)
+    # ─────────────────────────────────────────────────────────────────────────
+    @classmethod
+    def create_stat_cards(cls, parent):
+        C = cls.COLORS
+        outer = tk.Frame(parent, bg=C['bg_primary'])
+        outer.pack(fill=tk.X, padx=18, pady=(10, 0))
+
+        specs = [
+            ('critical',    'CRÍTICOS',       C['red'],   '#1A0812'),
+            ('suspicious',  'SOSPECHOSOS',    C['amber'], '#1A1208'),
+            ('low',         'POCO SUSP.',     '#818CF8',  '#0D0D1A'),
+            ('clean',       'NORMALES',       C['green'], '#081A12'),
+        ]
+
+        cls._counter_labels = {}
+        for key, label, color, bg in specs:
+            card = tk.Frame(outer, bg=bg,
+                            highlightbackground=color + '40',
+                            highlightthickness=1)
+            card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
+
+            # Top accent line
+            tk.Frame(card, bg=color, height=2).pack(fill=tk.X)
+
+            inner = tk.Frame(card, bg=bg)
+            inner.pack(fill=tk.BOTH, expand=True, padx=14, pady=10)
+
+            tk.Label(inner, text=label,
+                     font=cls.FONTS['label_sm'],
+                     bg=bg, fg=color + 'BB',
+                     anchor='w').pack(anchor='w')
+
+            num = tk.Label(inner, text="0",
+                           font=cls.FONTS['counter'],
+                           bg=bg, fg=color,
+                           anchor='w')
+            num.pack(anchor='w', pady=(2, 0))
+
+            cls._counter_labels[key] = num
+
+        return outer
+
+    # ─────────────────────────────────────────────────────────────────────────
+    #  PROGRESS SECTION
+    # ─────────────────────────────────────────────────────────────────────────
+    @classmethod
+    def create_progress_section(cls, parent):
+        cls._apply_ttk_style()
+        C = cls.COLORS
 
         outer = tk.Frame(parent, bg=C['bg_primary'])
-        outer.pack(fill=tk.X, padx=18, pady=(12, 6))
+        outer.pack(fill=tk.X, padx=18, pady=(10, 6))
 
-        card = tk.Frame(outer, bg=C['card'])
+        card = tk.Frame(outer, bg=C['bg_card'],
+                        highlightbackground=C['border_bright'], highlightthickness=1)
         card.pack(fill=tk.BOTH, expand=True)
-        tk.Frame(card, bg=C['accent_primary'], height=1).pack(fill=tk.X)
 
-        content = tk.Frame(card, bg=C['card'])
+        content = tk.Frame(card, bg=C['bg_card'])
         content.pack(fill=tk.BOTH, expand=True, padx=18, pady=12)
 
-        # Fila: título + porcentaje
-        top = tk.Frame(content, bg=C['card'])
-        top.pack(fill=tk.X, pady=(0, 6))
-        tk.Label(top, text="PROGRESO", font=('Segoe UI', 8, 'bold'),
-                 bg=C['card'], fg=C['text_secondary']).pack(side=tk.LEFT)
-        pct = tk.Label(top, text="0%",
+        # Row: PROGRESO label  +  percent
+        top_row = tk.Frame(content, bg=C['bg_card'])
+        top_row.pack(fill=tk.X, pady=(0, 6))
+
+        tk.Label(top_row, text="PROGRESO",
+                 font=cls.FONTS['label_sm'],
+                 bg=C['bg_card'], fg=C['text_secondary']).pack(side=tk.LEFT)
+
+        pct = tk.Label(top_row, text="0%",
                        font=('Consolas', 11, 'bold'),
-                       bg=C['card'], fg=C['accent_primary'])
+                       bg=C['bg_card'], fg=C['accent'])
         pct.pack(side=tk.RIGHT)
 
-        # Etiqueta de estado
-        status = tk.Label(content, text="⏳ Esperando inicio...",
-                          font=ModernUI.FONTS['body'],
-                          bg=C['card'], fg=C['text_primary'], anchor='w')
-        status.pack(fill=tk.X, pady=(0, 6))
+        # Status label
+        status = tk.Label(content, text="Iniciando escaneo exhaustivo",
+                          font=('Segoe UI', 10),
+                          bg=C['bg_card'], fg=C['text_primary'], anchor='w')
+        status.pack(fill=tk.X, pady=(0, 8))
 
-        # Progress bar delgada con canvas para mejor control visual
-        pb_frame = tk.Frame(content, bg='#0d1a2e', height=6)
-        pb_frame.pack(fill=tk.X, pady=(0, 4))
-        pb_frame.pack_propagate(False)
+        # Custom Canvas progress bar (looks better than ttk)
+        bar_height = 8
+        bar_bg = tk.Frame(content, bg=C['bg_secondary'], height=bar_height)
+        bar_bg.pack(fill=tk.X, pady=(0, 6))
+        bar_bg.pack_propagate(False)
 
-        pb = ttk.Progressbar(pb_frame, mode='determinate', maximum=100,
-                             style='Argus.Horizontal.TProgressbar')
-        pb.pack(fill=tk.BOTH, expand=True)
+        canvas = tk.Canvas(bar_bg, height=bar_height,
+                           bg=C['bg_secondary'],
+                           highlightthickness=0, bd=0)
+        canvas.pack(fill=tk.BOTH, expand=True)
+        canvas._fill = None
+        canvas._width = 0
 
-        # Detalle
-        detail = tk.Label(content, text="",
-                          font=ModernUI.FONTS['small'],
-                          bg=C['card'], fg=C['text_muted'], anchor='w')
-        detail.pack(fill=tk.X, pady=(2, 6))
+        def _draw_bar(pct_val):
+            canvas.delete('bar')
+            w = canvas.winfo_width()
+            if w < 2:
+                return
+            fill_w = int(w * pct_val / 100)
+            if fill_w > 0:
+                # Main fill
+                canvas.create_rectangle(0, 0, fill_w, bar_height,
+                                        fill=C['accent'], outline='', tags='bar')
+                # Shine strip
+                canvas.create_rectangle(0, 0, fill_w, 2,
+                                        fill='#A78BFA', outline='', tags='bar')
 
-        # Fila inferior: timer + recursos
-        bottom = tk.Frame(content, bg=C['card'])
-        bottom.pack(fill=tk.X)
-        timer = tk.Label(bottom, text="⏱  00:00:00",
+        canvas._draw = _draw_bar
+
+        # Detail text
+        detail = tk.Label(content, text="Preparando sistema...",
+                          font=cls.FONTS['small'],
+                          bg=C['bg_card'], fg=C['text_secondary'], anchor='w')
+        detail.pack(fill=tk.X, pady=(0, 8))
+
+        # Bottom row: timer + resources
+        bot = tk.Frame(content, bg=C['bg_card'])
+        bot.pack(fill=tk.X)
+
+        timer = tk.Label(bot, text="⏱  00:00:00",
                          font=('Consolas', 9),
-                         bg=C['card'], fg=C['accent_info'])
+                         bg=C['bg_card'], fg=C['blue'])
         timer.pack(side=tk.LEFT)
-        resources = tk.Label(bottom, text="",
-                             font=ModernUI.FONTS['small'],
-                             bg=C['card'], fg=C['text_muted'])
+
+        resources = tk.Label(bot, text="",
+                             font=cls.FONTS['small'],
+                             bg=C['bg_card'], fg=C['text_secondary'])
         resources.pack(side=tk.RIGHT)
+
+        # Fake ttk bar hidden — we use canvas instead
+        pb = ttk.Progressbar(content, mode='determinate', maximum=100,
+                             style='Argus.Horizontal.TProgressbar')
+        # hidden — but kept so existing code that sets pb['value'] still works
+        pb._canvas_ref = canvas
 
         return {
             'container': card,
@@ -241,23 +319,26 @@ class ModernUI:
             'timer':     timer,
             'resources': resources,
             'percent':   pct,
+            '_canvas':   canvas,
         }
 
-    # ── Botones ──────────────────────────────────────────────────────────────
-    @staticmethod
-    def create_button(parent, text, command, style='primary', icon=''):
-        C = ModernUI.COLORS
+    # ─────────────────────────────────────────────────────────────────────────
+    #  SCAN BUTTON
+    # ─────────────────────────────────────────────────────────────────────────
+    @classmethod
+    def create_button(cls, parent, text, command, style='primary', icon=''):
+        C = cls.COLORS
         label = f"{icon}  {text}" if icon else text
 
         if style == 'primary':
-            bg = C['accent_primary'];    hv = C['accent_primary_hover']
-            fg = '#000000';              px, py, fs = 28, 11, 11
+            bg = C['accent'];       hv = C['accent_hover']
+            fg = '#FFFFFF';         px, py, fs = 32, 13, 11
         elif style == 'secondary':
-            bg = C['bg_tertiary'];       hv = '#141c2f'
-            fg = C['text_primary'];      px, py, fs = 20, 8, 9
+            bg = C['bg_card'];      hv = C['bg_hover']
+            fg = C['text_primary']; px, py, fs = 20, 9, 9
         else:
-            bg = C['bg_secondary'];      hv = C['bg_tertiary']
-            fg = C['text_secondary'];    px, py, fs = 16, 6, 9
+            bg = C['bg_secondary']; hv = C['bg_card']
+            fg = C['text_secondary'];px, py, fs = 16, 7, 9
 
         frame = tk.Frame(parent, bg=C['bg_primary'])
         btn = tk.Button(
@@ -269,52 +350,103 @@ class ModernUI:
             activebackground=hv, activeforeground=fg,
             highlightthickness=0,
         )
-        btn.pack()
+        btn.pack(fill=tk.X)
         btn.bind('<Enter>', lambda e: btn.config(bg=hv))
         btn.bind('<Leave>', lambda e: btn.config(bg=bg))
         return frame
 
-    # ── Sección de resultados ────────────────────────────────────────────────
-    @staticmethod
-    def create_results_section(parent):
-        C = ModernUI.COLORS
+    # ─────────────────────────────────────────────────────────────────────────
+    #  RESULTS SECTION
+    # ─────────────────────────────────────────────────────────────────────────
+    @classmethod
+    def create_results_section(cls, parent):
+        C = cls.COLORS
 
         outer = tk.Frame(parent, bg=C['bg_primary'])
         outer.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 18))
 
-        card = tk.Frame(outer, bg=C['card'])
+        card = tk.Frame(outer, bg=C['bg_card'],
+                        highlightbackground=C['border_bright'], highlightthickness=1)
         card.pack(fill=tk.BOTH, expand=True)
-        tk.Frame(card, bg=C['accent_secondary'], height=1).pack(fill=tk.X)
 
-        content = tk.Frame(card, bg=C['card'])
-        content.pack(fill=tk.BOTH, expand=True, padx=18, pady=12)
+        # Header row
+        hdr = tk.Frame(card, bg=C['bg_secondary'])
+        hdr.pack(fill=tk.X)
+        tk.Label(hdr, text="RESULTADOS",
+                 font=cls.FONTS['label_sm'],
+                 bg=C['bg_secondary'], fg=C['text_secondary'],
+                 padx=18, pady=8).pack(side=tk.LEFT)
 
-        title = tk.Label(content, text="RESULTADOS",
-                         font=('Segoe UI', 8, 'bold'),
-                         bg=C['card'], fg=C['text_secondary'], anchor='w')
-        title.pack(fill=tk.X, pady=(0, 8))
+        title = tk.Label(hdr, text="",
+                         font=cls.FONTS['small'],
+                         bg=C['bg_secondary'], fg=C['text_muted'],
+                         padx=18)
+        title.pack(side=tk.RIGHT)
+
+        tk.Frame(card, bg=C['separator'], height=1).pack(fill=tk.X)
+
+        content = tk.Frame(card, bg=C['bg_card'])
+        content.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
 
         ta = scrolledtext.ScrolledText(
             content, wrap=tk.WORD,
-            font=ModernUI.FONTS['mono'],
-            bg=C['bg_secondary'], fg=C['text_primary'],
-            padx=14, pady=12,
-            insertbackground=C['accent_primary'],
-            selectbackground=C['bg_tertiary'],
+            font=cls.FONTS['mono'],
+            bg=C['bg_card'], fg=C['text_primary'],
+            padx=16, pady=12,
+            insertbackground=C['accent'],
+            selectbackground=C['bg_hover'],
             selectforeground=C['text_primary'],
             relief=tk.FLAT, bd=0, highlightthickness=0,
         )
         ta.pack(fill=tk.BOTH, expand=True)
 
-        ta.tag_config('success', foreground=C['accent_secondary'],
-                      font=(ModernUI.FONTS['mono'][0], ModernUI.FONTS['mono'][1], 'bold'))
-        ta.tag_config('warning', foreground=C['accent_warning'],
-                      font=(ModernUI.FONTS['mono'][0], ModernUI.FONTS['mono'][1], 'bold'))
-        ta.tag_config('danger',  foreground=C['accent_danger'],
-                      font=(ModernUI.FONTS['mono'][0], ModernUI.FONTS['mono'][1], 'bold'))
-        ta.tag_config('info',    foreground=C['accent_info'],
-                      font=(ModernUI.FONTS['mono'][0], ModernUI.FONTS['mono'][1], 'bold'))
+        ta.tag_config('success', foreground=C['green'],
+                      font=(cls.FONTS['mono'][0], cls.FONTS['mono'][1], 'bold'))
+        ta.tag_config('warning', foreground=C['amber'],
+                      font=(cls.FONTS['mono'][0], cls.FONTS['mono'][1], 'bold'))
+        ta.tag_config('danger',  foreground=C['red'],
+                      font=(cls.FONTS['mono'][0], cls.FONTS['mono'][1], 'bold'))
+        ta.tag_config('info',    foreground=C['blue'],
+                      font=(cls.FONTS['mono'][0], cls.FONTS['mono'][1], 'bold'))
         ta.tag_config('header',  foreground=C['text_primary'],
-                      font=(ModernUI.FONTS['mono'][0], ModernUI.FONTS['mono'][1], 'bold'))
+                      font=(cls.FONTS['mono'][0], cls.FONTS['mono'][1], 'bold'))
+        ta.tag_config('muted',   foreground=C['text_secondary'])
+        ta.tag_config('accent',  foreground=C['accent'],
+                      font=(cls.FONTS['mono'][0], cls.FONTS['mono'][1], 'bold'))
 
         return {'container': card, 'text': ta, 'title': title}
+
+    # ─────────────────────────────────────────────────────────────────────────
+    #  PUBLIC HELPERS (called by scanner during scan)
+    # ─────────────────────────────────────────────────────────────────────────
+    @classmethod
+    def set_status_badge(cls, text, color=None):
+        """Update the header status badge (e.g. SCANNING, DONE)."""
+        if cls._status_badge is None:
+            return
+        C = cls.COLORS
+        col = color or C['accent']
+        try:
+            cls._status_badge.config(text=f"●  {text}", fg=col)
+        except Exception:
+            pass
+
+    @classmethod
+    def update_counter(cls, key, value):
+        """Update a live stat counter. key: 'critical'|'suspicious'|'low'|'clean'"""
+        lbl = cls._counter_labels.get(key)
+        if lbl is None:
+            return
+        try:
+            lbl.config(text=str(value))
+        except Exception:
+            pass
+
+    @classmethod
+    def update_canvas_bar(cls, canvas, pct_val):
+        """Redraw the custom canvas progress bar."""
+        try:
+            if hasattr(canvas, '_draw'):
+                canvas._draw(pct_val)
+        except Exception:
+            pass
