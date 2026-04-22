@@ -48,6 +48,11 @@
     --shadow:      0 8px 32px rgba(0,0,0,0.60);
     --shadow-lg:   0 20px 60px rgba(0,0,0,0.80);
     --glow:        0 0 28px rgba(139,92,246,0.20);
+
+    /* Shorthand aliases (used in inline styles) */
+    --bg-s:        #0E0E28;
+    --bg-t:        transparent;
+    --text-h:      #E2E8F7;
 }
 
 /* ── Light Theme ── */
@@ -74,6 +79,10 @@ body.light-theme {
     --shadow:      0 8px 32px rgba(80,60,180,0.10);
     --shadow-lg:   0 20px 60px rgba(80,60,180,0.18);
     --glow:        0 0 28px rgba(124,58,237,0.14);
+
+    --bg-s:        #FFFFFF;
+    --bg-t:        transparent;
+    --text-h:      #1E1B4B;
 
     --green:       #059669;
     --green-bg:    rgba(5,150,105,0.09);
@@ -1089,17 +1098,19 @@ body.light-theme .sidebar {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 12px;
+    padding: 10px 12px;
     margin-bottom: 20px;
     backdrop-filter: blur(12px);
 }
 .subnav-row {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 6px;
+    flex-wrap: nowrap;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
-.subnav-row:last-child { margin-bottom: 0; }
+.subnav-row::-webkit-scrollbar { display: none; }
 
 .subnav-item {
     display: inline-flex;
@@ -2282,27 +2293,6 @@ body.light-theme .scan-back-btn {
 #scan-info-block .scan-info-value { font-weight: 600; font-size: 12px; }
 
 /* ══════════════════════════════════════════════
-   NEW SECTIONS: SUBNAV TABS
-══════════════════════════════════════════════ */
-
-.scan-subnav .subnav-row {
-    flex-wrap: wrap;
-}
-
-/* Better subnav item sizing for more tabs */
-.subnav-item {
-    font-size: 12px !important;
-    padding: 7px 12px !important;
-    gap: 6px !important;
-    white-space: nowrap;
-}
-
-.subnav-item svg {
-    width: 16px;
-    height: 16px;
-}
-
-/* ══════════════════════════════════════════════
    DATA CARDS (texture packs, executed, deleted)
 ══════════════════════════════════════════════ */
 
@@ -2345,8 +2335,3 @@ body.light-theme .scan-back-btn {
     transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* Subnav responsive */
-@media (max-width: 1200px) {
-    .subnav-item span { display: none; }
-    .subnav-item { padding: 8px 10px !important; }
-}

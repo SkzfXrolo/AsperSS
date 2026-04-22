@@ -3006,6 +3006,13 @@ class ArgusApp:
                 _run_safe(self.scan_cmd_history_full)
                 _run_safe(self.scan_prefetch_all)
                 _run_safe(self.scan_executed_userassist)
+                _run_safe(self.scan_bam_registry)
+                _run_safe(self.scan_recent_lnk)
+                _run_safe(self.scan_appcompat_shimcache)
+                _run_safe(self.scan_muicache)
+                _run_safe(self.scan_powershell_history)
+                _run_safe(self.scan_scheduled_tasks)
+                _run_safe(self.scan_browser_downloads)
 
             # Grupo D — Hardware y red (I/O alto)
             def _group_hardware():
@@ -3519,48 +3526,83 @@ class ArgusApp:
                 if not self.is_whitelisted(file_path):
                     return True
             
-            # ========== PASO 3: DETECCIÓN POR NOMBRE Y UBICACIÓN (MEJORADA 200%) ==========
-            
-            # PATRONES DE HACKS REALES (alta confianza)
-            HIGH_CONFIDENCE_HACK_PATTERNS = [
-                # Clientes de hack conocidos
-                'vape', 'entropy', 'whiteout', 'liquidbounce', 'wurst', 'impact',
-                'sigma', 'flux', 'future', 'astolfo', 'exhibition', 'novoline',
-                'rise', 'moon', 'drip', 'phobos', 'tenacity', 'meteor', 'lambda',
-                'rusherhack', 'konas', 'kami blue', 'kami', 'weepcraft',
-                
-                # Módulos de hack específicos
-                'killaura', 'aimbot', 'triggerbot', 'reach', 'velocity', 'antiknockback',
-                'scaffold', 'fly', 'xray', 'fullbright', 'nofall', 'speed', 'step',
-                'autoclicker', 'bhop', 'bunnyhop', 'esp', 'tracers', 'nametags',
-                'traceline', 'boxesp', 'chams', 'wallhack', 'nuker', 'autotool',
-                'autosprint', 'sprint', 'sneak', 'sneaking', 'freecam', 'camera',
-                'baritone', 'pathfinder', 'auto', 'automation', 'macro',
-                
-                # Técnicas de evasión
-                'bypass', 'inject', 'ghost', 'stealth', 'undetected', 'incognito',
-                'spoof', 'spoofing', 'hook', 'hooking', 'patch', 'patching',
-                'obfuscate', 'obfuscation', 'pack', 'packed', 'encrypt', 'encrypted',
-                
-                # Carpetas sospechosas
-                'cheat', 'hack', 'client', 'mods\\vape', 'mods\\entropy',
-                'mods\\sigma', 'mods\\flux', 'mods\\future', 'mods\\astolfo',
-                'versions\\vape', 'versions\\entropy', 'versions\\sigma',
+            # ========== PASO 3: DETECCIÓN POR NOMBRE Y UBICACIÓN ==========
+            #
+            # REGLA ANTI-FALSOS-POSITIVOS:
+            # Solo nombres de clientes/módulos que NO aparecen en software legítimo.
+            # Términos genéricos (fly, speed, ghost, bypass, inject, auto, macro, sprint,
+            # patch, hook, pack, encrypt, camera, client, pathfinder) se eliminaron porque
+            # producen decenas de falsos positivos en mods legítimos, launchers y software
+            # de sistema. Esos términos solo se evalúan en analyze_file_content() con
+            # múltiples co-ocurrencias, nunca sobre el nombre del archivo solo.
+
+            # Clientes de hack con nombres únicos — alta precisión, bajo FP
+            KNOWN_HACK_CLIENTS = {
+                'vape', 'vapelite', 'entropy', 'entropyclient', 'whiteout', 'whiteoutclient',
+                'liquidbounce', 'wurst', 'wurstclient', 'impact', 'impactclient',
+                'sigma', 'sigmaclient', 'flux', 'fluxclient', 'future', 'futureclient',
+                'astolfo', 'astolfoclient', 'exhibition', 'novoline', 'novolineclient',
+                'rise', 'riseclient', 'drip', 'dripclient', 'phobos', 'phobosclient',
+                'tenacity', 'meteor', 'meteorclient', 'rusherhack', 'konas', 'kami',
+                'weepcraft', 'ghostclient', 'sloth', 'lucid', 'nyx', 'vanish',
+                'nextgen', 'tegernako', 'zeroday', 'seppuku', 'wasp', 'komat',
+                'dllinjector', 'cheatengine', 'processhollowing', 'dllhijacking',
+            }
+
+            # Módulos cuyo nombre es exclusivo de cheats (no aparecen en mods legítimos)
+            HACK_MODULE_NAMES = {
+                'killaura', 'aimbot', 'triggerbot', 'antikb', 'antiknockback',
+                'xray', 'xraymod', 'wallhack', 'boxesp', 'chams', 'traceline',
+                'autoclicker', 'clickgui', 'bunnyhop', 'bhop', 'aimassist',
+                'nofall', 'nuker', 'fullbright', 'freecam', 'tracers',
+                'wtap', 'autotool', 'autosprint', 'speedhack',
+            }
+
+            # Combinaciones path-específicas de hack en carpetas de Minecraft
+            HACK_PATH_COMBOS = [
+                ('mods', 'vape'), ('mods', 'entropy'), ('mods', 'sigma'),
+                ('mods', 'flux'), ('mods', 'future'), ('mods', 'astolfo'),
+                ('mods', 'liquidbounce'), ('mods', 'wurst'), ('mods', 'impact'),
+                ('versions', 'vape'), ('versions', 'entropy'), ('versions', 'sigma'),
+                ('versions', 'flux'), ('versions', 'liquidbounce'),
             ]
+
+            HIGH_CONFIDENCE_HACK_PATTERNS = list(KNOWN_HACK_CLIENTS | HACK_MODULE_NAMES)
             
             # Verificar patrones de alta confianza
             is_suspicious = False
             confidence = 0
             detected_patterns = []
-            
+
+            # Nombre de archivo exacto o como parte del stem (sin extensión)
+            file_stem = os.path.splitext(filename)[0]
             for pattern in HIGH_CONFIDENCE_HACK_PATTERNS:
-                if pattern in filename or pattern in full_path_lower:
-                    # Verificación adicional: no debe estar en whitelist
-                    if not self.is_whitelisted(file_path):
-                        is_suspicious = True
-                        confidence = max(confidence, 80)
-                        detected_patterns.append(pattern)
-                        break  # Encontrado, no necesitamos seguir
+                # Match en nombre del archivo (stem) o en la ruta completa como segmento
+                stem_match = (pattern == file_stem or file_stem.startswith(pattern + '-')
+                              or file_stem.startswith(pattern + '_') or file_stem.endswith('-' + pattern)
+                              or file_stem.endswith('_' + pattern) or (' ' + pattern) in file_stem
+                              or (pattern + ' ') in file_stem)
+                path_segment_match = ('\\' + pattern + '\\') in full_path_lower or \
+                                     ('/' + pattern + '/') in full_path_lower or \
+                                     full_path_lower.endswith('\\' + pattern) or \
+                                     full_path_lower.endswith('/' + pattern)
+                # Clientes conocidos también pueden aparecer como substring en el nombre
+                client_match = (pattern in KNOWN_HACK_CLIENTS and pattern in filename)
+                if (stem_match or path_segment_match or client_match) and not self.is_whitelisted(file_path):
+                    is_suspicious = True
+                    confidence = max(confidence, 82)
+                    detected_patterns.append(pattern)
+                    break
+
+            # Combinaciones path (mods/vape, versions/flux, etc.)
+            if not is_suspicious:
+                for (folder, hack) in HACK_PATH_COMBOS:
+                    if folder in full_path_lower and hack in filename:
+                        if not self.is_whitelisted(file_path):
+                            is_suspicious = True
+                            confidence = max(confidence, 85)
+                            detected_patterns.append(f'{folder}/{hack}')
+                            break
             
             # ========== PASO 4: DETECCIÓN POR EXTENSIÓN Y CONTEXTO ==========
             # Archivos JAR en ubicaciones sospechosas
@@ -3632,21 +3674,19 @@ class ArgusApp:
                 'lucid', 'tenacity', 'nyx', 'vanish', 'ploow', 'cloud',
                 'nextgen', 'tegernako', 'zeroday',
                 
-                # Patrones de funcionalidad específica de hacks
-                'xray', 'killaura', 'aimbot', 'esp', 'wallhack', 'nuker',
-                'autotool', 'autosprint', 'autoclick', 'clicker', 'autoclicker',
-                'speedhack', 'wtap', 'aimassist', 'bhop', 'nofall', 'antiknockback',
-                'reach', 'velocity', 'scaffold', 'fly', 'fullbright',
-                'triggerbot', 'antiaim', 'autosprint', 'sprint',
-                
-                # Patrones de inyección y bypass
-                'injector', 'inject', 'inyector', 'injection', 'dllinjector',
-                'bypass', 'stealth', 'undetected', 'incognito', 'unbypass',
-                'silent', 'silentclient', 'silent-scanner',
-                
-                # Técnicas avanzadas de evasión
-                'obfuscated', 'packed', 'encrypted', 'hidden',
-                'processhollowing', 'dllhijacking', 'codecave'
+                # Módulos de hack cuyo nombre es exclusivo (no aparece en software legítimo)
+                'xray', 'killaura', 'aimbot', 'wallhack', 'boxesp', 'chams',
+                'autoclicker', 'autotool', 'autosprint', 'speedhack',
+                'wtap', 'aimassist', 'bhop', 'nofall', 'antiknockback',
+                'antikb', 'triggerbot', 'freecam', 'fullbright', 'nuker',
+                'clickgui', 'bunnyhop', 'traceline',
+
+                # Inyección y exploits — solo términos muy específicos
+                'dllinjector', 'dllhijacking', 'processhollowing', 'codecave',
+                'cheatengine',
+
+                # Clientes con nombre único (no causan confusión con software legítimo)
+                'silentclient', 'ghostclient'
             ]
             
             # Lista ampliada de falsos positivos para evitar detecciones incorrectas
@@ -4354,23 +4394,90 @@ class ArgusApp:
                 except Exception as e:
                     print(f"Error analizando conexiones: {e}")
             
+            # 5. Reporte detallado de proceso Minecraft / Java
+            def scan_minecraft_process_info():
+                print("🔍 Recopilando información detallada del proceso Minecraft...")
+                mc_names = {'java.exe', 'javaw.exe', 'minecraft.exe', 'minecraftlauncher.exe'}
+                try:
+                    for proc in psutil.process_iter(['pid', 'name', 'exe', 'cmdline', 'memory_info',
+                                                     'cpu_percent', 'create_time', 'username', 'status']):
+                        try:
+                            pname = (proc.info['name'] or '').lower()
+                            if pname not in mc_names:
+                                continue
+                            pid = proc.info['pid']
+                            exe = proc.info['exe'] or 'Desconocido'
+                            cmdline = proc.info['cmdline'] or []
+                            mem_mb = round(proc.info['memory_info'].rss / 1024 / 1024) if proc.info['memory_info'] else 0
+
+                            # Connections
+                            try:
+                                conns = proc.connections()
+                                conn_strs = [f"{c.raddr.ip}:{c.raddr.port}" for c in conns
+                                             if c.status == 'ESTABLISHED' and c.raddr]
+                            except Exception:
+                                conn_strs = []
+
+                            # Start time
+                            try:
+                                started = datetime.fromtimestamp(proc.info['create_time']).strftime('%Y-%m-%d %H:%M:%S')
+                            except Exception:
+                                started = 'Desconocida'
+
+                            # JVM args of interest
+                            jvm_flags = [a for a in cmdline if a.startswith('-') and len(a) < 120]
+
+                            summary_parts = [
+                                f"PID: {pid}",
+                                f"RAM: {mem_mb} MB",
+                                f"Inicio: {started}",
+                                f"Exe: {exe[:80]}",
+                            ]
+                            if conn_strs:
+                                summary_parts.append(f"Conexiones: {', '.join(conn_strs[:5])}")
+                            if jvm_flags:
+                                summary_parts.append(f"JVM args: {' '.join(jvm_flags[:10])}")
+
+                            self.issues_found.append({
+                                'tipo': 'minecraft_process_info',
+                                'nombre': f'Proceso Minecraft activo: {proc.info["name"]} (PID {pid})',
+                                'ruta': exe[:255],
+                                'archivo': ' | '.join(summary_parts)[:500],
+                                'categoria': 'PROCESSES',
+                                'alerta': 'NORMAL',
+                                'confidence': 0,
+                                'detected_patterns': conn_strs[:5],
+                                'extra': {
+                                    'pid': pid, 'ram_mb': mem_mb,
+                                    'started': started, 'exe': exe[:120],
+                                    'connections': conn_strs[:5],
+                                    'jvm_args': jvm_flags[:10],
+                                },
+                            })
+                            print(f"✅ Proceso MC: {proc.info['name']} PID:{pid} RAM:{mem_mb}MB conns:{conn_strs}")
+                        except Exception:
+                            continue
+                except Exception as e:
+                    print(f"Error en scan_minecraft_process_info: {e}")
+
             # Ejecutar todos los análisis en paralelo
             import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
                 futures = [
                     executor.submit(scan_dll_injection),
                     executor.submit(scan_memory_analysis),
                     executor.submit(scan_system_hooks),
-                    executor.submit(scan_network_connections)
+                    executor.submit(scan_network_connections),
+                    executor.submit(scan_minecraft_process_info),
                 ]
-                
+
                 # Esperar a que terminen todos
                 for future in concurrent.futures.as_completed(futures, timeout=30):
                     try:
                         future.result()
                     except Exception as e:
                         print(f"Error en análisis avanzado: {e}")
-            
+
             print("✅ Análisis avanzado de procesos completado")
             
         except Exception as e:
@@ -5872,6 +5979,524 @@ class ArgusApp:
                 })
         except Exception as e:
             print(f"Error en scan_executed_userassist: {e}")
+
+    def scan_bam_registry(self):
+        """Lee Background Activity Monitor (BAM) para detectar ejecutables con timestamps precisos."""
+        print("🔍 Escaneando BAM registry (Background Activity Monitor)...")
+        import struct
+        hack_terms = [
+            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
+            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
+            'clicker', 'phobos', 'astolfo', 'novoline', 'ghost', 'dllinjector',
+            'cheatengine', 'xray', 'triggerbot', 'bspoof', 'esp', 'radar'
+        ]
+        EPOCH_DIFF = 116444736000000000
+
+        def parse_bam_ts(data):
+            try:
+                if len(data) >= 8:
+                    ft_raw = struct.unpack_from('<Q', data, 0)[0]
+                    if ft_raw > 0:
+                        unix_ts = (ft_raw - EPOCH_DIFF) / 10000000
+                        if 0 < unix_ts < 2000000000:
+                            return datetime.fromtimestamp(unix_ts).strftime('%Y-%m-%d %H:%M:%S')
+            except Exception:
+                pass
+            return 'Desconocida'
+
+        try:
+            bam_base = r'SYSTEM\CurrentControlSet\Services\bam\State\UserSettings'
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, bam_base) as base_key:
+                sid_idx = 0
+                while True:
+                    try:
+                        sid = winreg.EnumKey(base_key, sid_idx)
+                        sid_idx += 1
+                        sid_path = bam_base + '\\' + sid
+                        try:
+                            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, sid_path) as sid_key:
+                                val_idx = 0
+                                all_entries = []
+                                while True:
+                                    try:
+                                        name, data, vtype = winreg.EnumValue(sid_key, val_idx)
+                                        val_idx += 1
+                                        if not isinstance(data, bytes) or not name.startswith('\\Device\\'):
+                                            continue
+                                        ts = parse_bam_ts(data)
+                                        exe_name = name.split('\\')[-1]
+                                        all_entries.append({'name': name, 'exe': exe_name, 'ts': ts})
+                                        # Check for hack terms
+                                        name_lower = name.lower()
+                                        for term in hack_terms:
+                                            if term in name_lower:
+                                                self.issues_found.append({
+                                                    'tipo': 'bam_suspicious',
+                                                    'nombre': f'BAM: ejecutable sospechoso detectado — {exe_name}',
+                                                    'ruta': name[:255],
+                                                    'archivo': name[:255],
+                                                    'categoria': 'EXECUTED_FILES',
+                                                    'alerta': 'CRITICAL',
+                                                    'confidence': 85,
+                                                    'detected_patterns': [term],
+                                                    'extra': {'last_run': ts, 'fuente': 'BAM'},
+                                                })
+                                                print(f"🚨 BAM SOSPECHOSO: {exe_name} @ {ts}")
+                                                break
+                                    except OSError:
+                                        break
+                                if all_entries:
+                                    summary = ' | '.join([
+                                        f"{e['exe']} @ {e['ts']}"
+                                        for e in sorted(all_entries, key=lambda x: x['ts'], reverse=True)[:20]
+                                    ])
+                                    self.issues_found.append({
+                                        'tipo': 'bam_history',
+                                        'nombre': f'BAM: {len(all_entries)} ejecutables registrados (SID: ...{sid[-8:]})',
+                                        'ruta': f'HKLM\\bam\\{sid}',
+                                        'archivo': summary[:500],
+                                        'categoria': 'EXECUTED_FILES',
+                                        'alerta': 'NORMAL',
+                                        'confidence': 0,
+                                        'detected_patterns': [e['exe'] for e in all_entries[:20]],
+                                    })
+                        except (FileNotFoundError, PermissionError):
+                            pass
+                    except OSError:
+                        break
+        except (FileNotFoundError, PermissionError) as e:
+            print(f"BAM registry no disponible: {e}")
+        except Exception as e:
+            print(f"Error en scan_bam_registry: {e}")
+
+    def scan_recent_lnk(self):
+        """Escanea archivos .lnk recientes en %APPDATA%\\Microsoft\\Windows\\Recent."""
+        print("🔍 Escaneando archivos .lnk recientes...")
+        hack_terms = [
+            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
+            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
+            'clicker', 'phobos', 'astolfo', 'ghost', 'dllinjector', 'cheatengine',
+            'xray', 'triggerbot', 'esp', 'radar', 'bspoof'
+        ]
+        recent_dir = os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Windows', 'Recent')
+        if not os.path.exists(recent_dir):
+            return
+        try:
+            lnk_files = []
+            for fname in os.listdir(recent_dir):
+                if not fname.lower().endswith('.lnk'):
+                    continue
+                fpath = os.path.join(recent_dir, fname)
+                try:
+                    mtime = os.path.getmtime(fpath)
+                    ts = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+                    base = fname[:-4]  # strip .lnk
+                    lnk_files.append({'name': base, 'ts': ts})
+                    # Check for hack terms
+                    name_lower = base.lower()
+                    for term in hack_terms:
+                        if term in name_lower:
+                            self.issues_found.append({
+                                'tipo': 'recent_lnk_suspicious',
+                                'nombre': f'Archivo reciente sospechoso: {base}',
+                                'ruta': fpath[:255],
+                                'archivo': fpath[:255],
+                                'categoria': 'EXECUTED_FILES',
+                                'alerta': 'SOSPECHOSO',
+                                'confidence': 65,
+                                'detected_patterns': [term],
+                                'extra': {'last_access': ts, 'fuente': 'Recent LNK'},
+                            })
+                            print(f"⚠️ LNK SOSPECHOSO: {base} @ {ts}")
+                            break
+                except Exception:
+                    pass
+
+            if lnk_files:
+                summary = ' | '.join([
+                    f"{e['name']} @ {e['ts']}"
+                    for e in sorted(lnk_files, key=lambda x: x['ts'], reverse=True)[:30]
+                ])
+                self.issues_found.append({
+                    'tipo': 'recent_lnk_history',
+                    'nombre': f'Archivos recientes (.lnk): {len(lnk_files)} entradas',
+                    'ruta': recent_dir,
+                    'archivo': summary[:500],
+                    'categoria': 'EXECUTED_FILES',
+                    'alerta': 'NORMAL',
+                    'confidence': 0,
+                    'detected_patterns': [e['name'] for e in lnk_files[:30]],
+                })
+        except Exception as e:
+            print(f"Error en scan_recent_lnk: {e}")
+
+    def scan_powershell_history(self):
+        """Escanea el historial de PowerShell (PSReadLine) en busca de comandos sospechosos."""
+        print("🔍 Escaneando historial de PowerShell...")
+        hack_terms = [
+            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
+            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
+            'clicker', 'phobos', 'astolfo', 'dllinjector', 'cheatengine',
+            'xray', 'triggerbot', 'bspoof', 'processhollowing',
+        ]
+        ps_history = os.path.join(
+            os.environ.get('APPDATA', ''),
+            'Microsoft', 'Windows', 'PowerShell', 'PSReadLine', 'ConsoleHost_history.txt'
+        )
+        if not os.path.exists(ps_history):
+            return
+        try:
+            with open(ps_history, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+
+            suspicious_cmds = []
+            all_cmds = [l.strip() for l in lines if l.strip()]
+
+            for cmd in all_cmds:
+                cmd_lower = cmd.lower()
+                for term in hack_terms:
+                    if term in cmd_lower:
+                        suspicious_cmds.append(cmd)
+                        self.issues_found.append({
+                            'tipo': 'powershell_suspicious',
+                            'nombre': f'Comando PS sospechoso: {cmd[:80]}',
+                            'ruta': ps_history[:255],
+                            'archivo': cmd[:255],
+                            'categoria': 'CMD_HISTORY',
+                            'alerta': 'CRITICAL',
+                            'confidence': 78,
+                            'detected_patterns': [term],
+                        })
+                        print(f"🚨 PS SOSPECHOSO: {cmd[:80]}")
+                        break
+
+            if all_cmds:
+                summary = ' | '.join(all_cmds[-30:])
+                self.issues_found.append({
+                    'tipo': 'powershell_history',
+                    'nombre': f'Historial PowerShell: {len(all_cmds)} comandos registrados',
+                    'ruta': ps_history[:255],
+                    'archivo': summary[:500],
+                    'categoria': 'CMD_HISTORY',
+                    'alerta': 'NORMAL',
+                    'confidence': 0,
+                    'detected_patterns': all_cmds[-30:],
+                })
+        except Exception as e:
+            print(f"Error en scan_powershell_history: {e}")
+
+    def scan_browser_downloads(self):
+        """Escanea historial de descargas de Chrome, Edge y Firefox en busca de hacks."""
+        print("🔍 Escaneando historial de descargas de navegadores...")
+        import sqlite3
+        import shutil
+        import tempfile
+
+        hack_terms = [
+            'vape', 'entropy', 'hack', 'cheat', 'wurst', 'liquidbounce',
+            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack',
+            'phobos', 'astolfo', 'dllinjector', 'cheatengine', 'xray',
+            'triggerbot', 'autoclicker', 'clicker', 'inject',
+        ]
+
+        local = os.environ.get('LOCALAPPDATA', '')
+        appdata = os.environ.get('APPDATA', '')
+
+        db_paths = [
+            os.path.join(local, 'Google', 'Chrome', 'User Data', 'Default', 'History'),
+            os.path.join(local, 'Microsoft', 'Edge', 'User Data', 'Default', 'History'),
+            os.path.join(local, 'Google', 'Chrome', 'User Data', 'Profile 1', 'History'),
+            os.path.join(appdata, 'Mozilla', 'Firefox', 'Profiles'),  # dir, handled separately
+        ]
+
+        def check_chromium_db(db_path):
+            if not os.path.exists(db_path):
+                return
+            tmp = None
+            try:
+                # Copy to temp to avoid SQLite lock
+                fd, tmp = tempfile.mkstemp(suffix='.db')
+                os.close(fd)
+                shutil.copy2(db_path, tmp)
+                con = sqlite3.connect(tmp)
+                cur = con.cursor()
+                cur.execute("SELECT url, target_path FROM downloads LIMIT 5000")
+                rows = cur.fetchall()
+                con.close()
+                suspicious = []
+                all_downloads = []
+                for url, target in rows:
+                    text = ((url or '') + ' ' + (target or '')).lower()
+                    fname = os.path.basename(target or url or '')
+                    all_downloads.append(fname[:60])
+                    for term in hack_terms:
+                        if term in text:
+                            suspicious.append(f"{fname} ({url[:60]})")
+                            self.issues_found.append({
+                                'tipo': 'browser_download_suspicious',
+                                'nombre': f'Descarga sospechosa: {fname}',
+                                'ruta': target[:255] if target else url[:255],
+                                'archivo': url[:255] if url else '',
+                                'categoria': 'CMD_HISTORY',
+                                'alerta': 'CRITICAL',
+                                'confidence': 80,
+                                'detected_patterns': [term],
+                            })
+                            print(f"🚨 DESCARGA SOSPECHOSA: {fname} — {url[:60]}")
+                            break
+                if all_downloads:
+                    self.issues_found.append({
+                        'tipo': 'browser_download_history',
+                        'nombre': f'Historial de descargas ({os.path.basename(os.path.dirname(db_path))}): {len(all_downloads)} entradas',
+                        'ruta': db_path[:255],
+                        'archivo': ' | '.join(all_downloads[-20:])[:500],
+                        'categoria': 'CMD_HISTORY',
+                        'alerta': 'NORMAL',
+                        'confidence': 0,
+                        'detected_patterns': all_downloads[-20:],
+                    })
+            except Exception as e:
+                print(f"  Error leyendo {db_path}: {e}")
+            finally:
+                if tmp and os.path.exists(tmp):
+                    try: os.remove(tmp)
+                    except: pass
+
+        # Chromium-based browsers
+        for db_path in db_paths:
+            if 'Profiles' not in db_path:
+                check_chromium_db(db_path)
+
+        # Firefox — iterate profiles
+        ff_profiles = db_paths[-1]
+        if os.path.isdir(ff_profiles):
+            try:
+                for profile in os.listdir(ff_profiles):
+                    ff_db = os.path.join(ff_profiles, profile, 'places.sqlite')
+                    if os.path.exists(ff_db):
+                        tmp = None
+                        try:
+                            fd, tmp = tempfile.mkstemp(suffix='.db')
+                            os.close(fd)
+                            shutil.copy2(ff_db, tmp)
+                            con = sqlite3.connect(tmp)
+                            cur = con.cursor()
+                            cur.execute("SELECT url FROM moz_places LIMIT 5000")
+                            rows = cur.fetchall()
+                            con.close()
+                            for (url,) in rows:
+                                if not url: continue
+                                url_lower = url.lower()
+                                for term in hack_terms:
+                                    if term in url_lower:
+                                        fname = url.split('/')[-1][:60]
+                                        self.issues_found.append({
+                                            'tipo': 'browser_download_suspicious',
+                                            'nombre': f'Visita/descarga sospechosa (Firefox): {fname}',
+                                            'ruta': url[:255],
+                                            'archivo': url[:255],
+                                            'categoria': 'CMD_HISTORY',
+                                            'alerta': 'SOSPECHOSO',
+                                            'confidence': 65,
+                                            'detected_patterns': [term],
+                                        })
+                                        break
+                        except Exception:
+                            pass
+                        finally:
+                            if tmp and os.path.exists(tmp):
+                                try: os.remove(tmp)
+                                except: pass
+            except Exception as e:
+                print(f"Error en Firefox profiles: {e}")
+
+    def scan_appcompat_shimcache(self):
+        """Lee AppCompatCache (ShimCache) del registro — ejecuciones históricas de aplicaciones."""
+        print("🔍 Escaneando AppCompatCache (ShimCache)...")
+        hack_terms = [
+            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
+            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
+            'clicker', 'phobos', 'astolfo', 'dllinjector', 'cheatengine',
+            'xray', 'triggerbot', 'bspoof', 'ghostclient', 'silentclient',
+        ]
+        try:
+            key_path = r'SYSTEM\CurrentControlSet\Control\Session Manager\AppCompatCache'
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path) as k:
+                data, _ = winreg.QueryValueEx(k, 'AppCompatCache')
+
+            if not isinstance(data, bytes) or len(data) < 16:
+                return
+
+            # Parse: signature at [0:4], entry count at [4:8], entries from offset 128
+            sig = data[:4]
+            entries = []
+
+            # Windows 10/11 format: 0x30 = entries start at 0x80 (128)
+            if sig in (b'10ts', b'\x30\x00\x00\x00'):
+                offset = 128
+            else:
+                offset = 128  # fallback
+
+            while offset + 12 <= len(data):
+                try:
+                    entry_sig = data[offset:offset+4]
+                    if entry_sig != b'10ts':
+                        offset += 4
+                        continue
+                    data_len = int.from_bytes(data[offset+4:offset+8], 'little')
+                    if data_len <= 0 or data_len > 65536:
+                        offset += 4
+                        continue
+                    entry_data = data[offset+8:offset+8+data_len]
+                    # Path is UTF-16LE at start of entry_data
+                    path_len = int.from_bytes(entry_data[0:2], 'little') if len(entry_data) >= 4 else 0
+                    if 0 < path_len <= len(entry_data) - 4:
+                        path = entry_data[4:4+path_len].decode('utf-16-le', errors='ignore')
+                        entries.append(path)
+                    offset += 8 + data_len
+                except Exception:
+                    offset += 4
+
+            if not entries:
+                return
+
+            suspicious = []
+            for path in entries:
+                path_lower = path.lower()
+                for term in hack_terms:
+                    if term in path_lower:
+                        suspicious.append(path)
+                        self.issues_found.append({
+                            'tipo': 'shimcache_suspicious',
+                            'nombre': f'ShimCache: ejecutable sospechoso — {os.path.basename(path)}',
+                            'ruta': path[:255],
+                            'archivo': path[:255],
+                            'categoria': 'EXECUTED_FILES',
+                            'alerta': 'CRITICAL',
+                            'confidence': 82,
+                            'detected_patterns': [term],
+                        })
+                        print(f"🚨 SHIMCACHE SOSPECHOSO: {path[:80]}")
+                        break
+
+            if entries:
+                summary = ' | '.join([os.path.basename(e) for e in entries[:25]])
+                self.issues_found.append({
+                    'tipo': 'shimcache_history',
+                    'nombre': f'ShimCache: {len(entries)} ejecutables registrados',
+                    'ruta': r'HKLM\AppCompatCache',
+                    'archivo': summary[:500],
+                    'categoria': 'EXECUTED_FILES',
+                    'alerta': 'NORMAL',
+                    'confidence': 0,
+                    'detected_patterns': [os.path.basename(e) for e in entries[:25]],
+                })
+        except (FileNotFoundError, PermissionError) as e:
+            print(f"ShimCache no disponible: {e}")
+        except Exception as e:
+            print(f"Error en scan_appcompat_shimcache: {e}")
+
+    def scan_muicache(self):
+        """Lee MUICache — nombres de todos los ejecutables que corrió el usuario, incluyendo borrados."""
+        print("🔍 Escaneando MUICache...")
+        hack_terms = [
+            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
+            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
+            'clicker', 'phobos', 'astolfo', 'dllinjector', 'cheatengine',
+            'xray', 'triggerbot', 'ghostclient', 'silentclient',
+        ]
+        key_path = r'Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache'
+        try:
+            entries = []
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as k:
+                i = 0
+                while True:
+                    try:
+                        name, data, _ = winreg.EnumValue(k, i)
+                        i += 1
+                        if name.endswith('.FriendlyAppName') or name.endswith('.ApplicationCompany'):
+                            continue
+                        if '\\' in name or '/' in name:
+                            entries.append(name)
+                    except OSError:
+                        break
+
+            suspicious = []
+            for path in entries:
+                path_lower = path.lower()
+                for term in hack_terms:
+                    if term in path_lower:
+                        suspicious.append(path)
+                        self.issues_found.append({
+                            'tipo': 'muicache_suspicious',
+                            'nombre': f'MUICache: ejecutable sospechoso — {os.path.basename(path)}',
+                            'ruta': path[:255],
+                            'archivo': path[:255],
+                            'categoria': 'EXECUTED_FILES',
+                            'alerta': 'CRITICAL',
+                            'confidence': 80,
+                            'detected_patterns': [term],
+                        })
+                        print(f"🚨 MUICACHE SOSPECHOSO: {path[:80]}")
+                        break
+
+            if entries:
+                summary = ' | '.join([os.path.basename(e) for e in entries[:30]])
+                self.issues_found.append({
+                    'tipo': 'muicache_history',
+                    'nombre': f'MUICache: {len(entries)} ejecutables registrados',
+                    'ruta': key_path,
+                    'archivo': summary[:500],
+                    'categoria': 'EXECUTED_FILES',
+                    'alerta': 'NORMAL',
+                    'confidence': 0,
+                    'detected_patterns': [os.path.basename(e) for e in entries[:30]],
+                })
+        except (FileNotFoundError, PermissionError) as e:
+            print(f"MUICache no disponible: {e}")
+        except Exception as e:
+            print(f"Error en scan_muicache: {e}")
+
+    def scan_scheduled_tasks(self):
+        """Escanea tareas programadas de Windows en busca de ejecutables sospechosos."""
+        print("🔍 Escaneando tareas programadas de Windows...")
+        hack_terms = [
+            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
+            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
+            'clicker', 'phobos', 'astolfo', 'dllinjector', 'cheatengine',
+            'xray', 'triggerbot', 'ghostclient',
+        ]
+        tasks_dir = r'C:\Windows\System32\Tasks'
+        if not os.path.exists(tasks_dir):
+            return
+        try:
+            found_tasks = []
+            for root, dirs, files in os.walk(tasks_dir):
+                for fname in files:
+                    fpath = os.path.join(root, fname)
+                    try:
+                        with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read(32768)
+                        content_lower = content.lower()
+                        for term in hack_terms:
+                            if term in content_lower:
+                                found_tasks.append(fname)
+                                self.issues_found.append({
+                                    'tipo': 'scheduled_task_suspicious',
+                                    'nombre': f'Tarea programada sospechosa: {fname}',
+                                    'ruta': fpath[:255],
+                                    'archivo': fpath[:255],
+                                    'categoria': 'CMD_HISTORY',
+                                    'alerta': 'CRITICAL',
+                                    'confidence': 85,
+                                    'detected_patterns': [term],
+                                })
+                                print(f"🚨 TAREA SOSPECHOSA: {fname} (contiene '{term}')")
+                                break
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"Error en scan_scheduled_tasks: {e}")
 
     def scan_texture_packs(self):
         """Escanea resource packs de Minecraft, incluyendo análisis de XRay."""

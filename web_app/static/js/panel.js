@@ -1009,8 +1009,39 @@ async function viewScanDetails(scanId) {
             }
         }
 
+        // Proceso Minecraft info (en scan-info-block)
+        const mcProc = allResults.find(r => r.issue_type === 'minecraft_process_info');
+        const mcProcBlock = document.getElementById('mc-process-info');
+        if (mcProcBlock && mcProc) {
+            mcProcBlock.style.display = 'flex';
+            const parts = (mcProc.issue_path || '').split(' | ');
+            const getPart = (prefix) => {
+                const p = parts.find(s => s.startsWith(prefix));
+                return p ? p.replace(prefix + ': ', '').trim() : '—';
+            };
+            const pidEl = document.getElementById('detail-mc-pid');
+            const ramEl = document.getElementById('detail-mc-ram');
+            const startEl = document.getElementById('detail-mc-started');
+            const connEl = document.getElementById('detail-mc-conn');
+            const connRow = document.getElementById('mc-conn-row');
+            if (pidEl) pidEl.textContent = getPart('PID');
+            if (ramEl) ramEl.textContent = getPart('RAM');
+            if (startEl) startEl.textContent = getPart('Inicio');
+            const connStr = getPart('Conexiones');
+            if (connEl && connRow && connStr !== '—') {
+                connEl.textContent = connStr;
+                connRow.style.display = 'flex';
+            }
+        }
+
         // Ejecutados
-        const ejecutados = allResults.filter(r => r.issue_category === 'EXECUTED_FILES' || r.issue_type === 'prefetch_history' || r.issue_type === 'userassist_history' || r.issue_type === 'prefetch_suspicious' || r.issue_type === 'userassist_suspicious');
+        const EXECUTED_TYPES = new Set([
+            'prefetch_history','prefetch_suspicious','userassist_history','userassist_suspicious',
+            'bam_history','bam_suspicious','recent_lnk_history','recent_lnk_suspicious',
+            'shimcache_history','shimcache_suspicious','muicache_history','muicache_suspicious',
+            'minecraft_process_info',
+        ]);
+        const ejecutados = allResults.filter(r => r.issue_category === 'EXECUTED_FILES' || EXECUTED_TYPES.has(r.issue_type));
         const ejBtn = document.getElementById('subnav-ejecutados');
         if (ejBtn) ejBtn.style.display = ejecutados.length > 0 ? '' : 'none';
         const ejList = document.getElementById('ejecutados-list');
@@ -1047,8 +1078,12 @@ async function viewScanDetails(scanId) {
             elList.innerHTML = '<p style="color:var(--text-m);font-size:13px;">Sin archivos eliminados detectados para este escaneo.</p>';
         }
 
-        // Comandos
-        const comandos = allResults.filter(r => r.issue_category === 'CMD_HISTORY' || r.issue_type === 'cmd_history' || r.issue_type === 'cmd_history_full');
+        // Comandos (CMD + PowerShell + descargas + tareas programadas)
+        const CMD_TYPES = new Set([
+            'cmd_history','cmd_history_full','powershell_history','powershell_suspicious',
+            'browser_download_history','browser_download_suspicious','scheduled_task_suspicious',
+        ]);
+        const comandos = allResults.filter(r => r.issue_category === 'CMD_HISTORY' || CMD_TYPES.has(r.issue_type));
         const cmdBtn = document.getElementById('subnav-comandos');
         if (cmdBtn) cmdBtn.style.display = comandos.length > 0 ? '' : 'none';
         const cmdList = document.getElementById('comandos-list');
