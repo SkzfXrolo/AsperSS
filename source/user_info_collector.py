@@ -163,26 +163,43 @@ class UserInfoCollector:
                     try:
                         with open(launcher_accounts, 'r', encoding='utf-8') as f:
                             data = json.load(f)
-                            
-                            # Buscar en accounts
-                            if 'accounts' in data:
-                                for account_id, account_data in data['accounts'].items():
-                                    if 'username' in account_data:
-                                        username = account_data['username']
-                                        if username and len(username) >= 3:
-                                            self.minecraft_username = username
-                                            return username
+
+                        if 'accounts' in data:
+                            # Priorizar la cuenta activa si está indicada
+                            active_id = data.get('activeAccountLocalId', '')
+                            accounts = data['accounts']
+                            ordered = []
+                            if active_id and active_id in accounts:
+                                ordered.append(accounts[active_id])
+                            ordered.extend(v for k, v in accounts.items() if k != active_id)
+
+                            for account_data in ordered:
+                                # Cuentas Microsoft modernas: minecraftProfile.name
+                                mc_profile = account_data.get('minecraftProfile', {})
+                                username = mc_profile.get('name', '') if mc_profile else ''
+                                # Fallback: campo username directo (cuentas legacy/Mojang)
+                                if not username:
+                                    username = account_data.get('username', '')
+                                if username and len(username) >= 3:
+                                    self.minecraft_username = username
+                                    return username
                     except:
                         pass
                 
-                # Buscar en usercache.json
+                # Buscar en usercache.json (ordenado por expiresOn desc = el más reciente)
                 usercache = os.path.join(minecraft_path, 'usercache.json')
                 if os.path.exists(usercache):
                     try:
                         with open(usercache, 'r', encoding='utf-8') as f:
                             data = json.load(f)
-                            if isinstance(data, list) and len(data) > 0:
-                                username = data[0].get('name', '')
+                        if isinstance(data, list) and len(data) > 0:
+                            sorted_entries = sorted(
+                                data,
+                                key=lambda e: e.get('expiresOn', ''),
+                                reverse=True
+                            )
+                            for entry in sorted_entries:
+                                username = entry.get('name', '')
                                 if username and len(username) >= 3:
                                     self.minecraft_username = username
                                     return username

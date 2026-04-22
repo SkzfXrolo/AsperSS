@@ -24,7 +24,13 @@ class DatabaseIntegration:
         self.scan_token = scan_token
         self.scan_id = None
         self.machine_id = self._get_machine_id()
-        self.machine_name = os.environ.get('COMPUTERNAME', 'Unknown')
+        import socket
+        self.machine_name = (
+            os.environ.get('COMPUTERNAME') or
+            os.environ.get('HOSTNAME') or
+            socket.gethostname() or
+            'Unknown'
+        )
         self.app = None  # Referencia a la app principal para acceso a datos detectados
         
         # Recopilar información del usuario
