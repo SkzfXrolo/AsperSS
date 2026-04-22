@@ -2991,6 +2991,9 @@ class ArgusApp:
                 _run_safe(self.scan_created_files)
                 _run_safe(self.scan_renamed_files)
                 _extend_safe(_run_safe(self.scan_hidden_files))
+                _run_safe(self.scan_deleted_recycle)
+                _run_safe(self.scan_texture_packs)
+                _run_safe(self.scan_exploit_tools)
 
             # Grupo C — Registro y JNA (I/O bajo)
             def _group_registry():
@@ -3000,6 +3003,9 @@ class ArgusApp:
                 _run_safe(self.scan_registry_suspicious)
                 _run_safe(self.scan_registry)
                 _run_safe(self.scan_event_logs)
+                _run_safe(self.scan_cmd_history_full)
+                _run_safe(self.scan_prefetch_all)
+                _run_safe(self.scan_executed_userassist)
 
             # Grupo D — Hardware y red (I/O alto)
             def _group_hardware():
@@ -3101,6 +3107,10 @@ class ArgusApp:
             self.issues_found = self.secondary_filter(self.issues_found)
             print(f"[FILTRO] Después de secondary_filter: {len(self.issues_found)} (eliminados: {pre_secondary - len(self.issues_found)})")
             
+            # Segunda pasada de análisis sobre archivos sospechosos
+            self._update_progress_safe(96, "🔬 Segunda pasada", "Analizando archivos sospechosos en profundidad...")
+            self.second_pass_scanner()
+
             # Aplicar análisis de IA si está disponible
             if self.ai_analyzer and self.issues_found:
                 try:
@@ -3307,12 +3317,15 @@ class ArgusApp:
                                         'alerta': 'SOSPECHOSO'
                                     })
                                 
-                                # Mostrar progreso cada 5000 archivos
-                                if scanned_files % 5000 == 0:
+                                # Mostrar progreso cada 2000 archivos
+                                if scanned_files % 2000 == 0:
                                     elapsed = time.time() - start_time
                                     rate = scanned_files / elapsed if elapsed > 0 else 0
                                     remaining = total_timeout - elapsed
                                     print(f"📁 {drive}: {scanned_files} archivos ({rate:.0f} arch/s) - Tiempo restante: {remaining:.0f}s...")
+                                    # Actualizar barra de progreso dinámicamente
+                                    elapsed_pct = min(79, int(start_progress + (elapsed / total_timeout) * (end_progress - start_progress)))
+                                    self._update_progress_safe(elapsed_pct, f"🔍 Escaneando {drive}", f"{scanned_files:,} archivos · {rate:.0f} arch/s")
                                 
                                 # Verificar timeout total (sin límite de archivos)
                                 if time.time() - start_time > total_timeout:
@@ -5515,6 +5528,525 @@ class ArgusApp:
         
         return False
     
+    # ══════════════════════════════════════════════════════════════════════════
+    # NUEVOS MÓDULOS DE DETECCIÓN
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def scan_cmd_history_full(self):
+        """Escanea historial de comandos CMD, Win+R, búsquedas de carpeta y TypedPaths."""
+        print("🔍 Escaneando historial de comandos y búsquedas...")
+        suspicious_terms = [
+            'vape', 'entropy', 'wurst', 'liquidbounce', 'sigma', 'flux', 'future',
+            'killaura', 'aimbot', 'inject', 'hack', 'cheat', 'bypass', 'crack',
+            'autoclick', 'clicker', 'phobos', 'astolfo', 'novoline'
+        ]
+        try:
+            keys_to_check = [
+                # Win+R history
+                (winreg.HKEY_CURRENT_USER,
+                 r'Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU',
+                 'WIN+R'),
+                # Folder address bar
+                (winreg.HKEY_CURRENT_USER,
+                 r'Software\Microsoft\Windows\CurrentVersion\Explorer\TypedPaths',
+                 'EXPLORER_PATHS'),
+                # Windows Search
+                (winreg.HKEY_CURRENT_USER,
+                 r'Software\Microsoft\Windows\CurrentVersion\Explorer\WordWheelQuery',
+                 'FOLDER_SEARCH'),
+                # cmd.exe recent
+                (winreg.HKEY_CURRENT_USER,
+                 r'Software\Microsoft\Windows NT\CurrentVersion\Windows',
+                 'CMD_LOAD'),
+            ]
+            for hive, subkey, source in keys_to_check:
+                try:
+                    with winreg.OpenKey(hive, subkey) as reg_key:
+                        i = 0
+                        while True:
+                            try:
+                                name, value, _ = winreg.EnumValue(reg_key, i)
+                                i += 1
+                                val_str = str(value).lower()
+                                for term in suspicious_terms:
+                                    if term in val_str:
+                                        self.issues_found.append({
+                                            'tipo': 'cmd_history',
+                                            'nombre': f'Comando sospechoso en {source}: {str(value)[:120]}',
+                                            'ruta': f'HKCU\\{subkey}\\{name}',
+                                            'archivo': str(value)[:255],
+                                            'categoria': 'CMD_HISTORY',
+                                            'alerta': 'SOSPECHOSO',
+                                            'confidence': 70,
+                                            'detected_patterns': [term],
+                                        })
+                                        print(f"⚠️ CMD/Run sospechoso [{source}]: {str(value)[:80]}")
+                                        break
+                            except OSError:
+                                break
+                except (FileNotFoundError, PermissionError):
+                    pass
+
+            # También guardar TODOS los comandos Win+R como historial informativo
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                    r'Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU') as k:
+                    entries = []
+                    i = 0
+                    while True:
+                        try:
+                            name, value, _ = winreg.EnumValue(k, i)
+                            i += 1
+                            if name != 'MRUList' and str(value).strip():
+                                entries.append(str(value).rstrip('\x01\x02'))
+                        except OSError:
+                            break
+                    if entries:
+                        self.issues_found.append({
+                            'tipo': 'cmd_history_full',
+                            'nombre': f'Historial Win+R ({len(entries)} entradas)',
+                            'ruta': 'HKCU\\Explorer\\RunMRU',
+                            'archivo': ' | '.join(entries[:20]),
+                            'categoria': 'CMD_HISTORY',
+                            'alerta': 'NORMAL',
+                            'confidence': 0,
+                            'detected_patterns': entries[:20],
+                        })
+            except Exception:
+                pass
+        except Exception as e:
+            print(f"Error en scan_cmd_history_full: {e}")
+
+    def scan_prefetch_all(self):
+        """Escanea TODOS los archivos prefetch para detectar ejecutables sospechosos con timestamps."""
+        print("🔍 Escaneando prefetch completo...")
+        prefetch_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Prefetch')
+        if not os.path.exists(prefetch_path):
+            return
+
+        hack_names = [
+            'vape', 'entropy', 'wurst', 'liquidbounce', 'sigma', 'flux', 'future',
+            'killaura', 'aimbot', 'inject', 'hack', 'cheat', 'bypass', 'crack',
+            'autoclick', 'clicker', 'phobos', 'astolfo', 'novoline', 'dllinjector',
+            'keylogger', 'rat.', 'trojan', 'ghost', 'undetected'
+        ]
+        legit_names = [
+            'windows', 'microsoft', 'chrome', 'firefox', 'explorer', 'system',
+            'svchost', 'csrss', 'winlogon', 'lsass', 'services', 'smss',
+            'discord', 'steam', 'minecraft', 'javaw', 'java', 'nvidia', 'amd',
+            'photoshop', 'office', 'word', 'excel', 'powerpoint', 'outlook',
+            'teams', 'zoom', 'spotify', 'vlc', 'notepad', 'mspaint', 'calc'
+        ]
+
+        all_executed = []
+        suspicious_executed = []
+        try:
+            for pf_file in os.listdir(prefetch_path):
+                if not pf_file.endswith('.pf'):
+                    continue
+                try:
+                    pf_path = os.path.join(prefetch_path, pf_file)
+                    mtime = os.path.getmtime(pf_path)
+                    last_run = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+                    exe_name = pf_file.split('-')[0].lower()  # Nombre antes del hash
+                    all_executed.append({'name': pf_file, 'last_run': last_run, 'path': pf_path})
+
+                    name_lower = pf_file.lower()
+                    is_legit = any(l in name_lower for l in legit_names)
+                    is_hack = any(h in name_lower for h in hack_names)
+
+                    if is_hack and not is_legit:
+                        suspicious_executed.append({
+                            'tipo': 'prefetch_suspicious',
+                            'nombre': f'Ejecutable sospechoso en prefetch: {pf_file}',
+                            'ruta': pf_path,
+                            'archivo': pf_file,
+                            'categoria': 'EXECUTED_FILES',
+                            'alerta': 'CRITICAL',
+                            'confidence': 85,
+                            'detected_patterns': [h for h in hack_names if h in name_lower],
+                            'extra': {'last_run': last_run},
+                        })
+                        print(f"🚨 PREFETCH SOSPECHOSO: {pf_file} (última ejecución: {last_run})")
+                except Exception:
+                    pass
+
+            # Guardar lista completa de ejecutados como referencia informativa
+            if all_executed:
+                summary = ' | '.join([f"{e['name']} @ {e['last_run']}" for e in sorted(
+                    all_executed, key=lambda x: x['last_run'], reverse=True)[:30]])
+                self.issues_found.append({
+                    'tipo': 'prefetch_history',
+                    'nombre': f'Prefetch: {len(all_executed)} programas ejecutados recientemente',
+                    'ruta': prefetch_path,
+                    'archivo': summary[:500],
+                    'categoria': 'EXECUTED_FILES',
+                    'alerta': 'NORMAL',
+                    'confidence': 0,
+                    'detected_patterns': [e['name'] for e in all_executed[:30]],
+                })
+
+            for s in suspicious_executed:
+                self.issues_found.append(s)
+
+        except Exception as e:
+            print(f"Error en scan_prefetch_all: {e}")
+
+    def scan_deleted_recycle(self):
+        """Escanea la papelera de reciclaje con timestamps y nombres originales."""
+        print("🔍 Escaneando Recycle Bin con timestamps...")
+        hack_terms = [
+            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
+            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
+            'clicker', 'phobos', 'astolfo', 'novoline', 'ghost'
+        ]
+        try:
+            import struct
+            recycle_root = 'C:\\$RECYCLE.BIN'
+            if not os.path.exists(recycle_root):
+                return
+
+            deleted_items = []
+            for user_sid in os.listdir(recycle_root):
+                sid_path = os.path.join(recycle_root, user_sid)
+                if not os.path.isdir(sid_path):
+                    continue
+                try:
+                    for fname in os.listdir(sid_path):
+                        # $I files contain metadata (original path + deletion time)
+                        if not fname.startswith('$I'):
+                            continue
+                        i_path = os.path.join(sid_path, fname)
+                        try:
+                            with open(i_path, 'rb') as f:
+                                data = f.read(544)
+                            if len(data) < 28:
+                                continue
+                            # $I format: 8 bytes version, 8 bytes size, 8 bytes FILETIME, N bytes path
+                            ft_raw = struct.unpack_from('<Q', data, 16)[0]
+                            if ft_raw > 0:
+                                # Convert FILETIME to datetime
+                                EPOCH_DIFF = 116444736000000000
+                                unix_ts = (ft_raw - EPOCH_DIFF) / 10000000
+                                if 0 < unix_ts < 2000000000:
+                                    deleted_at = datetime.fromtimestamp(unix_ts).strftime('%Y-%m-%d %H:%M:%S')
+                                else:
+                                    deleted_at = 'Desconocida'
+                            else:
+                                deleted_at = 'Desconocida'
+
+                            # Original path starts at offset 28 (v2) as UTF-16LE
+                            try:
+                                orig_path = data[28:].decode('utf-16-le').rstrip('\x00')
+                            except Exception:
+                                orig_path = fname
+
+                            deleted_items.append({'path': orig_path, 'deleted_at': deleted_at, 'i_file': i_path})
+                        except Exception:
+                            continue
+                except PermissionError:
+                    continue
+
+            if not deleted_items:
+                return
+
+            # Report suspicious items
+            for item in deleted_items:
+                name_lower = item['path'].lower()
+                for term in hack_terms:
+                    if term in name_lower:
+                        self.issues_found.append({
+                            'tipo': 'deleted_suspicious',
+                            'nombre': f'Archivo sospechoso eliminado: {os.path.basename(item["path"])}',
+                            'ruta': item['path'],
+                            'archivo': item['path'][:255],
+                            'categoria': 'DELETED_FILES',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 75,
+                            'detected_patterns': [term],
+                            'extra': {'deleted_at': item['deleted_at']},
+                        })
+                        print(f"⚠️ ELIMINADO SOSPECHOSO: {item['path']} @ {item['deleted_at']}")
+                        break
+
+            # Summary of all deleted items
+            summary = ' | '.join([f"{os.path.basename(d['path'])} @ {d['deleted_at']}"
+                                   for d in sorted(deleted_items, key=lambda x: x['deleted_at'], reverse=True)[:20]])
+            self.issues_found.append({
+                'tipo': 'deleted_history',
+                'nombre': f'Papelera: {len(deleted_items)} archivo(s) eliminado(s)',
+                'ruta': recycle_root,
+                'archivo': summary[:500],
+                'categoria': 'DELETED_FILES',
+                'alerta': 'NORMAL',
+                'confidence': 0,
+                'detected_patterns': [os.path.basename(d['path']) for d in deleted_items[:20]],
+            })
+        except Exception as e:
+            print(f"Error en scan_deleted_recycle: {e}")
+
+    def scan_executed_userassist(self):
+        """Lee UserAssist del registro para detectar ejecutables recientes con timestamps."""
+        print("🔍 Escaneando UserAssist (ejecutables recientes)...")
+        hack_terms = [
+            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
+            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
+            'clicker', 'phobos', 'astolfo', 'novoline', 'ghost', 'dllinjector'
+        ]
+        import codecs
+        import struct
+
+        def rot13(s):
+            return codecs.encode(s, 'rot_13')
+
+        ua_guids = [
+            r'Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}\Count',
+            r'Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{F4E57C4B-2036-45F0-A9AB-443BCFE33D9F}\Count',
+        ]
+
+        executed = []
+        try:
+            for guid_path in ua_guids:
+                try:
+                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, guid_path) as k:
+                        i = 0
+                        while True:
+                            try:
+                                name, data, _ = winreg.EnumValue(k, i)
+                                i += 1
+                                decoded = rot13(name)
+                                if len(data) >= 72:
+                                    try:
+                                        ft_raw = struct.unpack_from('<Q', data, 60)[0]
+                                        if ft_raw > 0:
+                                            EPOCH_DIFF = 116444736000000000
+                                            unix_ts = (ft_raw - EPOCH_DIFF) / 10000000
+                                            if 0 < unix_ts < 2000000000:
+                                                last_run = datetime.fromtimestamp(unix_ts).strftime('%Y-%m-%d %H:%M:%S')
+                                            else:
+                                                last_run = 'Desconocida'
+                                        else:
+                                            last_run = 'Desconocida'
+                                    except Exception:
+                                        last_run = 'Desconocida'
+                                else:
+                                    last_run = 'Desconocida'
+                                executed.append({'name': decoded, 'last_run': last_run})
+                            except OSError:
+                                break
+                except (FileNotFoundError, PermissionError):
+                    pass
+
+            suspicious = []
+            for item in executed:
+                name_lower = item['name'].lower()
+                for term in hack_terms:
+                    if term in name_lower:
+                        suspicious.append(item)
+                        self.issues_found.append({
+                            'tipo': 'userassist_suspicious',
+                            'nombre': f'Ejecutado sospechoso (UserAssist): {os.path.basename(item["name"])}',
+                            'ruta': item['name'][:255],
+                            'archivo': item['name'][:255],
+                            'categoria': 'EXECUTED_FILES',
+                            'alerta': 'CRITICAL',
+                            'confidence': 80,
+                            'detected_patterns': [term],
+                            'extra': {'last_run': item['last_run']},
+                        })
+                        print(f"🚨 USERASSIST SOSPECHOSO: {item['name'][:80]} @ {item['last_run']}")
+                        break
+
+            if executed:
+                summary = ' | '.join([f"{os.path.basename(e['name'])} @ {e['last_run']}"
+                                       for e in sorted(executed, key=lambda x: x['last_run'], reverse=True)[:25]])
+                self.issues_found.append({
+                    'tipo': 'userassist_history',
+                    'nombre': f'UserAssist: {len(executed)} ejecutables registrados',
+                    'ruta': 'HKCU\\UserAssist',
+                    'archivo': summary[:500],
+                    'categoria': 'EXECUTED_FILES',
+                    'alerta': 'NORMAL',
+                    'confidence': 0,
+                    'detected_patterns': [os.path.basename(e['name']) for e in executed[:25]],
+                })
+        except Exception as e:
+            print(f"Error en scan_executed_userassist: {e}")
+
+    def scan_texture_packs(self):
+        """Escanea resource packs de Minecraft, incluyendo análisis de XRay."""
+        print("🔍 Escaneando resource packs de Minecraft...")
+        xray_terms = ['xray', 'x-ray', 'xview', 'ore', 'highlight', 'transparent', 'wallhack', 'see_through']
+        mc_path = os.path.join(os.environ.get('APPDATA', ''), '.minecraft', 'resourcepacks')
+        if not os.path.exists(mc_path):
+            return
+        try:
+            packs = []
+            for entry in os.listdir(mc_path):
+                entry_path = os.path.join(mc_path, entry)
+                name_lower = entry.lower()
+                mtime = os.path.getmtime(entry_path)
+                added_at = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+                is_xray = any(t in name_lower for t in xray_terms)
+                alerta = 'CRITICAL' if is_xray else 'NORMAL'
+                confidence = 85 if is_xray else 0
+
+                packs.append({'name': entry, 'added_at': added_at, 'is_xray': is_xray})
+                self.issues_found.append({
+                    'tipo': 'texture_pack',
+                    'nombre': f'Resource Pack: {entry}' + (' [POSIBLE XRAY]' if is_xray else ''),
+                    'ruta': entry_path,
+                    'archivo': entry,
+                    'categoria': 'TEXTURE_PACKS',
+                    'alerta': alerta,
+                    'confidence': confidence,
+                    'detected_patterns': [t for t in xray_terms if t in name_lower],
+                    'extra': {'added_at': added_at, 'is_xray': is_xray},
+                })
+                if is_xray:
+                    print(f"🚨 POSIBLE XRAY PACK: {entry}")
+                else:
+                    print(f"ℹ️ Resource Pack: {entry}")
+
+                # Try xray_texture_analyzer if available
+                try:
+                    from xray_texture_analyzer import XRayTextureAnalyzer
+                    analyzer = XRayTextureAnalyzer()
+                    result = analyzer.analyze_pack(entry_path)
+                    if result and result.get('is_xray'):
+                        self.issues_found.append({
+                            'tipo': 'texture_pack_xray',
+                            'nombre': f'XRAY confirmado por análisis: {entry}',
+                            'ruta': entry_path,
+                            'archivo': entry,
+                            'categoria': 'TEXTURE_PACKS',
+                            'alerta': 'CRITICAL',
+                            'confidence': result.get('confidence', 90),
+                            'detected_patterns': result.get('patterns', []),
+                        })
+                        print(f"🚨 XRAY CONFIRMADO por análisis: {entry}")
+                except Exception:
+                    pass
+
+        except Exception as e:
+            print(f"Error en scan_texture_packs: {e}")
+
+    def scan_exploit_tools(self):
+        """Detecta herramientas de exploit y RATs conocidas."""
+        print("🔍 Buscando herramientas de exploit y RATs...")
+        exploit_signatures = [
+            # RATs
+            ('njrat', 'RAT', 'CRITICAL'), ('darkcomet', 'RAT', 'CRITICAL'),
+            ('nanocore', 'RAT', 'CRITICAL'), ('quasar', 'RAT', 'CRITICAL'),
+            ('asyncrat', 'RAT', 'CRITICAL'), ('remcos', 'RAT', 'CRITICAL'),
+            ('limerat', 'RAT', 'CRITICAL'),
+            # Keyloggers
+            ('keylogger', 'KEYLOGGER', 'CRITICAL'), ('ardamax', 'KEYLOGGER', 'CRITICAL'),
+            ('revealer', 'KEYLOGGER', 'SOSPECHOSO'),
+            # Exploits
+            ('metasploit', 'EXPLOIT', 'CRITICAL'), ('cobalt', 'EXPLOIT', 'CRITICAL'),
+            ('msfvenom', 'EXPLOIT', 'CRITICAL'), ('shellcode', 'EXPLOIT', 'SOSPECHOSO'),
+            # Packet tools
+            ('wireshark', 'PACKET_SNIFF', 'SOSPECHOSO'), ('cheatengine', 'CHEAT', 'CRITICAL'),
+            ('x64dbg', 'DEBUGGER', 'SOSPECHOSO'), ('ollydbg', 'DEBUGGER', 'SOSPECHOSO'),
+            ('processhacker', 'PROC_HACK', 'SOSPECHOSO'),
+        ]
+
+        search_paths = [
+            os.path.expanduser('~\\Desktop'),
+            os.path.expanduser('~\\Downloads'),
+            os.path.expanduser('~\\AppData\\Roaming'),
+            os.path.expanduser('~\\AppData\\Local\\Temp'),
+        ]
+
+        found_names = set()
+        try:
+            # Check running processes
+            for proc in psutil.process_iter(['name', 'exe']):
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                    pexe = (proc.info.get('exe') or '').lower()
+                    for sig, cat, level in exploit_signatures:
+                        if sig in pname or sig in pexe:
+                            key = sig + pname
+                            if key not in found_names:
+                                found_names.add(key)
+                                self.issues_found.append({
+                                    'tipo': 'exploit_process',
+                                    'nombre': f'Proceso de exploit activo: {proc.info.get("name", sig)}',
+                                    'ruta': proc.info.get('exe') or 'N/A',
+                                    'archivo': proc.info.get('name', sig),
+                                    'categoria': cat,
+                                    'alerta': level,
+                                    'confidence': 90,
+                                    'detected_patterns': [sig],
+                                })
+                                print(f"🚨 EXPLOIT PROCESS: {proc.info.get('name')} [{level}]")
+                            break
+                except Exception:
+                    continue
+
+            # Check file system
+            for search_path in search_paths:
+                if not os.path.exists(search_path):
+                    continue
+                try:
+                    for root, dirs, files in os.walk(search_path):
+                        dirs[:] = [d for d in dirs if d not in {'node_modules', '.git', '__pycache__'}]
+                        for fname in files:
+                            fname_lower = fname.lower()
+                            for sig, cat, level in exploit_signatures:
+                                if sig in fname_lower:
+                                    fpath = os.path.join(root, fname)
+                                    key = sig + fpath
+                                    if key not in found_names:
+                                        found_names.add(key)
+                                        self.issues_found.append({
+                                            'tipo': 'exploit_file',
+                                            'nombre': f'Herramienta de exploit: {fname}',
+                                            'ruta': fpath,
+                                            'archivo': fname,
+                                            'categoria': cat,
+                                            'alerta': level,
+                                            'confidence': 80,
+                                            'detected_patterns': [sig],
+                                        })
+                                        print(f"🚨 EXPLOIT FILE: {fpath} [{level}]")
+                                    break
+                except PermissionError:
+                    pass
+        except Exception as e:
+            print(f"Error en scan_exploit_tools: {e}")
+
+    def second_pass_scanner(self):
+        """Segunda pasada: analiza archivos SOSPECHOSO/CRITICAL con mayor profundidad."""
+        print("🔬 Segunda pasada de análisis sobre archivos sospechosos...")
+        try:
+            candidates = [i for i in self.issues_found
+                          if i.get('alerta') in ('SOSPECHOSO', 'CRITICAL')
+                          and i.get('tipo') in ('file', 'jar_file', 'minecraft_file', 'exe_file')
+                          and i.get('ruta') and os.path.isfile(str(i.get('ruta', '')))]
+
+            upgraded = 0
+            for issue in candidates[:50]:  # Limit to 50 to avoid slowdown
+                try:
+                    analysis = self.analyze_file_content(str(issue['ruta']))
+                    if analysis.get('is_hack') and analysis.get('confidence', 0) > issue.get('confidence', 0):
+                        issue['confidence'] = analysis['confidence']
+                        issue['detected_patterns'] = list(set(
+                            issue.get('detected_patterns', []) + analysis.get('detected_patterns', [])))
+                        issue['file_hash'] = analysis.get('file_hash') or issue.get('file_hash')
+                        if analysis['confidence'] >= 80:
+                            issue['alerta'] = 'CRITICAL'
+                            upgraded += 1
+                        elif analysis['confidence'] >= 60:
+                            issue['alerta'] = 'SOSPECHOSO'
+                except Exception:
+                    pass
+            print(f"✅ Segunda pasada: {upgraded} archivos actualizados a CRITICAL")
+        except Exception as e:
+            print(f"Error en second_pass_scanner: {e}")
+
     def show_details(self):
         """Muestra la ventana de detalles"""
         if self.issues_found:

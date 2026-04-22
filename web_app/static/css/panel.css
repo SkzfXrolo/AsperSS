@@ -2264,3 +2264,89 @@ body.light-theme .scan-back-btn {
 .echo-action-btn:hover { background: var(--accent-bg); color: var(--accent); border-color: var(--border-h); }
 .echo-action-hack:hover  { background: var(--red-bg);   color: var(--red);   border-color: rgba(244,63,94,0.3); }
 .echo-action-legit:hover { background: var(--green-bg); color: var(--green); border-color: rgba(16,185,129,0.3); }
+
+/* ══════════════════════════════════════════════
+   REDESIGNED SCAN INFO SIDEBAR
+══════════════════════════════════════════════ */
+
+#scan-info-block .scan-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(139,92,246,0.06);
+}
+#scan-info-block .scan-info-row:last-child { border-bottom: none; }
+#scan-info-block .scan-info-label { color: var(--text-d); font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+#scan-info-block .scan-info-value { font-weight: 600; font-size: 12px; }
+
+/* ══════════════════════════════════════════════
+   NEW SECTIONS: SUBNAV TABS
+══════════════════════════════════════════════ */
+
+.scan-subnav .subnav-row {
+    flex-wrap: wrap;
+}
+
+/* Better subnav item sizing for more tabs */
+.subnav-item {
+    font-size: 12px !important;
+    padding: 7px 12px !important;
+    gap: 6px !important;
+    white-space: nowrap;
+}
+
+.subnav-item svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* ══════════════════════════════════════════════
+   DATA CARDS (texture packs, executed, deleted)
+══════════════════════════════════════════════ */
+
+.data-card {
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: var(--trans);
+}
+.data-card:hover { transform: translateX(2px); }
+.data-card-icon { font-size: 20px; flex-shrink: 0; }
+.data-card-body { flex: 1; min-width: 0; }
+.data-card-title { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.data-card-subtitle { font-size: 11px; color: var(--text-d); margin-top: 3px; word-break: break-all; }
+.data-card-badge { font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 5px; flex-shrink: 0; }
+
+/* ══════════════════════════════════════════════
+   IMPROVED DETECTION BANNER
+══════════════════════════════════════════════ */
+
+.echo-detection-banner {
+    position: relative;
+    overflow: hidden;
+}
+.echo-detection-banner::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 60%, rgba(244,63,94,0.04) 100%);
+    pointer-events: none;
+}
+
+/* ══════════════════════════════════════════════
+   IMPROVED STAT CARDS ANIMATION
+══════════════════════════════════════════════ */
+
+#sum-critical, #sum-suspicious, #sum-low, #sum-clean {
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Subnav responsive */
+@media (max-width: 1200px) {
+    .subnav-item span { display: none; }
+    .subnav-item { padding: 8px 10px !important; }
+}

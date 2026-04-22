@@ -973,6 +973,98 @@ async function viewScanDetails(scanId) {
         }
 
 
+        // ── Nuevas secciones: Texture Packs, Ejecutados, Eliminados, Comandos ──
+        const allResults = data.results || [];
+
+        // Texture Packs
+        const texturePacks = allResults.filter(r => r.issue_type === 'texture_pack' || r.issue_type === 'texture_pack_xray' || r.issue_category === 'TEXTURE_PACKS');
+        const tpBtn = document.getElementById('subnav-texture-packs');
+        if (tpBtn) tpBtn.style.display = texturePacks.length > 0 ? '' : 'none';
+        const tpBadge = document.getElementById('tp-badge');
+        if (tpBadge) {
+            const xrays = texturePacks.filter(r => r.alert_level === 'CRITICAL').length;
+            if (xrays > 0) { tpBadge.textContent = xrays; tpBadge.style.display = ''; }
+            else tpBadge.style.display = 'none';
+        }
+        const tpList = document.getElementById('texture-packs-list');
+        const tpCountBadge = document.getElementById('tp-count-badge');
+        if (tpList) {
+            if (texturePacks.length > 0) {
+                if (tpCountBadge) { tpCountBadge.textContent = texturePacks.length; tpCountBadge.style.display = ''; }
+                tpList.innerHTML = texturePacks.map(r => {
+                    const isXray = r.alert_level === 'CRITICAL';
+                    const accent = isXray ? '#ef4444' : '#10b981';
+                    return `<div style="background:rgba(${isXray?'239,68,68':'16,185,129'},0.06);border:1px solid rgba(${isXray?'239,68,68':'16,185,129'},0.25);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:12px;">
+                        <span style="font-size:20px;">${isXray?'⚠️':'🖼️'}</span>
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-size:13px;font-weight:600;color:${accent};">${r.issue_name||r.issue_path||'Pack'}</div>
+                            <div style="font-size:11px;color:var(--text-d);margin-top:2px;">${r.issue_path||''}</div>
+                        </div>
+                        <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:5px;background:rgba(${isXray?'239,68,68':'16,185,129'},0.15);color:${accent};">${isXray?'POSIBLE XRAY':'NORMAL'}</span>
+                    </div>`;
+                }).join('');
+            } else {
+                if (tpCountBadge) tpCountBadge.style.display = 'none';
+                tpList.innerHTML = '<p style="color:var(--text-m);font-size:13px;">✅ Sin texture packs detectados.</p>';
+            }
+        }
+
+        // Ejecutados
+        const ejecutados = allResults.filter(r => r.issue_category === 'EXECUTED_FILES' || r.issue_type === 'prefetch_history' || r.issue_type === 'userassist_history' || r.issue_type === 'prefetch_suspicious' || r.issue_type === 'userassist_suspicious');
+        const ejBtn = document.getElementById('subnav-ejecutados');
+        if (ejBtn) ejBtn.style.display = ejecutados.length > 0 ? '' : 'none';
+        const ejList = document.getElementById('ejecutados-list');
+        if (ejList && ejecutados.length > 0) {
+            ejList.innerHTML = ejecutados.map(r => {
+                const isSusp = r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO';
+                const accent = isSusp ? '#ef4444' : '#38bdf8';
+                const bg = isSusp ? 'rgba(239,68,68,0.06)' : 'rgba(56,189,248,0.04)';
+                return `<div style="background:${bg};border:1px solid ${accent}33;border-radius:8px;padding:12px 14px;">
+                    <div style="font-size:12px;font-weight:600;color:${accent};">${isSusp?'⚠️ ':'▶️ '}${r.issue_name||r.issue_path||'—'}</div>
+                    ${r.issue_path?`<div style="font-size:11px;color:var(--text-d);margin-top:3px;word-break:break-all;">${r.issue_path}</div>`:''}
+                    ${r.alert_level?`<div style="margin-top:4px;font-size:10px;font-weight:700;color:${accent};text-transform:uppercase;">${r.alert_level}</div>`:''}
+                </div>`;
+            }).join('');
+        } else if (ejList) {
+            ejList.innerHTML = '<p style="color:var(--text-m);font-size:13px;">Sin historial de ejecutados para este escaneo.</p>';
+        }
+
+        // Eliminados
+        const eliminados = allResults.filter(r => r.issue_category === 'DELETED_FILES' || r.issue_type === 'deleted_suspicious' || r.issue_type === 'deleted_history');
+        const elBtn = document.getElementById('subnav-eliminados');
+        if (elBtn) elBtn.style.display = eliminados.length > 0 ? '' : 'none';
+        const elList = document.getElementById('eliminados-list');
+        if (elList && eliminados.length > 0) {
+            elList.innerHTML = eliminados.map(r => {
+                const isSusp = r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO';
+                const accent = isSusp ? '#ef4444' : '#f59e0b';
+                return `<div style="background:rgba(${isSusp?'239,68,68':'245,158,11'},0.06);border:1px solid ${accent}33;border-radius:8px;padding:12px 14px;">
+                    <div style="font-size:12px;font-weight:600;color:${accent};">🗑️ ${r.issue_name||r.issue_path||'—'}</div>
+                    ${r.issue_path?`<div style="font-size:11px;color:var(--text-d);margin-top:3px;word-break:break-all;">${r.issue_path}</div>`:''}
+                </div>`;
+            }).join('');
+        } else if (elList) {
+            elList.innerHTML = '<p style="color:var(--text-m);font-size:13px;">Sin archivos eliminados detectados para este escaneo.</p>';
+        }
+
+        // Comandos
+        const comandos = allResults.filter(r => r.issue_category === 'CMD_HISTORY' || r.issue_type === 'cmd_history' || r.issue_type === 'cmd_history_full');
+        const cmdBtn = document.getElementById('subnav-comandos');
+        if (cmdBtn) cmdBtn.style.display = comandos.length > 0 ? '' : 'none';
+        const cmdList = document.getElementById('comandos-list');
+        if (cmdList && comandos.length > 0) {
+            cmdList.innerHTML = comandos.map(r => {
+                const isSusp = r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO';
+                const accent = isSusp ? '#ef4444' : '#a78bfa';
+                return `<div style="background:rgba(${isSusp?'239,68,68':'167,139,250'},0.06);border:1px solid ${accent}33;border-radius:8px;padding:12px 14px;">
+                    <div style="font-size:12px;font-weight:600;color:${accent};">💻 ${r.issue_name||'—'}</div>
+                    ${r.issue_path?`<div style="font-size:11px;color:var(--text-d);margin-top:3px;">${r.issue_path}</div>`:''}
+                </div>`;
+            }).join('');
+        } else if (cmdList) {
+            cmdList.innerHTML = '<p style="color:var(--text-m);font-size:13px;">Sin historial de comandos para este escaneo.</p>';
+        }
+
     } catch (error) {
         console.error('Error cargando detalles:', error);
         alert('Error al cargar detalles del escaneo: ' + error.message);
