@@ -754,7 +754,11 @@ async function loadScans() {
                         <div class="scan-details-cell">
                             <div class="scan-avatar-circle">${_scanInitials(scan.machine_name)}</div>
                             <div>
-                                <div class="scan-machine-name">${scan.machine_name || 'N/A'}</div>
+                                <div class="scan-machine-name"
+                                    onclick="event.stopPropagation();viewPlayerProfile(${JSON.stringify(scan.machine_name || '')})"
+                                    title="Ver perfil del jugador"
+                                    style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;"
+                                >${scan.machine_name || 'N/A'}</div>
                                 <div class="scan-date-small">${formatDate(scan.started_at)}</div>
                             </div>
                         </div>
@@ -1067,7 +1071,16 @@ async function viewScanDetails(scanId) {
         if (osEl) osEl.textContent = data.os || data.operating_system || 'Windows';
         
         const machineEl = document.getElementById('detail-machine-name');
-        if (machineEl) machineEl.textContent = data.machine_name || 'N/A';
+        if (machineEl) {
+            machineEl.textContent = data.machine_name || 'N/A';
+            machineEl.style.cursor = 'pointer';
+            machineEl.title = 'Ver historial de este jugador';
+            machineEl.style.textDecoration = 'underline dotted';
+            machineEl.onclick = () => {
+                const btn = document.querySelector('.subnav-item[data-subpage="escaneos-previos"]');
+                if (btn) btn.click();
+            };
+        }
         
         const filesEl = document.getElementById('detail-files-count');
         if (filesEl) {
@@ -1424,6 +1437,21 @@ async function deleteScanNote(scanId, noteId, btn) {
     } catch(e) { btn.disabled = false; }
 }
 
+async function viewPlayerProfile(machineName) {
+    if (!machineName) return;
+    // Cargar el scan más reciente de ese jugador y abrir en "Escaneos Previos"
+    try {
+        const res  = await fetch(`/api/scans?machine_name=${encodeURIComponent(machineName)}&limit=1`);
+        const data = await res.json();
+        if (data.scans && data.scans.length > 0) {
+            await viewScanDetails(data.scans[0].id);
+            // Cambiar a la pestaña de escaneos previos
+            const btn = document.querySelector('.subnav-item[data-subpage="escaneos-previos"]');
+            if (btn) btn.click();
+        }
+    } catch(e) { console.error('Error cargando perfil de jugador:', e); }
+}
+
 async function loadPreviousScans(machineName) {
     try {
         const response = await fetch(`/api/scans?machine_name=${encodeURIComponent(machineName)}&limit=10`);
@@ -1432,36 +1460,55 @@ async function loadPreviousScans(machineName) {
         const container = document.getElementById('previous-scans-list');
         if (!container) return;
         
-        if (data.scans && data.scans.length > 1) {
-            // Filtrar el escaneo actual
-            const previousScans = data.scans.filter(s => s.id !== currentScanId);
-            
-            if (previousScans.length > 0) {
-                container.innerHTML = previousScans.map(scan => {
-                    const previewText = scan.severity_summary === 'CRITICO' ? '🔴 CRÍTICO' :
-                                       scan.severity_summary === 'SOSPECHOSO' ? '🟠 SOSPECHOSO' :
-                                       scan.severity_summary === 'POCO_SOSPECHOSO' ? '🟡 POCO SOSPECHOSO' :
-                                       scan.severity_summary === 'LIMPIO' ? '🟢 LIMPIO' : '⚪ NORMAL';
-                    
-                    return `
-                        <div class="previous-scan-item" onclick="viewScanDetails(${scan.id})">
-                            <div class="previous-scan-header">
-                                <span class="previous-scan-id">Escaneo #${scan.id}</span>
-                                <span class="previous-scan-date">${formatDate(scan.started_at)}</span>
-                            </div>
-                            <div class="previous-scan-stats">
-                                <span class="previous-scan-stat"><strong>${scan.issues_found || 0}</strong> issues</span>
-                                <span class="previous-scan-stat"><strong>${scan.total_files_scanned || 0}</strong> archivos</span>
-                                <span class="previous-scan-stat">${previewText}</span>
-                            </div>
+        const allScans  = data.scans || [];
+        const prevScans = allScans.filter(s => s.id !== currentScanId);
+        const current   = allScans.find(s => s.id === currentScanId);
+
+        if (prevScans.length > 0) {
+            // Estadísticas de historial
+            const totalScans = allScans.length;
+            const withHacks  = allScans.filter(s => s.verdict === 'hack').length;
+            const clean      = allScans.filter(s => s.verdict === 'clean').length;
+
+            const statsHtml = `
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
+                    <div style="background:var(--bg-s);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center;">
+                        <div style="font-size:22px;font-weight:800;color:var(--accent);">${totalScans}</div>
+                        <div style="font-size:11px;color:var(--text-d);">Escaneos totales</div>
+                    </div>
+                    <div style="background:var(--bg-s);border:1px solid rgba(220,38,38,0.3);border-radius:10px;padding:12px;text-align:center;">
+                        <div style="font-size:22px;font-weight:800;color:#ef4444;">${withHacks}</div>
+                        <div style="font-size:11px;color:var(--text-d);">Con hacks</div>
+                    </div>
+                    <div style="background:var(--bg-s);border:1px solid rgba(16,185,129,0.3);border-radius:10px;padding:12px;text-align:center;">
+                        <div style="font-size:22px;font-weight:800;color:#10b981;">${clean}</div>
+                        <div style="font-size:11px;color:var(--text-d);">Limpios</div>
+                    </div>
+                </div>`;
+
+            container.innerHTML = statsHtml + prevScans.map((scan, i) => {
+                const prev      = prevScans[i + 1];
+                const issuesDiff = prev != null ? (scan.issues_found || 0) - (prev.issues_found || 0) : null;
+                const diffBadge = issuesDiff === null ? '' :
+                    issuesDiff > 0 ? `<span style="color:#ef4444;font-size:11px;">▲ ${issuesDiff}</span>` :
+                    issuesDiff < 0 ? `<span style="color:#10b981;font-size:11px;">▼ ${Math.abs(issuesDiff)}</span>` :
+                                    `<span style="color:var(--text-d);font-size:11px;">= igual</span>`;
+                const verdictBadge = scan.verdict === 'hack'  ? '<span style="font-size:10px;font-weight:700;color:#ef4444;background:rgba(220,38,38,0.12);padding:1px 6px;border-radius:6px;">HACKS</span>' :
+                                     scan.verdict === 'clean' ? '<span style="font-size:10px;font-weight:700;color:#10b981;background:rgba(16,185,129,0.12);padding:1px 6px;border-radius:6px;">LIMPIO</span>' : '';
+                return `
+                    <div class="previous-scan-item" onclick="viewScanDetails(${scan.id})">
+                        <div class="previous-scan-header">
+                            <span class="previous-scan-id">Escaneo #${scan.id} ${verdictBadge}</span>
+                            <span class="previous-scan-date">${formatDate(scan.started_at)}</span>
                         </div>
-                    `;
-                }).join('');
-            } else {
-                container.innerHTML = '<div class="loading-cell">No hay escaneos previos de esta máquina.</div>';
-            }
+                        <div class="previous-scan-stats">
+                            <span class="previous-scan-stat"><strong>${scan.issues_found || 0}</strong> issues ${diffBadge}</span>
+                            <span class="previous-scan-stat"><strong>${scan.total_files_scanned || 0}</strong> archivos</span>
+                        </div>
+                    </div>`;
+            }).join('');
         } else {
-            container.innerHTML = '<div class="loading-cell">No hay escaneos previos de esta máquina.</div>';
+            container.innerHTML = '<div class="loading-cell">Primer escaneo de esta máquina.</div>';
         }
     } catch (error) {
         console.error('Error cargando escaneos previos:', error);
