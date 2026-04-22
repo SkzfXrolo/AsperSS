@@ -1,0 +1,161 @@
+================================================================
+  ASPERS PROJECTS — PENDIENTES PARA PRÓXIMA SESIÓN
+  Última actualización: 22/04/2026
+================================================================
+
+── TAREAS PEDIDAS ────────────────────────────────────────────
+
+[ ] Crear Vistas móvil
+      → Responsive design en panel.html/panel.css
+      → Subnav colapsable en móvil (hamburger menu)
+      → Cards de stats apiladas verticalmente en < 768px
+      → Tabla de resultados adaptada a pantalla chica
+
+[ ] Crear aplicación web móvil
+      → PWA (Progressive Web App) con manifest.json y service worker
+      → Instalable desde el navegador en Android/iOS
+      → Notificaciones push cuando llega un scan nuevo
+      → Modo offline básico con caché de último scan
+
+[ ] Arreglar descargas por link generado por token
+      → El link /download/<token> debe forzar descarga del .exe
+      → Verificar que el token sea válido antes de servir el archivo
+      → El link debe expirar después de N usos o N horas
+      → Registrar en BD qué staff generó el link y cuándo se descargó
+
+── MEJORAS DE PANEL WEB ──────────────────────────────────────
+
+[ ] Sistema de notificaciones en tiempo real
+      → WebSocket (Flask-SocketIO) para avisar cuando llega un scan
+      → Badge con contador de scans nuevos sin revisar
+      → Sonido/vibración opcional al recibir scan
+
+[ ] Dashboard con estadísticas globales
+      → Gráfico de scans por día/semana (Chart.js)
+      → Porcentaje de usuarios limpios vs con hacks
+      → Top hacks detectados este mes
+      → Tiempo promedio de escaneo
+
+[ ] Perfil de jugador (historial)
+      → Al hacer clic en un username, ver todos sus scans anteriores
+      → Comparar scan actual con el anterior (diferencias destacadas)
+      → Timeline de escáneos del mismo jugador
+
+[ ] Sistema de notas por scan
+      → Staff puede agregar notas/comentarios a un scan
+      → Notas visibles para todo el equipo de staff
+      → Historial de quién escribió cada nota
+
+[ ] Exportar resultados
+      → Exportar scan a PDF con logo de Argus Projects
+      → Exportar a CSV para análisis externo
+      → Compartir link de solo lectura del scan (sin login)
+
+[ ] Gestión de veredictos mejorada
+      → Campo de razón obligatorio al marcar "Con Hacks" o "Limpio"
+      → Historial de cambios de veredicto (quién cambió qué y cuándo)
+      → Veredicto pendiente / en revisión / definitivo
+
+[ ] Filtros y búsqueda avanzada
+      → Filtrar por fecha, país, OS, veredicto, staff que escaneó
+      → Búsqueda por username, IP, hallazgo específico
+      → Guardar filtros como presets
+
+[ ] Sistema de permisos de staff
+      → Roles: Owner / Admin / Moderador / Helper
+      → Helper solo puede ver scans, no cambiar veredictos
+      → Admin puede crear tokens, Moderador no
+
+── MEJORAS DEL SCANNER .EXE ──────────────────────────────────
+
+[ ] Auto-actualización del scanner
+      → Al abrir, verificar si hay versión nueva en el servidor
+      → Descargar y reemplazarse automáticamente si hay update
+      → Mostrar changelog de la nueva versión
+
+[ ] Protección anti-detección del scanner
+      → Nombre aleatorio del proceso al ejecutarse
+      → Ofuscación del binario (PyInstaller + UPX + cambio de strings)
+      → El jugador no debería poder saber qué está escaneando
+
+[ ] Captura de pantalla durante el scan
+      → Tomar screenshot al iniciar (para ver qué tenía abierto)
+      → Enviar imagen al panel junto con los resultados
+      → El staff puede ver la pantalla del momento del scan
+
+[ ] Mejor detección de Minecraft activo
+      → Detectar versión exacta de MC corriendo (1.8.9, 1.12.2, etc.)
+      → Detectar si hay mods cargados en tiempo real (JVM args)
+      → Detectar si el launcher es oficial, Lunar, Badlion, etc.
+
+[ ] Base de datos de hashes de hacks en la nube
+      → El servidor mantiene lista de SHA256 de hacks conocidos
+      → El scanner descarga la lista al iniciar (o usa API)
+      → Detección 100% confiable por hash aunque el archivo esté renombrado
+
+[ ] Módulo de detección de macros de mouse/teclado
+      → Detectar AutoHotKey, Logitech GHUB scripts, Razer Synapse macros
+      → Revisar si hay clicks en intervalos perfectamente regulares (autoclicker)
+      → Analizar patrón de timing en historial de eventos del mouse
+
+[ ] Escaneo de memoria de procesos Java
+      → Listar módulos cargados en la JVM de Minecraft
+      → Detectar agentes Java (-javaagent) en la línea de comando
+      → Identificar DLLs inyectadas en el proceso javaw.exe
+
+[ ] Mejorar tiempo total del scan
+      → Actualmente 3-4 minutos → objetivo < 90 segundos
+      → Revisar qué fases son las más lentas y optimizarlas
+      → Hacer más fases verdaderamente paralelas
+
+── MEJORAS DE AUTENTICACIÓN / SEGURIDAD ─────────────────────
+
+[ ] Tokens con expiración configurable
+      → El staff puede elegir: token de 1 uso, 24h, 7 días, permanente
+      → Revocar token desde el panel en cualquier momento
+      → Ver última vez que se usó un token
+
+[ ] Autenticación de dos factores para staff
+      → TOTP (Google Authenticator) para cuentas admin
+      → Código de backup de un solo uso
+
+[ ] Rate limiting en endpoints de API
+      → Máximo N scans por token por hora
+      → Bloqueo automático de IPs que hagan spam a la API
+      → Alerta al admin si se detecta abuso
+
+[ ] Log de auditoría completo
+      → Registrar TODAS las acciones del staff (login, veredictos, tokens)
+      → Log inmutable (append-only) con timestamp
+      → Página de auditoría en el panel para el Owner
+
+── INFRAESTRUCTURA / BACKEND ─────────────────────────────────
+
+[ ] Migrar de Render free tier a servicio más estable
+      → El cold start de Render free tarda 30-60s → mala UX
+      → Opciones: Railway, Fly.io, VPS propio (DigitalOcean $6/mes)
+
+[ ] Sistema de backup de BD automático
+      → Dump diario de PostgreSQL a un bucket S3 o Google Drive
+      → Retención de 30 días
+
+[ ] API pública documentada
+      → Swagger/OpenAPI docs en /api/docs
+      → Para integrar con bots de Discord u otros sistemas externos
+
+[ ] Bot de Discord oficial
+      → Comandos slash: /scan @jugador, /veredicto <id>, /stats
+      → Notificación automática en canal cuando llega scan nuevo
+      → El staff puede marcar veredicto directamente desde Discord
+
+================================================================
+  BUGS CONOCIDOS A REVISAR
+================================================================
+
+[ ] La barra de progreso a veces salta de golpe en vez de animar suave
+[ ] El username del jugador aparece como "No detectado" a veces
+[ ] En scans muy rápidos (< 30s) el panel no recibe los datos a tiempo
+[ ] El panel no refresca automáticamente cuando llega un scan nuevo
+[ ] En resoluciones < 1200px la subnav puede hacer wrap en algunos browsers
+
+================================================================
