@@ -759,17 +759,16 @@ async function viewScanDetails(scanId) {
             setupSubpageNavigation();
         }
         
-        // Mostrar issues individuales con botones de feedback (solo CRITICAL y SOSPECHOSO)
+        // Mostrar todos los resultados con badge de categoría
         const issuesContainer = document.getElementById('issues-list-container');
-        const relevantResults = (data.results || []).filter(r =>
-            r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO'
-        );
+        const relevantResults = data.results || [];
         if (relevantResults.length > 0) {
             issuesContainer.innerHTML = relevantResults.map((result) => {
                 const isCrit = result.alert_level === 'CRITICAL';
                 const isSusp = result.alert_level === 'SOSPECHOSO';
                 const borderColor = isCrit ? 'var(--red)' : isSusp ? 'var(--amber)' : 'var(--border-m)';
                 const iconColor   = isCrit ? 'var(--red)' : isSusp ? 'var(--amber)' : 'var(--text-d)';
+                const catLabel = result.issue_category ? `<span style="font-size:10px;color:var(--text-d);background:var(--bg-s);padding:1px 6px;border-radius:4px;margin-left:6px;">${result.issue_category}</span>` : '';
                 const hasFeedback = result.feedback_status;
 
                 const issueNameEscaped = (result.issue_name || 'Issue Desconocido').replace(/'/g, "\\'");
@@ -792,7 +791,7 @@ async function viewScanDetails(scanId) {
                             </svg>
                         </div>
                         <div class="echo-issue-body">
-                            <div class="echo-issue-name">${result.issue_name || 'Issue Desconocido'}</div>
+                            <div class="echo-issue-name">${result.issue_name || 'Issue Desconocido'}${catLabel}</div>
                             <div class="echo-issue-path">${result.issue_path || 'N/A'}</div>
                             ${result.ai_analysis ? `<div class="echo-issue-analysis">${result.ai_analysis}</div>` : ''}
                             ${result.detected_patterns && result.detected_patterns.length > 0
@@ -891,49 +890,6 @@ async function viewScanDetails(scanId) {
             }
         }
 
-        // ── Poblar tabs por categoría ─────────────────────────────────────────
-        const TAB_CATEGORIES = {
-            'cuentas':            ['MINECRAFT', 'MINECRAFT_CONFIGS', 'NETWORK_CONNECTIONS'],
-            'launcher-profiles':  ['JAR_FILES', 'JAVA_CMD', 'LAUNCHER'],
-            'resource-packs':     ['texture_modification', 'RESOURCE_PACKS'],
-            'historial-archivos': ['RECENT_FILES', 'DELETED_FILES', 'NEW_FILES', 'RENAMED_FILES', 'DATE_CHANGES'],
-            'utilities':          ['AUTOCLICK_TOOLS', 'autoclicker', 'injection', 'LOGITECH', 'RAZER', 'USB_DEVICES'],
-            'archivos-windows':   ['PREFETCH', 'JNA', 'TEMP_FILES', 'SERVICES', 'PROCESSES', 'BACKGROUND_PROCESSES', 'DNS_CACHE', 'HIDDEN_FILES'],
-        };
-        const allResults = data.results || [];
-        const _cats = allResults.map(r => r.issue_category);
-        const _counts = {};
-        _cats.forEach(c => { _counts[c||'(vacío)'] = (_counts[c||'(vacío)']||0)+1; });
-        console.log('[DEBUG] Categorías:', JSON.stringify(_counts));
-
-        Object.entries(TAB_CATEGORIES).forEach(([tab, cats]) => {
-            const container = document.getElementById(`subpage-${tab}`);
-            if (!container) return;
-            const filtered = allResults.filter(r => cats.includes(r.issue_category));
-            if (filtered.length === 0) {
-                container.innerHTML = `<div class="subpage-placeholder"><p style="color:var(--text-m);font-size:13px;padding:40px 0;">Sin hallazgos en esta categoría.</p></div>`;
-                return;
-            }
-            container.innerHTML = filtered.map(r => {
-                const isCrit = r.alert_level === 'CRITICAL';
-                const isSusp = r.alert_level === 'SOSPECHOSO' || r.alert_level === 'HACKS';
-                const borderColor = isCrit ? 'var(--red)' : isSusp ? 'var(--amber)' : 'var(--border-m)';
-                const iconColor   = isCrit ? 'var(--red)' : isSusp ? 'var(--amber)' : 'var(--text-d)';
-                return `
-                    <div class="echo-issue-row" style="border-left-color:${borderColor}">
-                        <div class="echo-issue-x" style="color:${iconColor}">
-                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                                <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                            </svg>
-                        </div>
-                        <div class="echo-issue-body">
-                            <div class="echo-issue-name">${r.issue_name || r.issue_type || 'Hallazgo'}</div>
-                            <div class="echo-issue-path">${r.issue_path || ''}</div>
-                            ${r.ai_analysis ? `<div class="echo-issue-analysis">${r.ai_analysis}</div>` : ''}
-                        </div>
-                    </div>`;
-            }).join('');
-        });
 
     } catch (error) {
         console.error('Error cargando detalles:', error);
