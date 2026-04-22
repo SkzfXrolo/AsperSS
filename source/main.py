@@ -6033,10 +6033,12 @@ class ArgusApp:
         print("🔍 Escaneando BAM registry (Background Activity Monitor)...")
         import struct
         hack_terms = [
-            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
-            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
-            'clicker', 'phobos', 'astolfo', 'novoline', 'ghost', 'dllinjector',
-            'cheatengine', 'xray', 'triggerbot', 'bspoof', 'esp', 'radar'
+            'vape', 'vapelite', 'entropy', 'entropyclient',
+            'wurst', 'wurstclient', 'liquidbounce',
+            'killaura', 'aimbot', 'cheatengine',
+            'xray', 'triggerbot', 'dllinjector', 'bspoof',
+            'phobos', 'astolfo', 'novoline',
+            'ghostclient', 'silentclient', 'fluxclient',
         ]
         EPOCH_DIFF = 116444736000000000
 
@@ -6094,20 +6096,7 @@ class ArgusApp:
                                     except OSError:
                                         break
                                 if all_entries:
-                                    summary = ' | '.join([
-                                        f"{e['exe']} @ {e['ts']}"
-                                        for e in sorted(all_entries, key=lambda x: x['ts'], reverse=True)[:20]
-                                    ])
-                                    self.issues_found.append({
-                                        'tipo': 'bam_history',
-                                        'nombre': f'BAM: {len(all_entries)} ejecutables registrados (SID: ...{sid[-8:]})',
-                                        'ruta': f'HKLM\\bam\\{sid}',
-                                        'archivo': summary[:500],
-                                        'categoria': 'EXECUTED_FILES',
-                                        'alerta': 'NORMAL',
-                                        'confidence': 0,
-                                        'detected_patterns': [e['exe'] for e in all_entries[:20]],
-                                    })
+                                    print(f"✅ BAM: {len(all_entries)} ejecutables en SID ...{sid[-8:]}")
                         except (FileNotFoundError, PermissionError):
                             pass
                     except OSError:
@@ -6121,10 +6110,12 @@ class ArgusApp:
         """Escanea archivos .lnk recientes en %APPDATA%\\Microsoft\\Windows\\Recent."""
         print("🔍 Escaneando archivos .lnk recientes...")
         hack_terms = [
-            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
-            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
-            'clicker', 'phobos', 'astolfo', 'ghost', 'dllinjector', 'cheatengine',
-            'xray', 'triggerbot', 'esp', 'radar', 'bspoof'
+            'vape', 'vapelite', 'entropy', 'entropyclient',
+            'wurst', 'wurstclient', 'liquidbounce',
+            'killaura', 'aimbot', 'cheatengine',
+            'xray', 'triggerbot', 'dllinjector', 'bspoof',
+            'phobos', 'astolfo', 'novoline',
+            'ghostclient', 'silentclient', 'fluxclient',
         ]
         recent_dir = os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Windows', 'Recent')
         if not os.path.exists(recent_dir):
@@ -6161,20 +6152,7 @@ class ArgusApp:
                     pass
 
             if lnk_files:
-                summary = ' | '.join([
-                    f"{e['name']} @ {e['ts']}"
-                    for e in sorted(lnk_files, key=lambda x: x['ts'], reverse=True)[:30]
-                ])
-                self.issues_found.append({
-                    'tipo': 'recent_lnk_history',
-                    'nombre': f'Archivos recientes (.lnk): {len(lnk_files)} entradas',
-                    'ruta': recent_dir,
-                    'archivo': summary[:500],
-                    'categoria': 'EXECUTED_FILES',
-                    'alerta': 'NORMAL',
-                    'confidence': 0,
-                    'detected_patterns': [e['name'] for e in lnk_files[:30]],
-                })
+                print(f"✅ LNK recientes: {len(lnk_files)} archivos encontrados")
         except Exception as e:
             print(f"Error en scan_recent_lnk: {e}")
 
@@ -6182,10 +6160,12 @@ class ArgusApp:
         """Escanea el historial de PowerShell (PSReadLine) en busca de comandos sospechosos."""
         print("🔍 Escaneando historial de PowerShell...")
         hack_terms = [
-            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
-            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
-            'clicker', 'phobos', 'astolfo', 'dllinjector', 'cheatengine',
-            'xray', 'triggerbot', 'bspoof', 'processhollowing',
+            'vape', 'vapelite', 'entropy', 'entropyclient',
+            'wurst', 'wurstclient', 'liquidbounce',
+            'killaura', 'aimbot', 'cheatengine',
+            'xray', 'triggerbot', 'dllinjector', 'bspoof',
+            'phobos', 'astolfo', 'novoline', 'processhollowing',
+            'ghostclient', 'silentclient', 'fluxclient',
         ]
         ps_history = os.path.join(
             os.environ.get('APPDATA', ''),
@@ -6219,17 +6199,7 @@ class ArgusApp:
                         break
 
             if all_cmds:
-                summary = ' | '.join(all_cmds[-30:])
-                self.issues_found.append({
-                    'tipo': 'powershell_history',
-                    'nombre': f'Historial PowerShell: {len(all_cmds)} comandos registrados',
-                    'ruta': ps_history[:255],
-                    'archivo': summary[:500],
-                    'categoria': 'CMD_HISTORY',
-                    'alerta': 'NORMAL',
-                    'confidence': 0,
-                    'detected_patterns': all_cmds[-30:],
-                })
+                print(f"✅ PS history: {len(all_cmds)} comandos, {len(suspicious_cmds)} sospechosos")
         except Exception as e:
             print(f"Error en scan_powershell_history: {e}")
 
@@ -6241,10 +6211,12 @@ class ArgusApp:
         import tempfile
 
         hack_terms = [
-            'vape', 'entropy', 'hack', 'cheat', 'wurst', 'liquidbounce',
-            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack',
-            'phobos', 'astolfo', 'dllinjector', 'cheatengine', 'xray',
-            'triggerbot', 'autoclicker', 'clicker', 'inject',
+            'vape', 'vapelite', 'entropy', 'entropyclient',
+            'wurst', 'wurstclient', 'liquidbounce',
+            'killaura', 'aimbot', 'cheatengine',
+            'xray', 'triggerbot', 'dllinjector', 'bspoof',
+            'phobos', 'astolfo', 'novoline',
+            'ghostclient', 'silentclient', 'fluxclient',
         ]
 
         local = os.environ.get('LOCALAPPDATA', '')
@@ -6361,12 +6333,25 @@ class ArgusApp:
     def scan_appcompat_shimcache(self):
         """Lee AppCompatCache (ShimCache) del registro — ejecuciones históricas de aplicaciones."""
         print("🔍 Escaneando AppCompatCache (ShimCache)...")
+        import re as _re
         hack_terms = [
-            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
-            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
-            'clicker', 'phobos', 'astolfo', 'dllinjector', 'cheatengine',
-            'xray', 'triggerbot', 'bspoof', 'ghostclient', 'silentclient',
+            'vape', 'vapelite', 'entropy', 'entropyclient',
+            'wurst', 'wurstclient', 'liquidbounce',
+            'killaura', 'aimbot', 'cheatengine',
+            'xray', 'triggerbot', 'dllinjector', 'bspoof',
+            'phobos', 'astolfo', 'novoline',
+            'ghostclient', 'silentclient', 'fluxclient',
         ]
+
+        def _valid_path(p):
+            """Ruta válida de Windows: empieza con letra de unidad o \\Device\\, sin chars raros."""
+            if not p or len(p) < 5:
+                return False
+            if not (_re.match(r'^[A-Za-z]:\\', p) or p.startswith('\\Device\\')):
+                return False
+            if any(ord(c) < 0x20 for c in p):
+                return False
+            return True
         try:
             key_path = r'SYSTEM\CurrentControlSet\Control\Session Manager\AppCompatCache'
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path) as k:
@@ -6400,7 +6385,8 @@ class ArgusApp:
                     path_len = int.from_bytes(entry_data[0:2], 'little') if len(entry_data) >= 4 else 0
                     if 0 < path_len <= len(entry_data) - 4:
                         path = entry_data[4:4+path_len].decode('utf-16-le', errors='ignore')
-                        entries.append(path)
+                        if _valid_path(path):
+                            entries.append(path)
                     offset += 8 + data_len
                 except Exception:
                     offset += 4
@@ -6428,17 +6414,7 @@ class ArgusApp:
                         break
 
             if entries:
-                summary = ' | '.join([os.path.basename(e) for e in entries[:25]])
-                self.issues_found.append({
-                    'tipo': 'shimcache_history',
-                    'nombre': f'ShimCache: {len(entries)} ejecutables registrados',
-                    'ruta': r'HKLM\AppCompatCache',
-                    'archivo': summary[:500],
-                    'categoria': 'EXECUTED_FILES',
-                    'alerta': 'NORMAL',
-                    'confidence': 0,
-                    'detected_patterns': [os.path.basename(e) for e in entries[:25]],
-                })
+                print(f"✅ ShimCache: {len(entries)} entradas válidas")
         except (FileNotFoundError, PermissionError) as e:
             print(f"ShimCache no disponible: {e}")
         except Exception as e:
@@ -6448,10 +6424,12 @@ class ArgusApp:
         """Lee MUICache — nombres de todos los ejecutables que corrió el usuario, incluyendo borrados."""
         print("🔍 Escaneando MUICache...")
         hack_terms = [
-            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
-            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
-            'clicker', 'phobos', 'astolfo', 'dllinjector', 'cheatengine',
-            'xray', 'triggerbot', 'ghostclient', 'silentclient',
+            'vape', 'vapelite', 'entropy', 'entropyclient',
+            'wurst', 'wurstclient', 'liquidbounce',
+            'killaura', 'aimbot', 'cheatengine',
+            'xray', 'triggerbot', 'dllinjector', 'bspoof',
+            'phobos', 'astolfo', 'novoline',
+            'ghostclient', 'silentclient', 'fluxclient',
         ]
         key_path = r'Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache'
         try:
@@ -6489,17 +6467,7 @@ class ArgusApp:
                         break
 
             if entries:
-                summary = ' | '.join([os.path.basename(e) for e in entries[:30]])
-                self.issues_found.append({
-                    'tipo': 'muicache_history',
-                    'nombre': f'MUICache: {len(entries)} ejecutables registrados',
-                    'ruta': key_path,
-                    'archivo': summary[:500],
-                    'categoria': 'EXECUTED_FILES',
-                    'alerta': 'NORMAL',
-                    'confidence': 0,
-                    'detected_patterns': [os.path.basename(e) for e in entries[:30]],
-                })
+                print(f"✅ MUICache: {len(entries)} entradas válidas")
         except (FileNotFoundError, PermissionError) as e:
             print(f"MUICache no disponible: {e}")
         except Exception as e:
