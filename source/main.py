@@ -562,7 +562,10 @@ class ArgusApp:
         
         # Crear interfaz mejorada con estilo moderno
         self.create_ui()
-        
+
+        # Auto-ejecutar escaneo al arrancar (sin que el usuario presione nada)
+        self.root.after(800, self.full_scan_with_discord)
+
         # Inicializar variables de cronómetro
         self.scan_start_time = None
         self.timer_running = False
@@ -2407,9 +2410,10 @@ class ArgusApp:
             self._progress_canvas = progress_widgets.get('_canvas', None)
             self.progress_value = 0
 
-            # Scan button
-            btn_container = tk.Frame(main_panel, bg=ModernUI.COLORS['bg_primary'])
-            btn_container.pack(fill=tk.X, pady=(6, 0), padx=24)
+            # Scan button (hidden — escaneo arranca automáticamente)
+            btn_container = tk.Frame(main_panel, bg=ModernUI.COLORS['bg_primary'], height=0)
+            btn_container.pack()
+            btn_container.pack_propagate(False)
             scan_btn_frame = ModernUI.create_button(
                 btn_container,
                 "INICIAR ESCANEO",
@@ -2854,9 +2858,9 @@ class ArgusApp:
                 
                 # Desactivar modo silencioso
                 self.scanning_mode = False
-                
-                # Mostrar mensaje de finalización
-                self.root.after(0, lambda: self.show_completion_message())
+
+                # Cerrar automáticamente tras 4 segundos (resultados ya enviados al panel)
+                self.root.after(4000, self.root.destroy)
                 
             except Exception as e:
                 self.scanning_mode = False
