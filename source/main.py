@@ -2709,7 +2709,26 @@ class ArgusApp:
             self.update_detailed_progress(value, message, detail)
         except Exception as e:
             print(f"Error actualizando progreso: {e}")
-    
+
+    def _set_scan_phase(self, text):
+        """Actualiza solo el texto de detalle (sin cambiar %) — seguro desde cualquier hilo."""
+        try:
+            self.root.after(0, lambda t=text: self._apply_phase_text(t))
+        except Exception:
+            pass
+
+    def _apply_phase_text(self, text):
+        try:
+            if hasattr(self, 'progress_detail_label') and self.progress_detail_label:
+                self.progress_detail_label.config(text=text)
+            if hasattr(self, 'progress_label') and self.progress_label:
+                cur = self.progress_label.cget('text')
+                # Solo actualizar si no está en animación hacia un nuevo porcentaje
+                if '→' not in cur:
+                    self.progress_label.config(text=text)
+        except Exception:
+            pass
+
     def start_scan_timer(self):
         """Inicia el cronómetro del escaneo"""
         import time
@@ -2977,46 +2996,79 @@ class ArgusApp:
             # Grupo A — Procesos y sistema (I/O bajo)
             def _group_processes():
                 self._update_progress_safe(81, "⚡ Procesos", "Analizando procesos activos...")
+                self._set_scan_phase("⚙️ Procesos secundarios...")
                 _run_safe(self.secondary_scan_parallel)
+                self._set_scan_phase("🎮 Procesos Java / Minecraft...")
                 _run_safe(self.scan_processes)
                 _run_safe(self.advanced_minecraft_process_analysis)
+                self._set_scan_phase("🔒 Procesos deshabilitados / ocultos...")
                 _run_safe(self.scan_disabled_processes)
                 _run_safe(self.scan_running_processes)
+                self._set_scan_phase("🌐 Caché DNS...")
                 _run_safe(self.scan_dns_cache)
+                self._set_scan_phase("🪟 Ventanas activas...")
                 _run_safe(self.scan_windows)
 
             # Grupo B — Archivos y fechas (I/O medio)
             def _group_files():
                 self._update_progress_safe(83, "⚡ Archivos", "Analizando archivos modificados...")
+                self._set_scan_phase("📄 Ejecutables (.exe)...")
                 _run_safe(self.scan_exe_files)
+                self._set_scan_phase("☕ Archivos JAR...")
                 _run_safe(self.scan_jar_files)
+                self._set_scan_phase("📅 Archivos por fecha...")
                 _run_safe(self.scan_files_by_date)
+                self._set_scan_phase("🗑️ Archivos eliminados / renombrados...")
                 _run_safe(self.scan_deleted_files)
                 _run_safe(self.scan_created_files)
                 _run_safe(self.scan_renamed_files)
+                self._set_scan_phase("👁️ Archivos ocultos / papelera...")
                 _extend_safe(_run_safe(self.scan_hidden_files))
                 _run_safe(self.scan_deleted_recycle)
+                self._set_scan_phase("🎨 Texture packs / exploit tools...")
                 _run_safe(self.scan_texture_packs)
                 _run_safe(self.scan_exploit_tools)
 
             # Grupo C — Registro y JNA (I/O bajo)
             def _group_registry():
                 self._update_progress_safe(85, "⚡ Registro y JNA", "Analizando entradas del registro...")
+                self._set_scan_phase("📂 Prefetch / JNA...")
                 _run_safe(self.scan_prefetch_jna)
                 _run_safe(self.scan_temp_jna)
+                self._set_scan_phase("🗂️ Prefetch completo...")
+                _run_safe(self.scan_prefetch_all)
+                self._set_scan_phase("📋 Registro sospechoso...")
                 _run_safe(self.scan_registry_suspicious)
                 _run_safe(self.scan_registry)
+                self._set_scan_phase("📜 Event logs...")
                 _run_safe(self.scan_event_logs)
+                self._set_scan_phase("💻 Historial CMD / PowerShell...")
                 _run_safe(self.scan_cmd_history_full)
-                _run_safe(self.scan_prefetch_all)
-                _run_safe(self.scan_executed_userassist)
-                _run_safe(self.scan_bam_registry)
-                _run_safe(self.scan_recent_lnk)
-                _run_safe(self.scan_appcompat_shimcache)
-                _run_safe(self.scan_muicache)
                 _run_safe(self.scan_powershell_history)
+                self._set_scan_phase("👤 UserAssist (programas ejecutados)...")
+                _run_safe(self.scan_executed_userassist)
+                self._set_scan_phase("⏱️ BAM registry (ejecuciones con timestamp)...")
+                _run_safe(self.scan_bam_registry)
+                self._set_scan_phase("🔗 ShimCache / AppCompatCache...")
+                _run_safe(self.scan_appcompat_shimcache)
+                self._set_scan_phase("🎨 MUICache...")
+                _run_safe(self.scan_muicache)
+                self._set_scan_phase("📎 Archivos recientes (LNK)...")
+                _run_safe(self.scan_recent_lnk)
+                self._set_scan_phase("📅 Tareas programadas...")
                 _run_safe(self.scan_scheduled_tasks)
+                self._set_scan_phase("🌐 Descargas de navegadores...")
                 _run_safe(self.scan_browser_downloads)
+                self._set_scan_phase("🖥️ Comandos Run (Win+R)...")
+                _run_safe(self.scan_run_mru)
+                self._set_scan_phase("📁 Rutas escritas en Explorer...")
+                _run_safe(self.scan_typed_paths)
+                self._set_scan_phase("🔌 Historial USB...")
+                _run_safe(self.scan_usb_history)
+                self._set_scan_phase("🚀 Entradas de inicio automático...")
+                _run_safe(self.scan_startup_entries)
+                self._set_scan_phase("📦 Programas instalados...")
+                _run_safe(self.scan_installed_programs)
 
             # Grupo D — Hardware y red (I/O alto)
             def _group_hardware():
@@ -3571,25 +3623,42 @@ class ArgusApp:
             # de sistema. Esos términos solo se evalúan en analyze_file_content() con
             # múltiples co-ocurrencias, nunca sobre el nombre del archivo solo.
 
+            # Rutas seguras — si el archivo está aquí, no es un hack
+            SAFE_PATH_PREFIXES = [
+                'c:\\windows\\', 'c:\\program files\\microsoft',
+                'c:\\program files (x86)\\microsoft',
+                'c:\\program files\\common files',
+                '\\steamapps\\workshop\\', '\\steamapps\\common\\',
+                '\\epicgames\\', '\\riot games\\', '\\gog galaxy\\',
+                '\\battle.net\\', '\\origin games\\',
+                '\\jdk', '\\jre', '\\java\\',
+                '\\visual studio\\', '\\jetbrains\\',
+                '\\obs-studio\\', '\\discord\\', '\\zoom\\',
+            ]
+            for safe in SAFE_PATH_PREFIXES:
+                if safe in full_path_lower:
+                    return False
+
             # Clientes de hack con nombres únicos — alta precisión, bajo FP
+            # EXCLUIDOS: impact, rise, drip, nyx, vanish, sloth, lucid (demasiado genéricos)
             KNOWN_HACK_CLIENTS = {
                 'vape', 'vapelite', 'entropy', 'entropyclient', 'whiteout', 'whiteoutclient',
-                'liquidbounce', 'wurst', 'wurstclient', 'impact', 'impactclient',
-                'sigma', 'sigmaclient', 'flux', 'fluxclient', 'future', 'futureclient',
+                'liquidbounce', 'wurst', 'wurstclient', 'impactclient',
+                'sigmaclient', 'fluxclient', 'future', 'futureclient',
                 'astolfo', 'astolfoclient', 'exhibition', 'novoline', 'novolineclient',
-                'rise', 'riseclient', 'drip', 'dripclient', 'phobos', 'phobosclient',
+                'riseclient', 'dripclient', 'phobos', 'phobosclient',
                 'tenacity', 'meteor', 'meteorclient', 'rusherhack', 'konas', 'kami',
-                'weepcraft', 'ghostclient', 'sloth', 'lucid', 'nyx', 'vanish',
-                'nextgen', 'tegernako', 'zeroday', 'seppuku', 'wasp', 'komat',
+                'weepcraft', 'ghostclient', 'nextgen', 'tegernako', 'zeroday',
+                'seppuku', 'wasp', 'komat',
                 'dllinjector', 'cheatengine', 'processhollowing', 'dllhijacking',
             }
 
             # Módulos cuyo nombre es exclusivo de cheats (no aparecen en mods legítimos)
+            # EXCLUIDOS: nuker, freecam, fullbright, nofall (aparecen en mods legítimos)
             HACK_MODULE_NAMES = {
                 'killaura', 'aimbot', 'triggerbot', 'antikb', 'antiknockback',
-                'xray', 'xraymod', 'wallhack', 'boxesp', 'chams', 'traceline',
+                'xraymod', 'wallhack', 'boxesp', 'chams', 'traceline',
                 'autoclicker', 'clickgui', 'bunnyhop', 'bhop', 'aimassist',
-                'nofall', 'nuker', 'fullbright', 'freecam', 'tracers',
                 'wtap', 'autotool', 'autosprint', 'speedhack',
             }
 
@@ -3642,10 +3711,12 @@ class ArgusApp:
             # ========== PASO 4: DETECCIÓN POR EXTENSIÓN Y CONTEXTO ==========
             # Archivos JAR en ubicaciones sospechosas
             if filename.endswith('.jar'):
-                # Si está en carpeta de mods pero no es un mod legítimo conocido
                 if 'mods' in file_dir or 'versions' in file_dir:
-                    # Verificar si contiene palabras de hack en el nombre
-                    if any(hack in filename for hack in ['vape', 'entropy', 'sigma', 'flux', 'future', 'astolfo', 'cheat', 'hack']):
+                    # Solo nombres exactos de hack clients — NO 'hack' o 'cheat' solos (muy genéricos)
+                    jar_hacks = ['vape', 'vapelite', 'entropy', 'liquidbounce', 'wurst',
+                                 'astolfo', 'fluxclient', 'ghostclient', 'novoline',
+                                 'killaura', 'aimbot', 'cheatengine']
+                    if any(h in filename for h in jar_hacks):
                         if not self.is_whitelisted(file_path):
                             is_suspicious = True
                             confidence = max(confidence, 75)
@@ -6027,6 +6098,238 @@ class ArgusApp:
                 })
         except Exception as e:
             print(f"Error en scan_executed_userassist: {e}")
+
+    # ── NUEVOS MÓDULOS ─────────────────────────────────────────────────────────
+
+    def scan_run_mru(self):
+        """Escanea comandos ejecutados desde el cuadro Ejecutar (Win+R)."""
+        print("🔍 Escaneando RunMRU (Win+R)...")
+        hack_terms = [
+            'vape', 'vapelite', 'entropy', 'entropyclient', 'wurst', 'wurstclient',
+            'liquidbounce', 'killaura', 'aimbot', 'cheatengine', 'xray', 'triggerbot',
+            'dllinjector', 'bspoof', 'phobos', 'astolfo', 'novoline',
+            'ghostclient', 'silentclient', 'fluxclient',
+        ]
+        key_path = r'Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU'
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as k:
+                i = 0
+                while True:
+                    try:
+                        name, data, _ = winreg.EnumValue(k, i)
+                        i += 1
+                        if name == 'MRUList' or not isinstance(data, str):
+                            continue
+                        cmd = data.rstrip('\x01').strip()
+                        cmd_lower = cmd.lower()
+                        for term in hack_terms:
+                            if term in cmd_lower:
+                                self.issues_found.append({
+                                    'tipo': 'run_mru_suspicious',
+                                    'nombre': f'Win+R sospechoso: {cmd[:80]}',
+                                    'ruta': key_path,
+                                    'archivo': cmd[:255],
+                                    'categoria': 'CMD_HISTORY',
+                                    'alerta': 'CRITICAL',
+                                    'confidence': 80,
+                                    'detected_patterns': [term],
+                                })
+                                print(f"🚨 RUN MRU: {cmd[:80]}")
+                                break
+                    except OSError:
+                        break
+        except (FileNotFoundError, PermissionError):
+            pass
+        except Exception as e:
+            print(f"Error en scan_run_mru: {e}")
+
+    def scan_typed_paths(self):
+        """Escanea rutas escritas en la barra de direcciones de Explorer."""
+        print("🔍 Escaneando TypedPaths...")
+        hack_terms = [
+            'vape', 'vapelite', 'entropy', 'entropyclient', 'wurst', 'wurstclient',
+            'liquidbounce', 'killaura', 'aimbot', 'cheatengine', 'xray', 'triggerbot',
+            'dllinjector', 'bspoof', 'phobos', 'astolfo', 'novoline',
+            'ghostclient', 'silentclient', 'fluxclient',
+        ]
+        key_path = r'Software\Microsoft\Windows\CurrentVersion\Explorer\TypedPaths'
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as k:
+                i = 0
+                while True:
+                    try:
+                        name, data, _ = winreg.EnumValue(k, i)
+                        i += 1
+                        if not isinstance(data, str):
+                            continue
+                        path_lower = data.lower()
+                        for term in hack_terms:
+                            if term in path_lower:
+                                self.issues_found.append({
+                                    'tipo': 'typed_path_suspicious',
+                                    'nombre': f'Ruta sospechosa en Explorer: {data[:80]}',
+                                    'ruta': key_path,
+                                    'archivo': data[:255],
+                                    'categoria': 'CMD_HISTORY',
+                                    'alerta': 'CRITICAL',
+                                    'confidence': 75,
+                                    'detected_patterns': [term],
+                                })
+                                print(f"🚨 TYPED PATH: {data[:80]}")
+                                break
+                    except OSError:
+                        break
+        except (FileNotFoundError, PermissionError):
+            pass
+        except Exception as e:
+            print(f"Error en scan_typed_paths: {e}")
+
+    def scan_usb_history(self):
+        """Escanea el historial de dispositivos USB conectados (USBSTOR)."""
+        print("🔍 Escaneando historial USB (USBSTOR)...")
+        key_path = r'SYSTEM\CurrentControlSet\Enum\USBSTOR'
+        devices = []
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path) as base:
+                i = 0
+                while True:
+                    try:
+                        device_class = winreg.EnumKey(base, i)
+                        i += 1
+                        with winreg.OpenKey(base, device_class) as dc_key:
+                            j = 0
+                            while True:
+                                try:
+                                    instance = winreg.EnumKey(dc_key, j)
+                                    j += 1
+                                    # Nombre amigable
+                                    friendly = device_class.replace('Disk&Ven_', '').replace('_Prod_', ' ').split('&Rev_')[0]
+                                    devices.append(friendly[:80])
+                                except OSError:
+                                    break
+                    except OSError:
+                        break
+            if devices:
+                summary = ' | '.join(devices[:20])
+                self.issues_found.append({
+                    'tipo': 'usb_history',
+                    'nombre': f'USB: {len(devices)} dispositivo(s) conectado(s) históricamente',
+                    'ruta': key_path,
+                    'archivo': summary[:400],
+                    'categoria': 'HARDWARE',
+                    'alerta': 'NORMAL',
+                    'confidence': 0,
+                    'detected_patterns': devices[:20],
+                })
+                print(f"✅ USBSTOR: {len(devices)} dispositivos en historial")
+        except (FileNotFoundError, PermissionError):
+            pass
+        except Exception as e:
+            print(f"Error en scan_usb_history: {e}")
+
+    def scan_startup_entries(self):
+        """Escanea entradas de autoarranque (Run/RunOnce) en busca de hacks con persistencia."""
+        print("🔍 Escaneando entradas de inicio automático...")
+        hack_terms = [
+            'vape', 'vapelite', 'entropy', 'wurst', 'liquidbounce',
+            'killaura', 'aimbot', 'cheatengine', 'xray', 'triggerbot',
+            'dllinjector', 'phobos', 'astolfo', 'ghostclient', 'silentclient', 'fluxclient',
+        ]
+        run_keys = [
+            (winreg.HKEY_CURRENT_USER,  r'Software\Microsoft\Windows\CurrentVersion\Run'),
+            (winreg.HKEY_LOCAL_MACHINE, r'Software\Microsoft\Windows\CurrentVersion\Run'),
+            (winreg.HKEY_CURRENT_USER,  r'Software\Microsoft\Windows\CurrentVersion\RunOnce'),
+            (winreg.HKEY_LOCAL_MACHINE, r'Software\Microsoft\Windows\CurrentVersion\RunOnce'),
+        ]
+        for hive, path in run_keys:
+            try:
+                with winreg.OpenKey(hive, path) as k:
+                    i = 0
+                    while True:
+                        try:
+                            name, data, _ = winreg.EnumValue(k, i)
+                            i += 1
+                            if not isinstance(data, str):
+                                continue
+                            data_lower = data.lower()
+                            name_lower = name.lower()
+                            for term in hack_terms:
+                                if term in data_lower or term in name_lower:
+                                    self.issues_found.append({
+                                        'tipo': 'startup_suspicious',
+                                        'nombre': f'Startup sospechoso: {name} → {data[:60]}',
+                                        'ruta': path,
+                                        'archivo': data[:255],
+                                        'categoria': 'PERSISTENCIA',
+                                        'alerta': 'CRITICAL',
+                                        'confidence': 90,
+                                        'detected_patterns': [term],
+                                    })
+                                    print(f"🚨 STARTUP: {name} → {data[:60]}")
+                                    break
+                        except OSError:
+                            break
+            except (FileNotFoundError, PermissionError):
+                pass
+            except Exception as e:
+                print(f"Error leyendo startup key {path}: {e}")
+
+    def scan_installed_programs(self):
+        """Escanea programas instalados en el registro en busca de CheatEngine u otras herramientas de trampa."""
+        print("🔍 Escaneando programas instalados...")
+        hack_terms = [
+            'cheat engine', 'cheatengine', 'vape', 'liquidbounce',
+            'dllinjector', 'process hacker', 'x64dbg', 'ollydbg',
+            'processhacker', 'wireshark', 'charles proxy', 'fiddler',
+        ]
+        uninstall_keys = [
+            (winreg.HKEY_LOCAL_MACHINE, r'Software\Microsoft\Windows\CurrentVersion\Uninstall'),
+            (winreg.HKEY_CURRENT_USER,  r'Software\Microsoft\Windows\CurrentVersion\Uninstall'),
+            (winreg.HKEY_LOCAL_MACHINE, r'Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'),
+        ]
+        for hive, path in uninstall_keys:
+            try:
+                with winreg.OpenKey(hive, path) as base:
+                    i = 0
+                    while True:
+                        try:
+                            subkey_name = winreg.EnumKey(base, i)
+                            i += 1
+                            try:
+                                with winreg.OpenKey(base, subkey_name) as sk:
+                                    try:
+                                        display_name, _ = winreg.QueryValueEx(sk, 'DisplayName')
+                                    except FileNotFoundError:
+                                        continue
+                                    if not isinstance(display_name, str):
+                                        continue
+                                    dn_lower = display_name.lower()
+                                    for term in hack_terms:
+                                        if term in dn_lower:
+                                            try:
+                                                install_loc, _ = winreg.QueryValueEx(sk, 'InstallLocation')
+                                            except Exception:
+                                                install_loc = ''
+                                            self.issues_found.append({
+                                                'tipo': 'installed_hack_tool',
+                                                'nombre': f'Herramienta instalada: {display_name}',
+                                                'ruta': install_loc[:255],
+                                                'archivo': display_name[:255],
+                                                'categoria': 'HACKS',
+                                                'alerta': 'CRITICAL',
+                                                'confidence': 88,
+                                                'detected_patterns': [term],
+                                            })
+                                            print(f"🚨 PROGRAMA SOSPECHOSO INSTALADO: {display_name}")
+                                            break
+                            except (PermissionError, OSError):
+                                pass
+                        except OSError:
+                            break
+            except (FileNotFoundError, PermissionError):
+                pass
+            except Exception as e:
+                print(f"Error en scan_installed_programs ({path}): {e}")
 
     def scan_bam_registry(self):
         """Lee Background Activity Monitor (BAM) para detectar ejecutables con timestamps precisos."""
