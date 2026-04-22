@@ -541,43 +541,22 @@ def get_statistics():
                 'total_bans': 0
             }
             
-            # Consulta optimizada: una sola query
-            try:
-                cursor.execute('''
-                    SELECT 
-                        (SELECT COUNT(*) FROM scans) as total_scans,
-                        (SELECT COUNT(*) FROM scans WHERE status = "running") as active_scans,
-                        (SELECT COUNT(DISTINCT machine_id) FROM scans WHERE machine_id IS NOT NULL AND machine_id != "") as unique_machines,
-                        (SELECT COUNT(*) FROM scan_results WHERE alert_level = "CRITICAL") as severe_detections,
-                        (SELECT COUNT(*) FROM scan_results) as total_results,
-                        (SELECT COUNT(*) FROM scan_tokens WHERE is_active = TRUE) as active_tokens,
-                        (SELECT COUNT(*) FROM ban_history) as total_bans
-                ''')
-                row = cursor.fetchone()
-                if row:
-                    stats['total_scans'] = row[0] or 0
-                    stats['active_scans'] = row[1] or 0
-                    stats['unique_machines'] = row[2] or 0
-                    stats['severe_detections'] = row[3] or 0
-                    stats['total_results'] = row[4] or 0
-                    stats['active_tokens'] = row[5] or 0
-                    stats['total_bans'] = row[6] or 0
-            except sqlite3.OperationalError:
-                # Fallback: consultas individuales si alguna tabla no existe
-                for query, key in [
-                    ('SELECT COUNT(*) FROM scans', 'total_scans'),
-                    ('SELECT COUNT(*) FROM scans WHERE status = "running"', 'active_scans'),
-                    ('SELECT COUNT(DISTINCT machine_id) FROM scans WHERE machine_id IS NOT NULL AND machine_id != ""', 'unique_machines'),
-                    ('SELECT COUNT(*) FROM scan_results WHERE alert_level = "CRITICAL"', 'severe_detections'),
-                    ('SELECT COUNT(*) FROM scan_results', 'total_results'),
-                    ('SELECT COUNT(*) FROM scan_tokens WHERE is_active = TRUE', 'active_tokens'),
-                    ('SELECT COUNT(*) FROM ban_history', 'total_bans')
-                ]:
-                    try:
-                        cursor.execute(query)
-                        stats[key] = cursor.fetchone()[0] or 0
-                    except sqlite3.OperationalError:
-                        pass
+            # Consulta optimizada para PostgreSQL
+            for query, key in [
+                ("SELECT COUNT(*) FROM scans", 'total_scans'),
+                ("SELECT COUNT(*) FROM scans WHERE status = 'running'", 'active_scans'),
+                ("SELECT COUNT(DISTINCT machine_id) FROM scans WHERE machine_id IS NOT NULL AND machine_id != ''", 'unique_machines'),
+                ("SELECT COUNT(*) FROM scan_results WHERE alert_level = 'CRITICAL'", 'severe_detections'),
+                ("SELECT COUNT(*) FROM scan_results", 'total_results'),
+                ("SELECT COUNT(*) FROM scan_tokens WHERE is_active = TRUE", 'active_tokens'),
+                ("SELECT COUNT(*) FROM ban_history", 'total_bans'),
+            ]:
+                try:
+                    cursor.execute(query)
+                    row = cursor.fetchone()
+                    stats[key] = (_row_get(row, 0, list(row.keys())[0]) if row else 0) or 0
+                except Exception:
+                    pass
             
             stats['timestamp'] = datetime.datetime.now().isoformat()
             
