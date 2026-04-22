@@ -759,74 +759,58 @@ async function viewScanDetails(scanId) {
             r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO'
         );
         if (relevantResults.length > 0) {
-            issuesContainer.innerHTML = relevantResults.map((result) => {
+            issuesContainer.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;">` +
+            relevantResults.map((result) => {
                 const isCrit = result.alert_level === 'CRITICAL';
                 const isSusp = result.alert_level === 'SOSPECHOSO';
-                const borderColor = isCrit ? 'var(--red)' : isSusp ? 'var(--amber)' : 'var(--border-m)';
-                const iconColor   = isCrit ? 'var(--red)' : isSusp ? 'var(--amber)' : 'var(--text-d)';
-                const catLabel = result.issue_category ? `<span style="font-size:10px;color:var(--text-d);background:var(--bg-s);padding:1px 6px;border-radius:4px;margin-left:6px;">${result.issue_category}</span>` : '';
+                const accent = isCrit ? '#ef4444' : isSusp ? '#f59e0b' : '#6366f1';
+                const bg     = isCrit ? 'rgba(239,68,68,0.05)' : isSusp ? 'rgba(245,158,11,0.05)' : 'rgba(99,102,241,0.04)';
+                const dot    = isCrit ? '🔴' : isSusp ? '🟠' : '🔵';
+                const cat    = result.issue_category || '';
                 const hasFeedback = result.feedback_status;
+                const nameEsc = (result.issue_name || '').replace(/'/g, "\\'");
+                const pathEsc = (result.issue_path || '').replace(/'/g, "\\'");
+                const name = result.issue_name || 'Hallazgo';
+                const path = result.issue_path || '';
+                const truncPath = path.length > 80 ? '…' + path.slice(-77) : path;
 
-                const issueNameEscaped = (result.issue_name || 'Issue Desconocido').replace(/'/g, "\\'");
-                const issuePathEscaped = (result.issue_path || 'N/A').replace(/'/g, "\\'");
-
-                const feedbackTag = hasFeedback === 'hack'
-                    ? '<span class="result-badge result-detected" style="font-size:10px;padding:2px 8px;">✓ Hack</span>'
-                    : hasFeedback === 'legitimate'
-                    ? '<span class="result-badge result-clean" style="font-size:10px;padding:2px 8px;">✓ Legítimo</span>'
-                    : '';
-
-                return `
-                    <div class="echo-issue-row" data-result-id="${result.id}" style="border-left-color:${borderColor}">
-                        <div class="echo-issue-icon-col">
-                            <input type="checkbox" class="issue-checkbox" data-result-id="${result.id}" ${hasFeedback ? 'disabled' : ''} onchange="updateBulkActions()" style="margin:0">
+                return `<div data-result-id="${result.id}" style="
+                    background:${bg};border:1px solid ${accent}33;border-left:3px solid ${accent};
+                    border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;">
+                    <input type="checkbox" class="issue-checkbox" data-result-id="${result.id}"
+                        ${hasFeedback ? 'disabled' : ''} onchange="updateBulkActions()"
+                        style="width:14px;height:14px;flex-shrink:0;cursor:pointer;">
+                    <span style="font-size:14px;flex-shrink:0;">${dot}</span>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:12px;font-weight:600;color:var(--text-h);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                            ${name}
+                            ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;margin-left:6px;">${cat}</span>` : ''}
                         </div>
-                        <div class="echo-issue-x" style="color:${iconColor}">
-                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                                <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                            </svg>
-                        </div>
-                        <div class="echo-issue-body">
-                            <div class="echo-issue-name">${result.issue_name || 'Issue Desconocido'}${catLabel}</div>
-                            <div class="echo-issue-path">${result.issue_path || 'N/A'}</div>
-                            ${result.ai_analysis ? `<div class="echo-issue-analysis">${result.ai_analysis}</div>` : ''}
-                            ${result.detected_patterns && result.detected_patterns.length > 0
-                                ? `<div class="echo-issue-patterns">${result.detected_patterns.join(' · ')}</div>` : ''}
-                        </div>
-                        <div class="echo-issue-actions">
-                            ${feedbackTag}
-                            ${!hasFeedback ? `
-                                <button class="echo-action-btn echo-action-hack" title="Marcar como Hack"
-                                    onclick="markAsHack(${result.id}, ${scanId}, '${issueNameEscaped}', '${issuePathEscaped}')">
-                                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 1.5L12.5 10.5H1.5L7 1.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
-                                    Hack
-                                </button>
-                                <button class="echo-action-btn echo-action-legit" title="Marcar como Legítimo"
-                                    onclick="markAsLegitimate(${result.id}, ${scanId}, '${issueNameEscaped}', '${issuePathEscaped}')">
-                                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7L5.5 10L11.5 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                    Legítimo
-                                </button>
-                            ` : `
-                                <button class="echo-action-btn" title="Cambiar feedback"
-                                    onclick="changeFeedback(${result.id}, ${scanId})">
-                                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5L11.5 4.5L5 11H3V9L9.5 2.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
-                                    Editar
-                                </button>
-                            `}
-                        </div>
+                        ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${truncPath}</div>` : ''}
                     </div>
-                `;
-            }).join('');
-            
-            // Mostrar barra de acciones masivas si hay issues sin feedback
-            const hasUnprocessedIssues = relevantResults.some(r => !r.feedback_status);
-            if (hasUnprocessedIssues) {
-                document.getElementById('bulk-actions-bar').style.display = 'flex';
-            }
+                    <div style="display:flex;gap:6px;flex-shrink:0;align-items:center;">
+                        ${hasFeedback === 'hack'
+                            ? `<span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:5px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">✓ Hack</span>`
+                            : hasFeedback === 'legitimate'
+                            ? `<span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:5px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);">✓ Legítimo</span>`
+                            : `<button onclick="markAsHack(${result.id},${scanId},'${nameEsc}','${pathEsc}')"
+                                style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:5px;border:1px solid rgba(239,68,68,0.4);background:rgba(239,68,68,0.1);color:#ef4444;cursor:pointer;">
+                                🚨 Hack</button>
+                               <button onclick="markAsLegitimate(${result.id},${scanId},'${nameEsc}','${pathEsc}')"
+                                style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:5px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#10b981;cursor:pointer;">
+                                ✓ Legít.</button>`
+                        }
+                        ${hasFeedback ? `<button onclick="changeFeedback(${result.id},${scanId})"
+                            style="font-size:11px;padding:4px 8px;border-radius:5px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">✎</button>` : ''}
+                    </div>
+                </div>`;
+            }).join('') + `</div>`;
 
+            const hasUnprocessed = relevantResults.some(r => !r.feedback_status);
+            document.getElementById('bulk-actions-bar').style.display = hasUnprocessed ? 'flex' : 'none';
             updateBulkActions();
         } else {
-            issuesContainer.innerHTML = '<div class="loading-cell">No se encontraron issues en este escaneo.</div>';
+            issuesContainer.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-d);font-size:13px;">✅ Sin hallazgos críticos o sospechosos en este escaneo.</div>';
             document.getElementById('bulk-actions-bar').style.display = 'none';
         }
 
