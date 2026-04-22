@@ -2000,6 +2000,11 @@ async function updateModel() {
 // UTILIDADES
 // ============================================================
 
+function exportScanCSV() {
+    if (!currentScanId) return;
+    window.open(`/api/scans/${currentScanId}/export/csv`, '_blank');
+}
+
 function formatDate(dateString) {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);

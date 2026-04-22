@@ -3496,6 +3496,85 @@ def import_echo_scan():
         }), 500
 
 # ============================================================
+# EXPORTAR SCAN (CSV)
+# ============================================================
+
+@app.route('/api/scans/<int:scan_id>/export/csv', methods=['GET'])
+@login_required
+def export_scan_csv(scan_id):
+    """Exporta los resultados de un escaneo como archivo CSV."""
+    import csv, io
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f'SELECT id, machine_name, minecraft_username, started_at, completed_at,'
+                f' status, total_files_scanned, issues_found, scan_duration,'
+                f' ip_address, country, verdict, verdict_reason, verdict_by'
+                f' FROM scans WHERE id = {_PH}',
+                (scan_id,)
+            )
+            scan_row = cursor.fetchone()
+            if not scan_row:
+                return jsonify({'error': 'Escaneo no encontrado'}), 404
+
+            def g(i, k): return _row_get(scan_row, i, k)
+            machine = g(1,'machine_name') or 'desconocido'
+
+            cursor.execute(
+                f'SELECT issue_type, issue_name, issue_path, issue_category, alert_level,'
+                f' confidence, obfuscation_detected, file_hash, ai_analysis, ai_confidence'
+                f' FROM scan_results WHERE scan_id = {_PH} ORDER BY alert_level',
+                (scan_id,)
+            )
+            results = cursor.fetchall()
+
+        buf = io.StringIO()
+        w   = csv.writer(buf)
+
+        # Header metadata
+        w.writerow(['# Reporte de Escaneo - ASPERS Projects'])
+        w.writerow(['# Scan ID', scan_id])
+        w.writerow(['# Máquina', g(1,'machine_name')])
+        w.writerow(['# Minecraft Username', g(2,'minecraft_username') or 'No detectado'])
+        w.writerow(['# Fecha inicio', g(3,'started_at')])
+        w.writerow(['# Fecha fin', g(4,'completed_at')])
+        w.writerow(['# Archivos escaneados', g(6,'total_files_scanned')])
+        w.writerow(['# Issues totales', g(7,'issues_found')])
+        w.writerow(['# Veredicto', g(11,'verdict') or 'pendiente'])
+        w.writerow(['# Razón veredicto', g(12,'verdict_reason') or ''])
+        w.writerow([])
+
+        # Column headers
+        w.writerow(['Tipo', 'Nombre', 'Ruta', 'Categoría', 'Nivel de alerta',
+                    'Confianza %', 'Ofuscación detectada', 'Hash SHA256',
+                    'Análisis IA', 'Confianza IA %'])
+
+        for r in results:
+            w.writerow([
+                _row_get(r, 0, 'issue_type'),
+                _row_get(r, 1, 'issue_name'),
+                _row_get(r, 2, 'issue_path'),
+                _row_get(r, 3, 'issue_category'),
+                _row_get(r, 4, 'alert_level'),
+                _row_get(r, 5, 'confidence'),
+                'Sí' if _row_get(r, 6, 'obfuscation_detected') else 'No',
+                _row_get(r, 7, 'file_hash'),
+                _row_get(r, 8, 'ai_analysis'),
+                _row_get(r, 9, 'ai_confidence'),
+            ])
+
+        csv_bytes = buf.getvalue().encode('utf-8-sig')  # BOM para Excel
+        filename  = f'scan_{scan_id}_{machine}.csv'
+        return Response(
+            csv_bytes,
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================
 # VEREDICTOS
 # ============================================================
 
