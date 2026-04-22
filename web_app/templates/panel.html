@@ -607,13 +607,18 @@
                         <!-- RIGHT: Issues -->
                         <div style="display:flex;flex-direction:column;gap:10px;">
                             <!-- Verdict bar -->
+                            <!-- Veredicto actual -->
+                            <div id="current-verdict-banner" style="display:none;border-radius:10px;padding:12px 16px;margin-bottom:4px;font-size:13px;"></div>
+
                             <div id="bulk-actions-bar" style="display:none;background:var(--bg-s);border:1px solid var(--border-m);border-radius:10px;padding:14px 16px;flex-direction:column;gap:10px;">
                                 <div style="font-size:13px;font-weight:600;color:var(--text-h);">Veredicto del escaneo</div>
                                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                                    <button onclick="submitVerdictClean()" style="font-size:12px;font-weight:700;padding:8px 18px;border-radius:7px;border:none;background:#059669;color:white;cursor:pointer;">Usuario Limpio</button>
-                                    <button onclick="openHackSelection()" style="font-size:12px;font-weight:700;padding:8px 18px;border-radius:7px;border:none;background:#dc2626;color:white;cursor:pointer;">Usuario Con Hacks</button>
+                                    <button onclick="openVerdictModal('clean')" style="font-size:12px;font-weight:700;padding:8px 18px;border-radius:7px;border:none;background:#059669;color:white;cursor:pointer;">Usuario Limpio</button>
+                                    <button onclick="openVerdictModal('hack')" style="font-size:12px;font-weight:700;padding:8px 18px;border-radius:7px;border:none;background:#dc2626;color:white;cursor:pointer;">Usuario Con Hacks</button>
                                     <button onclick="skipVerdict()" style="font-size:12px;padding:8px 16px;border-radius:7px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">Omitir</button>
+                                    <button onclick="loadVerdictHistory()" style="font-size:12px;padding:8px 16px;border-radius:7px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">Historial</button>
                                 </div>
+                                <div id="verdict-history-panel" style="display:none;margin-top:6px;font-size:12px;color:var(--text-s);"></div>
                             </div>
                             <!-- Issues list -->
                             <div id="issues-list-container">
@@ -1309,6 +1314,27 @@
             <div style="padding:14px 20px;border-top:1px solid var(--border-m);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0;background:var(--bg-s);">
                 <button onclick="skipHackSelection()" style="font-size:12px;padding:7px 16px;border-radius:7px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">No identifico el hack (Omitir)</button>
                 <button onclick="confirmHackSelection()" style="font-size:12px;font-weight:700;padding:7px 18px;border-radius:7px;border:none;background:#dc2626;color:white;cursor:pointer;">Confirmar hacks seleccionados</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Veredicto con razón obligatoria -->
+    <div class="modal" id="verdict-reason-modal">
+        <div class="modal-content" style="max-width:480px;">
+            <div class="modal-header">
+                <h3 id="verdict-reason-title">Confirmar veredicto</h3>
+                <button class="modal-close" onclick="document.getElementById('verdict-reason-modal').classList.remove('active')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13px;color:var(--text-s);margin-bottom:12px;">Escribe la razón del veredicto. Este campo es obligatorio.</p>
+                <textarea id="verdict-reason-input" rows="4"
+                    placeholder="Ej: Se encontraron archivos de Wurst y Baritone en la carpeta .minecraft/mods..."
+                    style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;resize:vertical;outline:none;font-family:inherit;box-sizing:border-box;"></textarea>
+                <p id="verdict-reason-error" style="color:#ef4444;font-size:12px;margin-top:6px;display:none;">La razón es obligatoria.</p>
+            </div>
+            <div style="padding:14px 20px;border-top:1px solid var(--border-m);display:flex;gap:8px;justify-content:flex-end;background:var(--bg-s);">
+                <button onclick="document.getElementById('verdict-reason-modal').classList.remove('active')" style="font-size:12px;padding:7px 16px;border-radius:7px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">Cancelar</button>
+                <button id="verdict-confirm-btn" onclick="confirmVerdict()" style="font-size:12px;font-weight:700;padding:7px 18px;border-radius:7px;border:none;background:var(--accent);color:white;cursor:pointer;">Confirmar</button>
             </div>
         </div>
     </div>

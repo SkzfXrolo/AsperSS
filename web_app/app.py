@@ -1847,7 +1847,8 @@ def get_scan(scan_id):
                 cursor.execute(f'''
                     SELECT id, token_id, scan_token, started_at, completed_at, status,
                            total_files_scanned, total_dirs_scanned, issues_found, scan_duration,
-                           machine_id, machine_name, ip_address, country, minecraft_username
+                           machine_id, machine_name, ip_address, country, minecraft_username,
+                           verdict, verdict_reason, verdict_by, verdict_at
                     FROM scans
                     WHERE id = {_PH}
                 ''', (scan_id,))
@@ -1871,7 +1872,11 @@ def get_scan(scan_id):
                     'machine_name': _row_get(row, 11, 'machine_name'),
                     'ip_address': _row_get(row, 12, 'ip_address'),
                     'country': _row_get(row, 13, 'country'),
-                    'minecraft_username': _row_get(row, 14, 'minecraft_username')
+                    'minecraft_username': _row_get(row, 14, 'minecraft_username'),
+                    'verdict': _row_get(row, 15, 'verdict'),
+                    'verdict_reason': _row_get(row, 16, 'verdict_reason'),
+                    'verdict_by': _row_get(row, 17, 'verdict_by'),
+                    'verdict_at': str(_row_get(row, 18, 'verdict_at') or ''),
                 }
                 
                 # Obtener resultados
@@ -3489,6 +3494,67 @@ def import_echo_scan():
             'error': f'Error inesperado: {str(e)}',
             'traceback': traceback.format_exc()
         }), 500
+
+# ============================================================
+# VEREDICTOS
+# ============================================================
+
+@app.route('/api/scans/<int:scan_id>/verdict', methods=['POST'])
+@login_required
+def set_scan_verdict(scan_id):
+    """Establece el veredicto final de un escaneo (clean | hack | pending)."""
+    data   = request.json or {}
+    verdict = (data.get('verdict') or '').strip().lower()
+    reason  = (data.get('reason') or '').strip()
+    if verdict not in ('clean', 'hack', 'pending'):
+        return jsonify({'error': 'Veredicto inválido. Usar: clean, hack, pending'}), 400
+    if not reason:
+        return jsonify({'error': 'La razón del veredicto es obligatoria'}), 400
+    user = session.get('username', 'staff')
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f'UPDATE scans SET verdict={_PH}, verdict_reason={_PH}, verdict_by={_PH},'
+                f' verdict_at=CURRENT_TIMESTAMP WHERE id={_PH}',
+                (verdict, reason, user, scan_id)
+            )
+            _insert_id(
+                cursor,
+                f'INSERT INTO verdict_history (scan_id, verdict, reason, changed_by)'
+                f' VALUES ({_PH},{_PH},{_PH},{_PH})',
+                (scan_id, verdict, reason, user)
+            )
+        # Invalidar caché de estadísticas
+        if 'statistics' in _stats_cache: del _stats_cache['statistics']
+        if 'dashboard_extended' in _stats_cache: del _stats_cache['dashboard_extended']
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/scans/<int:scan_id>/verdict/history', methods=['GET'])
+@login_required
+def get_verdict_history(scan_id):
+    """Historial de cambios de veredicto de un escaneo."""
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f'SELECT verdict, reason, changed_by, changed_at'
+                f' FROM verdict_history WHERE scan_id={_PH} ORDER BY changed_at DESC',
+                (scan_id,)
+            )
+            history = []
+            for row in cursor.fetchall():
+                history.append({
+                    'verdict':    _row_get(row, 0, 'verdict'),
+                    'reason':     _row_get(row, 1, 'reason'),
+                    'changed_by': _row_get(row, 2, 'changed_by'),
+                    'changed_at': str(_row_get(row, 3, 'changed_at') or ''),
+                })
+        return jsonify({'history': history}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 # ============================================================
 # NOTAS DE ESCANEO

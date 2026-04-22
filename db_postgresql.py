@@ -434,6 +434,32 @@ def init_postgresql_db():
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_scan_notes_scan_id ON scan_notes(scan_id)')
 
+        # Columnas de veredicto en la tabla scans (ALTER TABLE seguro en PostgreSQL)
+        for col, definition in [
+            ('verdict',        'VARCHAR(20)'),
+            ('verdict_reason', 'TEXT'),
+            ('verdict_by',     'VARCHAR(100)'),
+            ('verdict_at',     'TIMESTAMP'),
+            ('total_dirs_scanned', 'INTEGER DEFAULT 0'),
+        ]:
+            try:
+                cursor.execute(f'ALTER TABLE scans ADD COLUMN IF NOT EXISTS {col} {definition}')
+            except Exception:
+                pass
+
+        # Historial de veredictos
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS verdict_history (
+                id SERIAL PRIMARY KEY,
+                scan_id INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+                verdict VARCHAR(20) NOT NULL,
+                reason TEXT,
+                changed_by VARCHAR(100) NOT NULL,
+                changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_vh_scan_id ON verdict_history(scan_id)')
+
         conn.commit()
         print("✅ Base de datos PostgreSQL inicializada correctamente")
         

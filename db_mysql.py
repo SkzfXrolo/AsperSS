@@ -655,6 +655,32 @@ def init_mysql_db():
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ''')
 
+        # Columnas de veredicto (MySQL: ADD COLUMN solo si no existe)
+        for col, definition in [
+            ('verdict',        'VARCHAR(20)'),
+            ('verdict_reason', 'TEXT'),
+            ('verdict_by',     'VARCHAR(100)'),
+            ('verdict_at',     'TIMESTAMP NULL'),
+            ('total_dirs_scanned', 'INT DEFAULT 0'),
+        ]:
+            try:
+                cursor.execute(f'ALTER TABLE scans ADD COLUMN {col} {definition}')
+            except Exception:
+                pass  # Already exists
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS verdict_history (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                scan_id INT NOT NULL,
+                verdict VARCHAR(20) NOT NULL,
+                reason TEXT,
+                changed_by VARCHAR(100) NOT NULL,
+                changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (scan_id) REFERENCES scans(id) ON DELETE CASCADE,
+                INDEX idx_vh_scan_id (scan_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ''')
+
         conn.commit()
         print("✅ Base de datos MySQL inicializada correctamente")
         

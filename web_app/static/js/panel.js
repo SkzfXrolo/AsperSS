@@ -854,26 +854,101 @@ function skipVerdict() {
     document.getElementById('bulk-actions-bar').style.display = 'none';
 }
 
-async function submitVerdictClean() {
+let _pendingVerdictType = null;
+
+function openVerdictModal(verdictType) {
+    _pendingVerdictType = verdictType;
+    const title = document.getElementById('verdict-reason-title');
+    const btn   = document.getElementById('verdict-confirm-btn');
+    const err   = document.getElementById('verdict-reason-error');
+    const input = document.getElementById('verdict-reason-input');
+    if (title) title.textContent = verdictType === 'clean' ? 'Confirmar: Usuario Limpio' : 'Confirmar: Usuario Con Hacks';
+    if (btn)   btn.style.background = verdictType === 'clean' ? '#059669' : '#dc2626';
+    if (err)   err.style.display = 'none';
+    if (input) input.value = '';
+    document.getElementById('verdict-reason-modal').classList.add('active');
+}
+
+async function confirmVerdict() {
+    const reason = (document.getElementById('verdict-reason-input')?.value || '').trim();
+    const errEl  = document.getElementById('verdict-reason-error');
+    if (!reason) { if (errEl) errEl.style.display = 'block'; return; }
+    if (errEl) errEl.style.display = 'none';
+
+    const verdict = _pendingVerdictType;
+    document.getElementById('verdict-reason-modal').classList.remove('active');
+
+    try {
+        // 1. Guardar veredicto en el scan
+        const res = await fetch(`/api/scans/${currentScanId}/verdict`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ verdict, reason }),
+        });
+        if (!res.ok) { const d = await res.json(); alert(d.error || 'Error al guardar veredicto'); return; }
+
+        // 2. Si es "hack", abrir la selección de archivos; si es "clean", marcar todo como legítimo
+        if (verdict === 'hack') {
+            openHackSelection();
+        } else {
+            await submitVerdictClean(reason);
+        }
+
+        // 3. Refrescar el banner de veredicto actual
+        refreshCurrentVerdictBanner({ verdict, reason, verdict_by: 'tú', verdict_at: new Date().toISOString() });
+    } catch(e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function submitVerdictClean(reason) {
     const unprocessed = currentIssuesList.filter(r => !r.feedback_status);
     if (!unprocessed.length) { skipVerdict(); return; }
-    if (!confirm(`¿Confirmar que el usuario es limpio? Se marcarán ${unprocessed.length} hallazgo(s) como legítimos.`)) return;
-
     try {
         const res = await fetch('/api/feedback/batch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ result_ids: unprocessed.map(r => r.id), verification: 'legitimate', notes: 'Usuario limpio confirmado por staff' })
+            body: JSON.stringify({ result_ids: unprocessed.map(r => r.id), verification: 'legitimate', notes: reason || 'Usuario limpio confirmado por staff' })
         });
         if (!res.ok) throw new Error(await res.text());
         unprocessed.forEach(r => r.feedback_status = 'legitimate');
         document.getElementById('bulk-actions-bar').style.display = 'none';
         const container = document.getElementById('issues-list-container');
         if (container) renderIssuePage(container, currentScanId);
-        alert('Marcado como usuario limpio.');
     } catch (e) {
         alert('Error al enviar veredicto: ' + e.message);
     }
+}
+
+function refreshCurrentVerdictBanner(scanData) {
+    const banner = document.getElementById('current-verdict-banner');
+    if (!banner || !scanData?.verdict) { if (banner) banner.style.display = 'none'; return; }
+    const colors = { clean: { bg: 'rgba(5,150,105,0.12)', border: 'rgba(5,150,105,0.3)', text: '#10b981' },
+                     hack:  { bg: 'rgba(220,38,38,0.12)', border: 'rgba(220,38,38,0.3)', text: '#ef4444' },
+                     pending: { bg: 'rgba(107,114,128,0.1)', border: 'rgba(107,114,128,0.2)', text: '#9ca3af' } };
+    const c = colors[scanData.verdict] || colors.pending;
+    const label = scanData.verdict === 'clean' ? 'LIMPIO' : scanData.verdict === 'hack' ? 'CON HACKS' : 'PENDIENTE';
+    banner.style.cssText = `display:block;background:${c.bg};border:1px solid ${c.border};border-radius:10px;padding:12px 16px;margin-bottom:4px;font-size:13px;`;
+    banner.innerHTML = `<span style="font-weight:700;color:${c.text};">Veredicto: ${label}</span>${scanData.verdict_reason ? ` — <span style="color:var(--text-s);">${scanData.verdict_reason}</span>` : ''}${scanData.verdict_by ? `<span style="color:var(--text-d);font-size:11px;margin-left:8px;">por ${scanData.verdict_by}</span>` : ''}`;
+}
+
+async function loadVerdictHistory() {
+    const panel = document.getElementById('verdict-history-panel');
+    if (!panel || !currentScanId) return;
+    if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+    panel.innerHTML = 'Cargando historial...';
+    try {
+        const res  = await fetch(`/api/scans/${currentScanId}/verdict/history`);
+        const data = await res.json();
+        const h = data.history || [];
+        if (!h.length) { panel.innerHTML = '<em>Sin historial de veredictos.</em>'; return; }
+        panel.innerHTML = h.map(e =>
+            `<div style="padding:5px 0;border-bottom:1px solid var(--border);last-child:border:none;">` +
+            `<strong style="color:${e.verdict==='clean'?'#10b981':'#ef4444'}">${e.verdict==='clean'?'LIMPIO':'CON HACKS'}</strong>` +
+            ` — ${e.reason || '—'} <span style="color:var(--text-d);">por ${e.changed_by} · ${formatDate(e.changed_at)}</span></div>`
+        ).join('');
+    } catch(e) { panel.innerHTML = 'Error cargando historial'; }
 }
 
 function openHackSelection() {
@@ -1069,6 +1144,9 @@ async function viewScanDetails(scanId) {
         const hasUnprocessed = currentIssuesList.some(r => !r.feedback_status);
         document.getElementById('bulk-actions-bar').style.display = (currentIssuesList.length > 0 && hasUnprocessed) ? 'flex' : 'none';
         updateBulkActions();
+
+        // Mostrar veredicto actual si existe
+        refreshCurrentVerdictBanner(data);
 
         // ── Mouse & Forensics tab ─────────────────────────────────────────
         const mouseFn = data.mouse_findings || [];
