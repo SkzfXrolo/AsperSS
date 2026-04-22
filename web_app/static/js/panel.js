@@ -16,21 +16,79 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
     setupAdminListeners();
     setupCompanyListeners();
-    
+
     // Cargar datos críticos primero
     loadDashboard();
-    
+
     // Cargar el resto en background (no bloquea la UI)
     setTimeout(() => {
         loadTokens();
         loadScans();
     }, 100);
-    
+
     // Cargar estadísticas de aprendizaje en background (menos crítico)
     setTimeout(() => {
         loadLearningStats();
     }, 500);
+
+    // Auto-refresh: arrancar polling 3 segundos después de la carga
+    setTimeout(startScanPolling, 3000);
 });
+
+// ============================================================
+// AUTO-REFRESH / POLLING
+// ============================================================
+
+let _lastKnownScanId = null;
+let _newScansCount   = 0;
+const POLL_INTERVAL  = 30000; // 30 s
+
+async function startScanPolling() {
+    // Registrar el ID más reciente actual como baseline
+    try {
+        const res  = await fetch('/api/scans?limit=1');
+        const data = await res.json();
+        if (data.scans && data.scans.length > 0) {
+            _lastKnownScanId = data.scans[0].id;
+        }
+    } catch (_) {}
+
+    setInterval(pollForNewScans, POLL_INTERVAL);
+}
+
+async function pollForNewScans() {
+    try {
+        const res  = await fetch('/api/scans?limit=1');
+        const data = await res.json();
+        if (!data.scans || data.scans.length === 0) return;
+
+        const latestId = data.scans[0].id;
+        if (_lastKnownScanId !== null && latestId > _lastKnownScanId) {
+            _newScansCount += (latestId - _lastKnownScanId);
+            _lastKnownScanId = latestId;
+            showNewScansBadge(_newScansCount);
+
+            // Si el usuario está viendo el dashboard, refrescar automáticamente
+            const activeSection = document.querySelector('.panel-section.active');
+            if (activeSection && activeSection.id === 'dashboard-section') {
+                loadDashboard();
+            }
+        }
+    } catch (_) {}
+}
+
+function showNewScansBadge(count) {
+    const badge = document.getElementById('new-scans-badge');
+    if (!badge) return;
+    badge.textContent = count > 99 ? '99+' : count;
+    badge.style.display = 'inline-block';
+}
+
+function clearNewScansBadge() {
+    _newScansCount = 0;
+    const badge = document.getElementById('new-scans-badge');
+    if (badge) badge.style.display = 'none';
+}
 
 // ============================================================
 // NAVEGACIÓN
@@ -143,6 +201,11 @@ function showSection(sectionName) {
         loadCompanyInfo();
         loadCompanyTokens();
         loadCompanyUsers();
+    }
+
+    // Limpiar badge de nuevos scans al visitar las secciones relacionadas
+    if (sectionName === 'resultados' || sectionName === 'dashboard') {
+        clearNewScansBadge();
     }
 
     // Cargar datos según sección
@@ -610,6 +673,10 @@ async function loadScans() {
         
         const tbody = document.getElementById('results-table-body');
         if (data.scans && data.scans.length > 0) {
+            // Actualizar baseline del polling con el scan más reciente visible
+            if (data.scans[0].id > (_lastKnownScanId || 0)) {
+                _lastKnownScanId = data.scans[0].id;
+            }
             tbody.innerHTML = data.scans.map(scan => `
                 <tr style="cursor:pointer" onclick="viewScanDetails(${scan.id})">
                     <td>
