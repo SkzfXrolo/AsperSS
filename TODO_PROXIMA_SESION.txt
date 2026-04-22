@@ -5,11 +5,12 @@
 
 ── TAREAS PEDIDAS ────────────────────────────────────────────
 
-[ ] Crear Vistas móvil
-      → Responsive design en panel.html/panel.css
-      → Subnav colapsable en móvil (hamburger menu)
-      → Cards de stats apiladas verticalmente en < 768px
-      → Tabla de resultados adaptada a pantalla chica
+[x] Crear Vistas móvil
+      → Hamburger menu con sidebar deslizante (left: -260px → 0)
+      → Overlay para cerrar sidebar al tocar fuera
+      → Stats grid apilado en 1 columna en < 540px
+      → Subnav colapsado a solo íconos en móvil
+      → Sidebar se cierra automáticamente al navegar
 
 [ ] Crear aplicación web móvil
       → PWA (Progressive Web App) con manifest.json y service worker
@@ -17,44 +18,51 @@
       → Notificaciones push cuando llega un scan nuevo
       → Modo offline básico con caché de último scan
 
-[ ] Arreglar descargas por link generado por token
-      → El link /download/<token> debe forzar descarga del .exe
-      → Verificar que el token sea válido antes de servir el archivo
-      → El link debe expirar después de N usos o N horas
-      → Registrar en BD qué staff generó el link y cuándo se descargó
+[x] Arreglar descargas por link generado por token
+      → Fix: nombre MinecraftSSTool.exe → ArgusScanner.exe en BD + possible_paths
+      → Fix: condición y nombre del ZIP actualizado
+      → Fix: dropdown en panel.html y mensajes de error en panel.js
 
 ── MEJORAS DE PANEL WEB ──────────────────────────────────────
 
-[ ] Sistema de notificaciones en tiempo real
-      → WebSocket (Flask-SocketIO) para avisar cuando llega un scan
-      → Badge con contador de scans nuevos sin revisar
-      → Sonido/vibración opcional al recibir scan
+[x] Sistema de notificaciones en tiempo real
+      → Polling cada 30s detecta scans nuevos
+      → Badge rojo en el nav "Escaneos" con conteo de nuevos
+      → Toast animado (slide-in) al llegar scan nuevo, clickeable para abrirlo
+      → Sonido sutil via Web Audio API (toggle persistido en localStorage)
+      → Auto-refresca el dashboard si está activo al detectar scan nuevo
 
-[ ] Dashboard con estadísticas globales
-      → Gráfico de scans por día/semana (Chart.js)
-      → Porcentaje de usuarios limpios vs con hacks
-      → Top hacks detectados este mes
-      → Tiempo promedio de escaneo
+[x] Dashboard con estadísticas globales
+      → Gráfico de scans por día (últimos 30 días) ya existente — mejorado
+      → Doughnut chart de veredictos: Limpio / Con Hacks / Pendiente con %
+      → Top 5 hacks del mes con barras de progreso proporcionales
+      → Tiempo promedio de escaneo en el footer
+      → Endpoint /api/dashboard/extended con caché de 60s
 
-[ ] Perfil de jugador (historial)
-      → Al hacer clic en un username, ver todos sus scans anteriores
-      → Comparar scan actual con el anterior (diferencias destacadas)
-      → Timeline de escáneos del mismo jugador
+[x] Perfil de jugador (historial)
+      → Click en nombre de máquina (tabla o detalle) abre historial
+      → Escaneos Previos muestra stats: total scans, con hacks, limpios
+      → Cada scan previo muestra veredicto y diferencia de issues vs anterior
+      → viewPlayerProfile() carga el scan más reciente y abre la pestaña
 
-[ ] Sistema de notas por scan
-      → Staff puede agregar notas/comentarios a un scan
-      → Notas visibles para todo el equipo de staff
-      → Historial de quién escribió cada nota
+[x] Sistema de notas por scan
+      → Tabla scan_notes (PostgreSQL + MySQL, auto-migrada)
+      → API GET/POST /api/scans/<id>/notes y DELETE /api/scans/<id>/notes/<note_id>
+      → Pestaña "Notas" en la vista de detalle del scan
+      → Solo el autor o admin puede eliminar notas
 
-[ ] Exportar resultados
-      → Exportar scan a PDF con logo de Argus Projects
-      → Exportar a CSV para análisis externo
-      → Compartir link de solo lectura del scan (sin login)
+[x] Exportar resultados
+      → Exportar a CSV con BOM para Excel (metadatos + todos los hallazgos)
+      → Endpoint GET /api/scans/<id>/export/csv
+      → Botón "CSV" en la cabecera de la vista de detalle
+      → PENDIENTE: exportar a PDF con logo
 
-[ ] Gestión de veredictos mejorada
-      → Campo de razón obligatorio al marcar "Con Hacks" o "Limpio"
-      → Historial de cambios de veredicto (quién cambió qué y cuándo)
-      → Veredicto pendiente / en revisión / definitivo
+[x] Gestión de veredictos mejorada
+      → Modal con razón obligatoria al marcar "Con Hacks" o "Limpio"
+      → Tabla verdict_history registra cada cambio (quién, cuándo, razón)
+      → Banner en el detalle muestra el veredicto actual con su razón
+      → Botón "Historial" muestra todos los cambios inline
+      → API POST /api/scans/<id>/verdict y GET /api/scans/<id>/verdict/history
 
 [ ] Filtros y búsqueda avanzada
       → Filtrar por fecha, país, OS, veredicto, staff que escaneó
@@ -119,9 +127,16 @@
 ================================================================
 
 [ ] La barra de progreso a veces salta de golpe en vez de animar suave
-[ ] El username del jugador aparece como "No detectado" a veces
+[x] El username del jugador aparece como "No detectado" a veces
+      → Fix: soporte minecraftProfile.name (cuentas Microsoft modernas)
+      → Fix: cuenta activa prioritizada con activeAccountLocalId
+      → Fix: usercache.json ordenado por expiresOn desc
+      → Fix: machine_name con fallback HOSTNAME / socket.gethostname()
 [ ] En scans muy rápidos (< 30s) el panel no recibe los datos a tiempo
-[ ] El panel no refresca automáticamente cuando llega un scan nuevo
+[x] El panel no refresca automáticamente cuando llega un scan nuevo
+      → Fix: polling cada 30s + badge + toast + auto-refresh del dashboard
 [ ] En resoluciones < 1200px la subnav puede hacer wrap en algunos browsers
 
 ================================================================
+Reediseñar todo el sistema de llegada de datos de scaneos a la página porque se ve
+infinito
