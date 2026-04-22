@@ -570,6 +570,83 @@ def get_statistics():
         print(traceback.format_exc())
         return jsonify({'error': f'Error inesperado: {str(e)}'}), 500
 
+
+@app.route('/api/dashboard/extended', methods=['GET'])
+@login_required
+def get_dashboard_extended():
+    """Estadísticas extendidas para el dashboard: veredictos, top hacks, tiempo promedio."""
+    import time
+    cache_key = 'dashboard_extended'
+    if cache_key in _stats_cache:
+        if time.time() - _stats_cache_time.get(cache_key, 0) < 60:
+            return jsonify(_stats_cache[cache_key]), 200
+    try:
+        with get_api_db_cursor() as cursor:
+            # Veredictos
+            clean = hack = pending = 0
+            try:
+                cursor.execute("SELECT COUNT(*) FROM scans WHERE verdict = 'clean'")
+                r = cursor.fetchone(); clean = (_row_get(r, 0, list(r.keys())[0]) if r else 0) or 0
+                cursor.execute("SELECT COUNT(*) FROM scans WHERE verdict = 'hack'")
+                r = cursor.fetchone(); hack = (_row_get(r, 0, list(r.keys())[0]) if r else 0) or 0
+                cursor.execute("SELECT COUNT(*) FROM scans WHERE verdict IS NULL OR verdict = ''")
+                r = cursor.fetchone(); pending = (_row_get(r, 0, list(r.keys())[0]) if r else 0) or 0
+            except Exception:
+                pass
+
+            # Top hacks este mes
+            top_issues = []
+            try:
+                cursor.execute(f"""
+                    SELECT issue_name, COUNT(*) as cnt
+                    FROM scan_results
+                    WHERE alert_level IN ('CRITICAL','HIGH')
+                      AND created_at >= DATE_TRUNC('month', CURRENT_DATE)
+                    GROUP BY issue_name
+                    ORDER BY cnt DESC
+                    LIMIT 5
+                """)
+                for row in cursor.fetchall():
+                    top_issues.append({'name': _row_get(row, 0, 'issue_name'), 'count': _row_get(row, 1, 'cnt')})
+            except Exception:
+                try:
+                    # SQLite fallback
+                    cursor.execute("""
+                        SELECT issue_name, COUNT(*) as cnt
+                        FROM scan_results
+                        WHERE alert_level IN ('CRITICAL','HIGH')
+                          AND created_at >= date('now','start of month')
+                        GROUP BY issue_name
+                        ORDER BY cnt DESC
+                        LIMIT 5
+                    """)
+                    for row in cursor.fetchall():
+                        top_issues.append({'name': _row_get(row, 0, 'issue_name'), 'count': _row_get(row, 1, 'cnt')})
+                except Exception:
+                    pass
+
+            # Tiempo promedio de escaneo (en segundos)
+            avg_duration = 0
+            try:
+                cursor.execute("SELECT AVG(scan_duration) FROM scans WHERE scan_duration IS NOT NULL AND scan_duration > 0")
+                r = cursor.fetchone()
+                avg_duration = round((_row_get(r, 0, list(r.keys())[0]) if r else 0) or 0, 1)
+            except Exception:
+                pass
+
+            result = {
+                'verdicts': {'clean': clean, 'hack': hack, 'pending': pending},
+                'top_issues': top_issues,
+                'avg_duration': avg_duration,
+            }
+            _stats_cache[cache_key] = result
+            _stats_cache_time[cache_key] = time.time()
+            return jsonify(result), 200
+    except Exception as e:
+        print(f"Error en get_dashboard_extended: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+
 # ============================================================
 # API DE AUTENTICACIÓN
 # ============================================================

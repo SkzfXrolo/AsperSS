@@ -259,6 +259,7 @@ async function loadDashboard() {
 
         loadRecentScans();
         loadMonthlyChart();
+        loadExtendedDashboard();
     } catch (error) {
         console.error('Error cargando dashboard:', error);
     }
@@ -371,6 +372,76 @@ async function loadMonthlyChart() {
             }
         });
     } catch(e) { /* no chart data */ }
+}
+
+let verdictChart = null;
+async function loadExtendedDashboard() {
+    try {
+        const res  = await fetch('/api/dashboard/extended');
+        const data = await res.json();
+        if (data.error) return;
+
+        // --- Veredictos doughnut ---
+        const canvas = document.getElementById('verdict-chart');
+        const legend = document.getElementById('verdict-legend');
+        if (canvas && window.Chart) {
+            const { clean = 0, hack = 0, pending = 0 } = data.verdicts || {};
+            const total = clean + hack + pending || 1;
+            if (verdictChart) verdictChart.destroy();
+            verdictChart = new Chart(canvas, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Limpio', 'Con Hacks', 'Pendiente'],
+                    datasets: [{
+                        data: [clean, hack, pending],
+                        backgroundColor: ['#22c55e', '#ef4444', '#6b7280'],
+                        borderWidth: 0,
+                        hoverOffset: 4,
+                    }]
+                },
+                options: {
+                    cutout: '70%',
+                    responsive: false,
+                    plugins: { legend: { display: false }, tooltip: { callbacks: {
+                        label: ctx => ` ${ctx.label}: ${ctx.raw} (${Math.round(ctx.raw/total*100)}%)`
+                    }}}
+                }
+            });
+            if (legend) legend.innerHTML = [
+                `<span style="color:#22c55e">&#9679;</span> Limpios: <strong>${clean}</strong> (${Math.round(clean/total*100)}%)`,
+                `<span style="color:#ef4444">&#9679;</span> Con Hacks: <strong>${hack}</strong> (${Math.round(hack/total*100)}%)`,
+                `<span style="color:#6b7280">&#9679;</span> Pendientes: <strong>${pending}</strong>`,
+            ].join('<br>');
+        }
+
+        // --- Top hacks ---
+        const listEl = document.getElementById('top-hacks-list');
+        if (listEl) {
+            const issues = data.top_issues || [];
+            if (issues.length === 0) {
+                listEl.innerHTML = '<div style="color:var(--text-d);font-size:13px;padding:8px 0;">Sin datos este mes</div>';
+            } else {
+                const max = issues[0].count || 1;
+                listEl.innerHTML = issues.map((item, i) => `
+                    <div style="margin-bottom:8px;">
+                        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+                            <span style="color:var(--text-s);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:75%;">${i+1}. ${item.name}</span>
+                            <span style="color:var(--accent);font-weight:600;">${item.count}</span>
+                        </div>
+                        <div style="height:3px;background:var(--border);border-radius:2px;">
+                            <div style="height:3px;width:${Math.round(item.count/max*100)}%;background:var(--accent);border-radius:2px;"></div>
+                        </div>
+                    </div>`).join('');
+            }
+        }
+
+        // --- Tiempo promedio ---
+        const avgEl = document.getElementById('avg-scan-time');
+        if (avgEl && data.avg_duration != null) {
+            const s = data.avg_duration;
+            avgEl.textContent = s >= 60 ? `${Math.round(s/60)} min` : `${Math.round(s)} seg`;
+        }
+    } catch(e) { /* silent */ }
 }
 
 // ============================================================
