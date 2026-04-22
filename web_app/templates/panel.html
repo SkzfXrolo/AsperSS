@@ -557,14 +557,28 @@
                     </div>
                 </div>
 
-                <!-- Columna Central: Gráfico de Indicaciones -->
+                <!-- Columna Central: Resumen de Indicaciones -->
                 <div class="scan-chart-column">
-                    <h3 class="column-title">Gráfico de Indicaciones</h3>
-                    <p class="column-subtitle">Representación visual de las indicaciones encontradas durante el escaneo</p>
-                    <div class="chart-container">
-                        <canvas id="severity-chart"></canvas>
+                    <h3 class="column-title">Resumen de Indicaciones</h3>
+                    <p class="column-subtitle">Desglose de hallazgos encontrados durante el escaneo</p>
+                    <div id="severity-summary-cards" style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(239,68,68,0.1);border-left:3px solid #ef4444;border-radius:6px;">
+                            <span style="color:#ef4444;font-weight:600;font-size:13px;">🔴 Críticos (Hacks)</span>
+                            <span id="sum-critical" style="color:#ef4444;font-weight:700;font-size:20px;">0</span>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(245,158,11,0.1);border-left:3px solid #f59e0b;border-radius:6px;">
+                            <span style="color:#f59e0b;font-weight:600;font-size:13px;">🟠 Sospechosos</span>
+                            <span id="sum-suspicious" style="color:#f59e0b;font-weight:700;font-size:20px;">0</span>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(99,102,241,0.08);border-left:3px solid #6366f1;border-radius:6px;">
+                            <span style="color:#6366f1;font-weight:600;font-size:13px;">🔵 Poco sospechosos</span>
+                            <span id="sum-low" style="color:#6366f1;font-weight:700;font-size:20px;">0</span>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(16,185,129,0.08);border-left:3px solid #10b981;border-radius:6px;">
+                            <span style="color:#10b981;font-weight:600;font-size:13px;">🟢 Sin hallazgos</span>
+                            <span id="sum-clean" style="color:#10b981;font-weight:700;font-size:20px;">0</span>
+                        </div>
                     </div>
-                    <div class="chart-legend" id="chart-legend"></div>
                 </div>
 
                 <!-- Columna Derecha: Log de Indicaciones -->

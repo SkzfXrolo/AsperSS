@@ -658,24 +658,21 @@ async function viewScanDetails(scanId) {
         const data = await response.json();
         
         // Calcular estadísticas de severidad
-        const severityStats = {
-            clean: 0,
-            alert: 0,
-            severe: 0
-        };
-        
+        const severityStats = { clean: 0, alert: 0, severe: 0, low: 0 };
         if (data.results && data.results.length > 0) {
             data.results.forEach(result => {
                 const level = result.alert_level;
-                if (level === 'CRITICAL') {
-                    severityStats.severe++;
-                } else if (level === 'SOSPECHOSO') {
-                    severityStats.alert++;
-                } else {
-                    severityStats.clean++;
-                }
+                if (level === 'CRITICAL') severityStats.severe++;
+                else if (level === 'SOSPECHOSO') severityStats.alert++;
+                else if (level === 'POCO_SOSPECHOSO') severityStats.low++;
+                else severityStats.clean++;
             });
         }
+        // Actualizar tarjetas de resumen
+        const sc = document.getElementById('sum-critical'); if (sc) sc.textContent = severityStats.severe;
+        const ss = document.getElementById('sum-suspicious'); if (ss) ss.textContent = severityStats.alert;
+        const sl = document.getElementById('sum-low'); if (sl) sl.textContent = severityStats.low;
+        const sk = document.getElementById('sum-clean'); if (sk) sk.textContent = severityStats.clean;
         
         // Actualizar información del escaneo (columna izquierda)
         const scanIdEl = document.getElementById('detail-scan-id');
@@ -748,9 +745,6 @@ async function viewScanDetails(scanId) {
             detectionBanner.style.display = 'none';
         }
         
-        // Generar gráfico donut
-        updateSeverityChart(severityStats);
-        
         // Cargar escaneos previos si existe la subpágina
         loadPreviousScans(data.machine_name || data.machine_id);
         
@@ -759,9 +753,11 @@ async function viewScanDetails(scanId) {
             setupSubpageNavigation();
         }
         
-        // Mostrar todos los resultados con badge de categoría
+        // Mostrar solo CRITICAL y SOSPECHOSO con badge de categoría
         const issuesContainer = document.getElementById('issues-list-container');
-        const relevantResults = data.results || [];
+        const relevantResults = (data.results || []).filter(r =>
+            r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO'
+        );
         if (relevantResults.length > 0) {
             issuesContainer.innerHTML = relevantResults.map((result) => {
                 const isCrit = result.alert_level === 'CRITICAL';
