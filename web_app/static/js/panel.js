@@ -732,11 +732,6 @@ async function viewScanDetails(scanId) {
         const dateEl = document.getElementById('detail-scan-date');
         if (dateEl) dateEl.textContent = formatDate(data.started_at);
         
-        // Actualizar contadores de severidad (columna derecha)
-        document.getElementById('count-clean').textContent  = severityStats.clean;
-        document.getElementById('count-alert').textContent  = severityStats.alert;
-        document.getElementById('count-severe').textContent = severityStats.severe;
-
         // Mostrar/ocultar banner de detección
         const detectionBanner = document.getElementById('detection-banner');
         if (severityStats.severe > 0 || severityStats.alert > 0) {
