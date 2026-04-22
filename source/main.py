@@ -2395,9 +2395,6 @@ class ArgusApp:
             # Header
             ModernUI.create_header(main_panel)
 
-            # Stat cards row
-            ModernUI.create_stat_cards(main_panel)
-
             # Progress section
             progress_widgets = ModernUI.create_progress_section(main_panel)
             self.progress_frame = progress_widgets['container']
@@ -2412,8 +2409,7 @@ class ArgusApp:
 
             # Scan button
             btn_container = tk.Frame(main_panel, bg=ModernUI.COLORS['bg_primary'])
-            btn_container.pack(fill=tk.X, pady=(6, 0), padx=18)
-
+            btn_container.pack(fill=tk.X, pady=(6, 0), padx=24)
             scan_btn_frame = ModernUI.create_button(
                 btn_container,
                 "INICIAR ESCANEO",
@@ -2429,7 +2425,10 @@ class ArgusApp:
                     break
             self.details_button = None
 
-            # Results section
+            # Completion panel (visible to user instead of raw results)
+            self._completion_widgets = ModernUI.create_completion_panel(main_panel)
+
+            # Hidden results section (staff data written here but never shown)
             results_widgets = ModernUI.create_results_section(main_panel)
             self.results_frame = results_widgets['container']
             self.results_text = results_widgets['text']
@@ -3178,6 +3177,16 @@ class ArgusApp:
             self.scanning = False
             if UI_STYLE_AVAILABLE:
                 ModernUI.set_status_badge("LISTO", ModernUI.COLORS['green'])
+                if hasattr(self, '_completion_widgets'):
+                    try:
+                        self.root.after(0, lambda: ModernUI.set_completion_state(
+                            self._completion_widgets,
+                            success=True,
+                            message="Escaneo completado",
+                            sub="Los resultados han sido enviados al staff"
+                        ))
+                    except Exception:
+                        pass
     
     def scan_drive_exhaustive(self, drive, start_progress, end_progress):
         """Escanea una unidad completa - VERSIÓN OPTIMIZADA CON LÍMITES"""
