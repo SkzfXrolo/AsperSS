@@ -3402,37 +3402,41 @@ class ArgusApp:
             # Análisis de contenido para archivos de texto y JARs
             filename_lower = os.path.basename(file_path).lower()
             
-            # Patrones de hacks en contenido
+            # Patrones de hacks en contenido — solo nombres de clientes/hacks específicos
+            # Excluidos a propósito: reach, velocity, fly, bypass, inject, ghost, scaffold
+            # (son términos genéricos presentes en cualquier mod legítimo de Minecraft)
             hack_content_patterns = [
                 b'vape', b'entropy', b'whiteout', b'liquidbounce', b'wurst',
-                b'killaura', b'aimbot', b'triggerbot', b'reach', b'velocity',
-                b'scaffold', b'fly', b'xray', b'fullbright', b'bypass',
-                b'inject', b'ghost', b'stealth', b'undetected', b'incognito',
-                b'flux', b'sigma', b'future', b'astolfo', b'exhibition',
-                b'novoline', b'rise', b'moon', b'drip', b'phobos'
+                b'killaura', b'aimbot', b'triggerbot', b'xray', b'fullbright',
+                b'flux', b'sigma', b'astolfo', b'exhibition',
+                b'novoline', b'drip', b'phobos', b'dllinjector',
+                b'autoclick', b'clickgui', b'anticheat.bypass'
             ]
-            
+
             # Análisis de strings sospechosos
             try:
                 if filename_lower.endswith(('.jar', '.class', '.java', '.txt', '.lua', '.js', '.py')):
                     with open(file_path, 'rb') as f:
                         content = f.read(1024 * 1024)  # Leer primeros 1MB
-                        
+
                         # Detectar patrones de hack en contenido
                         detected_count = 0
                         for pattern in hack_content_patterns:
                             if pattern in content:
                                 detected_count += 1
                                 result['detected_patterns'].append(pattern.decode('utf-8', errors='ignore'))
-                        
-                        if detected_count >= 2:  # Si encuentra 2+ patrones, es muy sospechoso
+
+                        if detected_count >= 3:  # Requiere 3+ patrones para evitar falsos positivos
                             result['is_hack'] = True
                             result['confidence'] = min(90, detected_count * 15)
-                        
-                        # Detección de ofuscación (alto ratio de caracteres no ASCII)
-                        if len(content) > 100:
+                        elif detected_count == 2:
+                            result['is_hack'] = True
+                            result['confidence'] = 55  # sospechoso pero no crítico
+
+                        # Ofuscación solo relevante para archivos de texto, no binarios JARs/class
+                        if len(content) > 100 and not filename_lower.endswith(('.jar', '.class')):
                             non_ascii_ratio = sum(1 for b in content[:1000] if b > 127) / min(1000, len(content))
-                            if non_ascii_ratio > 0.3:  # Más del 30% no ASCII = posible ofuscación
+                            if non_ascii_ratio > 0.3:
                                 result['obfuscation_detected'] = True
                                 result['confidence'] += 20
             except:

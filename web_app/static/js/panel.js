@@ -6,6 +6,9 @@
 // Estado global
 let currentScanId = null;
 let currentResultId = null;
+let currentIssuesList = [];
+let currentIssuesPage = 0;
+const ISSUES_PER_PAGE = 25;
 
 // Inicialización - OPTIMIZADO: Cargar datos críticos primero, el resto en background
 document.addEventListener('DOMContentLoaded', function() {
@@ -627,6 +630,159 @@ async function loadScans() {
 
 let severityChart = null;
 
+function renderIssuePage(container, scanId) {
+    const list = currentIssuesList;
+    if (!list || list.length === 0) {
+        container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-d);font-size:13px;">Sin hallazgos críticos o sospechosos en este escaneo.</div>';
+        return;
+    }
+    const totalPages = Math.ceil(list.length / ISSUES_PER_PAGE);
+    const page = currentIssuesPage;
+    const slice = list.slice(page * ISSUES_PER_PAGE, (page + 1) * ISSUES_PER_PAGE);
+
+    const rows = slice.map((result) => {
+        const isCrit = result.alert_level === 'CRITICAL';
+        const accent = isCrit ? '#ef4444' : '#f59e0b';
+        const bg     = isCrit ? 'rgba(239,68,68,0.05)' : 'rgba(245,158,11,0.05)';
+        const dot    = isCrit ? '🔴' : '🟠';
+        const cat    = result.issue_category || '';
+        const hasFeedback = result.feedback_status;
+        const nameEsc = (result.issue_name || '').replace(/'/g, "\\'");
+        const pathEsc = (result.issue_path || '').replace(/'/g, "\\'");
+        const name = result.issue_name || 'Hallazgo';
+        const path = result.issue_path || '';
+        const truncPath = path.length > 80 ? '…' + path.slice(-77) : path;
+
+        return `<div data-result-id="${result.id}" style="
+            background:${bg};border:1px solid ${accent}33;border-left:3px solid ${accent};
+            border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:14px;flex-shrink:0;">${dot}</span>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:600;color:var(--text-h);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                    ${name}
+                    ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;margin-left:6px;">${cat}</span>` : ''}
+                </div>
+                ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${truncPath}</div>` : ''}
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;align-items:center;">
+                ${hasFeedback === 'hack'
+                    ? `<span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:5px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">Hack</span>`
+                    : hasFeedback === 'legitimate'
+                    ? `<span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:5px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);">Legítimo</span>`
+                    : ''
+                }
+                ${hasFeedback ? `<button onclick="changeFeedback(${result.id},${scanId})"
+                    style="font-size:11px;padding:4px 8px;border-radius:5px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;" title="Cambiar veredicto">✎</button>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+
+    const pagination = totalPages > 1 ? `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 4px;margin-top:8px;">
+            <button onclick="changeIssuePage(-1,${scanId})" ${page === 0 ? 'disabled' : ''} style="font-size:12px;padding:5px 14px;border-radius:6px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-h);cursor:pointer;opacity:${page === 0 ? '0.3' : '1'};">← Anterior</button>
+            <span style="font-size:12px;color:var(--text-d);">Página ${page+1} / ${totalPages} &nbsp;·&nbsp; ${list.length} hallazgos</span>
+            <button onclick="changeIssuePage(1,${scanId})" ${page >= totalPages-1 ? 'disabled' : ''} style="font-size:12px;padding:5px 14px;border-radius:6px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-h);cursor:pointer;opacity:${page >= totalPages-1 ? '0.3' : '1'};">Siguiente →</button>
+        </div>` : '';
+
+    container.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;">${rows}</div>${pagination}`;
+}
+
+function changeIssuePage(delta, scanId) {
+    const totalPages = Math.ceil(currentIssuesList.length / ISSUES_PER_PAGE);
+    currentIssuesPage = Math.max(0, Math.min(currentIssuesPage + delta, totalPages - 1));
+    const container = document.getElementById('issues-list-container');
+    if (container) renderIssuePage(container, scanId);
+}
+
+// ── Verdict functions ──────────────────────────────────────────────────────
+
+function skipVerdict() {
+    document.getElementById('bulk-actions-bar').style.display = 'none';
+}
+
+async function submitVerdictClean() {
+    const unprocessed = currentIssuesList.filter(r => !r.feedback_status);
+    if (!unprocessed.length) { skipVerdict(); return; }
+    if (!confirm(`¿Confirmar que el usuario es limpio? Se marcarán ${unprocessed.length} hallazgo(s) como legítimos.`)) return;
+
+    try {
+        const res = await fetch('/api/feedback/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ result_ids: unprocessed.map(r => r.id), verification: 'legitimate', notes: 'Usuario limpio confirmado por staff' })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        unprocessed.forEach(r => r.feedback_status = 'legitimate');
+        document.getElementById('bulk-actions-bar').style.display = 'none';
+        const container = document.getElementById('issues-list-container');
+        if (container) renderIssuePage(container, currentScanId);
+        alert('Marcado como usuario limpio.');
+    } catch (e) {
+        alert('Error al enviar veredicto: ' + e.message);
+    }
+}
+
+function openHackSelection() {
+    const list = document.getElementById('hack-selection-list');
+    if (!list) return;
+    list.innerHTML = currentIssuesList.map(r => {
+        const isCrit = r.alert_level === 'CRITICAL';
+        const dot = isCrit ? '🔴' : '🟠';
+        const name = r.issue_name || 'Hallazgo';
+        const path = r.issue_path || '';
+        const truncPath = path.length > 70 ? '…' + path.slice(-67) : path;
+        const already = r.feedback_status;
+        return `<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;border:1px solid var(--border-m);background:var(--bg-t);cursor:pointer;">
+            <input type="checkbox" data-result-id="${r.id}" ${already === 'hack' ? 'checked' : ''} ${already === 'legitimate' ? 'disabled' : ''} style="width:15px;height:15px;flex-shrink:0;cursor:pointer;">
+            <span style="font-size:13px;flex-shrink:0;">${dot}</span>
+            <div style="min-width:0;">
+                <div style="font-size:12px;font-weight:600;color:var(--text-h);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
+                ${truncPath ? `<div style="font-size:11px;color:var(--text-d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${truncPath}</div>` : ''}
+            </div>
+        </label>`;
+    }).join('');
+    document.getElementById('hack-selection-modal').classList.add('active');
+}
+
+function skipHackSelection() {
+    document.getElementById('hack-selection-modal').classList.remove('active');
+}
+
+async function confirmHackSelection() {
+    const modal = document.getElementById('hack-selection-modal');
+    const checkboxes = modal.querySelectorAll('input[type="checkbox"]:not([disabled])');
+    const hackIds = [];
+    const cleanIds = [];
+    checkboxes.forEach(cb => {
+        const id = parseInt(cb.dataset.resultId);
+        const result = currentIssuesList.find(r => r.id === id);
+        if (!result || result.feedback_status) return;
+        if (cb.checked) hackIds.push(id);
+        else cleanIds.push(id);
+    });
+
+    if (!hackIds.length && !cleanIds.length) { skipHackSelection(); return; }
+
+    try {
+        const requests = [];
+        if (hackIds.length) requests.push(fetch('/api/feedback/batch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ result_ids: hackIds, verification: 'hack', notes: 'Hack confirmado por staff' }) }));
+        if (cleanIds.length) requests.push(fetch('/api/feedback/batch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ result_ids: cleanIds, verification: 'legitimate', notes: 'Legítimo confirmado por staff' }) }));
+        await Promise.all(requests);
+
+        hackIds.forEach(id => { const r = currentIssuesList.find(x => x.id === id); if (r) r.feedback_status = 'hack'; });
+        cleanIds.forEach(id => { const r = currentIssuesList.find(x => x.id === id); if (r) r.feedback_status = 'legitimate'; });
+
+        skipHackSelection();
+        const container = document.getElementById('issues-list-container');
+        if (container) renderIssuePage(container, currentScanId);
+        const hasUnprocessed = currentIssuesList.some(r => !r.feedback_status);
+        document.getElementById('bulk-actions-bar').style.display = hasUnprocessed ? 'flex' : 'none';
+        alert(`Feedback enviado: ${hackIds.length} hack(s), ${cleanIds.length} legítimo(s).`);
+    } catch (e) {
+        alert('Error al enviar feedback: ' + e.message);
+    }
+}
+
 async function viewScanDetails(scanId) {
     currentScanId = scanId;
 
@@ -748,66 +904,17 @@ async function viewScanDetails(scanId) {
             setupSubpageNavigation();
         }
         
-        // Mostrar solo CRITICAL y SOSPECHOSO con badge de categoría
+        // Mostrar solo CRITICAL y SOSPECHOSO con paginación
         const issuesContainer = document.getElementById('issues-list-container');
-        const relevantResults = (data.results || []).filter(r =>
+        currentIssuesPage = 0;
+        currentIssuesList = (data.results || []).filter(r =>
             r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO'
         );
-        if (relevantResults.length > 0) {
-            issuesContainer.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;">` +
-            relevantResults.map((result) => {
-                const isCrit = result.alert_level === 'CRITICAL';
-                const isSusp = result.alert_level === 'SOSPECHOSO';
-                const accent = isCrit ? '#ef4444' : isSusp ? '#f59e0b' : '#6366f1';
-                const bg     = isCrit ? 'rgba(239,68,68,0.05)' : isSusp ? 'rgba(245,158,11,0.05)' : 'rgba(99,102,241,0.04)';
-                const dot    = isCrit ? '🔴' : isSusp ? '🟠' : '🔵';
-                const cat    = result.issue_category || '';
-                const hasFeedback = result.feedback_status;
-                const nameEsc = (result.issue_name || '').replace(/'/g, "\\'");
-                const pathEsc = (result.issue_path || '').replace(/'/g, "\\'");
-                const name = result.issue_name || 'Hallazgo';
-                const path = result.issue_path || '';
-                const truncPath = path.length > 80 ? '…' + path.slice(-77) : path;
+        renderIssuePage(issuesContainer, scanId);
 
-                return `<div data-result-id="${result.id}" style="
-                    background:${bg};border:1px solid ${accent}33;border-left:3px solid ${accent};
-                    border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;">
-                    <input type="checkbox" class="issue-checkbox" data-result-id="${result.id}"
-                        ${hasFeedback ? 'disabled' : ''} onchange="updateBulkActions()"
-                        style="width:14px;height:14px;flex-shrink:0;cursor:pointer;">
-                    <span style="font-size:14px;flex-shrink:0;">${dot}</span>
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-size:12px;font-weight:600;color:var(--text-h);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                            ${name}
-                            ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;margin-left:6px;">${cat}</span>` : ''}
-                        </div>
-                        ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${truncPath}</div>` : ''}
-                    </div>
-                    <div style="display:flex;gap:6px;flex-shrink:0;align-items:center;">
-                        ${hasFeedback === 'hack'
-                            ? `<span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:5px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">✓ Hack</span>`
-                            : hasFeedback === 'legitimate'
-                            ? `<span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:5px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);">✓ Legítimo</span>`
-                            : `<button onclick="markAsHack(${result.id},${scanId},'${nameEsc}','${pathEsc}')"
-                                style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:5px;border:1px solid rgba(239,68,68,0.4);background:rgba(239,68,68,0.1);color:#ef4444;cursor:pointer;">
-                                🚨 Hack</button>
-                               <button onclick="markAsLegitimate(${result.id},${scanId},'${nameEsc}','${pathEsc}')"
-                                style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:5px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#10b981;cursor:pointer;">
-                                ✓ Legít.</button>`
-                        }
-                        ${hasFeedback ? `<button onclick="changeFeedback(${result.id},${scanId})"
-                            style="font-size:11px;padding:4px 8px;border-radius:5px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">✎</button>` : ''}
-                    </div>
-                </div>`;
-            }).join('') + `</div>`;
-
-            const hasUnprocessed = relevantResults.some(r => !r.feedback_status);
-            document.getElementById('bulk-actions-bar').style.display = hasUnprocessed ? 'flex' : 'none';
-            updateBulkActions();
-        } else {
-            issuesContainer.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-d);font-size:13px;">✅ Sin hallazgos críticos o sospechosos en este escaneo.</div>';
-            document.getElementById('bulk-actions-bar').style.display = 'none';
-        }
+        const hasUnprocessed = currentIssuesList.some(r => !r.feedback_status);
+        document.getElementById('bulk-actions-bar').style.display = (currentIssuesList.length > 0 && hasUnprocessed) ? 'flex' : 'none';
+        updateBulkActions();
 
         // ── Mouse & Forensics tab ─────────────────────────────────────────
         const mouseFn = data.mouse_findings || [];
