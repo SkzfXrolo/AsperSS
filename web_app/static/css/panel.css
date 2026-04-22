@@ -1018,20 +1018,121 @@ body.light-theme .sidebar {
 *::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.15); border-radius: 3px; }
 *::-webkit-scrollbar-thumb:hover { background: rgba(139,92,246,0.30); }
 
-/* Responsive */
+/* ═══════════════════════════════════════════════
+   HAMBURGER BUTTON (oculto en desktop)
+═══════════════════════════════════════════════ */
+.hamburger-btn {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 36px;
+    height: 36px;
+    background: var(--accent-bg);
+    border: 1px solid var(--border-m);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    padding: 6px;
+    flex-shrink: 0;
+    transition: var(--trans);
+}
+.hamburger-btn span {
+    display: block;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: var(--trans);
+}
+.hamburger-btn.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.hamburger-btn.open span:nth-child(2) { opacity: 0; }
+.hamburger-btn.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+/* Overlay oscuro cuando sidebar está abierto en móvil */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 199;
+    backdrop-filter: blur(2px);
+}
+.sidebar-overlay.active { display: block; }
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE — TABLET (768px)
+═══════════════════════════════════════════════ */
 @media (max-width: 768px) {
-    .sidebar { width: 200px; }
-    .main-content { margin-left: 200px; }
+    .sidebar { width: 220px; }
+    .main-content { margin-left: 220px; }
     .stats-grid { grid-template-columns: 1fr 1fr; }
     .section-header-actions { flex-direction: column; align-items: flex-start; }
     .filter-controls { flex-direction: column; align-items: flex-start; }
     .search-input { width: 100%; }
+    .subnav-row { gap: 4px; }
 }
 
+/* ═══════════════════════════════════════════════
+   RESPONSIVE — MÓVIL (540px)
+═══════════════════════════════════════════════ */
 @media (max-width: 540px) {
-    .sidebar { display: none; }
+    /* Sidebar: deslizable desde la izquierda */
+    .sidebar {
+        position: fixed;
+        left: -260px;
+        top: 0;
+        bottom: 0;
+        width: 240px;
+        z-index: 200;
+        transition: left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: none;
+    }
+    .sidebar.mobile-open {
+        left: 0;
+        box-shadow: 4px 0 32px rgba(0,0,0,0.45);
+    }
+
+    /* Main ocupa todo el ancho */
     .main-content { margin-left: 0; }
+
+    /* Header: mostrar hamburger */
+    .hamburger-btn { display: flex; }
+    .panel-header {
+        gap: 10px;
+        padding: 12px 16px;
+    }
+    .panel-title { font-size: 15px; }
+
+    /* Grids de 1 columna */
     .stats-grid { grid-template-columns: 1fr; }
+    .scan-results-layout { grid-template-columns: 1fr !important; }
+    .dashboard-bottom-grid { grid-template-columns: 1fr !important; }
+
+    /* Secciones con padding reducido */
+    .panel-section { padding: 0 12px 12px; }
+    .section-content { padding: 16px 14px; }
+
+    /* Acciones apiladas */
+    .section-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .section-header-actions { width: 100%; flex-direction: column; }
+    .section-header-actions .btn { width: 100%; justify-content: center; }
+
+    /* Filtros en columna */
+    .filter-controls { flex-direction: column; }
+    .filter-controls select,
+    .filter-controls input,
+    .search-input { width: 100% !important; }
+
+    /* Subnav scrollable sin texto */
+    .subnav-tab span { display: none; }
+    .subnav-tab { padding: 8px 10px; min-width: 36px; justify-content: center; }
+    .subnav-row { gap: 2px; }
+
+    /* Tabla de resultados: scroll horizontal */
+    .results-table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+    /* Cards de scan apiladas */
+    .scan-card { flex-direction: column; }
+    .scan-card .scan-meta { flex-wrap: wrap; gap: 6px; }
 }
 
 /* ══════════════════════════════════════════════

@@ -122,10 +122,17 @@
         </div>
     </aside>
 
+    <!-- Overlay para cerrar sidebar en móvil -->
+    <div id="sidebar-overlay" class="sidebar-overlay" onclick="closeMobileSidebar()"></div>
+
     <!-- Main Content -->
     <main class="main-content">
         <!-- Header -->
         <header class="panel-header">
+            <!-- Botón hamburger (solo visible en móvil) -->
+            <button class="hamburger-btn" id="hamburger-btn" onclick="toggleMobileSidebar()" aria-label="Menú">
+                <span></span><span></span><span></span>
+            </button>
             <h1 class="panel-title" id="section-title">Dashboard</h1>
             <div class="header-actions">
                 <!-- Theme toggle -->
@@ -803,7 +810,7 @@
                         <div class="form-group">
                             <label>Archivo</label>
                             <select id="download-link-filename" required>
-                                <option value="MinecraftSSTool.exe">MinecraftSSTool.exe</option>
+                                <option value="ArgusScanner.exe">ArgusScanner.exe</option>
                             </select>
                         </div>
                         <div class="form-group">

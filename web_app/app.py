@@ -1333,7 +1333,7 @@ def create_token():
                 cursor.execute(
                     f'INSERT INTO download_links (token, filename, created_by, expires_at, max_downloads)'
                     f' VALUES ({_PH},{_PH},{_PH},{_PH},{_PH})',
-                    (download_token, 'MinecraftSSTool.exe', user_id, dl_expires, 1)
+                    (download_token, 'ArgusScanner.exe', user_id, dl_expires, 1)
                 )
             base_url = os.environ.get('RENDER_EXTERNAL_URL', request.host_url).rstrip('/')
             download_link = f"{base_url}/d/{download_token}?token={scan_token}"
@@ -2718,8 +2718,10 @@ def download_with_token(token):
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         possible_paths = [
             os.path.join(project_root, 'downloads', filename),
-            os.path.join(project_root, 'source', 'dist', filename) if filename == 'MinecraftSSTool.exe' else None,
-            os.path.join(project_root, filename)
+            os.path.join(project_root, 'source', 'dist', filename),
+            os.path.join(project_root, filename),
+            # Fallback: buscar ArgusScanner.exe si se pidió el nombre viejo
+            os.path.join(project_root, 'source', 'dist', 'ArgusScanner.exe') if filename == 'MinecraftSSTool.exe' else None,
         ]
         
         file_path = None
@@ -2730,7 +2732,7 @@ def download_with_token(token):
         
         if file_path:
             # Si hay un token de escaneo en la URL, crear un ZIP con el ejecutable y config.json
-            if scan_token and filename == 'MinecraftSSTool.exe':
+            if scan_token and filename in ('ArgusScanner.exe', 'MinecraftSSTool.exe'):
                 try:
                     import zipfile
                     import tempfile
@@ -2768,7 +2770,7 @@ def download_with_token(token):
                     print(f"🔑 Token incluido en config: {scan_token[:20]}...")
                     
                     # Enviar el ZIP
-                    response = send_file(zip_path, as_attachment=True, download_name='MinecraftSSTool.zip', mimetype='application/zip')
+                    response = send_file(zip_path, as_attachment=True, download_name='ArgusScanner.zip', mimetype='application/zip')
                     
                     # Limpiar el archivo temporal después de enviarlo (en un thread separado)
                     def cleanup_temp_file():

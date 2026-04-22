@@ -108,41 +108,7 @@
       → Revisar qué fases son las más lentas y optimizarlas
       → Hacer más fases verdaderamente paralelas
 
-── MEJORAS DE AUTENTICACIÓN / SEGURIDAD ─────────────────────
-
-[ ] Tokens con expiración configurable
-      → El staff puede elegir: token de 1 uso, 24h, 7 días, permanente
-      → Revocar token desde el panel en cualquier momento
-      → Ver última vez que se usó un token
-
-[ ] Autenticación de dos factores para staff
-      → TOTP (Google Authenticator) para cuentas admin
-      → Código de backup de un solo uso
-
-[ ] Rate limiting en endpoints de API
-      → Máximo N scans por token por hora
-      → Bloqueo automático de IPs que hagan spam a la API
-      → Alerta al admin si se detecta abuso
-
-[ ] Log de auditoría completo
-      → Registrar TODAS las acciones del staff (login, veredictos, tokens)
-      → Log inmutable (append-only) con timestamp
-      → Página de auditoría en el panel para el Owner
-
 ── INFRAESTRUCTURA / BACKEND ─────────────────────────────────
-
-[ ] Migrar de Render free tier a servicio más estable
-      → El cold start de Render free tarda 30-60s → mala UX
-      → Opciones: Railway, Fly.io, VPS propio (DigitalOcean $6/mes)
-
-[ ] Sistema de backup de BD automático
-      → Dump diario de PostgreSQL a un bucket S3 o Google Drive
-      → Retención de 30 días
-
-[ ] API pública documentada
-      → Swagger/OpenAPI docs en /api/docs
-      → Para integrar con bots de Discord u otros sistemas externos
-
 [ ] Bot de Discord oficial
       → Comandos slash: /scan @jugador, /veredicto <id>, /stats
       → Notificación automática en canal cuando llega scan nuevo

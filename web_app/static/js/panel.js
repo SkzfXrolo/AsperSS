@@ -36,10 +36,25 @@ document.addEventListener('DOMContentLoaded', function() {
 // NAVEGACIÓN
 // ============================================================
 
+function toggleMobileSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    const btn = document.getElementById('hamburger-btn');
+    sidebar.classList.toggle('mobile-open');
+    overlay.classList.toggle('active');
+    btn.classList.toggle('open');
+}
+
+function closeMobileSidebar() {
+    document.querySelector('.sidebar').classList.remove('mobile-open');
+    document.getElementById('sidebar-overlay').classList.remove('active');
+    document.getElementById('hamburger-btn').classList.remove('open');
+}
+
 function initializeNavigation() {
     const navItems = document.querySelectorAll('.nav-item[data-section]');
     console.log('Inicializando navegación, elementos encontrados:', navItems.length);
-    
+
     navItems.forEach(item => {
         item.addEventListener('click', function(e) {
             e.preventDefault();
@@ -48,6 +63,7 @@ function initializeNavigation() {
             console.log('Click en navegación, sección:', section);
             if (section) {
                 showSection(section);
+                closeMobileSidebar();
             } else {
                 console.error('No se encontró atributo data-section en:', this);
             }
@@ -1705,9 +1721,9 @@ async function downloadApp() {
                 // Mensaje para local
                 alert(`⚠️ ${errorMsg}\n\n` +
                       'El ejecutable debe estar en una de estas ubicaciones:\n' +
-                      '• downloads/MinecraftSSTool.exe\n' +
-                      '• source/dist/MinecraftSSTool.exe\n' +
-                      '• MinecraftSSTool.exe (raíz del proyecto)\n\n' +
+                      '• downloads/ArgusScanner.exe\n' +
+                      '• source/dist/ArgusScanner.exe\n' +
+                      '• ArgusScanner.exe (raíz del proyecto)\n\n' +
                       'Asegúrate de que el archivo .exe esté compilado.');
             }
         }
