@@ -64,15 +64,20 @@
       → Botón "Historial" muestra todos los cambios inline
       → API POST /api/scans/<id>/verdict y GET /api/scans/<id>/verdict/history
 
-[ ] Filtros y búsqueda avanzada
-      → Filtrar por fecha, país, OS, veredicto, staff que escaneó
-      → Búsqueda por username, IP, hallazgo específico
-      → Guardar filtros como presets
+[x] Filtros y búsqueda avanzada
+      → Búsqueda por máquina, username, IP (ILIKE server-side)
+      → Filtrar por veredicto: pendiente / limpio / con hacks
+      → Filtrar por rango de fecha (desde / hasta)
+      → Guardar filtros como presets (localStorage)
+      → PENDIENTE: filtrar por país, OS, staff que escaneó
 
-[ ] Sistema de permisos de staff
-      → Roles: Owner / Admin / Moderador / Helper
-      → Helper solo puede ver scans, no cambiar veredictos
-      → Admin puede crear tokens, Moderador no
+[x] Sistema de permisos de staff
+      → Roles: Owner / Admin / Moderador / Helper (jerarquía en auth.py)
+      → Helper solo puede ver scans, no cambiar veredictos (403 en backend + oculto en UI)
+      → Admin puede crear tokens, Moderador no (403 en backend + botón oculto)
+      → Sección "Staff" en sidebar (solo Admin/Owner) con tabla de usuarios y selector de rol
+      → API GET /api/staff/users y PUT /api/staff/users/<id>/role
+      → STAFF_ROLE inyectado como JS global desde Flask template
 
 ── MEJORAS DEL SCANNER .EXE ──────────────────────────────────
 
@@ -86,15 +91,20 @@
       → Ofuscación del binario (PyInstaller + UPX + cambio de strings)
       → El jugador no debería poder saber qué está escaneando
 
-[ ] Captura de pantalla durante el scan
-      → Tomar screenshot al iniciar (para ver qué tenía abierto)
-      → Enviar imagen al panel junto con los resultados
-      → El staff puede ver la pantalla del momento del scan
+[x] Captura de pantalla durante el scan
+      → Scanner toma screenshot al enviar resultados (PIL.ImageGrab o mss)
+      → Envía como base64 JPEG (calidad 50) en el payload de resultados
+      → api_server.py almacena en columna screenshot TEXT de la tabla scans
+      → Panel muestra la imagen en la pestaña "Captura" del detalle del scan
 
-[ ] Mejor detección de Minecraft activo
-      → Detectar versión exacta de MC corriendo (1.8.9, 1.12.2, etc.)
-      → Detectar si hay mods cargados en tiempo real (JVM args)
-      → Detectar si el launcher es oficial, Lunar, Badlion, etc.
+[x] Mejor detección de Minecraft activo
+      → get_minecraft_active_info() en user_info_collector.py: detecta versión, launcher, mods, agentes Java
+      → Versión extraída de --version en cmdline de javaw.exe
+      → Launcher: Lunar, Badlion, Feather, Forge, Fabric, Quilt, OptiFine, Oficial
+      → Mods: lista .jar desde carpeta mods del --gameDir
+      → Agentes Java (-javaagent) detectados en cmdline
+      → mc_info almacenado como JSON en columna mc_info de scans table
+      → Panel muestra versión, launcher, mods y agentes en la sección de detalles del scan
 
 [ ] Base de datos de hashes de hacks en la nube
       → El servidor mantiene lista de SHA256 de hacks conocidos
@@ -137,8 +147,15 @@
       → Fix: polling cada 30s + badge + toast + auto-refresh del dashboard
 [ ] En resoluciones < 1200px la subnav puede hacer wrap en algunos browsers
 [x] REGRESIÓN: detalle de scan no cargaba ningún dato (Archivos: 0, Fecha: N/A, todo vacío)
-      → Causa: query de GET /api/scans/<id> pedía columnas verdict/* que no existían en BD de Render
-      → Fix: query principal sin columnas de veredicto + segundo query opcional que falla silenciosamente
+      → Causa raíz real: query opcional de verdict/screenshot/mc_info fallaba en psycopg2,
+        poniendo la conexión en "transaction aborted" — el SELECT de scan_results también fallaba
+      → Fix: SAVEPOINT alrededor de query opcional en get_scan() para no abortar la transacción
+      → Fix: ALTER TABLE en web_app/db_postgresql.py para verdict, screenshot, mc_info, scan_notes, verdict_history
+      → Fix: banner "Detectado" con display:flex !important → display:flex (ya no override JS)
+[x] Resultados llegan antes de que el scanner termine (scans con status='running' disparaban notificación)
+      → Fix: poll solo notifica badge/toast para scans 'completed'; running van a _pendingRunning
+      → Fix: viewScanDetails muestra "Scan en progreso..." si status='running'
+      → Fix: _resultBadge muestra badge "⏳ Escaneando" para running scans
 
 ================================================================
 Reediseñar todo el sistema de llegada de datos de scaneos a la página porque se ve
