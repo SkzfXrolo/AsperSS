@@ -1847,8 +1847,7 @@ def get_scan(scan_id):
                 cursor.execute(f'''
                     SELECT id, token_id, scan_token, started_at, completed_at, status,
                            total_files_scanned, total_dirs_scanned, issues_found, scan_duration,
-                           machine_id, machine_name, ip_address, country, minecraft_username,
-                           verdict, verdict_reason, verdict_by, verdict_at
+                           machine_id, machine_name, ip_address, country, minecraft_username
                     FROM scans
                     WHERE id = {_PH}
                 ''', (scan_id,))
@@ -1873,11 +1872,24 @@ def get_scan(scan_id):
                     'ip_address': _row_get(row, 12, 'ip_address'),
                     'country': _row_get(row, 13, 'country'),
                     'minecraft_username': _row_get(row, 14, 'minecraft_username'),
-                    'verdict': _row_get(row, 15, 'verdict'),
-                    'verdict_reason': _row_get(row, 16, 'verdict_reason'),
-                    'verdict_by': _row_get(row, 17, 'verdict_by'),
-                    'verdict_at': str(_row_get(row, 18, 'verdict_at') or ''),
+                    'verdict': None, 'verdict_reason': None,
+                    'verdict_by': None, 'verdict_at': '',
                 }
+
+                # Columnas de veredicto: query separado por si aún no existen en la BD
+                try:
+                    cursor.execute(f'''
+                        SELECT verdict, verdict_reason, verdict_by, verdict_at
+                        FROM scans WHERE id = {_PH}
+                    ''', (scan_id,))
+                    vrow = cursor.fetchone()
+                    if vrow:
+                        scan['verdict']        = _row_get(vrow, 0, 'verdict')
+                        scan['verdict_reason'] = _row_get(vrow, 1, 'verdict_reason')
+                        scan['verdict_by']     = _row_get(vrow, 2, 'verdict_by')
+                        scan['verdict_at']     = str(_row_get(vrow, 3, 'verdict_at') or '')
+                except Exception:
+                    pass  # columnas aún no migradas — ignorar
                 
                 # Obtener resultados
                 cursor.execute(f'''
