@@ -52,7 +52,6 @@
             </a>
 
             <div class="nav-group-label">HERRAMIENTAS</div>
-            {% if staff_role in ('moderador', 'admin', 'owner') %}
             <a href="/panel" class="nav-item" data-section="tokens">
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                     <path d="M11 3.5C12.933 3.5 14.5 5.067 14.5 7C14.5 8.933 12.933 10.5 11 10.5C10.18 10.5 9.426 10.22 8.83 9.75L4 14.5L3.5 14.5L3.5 12L5 12L5 10.5L6.5 10.5L6.5 9L8.25 9.17C8.04 8.49 7.5 6.93 7.5 7C7.5 5.067 9.067 3.5 11 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
@@ -60,7 +59,6 @@
                 </svg>
                 <span>Tokens</span>
             </a>
-            {% endif %}
             <a href="/panel" class="nav-item" data-section="generar-app">
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                     <path d="M9 2L9 12M5 8L9 12L13 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -381,14 +379,12 @@
         <section class="panel-section" id="tokens-section">
             <div class="section-header-actions">
                 <h2 class="section-subtitle">Gestión de Tokens</h2>
-                {% if staff_role in ('moderador', 'admin', 'owner') %}
                 <button class="btn btn-primary" id="create-token-btn">
                     <span>Crear Nuevo Token</span>
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                         <path d="M10 3L10 17M3 10L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                     </svg>
                 </button>
-                {% endif %}
             </div>
 
             <div class="tokens-table-container">
@@ -1435,7 +1431,7 @@
     // Permisos de staff inyectados desde Flask
     window.STAFF_ROLE     = "{{ staff_role }}";
     window.CAN_VERDICT    = {{ 'true' if staff_role in ('moderador','admin','owner') else 'false' }};
-    window.CAN_TOKENS     = {{ 'true' if staff_role in ('moderador','admin','owner') else 'false' }};
+    window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
     <script src="{{ url_for('static', filename='js/panel.js') }}"></script>
