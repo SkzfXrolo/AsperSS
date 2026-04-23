@@ -12,7 +12,7 @@
       → Subnav colapsado a solo íconos en móvil
       → Sidebar se cierra automáticamente al navegar
 
-[ ] Crear aplicación web móvil
+[x] Crear aplicación web móvil
       → PWA (Progressive Web App) con manifest.json y service worker
       → Instalable desde el navegador en Android/iOS
       → Notificaciones push cuando llega un scan nuevo
@@ -81,9 +81,9 @@
 
 ── MEJORAS DEL SCANNER .EXE ──────────────────────────────────
 
-[ ] Auto-actualización del scanner
-      → Al abrir, verificar si hay versión nueva en el servidor
-      → Descargar y reemplazarse automáticamente si hay update
+[x] Auto-actualización del scanner
+      → Al abrir, verificar si hay versión nueva en el servidor (/api/scanner/version)
+      → Descargar y reemplazarse automáticamente si hay update (bat script)
       → Mostrar changelog de la nueva versión
 
 [ ] Protección anti-detección del scanner
@@ -111,10 +111,13 @@
       → El scanner descarga la lista al iniciar (o usa API)
       → Detección 100% confiable por hash aunque el archivo esté renombrado
 
-[ ] Módulo de detección de macros de mouse/teclado
-      → Detectar AutoHotKey, Logitech GHUB scripts, Razer Synapse macros
-      → Revisar si hay clicks en intervalos perfectamente regulares (autoclicker)
-      → Analizar patrón de timing en historial de eventos del mouse
+[x] Módulo de detección de macros de mouse/teclado
+      → Detectar AutoHotKey procesos activos, scripts .ahk, registro instalación
+      → Logitech LGHUB settings.json: keywords click/macro/interval
+      → Razer Synapse3/Profiles: JSON/XML con keywords de macro
+      → DNS cache: ipconfig /displaydns cruzado con dominios de hacks conocidos
+      → Event Log EventID 4616: cambio de fecha del sistema
+      → JNA artifacts en %APPDATA%/%TEMP%
 
 [ ] Escaneo de memoria de procesos Java
       → Listar módulos cargados en la JVM de Minecraft
