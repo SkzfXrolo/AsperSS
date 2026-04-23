@@ -927,6 +927,31 @@ def is_company_user(user):
         return user.get('company_id') is not None
     return False
 
+# ── Staff role hierarchy ───────────────────────────────────────────────────
+STAFF_ROLE_HIERARCHY = ['helper', 'moderador', 'admin', 'owner']
+
+def get_staff_role(user):
+    """Returns the highest staff role the user holds. Defaults to 'helper'."""
+    roles = user.get('roles', []) if isinstance(user, dict) else []
+    for role in reversed(STAFF_ROLE_HIERARCHY):
+        if role in roles:
+            return role
+    if is_admin(user):
+        return 'admin'
+    return 'helper'
+
+def _staff_level(user):
+    return STAFF_ROLE_HIERARCHY.index(get_staff_role(user))
+
+def can_change_verdict(user):
+    return _staff_level(user) >= STAFF_ROLE_HIERARCHY.index('moderador')
+
+def can_manage_tokens(user):
+    return _staff_level(user) >= STAFF_ROLE_HIERARCHY.index('admin')
+
+def can_manage_staff(user):
+    return _staff_level(user) >= STAFF_ROLE_HIERARCHY.index('admin')
+
 def list_registration_tokens(include_used=False, company_id=None):
     """Lista tokens de registro, opcionalmente filtrados por empresa."""
     try:

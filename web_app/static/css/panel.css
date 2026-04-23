@@ -725,6 +725,45 @@ body.light-theme .sidebar {
 
 .filter-select option { background: var(--bg-3); }
 
+/* Scans filter bar */
+.scans-filter-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.filter-input {
+    padding: 8px 12px;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-h);
+    font-size: 13px;
+    transition: var(--trans);
+}
+.filter-input:focus {
+    outline: none;
+    border-color: var(--border-h);
+    box-shadow: 0 0 0 3px rgba(139,92,246,0.07);
+}
+.filter-input::placeholder { color: var(--text-d); }
+#filter-search { flex: 1; min-width: 180px; }
+.filter-date { width: 140px; }
+.filter-preset-group { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+.filter-preset-select { min-width: 120px; }
+
+@media (max-width: 768px) {
+    .scans-filter-bar { flex-direction: column; align-items: stretch; }
+    #filter-search, .filter-date, .filter-preset-group { width: 100%; min-width: unset; }
+    .filter-preset-group { margin-left: 0; }
+}
+
 /* ══════════════════════════════════════════════
    BADGES
 ══════════════════════════════════════════════ */
@@ -747,6 +786,10 @@ body.light-theme .sidebar {
 .badge-critical  { background: var(--red-bg);    color: var(--red);    border: 1px solid rgba(244,63,94,0.25); }
 .badge-suspicious{ background: var(--yellow-bg); color: var(--yellow); border: 1px solid rgba(251,191,36,0.25); }
 .badge-info      { background: var(--accent-bg); color: var(--accent); border: 1px solid rgba(139,92,246,0.20); }
+.badge-danger    { background: rgba(239,68,68,0.12);  color: #ef4444; border: 1px solid rgba(239,68,68,0.25); }
+.badge-warning   { background: rgba(245,158,11,0.12); color: #f59e0b; border: 1px solid rgba(245,158,11,0.25); }
+.badge-secondary { background: rgba(100,116,139,0.12);color: #94a3b8; border: 1px solid rgba(100,116,139,0.20); }
+.badge-success   { background: var(--green-bg);  color: var(--green);  border: 1px solid rgba(16,185,129,0.20); }
 
 /* ══════════════════════════════════════════════
    BUTTONS
@@ -2192,7 +2235,7 @@ body.light-theme .avatar-online {
 
 /* ── Echo Detection Banner ── */
 .echo-detection-banner {
-    display: flex !important;
+    display: flex;
     align-items: center;
     gap: 16px;
     padding: 16px 22px;
