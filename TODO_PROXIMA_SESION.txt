@@ -134,16 +134,20 @@
       → Fases A-G ya corren en paralelo (7 workers)
 
 ── INFRAESTRUCTURA / BACKEND ─────────────────────────────────
-[ ] Bot de Discord oficial
-      → Comandos slash: /scan @jugador, /veredicto <id>, /stats
-      → Notificación automática en canal cuando llega scan nuevo
+[x] Bot de Discord oficial
+      → discord_bot.py: slash commands /scan, /veredicto, /stats
+      → Notificación automática embed cuando llega scan nuevo (notify_new_scan)
       → El staff puede marcar veredicto directamente desde Discord
+      → Arranca en daemon thread si DISCORD_TOKEN está en env vars
+      → Variables: DISCORD_TOKEN, DISCORD_GUILD, DISCORD_CHANNEL
 
 ================================================================
   BUGS CONOCIDOS A REVISAR
 ================================================================
 
-[ ] La barra de progreso a veces salta de golpe en vez de animar suave
+[x] La barra de progreso a veces salta de golpe en vez de animar suave
+      → Fix: closure bug — update_ui(v=next_value) captura por valor
+      → Fix: callbacks acumulados en root.after() ahora usan el valor correcto
 [x] El username del jugador aparece como "No detectado" a veces
       → Fix: soporte minecraftProfile.name (cuentas Microsoft modernas)
       → Fix: cuenta activa prioritizada con activeAccountLocalId
