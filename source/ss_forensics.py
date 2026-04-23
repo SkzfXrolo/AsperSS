@@ -94,6 +94,7 @@ class SSForensics:
             self._scan_autohotkey,
             self._scan_event_log_time_change,
             self._scan_jna_artifacts,
+            self._scan_java_process_memory,
         ]
         for fn in methods:
             try:
@@ -1210,6 +1211,74 @@ class SSForensics:
                                 ),
                             })
                 except Exception:
+                    continue
+        except Exception:
+            pass
+        return findings
+
+    def _scan_java_process_memory(self):
+        findings = []
+        SUSPICIOUS_AGENTS = [
+            'wurst', 'meteor', 'aristois', 'liquidbounce', 'sigma', 'inertia', 'impact',
+            'wolfram', 'novoline', 'rise', 'flux', 'drip', 'ghostclient', 'lucid',
+            'mixinbooter', 'mixin', 'optifine', 'fabricloader',
+        ]
+        SUSPICIOUS_DLLS = [
+            'hook', 'inject', 'cheat', 'hack', 'bypass', 'aimbot', 'esp',
+            'triggerbot', 'blatant', 'ghost',
+        ]
+        try:
+            import psutil
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'exe']):
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                    if 'javaw' not in pname and 'java.exe' not in pname:
+                        continue
+                    cmdline = proc.info.get('cmdline') or []
+                    cmdline_str = ' '.join(cmdline).lower()
+
+                    # Detect -javaagent flags pointing to suspicious agents
+                    for part in cmdline:
+                        if '-javaagent' in part.lower():
+                            agent_path = part.lower()
+                            matched = [a for a in SUSPICIOUS_AGENTS if a in agent_path]
+                            findings.append({
+                                'tipo':        'JAVA_AGENT_DETECTED',
+                                'nombre':      f'Java agent sospechoso: {part}',
+                                'ruta':        f'PID {proc.pid}',
+                                'detalle':     part,
+                                'alerta':      'MUY_SOSPECHOSO' if matched else 'SOSPECHOSO',
+                                'categoria':   'JAVA_MEMORY',
+                                'descripcion': (
+                                    f'Proceso Java (PID {proc.pid}) cargó un -javaagent: {part}. '
+                                    + (f'Coincide con: {", ".join(matched)}.' if matched else '')
+                                ),
+                            })
+
+                    # Inspect loaded DLLs via psutil memory maps
+                    try:
+                        for mmap in proc.memory_maps():
+                            path_lower = mmap.path.lower()
+                            if not path_lower.endswith('.dll'):
+                                continue
+                            matched_dll = [kw for kw in SUSPICIOUS_DLLS if kw in path_lower]
+                            if matched_dll:
+                                findings.append({
+                                    'tipo':        'SUSPICIOUS_DLL_INJECTED',
+                                    'nombre':      f'DLL sospechosa en JVM: {mmap.path}',
+                                    'ruta':        f'PID {proc.pid}',
+                                    'detalle':     mmap.path,
+                                    'alerta':      'MUY_SOSPECHOSO',
+                                    'categoria':   'JAVA_MEMORY',
+                                    'descripcion': (
+                                        f'DLL con nombre sospechoso "{mmap.path}" cargada en proceso '
+                                        f'Java (PID {proc.pid}). Keywords: {", ".join(matched_dll)}.'
+                                    ),
+                                })
+                    except (psutil.AccessDenied, psutil.NoSuchProcess):
+                        pass
+
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     continue
         except Exception:
             pass

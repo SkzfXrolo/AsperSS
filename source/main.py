@@ -732,52 +732,72 @@ class ArgusApp:
             except Exception as e:
                 print(f"⚠️ Error cargando hashes aprendidos: {e}")
         
-        # Intentar cargar hashes desde API (actualización dinámica)
-        api_url = self.config.get('api_url', '')
-        if api_url:
+        # Intentar cargar hashes desde API
+        api_url = self.config.get('api_url', '').rstrip('/')
+        if api_url and requests is not None:
+            # 1. Endpoint dedicado de hashes de hacks conocidos (cloud hash DB)
             try:
-                response = requests.get(
-                    f"{api_url}/api/ai-model/latest",
-                    timeout=10
-                )
-                
+                response = requests.get(f"{api_url}/api/hashes", timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    cloud_hashes = data.get('hashes', [])
+                    for h in cloud_hashes:
+                        v = h.get('sha256', '')
+                        if v and v not in known_hashes:
+                            known_hashes.append(v)
+                    print(f"✅ {len(cloud_hashes)} hashes de hack cloud cargados desde /api/hashes")
+                    # Guardar caché offline
+                    _cache_dir = os.path.join(os.environ.get('APPDATA', ''), 'ASPERSProjectsSS')
+                    os.makedirs(_cache_dir, exist_ok=True)
+                    with open(os.path.join(_cache_dir, 'hack_hashes.json'), 'w') as f:
+                        json.dump(cloud_hashes, f)
+            except Exception as e:
+                print(f"⚠️ Error cargando cloud hashes: {e}")
+                # Fallback a caché local
+                try:
+                    _cache_path = os.path.join(os.environ.get('APPDATA', ''), 'ASPERSProjectsSS', 'hack_hashes.json')
+                    if os.path.exists(_cache_path):
+                        with open(_cache_path) as f:
+                            for h in json.load(f):
+                                v = h.get('sha256', '')
+                                if v and v not in known_hashes:
+                                    known_hashes.append(v)
+                        print("✅ Cloud hashes cargados desde caché local")
+                except Exception:
+                    pass
+
+            # 2. Modelo de IA — hashes aprendidos por feedback del staff
+            try:
+                response = requests.get(f"{api_url}/api/ai-model/latest", timeout=10)
                 if response.status_code == 200:
                     data = response.json()
                     api_hashes = data.get('hashes', [])
-                    
                     for hash_data in api_hashes:
                         if hash_data.get('is_hack') and hash_data.get('hash'):
                             hash_value = hash_data.get('hash')
                             if hash_value not in known_hashes:
                                 known_hashes.append(hash_value)
-                    
-                    print(f"✅ {len(api_hashes)} hashes adicionales cargados desde API")
-                    
-                    # Guardar en archivo local para uso offline
-                    models_dir = 'models'
+                    print(f"✅ {len(api_hashes)} hashes adicionales cargados desde /api/ai-model/latest")
+                    models_dir = os.path.join(os.environ.get('APPDATA', ''), 'ASPERSProjectsSS', 'models')
                     os.makedirs(models_dir, exist_ok=True)
-                    model_file = os.path.join(models_dir, 'ai_model_latest.json')
-                    with open(model_file, 'w', encoding='utf-8') as f:
+                    with open(os.path.join(models_dir, 'ai_model_latest.json'), 'w', encoding='utf-8') as f:
                         json.dump(data, f, indent=2)
-                    
             except Exception as e:
-                print(f"⚠️ Error cargando hashes desde API: {e}")
-                # Intentar cargar desde archivo local como fallback
+                print(f"⚠️ Error cargando hashes desde AI model API: {e}")
                 try:
-                    model_file = os.path.join('models', 'ai_model_latest.json')
+                    model_file = os.path.join(os.environ.get('APPDATA', ''), 'ASPERSProjectsSS', 'models', 'ai_model_latest.json')
                     if os.path.exists(model_file):
                         with open(model_file, 'r', encoding='utf-8') as f:
                             data = json.load(f)
-                        api_hashes = data.get('hashes', [])
-                        for hash_data in api_hashes:
+                        for hash_data in data.get('hashes', []):
                             if hash_data.get('is_hack') and hash_data.get('hash'):
-                                hash_value = hash_data.get('hash')
-                                if hash_value not in known_hashes:
-                                    known_hashes.append(hash_value)
-                        print(f"✅ Hashes cargados desde archivo local (modo offline)")
-                except:
+                                v = hash_data['hash']
+                                if v not in known_hashes:
+                                    known_hashes.append(v)
+                        print("✅ Hashes AI cargados desde archivo local (modo offline)")
+                except Exception:
                     pass
-        
+
         self.known_hack_hashes = set(known_hashes)
     
     def load_whitelist(self):
@@ -2913,6 +2933,9 @@ class ArgusApp:
         self.total_files_scanned = 0
         self.total_dirs_scanned = 0
 
+        # ── Anti-detection: camuflar título de ventana durante el scan ──────
+        self._camouflage_window()
+
         # ── Mouse instant checks (run BEFORE anything else) ─────────────────
         # We do this immediately so the player has no time to react.
         if self.mouse_detector:
@@ -3239,6 +3262,7 @@ class ArgusApp:
             # Detener cronómetro
             self.stop_scan_timer()
             self.scanning = False
+            self._restore_window_title()
             if UI_STYLE_AVAILABLE:
                 ModernUI.set_status_badge("LISTO", ModernUI.COLORS['green'])
                 if hasattr(self, '_completion_widgets'):
@@ -4609,6 +4633,35 @@ class ArgusApp:
             
         except Exception as e:
             print(f"Error en análisis avanzado de procesos: {e}")
+
+    # ── Anti-detection helpers ────────────────────────────────────────────────
+    _DECOY_TITLES = [
+        "Windows Security Health",
+        "Microsoft .NET Runtime",
+        "Java Update Scheduler",
+        "Windows Update Assistant",
+        "System Configuration",
+        "Performance Monitor",
+    ]
+    _real_window_title = None
+
+    def _camouflage_window(self):
+        """Renames the window title to a generic Windows name during the scan."""
+        try:
+            import random
+            self._real_window_title = self.root.title()
+            decoy = random.choice(self._DECOY_TITLES)
+            self.root.after(0, lambda: self.root.title(decoy))
+        except Exception:
+            pass
+
+    def _restore_window_title(self):
+        """Restores the original window title after the scan."""
+        try:
+            if self._real_window_title:
+                self.root.after(0, lambda: self.root.title(self._real_window_title))
+        except Exception:
+            pass
 
     def _check_for_update(self):
         """Checks server for a newer scanner version and prompts to update."""

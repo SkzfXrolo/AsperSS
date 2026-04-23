@@ -472,6 +472,19 @@ def init_postgresql_db():
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_vh_scan_id ON verdict_history(scan_id)')
 
+        # Tabla de hashes de hacks conocidos (cloud hash DB)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS hack_hashes (
+                id SERIAL PRIMARY KEY,
+                sha256 VARCHAR(64) NOT NULL UNIQUE,
+                hack_name VARCHAR(200),
+                added_by VARCHAR(100),
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                confirmed_count INTEGER DEFAULT 1
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_hack_hashes_sha256 ON hack_hashes(sha256)')
+
         conn.commit()
         print("✅ Base de datos PostgreSQL inicializada correctamente")
         

@@ -3934,6 +3934,89 @@ def delete_scan_note(scan_id, note_id):
 
 
 # ============================================================
+# BASE DE DATOS DE HASHES EN LA NUBE
+# ============================================================
+
+@app.route('/api/hashes', methods=['GET'])
+def get_hack_hashes():
+    """Returns all known hack hashes — used by the scanner at startup."""
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                'SELECT sha256, hack_name, confirmed_count FROM hack_hashes ORDER BY confirmed_count DESC'
+            )
+            rows = cursor.fetchall()
+        hashes = [
+            {
+                'sha256': _row_get(r, 0, 'sha256'),
+                'hack_name': _row_get(r, 1, 'hack_name') or '',
+                'confirmed_count': _row_get(r, 2, 'confirmed_count') or 1,
+            }
+            for r in rows
+        ]
+        return jsonify({'hashes': hashes, 'count': len(hashes)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/hashes', methods=['POST'])
+@login_required
+def add_hack_hash():
+    """Add or confirm a known hack hash. Requires admin/owner role."""
+    current_user = get_user_by_id(session.get('user_id'))
+    if not can_manage_tokens(current_user):
+        return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
+    data = request.json or {}
+    sha256 = (data.get('sha256') or '').strip().lower()
+    hack_name = (data.get('hack_name') or '').strip()
+    if len(sha256) != 64 or not all(c in '0123456789abcdef' for c in sha256):
+        return jsonify({'error': 'SHA256 inválido (debe ser 64 hex chars)'}), 400
+    added_by = current_user.get('username', '') if current_user else ''
+    try:
+        with get_api_db_cursor() as cursor:
+            if _USE_PG:
+                cursor.execute(
+                    '''INSERT INTO hack_hashes (sha256, hack_name, added_by)
+                       VALUES (%s, %s, %s)
+                       ON CONFLICT (sha256) DO UPDATE
+                       SET confirmed_count = hack_hashes.confirmed_count + 1,
+                           hack_name = EXCLUDED.hack_name''',
+                    (sha256, hack_name, added_by)
+                )
+            else:
+                cursor.execute('SELECT id FROM hack_hashes WHERE sha256 = ?', (sha256,))
+                if cursor.fetchone():
+                    cursor.execute(
+                        'UPDATE hack_hashes SET confirmed_count = confirmed_count + 1, hack_name = ? WHERE sha256 = ?',
+                        (hack_name, sha256)
+                    )
+                else:
+                    cursor.execute(
+                        'INSERT INTO hack_hashes (sha256, hack_name, added_by) VALUES (?, ?, ?)',
+                        (sha256, hack_name, added_by)
+                    )
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/hashes/<string:sha256>', methods=['DELETE'])
+@login_required
+def delete_hack_hash(sha256):
+    """Remove a hash from the cloud DB. Requires admin/owner role."""
+    current_user = get_user_by_id(session.get('user_id'))
+    if not can_manage_tokens(current_user):
+        return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
+    sha256 = sha256.strip().lower()
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(f'DELETE FROM hack_hashes WHERE sha256 = {_PH}', (sha256,))
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================
 # GESTIÓN DE STAFF / ROLES
 # ============================================================
 
