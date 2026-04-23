@@ -1634,6 +1634,19 @@ def debug_last_scan():
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
+# Current released scanner version — update this when distributing a new build
+CURRENT_SCANNER_VERSION = "1.3.0"
+
+@app.route('/api/scanner/version', methods=['GET'])
+def scanner_version():
+    """Returns latest scanner version info so the .exe can self-update."""
+    return jsonify({
+        'version': CURRENT_SCANNER_VERSION,
+        'download_url': '',   # fill in the direct .exe URL when hosting a new build
+        'changelog': '',
+    })
+
+
 @app.route('/api/scans', methods=['POST'])
 def start_scan():
     """Inicia un nuevo escaneo (usado por el cliente .exe) — sin login requerido"""

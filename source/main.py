@@ -54,6 +54,8 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
+SCANNER_VERSION = "1.3.0"
+
 class DetallesVentana:
     """Ventana avanzada para mostrar detalles con gráfico y 4 niveles"""
     def __init__(self, parent, archivos_sospechosos):
@@ -491,12 +493,18 @@ class ArgusApp:
             error_msg = f"Error en autenticación: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
             try:
-                messagebox.showerror("Error de Autenticación", 
+                messagebox.showerror("Error de Autenticación",
                     f"Hubo un error en el sistema de autenticación.\n\n{str(e)}\n\nLa aplicación continuará sin autenticación.")
             except:
                 pass
             # Continuar sin autenticación para permitir debugging
-        
+
+        # Verificar actualizaciones en background
+        try:
+            threading.Thread(target=self._check_for_update, daemon=True).start()
+        except Exception:
+            pass
+
         # Variables
         self.scanning = False
         self.issues_found = []
@@ -4601,7 +4609,70 @@ class ArgusApp:
             
         except Exception as e:
             print(f"Error en análisis avanzado de procesos: {e}")
-    
+
+    def _check_for_update(self):
+        """Checks server for a newer scanner version and prompts to update."""
+        try:
+            if requests is None:
+                return
+            api_url = self.config.get('api_url', 'https://asperss.onrender.com').rstrip('/')
+            resp = requests.get(f"{api_url}/api/scanner/version", timeout=8)
+            if resp.status_code != 200:
+                return
+            data = resp.json()
+            latest = data.get('version', '')
+            download_url = data.get('download_url', '')
+            changelog = data.get('changelog', '')
+            if not latest or not download_url:
+                return
+            if latest <= SCANNER_VERSION:
+                return
+            # Show update dialog on main thread
+            self.root.after(0, lambda: self._show_update_dialog(latest, download_url, changelog))
+        except Exception as e:
+            print(f"[UPDATE] check failed: {e}")
+
+    def _show_update_dialog(self, latest_version, download_url, changelog):
+        """Shows update available dialog and downloads+replaces the exe if user accepts."""
+        import tkinter as tk
+        msg = f"Nueva versión disponible: v{latest_version}\nActual: v{SCANNER_VERSION}"
+        if changelog:
+            msg += f"\n\nCambios:\n{changelog}"
+        msg += "\n\n¿Descargar e instalar ahora?"
+        if not messagebox.askyesno("Actualización disponible", msg):
+            return
+        # Download in background
+        threading.Thread(
+            target=self._download_and_replace,
+            args=(download_url,),
+            daemon=True
+        ).start()
+
+    def _download_and_replace(self, download_url):
+        """Downloads new exe to a temp file and relaunches via a batch script."""
+        try:
+            import tempfile, urllib.request
+            exe_path = sys.executable  # path to the current .exe
+            tmp_path = exe_path + '.new'
+            messagebox.showinfo("Descargando...", "Descargando actualización. La aplicación se reiniciará al terminar.")
+            urllib.request.urlretrieve(download_url, tmp_path)
+            # Write a .bat that waits for this process to exit, replaces, then relaunches
+            bat_content = (
+                f'@echo off\n'
+                f'timeout /t 2 /nobreak >nul\n'
+                f'move /Y "{tmp_path}" "{exe_path}"\n'
+                f'start "" "{exe_path}"\n'
+                f'del "%~f0"\n'
+            )
+            bat_path = exe_path + '_update.bat'
+            with open(bat_path, 'w') as f:
+                f.write(bat_content)
+            import subprocess as _sp
+            _sp.Popen(['cmd', '/c', bat_path], creationflags=0x08000000)
+            self.root.after(0, self.root.destroy)
+        except Exception as e:
+            self.root.after(0, lambda: messagebox.showerror("Error de actualización", str(e)))
+
     def check_authentication(self):
         """Sistema de autenticación usando Discord para generar tokens"""
         try:
