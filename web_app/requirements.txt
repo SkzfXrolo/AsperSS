@@ -6,4 +6,5 @@ pymysql==1.1.0
 cryptography==41.0.7
 psycopg2-binary>=2.9.9
 discord.py>=2.3.0
+fpdf2>=2.7.9
 

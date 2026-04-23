@@ -449,6 +449,14 @@
                 </select>
                 <input type="date" class="filter-input filter-date" id="filter-date-from" title="Desde">
                 <input type="date" class="filter-input filter-date" id="filter-date-to" title="Hasta">
+                <input type="text" class="filter-input" id="filter-country" placeholder="País..." style="max-width:110px;"
+                       onkeydown="if(event.key==='Enter')applyFilters()">
+                <select class="filter-select" id="filter-risk" style="min-width:130px;">
+                    <option value="">Todos los riesgos</option>
+                    <option value="hack">HACK (70+)</option>
+                    <option value="suspicious">Sospechoso (30-69)</option>
+                    <option value="clean">Limpio (0-29)</option>
+                </select>
                 <button class="btn btn-primary btn-sm" onclick="applyFilters()">Buscar</button>
                 <button class="btn btn-ghost btn-sm" onclick="clearFilters()" title="Limpiar filtros">✕</button>
                 <div class="filter-preset-group">
@@ -502,6 +510,9 @@
                     </button>
                     <button class="btn btn-secondary" id="export-csv-btn" onclick="exportScanCSV()" style="font-size:12px;padding:7px 14px;">
                         📊 CSV
+                    </button>
+                    <button class="btn btn-secondary" id="export-pdf-btn" onclick="exportScanPDF()" style="font-size:12px;padding:7px 14px;">
+                        📄 PDF
                     </button>
                 </div>
             </div>

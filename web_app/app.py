@@ -1752,7 +1752,9 @@ def _calculate_risk_score(results):
         'usn_journal':      30,
         'prefetch':         35,
         'vm':               15,
+        'debugger':         55,
         'process_hacker':   40,
+        'explorer_suspicious': 60,
     }
 
     ALERT_SCORES = {
@@ -1920,8 +1922,10 @@ def list_scans():
     date_from   = (request.args.get('date_from') or '').strip()
     date_to     = (request.args.get('date_to') or '').strip()
     machine_name_f = (request.args.get('machine_name') or '').strip()
+    country_f   = (request.args.get('country') or '').strip()
+    risk_f      = (request.args.get('risk') or '').strip().lower()  # hack|suspicious|clean
 
-    has_filters = bool(search or verdict_f or date_from or date_to or machine_name_f)
+    has_filters = bool(search or verdict_f or date_from or date_to or machine_name_f or country_f or risk_f)
 
     # Caché solo cuando no hay filtros activos
     cache_key = f'scans_list_{limit}_{offset}'
@@ -1955,6 +1959,15 @@ def list_scans():
                 if date_to:
                     conditions.append(f'started_at <= {_PH}')
                     params.append(date_to + ' 23:59:59')
+                if country_f:
+                    conditions.append(f'country ILIKE {_PH}')
+                    params.append(f'%{country_f}%')
+                if risk_f == 'hack':
+                    conditions.append(f'risk_score >= 70')
+                elif risk_f == 'suspicious':
+                    conditions.append(f'risk_score >= 30 AND risk_score < 70')
+                elif risk_f == 'clean':
+                    conditions.append(f'risk_score < 30')
                 where = ('WHERE ' + ' AND '.join(conditions)) if conditions else ''
                 params += [limit, offset]
 
@@ -3907,6 +3920,195 @@ def export_scan_csv(scan_id):
         return Response(
             csv_bytes,
             mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/scans/<int:scan_id>/export/pdf', methods=['GET'])
+@login_required
+def export_scan_pdf(scan_id):
+    """Exporta el reporte de un escaneo como PDF con logo ASPERS Projects."""
+    try:
+        from fpdf import FPDF
+    except ImportError:
+        return jsonify({'error': 'fpdf2 no instalado en el servidor'}), 501
+
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f'SELECT id, machine_name, minecraft_username, started_at, completed_at,'
+                f' status, total_files_scanned, issues_found, scan_duration,'
+                f' ip_address, country, verdict, verdict_reason, verdict_by, risk_score'
+                f' FROM scans WHERE id = {_PH}',
+                (scan_id,)
+            )
+            scan_row = cursor.fetchone()
+            if not scan_row:
+                return jsonify({'error': 'Escaneo no encontrado'}), 404
+
+            def g(i, k): return _row_get(scan_row, i, k) or ''
+            machine    = str(g(1, 'machine_name') or 'desconocido')
+            username   = str(g(2, 'minecraft_username') or 'No detectado')
+            started    = str(g(3, 'started_at') or '')[:19]
+            completed  = str(g(4, 'completed_at') or '')[:19]
+            status_val = str(g(5, 'status') or 'completed')
+            files_n    = int(g(6, 'total_files_scanned') or 0)
+            issues_n   = int(g(7, 'issues_found') or 0)
+            duration   = int(g(8, 'scan_duration') or 0)
+            ip_addr    = str(g(9, 'ip_address') or 'N/A')
+            country    = str(g(10, 'country') or 'N/A')
+            verdict_v  = str(g(11, 'verdict') or 'pendiente')
+            verdict_r  = str(g(12, 'verdict_reason') or '')
+            verdict_by = str(g(13, 'verdict_by') or '')
+            risk_score = int(g(14, 'risk_score') or 0)
+
+            cursor.execute(
+                f'SELECT issue_type, issue_name, issue_path, issue_category, alert_level, confidence'
+                f' FROM scan_results WHERE scan_id = {_PH}'
+                f' ORDER BY CASE alert_level WHEN \'CRITICAL\' THEN 0 WHEN \'SOSPECHOSO\' THEN 1'
+                f' WHEN \'MUY_SOSPECHOSO\' THEN 2 ELSE 3 END',
+                (scan_id,)
+            )
+            results = cursor.fetchall()
+
+        # ── Build PDF ──
+        class _PDF(FPDF):
+            def header(self):
+                self.set_font('Helvetica', 'B', 10)
+                self.set_fill_color(13, 17, 36)
+                self.rect(0, 0, 210, 18, 'F')
+                self.set_text_color(139, 92, 246)
+                self.set_xy(8, 4)
+                self.cell(0, 10, 'ASPERS PROJECTS  |  REPORTE DE SS', ln=False)
+                self.set_text_color(100, 100, 120)
+                self.set_xy(0, 4)
+                self.cell(200, 10, f'Scan #{scan_id}', align='R')
+                self.set_text_color(0, 0, 0)
+                self.ln(14)
+
+            def footer(self):
+                self.set_y(-12)
+                self.set_font('Helvetica', 'I', 8)
+                self.set_text_color(150, 150, 170)
+                self.cell(0, 8, f'ASPERS Projects  |  Pagina {self.page_no()}  |  Confidencial', align='C')
+
+        pdf = _PDF()
+        pdf.set_auto_page_break(auto=True, margin=16)
+        pdf.add_page()
+        pdf.set_margins(14, 20, 14)
+
+        # Accent bar
+        pdf.set_fill_color(139, 92, 246)
+        pdf.rect(14, 22, 2, 12, 'F')
+
+        # Title
+        pdf.set_xy(18, 22)
+        pdf.set_font('Helvetica', 'B', 16)
+        pdf.set_text_color(20, 20, 50)
+        pdf.cell(0, 8, f'Reporte de Escaneo — {machine}', ln=True)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.set_text_color(100, 100, 130)
+        pdf.set_x(18)
+        pdf.cell(0, 6, f'Usuario: {username}  |  Scan ID: {scan_id}  |  {started}', ln=True)
+        pdf.ln(4)
+
+        # Verdict banner
+        VERDICT_COLORS = {
+            'hack':     (220, 38, 38),
+            'clean':    (16, 185, 129),
+            'pendiente': (100, 116, 139),
+        }
+        vc = VERDICT_COLORS.get(verdict_v.lower(), (100, 116, 139))
+        pdf.set_fill_color(*vc)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font('Helvetica', 'B', 11)
+        verdict_label = {'hack': 'CON HACKS', 'clean': 'LIMPIO', 'pendiente': 'PENDIENTE'}.get(verdict_v.lower(), verdict_v.upper())
+        pdf.cell(0, 10, f'  Veredicto: {verdict_label}', fill=True, ln=True)
+        if verdict_r:
+            pdf.set_fill_color(240, 240, 248)
+            pdf.set_text_color(60, 60, 90)
+            pdf.set_font('Helvetica', 'I', 9)
+            pdf.cell(0, 7, f'  Razon: {verdict_r}  (por {verdict_by})', fill=True, ln=True)
+        pdf.ln(5)
+
+        # Summary grid
+        def _info_row(label, value, color=(30, 30, 60)):
+            pdf.set_font('Helvetica', 'B', 9)
+            pdf.set_text_color(100, 100, 130)
+            pdf.cell(48, 7, label + ':', ln=False)
+            pdf.set_font('Helvetica', '', 9)
+            pdf.set_text_color(*color)
+            pdf.cell(0, 7, str(value), ln=True)
+
+        mins, secs = divmod(duration, 60)
+        dur_str = f'{mins}m {secs}s' if mins else f'{secs}s'
+        risk_label = 'HACK' if risk_score >= 70 else 'Sospechoso' if risk_score >= 30 else 'Limpio'
+
+        _info_row('Maquina',          machine)
+        _info_row('IP / Pais',        f'{ip_addr}  /  {country}')
+        _info_row('Inicio',           started)
+        _info_row('Fin',              completed or 'En curso')
+        _info_row('Archivos escaneados', f'{files_n:,}')
+        _info_row('Hallazgos',        issues_n)
+        _info_row('Duracion',         dur_str)
+        _info_row('Risk Score',       f'{risk_score}/100  ({risk_label})',
+                  color=(180, 30, 30) if risk_score >= 70 else (200, 130, 0) if risk_score >= 30 else (16, 140, 90))
+        pdf.ln(6)
+
+        # Issues table
+        if results:
+            pdf.set_font('Helvetica', 'B', 11)
+            pdf.set_text_color(20, 20, 50)
+            pdf.cell(0, 8, f'Hallazgos ({len(results)})', ln=True)
+            pdf.ln(1)
+
+            # Table header
+            ALERT_BG = {
+                'CRITICAL':        (220, 38, 38),
+                'SOSPECHOSO':      (245, 158, 11),
+                'MUY_SOSPECHOSO':  (234, 88, 12),
+                'POCO_SOSPECHOSO': (99, 102, 241),
+            }
+            col_w = [28, 72, 28, 22, 20]
+            headers = ['Nivel', 'Nombre', 'Categoria', 'Tipo', 'Conf%']
+            pdf.set_fill_color(13, 17, 36)
+            pdf.set_text_color(200, 200, 220)
+            pdf.set_font('Helvetica', 'B', 8)
+            for h, w in zip(headers, col_w):
+                pdf.cell(w, 7, h, border=0, fill=True, ln=False)
+            pdf.ln(7)
+
+            pdf.set_font('Helvetica', '', 8)
+            for i, r in enumerate(results):
+                alert = str(_row_get(r, 4, 'alert_level') or '')
+                name  = str(_row_get(r, 1, 'issue_name') or '')[:55]
+                cat   = str(_row_get(r, 3, 'issue_category') or '')[:18]
+                tipo  = str(_row_get(r, 0, 'issue_type') or '')[:14]
+                conf  = str(_row_get(r, 5, 'confidence') or 0)
+                bg = ALERT_BG.get(alert, (180, 180, 200))
+                pdf.set_fill_color(*bg)
+                pdf.set_text_color(255, 255, 255)
+                pdf.cell(col_w[0], 6, alert[:14], fill=True, ln=False)
+                fill_alt = i % 2 == 0
+                pdf.set_fill_color(248, 248, 252) if fill_alt else pdf.set_fill_color(255, 255, 255)
+                pdf.set_text_color(30, 30, 60)
+                pdf.cell(col_w[1], 6, name, fill=fill_alt, ln=False)
+                pdf.cell(col_w[2], 6, cat, fill=fill_alt, ln=False)
+                pdf.cell(col_w[3], 6, tipo, fill=fill_alt, ln=False)
+                pdf.cell(col_w[4], 6, conf + '%', fill=fill_alt, ln=True)
+        else:
+            pdf.set_font('Helvetica', 'I', 10)
+            pdf.set_text_color(100, 120, 150)
+            pdf.cell(0, 8, 'Sin hallazgos en este escaneo.', ln=True)
+
+        pdf_bytes = bytes(pdf.output())
+        safe_machine = ''.join(c for c in machine if c.isalnum() or c in '-_')
+        filename = f'ss_scan_{scan_id}_{safe_machine}.pdf'
+        return Response(
+            pdf_bytes,
+            mimetype='application/pdf',
             headers={'Content-Disposition': f'attachment; filename="{filename}"'}
         )
     except Exception as e:

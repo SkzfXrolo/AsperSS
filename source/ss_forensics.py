@@ -102,6 +102,8 @@ class SSForensics:
             self._scan_recentdocs,
             self._scan_runmru,
             self._scan_amcache,
+            self._scan_vm_detection,
+            self._scan_explorer_strings,
         ]
         for fn in methods:
             try:
@@ -1617,6 +1619,176 @@ class SSForensics:
                             })
                     except OSError:
                         break
+        except Exception:
+            pass
+        return findings
+
+    # =========================================================================
+    # 29. VM / DEBUGGER DETECTION
+    # =========================================================================
+
+    def _scan_vm_detection(self):
+        """Detecta entornos virtualizados y debuggers activos."""
+        findings = []
+        VM_REGISTRY = [
+            (winreg.HKEY_LOCAL_MACHINE, r'SOFTWARE\VMware, Inc.\VMware Tools',           'VMware'),
+            (winreg.HKEY_LOCAL_MACHINE, r'SOFTWARE\Oracle\VirtualBox Guest Additions',   'VirtualBox'),
+            (winreg.HKEY_LOCAL_MACHINE, r'SOFTWARE\Microsoft\Virtual Machine\Guest\Parameters', 'Hyper-V'),
+        ]
+        detected_vms = []
+        for hive, path, vm_name in VM_REGISTRY:
+            try:
+                with winreg.OpenKey(hive, path):
+                    detected_vms.append(vm_name)
+            except OSError:
+                pass
+        # SCSI Identifier check
+        try:
+            scsi_path = r'HARDWARE\DEVICEMAP\Scsi\Scsi Port 0\Scsi Bus 0\Target Id 0\Logical Unit Id 0'
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, scsi_path) as k:
+                val, _ = winreg.QueryValueEx(k, 'Identifier')
+                val_l = str(val).lower()
+                if 'vmware' in val_l and 'VMware' not in detected_vms:
+                    detected_vms.append('VMware (SCSI)')
+                elif ('vbox' in val_l or 'virtual' in val_l) and 'VirtualBox' not in detected_vms:
+                    detected_vms.append('VirtualBox (SCSI)')
+        except OSError:
+            pass
+
+        if detected_vms:
+            findings.append({
+                'tipo':        'VM_DETECTED',
+                'nombre':      f'VM detectada: {", ".join(detected_vms)}',
+                'ruta':        'HKLM\\SOFTWARE',
+                'detalle':     f'Artefactos: {", ".join(detected_vms)}',
+                'alerta':      'POCO_SOSPECHOSO',
+                'categoria':   'vm',
+                'descripcion': f'El SS fue realizado dentro de una maquina virtual: {", ".join(detected_vms)}.',
+            })
+
+        VM_PROCS = {
+            'vmtoolsd.exe': 'VMware', 'vmwaretray.exe': 'VMware',
+            'vboxservice.exe': 'VirtualBox', 'vboxtray.exe': 'VirtualBox',
+            'qemu-ga.exe': 'QEMU',
+        }
+        DEBUGGER_PROCS = [
+            'x64dbg.exe', 'x32dbg.exe', 'ollydbg.exe', 'windbg.exe',
+            'processhacker.exe', 'procmon.exe', 'procmon64.exe',
+            'wireshark.exe', 'fiddler.exe', 'dnspy.exe', 'de4dot.exe',
+            'ilspy.exe', 'idaq.exe', 'idaq64.exe',
+        ]
+        try:
+            out = subprocess.check_output(['tasklist', '/fo', 'csv', '/nh'],
+                                          timeout=10, text=True, errors='ignore').lower()
+            for proc_name, vm_label in VM_PROCS.items():
+                if proc_name in out:
+                    findings.append({
+                        'tipo':        'VM_PROCESS',
+                        'nombre':      f'Proceso VM activo: {proc_name}',
+                        'ruta':        'tasklist',
+                        'detalle':     f'{proc_name} ({vm_label})',
+                        'alerta':      'POCO_SOSPECHOSO',
+                        'categoria':   'vm',
+                        'descripcion': f'Proceso de {vm_label} activo durante el SS: {proc_name}.',
+                    })
+            matched_dbg = [p for p in DEBUGGER_PROCS if p in out]
+            if matched_dbg:
+                findings.append({
+                    'tipo':        'DEBUGGER_DETECTED',
+                    'nombre':      f'Debugger activo: {", ".join(matched_dbg)}',
+                    'ruta':        'tasklist',
+                    'detalle':     f'Procesos: {", ".join(matched_dbg)}',
+                    'alerta':      'MUY_SOSPECHOSO',
+                    'categoria':   'vm',
+                    'descripcion': (
+                        f'Herramientas de debug/analisis activas durante el SS: {", ".join(matched_dbg)}. '
+                        f'Posible intento de evasion del scanner.'
+                    ),
+                })
+        except Exception:
+            pass
+        # Hypervisor via WMI
+        try:
+            wmi_out = subprocess.check_output(
+                ['powershell', '-NoProfile', '-Command',
+                 '(Get-WmiObject Win32_ComputerSystem).HypervisorPresent'],
+                timeout=12, text=True, errors='ignore'
+            ).strip().lower()
+            if wmi_out == 'true' and not detected_vms:
+                findings.append({
+                    'tipo':        'HYPERVISOR_WMI',
+                    'nombre':      'Hypervisor presente (WMI)',
+                    'ruta':        'Win32_ComputerSystem',
+                    'detalle':     'HypervisorPresent=True',
+                    'alerta':      'POCO_SOSPECHOSO',
+                    'categoria':   'vm',
+                    'descripcion': 'WMI confirma ejecucion dentro de un hypervisor/VM.',
+                })
+        except Exception:
+            pass
+        return findings
+
+    # =========================================================================
+    # 30. EXPLORER.EXE STRINGS (Process Hacker automatico)
+    # =========================================================================
+
+    def _scan_explorer_strings(self):
+        """Equivalente automatizado del analisis de strings en explorer.exe via Process Hacker.
+        Busca pcaclient.dll y DLLs con keywords de hacks inyectadas en explorer."""
+        findings = []
+        HACK_KEYWORDS = [
+            'hack', 'cheat', 'inject', 'ghost', 'bypass', 'vape', 'wurst',
+            'sigma', 'flux', 'meteor', 'liquidbounce', 'autohotkey',
+            'xray', 'aimbot', 'killaura', 'nodus', 'impact', 'rise',
+        ]
+        SYS_PATHS = [r'\windows\system32\\', r'\windows\syswow64\\',
+                     r'\windows\winsxs\\', r'\program files\\']
+        try:
+            import psutil
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    if proc.info['name'].lower() != 'explorer.exe':
+                        continue
+                    maps = proc.memory_maps(grouped=False)
+                    # 1. pcaclient.dll activo
+                    if any(m.path and 'pcaclient' in m.path.lower() for m in maps):
+                        findings.append({
+                            'tipo':        'EXPLORER_PCA_ACTIVE',
+                            'nombre':      'pcaclient.dll en explorer.exe',
+                            'ruta':        'explorer.exe:memory',
+                            'detalle':     'PCA (Program Compatibility Assistant) activo',
+                            'alerta':      'POCO_SOSPECHOSO',
+                            'categoria':   'process_hacker',
+                            'descripcion': (
+                                'pcaclient.dll esta activo en explorer.exe, indicando ejecucion '
+                                'reciente de un programa no reconocido.'
+                            ),
+                        })
+                    # 2. DLLs fuera del sistema con keywords de hack
+                    seen = set()
+                    for m in maps:
+                        if not m.path or '.dll' not in m.path.lower():
+                            continue
+                        path_l = m.path.lower()
+                        if any(sp in path_l for sp in SYS_PATHS) or path_l in seen:
+                            continue
+                        seen.add(path_l)
+                        matched = [kw for kw in HACK_KEYWORDS if kw in path_l]
+                        if matched:
+                            findings.append({
+                                'tipo':        'EXPLORER_SUSPICIOUS_DLL',
+                                'nombre':      f'DLL sospechosa en explorer: {m.path.split(chr(92))[-1]}',
+                                'ruta':        m.path,
+                                'detalle':     f'Keywords: {", ".join(matched)}',
+                                'alerta':      'MUY_SOSPECHOSO',
+                                'categoria':   'process_hacker',
+                                'descripcion': (
+                                    f'DLL con keywords de hacks en explorer.exe: {m.path}. '
+                                    f'Posible inyeccion de DLL.'
+                                ),
+                            })
+                except (psutil.AccessDenied, psutil.NoSuchProcess):
+                    pass
         except Exception:
             pass
         return findings

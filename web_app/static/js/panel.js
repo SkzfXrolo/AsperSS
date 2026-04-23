@@ -846,10 +846,14 @@ async function loadScans() {
         const verdict   = document.getElementById('filter-verdict')?.value || '';
         const dateFrom  = document.getElementById('filter-date-from')?.value || '';
         const dateTo    = document.getElementById('filter-date-to')?.value || '';
+        const country   = (document.getElementById('filter-country')?.value || '').trim();
+        const risk      = document.getElementById('filter-risk')?.value || '';
         if (search)   params.set('search', search);
         if (verdict)  params.set('verdict', verdict);
         if (dateFrom) params.set('date_from', dateFrom);
         if (dateTo)   params.set('date_to', dateTo);
+        if (country)  params.set('country', country);
+        if (risk)     params.set('risk', risk);
 
         const response = await fetch('/api/scans?' + params.toString());
         const data = await response.json();
@@ -901,7 +905,7 @@ async function loadScans() {
 function applyFilters() { loadScans(); }
 
 function clearFilters() {
-    const ids = ['filter-search','filter-verdict','filter-date-from','filter-date-to'];
+    const ids = ['filter-search','filter-verdict','filter-date-from','filter-date-to','filter-country','filter-risk'];
     ids.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
@@ -2355,6 +2359,11 @@ async function updateModel() {
 function exportScanCSV() {
     if (!currentScanId) return;
     window.open(`/api/scans/${currentScanId}/export/csv`, '_blank');
+}
+
+function exportScanPDF() {
+    if (!currentScanId) return;
+    window.open(`/api/scans/${currentScanId}/export/pdf`, '_blank');
 }
 
 function formatDate(dateString) {
