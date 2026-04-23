@@ -2998,12 +2998,12 @@ class ArgusApp:
                     futures.append(future)
                 
                 # Esperar a que terminen todos con timeout aumentado
-                for future in concurrent.futures.as_completed(futures, timeout=600):  # 10 minutos timeout
+                for future in concurrent.futures.as_completed(futures, timeout=85):  # 85s max para todas las unidades
                     try:
                         future.result()
                         print(f"✅ Unidad escaneada exitosamente")
                     except concurrent.futures.TimeoutError:
-                        print(f"⏰ Timeout en escaneo de unidad después de 10 minutos - continuando...")
+                        print(f"⏰ Timeout en escaneo de unidad (85s) - continuando con fases secundarias...")
                     except Exception as e:
                         print(f"⚠️ Error en escaneo de unidad: {e} - continuando...")
             
@@ -3168,7 +3168,7 @@ class ArgusApp:
                     sec_exec.submit(_group_advanced),
                     sec_exec.submit(_group_forensics),
                 ]
-                for f in concurrent.futures.as_completed(sec_futures, timeout=300):
+                for f in concurrent.futures.as_completed(sec_futures, timeout=80):
                     try:
                         f.result()
                     except Exception as ex:
@@ -3290,30 +3290,20 @@ class ArgusApp:
             
             start_time = time.time()
             
-            # Calcular timeout dinámico según hardware (OPTIMIZADO - sin cpu_freq que es lento)
+            # Timeout agresivo: objetivo < 90s totales para todo el scan
+            # Esta fase ocupa ~80% del tiempo, así que le damos 65s max por unidad
             try:
                 cpu_count = psutil.cpu_count() or 2
-                
-                # OPTIMIZACIÓN: No usar cpu_freq() que puede ser muy lento en algunos sistemas
-                # Usar heurística basada solo en número de cores (más rápido)
-                base_timeout = 300  # 5 minutos base
-                
                 if cpu_count < 4:
-                    # Pocos cores = procesador probablemente lento
-                    total_timeout = 600  # 10 minutos
-                    print(f"⚙️ Hardware detectado: {cpu_count} cores - Timeout ajustado a {total_timeout//60} minutos")
+                    total_timeout = 80   # hardware lento
                 elif cpu_count < 8:
-                    # Cores medios
-                    total_timeout = 450  # 7.5 minutos
-                    print(f"⚙️ Hardware detectado: {cpu_count} cores - Timeout: {total_timeout//60} minutos")
+                    total_timeout = 65
                 else:
-                    # Muchos cores = procesador rápido
-                    total_timeout = base_timeout
-                    print(f"⚙️ Hardware detectado: {cpu_count} cores - Timeout: {total_timeout//60} minutos")
-            except Exception as e:
-                # Si falla la detección, usar timeout estándar (más rápido)
-                total_timeout = 300  # 5 minutos por defecto
-                print(f"⚠️ No se pudo detectar hardware, usando timeout estándar: {total_timeout//60} minutos")
+                    total_timeout = 55   # hardware rápido
+                print(f"⚙️ Hardware {cpu_count} cores → timeout por unidad: {total_timeout}s (objetivo total <90s)")
+            except Exception:
+                total_timeout = 65
+                print(f"⚠️ No se pudo detectar hardware, usando timeout: {total_timeout}s")
             
             scanned_files = 0
             max_files_per_folder = None  # Sin límite de archivos por carpeta (solo timeout total)
@@ -3325,7 +3315,7 @@ class ArgusApp:
             if not hasattr(self, 'total_dirs_scanned'):
                 self.total_dirs_scanned = 0
             
-            max_depth = 8
+            max_depth = 4   # Reducido de 8 → 4 para velocidad (Minecraft no tiene más de 4 niveles relevantes)
 
             skip_folders = {
                 'node_modules', '.git', '__pycache__', 'venv', '.venv',
