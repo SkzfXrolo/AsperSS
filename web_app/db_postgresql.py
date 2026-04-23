@@ -441,6 +441,7 @@ def init_postgresql_db():
             ('verdict_at',     'TIMESTAMP'),
             ('screenshot',     'TEXT'),
             ('mc_info',        'TEXT'),
+            ('risk_score',     'INTEGER DEFAULT 0'),
         ]:
             try:
                 cursor.execute(f'ALTER TABLE scans ADD COLUMN IF NOT EXISTS {_col} {_def}')

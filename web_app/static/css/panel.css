@@ -2495,3 +2495,61 @@ body.light-theme .scan-back-btn {
     to   { opacity: 1; transform: translateX(0); }
 }
 
+/* ═══════════════════════════════════════════════
+   RESPONSIVE — MONITOR ANCHO (≥1500px)
+   Limita el ancho del contenido para que no se
+   estire en monitores 1920px+
+═══════════════════════════════════════════════ */
+@media (min-width: 1500px) {
+    .panel-section {
+        max-width: 1420px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+
+/* ══════════════════════════════════════════════
+   RISK SCORE BADGE
+══════════════════════════════════════════════ */
+.risk-score-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 700;
+    border: 1px solid;
+}
+.risk-score-badge.risk-clean {
+    background: var(--green-bg);
+    border-color: rgba(16,185,129,0.28);
+    color: var(--green);
+}
+.risk-score-badge.risk-suspicious {
+    background: var(--amber-bg);
+    border-color: rgba(245,158,11,0.28);
+    color: var(--amber);
+}
+.risk-score-badge.risk-hack {
+    background: var(--red-bg);
+    border-color: rgba(244,63,94,0.28);
+    color: var(--red);
+}
+
+.risk-score-bar-wrap {
+    height: 6px;
+    background: var(--bg-3);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 6px;
+}
+.risk-score-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+}
+.risk-score-bar.risk-clean    { background: var(--green); }
+.risk-score-bar.risk-suspicious { background: var(--amber); }
+.risk-score-bar.risk-hack     { background: var(--red); }
+

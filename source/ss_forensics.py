@@ -99,6 +99,9 @@ class SSForensics:
             self._scan_recent_exe_forfiles,
             self._scan_mmagent,
             self._scan_tray_icons,
+            self._scan_recentdocs,
+            self._scan_runmru,
+            self._scan_amcache,
         ]
         for fn in methods:
             try:
@@ -1442,6 +1445,178 @@ class SSForensics:
                             break
             except OSError:
                 pass
+        except Exception:
+            pass
+        return findings
+
+    # =========================================================================
+    # 26. RECENTDOCS — documentos / archivos abiertos recientemente
+    # =========================================================================
+
+    def _scan_recentdocs(self):
+        """Analiza HKCU\\...\\Explorer\\RecentDocs buscando extensiones de hack."""
+        findings = []
+        HACK_EXTS  = [b'.ahk', b'.jar', b'.rar', b'.zip', b'.7z']
+        HACK_NAMES = [b'hack', b'cheat', b'inject', b'ghost', b'bypass', b'vape',
+                      b'wurst', b'sigma', b'flux', b'meteor', b'liquidbounce']
+        try:
+            import winreg
+            key_path = r'SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs'
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as base:
+                sub_idx = 0
+                while True:
+                    try:
+                        sub_name = winreg.EnumKey(base, sub_idx)
+                        sub_idx += 1
+                        if not any(sub_name.lower().encode() == ext for ext in HACK_EXTS):
+                            continue
+                        with winreg.OpenKey(base, sub_name) as sub:
+                            val_idx = 0
+                            while True:
+                                try:
+                                    name, data, _ = winreg.EnumValue(sub, val_idx)
+                                    val_idx += 1
+                                    if name == 'MRUListEx':
+                                        continue
+                                    if isinstance(data, (bytes, bytearray)):
+                                        raw = bytes(data).lower()
+                                        matched_names = [kw.decode() for kw in HACK_NAMES if kw in raw]
+                                        display = raw.decode('utf-16-le', errors='ignore').split('\x00')[0]
+                                    else:
+                                        display = str(data)
+                                        matched_names = []
+                                    if matched_names:
+                                        findings.append({
+                                            'tipo':        'RECENTDOC_HACK',
+                                            'nombre':      f'RecentDoc sospechoso: {display[:80]}',
+                                            'ruta':        f'HKCU\\{key_path}\\{sub_name}',
+                                            'detalle':     f'Keywords: {", ".join(matched_names)}',
+                                            'alerta':      'SOSPECHOSO',
+                                            'categoria':   'recentdocs',
+                                            'descripcion': (
+                                                f'RecentDocs contiene un archivo reciente con '
+                                                f'extension {sub_name} y keywords: {", ".join(matched_names)}.'
+                                            ),
+                                        })
+                                except OSError:
+                                    break
+                    except OSError:
+                        break
+        except Exception:
+            pass
+        return findings
+
+    # =========================================================================
+    # 27. RUNMRU — comandos ejecutados desde Windows + R
+    # =========================================================================
+
+    def _scan_runmru(self):
+        """Analiza HKCU\\...\\Explorer\\RunMRU para detectar comandos sospechosos
+        ejecutados con Win+R."""
+        findings = []
+        SUSPICIOUS_RUNS = [
+            'jna', 'prefetch', 'hack', 'inject',
+            '.ahk', '.jar', '.bat', '.vbs', '.ps1', 'powershell',
+            'reg delete', 'del /f', 'wmic', 'liquidbounce', 'sigma', 'vape',
+        ]
+        try:
+            import winreg
+            key_path = r'SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\RunMRU'
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+                idx = 0
+                while True:
+                    try:
+                        name, data, _ = winreg.EnumValue(key, idx)
+                        idx += 1
+                        if name == 'MRUList':
+                            continue
+                        value = str(data).lower().strip('\\1')
+                        matched = [kw for kw in SUSPICIOUS_RUNS if kw in value]
+                        if matched:
+                            high = any(k in matched for k in ['hack', 'inject', '.ahk', 'reg delete', 'liquidbounce', 'sigma', 'vape'])
+                            findings.append({
+                                'tipo':        'RUNMRU_SUSPICIOUS',
+                                'nombre':      f'RunMRU sospechoso: {str(data)[:80]}',
+                                'ruta':        f'HKCU\\{key_path}',
+                                'detalle':     f'Comando: {str(data)[:120]}, keywords: {", ".join(matched)}',
+                                'alerta':      'MUY_SOSPECHOSO' if high else 'POCO_SOSPECHOSO',
+                                'categoria':   'runmru',
+                                'descripcion': (
+                                    f'Comando ejecutado con Win+R: "{str(data)[:100]}". '
+                                    f'Referencias sospechosas: {", ".join(matched)}.'
+                                ),
+                            })
+                    except OSError:
+                        break
+        except Exception:
+            pass
+        return findings
+
+    # =========================================================================
+    # 28. AMCACHE — historial de ejecucion (AppCompat / Compatibility Store)
+    # =========================================================================
+
+    def _scan_amcache(self):
+        """Lee ShimCache y Compatibility Store para detectar ejecucion pasada
+        de programas con nombres de hacks conocidos."""
+        findings = []
+        HACK_KEYWORDS = [
+            'hack', 'cheat', 'inject', 'ghost', 'bypass', 'vape', 'wurst',
+            'sigma', 'flux', 'meteor', 'liquidbounce', 'autohotkey', 'ahk',
+            'xray', 'aimbot', 'triggerbot', 'killaura', 'nodus', 'impact',
+        ]
+        # ShimCache (AppCompatCache) — nivel sistema
+        try:
+            import winreg
+            compat_key = r'SYSTEM\CurrentControlSet\Control\Session Manager\AppCompatCache'
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, compat_key) as key:
+                data, _ = winreg.QueryValueEx(key, 'AppCompatCache')
+                if isinstance(data, (bytes, bytearray)):
+                    text = bytes(data).decode('utf-16-le', errors='ignore').lower()
+                    for kw in HACK_KEYWORDS:
+                        if kw in text:
+                            findings.append({
+                                'tipo':        'SHIMCACHE_HACK',
+                                'nombre':      f'ShimCache: keyword "{kw}" encontrada',
+                                'ruta':        f'HKLM\\{compat_key}',
+                                'detalle':     f'Keyword "{kw}" en AppCompatCache',
+                                'alerta':      'SOSPECHOSO',
+                                'categoria':   'amcache',
+                                'descripcion': (
+                                    f'ShimCache registra ejecucion pasada de software con nombre "{kw}", '
+                                    f'indicando que ese programa fue ejecutado en este sistema.'
+                                ),
+                            })
+                            break
+        except Exception:
+            pass
+        # Compatibility Assistant Store — nivel usuario
+        try:
+            import winreg
+            store_key = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store'
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, store_key) as key:
+                idx = 0
+                while True:
+                    try:
+                        name, data, _ = winreg.EnumValue(key, idx)
+                        idx += 1
+                        name_lower = name.lower()
+                        matched = [kw for kw in HACK_KEYWORDS if kw in name_lower]
+                        if matched:
+                            findings.append({
+                                'tipo':        'COMPAT_STORE_HACK',
+                                'nombre':      f'CompatStore: {name.split(chr(92))[-1][:80]}',
+                                'ruta':        name,
+                                'detalle':     f'Keywords: {", ".join(matched)}',
+                                'alerta':      'SOSPECHOSO',
+                                'categoria':   'amcache',
+                                'descripcion': (
+                                    f'Compatibility Assistant registra que "{name}" fue ejecutado. '
+                                    f'Coincide con keywords de hacks: {", ".join(matched)}.'
+                                ),
+                            })
+                    except OSError:
+                        break
         except Exception:
             pass
         return findings

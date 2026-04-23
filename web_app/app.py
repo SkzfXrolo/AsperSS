@@ -1722,6 +1722,65 @@ def start_scan():
         return jsonify({'error': f'Error iniciando escaneo: {str(e)}'}), 500
 
 
+def _calculate_risk_score(results):
+    """Calcula el risk score de un scan según las evidencias encontradas.
+    Escalas: javaagent=+90, AHK=+70, macros=+60, DNS=+40, CRITICAL=+50,
+             MUY_SOSPECHOSO=+40, SOSPECHOSO=+25, POCO_SOSPECHOSO=+10.
+    Retorna un valor 0–100 (capped).
+    """
+    score = 0
+    _counted = set()  # evitar sumar el mismo tipo varias veces (solo el primer hit)
+
+    CATEGORY_SCORES = {
+        'java_agent':       90,
+        'javaagent':        90,
+        'ahk':              70,
+        'autohotkey':       70,
+        'macro':            60,
+        'logitech':         55,
+        'razer':            55,
+        'dns':              40,
+        'dns_cache':        40,
+        'event_log':        30,
+        'jna':              35,
+        'rar':              20,
+        'compressed':       20,
+        'amcache':          45,
+        'recentdocs':       25,
+        'runmru':           20,
+        'compatibility_store': 35,
+        'usn_journal':      30,
+        'prefetch':         35,
+        'vm':               15,
+        'process_hacker':   40,
+    }
+
+    ALERT_SCORES = {
+        'CRITICAL':         50,
+        'MUY_SOSPECHOSO':   40,
+        'SOSPECHOSO':       25,
+        'POCO_SOSPECHOSO':  10,
+    }
+
+    for r in results:
+        tipo = (r.get('tipo') or '').lower().replace(' ', '_')
+        cat  = (r.get('categoria') or '').lower().replace(' ', '_')
+        alerta = (r.get('alerta') or '').upper()
+
+        # Bonus por categoría/tipo (una sola vez por categoría)
+        for key, pts in CATEGORY_SCORES.items():
+            if key in tipo or key in cat:
+                if key not in _counted:
+                    score += pts
+                    _counted.add(key)
+                break
+
+        # Puntos adicionales por nivel de alerta
+        score += ALERT_SCORES.get(alerta, 0)
+
+    return min(score, 100)
+
+
 @app.route('/api/scans/<int:scan_id>/results', methods=['POST'])
 def submit_scan_results(scan_id):
     """Recibe y almacena resultados de escaneo (usado por el cliente .exe) — sin login requerido"""
@@ -1809,6 +1868,22 @@ def submit_scan_results(scan_id):
                     batch
                 )
                 print(f"[DEBUG] executemany completado")
+
+            # Calcular y guardar risk_score
+            try:
+                cursor.execute('SAVEPOINT risk_score_save')
+                risk_score = _calculate_risk_score(results)
+                cursor.execute(
+                    f'UPDATE scans SET risk_score = {_PH} WHERE id = {_PH}',
+                    (risk_score, scan_id)
+                )
+                cursor.execute('RELEASE SAVEPOINT risk_score_save')
+                print(f"[DEBUG] risk_score={risk_score} guardado")
+            except Exception:
+                try:
+                    cursor.execute('ROLLBACK TO SAVEPOINT risk_score_save')
+                except Exception:
+                    pass
 
         print(f"[DEBUG] ===== SCAN {scan_id} COMPLETADO OK: "
               f"{len(data.get('results',[]))} resultados, status={data.get('status','completed')} =====\n")
@@ -1956,7 +2031,30 @@ def list_scans():
                             is_clean = not (scan.get('issues_found') or 0)
                             scan['severity_summary'] = 'LIMPIO' if is_clean else 'SOSPECHOSO'
                             scan['severity_badge'] = 'success' if is_clean else 'warning'
-                
+
+                # Obtener verdict y risk_score de columnas opcionales
+                if scan_ids:
+                    try:
+                        cursor.execute('SAVEPOINT opt_verdict')
+                        placeholders2 = ','.join([_PH] * len(scan_ids))
+                        cursor.execute(f'''
+                            SELECT id, verdict, risk_score
+                            FROM scans WHERE id IN ({placeholders2})
+                        ''', scan_ids)
+                        for vrow in cursor.fetchall():
+                            sid = _row_get(vrow, 0, 'id')
+                            for s in scans:
+                                if s['id'] == sid:
+                                    s['verdict'] = _row_get(vrow, 1, 'verdict')
+                                    s['risk_score'] = int(_row_get(vrow, 2, 'risk_score') or 0)
+                                    break
+                        cursor.execute('RELEASE SAVEPOINT opt_verdict')
+                    except Exception:
+                        try:
+                            cursor.execute('ROLLBACK TO SAVEPOINT opt_verdict')
+                        except Exception:
+                            pass
+
                 result = {'scans': scans}
                 
                 # Guardar en caché
@@ -2081,11 +2179,12 @@ def get_scan(scan_id):
                 # Usa SAVEPOINT para que un fallo (columna inexistente) no aborte la transacción
                 scan['screenshot'] = None
                 scan['mc_info'] = None
+                scan['risk_score'] = 0
                 try:
                     cursor.execute('SAVEPOINT opt_cols')
                     cursor.execute(f'''
                         SELECT total_dirs_scanned, verdict, verdict_reason, verdict_by, verdict_at,
-                               screenshot, mc_info
+                               screenshot, mc_info, risk_score
                         FROM scans WHERE id = {_PH}
                     ''', (scan_id,))
                     vrow = cursor.fetchone()
@@ -2103,6 +2202,7 @@ def get_scan(scan_id):
                                 scan['mc_info'] = _json2.loads(raw_mc_info)
                             except Exception:
                                 scan['mc_info'] = None
+                        scan['risk_score'] = int(_row_get(vrow, 7, 'risk_score') or 0)
                     cursor.execute('RELEASE SAVEPOINT opt_cols')
                 except Exception:
                     try:

@@ -362,18 +362,29 @@ function _scanInitials(machineName) {
 }
 
 function _resultBadge(scan) {
-    if (scan.status === 'running')
-        return '<span class="result-badge" style="background:rgba(99,102,241,0.12);color:#818cf8;border-color:rgba(99,102,241,0.3)">⏳ Escaneando</span>';
-    const s = scan.severity_summary || '';
-    if (s === 'CRITICO' || s === 'SOSPECHOSO')
-        return '<span class="result-badge result-detected">Detectado</span>';
-    if (s === 'POCO_SOSPECHOSO')
-        return '<span class="result-badge result-suspicious">Sospechoso</span>';
-    if (s === 'LIMPIO')
-        return '<span class="result-badge result-clean">Limpio</span>';
-    if (scan.status === 'completed')
-        return '<span class="result-badge result-pending">Revisado</span>';
-    return '<span class="result-badge result-pending">Pendiente</span>';
+    let badge = '';
+    if (scan.status === 'running') {
+        badge = '<span class="result-badge" style="background:rgba(99,102,241,0.12);color:#818cf8;border-color:rgba(99,102,241,0.3)">⏳ Escaneando</span>';
+    } else {
+        const s = scan.verdict || scan.severity_summary || '';
+        if (s === 'hack' || s === 'CRITICO' || s === 'SOSPECHOSO')
+            badge = '<span class="result-badge result-detected">Detectado</span>';
+        else if (s === 'clean' || s === 'LIMPIO')
+            badge = '<span class="result-badge result-clean">Limpio</span>';
+        else if (s === 'POCO_SOSPECHOSO')
+            badge = '<span class="result-badge result-suspicious">Sospechoso</span>';
+        else if (scan.status === 'completed')
+            badge = '<span class="result-badge result-pending">Pendiente</span>';
+        else
+            badge = '<span class="result-badge result-pending">Pendiente</span>';
+    }
+    // Risk score mini-badge
+    const rs = scan.risk_score;
+    if (rs !== undefined && rs !== null && scan.status !== 'running') {
+        const rsCls = rs >= 70 ? 'risk-hack' : rs >= 30 ? 'risk-suspicious' : 'risk-clean';
+        badge += ` <span class="risk-score-badge ${rsCls}" style="font-size:10px;padding:2px 7px;margin-left:4px;">${rs}pts</span>`;
+    }
+    return badge;
 }
 
 function _indicatorDots(scan) {
@@ -1412,6 +1423,19 @@ async function viewScanDetails(scanId) {
         
         const dateEl = document.getElementById('detail-scan-date');
         if (dateEl) dateEl.textContent = formatDate(data.started_at);
+
+        // Risk score badge
+        const riskScore = data.risk_score || 0;
+        const riskBadge = document.getElementById('detail-risk-score-badge');
+        const riskBar   = document.getElementById('detail-risk-score-bar');
+        if (riskBadge && riskBar) {
+            const riskClass = riskScore >= 70 ? 'risk-hack' : riskScore >= 30 ? 'risk-suspicious' : 'risk-clean';
+            const riskLabel = riskScore >= 70 ? `${riskScore} — HACK` : riskScore >= 30 ? `${riskScore} — Sospechoso` : `${riskScore} — Limpio`;
+            riskBadge.className = `risk-score-badge ${riskClass}`;
+            riskBadge.textContent = riskLabel;
+            riskBar.className = `risk-score-bar ${riskClass}`;
+            riskBar.style.width = `${Math.min(riskScore, 100)}%`;
+        }
         
         // Mostrar/ocultar banner de detección
         const detectionBanner = document.getElementById('detection-banner');
