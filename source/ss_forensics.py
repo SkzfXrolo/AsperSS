@@ -95,6 +95,10 @@ class SSForensics:
             self._scan_event_log_time_change,
             self._scan_jna_artifacts,
             self._scan_java_process_memory,
+            self._scan_rar_files,
+            self._scan_recent_exe_forfiles,
+            self._scan_mmagent,
+            self._scan_tray_icons,
         ]
         for fn in methods:
             try:
@@ -1280,6 +1284,164 @@ class SSForensics:
 
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     continue
+        except Exception:
+            pass
+        return findings
+
+    def _scan_rar_files(self):
+        """Busca .rar sospechosos en dirs de usuario — pueden ocultar hacks comprimidos."""
+        findings = []
+        HACK_KEYWORDS = [
+            'hack', 'cheat', 'client', 'vape', 'wurst', 'sigma', 'meteor', 'flux',
+            'liquidbounce', 'ghost', 'bypass', 'inject', 'crack', 'keygen',
+        ]
+        try:
+            import os, subprocess
+            user = os.environ.get('USERPROFILE', '')
+            search_dirs = [
+                os.path.join(user, 'Downloads'),
+                os.path.join(user, 'Desktop'),
+                os.path.join(user, 'Documents'),
+                os.path.join(user, 'AppData', 'Roaming'),
+                os.path.join(user, 'AppData', 'Local', 'Temp'),
+            ]
+            for base in search_dirs:
+                if not base or not os.path.isdir(base):
+                    continue
+                for root, _dirs, files in os.walk(base):
+                    for fname in files:
+                        if not fname.lower().endswith(('.rar', '.zip', '.7z')):
+                            continue
+                        name_lower = fname.lower()
+                        matched = [kw for kw in HACK_KEYWORDS if kw in name_lower]
+                        if matched:
+                            fpath = os.path.join(root, fname)
+                            findings.append({
+                                'tipo':        'SUSPICIOUS_ARCHIVE',
+                                'nombre':      f'Archivo comprimido sospechoso: {fname}',
+                                'ruta':        fpath,
+                                'detalle':     f'Keywords: {", ".join(matched)}',
+                                'alerta':      'SOSPECHOSO',
+                                'categoria':   'HACK_FILES',
+                                'descripcion': (
+                                    f'Archivo comprimido "{fname}" en {root} con nombre relacionado '
+                                    f'a hacks ({", ".join(matched)}).'
+                                ),
+                            })
+        except Exception:
+            pass
+        return findings
+
+    def _scan_recent_exe_forfiles(self):
+        """Detecta .exe creados/modificados en los últimos 30 días en dirs de usuario."""
+        findings = []
+        try:
+            import subprocess, os, datetime
+            user = os.environ.get('USERPROFILE', '')
+            search_dirs = [
+                os.path.join(user, 'Downloads'),
+                os.path.join(user, 'Desktop'),
+                os.path.join(user, 'AppData', 'Roaming'),
+                os.path.join(user, 'AppData', 'Local', 'Temp'),
+            ]
+            cutoff = datetime.datetime.now() - datetime.timedelta(days=30)
+            for base in search_dirs:
+                if not base or not os.path.isdir(base):
+                    continue
+                for root, _dirs, files in os.walk(base):
+                    for fname in files:
+                        if not fname.lower().endswith('.exe'):
+                            continue
+                        fpath = os.path.join(root, fname)
+                        try:
+                            mtime = datetime.datetime.fromtimestamp(os.path.getmtime(fpath))
+                            if mtime >= cutoff:
+                                findings.append({
+                                    'tipo':        'RECENT_EXE',
+                                    'nombre':      f'Ejecutable reciente: {fname}',
+                                    'ruta':        fpath,
+                                    'detalle':     f'Modificado: {mtime.strftime("%Y-%m-%d %H:%M")}',
+                                    'alerta':      'POCO_SOSPECHOSO',
+                                    'categoria':   'RECENT_FILES',
+                                    'descripcion': (
+                                        f'Ejecutable "{fname}" creado/modificado hace menos de 30 días '
+                                        f'({mtime.strftime("%Y-%m-%d")}) en {root}.'
+                                    ),
+                                })
+                        except OSError:
+                            continue
+        except Exception:
+            pass
+        return findings
+
+    def _scan_mmagent(self):
+        """Detecta MMAgent (Memory Manager Agent) deshabilitado — indicador de manipulación del sistema."""
+        findings = []
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['powershell', '-NonInteractive', '-Command',
+                 'Get-MMAgent | Select-Object -Property ApplicationLaunchPrefetching,MemoryCompression,PageCombining | ConvertTo-Json'],
+                capture_output=True, text=True, timeout=10,
+                creationflags=0x08000000
+            )
+            output = result.stdout.strip()
+            if output and 'false' in output.lower():
+                findings.append({
+                    'tipo':        'MMAGENT_DISABLED',
+                    'nombre':      'MMAgent con características deshabilitadas',
+                    'ruta':        'PowerShell: Get-MMAgent',
+                    'detalle':     output[:300],
+                    'alerta':      'SOSPECHOSO',
+                    'categoria':   'SYSTEM_TAMPERING',
+                    'descripcion': (
+                        'El Memory Manager Agent (MMAgent) tiene características deshabilitadas. '
+                        'Algunos GhostClients deshabilitan MemoryCompression o PageCombining para evadir detección.'
+                    ),
+                })
+        except Exception:
+            pass
+        return findings
+
+    def _scan_tray_icons(self):
+        """Lee el registro de iconos del área de notificación (system tray) para detectar programas ocultos."""
+        findings = []
+        HACK_KEYWORDS = [
+            'hack', 'cheat', 'inject', 'ghost', 'bypass', 'vape', 'wurst',
+            'sigma', 'flux', 'meteor', 'liquidbounce', 'rat', 'keylog',
+        ]
+        try:
+            import winreg
+            tray_key = r'SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\TrayNotify'
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, tray_key) as key:
+                    i = 0
+                    while True:
+                        try:
+                            name, data, _ = winreg.EnumValue(key, i)
+                            i += 1
+                            if isinstance(data, (bytes, bytearray)):
+                                text = data.decode('utf-16-le', errors='ignore').lower()
+                            else:
+                                text = str(data).lower()
+                            matched = [kw for kw in HACK_KEYWORDS if kw in text]
+                            if matched:
+                                findings.append({
+                                    'tipo':        'TRAY_SUSPICIOUS_ICON',
+                                    'nombre':      f'Icono de tray sospechoso: {name}',
+                                    'ruta':        f'HKCU\\{tray_key}',
+                                    'detalle':     f'Keywords: {", ".join(matched)}',
+                                    'alerta':      'SOSPECHOSO',
+                                    'categoria':   'SYSTEM_TAMPERING',
+                                    'descripcion': (
+                                        f'El área de notificación (tray) contiene entradas con keywords '
+                                        f'sospechosas ({", ".join(matched)}) en la clave {name}.'
+                                    ),
+                                })
+                        except OSError:
+                            break
+            except OSError:
+                pass
         except Exception:
             pass
         return findings

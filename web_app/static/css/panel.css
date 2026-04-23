@@ -1102,6 +1102,14 @@ body.light-theme .sidebar {
 .sidebar-overlay.active { display: block; }
 
 /* ═══════════════════════════════════════════════
+   RESPONSIVE — LAPTOP ESTRECHO (1200px)
+═══════════════════════════════════════════════ */
+@media (max-width: 1200px) {
+    .subnav-item { padding: 6px 10px; font-size: 11.5px; gap: 5px; }
+    .subnav-row { gap: 3px; }
+}
+
+/* ═══════════════════════════════════════════════
    RESPONSIVE — TABLET (768px)
 ═══════════════════════════════════════════════ */
 @media (max-width: 768px) {
@@ -1245,6 +1253,8 @@ body.light-theme .sidebar {
     padding: 10px 12px;
     margin-bottom: 20px;
     backdrop-filter: blur(12px);
+    overflow: hidden; /* evita desbordamiento del subnav en resolutions estrechas */
+    min-width: 0;
 }
 .subnav-row {
     display: flex;
@@ -1253,6 +1263,7 @@ body.light-theme .sidebar {
     overflow-x: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    min-width: 0; /* permite que overflow-x: auto funcione dentro de flex */
 }
 .subnav-row::-webkit-scrollbar { display: none; }
 

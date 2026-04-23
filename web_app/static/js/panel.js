@@ -48,7 +48,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 let _lastKnownScanId = null;
 let _newScansCount   = 0;
-const POLL_INTERVAL  = 30000; // 30 s
+const POLL_INTERVAL         = 15000; // 15 s — detecta scans rápidos (<30s)
+const POLL_RUNNING_INTERVAL = 5000;  // 5 s — re-chequea running scans
 // Scans en progreso detectados — {id → machine_name} — vigilados hasta completarse
 const _pendingRunning = new Map();
 
@@ -62,6 +63,8 @@ async function startScanPolling() {
     } catch (_) {}
 
     setInterval(pollForNewScans, POLL_INTERVAL);
+    // Intervalo rápido para vigilar running scans que terminan antes del poll normal
+    setInterval(_checkPendingRunning, POLL_RUNNING_INTERVAL);
 }
 
 async function pollForNewScans() {
@@ -90,24 +93,36 @@ async function pollForNewScans() {
             }
         }
 
-        // Comprobar si algún scan "en progreso" ya terminó
-        for (const [id, name] of _pendingRunning.entries()) {
-            const scan = data.scans.find(s => s.id === id);
-            if (scan && scan.status === 'completed') {
-                _pendingRunning.delete(id);
-                _newScansCount++;
-                showNewScansBadge(_newScansCount);
-                showToast(`Scan completado: ${name}`, 'success', id);
-                playNotificationSound();
-                const activeSection = document.querySelector('.panel-section.active');
-                if (activeSection && activeSection.id === 'dashboard-section') loadDashboard();
-            } else if (!scan) {
-                _pendingRunning.delete(id); // ya no aparece en recientes, descartar
-            }
-        }
-
+        _checkPendingRunningWithData(data.scans);
         _lastKnownScanId = latest.id;
     } catch (_) {}
+}
+
+async function _checkPendingRunning() {
+    if (_pendingRunning.size === 0) return;
+    try {
+        const res  = await fetch(`/api/scans?limit=20`);
+        const data = await res.json();
+        if (!data.scans) return;
+        _checkPendingRunningWithData(data.scans);
+    } catch (_) {}
+}
+
+function _checkPendingRunningWithData(scans) {
+    for (const [id, name] of _pendingRunning.entries()) {
+        const scan = scans.find(s => s.id === id);
+        if (scan && scan.status === 'completed') {
+            _pendingRunning.delete(id);
+            _newScansCount++;
+            showNewScansBadge(_newScansCount);
+            showToast(`Scan completado: ${name}`, 'success', id);
+            playNotificationSound();
+            const activeSection = document.querySelector('.panel-section.active');
+            if (activeSection && activeSection.id === 'dashboard-section') loadDashboard();
+        } else if (!scan) {
+            _pendingRunning.delete(id);
+        }
+    }
 }
 
 function showNewScansBadge(count) {
