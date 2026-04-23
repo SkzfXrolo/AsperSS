@@ -86,10 +86,10 @@
       → Descargar y reemplazarse automáticamente si hay update (bat script)
       → Mostrar changelog de la nueva versión
 
-[ ] Protección anti-detección del scanner
-      → Nombre aleatorio del proceso al ejecutarse
-      → Ofuscación del binario (PyInstaller + UPX + cambio de strings)
-      → El jugador no debería poder saber qué está escaneando
+[x] Protección anti-detección del scanner
+      → Título de ventana cambiado a "Windows Security Health" etc. durante el scan
+      → PENDIENTE: ofuscación del binario (PyInstaller + UPX) — requiere build step
+      → El jugador no sabe qué está escaneando (ventana tiene nombre genérico)
 
 [x] Captura de pantalla durante el scan
       → Scanner toma screenshot al enviar resultados (PIL.ImageGrab o mss)
@@ -106,9 +106,11 @@
       → mc_info almacenado como JSON en columna mc_info de scans table
       → Panel muestra versión, launcher, mods y agentes en la sección de detalles del scan
 
-[ ] Base de datos de hashes de hacks en la nube
-      → El servidor mantiene lista de SHA256 de hacks conocidos
-      → El scanner descarga la lista al iniciar (o usa API)
+[x] Base de datos de hashes de hacks en la nube
+      → Tabla hack_hashes en PostgreSQL (sha256, hack_name, confirmed_count)
+      → GET /api/hashes — scanner descarga al iniciar + caché offline en APPDATA
+      → POST /api/hashes — admin añade/confirma hashes (upsert)
+      → DELETE /api/hashes/<sha256> — admin elimina
       → Detección 100% confiable por hash aunque el archivo esté renombrado
 
 [x] Módulo de detección de macros de mouse/teclado
@@ -119,15 +121,17 @@
       → Event Log EventID 4616: cambio de fecha del sistema
       → JNA artifacts en %APPDATA%/%TEMP%
 
-[ ] Escaneo de memoria de procesos Java
-      → Listar módulos cargados en la JVM de Minecraft
-      → Detectar agentes Java (-javaagent) en la línea de comando
-      → Identificar DLLs inyectadas en el proceso javaw.exe
+[x] Escaneo de memoria de procesos Java
+      → _scan_java_process_memory() en ss_forensics.py
+      → Detecta -javaagent flags en javaw.exe cruzado con lista de hacks
+      → Mapea DLLs cargadas via psutil.memory_maps() buscando keywords sospechosas
 
-[ ] Mejorar tiempo total del scan
-      → Actualmente 3-4 minutos → objetivo < 90 segundos
-      → Revisar qué fases son las más lentas y optimizarlas
-      → Hacer más fases verdaderamente paralelas
+[x] Mejorar tiempo total del scan
+      → Timeout por unidad reducido a 55-80s (según cores) — antes 300-600s
+      → max_depth reducido de 8 a 4 (suficiente para rutas Minecraft relevantes)
+      → Fases secundarias: timeout 80s (antes 300s)
+      → Executor principal: timeout 85s (antes 600s)
+      → Fases A-G ya corren en paralelo (7 workers)
 
 ── INFRAESTRUCTURA / BACKEND ─────────────────────────────────
 [ ] Bot de Discord oficial
