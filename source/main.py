@@ -2645,12 +2645,13 @@ class ArgusApp:
                     current = int(self.progress_value)
                     target = int(self.progress_target_value)
                     
-                    # Si ya llegamos al objetivo, esperar un poco y verificar de nuevo
+                    # Si ya llegamos al objetivo, verificar brevemente si hay un nuevo target
                     if current == target:
-                        time.sleep(0.1)  # Esperar un poco antes de verificar de nuevo
-                        # Si después de esperar sigue siendo el mismo, terminar
+                        time.sleep(0.05)
                         if int(self.progress_value) == int(self.progress_target_value):
-                            break
+                            time.sleep(0.05)  # segunda espera antes de salir del loop
+                            if int(self.progress_value) == int(self.progress_target_value):
+                                break
                         continue
                     
                     # Calcular siguiente paso (siempre de 1 en 1)
@@ -2676,24 +2677,25 @@ class ArgusApp:
                                 last_message = msg_part
                     
                     # Actualizar UI en el hilo principal usando after()
-                    def update_ui():
+                    # next_value capturado por valor (v=next_value) para evitar closure bug
+                    def update_ui(v=next_value, msg=last_message):
                         try:
                             if hasattr(self, 'progress_bar'):
-                                self.progress_bar['value'] = next_value
+                                self.progress_bar['value'] = v
                             if hasattr(self, 'progress_label'):
-                                self.progress_label.config(text=f"{last_message}")
+                                self.progress_label.config(text=msg)
                             if hasattr(self, 'progress_percent_label') and self.progress_percent_label:
-                                self.progress_percent_label.config(text=f"{next_value}%")
+                                self.progress_percent_label.config(text=f"{v}%")
                             if hasattr(self, '_progress_canvas') and self._progress_canvas:
-                                ModernUI.update_canvas_bar(self._progress_canvas, next_value)
-                        except:
+                                ModernUI.update_canvas_bar(self._progress_canvas, v)
+                        except Exception:
                             pass
-                    
+
                     # Programar actualización en el hilo principal
                     self.root.after(0, update_ui)
-                    
+
                     # Esperar antes del siguiente paso (velocidad ajustable)
-                    time.sleep(0.025)  # 25ms por paso = 40 pasos por segundo
+                    time.sleep(0.03)  # 30ms por paso = ~33 pasos por segundo
                     
             except Exception as e:
                 print(f"Error en animación de progreso: {e}")
