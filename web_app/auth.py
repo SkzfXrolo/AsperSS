@@ -947,7 +947,7 @@ def can_change_verdict(user):
     return _staff_level(user) >= STAFF_ROLE_HIERARCHY.index('moderador')
 
 def can_manage_tokens(user):
-    return _staff_level(user) >= STAFF_ROLE_HIERARCHY.index('admin')
+    return _staff_level(user) >= STAFF_ROLE_HIERARCHY.index('moderador')
 
 def can_manage_staff(user):
     return _staff_level(user) >= STAFF_ROLE_HIERARCHY.index('admin')

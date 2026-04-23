@@ -381,7 +381,7 @@
         <section class="panel-section" id="tokens-section">
             <div class="section-header-actions">
                 <h2 class="section-subtitle">Gestión de Tokens</h2>
-                {% if staff_role in ('admin', 'owner') %}
+                {% if staff_role in ('moderador', 'admin', 'owner') %}
                 <button class="btn btn-primary" id="create-token-btn">
                     <span>Crear Nuevo Token</span>
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -1435,7 +1435,7 @@
     // Permisos de staff inyectados desde Flask
     window.STAFF_ROLE     = "{{ staff_role }}";
     window.CAN_VERDICT    = {{ 'true' if staff_role in ('moderador','admin','owner') else 'false' }};
-    window.CAN_TOKENS     = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
+    window.CAN_TOKENS     = {{ 'true' if staff_role in ('moderador','admin','owner') else 'false' }};
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
     <script src="{{ url_for('static', filename='js/panel.js') }}"></script>
