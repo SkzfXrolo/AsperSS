@@ -136,7 +136,55 @@
 [x] El panel no refresca automáticamente cuando llega un scan nuevo
       → Fix: polling cada 30s + badge + toast + auto-refresh del dashboard
 [ ] En resoluciones < 1200px la subnav puede hacer wrap en algunos browsers
+[x] REGRESIÓN: detalle de scan no cargaba ningún dato (Archivos: 0, Fecha: N/A, todo vacío)
+      → Causa: query de GET /api/scans/<id> pedía columnas verdict/* que no existían en BD de Render
+      → Fix: query principal sin columnas de veredicto + segundo query opcional que falla silenciosamente
 
 ================================================================
 Reediseñar todo el sistema de llegada de datos de scaneos a la página porque se ve
 infinito
+
+
+
+Si es posible hacer que el scanner haga todo esto además de lo que ya hace
+
+CMD:
+-sc query dps (Si En El Estado Aparece como STOPPED Esta Usando Un GhostClient o ha deshabilitado un proceso de windows)
+-ipconfig/displaydns (Muestra las paginas abiertas)
+-tasklist (Muestra los .exe Ejecutados)
+-dir /b/s *.exe (muestra todos los .exe que tiene el user)
+-dir /b/s *.jar (cumple la misma funcion que el comando de arriba pero con .jar)Â¨
+- archivos newnames (cd c:\users%username%): FORFILES /M *.exe /S /D +04/08/2021 /C "cmd /C echo @fdate @file @path" (define la fecha a la que quieras buscar el archivo)
+- archivos borrados (cd c:\windows\system32): fsutil usn readjournal c: csv | findstr /i /c:.exe | findstr /i /c:0x80000200 >> deletedfiles.txt
+- archivos  creados (cd c:\windows\system32): fsutil usn readjournal c: csv | findstr /i /c:.exe | findstr /i /c:0x00000100 >> createdfiles.txt
+- archivos oldnames (cd c:\windows\system32): fsutil usn readjournal c: csv | findstr /i /c:.exe | findstr /i /c:0x00001000 >> oldnamefiles.txt
+- archivos newnames (cd c:\windows\system32): fsutil usn readjournal c: csv | findstr /i /c:.exe | findstr /i /c:0x00002000 >> newnamefiles.txt
+- ver ruta de archivo(los numeros mas largos, el segundo): fsutil file queryFileNameById C:\ 0x(numeros)
+PROCCES HACKER: 
+-vamos al explorer.exe , le damos a propeties , quitamos el "hide free regions" , le damos a "strings" , quitamos el "10" y pones "4" , activas las 3 casillas, le das a "ok" , cuando cargue le das a "filter" "contains case-insensitive" y buscas "pcaclient", ahi clicas en el primer resultado y le das a "save search results", ahora vamos a elementos recientes y abrimos los "search results" y vemos si hay algun hack .
+-vamos al explorer.exe , le damos a propeties ,  quitamos el "hide free regions" , le damos a "strings" , quitamos el "10" y pones "4" , activas las 3 casillas, le das a "Ok", cuando cargue le das a "filter" y pones "file://" , cuando cargue le das a filter ""contains case-insensitive" ,y pones en el buscador ".dll" para ver cuales tiene.
+WINDOWS + R:
+-eventvwr.msc (sirve para ver si cambio la fecha del equipo)
+-%appdata%
+-entras al "prefetch" buscas "jna" + revisar 
+-entras al "%temp%" y miras todas las carpetas , despues buscas "jna" + revisar
+-apretas la tecla "windows + r" y en el buscador pones "explorer.exe shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}"
+
+REGEDIT:
+regedit : current user : software : microsoft : windows nt : current versions : Compatibility asistant : store
+Equipo\HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\OpenSavePidlMRU\txt          
+Equipo\HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store
+
+POWERSELL:
+EL POWERSELL ES PARACIDO AL CMD PERO NOS PUEDE DAR OTROS RESULTADOS 
+-entramos al buscador y pones "gci -recurse -filter *.exe"
+-entramos al buscador y pones "gci -recurse -filter *.rar"
+-entramos al buscador y pones "gci -recurse -filter *.dll"
+-ejecutamos el powersell como "administrador" y buscas  "mmagent" [COMO ADMINISTRADOR]
+
+MACROS LOGITECH (LGHUB):
+-windows+r : appdata : Local : LGHUB : Settings.json 
+MACROS RAZER:
+-C:\ProgramData : Razer : Synapse Accounts
+
+(Si encuentras alguna mejora dale con fe)
