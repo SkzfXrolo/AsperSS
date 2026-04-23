@@ -594,9 +594,7 @@ async function loadTokens() {
                     <td>${usedCount}${maxUses > 0 ? ` / ${maxUses}` : ' / ∞'}</td>
                     <td><span class="badge ${statusBadge}">${statusText}</span></td>
                     <td>
-                        <button class="btn btn-sm btn-danger" onclick="deleteToken(${token.id || token.token_id})" title="Eliminar permanentemente este token">
-                            🗑️ Eliminar
-                        </button>
+                        ${window.CAN_TOKENS ? `<button class="btn btn-sm btn-danger" onclick="deleteToken(${token.id || token.token_id})" title="Eliminar permanentemente este token">🗑️ Eliminar</button>` : ''}
                     </td>
                 </tr>
             `;

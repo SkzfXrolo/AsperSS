@@ -1454,19 +1454,14 @@ def delete_token(token_id):
         if not user:
             return jsonify({'success': False, 'error': 'Usuario no encontrado'}), 401
         
-        username = user.get('username', '')
-        is_admin_user = is_admin(user)
-        
+        if not can_manage_tokens(user):
+            return jsonify({'success': False, 'error': 'No tienes permisos para eliminar tokens (se requiere Admin o superior)'}), 403
+
         with get_api_db_cursor() as cursor:
             cursor.execute(f'SELECT id, created_by FROM scan_tokens WHERE id = {_PH}', (token_id,))
             token_row = cursor.fetchone()
             if not token_row:
                 return jsonify({'success': False, 'error': 'Token no encontrado'}), 404
-
-            token_creator = _row_get(token_row, 1, 'created_by')
-
-            if not is_admin_user and token_creator != username:
-                return jsonify({'success': False, 'error': 'No tienes permiso para eliminar este token'}), 403
 
             cursor.execute(f'DELETE FROM scan_tokens WHERE id = {_PH}', (token_id,))
         
