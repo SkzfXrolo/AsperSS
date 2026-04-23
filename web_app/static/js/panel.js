@@ -1027,10 +1027,6 @@ function renderScreenshot(data) {
 
 // Apply permission guards on page load
 function applyPermissionGuards() {
-    if (typeof window.CAN_TOKENS !== 'undefined' && !window.CAN_TOKENS) {
-        const btn = document.getElementById('create-token-btn');
-        if (btn) btn.style.display = 'none';
-    }
     if (typeof window.CAN_VERDICT !== 'undefined' && !window.CAN_VERDICT) {
         // Hide verdict action buttons for helpers
         const verdictBtns = document.querySelectorAll('#bulk-mark-hack-btn,#bulk-mark-legitimate-btn,[onclick*="openVerdictModal"],[onclick*="confirmVerdict"]');
