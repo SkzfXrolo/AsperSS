@@ -153,10 +153,14 @@
       → Fix: cuenta activa prioritizada con activeAccountLocalId
       → Fix: usercache.json ordenado por expiresOn desc
       → Fix: machine_name con fallback HOSTNAME / socket.gethostname()
-[ ] En scans muy rápidos (< 30s) el panel no recibe los datos a tiempo
+[x] En scans muy rápidos (< 30s) el panel no recibe los datos a tiempo
+      → Poll reducido a 15s (antes 30s)
+      → _checkPendingRunning() en intervalo separado de 5s para running scans
 [x] El panel no refresca automáticamente cuando llega un scan nuevo
       → Fix: polling cada 30s + badge + toast + auto-refresh del dashboard
-[ ] En resoluciones < 1200px la subnav puede hacer wrap en algunos browsers
+[x] En resoluciones < 1200px la subnav puede hacer wrap en algunos browsers
+      → overflow:hidden + min-width:0 en .scan-subnav y .subnav-row
+      → @media (max-width: 1200px): padding/gap reducidos en subnav-item
 [x] REGRESIÓN: detalle de scan no cargaba ningún dato (Archivos: 0, Fecha: N/A, todo vacío)
       → Causa raíz real: query opcional de verdict/screenshot/mc_info fallaba en psycopg2,
         poniendo la conexión en "transaction aborted" — el SELECT de scan_results también fallaba
@@ -169,8 +173,17 @@
       → Fix: _resultBadge muestra badge "⏳ Escaneando" para running scans
 
 ================================================================
-Reediseñar todo el sistema de llegada de datos de scaneos a la página porque se ve
-infinito
+[x] Reediseñar lista de hallazgos del scan (se veía infinita)
+      → Chips de categoría encima (Todos / Hacks / Macros / Java / Red / Sistema...)
+      → Filtro por categoría con contador por tipo
+      → "Cargar más" en lugar de paginación numérica
+      → Incluye MUY_SOSPECHOSO y POCO_SOSPECHOSO, ordenados por severidad
+
+[x] Técnicas CMD/PowerShell implementadas en scanner:
+      → _scan_rar_files(): archivos .rar/.zip/.7z con nombres de hacks
+      → _scan_recent_exe_forfiles(): .exe modificados en últimos 30 días
+      → _scan_mmagent(): Get-MMAgent via PowerShell
+      → _scan_tray_icons(): iconos del system tray con keywords sospechosas
 
 
 
