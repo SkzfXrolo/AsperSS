@@ -662,6 +662,8 @@ def init_mysql_db():
             ('verdict_by',     'VARCHAR(100)'),
             ('verdict_at',     'TIMESTAMP NULL'),
             ('total_dirs_scanned', 'INT DEFAULT 0'),
+            ('screenshot',     'LONGTEXT'),
+            ('mc_info',        'TEXT'),
         ]:
             try:
                 cursor.execute(f'ALTER TABLE scans ADD COLUMN {col} {definition}')

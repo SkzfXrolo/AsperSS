@@ -238,15 +238,88 @@ class UserInfoCollector:
             print(f"⚠️ Error obteniendo username de Minecraft: {e}")
             return None
     
+    def get_minecraft_active_info(self):
+        """Detects running Minecraft version, launcher type, and loaded mods/agents."""
+        result = {
+            'mc_running': False,
+            'mc_version': None,
+            'mc_launcher': None,
+            'mc_mods': [],
+            'java_agents': [],
+        }
+        try:
+            import psutil
+            for proc in psutil.process_iter(['name', 'cmdline', 'exe']):
+                try:
+                    name = (proc.info.get('name') or '').lower()
+                    cmdline = proc.info.get('cmdline') or []
+                    cmd_str = ' '.join(str(c) for c in cmdline).lower()
+
+                    is_java = name in ('java.exe', 'javaw.exe', 'java', 'javaw')
+                    if not is_java:
+                        continue
+                    if 'minecraft' not in cmd_str and 'net.minecraft' not in cmd_str:
+                        continue
+
+                    result['mc_running'] = True
+
+                    # Version: --version 1.8.9 or --gameDir
+                    import re
+                    vm = re.search(r'--version\s+([^\s]+)', cmd_str)
+                    if vm:
+                        result['mc_version'] = vm.group(1)
+
+                    # Launcher detection
+                    for launcher, keyword in [
+                        ('Lunar Client', 'lunarclient'),
+                        ('Badlion Client', 'badlion'),
+                        ('Feather Client', 'feather'),
+                        ('Forge', 'minecraftforge'),
+                        ('Fabric', 'fabricmc'),
+                        ('Quilt', 'quiltmc'),
+                        ('OptiFine', 'optifine'),
+                        ('Official Launcher', 'net.minecraft.client.main'),
+                    ]:
+                        if keyword in cmd_str:
+                            result['mc_launcher'] = launcher
+                            break
+
+                    # Java agents (-javaagent:path)
+                    agents = re.findall(r'-javaagent:([^\s]+)', cmd_str)
+                    result['java_agents'] = agents
+
+                    # Mods from --gameDir or --assetsDir
+                    game_dir_m = re.search(r'--gameDir\s+([^\s]+)', cmd_str)
+                    if game_dir_m:
+                        mods_path = os.path.join(game_dir_m.group(1), 'mods')
+                        if os.path.isdir(mods_path):
+                            result['mc_mods'] = [
+                                f for f in os.listdir(mods_path)
+                                if f.endswith(('.jar', '.zip'))
+                            ][:50]  # cap at 50
+
+                    break  # Found MC process, stop
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"⚠️ Error detectando MC activo: {e}")
+        return result
+
     def collect_all_info(self):
         """Recopila toda la información del usuario"""
+        mc_info = self.get_minecraft_active_info()
         info = {
             'ip_address': self.get_ip_address(),
             'country': self.get_country_from_ip(),
             'minecraft_username': self.get_minecraft_username(),
             'os': platform.system(),
-            'os_version': platform.version()
+            'os_version': platform.version(),
+            'mc_running': mc_info['mc_running'],
+            'mc_version': mc_info['mc_version'],
+            'mc_launcher': mc_info['mc_launcher'],
+            'mc_mods': mc_info['mc_mods'],
+            'java_agents': mc_info['java_agents'],
         }
-        
+
         return info
 

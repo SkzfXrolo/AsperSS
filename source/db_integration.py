@@ -74,7 +74,11 @@ class DatabaseIntegration:
                 'machine_name': self.machine_name,
                 'ip_address': self.user_info.get('ip_address'),
                 'country': self.user_info.get('country'),
-                'minecraft_username': minecraft_username
+                'minecraft_username': minecraft_username,
+                'mc_version': self.user_info.get('mc_version'),
+                'mc_launcher': self.user_info.get('mc_launcher'),
+                'mc_mods': self.user_info.get('mc_mods', []),
+                'java_agents': self.user_info.get('java_agents', []),
             }
             
             response = requests.post(
@@ -109,6 +113,30 @@ class DatabaseIntegration:
             print(f"❌ Error de conexión con API: {e}")
             return False
     
+    def take_screenshot(self):
+        """Captures the current screen and returns a base64-encoded JPEG string, or None on failure."""
+        try:
+            import base64
+            from io import BytesIO
+            try:
+                from PIL import ImageGrab
+                img = ImageGrab.grab()
+            except Exception:
+                try:
+                    import mss, mss.tools
+                    with mss.mss() as sct:
+                        sct_img = sct.grab(sct.monitors[0])
+                        from PIL import Image
+                        img = Image.frombytes('RGB', sct_img.size, sct_img.bgra, 'raw', 'BGRX')
+                except Exception:
+                    return None
+            buf = BytesIO()
+            img.convert('RGB').save(buf, format='JPEG', quality=50, optimize=True)
+            return base64.b64encode(buf.getvalue()).decode('utf-8')
+        except Exception as e:
+            print(f"⚠️ Error capturando pantalla: {e}")
+            return None
+
     def submit_results(self, issues_found, total_files_scanned, scan_duration, total_dirs_scanned=0):
         """Envía resultados del escaneo a la API"""
         print(f"\n{'='*60}")
@@ -153,13 +181,15 @@ class DatabaseIntegration:
                     'ai_confidence': issue.get('ai_confidence', 0)
                 })
             
+            screenshot_b64 = self.take_screenshot()
             payload = {
                 'status': 'completed',
                 'total_files_scanned': total_files_scanned,
                 'total_dirs_scanned': total_dirs_scanned,
                 'issues_found': len(issues_found),
                 'scan_duration': scan_duration,
-                'results': results
+                'results': results,
+                'screenshot': screenshot_b64,
             }
             
             url = f"{self.api_url}/api/scans/{self.scan_id}/results"

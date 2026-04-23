@@ -386,6 +386,21 @@ def init_db():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_ban_date ON ban_history(banned_at DESC)')
     except Exception as e:
         print(f"⚠️ Error creando índices de ban_history: {e}")
+
+    # Columnas opcionales en scans (ALTER TABLE seguro en SQLite — ignorar si ya existen)
+    for col, definition in [
+        ('total_dirs_scanned', 'INTEGER DEFAULT 0'),
+        ('verdict',        'TEXT'),
+        ('verdict_reason', 'TEXT'),
+        ('verdict_by',     'TEXT'),
+        ('verdict_at',     'TIMESTAMP'),
+        ('screenshot',     'TEXT'),
+        ('mc_info',        'TEXT'),
+    ]:
+        try:
+            cursor.execute(f'ALTER TABLE scans ADD COLUMN {col} {definition}')
+        except Exception:
+            pass  # ya existe
     
         conn.commit()
         conn.close()
@@ -920,7 +935,13 @@ def start_scan():
     ip_address = data.get('ip_address') or request.remote_addr
     country = data.get('country', '')
     minecraft_username = data.get('minecraft_username', '')
-    
+    mc_info = json.dumps({
+        'version': data.get('mc_version'),
+        'launcher': data.get('mc_launcher'),
+        'mods': data.get('mc_mods', []),
+        'java_agents': data.get('java_agents', []),
+    })
+
     # Validar token
     token_id, error = validate_scan_token(scan_token)
     if error:
@@ -988,10 +1009,17 @@ def start_scan():
                 print(f"⚠️ ADVERTENCIA: No se pudo verificar actualización del token")
             
             # Crear registro de escaneo
-            cursor.execute('''
-                INSERT INTO scans (token_id, scan_token, status, machine_id, machine_name, ip_address, country, minecraft_username)
-                VALUES (?, ?, 'running', ?, ?, ?, ?, ?)
-            ''', (token_id, scan_token, machine_id, machine_name, ip_address, country, minecraft_username))
+            try:
+                cursor.execute('''
+                    INSERT INTO scans (token_id, scan_token, status, machine_id, machine_name, ip_address, country, minecraft_username, mc_info)
+                    VALUES (?, ?, 'running', ?, ?, ?, ?, ?, ?)
+                ''', (token_id, scan_token, machine_id, machine_name, ip_address, country, minecraft_username, mc_info))
+            except Exception:
+                # Fallback sin mc_info si la columna aún no existe
+                cursor.execute('''
+                    INSERT INTO scans (token_id, scan_token, status, machine_id, machine_name, ip_address, country, minecraft_username)
+                    VALUES (?, ?, 'running', ?, ?, ?, ?, ?)
+                ''', (token_id, scan_token, machine_id, machine_name, ip_address, country, minecraft_username))
             
             scan_id = cursor.lastrowid
             print(f"✅ Escaneo creado con ID: {scan_id}")
@@ -1050,21 +1078,29 @@ def submit_scan_results(scan_id):
             
             print(f"✅ Scan encontrado en BD - Status actual: {scan_row[1]}")
             
-            # Actualizar estado del escaneo
+            # Actualizar estado del escaneo (query base — siempre funciona)
             cursor.execute('''
-                UPDATE scans 
-                SET status = ?, completed_at = CURRENT_TIMESTAMP, 
+                UPDATE scans
+                SET status = ?, completed_at = CURRENT_TIMESTAMP,
                     total_files_scanned = ?, issues_found = ?, scan_duration = ?
                 WHERE id = ?
             ''', (
-                data.get('status', 'completed'),
-                data.get('total_files_scanned', 0),
-                data.get('issues_found', 0),
-                data.get('scan_duration', 0),
-                scan_id
-            ))
+                    data.get('status', 'completed'),
+                    data.get('total_files_scanned', 0),
+                    data.get('issues_found', 0),
+                    data.get('scan_duration', 0),
+                    scan_id
+                ))
             print(f"✅ Estado del escaneo actualizado")
-            
+
+            # Guardar screenshot si viene (columna opcional — ignorar si no existe)
+            screenshot = data.get('screenshot') or None
+            if screenshot:
+                try:
+                    cursor.execute('UPDATE scans SET screenshot = ? WHERE id = ?', (screenshot, scan_id))
+                except Exception:
+                    pass  # columna screenshot no migrada aún
+
             # Insertar resultados en batch (mucho más rápido)
             results = data.get('results', [])
             if results:
