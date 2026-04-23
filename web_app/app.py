@@ -40,6 +40,13 @@ def init_db_async():
 import threading
 threading.Thread(target=init_db_async, daemon=True).start()
 
+# Iniciar bot de Discord si DISCORD_TOKEN está configurado
+try:
+    from discord_bot import start_bot_thread as _start_discord_bot
+    threading.Thread(target=_start_discord_bot, daemon=True).start()
+except Exception as _disc_err:
+    print(f'[Discord] Bot no disponible: {_disc_err}')
+
 # Health check endpoints (simplificado - sin import externo)
 
 # Configuración
@@ -1805,6 +1812,18 @@ def submit_scan_results(scan_id):
 
         print(f"[DEBUG] ===== SCAN {scan_id} COMPLETADO OK: "
               f"{len(data.get('results',[]))} resultados, status={data.get('status','completed')} =====\n")
+
+        # Notificar al bot de Discord
+        try:
+            from discord_bot import notify_new_scan as _discord_notify
+            _discord_notify(
+                scan_id,
+                data.get('machine_name', 'N/A'),
+                data.get('username', 'N/A'),
+            )
+        except Exception:
+            pass
+
         return jsonify({'success': True, 'message': 'Resultados almacenados'})
     except Exception as e:
         print(f"[DEBUG] ===== ERROR en submit_scan_results scan_id={scan_id} =====")
