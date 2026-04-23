@@ -432,7 +432,46 @@ def init_postgresql_db():
         
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_version ON ai_model_versions(version)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_active ON ai_model_versions(is_active)')
-        
+
+        # Columnas opcionales en scans (agregadas en versiones posteriores)
+        for _col, _def in [
+            ('verdict',        'VARCHAR(20)'),
+            ('verdict_reason', 'TEXT'),
+            ('verdict_by',     'VARCHAR(100)'),
+            ('verdict_at',     'TIMESTAMP'),
+            ('screenshot',     'TEXT'),
+            ('mc_info',        'TEXT'),
+        ]:
+            try:
+                cursor.execute(f'ALTER TABLE scans ADD COLUMN IF NOT EXISTS {_col} {_def}')
+            except Exception:
+                pass
+
+        # Notas por scan
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS scan_notes (
+                id SERIAL PRIMARY KEY,
+                scan_id INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+                author VARCHAR(100) NOT NULL,
+                body TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_scan_notes_scan_id ON scan_notes(scan_id)')
+
+        # Historial de veredictos
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS verdict_history (
+                id SERIAL PRIMARY KEY,
+                scan_id INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+                verdict VARCHAR(20) NOT NULL,
+                reason TEXT,
+                changed_by VARCHAR(100) NOT NULL,
+                changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_vh_scan_id ON verdict_history(scan_id)')
+
         conn.commit()
         print("✅ Base de datos PostgreSQL inicializada correctamente")
         

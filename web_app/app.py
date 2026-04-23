@@ -17,7 +17,9 @@ from auth import (
     verify_registration_token, login_required, admin_required, company_admin_required,
     company_user_required, get_user_by_id, list_registration_tokens, list_users,
     create_company, get_company_by_id, list_companies, update_company,
-    has_role, is_admin, is_company_admin, is_company_user
+    has_role, is_admin, is_company_admin, is_company_user,
+    get_staff_role, can_change_verdict, can_manage_tokens, can_manage_staff,
+    STAFF_ROLE_HIERARCHY
 )
 
 app = Flask(__name__)
@@ -330,7 +332,8 @@ def panel():
             user['roles'] = json.loads(user['roles'])
         except:
             user['roles'] = [user.get('roles', 'user')]
-    return render_template('panel.html', user=user)
+    staff_role = get_staff_role(user) if user else 'helper'
+    return render_template('panel.html', user=user, staff_role=staff_role)
 
 @app.route('/aspers-sa', methods=['GET', 'POST'])
 def admin_subscriptions():
@@ -1364,6 +1367,8 @@ def create_token():
         user = get_user_by_id(session.get('user_id'))
         if not user:
             return jsonify({'success': False, 'error': 'Usuario no encontrado'}), 401
+        if not can_manage_tokens(user):
+            return jsonify({'success': False, 'error': 'No tienes permisos para crear tokens (se requiere Admin o superior)'}), 403
 
         created_by = user.get('username', 'web_app')
         user_id = user.get('id')
@@ -1600,6 +1605,15 @@ def start_scan():
         if error:
             return jsonify({'error': error}), 401
 
+        mc_info = None
+        if data.get('mc_version') or data.get('mc_launcher'):
+            mc_info = json.dumps({
+                'version': data.get('mc_version'),
+                'launcher': data.get('mc_launcher'),
+                'mods': data.get('mc_mods', []),
+                'java_agents': data.get('java_agents', []),
+            })
+
         with get_api_db_cursor() as cursor:
             cursor.execute(
                 f'UPDATE scan_tokens SET used_count = used_count + 1,'
@@ -1613,6 +1627,16 @@ def start_scan():
                 f" VALUES ({_PH},{_PH},'running',{_PH},{_PH},{_PH},{_PH},{_PH})",
                 (token_id, scan_token, machine_id, machine_name, ip_address, country, mc_username)
             )
+            if mc_info:
+                try:
+                    cursor.execute('SAVEPOINT mc_info_save')
+                    cursor.execute(f'UPDATE scans SET mc_info = {_PH} WHERE id = {_PH}', (mc_info, scan_id))
+                    cursor.execute('RELEASE SAVEPOINT mc_info_save')
+                except Exception:
+                    try:
+                        cursor.execute('ROLLBACK TO SAVEPOINT mc_info_save')
+                    except Exception:
+                        pass
 
         return jsonify({'success': True, 'scan_id': scan_id, 'status': 'running', 'message': 'Escaneo iniciado'}), 201
     except Exception as e:
@@ -1640,6 +1664,36 @@ def submit_scan_results(scan_id):
             )
             if cursor.rowcount == 0:
                 return jsonify({'error': f'Escaneo {scan_id} no encontrado'}), 404
+
+            # Guardar screenshot y mc_info si vienen en el payload (columnas opcionales)
+            screenshot = data.get('screenshot') or None
+            mc_info = None
+            if data.get('mc_version') or data.get('mc_launcher'):
+                import json as _j
+                mc_info = _j.dumps({
+                    'version': data.get('mc_version'),
+                    'launcher': data.get('mc_launcher'),
+                    'mods': data.get('mc_mods', []),
+                    'java_agents': data.get('java_agents', []),
+                })
+            if screenshot or mc_info:
+                try:
+                    cursor.execute('SAVEPOINT opt_save')
+                    updates, vals = [], []
+                    if screenshot:
+                        updates.append(f'screenshot = {_PH}')
+                        vals.append(screenshot)
+                    if mc_info:
+                        updates.append(f'mc_info = {_PH}')
+                        vals.append(mc_info)
+                    vals.append(scan_id)
+                    cursor.execute(f'UPDATE scans SET {", ".join(updates)} WHERE id = {_PH}', vals)
+                    cursor.execute('RELEASE SAVEPOINT opt_save')
+                except Exception:
+                    try:
+                        cursor.execute('ROLLBACK TO SAVEPOINT opt_save')
+                    except Exception:
+                        pass
 
             results = data.get('results', [])
             if results:
@@ -1674,27 +1728,60 @@ def list_scans():
     """Lista escaneos - Usa BD directa si está disponible, sino HTTP"""
     import time
     
-    limit = request.args.get('limit', 50, type=int)
-    offset = request.args.get('offset', 0, type=int)
-    
-    # Caché por limit/offset (10 segundos TTL)
+    limit       = request.args.get('limit', 50, type=int)
+    offset      = request.args.get('offset', 0, type=int)
+    search      = (request.args.get('search') or '').strip()
+    verdict_f   = (request.args.get('verdict') or '').strip().lower()
+    date_from   = (request.args.get('date_from') or '').strip()
+    date_to     = (request.args.get('date_to') or '').strip()
+    machine_name_f = (request.args.get('machine_name') or '').strip()
+
+    has_filters = bool(search or verdict_f or date_from or date_to or machine_name_f)
+
+    # Caché solo cuando no hay filtros activos
     cache_key = f'scans_list_{limit}_{offset}'
-    if cache_key in _stats_cache:
+    if not has_filters and cache_key in _stats_cache:
         if time.time() - _stats_cache_time.get(cache_key, 0) < 10:
             return jsonify(_stats_cache[cache_key]), 200
-    
+
     # Intentar acceso directo a BD primero (más rápido) - BD unificada siempre disponible
     if API_DB_AVAILABLE_LOCALLY:
         try:
             print(f"🔄 Intentando obtener escaneos directamente de la BD local...")
             with get_api_db_cursor() as cursor:
+                # Construir WHERE dinámico
+                conditions = []
+                params = []
+                if machine_name_f:
+                    conditions.append(f'machine_name ILIKE {_PH}')
+                    params.append(f'%{machine_name_f}%')
+                if search:
+                    conditions.append(f'(machine_name ILIKE {_PH} OR minecraft_username ILIKE {_PH} OR ip_address ILIKE {_PH})')
+                    params.extend([f'%{search}%'] * 3)
+                if verdict_f:
+                    if verdict_f == 'pending':
+                        conditions.append(f"(verdict IS NULL OR verdict = '')")
+                    else:
+                        conditions.append(f'verdict = {_PH}')
+                        params.append(verdict_f)
+                if date_from:
+                    conditions.append(f'started_at >= {_PH}')
+                    params.append(date_from)
+                if date_to:
+                    conditions.append(f'started_at <= {_PH}')
+                    params.append(date_to + ' 23:59:59')
+                where = ('WHERE ' + ' AND '.join(conditions)) if conditions else ''
+                params += [limit, offset]
+
                 cursor.execute(f'''
                     SELECT id, scan_token, started_at, completed_at, status,
-                           total_files_scanned, issues_found, scan_duration, machine_name
+                           total_files_scanned, issues_found, scan_duration, machine_name,
+                           minecraft_username, ip_address, country
                     FROM scans
+                    {where}
                     ORDER BY started_at DESC
                     LIMIT {_PH} OFFSET {_PH}
-                ''', (limit, offset))
+                ''', params)
                 
                 scans = []
                 scan_ids = []
@@ -1710,7 +1797,10 @@ def list_scans():
                         'total_files_scanned': _row_get(row, 5, 'total_files_scanned'),
                         'issues_found': _row_get(row, 6, 'issues_found'),
                         'scan_duration': _row_get(row, 7, 'scan_duration'),
-                        'machine_name': _row_get(row, 8, 'machine_name')
+                        'machine_name': _row_get(row, 8, 'machine_name'),
+                        'minecraft_username': _row_get(row, 9, 'minecraft_username'),
+                        'ip_address': _row_get(row, 10, 'ip_address'),
+                        'country': _row_get(row, 11, 'country'),
                     })
                 
                 print(f"📊 Escaneos encontrados en BD local: {len(scans)}")
@@ -1844,9 +1934,10 @@ def get_scan(scan_id):
     if API_DB_AVAILABLE_LOCALLY:
         try:
             with get_api_db_cursor() as cursor:
+                # Columnas base (siempre existen desde la primera versión del schema)
                 cursor.execute(f'''
                     SELECT id, token_id, scan_token, started_at, completed_at, status,
-                           total_files_scanned, total_dirs_scanned, issues_found, scan_duration,
+                           total_files_scanned, issues_found, scan_duration,
                            machine_id, machine_name, ip_address, country, minecraft_username
                     FROM scans
                     WHERE id = {_PH}
@@ -1860,36 +1951,54 @@ def get_scan(scan_id):
                     'id': _row_get(row, 0, 'id'),
                     'token_id': _row_get(row, 1, 'token_id'),
                     'scan_token': _row_get(row, 2, 'scan_token'),
-                    'started_at': _row_get(row, 3, 'started_at'),
-                    'completed_at': _row_get(row, 4, 'completed_at'),
+                    'started_at': str(_row_get(row, 3, 'started_at') or ''),
+                    'completed_at': str(_row_get(row, 4, 'completed_at') or ''),
                     'status': _row_get(row, 5, 'status'),
-                    'total_files_scanned': _row_get(row, 6, 'total_files_scanned'),
-                    'total_dirs_scanned': _row_get(row, 7, 'total_dirs_scanned'),
-                    'issues_found': _row_get(row, 8, 'issues_found'),
-                    'scan_duration': _row_get(row, 9, 'scan_duration'),
-                    'machine_id': _row_get(row, 10, 'machine_id'),
-                    'machine_name': _row_get(row, 11, 'machine_name'),
-                    'ip_address': _row_get(row, 12, 'ip_address'),
-                    'country': _row_get(row, 13, 'country'),
-                    'minecraft_username': _row_get(row, 14, 'minecraft_username'),
+                    'total_files_scanned': _row_get(row, 6, 'total_files_scanned') or 0,
+                    'total_dirs_scanned': 0,
+                    'issues_found': _row_get(row, 7, 'issues_found') or 0,
+                    'scan_duration': _row_get(row, 8, 'scan_duration') or 0,
+                    'machine_id': _row_get(row, 9, 'machine_id'),
+                    'machine_name': _row_get(row, 10, 'machine_name'),
+                    'ip_address': _row_get(row, 11, 'ip_address'),
+                    'country': _row_get(row, 12, 'country'),
+                    'minecraft_username': _row_get(row, 13, 'minecraft_username'),
                     'verdict': None, 'verdict_reason': None,
                     'verdict_by': None, 'verdict_at': '',
                 }
 
-                # Columnas de veredicto: query separado por si aún no existen en la BD
+                # Columnas opcionales: total_dirs_scanned, verdict, screenshot, mc_info
+                # Usa SAVEPOINT para que un fallo (columna inexistente) no aborte la transacción
+                scan['screenshot'] = None
+                scan['mc_info'] = None
                 try:
+                    cursor.execute('SAVEPOINT opt_cols')
                     cursor.execute(f'''
-                        SELECT verdict, verdict_reason, verdict_by, verdict_at
+                        SELECT total_dirs_scanned, verdict, verdict_reason, verdict_by, verdict_at,
+                               screenshot, mc_info
                         FROM scans WHERE id = {_PH}
                     ''', (scan_id,))
                     vrow = cursor.fetchone()
                     if vrow:
-                        scan['verdict']        = _row_get(vrow, 0, 'verdict')
-                        scan['verdict_reason'] = _row_get(vrow, 1, 'verdict_reason')
-                        scan['verdict_by']     = _row_get(vrow, 2, 'verdict_by')
-                        scan['verdict_at']     = str(_row_get(vrow, 3, 'verdict_at') or '')
+                        scan['total_dirs_scanned'] = _row_get(vrow, 0, 'total_dirs_scanned') or 0
+                        scan['verdict']        = _row_get(vrow, 1, 'verdict')
+                        scan['verdict_reason'] = _row_get(vrow, 2, 'verdict_reason')
+                        scan['verdict_by']     = _row_get(vrow, 3, 'verdict_by')
+                        scan['verdict_at']     = str(_row_get(vrow, 4, 'verdict_at') or '')
+                        scan['screenshot']     = _row_get(vrow, 5, 'screenshot')
+                        raw_mc_info = _row_get(vrow, 6, 'mc_info')
+                        if raw_mc_info:
+                            import json as _json2
+                            try:
+                                scan['mc_info'] = _json2.loads(raw_mc_info)
+                            except Exception:
+                                scan['mc_info'] = None
+                    cursor.execute('RELEASE SAVEPOINT opt_cols')
                 except Exception:
-                    pass  # columnas aún no migradas — ignorar
+                    try:
+                        cursor.execute('ROLLBACK TO SAVEPOINT opt_cols')
+                    except Exception:
+                        pass
                 
                 # Obtener resultados
                 cursor.execute(f'''
@@ -2506,7 +2615,11 @@ def generate_app():
                 exe_path = next((p for p in exe_candidates if os.path.exists(p)), None)
 
                 if not exe_path:
-                    yield f"data: {json.dumps({'step': '⚠️ No se encontró un ejecutable pre-compilado en el repositorio.\\n\\nPara distribuir el scanner:\\n1. Compila localmente: pyinstaller ArgusScanner.spec\\n2. Haz commit de source/dist/ArgusScanner.exe\\n3. Pushea a GitHub — Render lo incluirá en el siguiente deploy.', 'progress': 100, 'error': True})}\n\n"
+                    _msg = ('⚠️ No se encontró un ejecutable pre-compilado en el repositorio.\n\n'
+                            'Para distribuir el scanner:\n1. Compila localmente: pyinstaller ArgusScanner.spec\n'
+                            '2. Haz commit de source/dist/ArgusScanner.exe\n'
+                            '3. Pushea a GitHub — Render lo incluirá en el siguiente deploy.')
+                    yield "data: " + json.dumps({'step': _msg, 'progress': 100, 'error': True}) + "\n\n"
                     return
 
                 import hashlib
@@ -2531,7 +2644,11 @@ def generate_app():
                 except Exception:
                     pass
 
-                yield f"data: {json.dumps({'step': f'✅ Listo para distribuir.\\n\\nArchivo: {exe_name}\\nTamaño: {file_size / (1024*1024):.1f} MB\\nModelo: {patterns_count} patrones + {hashes_count} hashes\\n\\n💡 El modelo de IA se actualiza automáticamente sin recompilar.', 'progress': 100, 'success': True, 'download_url': f'/download/{exe_name}', 'filename': exe_name})}\n\n"
+                _done_msg = (f'✅ Listo para distribuir.\n\nArchivo: {exe_name}\n'
+                             f'Tamaño: {file_size / (1024*1024):.1f} MB\n'
+                             f'Modelo: {patterns_count} patrones + {hashes_count} hashes\n\n'
+                             '💡 El modelo de IA se actualiza automáticamente sin recompilar.')
+                yield "data: " + json.dumps({'step': _done_msg, 'progress': 100, 'success': True, 'download_url': f'/download/{exe_name}', 'filename': exe_name}) + "\n\n"
 
             except Exception as e:
                 yield f"data: {json.dumps({'step': f'ERROR: {str(e)}', 'progress': 100, 'error': True})}\n\n"
@@ -3594,6 +3711,9 @@ def export_scan_csv(scan_id):
 @login_required
 def set_scan_verdict(scan_id):
     """Establece el veredicto final de un escaneo (clean | hack | pending)."""
+    current_user = get_user_by_id(session.get('user_id'))
+    if not can_change_verdict(current_user):
+        return jsonify({'error': 'No tienes permisos para cambiar veredictos (se requiere Moderador o superior)'}), 403
     data   = request.json or {}
     verdict = (data.get('verdict') or '').strip().lower()
     reason  = (data.get('reason') or '').strip()
@@ -3718,6 +3838,67 @@ def delete_scan_note(scan_id, note_id):
                 (note_id,)
             )
         return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================
+# GESTIÓN DE STAFF / ROLES
+# ============================================================
+
+@app.route('/api/staff/users', methods=['GET'])
+@login_required
+def list_staff_users():
+    """Lista todos los usuarios con su rol de staff. Solo Admin o superior."""
+    current_user = get_user_by_id(session.get('user_id'))
+    if not can_manage_staff(current_user):
+        return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
+    users = list_users() or []
+    result = []
+    for u in users:
+        result.append({
+            'id':         u.get('id'),
+            'username':   u.get('username'),
+            'email':      u.get('email', ''),
+            'roles':      u.get('roles', []),
+            'staff_role': get_staff_role(u),
+            'is_active':  u.get('is_active', True),
+            'created_at': str(u.get('created_at', '')),
+        })
+    return jsonify({'users': result}), 200
+
+
+@app.route('/api/staff/users/<int:user_id>/role', methods=['PUT'])
+@login_required
+def update_staff_role(user_id):
+    """Asigna un rol de staff a un usuario. Solo Admin o superior."""
+    current_user = get_user_by_id(session.get('user_id'))
+    if not can_manage_staff(current_user):
+        return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
+    data = request.json or {}
+    new_role = (data.get('role') or '').strip().lower()
+    if new_role not in STAFF_ROLE_HIERARCHY:
+        return jsonify({'error': f'Rol inválido. Opciones: {", ".join(STAFF_ROLE_HIERARCHY)}'}), 400
+    # Owner no puede ser asignado a través de la API para evitar escalada
+    if new_role == 'owner' and get_staff_role(current_user) != 'owner':
+        return jsonify({'error': 'Solo un Owner puede asignar el rol de Owner'}), 403
+    target = get_user_by_id(user_id)
+    if not target:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+    # Build updated roles: keep non-staff roles, replace staff role
+    existing = target.get('roles', []) if isinstance(target.get('roles'), list) else []
+    non_staff = [r for r in existing if r not in STAFF_ROLE_HIERARCHY]
+    updated = non_staff + [new_role]
+    import json as _json
+    try:
+        from auth import _auth_cursor, _ph
+        ph = _ph()
+        with _auth_cursor() as cursor:
+            cursor.execute(
+                f'UPDATE users SET roles = {ph} WHERE id = {ph}',
+                (_json.dumps(updated), user_id)
+            )
+        return jsonify({'success': True, 'role': new_role}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

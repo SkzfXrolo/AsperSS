@@ -9,6 +9,7 @@ let currentResultId = null;
 let currentIssuesList = [];
 let currentIssuesPage = 0;
 const ISSUES_PER_PAGE = 25;
+let _currentScanData = null;
 
 // Inicialización - OPTIMIZADO: Cargar datos críticos primero, el resto en background
 document.addEventListener('DOMContentLoaded', function() {
@@ -31,6 +32,12 @@ document.addEventListener('DOMContentLoaded', function() {
         loadLearningStats();
     }, 500);
 
+    // Cargar presets de filtros guardados
+    _renderPresetOptions();
+
+    // Aplicar restricciones de permisos según rol
+    applyPermissionGuards();
+
     // Auto-refresh: arrancar polling 3 segundos después de la carga
     setTimeout(startScanPolling, 3000);
 });
@@ -42,9 +49,10 @@ document.addEventListener('DOMContentLoaded', function() {
 let _lastKnownScanId = null;
 let _newScansCount   = 0;
 const POLL_INTERVAL  = 30000; // 30 s
+// Scans en progreso detectados — {id → machine_name} — vigilados hasta completarse
+const _pendingRunning = new Map();
 
 async function startScanPolling() {
-    // Registrar el ID más reciente actual como baseline
     try {
         const res  = await fetch('/api/scans?limit=1');
         const data = await res.json();
@@ -58,25 +66,47 @@ async function startScanPolling() {
 
 async function pollForNewScans() {
     try {
-        const res  = await fetch('/api/scans?limit=1');
+        const res  = await fetch('/api/scans?limit=10');
         const data = await res.json();
         if (!data.scans || data.scans.length === 0) return;
 
-        const latestId   = data.scans[0].id;
-        const latestName = data.scans[0].machine_name || 'desconocido';
-        if (_lastKnownScanId !== null && latestId > _lastKnownScanId) {
-            _newScansCount += (latestId - _lastKnownScanId);
-            _lastKnownScanId = latestId;
-            showNewScansBadge(_newScansCount);
-            showToast(`Nuevo scan de ${latestName}`, 'info', latestId);
-            playNotificationSound();
+        const latest = data.scans[0];
 
-            // Si el usuario está viendo el dashboard, refrescar automáticamente
-            const activeSection = document.querySelector('.panel-section.active');
-            if (activeSection && activeSection.id === 'dashboard-section') {
-                loadDashboard();
+        if (_lastKnownScanId !== null && latest.id > _lastKnownScanId) {
+            const newScans  = data.scans.filter(s => s.id > _lastKnownScanId);
+            const completed = newScans.filter(s => s.status === 'completed');
+            const running   = newScans.filter(s => s.status === 'running');
+
+            // Guardar running para notificar cuando terminen
+            running.forEach(s => _pendingRunning.set(s.id, s.machine_name || 'desconocido'));
+
+            if (completed.length > 0) {
+                _newScansCount += completed.length;
+                showNewScansBadge(_newScansCount);
+                showToast(`Nuevo scan de ${completed[0].machine_name || 'desconocido'}`, 'info', completed[0].id);
+                playNotificationSound();
+                const activeSection = document.querySelector('.panel-section.active');
+                if (activeSection && activeSection.id === 'dashboard-section') loadDashboard();
             }
         }
+
+        // Comprobar si algún scan "en progreso" ya terminó
+        for (const [id, name] of _pendingRunning.entries()) {
+            const scan = data.scans.find(s => s.id === id);
+            if (scan && scan.status === 'completed') {
+                _pendingRunning.delete(id);
+                _newScansCount++;
+                showNewScansBadge(_newScansCount);
+                showToast(`Scan completado: ${name}`, 'success', id);
+                playNotificationSound();
+                const activeSection = document.querySelector('.panel-section.active');
+                if (activeSection && activeSection.id === 'dashboard-section') loadDashboard();
+            } else if (!scan) {
+                _pendingRunning.delete(id); // ya no aparece en recientes, descartar
+            }
+        }
+
+        _lastKnownScanId = latest.id;
     } catch (_) {}
 }
 
@@ -178,7 +208,8 @@ function initializeNavigation() {
             'resultados': 'resultados',
             'aprendizaje': 'aprendizaje',
             'administracion': 'administracion',
-            'mi-empresa': 'mi-empresa'
+            'mi-empresa': 'mi-empresa',
+            'staff': 'staff',
         };
         if (sectionMap[hash]) {
             showSection(sectionMap[hash]);
@@ -241,6 +272,8 @@ function showSection(sectionName) {
         loadCompanyInfo();
         loadCompanyTokens();
         loadCompanyUsers();
+    } else if (sectionName === 'staff') {
+        loadStaffUsers();
     }
 
     // Limpiar badge de nuevos scans al visitar las secciones relacionadas
@@ -313,6 +346,8 @@ function _scanInitials(machineName) {
 }
 
 function _resultBadge(scan) {
+    if (scan.status === 'running')
+        return '<span class="result-badge" style="background:rgba(99,102,241,0.12);color:#818cf8;border-color:rgba(99,102,241,0.3)">⏳ Escaneando</span>';
     const s = scan.severity_summary || '';
     if (s === 'CRITICO' || s === 'SOSPECHOSO')
         return '<span class="result-badge result-detected">Detectado</span>';
@@ -779,7 +814,17 @@ window.deleteToken = deleteToken;
 
 async function loadScans() {
     try {
-        const response = await fetch('/api/scans?limit=50');
+        const params = new URLSearchParams({ limit: 50 });
+        const search    = (document.getElementById('filter-search')?.value || '').trim();
+        const verdict   = document.getElementById('filter-verdict')?.value || '';
+        const dateFrom  = document.getElementById('filter-date-from')?.value || '';
+        const dateTo    = document.getElementById('filter-date-to')?.value || '';
+        if (search)   params.set('search', search);
+        if (verdict)  params.set('verdict', verdict);
+        if (dateFrom) params.set('date_from', dateFrom);
+        if (dateTo)   params.set('date_to', dateTo);
+
+        const response = await fetch('/api/scans?' + params.toString());
         const data = await response.json();
         
         const tbody = document.getElementById('results-table-body');
@@ -823,6 +868,144 @@ async function loadScans() {
         }
     } catch (error) {
         console.error('Error cargando escaneos:', error);
+    }
+}
+
+function applyFilters() { loadScans(); }
+
+function clearFilters() {
+    const ids = ['filter-search','filter-verdict','filter-date-from','filter-date-to'];
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    loadScans();
+}
+
+function saveFilterPreset() {
+    const search   = (document.getElementById('filter-search')?.value || '').trim();
+    const verdict  = document.getElementById('filter-verdict')?.value || '';
+    const dateFrom = document.getElementById('filter-date-from')?.value || '';
+    const dateTo   = document.getElementById('filter-date-to')?.value || '';
+    if (!search && !verdict && !dateFrom && !dateTo) return;
+    const name = prompt('Nombre del preset:');
+    if (!name) return;
+    const presets = JSON.parse(localStorage.getItem('scan_filter_presets') || '{}');
+    presets[name] = { search, verdict, dateFrom, dateTo };
+    localStorage.setItem('scan_filter_presets', JSON.stringify(presets));
+    _renderPresetOptions();
+}
+
+function loadFilterPreset(name) {
+    if (!name) return;
+    const presets = JSON.parse(localStorage.getItem('scan_filter_presets') || '{}');
+    const p = presets[name];
+    if (!p) return;
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+    set('filter-search', p.search);
+    set('filter-verdict', p.verdict);
+    set('filter-date-from', p.dateFrom);
+    set('filter-date-to', p.dateTo);
+    loadScans();
+}
+
+function _renderPresetOptions() {
+    const sel = document.getElementById('filter-presets');
+    if (!sel) return;
+    const presets = JSON.parse(localStorage.getItem('scan_filter_presets') || '{}');
+    sel.innerHTML = '<option value="">Presets...</option>' +
+        Object.keys(presets).map(n => `<option value="${n}">${n}</option>`).join('');
+}
+
+// ── Staff management ───────────────────────────────────────────────────────
+
+const STAFF_ROLES = ['helper', 'moderador', 'admin', 'owner'];
+const STAFF_ROLE_LABELS = { helper: 'Helper', moderador: 'Moderador', admin: 'Admin', owner: 'Owner' };
+
+async function loadStaffUsers() {
+    const tbody = document.getElementById('staff-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" class="loading-cell">Cargando...</td></tr>';
+    try {
+        const res = await fetch('/api/staff/users');
+        if (!res.ok) { tbody.innerHTML = `<tr><td colspan="4" class="loading-cell">Sin acceso</td></tr>`; return; }
+        const data = await res.json();
+        if (!data.users || !data.users.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="loading-cell">Sin usuarios</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.users.map(u => {
+            const roleOptions = STAFF_ROLES.map(r =>
+                `<option value="${r}" ${u.staff_role === r ? 'selected' : ''}>${STAFF_ROLE_LABELS[r]}</option>`
+            ).join('');
+            return `<tr>
+                <td><strong>${u.username}</strong>${u.email ? `<div style="font-size:11px;color:var(--text-d);">${u.email}</div>` : ''}</td>
+                <td><span class="badge badge-${_staffBadge(u.staff_role)}">${STAFF_ROLE_LABELS[u.staff_role] || u.staff_role}</span></td>
+                <td>${u.is_active ? '✅' : '❌'}</td>
+                <td style="display:flex;gap:6px;align-items:center;">
+                    <select id="role-sel-${u.id}" class="filter-select" style="min-width:110px;font-size:12px;padding:5px 8px;">${roleOptions}</select>
+                    <button class="btn btn-sm btn-primary" onclick="updateStaffRole(${u.id})">Guardar</button>
+                </td>
+            </tr>`;
+        }).join('');
+    } catch(e) {
+        tbody.innerHTML = `<tr><td colspan="4" class="loading-cell">Error: ${e.message}</td></tr>`;
+    }
+}
+
+function _staffBadge(role) {
+    return { owner: 'danger', admin: 'warning', moderador: 'info', helper: 'secondary' }[role] || 'secondary';
+}
+
+async function updateStaffRole(userId) {
+    const sel = document.getElementById(`role-sel-${userId}`);
+    if (!sel) return;
+    const role = sel.value;
+    const res = await fetch(`/api/staff/users/${userId}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role })
+    });
+    const data = await res.json();
+    if (data.success) {
+        loadStaffUsers();
+    } else {
+        alert('Error: ' + (data.error || 'No se pudo actualizar'));
+    }
+}
+
+// ── Screenshot display ─────────────────────────────────────────────────────
+
+function renderScreenshot(data) {
+    const container = document.getElementById('screenshot-container');
+    if (!container) return;
+    const b64 = data && data.screenshot;
+    if (!b64) {
+        container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-d);font-size:13px;">Sin captura de pantalla — el scanner tomará una automáticamente a partir de la próxima versión.</div>';
+        return;
+    }
+    const ts = data.started_at ? new Date(data.started_at).toLocaleString() : '';
+    container.innerHTML = `
+        <div style="font-size:12px;color:var(--text-d);margin-bottom:8px;">
+            Capturado el inicio del escaneo · ${ts}
+        </div>
+        <img src="data:image/jpeg;base64,${b64}"
+             alt="Captura de pantalla"
+             style="max-width:100%;border-radius:10px;border:1px solid var(--border);box-shadow:0 4px 20px rgba(0,0,0,0.3);"
+             onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'none':'100%'"
+             title="Click para ver tamaño completo">`;
+}
+
+// Apply permission guards on page load
+function applyPermissionGuards() {
+    if (typeof window.CAN_TOKENS !== 'undefined' && !window.CAN_TOKENS) {
+        const btn = document.getElementById('create-token-btn');
+        if (btn) btn.style.display = 'none';
+    }
+    if (typeof window.CAN_VERDICT !== 'undefined' && !window.CAN_VERDICT) {
+        // Hide verdict action buttons for helpers
+        const verdictBtns = document.querySelectorAll('#bulk-mark-hack-btn,#bulk-mark-legitimate-btn,[onclick*="openVerdictModal"],[onclick*="confirmVerdict"]');
+        verdictBtns.forEach(b => b.style.display = 'none');
     }
 }
 
@@ -1085,7 +1268,8 @@ async function viewScanDetails(scanId) {
     try {
         const response = await fetch(`/api/scans/${scanId}`);
         const data = await response.json();
-        
+        _currentScanData = data;
+
         // Calcular estadísticas de severidad
         const severityStats = { clean: 0, alert: 0, severe: 0, low: 0 };
         if (data.results && data.results.length > 0) {
@@ -1172,10 +1356,22 @@ async function viewScanDetails(scanId) {
         
         // Mostrar/ocultar banner de detección
         const detectionBanner = document.getElementById('detection-banner');
-        if (severityStats.severe > 0 || severityStats.alert > 0) {
-            detectionBanner.style.display = 'flex';
+        if (data.status === 'running') {
+            // Scan aún en curso — no mostrar banner ni resultados vacíos
+            if (detectionBanner) detectionBanner.style.display = 'none';
+            const issuesContainer = document.getElementById('issues-list-container');
+            if (issuesContainer) issuesContainer.innerHTML = `
+                <div style="text-align:center;padding:60px 20px;color:var(--text-m)">
+                    <div style="font-size:36px;margin-bottom:14px">⏳</div>
+                    <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">Scan en progreso...</div>
+                    <div style="font-size:13px">Los resultados aparecerán cuando el scanner termine.</div>
+                    <button class="btn btn-sm" style="margin-top:18px" onclick="viewScanDetails(${scanId})">Actualizar</button>
+                </div>`;
+            document.getElementById('bulk-actions-bar').style.display = 'none';
+        } else if (severityStats.severe > 0 || severityStats.alert > 0) {
+            if (detectionBanner) detectionBanner.style.display = 'flex';
         } else {
-            detectionBanner.style.display = 'none';
+            if (detectionBanner) detectionBanner.style.display = 'none';
         }
         
         // Cargar escaneos previos si existe la subpágina
@@ -1319,6 +1515,33 @@ async function viewScanDetails(scanId) {
             }
         }
 
+        // MC info from scanner detection (version, launcher, mods, agents)
+        const mcInfoRow = document.getElementById('mc-info-row');
+        if (mcInfoRow) {
+            const mci = data.mc_info;
+            if (mci && (mci.version || mci.launcher)) {
+                mcInfoRow.style.display = 'flex';
+                const verEl = document.getElementById('detail-mc-version');
+                if (verEl) verEl.textContent = mci.version || '?';
+                const launchEl = document.getElementById('detail-mc-launcher');
+                if (launchEl) launchEl.textContent = mci.launcher || 'Desconocido';
+                const agentsRow = document.getElementById('mc-agents-row');
+                const agentsEl = document.getElementById('detail-mc-agents');
+                if (agentsRow && agentsEl && mci.java_agents && mci.java_agents.length > 0) {
+                    agentsEl.textContent = mci.java_agents.length + ' agente(s)';
+                    agentsRow.style.display = 'flex';
+                }
+                const modsRow = document.getElementById('mc-mods-row');
+                const modsEl = document.getElementById('detail-mc-mods');
+                if (modsRow && modsEl && mci.mods && mci.mods.length > 0) {
+                    modsEl.textContent = mci.mods.slice(0, 10).join(', ') + (mci.mods.length > 10 ? ` +${mci.mods.length - 10} más` : '');
+                    modsRow.style.display = 'block';
+                }
+            } else {
+                mcInfoRow.style.display = 'none';
+            }
+        }
+
         // Ejecutados
         const EXECUTED_TYPES = new Set([
             'prefetch_history','prefetch_suspicious','userassist_history','userassist_suspicious',
@@ -1411,6 +1634,10 @@ function setupSubpageNavigation() {
             // Cargar notas cuando se abre esa pestaña
             if (subpage === 'notas' && currentScanId) {
                 loadScanNotes(currentScanId);
+            }
+            // Mostrar captura cuando se abre esa pestaña
+            if (subpage === 'captura-pantalla') {
+                renderScreenshot(_currentScanData);
             }
         });
     });
