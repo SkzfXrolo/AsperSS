@@ -1589,6 +1589,51 @@ def validate_token_endpoint():
         return jsonify({'valid': False, 'error': str(e)}), 500
 
 
+@app.route('/api/debug/last-scan')
+def debug_last_scan():
+    """Endpoint de diagnóstico — muestra el último scan en bruto desde la BD"""
+    try:
+        with get_api_db_cursor() as cursor:
+            # Estado de columnas disponibles en la tabla scans
+            cursor.execute("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'scans' ORDER BY ordinal_position
+            """)
+            cols = [r['column_name'] if hasattr(r, 'keys') else r[0] for r in cursor.fetchall()]
+
+            # Último scan
+            cursor.execute('SELECT * FROM scans ORDER BY id DESC LIMIT 3')
+            scans_raw = cursor.fetchall()
+            scans_out = []
+            for row in scans_raw:
+                if hasattr(row, 'keys'):
+                    d = dict(row)
+                    # no mostrar screenshot completo
+                    if d.get('screenshot'):
+                        d['screenshot'] = f'<{len(d["screenshot"])} chars>'
+                    scans_out.append(d)
+                else:
+                    scans_out.append(list(row))
+
+            # Resultados del último scan
+            results_count = 0
+            if scans_raw:
+                last_id = scans_raw[0]['id'] if hasattr(scans_raw[0], 'keys') else scans_raw[0][0]
+                cursor.execute('SELECT COUNT(*) as cnt FROM scan_results WHERE scan_id = %s', (last_id,))
+                r = cursor.fetchone()
+                results_count = r['cnt'] if hasattr(r, 'keys') else r[0]
+
+        return jsonify({
+            'scans_columns': cols,
+            'last_3_scans': scans_out,
+            'last_scan_results_count': results_count,
+            'ph': _PH,
+            'use_pg': _USE_PG,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
 @app.route('/api/scans', methods=['POST'])
 def start_scan():
     """Inicia un nuevo escaneo (usado por el cliente .exe) — sin login requerido"""
@@ -1601,8 +1646,10 @@ def start_scan():
         country      = data.get('country', '')
         mc_username  = data.get('minecraft_username', '')
 
+        print(f"[DEBUG start_scan] token={scan_token[:12]}..., machine={machine_name}, ip={ip_address}")
         token_id, error, _created_by = _validate_scan_token_direct(scan_token)
         if error:
+            print(f"[DEBUG start_scan] token inválido: {error}")
             return jsonify({'error': error}), 401
 
         mc_info = None
@@ -1638,21 +1685,31 @@ def start_scan():
                     except Exception:
                         pass
 
+        print(f"[DEBUG start_scan] scan_id={scan_id} creado OK")
         return jsonify({'success': True, 'scan_id': scan_id, 'status': 'running', 'message': 'Escaneo iniciado'}), 201
     except Exception as e:
-        print(f"Error en start_scan: {e}\n{traceback.format_exc()}")
+        print(f"[DEBUG start_scan] ERROR: {e}\n{traceback.format_exc()}")
         return jsonify({'error': f'Error iniciando escaneo: {str(e)}'}), 500
 
 
 @app.route('/api/scans/<int:scan_id>/results', methods=['POST'])
 def submit_scan_results(scan_id):
     """Recibe y almacena resultados de escaneo (usado por el cliente .exe) — sin login requerido"""
+    print(f"\n[DEBUG submit_scan_results] ===== RECIBIENDO RESULTADOS =====")
+    print(f"[DEBUG] scan_id={scan_id}, IP={request.remote_addr}")
     data = request.json
     if not data:
+        print(f"[DEBUG] ERROR: no JSON recibido")
         return jsonify({'error': 'No se recibieron datos'}), 400
+
+    print(f"[DEBUG] status={data.get('status')}, files={data.get('total_files_scanned')}, "
+          f"issues={data.get('issues_found')}, duration={data.get('scan_duration')}, "
+          f"results_count={len(data.get('results', []))}, "
+          f"has_screenshot={'si' if data.get('screenshot') else 'no'}")
 
     try:
         with get_api_db_cursor() as cursor:
+            print(f"[DEBUG] Ejecutando UPDATE scans WHERE id={scan_id}")
             cursor.execute(
                 f'UPDATE scans SET status = {_PH}, completed_at = CURRENT_TIMESTAMP,'
                 f' total_files_scanned = {_PH}, total_dirs_scanned = {_PH},'
@@ -1662,7 +1719,9 @@ def submit_scan_results(scan_id):
                  data.get('total_dirs_scanned', 0),
                  data.get('issues_found', 0), data.get('scan_duration', 0), scan_id)
             )
+            print(f"[DEBUG] UPDATE rowcount={cursor.rowcount}")
             if cursor.rowcount == 0:
+                print(f"[DEBUG] ERROR: scan_id={scan_id} no encontrado en BD (rowcount=0)")
                 return jsonify({'error': f'Escaneo {scan_id} no encontrado'}), 404
 
             # Guardar screenshot y mc_info si vienen en el payload (columnas opcionales)
@@ -1696,6 +1755,7 @@ def submit_scan_results(scan_id):
                         pass
 
             results = data.get('results', [])
+            print(f"[DEBUG] Insertando {len(results)} resultados en scan_results")
             if results:
                 batch = [
                     (scan_id,
@@ -1706,6 +1766,10 @@ def submit_scan_results(scan_id):
                      r.get('ai_analysis', ''), r.get('ai_confidence', 0))
                     for r in results
                 ]
+                if results:
+                    print(f"[DEBUG] Primer resultado: tipo={results[0].get('tipo')}, "
+                          f"nombre={results[0].get('nombre') or results[0].get('archivo')}, "
+                          f"alerta={results[0].get('alerta')}")
                 cursor.executemany(
                     f'INSERT INTO scan_results'
                     f' (scan_id, issue_type, issue_name, issue_path, issue_category,'
@@ -1714,11 +1778,15 @@ def submit_scan_results(scan_id):
                     f' VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})',
                     batch
                 )
+                print(f"[DEBUG] executemany completado")
 
-        print(f"Scan {scan_id} completado: {len(results)} resultados, status={data.get('status', 'completed')}")
+        print(f"[DEBUG] ===== SCAN {scan_id} COMPLETADO OK: "
+              f"{len(data.get('results',[]))} resultados, status={data.get('status','completed')} =====\n")
         return jsonify({'success': True, 'message': 'Resultados almacenados'})
     except Exception as e:
-        print(f"Error en submit_scan_results: {e}\n{traceback.format_exc()}")
+        print(f"[DEBUG] ===== ERROR en submit_scan_results scan_id={scan_id} =====")
+        print(f"[DEBUG] {e}")
+        print(traceback.format_exc())
         return jsonify({'error': f'Error almacenando resultados: {str(e)}'}), 500
 
 
