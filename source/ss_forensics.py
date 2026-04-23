@@ -88,6 +88,12 @@ class SSForensics:
             self._scan_mounted_devices,
             self._scan_prefetch_analysis,
             self._scan_tcpip_interfaces,
+            self._scan_logitech_macros,
+            self._scan_razer_macros,
+            self._scan_dns_cache,
+            self._scan_autohotkey,
+            self._scan_event_log_time_change,
+            self._scan_jna_artifacts,
         ]
         for fn in methods:
             try:
@@ -956,5 +962,255 @@ class SSForensics:
                     except OSError:
                         continue
         except OSError:
+            pass
+        return findings
+
+    def _scan_logitech_macros(self):
+        findings = []
+        try:
+            import json, os
+            lghub_path = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'LGHUB', 'settings.json')
+            if os.path.isfile(lghub_path):
+                try:
+                    with open(lghub_path, 'r', encoding='utf-8', errors='replace') as f:
+                        data = json.load(f)
+                    raw = json.dumps(data).lower()
+                    click_keywords = ['click', 'mousebutton', 'leftbutton', 'rightbutton', 'interval', 'repeat', 'macro']
+                    matched = [kw for kw in click_keywords if kw in raw]
+                    if matched:
+                        findings.append({
+                            'tipo':        'LOGITECH_MACRO',
+                            'nombre':      'Logitech LGHUB macros detectados',
+                            'ruta':        lghub_path,
+                            'detalle':     f'Palabras clave encontradas: {", ".join(matched)}',
+                            'alerta':      'SOSPECHOSO',
+                            'categoria':   'MACRO_DETECTION',
+                            'descripcion': (
+                                'El archivo settings.json de Logitech LGHUB contiene configuración de macros '
+                                'que puede incluir autoclicker o secuencias automatizadas.'
+                            ),
+                        })
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return findings
+
+    def _scan_razer_macros(self):
+        findings = []
+        try:
+            import os, json
+            razer_base = r'C:\ProgramData\Razer\Synapse3\Profiles'
+            if not os.path.isdir(razer_base):
+                razer_base = r'C:\ProgramData\Razer\Synapse\Accounts'
+            macro_keywords = ['click', 'mousedown', 'mouseup', 'interval', 'repeat', 'macro', 'keystroke']
+            if os.path.isdir(razer_base):
+                for root, _dirs, files in os.walk(razer_base):
+                    for fname in files:
+                        if not fname.lower().endswith(('.json', '.xml', '.cfg')):
+                            continue
+                        fpath = os.path.join(root, fname)
+                        try:
+                            with open(fpath, 'r', encoding='utf-8', errors='replace') as f:
+                                content = f.read().lower()
+                            matched = [kw for kw in macro_keywords if kw in content]
+                            if matched:
+                                findings.append({
+                                    'tipo':        'RAZER_MACRO',
+                                    'nombre':      f'Razer Synapse macro: {fname}',
+                                    'ruta':        fpath,
+                                    'detalle':     f'Palabras clave: {", ".join(matched)}',
+                                    'alerta':      'SOSPECHOSO',
+                                    'categoria':   'MACRO_DETECTION',
+                                    'descripcion': (
+                                        f'Perfil Razer Synapse "{fname}" contiene configuración de macros '
+                                        'compatible con autoclicker o automatización de entrada.'
+                                    ),
+                                })
+                        except Exception:
+                            continue
+        except Exception:
+            pass
+        return findings
+
+    def _scan_dns_cache(self):
+        findings = []
+        HACK_DOMAINS = [
+            'wurst', 'meteor', 'aristois', 'liquidbounce', 'sigma', 'inertia',
+            'ghostclient', 'impact', 'lucid', 'drip', 'kingauraplus', 'xray',
+            'wolfram', 'novoline', 'rusher', 'remix', 'rise', 'flux',
+        ]
+        try:
+            import subprocess, re
+            result = subprocess.run(
+                ['ipconfig', '/displaydns'],
+                capture_output=True, text=True, timeout=15,
+                creationflags=0x08000000
+            )
+            output = result.stdout
+            record_names = re.findall(r'Record Name[\s.]+:\s*(.+)', output, re.IGNORECASE)
+            for name in record_names:
+                name = name.strip().lower()
+                for hack in HACK_DOMAINS:
+                    if hack in name:
+                        findings.append({
+                            'tipo':        'DNS_CACHE_HACK_DOMAIN',
+                            'nombre':      f'Dominio hack en caché DNS: {name}',
+                            'ruta':        'ipconfig /displaydns',
+                            'detalle':     f'Dominio: {name} | Coincide con: {hack}',
+                            'alerta':      'MUY_SOSPECHOSO',
+                            'categoria':   'NETWORK_FORENSICS',
+                            'descripcion': (
+                                f'La caché DNS contiene el dominio "{name}" relacionado con el cliente '
+                                f'"{hack}". Indica visita reciente a sitio de hack.'
+                            ),
+                        })
+        except Exception:
+            pass
+        return findings
+
+    def _scan_autohotkey(self):
+        findings = []
+        try:
+            import subprocess, os
+            # Check running AHK processes
+            try:
+                result = subprocess.run(
+                    ['tasklist', '/FO', 'CSV', '/NH'],
+                    capture_output=True, text=True, timeout=10,
+                    creationflags=0x08000000
+                )
+                for line in result.stdout.splitlines():
+                    line_lower = line.lower()
+                    if 'autohotkey' in line_lower or 'ahk' in line_lower:
+                        findings.append({
+                            'tipo':        'AUTOHOTKEY_PROCESS',
+                            'nombre':      'AutoHotKey proceso activo',
+                            'ruta':        'tasklist',
+                            'detalle':     line.strip(),
+                            'alerta':      'MUY_SOSPECHOSO',
+                            'categoria':   'MACRO_DETECTION',
+                            'descripcion': 'AutoHotKey está ejecutándose activamente, puede estar automatizando clics o inputs.',
+                        })
+            except Exception:
+                pass
+            # Scan common dirs for .ahk files
+            search_dirs = [
+                os.path.join(os.environ.get('APPDATA', ''), ''),
+                os.path.join(os.environ.get('LOCALAPPDATA', ''), ''),
+                os.path.join(os.environ.get('USERPROFILE', ''), 'Desktop'),
+                os.path.join(os.environ.get('USERPROFILE', ''), 'Documents'),
+                os.path.join(os.environ.get('USERPROFILE', ''), 'Downloads'),
+            ]
+            for base in search_dirs:
+                if not base or not os.path.isdir(base):
+                    continue
+                for root, _dirs, files in os.walk(base):
+                    for fname in files:
+                        if fname.lower().endswith('.ahk'):
+                            fpath = os.path.join(root, fname)
+                            findings.append({
+                                'tipo':        'AUTOHOTKEY_SCRIPT',
+                                'nombre':      f'Script AHK encontrado: {fname}',
+                                'ruta':        fpath,
+                                'detalle':     f'Archivo .ahk en {root}',
+                                'alerta':      'SOSPECHOSO',
+                                'categoria':   'MACRO_DETECTION',
+                                'descripcion': f'Script AutoHotKey "{fname}" encontrado. Puede contener macros de autoclicker.',
+                            })
+            # Check registry for AHK installation
+            try:
+                import winreg
+                uninstall_key = r'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, uninstall_key) as uk:
+                    i = 0
+                    while True:
+                        try:
+                            sub = winreg.EnumKey(uk, i)
+                            i += 1
+                            with winreg.OpenKey(uk, sub) as sk:
+                                try:
+                                    display_name, _ = winreg.QueryValueEx(sk, 'DisplayName')
+                                    if 'autohotkey' in display_name.lower():
+                                        findings.append({
+                                            'tipo':        'AUTOHOTKEY_INSTALLED',
+                                            'nombre':      f'AutoHotKey instalado: {display_name}',
+                                            'ruta':        f'HKLM\\{uninstall_key}\\{sub}',
+                                            'detalle':     display_name,
+                                            'alerta':      'POCO_SOSPECHOSO',
+                                            'categoria':   'MACRO_DETECTION',
+                                            'descripcion': 'AutoHotKey está instalado en el sistema.',
+                                        })
+                                except OSError:
+                                    pass
+                        except OSError:
+                            break
+            except Exception:
+                pass
+        except Exception:
+            pass
+        return findings
+
+    def _scan_event_log_time_change(self):
+        findings = []
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['wevtutil', 'qe', 'System', '/q:*[System[EventID=4616]]', '/f:text', '/c:5', '/rd:true'],
+                capture_output=True, text=True, timeout=15,
+                creationflags=0x08000000
+            )
+            output = result.stdout.strip()
+            if output:
+                lines = [l.strip() for l in output.splitlines() if l.strip()]
+                preview = ' | '.join(lines[:6])
+                findings.append({
+                    'tipo':        'SYSTEM_TIME_CHANGED',
+                    'nombre':      'Cambio de fecha/hora del sistema detectado',
+                    'ruta':        'Event Log: System / EventID 4616',
+                    'detalle':     preview[:300],
+                    'alerta':      'MUY_SOSPECHOSO',
+                    'categoria':   'SYSTEM_TAMPERING',
+                    'descripcion': (
+                        'Se encontraron eventos de cambio de hora del sistema (EventID 4616). '
+                        'Modificar la fecha puede ser usado para evadir detección de hacks basada en timestamps.'
+                    ),
+                })
+        except Exception:
+            pass
+        return findings
+
+    def _scan_jna_artifacts(self):
+        findings = []
+        try:
+            import os
+            search_dirs = [
+                os.environ.get('APPDATA', ''),
+                os.environ.get('TEMP', ''),
+                os.environ.get('TMP', ''),
+                os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Temp'),
+            ]
+            for base in search_dirs:
+                if not base or not os.path.isdir(base):
+                    continue
+                try:
+                    for entry in os.scandir(base):
+                        name_lower = entry.name.lower()
+                        if 'jna' in name_lower:
+                            findings.append({
+                                'tipo':        'JNA_ARTIFACT',
+                                'nombre':      f'Artefacto JNA encontrado: {entry.name}',
+                                'ruta':        entry.path,
+                                'detalle':     f'JNA (Java Native Access) en {base}',
+                                'alerta':      'SOSPECHOSO',
+                                'categoria':   'JAVA_AGENT',
+                                'descripcion': (
+                                    f'Artefacto JNA "{entry.name}" encontrado en directorio temporal. '
+                                    'JNA es usado por algunos clients de Minecraft para acceso nativo al sistema.'
+                                ),
+                            })
+                except Exception:
+                    continue
+        except Exception:
             pass
         return findings
