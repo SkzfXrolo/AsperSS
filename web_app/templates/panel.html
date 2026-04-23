@@ -3,7 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#8B5CF6">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Argus">
     <title>Panel Staff - Argus Projects</title>
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1424,6 +1430,19 @@
             if (icon) icon.textContent = '🌙';
         }
     })();
+    </script>
+    <script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .then(reg => {
+                console.log('[PWA] Service worker registrado:', reg.scope);
+                // Request push notification permission
+                if ('Notification' in window && Notification.permission === 'default') {
+                    Notification.requestPermission();
+                }
+            })
+            .catch(err => console.warn('[PWA] SW error:', err));
+    }
     </script>
 </body>
 </html>

@@ -1637,6 +1637,16 @@ def debug_last_scan():
 # Current released scanner version — update this when distributing a new build
 CURRENT_SCANNER_VERSION = "1.3.0"
 
+@app.route('/sw.js')
+def service_worker():
+    """Serve service worker from root scope so it can control the full origin."""
+    resp = make_response(app.send_static_file('sw.js'))
+    resp.headers['Content-Type'] = 'application/javascript'
+    resp.headers['Service-Worker-Allowed'] = '/'
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+
 @app.route('/api/scanner/version', methods=['GET'])
 def scanner_version():
     """Returns latest scanner version info so the .exe can self-update."""
