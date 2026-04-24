@@ -25,7 +25,7 @@ try:
     DISCORD_AVAILABLE = True
 except ImportError:
     DISCORD_AVAILABLE = False
-    log.warning('[Discord] discord.py no está instalado. Bot desactivado.')
+    print('[Discord] ⚠️ discord.py no está instalado. Bot desactivado.')
 
 DISCORD_TOKEN      = os.environ.get('DISCORD_TOKEN', '')
 DISCORD_GUILD      = os.environ.get('DISCORD_GUILD', '')
@@ -57,7 +57,7 @@ async def _send_to_channel(bot_instance, channel_id: int, embed: 'discord.Embed'
             channel = await bot_instance.fetch_channel(channel_id)
         await channel.send(embed=embed)
     except Exception as e:
-        log.warning(f'[Discord] Error enviando al canal {channel_id}: {e}')
+        print(f'[Discord] ⚠️ Error enviando al canal {channel_id}: {e}')
 
 
 # ── Bot factory ───────────────────────────────────────────────────────────────
@@ -383,8 +383,9 @@ def start_bot_thread():
 
     if not DISCORD_AVAILABLE:
         return
+    print(f'[Discord] DISCORD_AVAILABLE={DISCORD_AVAILABLE} TOKEN_SET={bool(DISCORD_TOKEN)} GUILD={DISCORD_GUILD!r} CHANNEL={DISCORD_CHANNEL!r}')
     if not DISCORD_TOKEN:
-        log.info('[Discord] DISCORD_TOKEN no configurado, bot desactivado.')
+        print('[Discord] ❌ DISCORD_TOKEN vacío — bot desactivado. Configurar en Render > Environment.')
         return
 
     def _run():
