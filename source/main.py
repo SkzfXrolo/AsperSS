@@ -2041,6 +2041,18 @@ class ArgusApp:
         hacks_normal = []
         
         print(f"\n🔍 INICIANDO FILTRADO MEJORADO DE {len(issues)} ELEMENTOS...")
+
+        # Umbral mínimo de confianza — descartar ruido < 30%
+        MIN_CONFIDENCE = 30
+        issues = [i for i in issues if (
+            i.get('tipo', '') in {
+                'ghost_client_config', 'ghost_client_registry', 'jdwp_debug_port',
+                'vpn_active', 'hosts_minecraft_redirect', 'injector_process',
+                'blacklisted_mod', 'modified_minecraft_jar', 'hack_string_in_loaded_jar',
+            } or
+            (i.get('confidence', 100) * (100 if i.get('confidence', 1) <= 1 else 1)) >= MIN_CONFIDENCE
+        )]
+        print(f"📉 Umbral confianza {MIN_CONFIDENCE}%: {len(issues)} elementos restantes")
         
         # ============================================================
         # FILTRO MEJORADO - DETECTA HACKS REALES PERO MENOS ESTRICTO
@@ -2271,6 +2283,27 @@ class ArgusApp:
                 
                 filtered.append(item)
         
+        # Correlación de evidencias: escalar si hay 2+ indicadores del mismo tipo
+        JAVA_INJECTION_TYPES = {
+            'jdwp_debug_port', 'javaagent_injection', 'bootclasspath_modification',
+            'dll_injection_java', 'hack_string_in_loaded_jar', 'injector_process',
+        }
+        AUTOCLICK_TYPES = {
+            'ahk_autoclick', 'peripheral_macro', 'bloody_a4tech', 'arduino_hid_device',
+        }
+        GHOST_TYPES = {
+            'ghost_client_config', 'ghost_client_registry', 'blacklisted_mod', 'modified_minecraft_jar',
+        }
+        for group in (JAVA_INJECTION_TYPES, AUTOCLICK_TYPES, GHOST_TYPES):
+            matching = [i for i in filtered if i.get('tipo', '') in group]
+            if len(matching) >= 2:
+                for item in matching:
+                    if item.get('alerta') not in ('CRITICAL',):
+                        item['alerta'] = 'CRITICAL'
+                        item['confidence'] = max(item.get('confidence', 0.8), 0.92)
+                        item['detected_patterns'] = list(set(item.get('detected_patterns', []) + ['multi_evidence_correlation']))
+                print(f"🔗 Correlación de evidencias: {len(matching)} hallazgos → CRITICAL")
+
         # Mostrar estadísticas de filtrado
         print(f"\n📊 ESTADÍSTICAS DE FILTRADO MEJORADO:")
         print(f"🔴 HACKS CRÍTICOS: {len(hacks_critical)}")
@@ -3629,12 +3662,12 @@ class ArgusApp:
                                 detected_count += 1
                                 result['detected_patterns'].append(pattern.decode('utf-8', errors='ignore'))
 
-                        if detected_count >= 3:  # Requiere 3+ patrones para evitar falsos positivos
+                        if detected_count >= 3:
                             result['is_hack'] = True
                             result['confidence'] = min(90, detected_count * 15)
                         elif detected_count == 2:
                             result['is_hack'] = True
-                            result['confidence'] = 55  # sospechoso pero no crítico
+                            result['confidence'] = 55
 
                         # Ofuscación solo relevante para archivos de texto, no binarios JARs/class
                         if len(content) > 100 and not filename_lower.endswith(('.jar', '.class')):
@@ -3644,7 +3677,63 @@ class ArgusApp:
                                 result['confidence'] += 20
             except:
                 pass
-            
+
+            # Análisis de estructura interna para JARs
+            if filename_lower.endswith('.jar'):
+                try:
+                    import zipfile as _zf
+                    import math as _math
+                    LEGIT_MOD_MARKERS = {
+                        'mcmod.info', 'fabric.mod.json', 'quilt.mod.json',
+                        'mods.toml', 'pack.mcmeta',
+                    }
+                    SUSPICIOUS_MANIFEST_PACKAGES = [
+                        'com.vape', 'net.sigma', 'com.entropy', 'me.drip',
+                        'net.liquidbounce', 'com.wurst', 'com.future', 'com.flux',
+                        'com.meteor', 'com.astolfo', 'net.rise', 'com.novoline',
+                    ]
+                    with _zf.ZipFile(file_path, 'r') as zf:
+                        names_lower = {n.lower() for n in zf.namelist()}
+                        has_legit_marker = bool(names_lower & LEGIT_MOD_MARKERS)
+                        result['has_legit_mod_marker'] = has_legit_marker
+
+                        if has_legit_marker and result['confidence'] < 75:
+                            result['confidence'] = max(0, result['confidence'] - 20)
+                            result['detected_patterns'].append('has_legit_mod_marker')
+
+                        # Check MANIFEST.MF for suspicious main class
+                        if 'meta-inf/manifest.mf' in names_lower:
+                            try:
+                                manifest = zf.read('META-INF/MANIFEST.MF').decode('utf-8', errors='ignore').lower()
+                                for pkg in SUSPICIOUS_MANIFEST_PACKAGES:
+                                    if pkg in manifest:
+                                        result['is_hack'] = True
+                                        result['confidence'] = max(result['confidence'], 80)
+                                        result['detected_patterns'].append(f'manifest_pkg:{pkg}')
+                                        break
+                            except Exception:
+                                pass
+
+                    # Shannon entropy of the jar
+                    try:
+                        fsize = os.path.getsize(file_path)
+                        if 0 < fsize < 50 * 1024 * 1024:
+                            with open(file_path, 'rb') as f:
+                                raw = f.read(min(fsize, 2 * 1024 * 1024))
+                            freq = [0] * 256
+                            for b in raw: freq[b] += 1
+                            n = len(raw)
+                            entropy = -sum((c/n) * _math.log2(c/n) for c in freq if c > 0)
+                            result['entropy'] = round(entropy, 3)
+                            if entropy > 7.5:
+                                result['obfuscation_detected'] = True
+                                result['confidence'] += 15
+                                result['detected_patterns'].append(f'high_entropy:{entropy:.2f}')
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
             # Guardar en cache
             self.file_analysis_cache[file_path] = result
             return result
