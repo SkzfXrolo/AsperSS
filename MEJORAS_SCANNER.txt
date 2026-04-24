@@ -379,4 +379,206 @@ BAJA PRIORIDAD (nice to have):
   Detección: #14 (Arduino HID), #25 (Litematica), #26 (X-ray resource packs)
   Análisis:  #20 (fecha compilación), #22 (decay score), #29 (safemode), #30 (feedback loop)
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ PARTE 3 — 20 MEJORAS PARA EL SISTEMA DE IA Y ANÁLISIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ MODELOS Y CLASIFICACIÓN ]
+
+1.  CLASIFICADOR REAL CON DATOS DE FEEDBACK DEL STAFF
+    Usar los registros acumulados en staff_feedback para entrenar un
+    clasificador scikit-learn (Random Forest o XGBoost) que prediga
+    hack/legítimo basándose en features reales:
+    alert_level, issue_category, issue_type, confidence, ruta, nombre,
+    detected_patterns count, obfuscation_detected, risk_score.
+    El modelo se reentrena automáticamente cada semana con los nuevos
+    feedbacks. Exportar como .pkl y cargarlo en el servidor.
+    Requiere: scikit-learn, joblib.
+
+2.  SCORING POR RAREZA — INDICADORES EPIDEMIOLÓGICOS
+    Calcular para cada tipo de hallazgo su "tasa de hack real":
+      tasa = feedback_hacks / (feedback_hacks + feedback_legitimos)
+    Un hallazgo que aparece en 95% de los baneados y 5% de los limpios
+    tiene mucho más peso que uno que aparece en todos por igual.
+    Actualizar esta tasa automáticamente con cada feedback del staff.
+    Resultado: confidence deja de ser hardcodeada y se vuelve dinámica.
+
+3.  ANÁLISIS DE SECUENCIA TEMPORAL (KILL CHAIN)
+    No analizar cada hallazgo como evento aislado — analizar la
+    secuencia cronológica de eventos en el USN Journal y Prefetch:
+    "Descargó .jar → lo ejecutó → lo borró → entró al servidor"
+    es una kill chain de hack. Detectar estas cadenas temporales y
+    sumarlas como un único hallazgo de alta confianza.
+    El modelo aprende qué secuencias son características de cheaters.
+
+4.  CLUSTERING DE PERFILES DE SCAN (DETECCIÓN DE HACKS NUEVOS)
+    Agrupar todos los scans usando K-Means o DBSCAN sobre sus vectores
+    de hallazgos. Si un cluster nuevo emerge de repente con múltiples
+    jugadores, es un hack nuevo distribuyéndose en el servidor.
+    El sistema alerta automáticamente: "Patrón nuevo detectado en
+    5 jugadores en las últimas 24h — posible hack en circulación."
+
+5.  MODELO DE PERFIL DE JUGADOR (BASELINE PERSONAL)
+    Acumular historial de scans del mismo machine_id. El primer scan
+    establece el baseline. Los scans siguientes se comparan contra él:
+    "Este jugador normalmente tiene X, Y, Z. Hoy apareció W nuevo."
+    El delta entre scans es más significativo que el scan aislado.
+    Implementar en la BD como player_profiles(machine_id, feature_vector).
+
+6.  DETECCIÓN DE EVASIÓN ACTIVA (META-ANÁLISIS)
+    El sistema detecta cuando un jugador está intentando evadir el
+    scanner activamente. Indicadores:
+    - Sistema demasiado "limpio" para un PC gamer normal
+    - VPN activa durante el scan
+    - Muchos archivos borrados en las últimas 2h
+    - Prefetch vacío o borrado manualmente
+    - Pocos procesos corriendo (apagó todo antes del SS)
+    Cada indicador de evasión suma al risk_score independientemente
+    del contenido encontrado. Evasión activa = sospechoso.
+
+[ ANÁLISIS DE TEXTO Y PATRONES ]
+
+7.  NLP EN STRINGS DE MEMORIA — NOMENCLATURA DE HACKS
+    Los módulos de ghost clients siguen convenciones de nombres:
+    PascalCase cortos (KillAura, AimBot, BowAimbot), a veces con
+    sufijos (KillAuraModule, AutoCritsFeature).
+    Entrenar un modelo de texto simple (Naive Bayes sobre n-gramas de
+    caracteres) para distinguir nombres de módulos de hacks de strings
+    Java legítimos. Más preciso que buscar palabras clave exactas.
+
+8.  TF-IDF EN CONFIG FILES DE MODS
+    Los config files de hacks tienen campos característicos:
+    "enabled", "mode", "range", "reach", "yawSpeed", "rotations",
+    "aimAssist", "criticals", "velocity", "scaffold".
+    Vectorizar los campos con TF-IDF y comparar contra vectores de
+    configs de hacks conocidos. Detecta configs renombrados o
+    parcialmente modificados para evadir detección por nombre de campo.
+
+9.  ANÁLISIS DE GRAFO DE PROCESOS (PROCESS TREE)
+    Construir el árbol completo de qué proceso lanzó a qué otro
+    usando psutil (proc.ppid()). Detectar cadenas anómalas:
+    explorer.exe → java.exe → injector.exe (anómalo)
+    javaw.exe lanzado por un proceso desconocido (no launcher oficial)
+    Un Minecraft legítimo siempre es lanzado por un launcher conocido.
+
+10. EMBEDDINGS DE RUTAS (DETECCIÓN DE OFUSCACIÓN POR RENOMBRE)
+    Convertir rutas de archivos en vectores usando character n-grams.
+    Un hack renombrado de "sigma.jar" a "update_patch_v2.jar" sigue
+    estando en la misma carpeta, con el mismo tamaño, misma estructura
+    interna. El vector de ruta+contexto sigue siendo similar.
+    Detectar rutas similares a patrones de hacks aunque el nombre
+    específico haya sido cambiado.
+
+[ CONFIANZA Y CALIBRACIÓN ]
+
+11. CALIBRACIÓN DE PROBABILIDADES (PLATT SCALING)
+    Los modelos de ML tienden a dar probabilidades mal calibradas.
+    Aplicar Platt Scaling o Isotonic Regression sobre las salidas del
+    clasificador para que "60% de confianza" signifique realmente que
+    6 de cada 10 casos con ese score son hacks.
+    Requiere un conjunto de validación separado del de entrenamiento.
+
+12. INTERVALOS DE CONFIANZA EN EL SCORE
+    En vez de un solo número (risk_score: 72), mostrar un intervalo:
+    "risk_score: 72 ± 15 (IC 95%)".
+    Cuando el intervalo es muy amplio (poca certeza), marcar el caso
+    como "REQUIERE REVISIÓN MANUAL" en vez de dar un veredicto firme.
+    El staff sabe cuándo la IA está segura y cuándo está adivinando.
+
+13. ACTIVE LEARNING — PRIORIZAR CASOS INCIERTOS
+    Cuando el modelo tiene confianza baja (45-65%), esos casos son los
+    más valiosos para el aprendizaje. Marcarlos en el panel con un
+    ícono especial: "La IA no está segura — tu revisión aquí mejora
+    el modelo más que en casos obvios."
+    Ordenar la cola de revisión priorizando estos casos inciertos.
+
+[ DETECCIÓN AVANZADA ]
+
+14. ANÁLISIS DE ENTROPÍA POR SECCIONES DEL ARCHIVO
+    No calcular entropía del archivo completo (muchos falsos positivos
+    por compresión legítima). Calcular entropía por secciones de 4KB.
+    Un packer malicioso tiene secciones de altísima entropía mezcladas
+    con secciones de baja entropía. Un zip legítimo tiene entropía
+    uniformemente alta en todo el archivo.
+    Entrenar el modelo para distinguir estos patrones.
+
+15. FINGERPRINT COMPUESTO DE HACK CLIENTS
+    Cada ghost client deja una combinación característica de artefactos.
+    Definir "firmas compuestas" en la cloud DB:
+      Vape:   vape.encrypted + proceso con heap >512MB + sin mods en /mods
+      Sigma:  .sigma/config + registry key + prefetch SIGMA.EXE
+      Rise:   .rise/ + javaagent con jar en temp + timing mouse 10ms
+    Si se detectan 2 de 3 artefactos de una firma → identificar
+    el cliente específico, no solo "hack genérico".
+
+16. VERIFICACIÓN CRUZADA CON HISTORIAL DE BANS
+    Cuando el modelo detecta un patrón, buscar en scan_results de
+    jugadores baneados si tuvieron exactamente ese hallazgo.
+    "Este patrón apareció en 8 de los últimos 10 jugadores baneados
+    con hack X" → multiplicar confidence x1.8 automáticamente.
+    El historial de bans retroalimenta directamente la detección futura.
+
+17. ANOMALY DETECTION EN ACTIVIDAD DE DISCO PRE-SCAN
+    Analizar el USN Journal de los 10 minutos anteriores al inicio del
+    scan. Si hubo actividad intensa de escritura+borrado en carpetas de
+    Minecraft justo antes, es un indicador de limpieza activa.
+    "El jugador borró 47 archivos en .minecraft en los 5 min previos
+    al scan" → agregar al reporte como evidencia de evasión.
+
+[ EXPLICABILIDAD Y FEEDBACK ]
+
+18. SHAP VALUES — EXPLICAR QUÉ IMPULSÓ CADA DECISIÓN
+    Integrar SHAP (SHapley Additive exPlanations) para que el panel
+    muestre exactamente qué features empujaron el risk_score hacia
+    arriba o hacia abajo en cada scan:
+    "+35 puntos: config file de ghost client encontrado"
+    "+20 puntos: jar borrado hace 2h en carpeta Minecraft"
+    "-10 puntos: firma digital válida en proceso principal"
+    El staff entiende la decisión en vez de confiar ciegamente en un número.
+
+19. MODELO DE LENGUAJE PARA NOTAS AUTOMÁTICAS
+    Usar las notas escritas por el staff en casos anteriores similares
+    para generar automáticamente un borrador de nota para el nuevo caso:
+    "Casos similares a este fueron anotados como: 'Vape V4 con config
+    en AppData, borró el jar antes del SS. Banear.' ¿Usar esta nota?"
+    El staff aprueba o edita, ahorrando tiempo en casos repetitivos.
+
+20. REENTRENAMIENTO AUTOMÁTICO SEMANAL CON MÉTRICAS
+    Cada domingo a las 3AM (cronjob en Render), el sistema:
+    a) Recolecta todos los feedbacks nuevos de la semana
+    b) Reentrena el clasificador con los datos acumulados totales
+    c) Evalúa el nuevo modelo contra un conjunto de validación fijo
+    d) Si accuracy mejora o es igual → despliega el nuevo modelo
+    e) Si empeora → mantiene el anterior y alerta al admin
+    f) Publica en el panel: "Modelo actualizado — accuracy: 94.2%
+       (+1.3% vs semana anterior). Basado en 847 feedbacks totales."
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ ORDEN DE IMPLEMENTACIÓN — IA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ALTA PRIORIDAD (mayor impacto inmediato, sin necesitar muchos datos):
+  #2  (scoring por rareza — solo SQL, impacto inmediato)
+  #6  (detección de evasión activa — reglas simples, muy efectivo)
+  #3  (kill chain temporal — ya tenemos USN Journal)
+  #16 (cruce con historial de bans — ya tenemos los datos)
+  #18 (SHAP values — mejora la UX del panel inmediatamente)
+
+MEDIA PRIORIDAD (requiere acumular datos primero):
+  #1  (clasificador RF — necesita ~500 feedbacks para ser útil)
+  #5  (perfil de jugador — necesita múltiples scans del mismo player)
+  #13 (active learning — depende del clasificador #1)
+  #17 (anomaly de disco pre-scan — ampliar USN analysis)
+  #15 (fingerprints compuestos — definir firmas en cloud DB)
+
+BAJA PRIORIDAD (investigación y refinamiento):
+  #4  (clustering — necesita volumen alto de scans)
+  #7  (NLP en strings — requiere dataset de entrenamiento)
+  #11 (calibración — refinamiento del clasificador)
+  #14 (entropía por secciones — análisis profundo de archivos)
+  #20 (reentrenamiento automático — cuando el resto esté estable)
+
+═══════════════════════════════════════════════════════════════════
+   TOTAL: 80 MEJORAS PENDIENTES (30 detección + 30 análisis FP + 20 IA)
 ═══════════════════════════════════════════════════════════════════
