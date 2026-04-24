@@ -98,6 +98,12 @@ def _rot13(s: str) -> str:
     return codecs.decode(s, 'rot_13')
 
 
+def _trunc(s: str, n: int = 120) -> str:
+    """Trunca un string a n caracteres para evitar textos enormes en hallazgos."""
+    s = str(s)
+    return s[:n] + '…' if len(s) > n else s
+
+
 def _is_hack(name: str) -> bool:
     """Devuelve True si el nombre coincide con patrones de hack.
 
@@ -262,35 +268,40 @@ class SSForensics:
             if not matched_reason:
                 continue
 
-            # Extract filename
-            m = re.search(r'"([^"]+\.(exe|jar|dll|bat|ps1|vbs|py|class))"',
-                          line, re.IGNORECASE)
+            # Solo .exe y .jar — los .dll generan demasiado ruido con shaders y drivers
+            m = re.search(r'"([^"]+\.(exe|jar|bat|ps1))"', line, re.IGNORECASE)
             if not m:
                 continue
             fname = m.group(1)
 
+            # Ignorar rutas de Steam (actualizaciones de juegos) y del sistema
+            fname_lower = fname.lower()
+            if any(skip in fname_lower for skip in (
+                r'\steamapps\\', r'\steam\steam', r'\epicgames\\',
+                r'\windows\', r'\program files\', r'\nvidia\', r'\microsoft\',
+            )):
+                continue
+
             reason_code, (reason_type, reason_label, base_severity) = matched_reason
             is_hack_name = _is_hack(fname)
 
-            # Only flag: (a) known hack names always, (b) deleted/renamed non-system always
-            if not is_hack_name and reason_type == 'CREATED':
-                continue   # too many false positives for generic creates
-
-            severity = 'CRITICAL' if is_hack_name else base_severity
+            # SOLO reportar si el nombre coincide con patrones de hack
+            # Reportar cualquier exe borrado genera cientos de falsos positivos
+            # (Steam updates, Windows updates, game installers, etc.)
+            if not is_hack_name:
+                continue
 
             findings.append({
                 'tipo':        f'USN_{reason_type}',
-                'nombre':      f'USN {reason_label}: {fname}',
+                'nombre':      _trunc(f'USN {reason_label}: {os.path.basename(fname)}', 80),
                 'ruta':        'USN Journal (C:)',
-                'detalle':     f'Archivo {reason_label}: {fname} | Razón: {reason_code}',
-                'alerta':      severity,
+                'detalle':     _trunc(f'{os.path.basename(fname)} — {reason_code}', 100),
+                'alerta':      'CRITICAL',
                 'categoria':   'USN_FORENSICS',
                 'descripcion': (
-                    f'El USN Journal del sistema registró que el archivo "{fname}" fue '
-                    f'{reason_label}. '
-                    + (f'El nombre coincide con patrones de hack conocidos. ' if is_hack_name else '')
-                    + 'El USN Journal es un registro de nivel de sistema de archivos NTFS '
-                    'que persiste independientemente de si el archivo fue borrado.'
+                    f'USN Journal registró que "{os.path.basename(fname)}" fue {reason_label}. '
+                    'El nombre coincide con patrones de hack. '
+                    'Este registro persiste aunque el archivo haya sido borrado.'
                 ),
             })
 
@@ -323,9 +334,9 @@ class SSForensics:
                         continue
                     findings.append({
                         'tipo':        'APPCOMPAT_HACK',
-                        'nombre':      f'AppCompat: {os.path.basename(val_name)}',
-                        'ruta':        val_name,
-                        'detalle':     f'Ruta completa en AppCompat Store: {val_name}',
+                        'nombre':      _trunc(f'AppCompat: {os.path.basename(val_name)}', 80),
+                        'ruta':        _trunc(val_name, 200),
+                        'detalle':     _trunc(f'Ruta en AppCompat Store: {val_name}', 200),
                         'alerta':      'CRITICAL',
                         'categoria':   'APPCOMPAT',
                         'descripcion': (
@@ -1834,13 +1845,19 @@ class SSForensics:
         """Equivalente automatizado del analisis de strings en explorer.exe via Process Hacker.
         Busca pcaclient.dll y DLLs con keywords de hacks inyectadas en explorer."""
         findings = []
+        # Solo términos de alta confianza — ghost/rise/impact/flux generan demasiados
+        # falsos positivos en DLL paths de NVIDIA, Adobe, Microsoft, etc.
         HACK_KEYWORDS = [
-            'hack', 'cheat', 'inject', 'ghost', 'bypass', 'vape', 'wurst',
-            'sigma', 'flux', 'meteor', 'liquidbounce', 'autohotkey',
-            'xray', 'aimbot', 'killaura', 'nodus', 'impact', 'rise',
+            'vape', 'liquidbounce', 'wurst', 'astolfo', 'killaura', 'aimbot',
+            'triggerbot', 'autoclicker', 'autohotkey', 'ghostmouse', 'cpstool',
+            'dllinjector', 'konas', 'seppuku', 'phobos', 'novoline', 'nodus',
         ]
-        SYS_PATHS = [r'\windows\system32\\', r'\windows\syswow64\\',
-                     r'\windows\winsxs\\', r'\program files\\']
+        SYS_PATHS = [
+            r'\windows\system32', r'\windows\syswow64',
+            r'\windows\winsxs', r'\program files\microsoft',
+            r'\program files (x86)\microsoft', r'\nvidia',
+            r'\windowsapps', r'\microsoft.net',
+        ]
         try:
             import psutil
             for proc in psutil.process_iter(['pid', 'name']):
