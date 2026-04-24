@@ -10,8 +10,8 @@
     <meta name="apple-mobile-web-app-title" content="Argus">
     <title>Panel Staff - Argus Projects</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=5">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=5">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=6">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=6">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -450,6 +450,14 @@
                 <input type="date" class="filter-input filter-date" id="filter-date-from" title="Desde">
                 <input type="date" class="filter-input filter-date" id="filter-date-to" title="Hasta">
                 <input type="text" class="filter-input" id="filter-country" placeholder="País..." style="max-width:110px;"
+                       onkeydown="if(event.key==='Enter')applyFilters()">
+                <select class="filter-select" id="filter-os" style="min-width:115px;">
+                    <option value="">Todos los OS</option>
+                    <option value="Windows">Windows</option>
+                    <option value="Linux">Linux</option>
+                    <option value="Darwin">Mac</option>
+                </select>
+                <input type="text" class="filter-input" id="filter-staff" placeholder="Staff..." style="max-width:110px;"
                        onkeydown="if(event.key==='Enter')applyFilters()">
                 <select class="filter-select" id="filter-risk" style="min-width:130px;">
                     <option value="">Todos los riesgos</option>
@@ -1434,8 +1442,8 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=5"></script>
-    <script src="{{ url_for('static', filename='js/empresas.js') }}?v=5"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='js/empresas.js') }}?v=6"></script>
     <script>
     // ── Theme Toggle ──────────────────────────────────────────
     function toggleTheme() {

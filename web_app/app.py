@@ -1670,6 +1670,7 @@ def start_scan():
         ip_address   = data.get('ip_address') or request.remote_addr
         country      = data.get('country', '')
         mc_username  = data.get('minecraft_username', '')
+        os_name      = data.get('os', 'Windows')[:32]
 
         print(f"[DEBUG start_scan] token={scan_token[:12]}..., machine={machine_name}, ip={ip_address}")
         token_id, error, _created_by = _validate_scan_token_direct(scan_token)
@@ -1709,6 +1710,15 @@ def start_scan():
                         cursor.execute('ROLLBACK TO SAVEPOINT mc_info_save')
                     except Exception:
                         pass
+            try:
+                cursor.execute('SAVEPOINT os_save')
+                cursor.execute(f'UPDATE scans SET os = {_PH} WHERE id = {_PH}', (os_name, scan_id))
+                cursor.execute('RELEASE SAVEPOINT os_save')
+            except Exception:
+                try:
+                    cursor.execute('ROLLBACK TO SAVEPOINT os_save')
+                except Exception:
+                    pass
 
         print(f"[DEBUG start_scan] scan_id={scan_id} creado OK")
         return jsonify({'success': True, 'scan_id': scan_id, 'status': 'running', 'message': 'Escaneo iniciado'}), 201
@@ -1919,8 +1929,10 @@ def list_scans():
     machine_name_f = (request.args.get('machine_name') or '').strip()
     country_f   = (request.args.get('country') or '').strip()
     risk_f      = (request.args.get('risk') or '').strip().lower()  # hack|suspicious|clean
+    os_f        = (request.args.get('os') or '').strip()
+    staff_f     = (request.args.get('staff') or '').strip()
 
-    has_filters = bool(search or verdict_f or date_from or date_to or machine_name_f or country_f or risk_f)
+    has_filters = bool(search or verdict_f or date_from or date_to or machine_name_f or country_f or risk_f or os_f or staff_f)
 
     # Caché solo cuando no hay filtros activos
     cache_key = f'scans_list_{limit}_{offset}'
@@ -1937,42 +1949,50 @@ def list_scans():
                 conditions = []
                 params = []
                 if machine_name_f:
-                    conditions.append(f'machine_name ILIKE {_PH}')
+                    conditions.append(f's.machine_name ILIKE {_PH}')
                     params.append(f'%{machine_name_f}%')
                 if search:
-                    conditions.append(f'(machine_name ILIKE {_PH} OR minecraft_username ILIKE {_PH} OR ip_address ILIKE {_PH})')
+                    conditions.append(f'(s.machine_name ILIKE {_PH} OR s.minecraft_username ILIKE {_PH} OR s.ip_address ILIKE {_PH})')
                     params.extend([f'%{search}%'] * 3)
                 if verdict_f:
                     if verdict_f == 'pending':
-                        conditions.append(f"(verdict IS NULL OR verdict = '')")
+                        conditions.append(f"(s.verdict IS NULL OR s.verdict = '')")
                     else:
-                        conditions.append(f'verdict = {_PH}')
+                        conditions.append(f's.verdict = {_PH}')
                         params.append(verdict_f)
                 if date_from:
-                    conditions.append(f'started_at >= {_PH}')
+                    conditions.append(f's.started_at >= {_PH}')
                     params.append(date_from)
                 if date_to:
-                    conditions.append(f'started_at <= {_PH}')
+                    conditions.append(f's.started_at <= {_PH}')
                     params.append(date_to + ' 23:59:59')
                 if country_f:
-                    conditions.append(f'country ILIKE {_PH}')
+                    conditions.append(f's.country ILIKE {_PH}')
                     params.append(f'%{country_f}%')
                 if risk_f == 'hack':
-                    conditions.append(f'risk_score >= 70')
+                    conditions.append(f's.risk_score >= 70')
                 elif risk_f == 'suspicious':
-                    conditions.append(f'risk_score >= 30 AND risk_score < 70')
+                    conditions.append(f's.risk_score >= 30 AND s.risk_score < 70')
                 elif risk_f == 'clean':
-                    conditions.append(f'risk_score < 30')
+                    conditions.append(f's.risk_score < 30')
+                if os_f:
+                    conditions.append(f's.os ILIKE {_PH}')
+                    params.append(f'%{os_f}%')
+                if staff_f:
+                    conditions.append(f'st.created_by ILIKE {_PH}')
+                    params.append(f'%{staff_f}%')
                 where = ('WHERE ' + ' AND '.join(conditions)) if conditions else ''
                 params += [limit, offset]
 
                 cursor.execute(f'''
-                    SELECT id, scan_token, started_at, completed_at, status,
-                           total_files_scanned, issues_found, scan_duration, machine_name,
-                           minecraft_username, ip_address, country
-                    FROM scans
+                    SELECT s.id, s.scan_token, s.started_at, s.completed_at, s.status,
+                           s.total_files_scanned, s.issues_found, s.scan_duration, s.machine_name,
+                           s.minecraft_username, s.ip_address, s.country,
+                           st.created_by AS scanned_by
+                    FROM scans s
+                    LEFT JOIN scan_tokens st ON s.token_id = st.id
                     {where}
-                    ORDER BY started_at DESC
+                    ORDER BY s.started_at DESC
                     LIMIT {_PH} OFFSET {_PH}
                 ''', params)
                 
@@ -1994,6 +2014,7 @@ def list_scans():
                         'minecraft_username': _row_get(row, 9, 'minecraft_username'),
                         'ip_address': _row_get(row, 10, 'ip_address'),
                         'country': _row_get(row, 11, 'country'),
+                        'scanned_by': _row_get(row, 12, 'scanned_by') or '',
                     })
                 
                 print(f"📊 Escaneos encontrados en BD local: {len(scans)}")

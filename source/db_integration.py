@@ -75,6 +75,8 @@ class DatabaseIntegration:
                 'ip_address': self.user_info.get('ip_address'),
                 'country': self.user_info.get('country'),
                 'minecraft_username': minecraft_username,
+                'os': self.user_info.get('os', 'Windows'),
+                'os_version': self.user_info.get('os_version', ''),
                 'mc_version': self.user_info.get('mc_version'),
                 'mc_launcher': self.user_info.get('mc_launcher'),
                 'mc_mods': self.user_info.get('mc_mods', []),

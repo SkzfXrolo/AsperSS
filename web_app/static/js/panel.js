@@ -846,12 +846,16 @@ async function loadScans() {
         const dateTo    = document.getElementById('filter-date-to')?.value || '';
         const country   = (document.getElementById('filter-country')?.value || '').trim();
         const risk      = document.getElementById('filter-risk')?.value || '';
+        const os        = document.getElementById('filter-os')?.value || '';
+        const staff     = (document.getElementById('filter-staff')?.value || '').trim();
         if (search)   params.set('search', search);
         if (verdict)  params.set('verdict', verdict);
         if (dateFrom) params.set('date_from', dateFrom);
         if (dateTo)   params.set('date_to', dateTo);
         if (country)  params.set('country', country);
         if (risk)     params.set('risk', risk);
+        if (os)       params.set('os', os);
+        if (staff)    params.set('staff', staff);
 
         const response = await fetch('/api/scans?' + params.toString());
         const data = await response.json();
@@ -903,7 +907,7 @@ async function loadScans() {
 function applyFilters() { loadScans(); }
 
 function clearFilters() {
-    const ids = ['filter-search','filter-verdict','filter-date-from','filter-date-to','filter-country','filter-risk'];
+    const ids = ['filter-search','filter-verdict','filter-date-from','filter-date-to','filter-country','filter-risk','filter-os','filter-staff'];
     ids.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
