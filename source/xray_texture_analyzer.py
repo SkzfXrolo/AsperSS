@@ -168,6 +168,44 @@ class XRayTextureAnalyzer:
         
         return detected
     
+    def analyze_pack(self, pack_path: str) -> Dict:
+        """Analiza un resource pack específico (carpeta o .zip) buscando X-Ray."""
+        try:
+            import zipfile
+            textures_to_check = []
+
+            if os.path.isdir(pack_path):
+                for root, _, files in os.walk(pack_path):
+                    for fname in files:
+                        if fname.lower().endswith('.png') and any(t in fname.lower() for t in self.CRITICAL_TEXTURES):
+                            textures_to_check.append(os.path.join(root, fname))
+            elif pack_path.lower().endswith('.zip') and os.path.isfile(pack_path):
+                import tempfile, shutil
+                tmp_dir = tempfile.mkdtemp()
+                try:
+                    with zipfile.ZipFile(pack_path, 'r') as zf:
+                        zf.extractall(tmp_dir)
+                    for root, _, files in os.walk(tmp_dir):
+                        for fname in files:
+                            if fname.lower().endswith('.png') and any(t in fname.lower() for t in self.CRITICAL_TEXTURES):
+                                textures_to_check.append(os.path.join(root, fname))
+                finally:
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
+
+            xray_found = False
+            patterns = []
+            max_conf = 0.0
+            for tex_path in textures_to_check[:50]:
+                result = self._analyze_texture(tex_path, 'resourcepack')
+                if result:
+                    xray_found = True
+                    patterns.append(result.get('name', ''))
+                    max_conf = max(max_conf, result.get('confidence', 0))
+
+            return {'is_xray': xray_found, 'confidence': max_conf, 'patterns': patterns}
+        except Exception:
+            return {'is_xray': False, 'confidence': 0.0, 'patterns': []}
+
     def _analyze_mcmeta(self, file_path: str) -> Dict:
         """Analiza un archivo .mcmeta buscando modificaciones sospechosas"""
         try:

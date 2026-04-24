@@ -3151,6 +3151,8 @@ class ArgusApp:
                 _run_safe(self.scan_jdwp_port)
                 self._set_scan_phase("💉 DLLs en proceso Java...")
                 _run_safe(self.scan_dll_injection_java)
+                self._set_scan_phase("🔬 Strings de hack en JARs cargados por Java...")
+                _run_safe(self.scan_process_memory_strings)
 
             # Grupo E — Ubicaciones de hacks (I/O alto)
             def _group_hack_locations():
@@ -7844,6 +7846,67 @@ class ArgusApp:
                             })
         except Exception as e:
             print(f"Error en scan_optifine_zoom: {e}")
+
+    def scan_process_memory_strings(self):
+        """Escanea JARs cargados por javaw.exe buscando strings de módulos de hack en memoria."""
+        print("🔍 Escaneando JARs cargados en memoria de Minecraft...")
+        HACK_CLASS_STRINGS = [
+            b'KillAura', b'killaura', b'Scaffold', b'scaffold',
+            b'BunnyHop', b'bunnyhop', b'Velocity', b'velocity',
+            b'NoFall', b'nofall', b'Reach', b'reach', b'AimAssist',
+            b'aimassist', b'Blink', b'blink', b'Strafe', b'strafe',
+            b'Criticals', b'criticals', b'AntiKnockback', b'Triggerbot',
+            b'triggerbot', b'FastBow', b'AutoSprint', b'Timer',
+            b'timer', b'Nuker', b'nuker', b'AutoClicker', b'autoclicker',
+            b'XRay', b'xray', b'ESP', b'Flight', b'flight',
+            b'LiquidBounce', b'liquidbounce', b'WurstClient', b'VapeClient',
+            b'SigmaClient', b'FutureClient', b'MeteorClient',
+            b'com/rise/', b'com/sigma/', b'net/vapor/', b'dev/liquidbounce',
+        ]
+        import zipfile as _zf
+        try:
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    name = (proc.info.get('name') or '').lower()
+                    if 'javaw' not in name and 'java' not in name:
+                        continue
+                    loaded_jars = set()
+                    try:
+                        for mmap in proc.memory_maps():
+                            path = mmap.path or ''
+                            if path.lower().endswith('.jar') and os.path.isfile(path):
+                                loaded_jars.add(path)
+                    except (psutil.AccessDenied, psutil.NoSuchProcess):
+                        pass
+
+                    for jar_path in loaded_jars:
+                        if 'jdk' in jar_path.lower() or 'jre' in jar_path.lower():
+                            continue
+                        try:
+                            with _zf.ZipFile(jar_path, 'r') as zf:
+                                class_names = [n for n in zf.namelist() if n.endswith('.class')]
+                                for class_name in class_names[:5000]:
+                                    cn_bytes = class_name.encode('utf-8', errors='ignore')
+                                    for sig in HACK_CLASS_STRINGS:
+                                        if sig in cn_bytes:
+                                            print(f"🚨 STRING DE HACK EN JAR CARGADO: {sig.decode()} → {jar_path}")
+                                            self.issues_found.append({
+                                                'nombre': f'Módulo de hack en JAR cargado en Java: {sig.decode()}',
+                                                'ruta': jar_path,
+                                                'archivo': os.path.basename(jar_path),
+                                                'tipo': 'hack_string_in_loaded_jar',
+                                                'categoria': 'JAVA_INJECTION',
+                                                'alerta': 'CRITICAL',
+                                                'confidence': 0.92,
+                                                'detected_patterns': [f'hack_class:{sig.decode()}'],
+                                            })
+                                            break
+                        except Exception:
+                            continue
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_process_memory_strings: {e}")
 
     def scan_minecraft_jar_hash(self):
         """Verifica el hash SHA1 del minecraft.jar contra los hashes oficiales de Mojang.
