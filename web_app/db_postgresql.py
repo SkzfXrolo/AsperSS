@@ -489,6 +489,31 @@ def init_postgresql_db():
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_hack_hashes_sha256 ON hack_hashes(sha256)')
 
+        # UNIQUE constraint en learned_patterns.pattern_value (necesario para ON CONFLICT DO UPDATE)
+        try:
+            cursor.execute(
+                'CREATE UNIQUE INDEX IF NOT EXISTS uq_lp_value ON learned_patterns(pattern_value)'
+            )
+        except Exception:
+            pass
+
+        # Backfill: sincronizar feedback_status en scan_results desde staff_feedback
+        try:
+            cursor.execute('''
+                UPDATE scan_results sr
+                SET    feedback_status = sf.staff_verification
+                FROM   (
+                    SELECT DISTINCT ON (result_id)
+                        result_id, staff_verification
+                    FROM staff_feedback
+                    ORDER BY result_id, verified_at DESC
+                ) sf
+                WHERE  sr.id = sf.result_id
+                  AND  sr.feedback_status IS NULL
+            ''')
+        except Exception:
+            pass
+
         conn.commit()
         print("✅ Base de datos PostgreSQL inicializada correctamente")
         

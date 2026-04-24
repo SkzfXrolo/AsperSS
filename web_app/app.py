@@ -1755,12 +1755,43 @@ _SERVER_FP_FRAGMENTS = [
 ]
 
 
+_lp_cache: dict = {'paths': [], 'ts': 0.0}
+_LP_CACHE_TTL = 300  # 5 minutos
+
+
+def _get_learned_legit_paths() -> list:
+    """Devuelve lista de rutas legítimas aprendidas por el staff (caché 5 min)."""
+    import time as _time
+    if _time.time() - _lp_cache['ts'] < _LP_CACHE_TTL:
+        return _lp_cache['paths']
+    try:
+        with get_api_db_cursor() as _cur:
+            _cur.execute(
+                "SELECT pattern_value FROM learned_patterns"
+                " WHERE is_active = TRUE AND pattern_type = 'legitimate_path'"
+            )
+            rows = _cur.fetchall()
+        paths = [(_row_get(r, 0, 'pattern_value') or '').lower().replace('/', '\\')
+                 for r in (rows or []) if r]
+        _lp_cache['paths'] = paths
+        _lp_cache['ts']    = _time.time()
+    except Exception:
+        pass  # si falla la BD usamos la caché vieja o lista vacía
+    return _lp_cache['paths']
+
+
 def _is_server_false_positive(result: dict) -> bool:
     """Devuelve True si el resultado es un falso positivo conocido y debe descartarse."""
-    ruta   = (result.get('ruta', '') or '').lower().replace('/', '\\')
-    nombre = (result.get('nombre', '') or result.get('archivo', '') or '').lower()
+    ruta     = (result.get('ruta', '') or '').lower().replace('/', '\\')
+    nombre   = (result.get('nombre', '') or result.get('archivo', '') or '').lower()
     combined = ruta + '|' + nombre
-    return any(frag in combined for frag in _SERVER_FP_FRAGMENTS)
+    if any(frag in combined for frag in _SERVER_FP_FRAGMENTS):
+        return True
+    # También revisar rutas aprendidas por el staff (cacheadas 5 min)
+    for lp in _get_learned_legit_paths():
+        if lp and lp in combined:
+            return True
+    return False
 
 
 def _calculate_risk_score(results):
