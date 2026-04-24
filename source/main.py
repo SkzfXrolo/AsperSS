@@ -3123,18 +3123,34 @@ class ArgusApp:
                 _run_safe(self.scan_startup_entries)
                 self._set_scan_phase("📦 Programas instalados...")
                 _run_safe(self.scan_installed_programs)
+                self._set_scan_phase("⛏️ JARs recientes en carpetas temporales...")
+                _run_safe(self.scan_temp_jars)
+                self._set_scan_phase("🤖 Baritone / modos prohibidos...")
+                _run_safe(self.scan_baritone_config)
+                self._set_scan_phase("🔨 Schematica/Litematica Printer Mode...")
+                _run_safe(self.scan_schematica_litematica)
+                self._set_scan_phase("🔍 OptiFine zoom key binding...")
+                _run_safe(self.scan_optifine_zoom)
 
             # Grupo D — Hardware y red (I/O alto)
             def _group_hardware():
                 self._update_progress_safe(87, "⚡ Hardware y red", "Analizando dispositivos y conexiones...")
                 _run_safe(self.scan_logitech_macros)
                 _run_safe(self.scan_razer_macros)
+                self._set_scan_phase("🖱️ Bloody/A4Tech macros...")
+                _run_safe(self.scan_bloody_a4tech)
+                self._set_scan_phase("🎮 SteelSeries/Corsair macros...")
+                _run_safe(self.scan_steelseries_corsair)
+                self._set_scan_phase("🔌 Arduino HID devices...")
+                _run_safe(self.scan_arduino_hid)
                 _extend_safe(_run_safe(self.scan_usb_devices))
                 _extend_safe(_run_safe(self.scan_network_connections))
                 self._set_scan_phase("🔌 Adaptadores VPN...")
                 _run_safe(self.scan_vpn_adapters)
                 self._set_scan_phase("☕ JDWP debug port...")
                 _run_safe(self.scan_jdwp_port)
+                self._set_scan_phase("💉 DLLs en proceso Java...")
+                _run_safe(self.scan_dll_injection_java)
 
             # Grupo E — Ubicaciones de hacks (I/O alto)
             def _group_hack_locations():
@@ -3144,6 +3160,14 @@ class ArgusApp:
                 _run_safe(self.scan_exact_hack_names)
                 self._set_scan_phase("👻 Config de ghost clients...")
                 _run_safe(self.scan_ghost_client_configs)
+                self._set_scan_phase("📋 Registro de ghost clients...")
+                _run_safe(self.scan_ghost_client_registry)
+                self._set_scan_phase("📦 Mods prohibidos en .minecraft/mods/...")
+                _run_safe(self.scan_minecraft_mods_blacklist)
+                self._set_scan_phase("🤖 Scripts AHK con autoclick...")
+                _run_safe(self.scan_ahk_scripts)
+                self._set_scan_phase("💉 Procesos inyectores activos...")
+                _run_safe(self.scan_active_injectors)
 
             # Grupo F — Técnicas avanzadas
             def _group_advanced():
@@ -7332,6 +7356,489 @@ class ArgusApp:
                     pass
         except Exception as e:
             print(f"Error en scan_exploit_tools: {e}")
+
+    def scan_ghost_client_registry(self):
+        """Detecta claves de registro dejadas por ghost clients instalados."""
+        print("🔍 Escaneando registro por instalaciones de ghost clients...")
+        GHOST_REGISTRY_KEYS = [
+            (winreg.HKEY_CURRENT_USER, r'Software\Rise Client'),
+            (winreg.HKEY_CURRENT_USER, r'Software\Sigma'),
+            (winreg.HKEY_CURRENT_USER, r'Software\Vape'),
+            (winreg.HKEY_CURRENT_USER, r'Software\LiquidBounce'),
+            (winreg.HKEY_CURRENT_USER, r'Software\Meteor Client'),
+            (winreg.HKEY_CURRENT_USER, r'Software\Drip Client'),
+            (winreg.HKEY_CURRENT_USER, r'Software\Vertex Client'),
+            (winreg.HKEY_CURRENT_USER, r'Software\Future Client'),
+            (winreg.HKEY_CURRENT_USER, r'Software\Flux Client'),
+            (winreg.HKEY_CURRENT_USER, r'Software\RusherHack'),
+            (winreg.HKEY_CURRENT_USER, r'Software\Astolfo'),
+            (winreg.HKEY_LOCAL_MACHINE, r'Software\Rise Client'),
+            (winreg.HKEY_LOCAL_MACHINE, r'Software\Sigma'),
+            (winreg.HKEY_LOCAL_MACHINE, r'Software\Vape'),
+        ]
+        try:
+            for hive, subkey in GHOST_REGISTRY_KEYS:
+                try:
+                    with winreg.OpenKey(hive, subkey):
+                        hive_name = 'HKCU' if hive == winreg.HKEY_CURRENT_USER else 'HKLM'
+                        key_name = subkey.split('\\')[-1]
+                        print(f"🚨 GHOST CLIENT REGISTRY: {hive_name}\\{subkey}")
+                        self.issues_found.append({
+                            'nombre': f'Clave de registro de ghost client: {key_name}',
+                            'ruta': f'{hive_name}\\{subkey}',
+                            'archivo': key_name,
+                            'tipo': 'ghost_client_registry',
+                            'categoria': 'GHOST_CLIENT',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.93,
+                            'detected_patterns': [f'registry:{key_name.lower().replace(" ", "_")}'],
+                        })
+                except FileNotFoundError:
+                    continue
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"Error en scan_ghost_client_registry: {e}")
+
+    def scan_minecraft_mods_blacklist(self):
+        """Detecta mods prohibidos en .minecraft/mods/ por nombre."""
+        print("🔍 Escaneando mods de Minecraft contra lista negra...")
+        appdata = os.environ.get('APPDATA', '')
+        mods_dir = os.path.join(appdata, '.minecraft', 'mods')
+        if not os.path.isdir(mods_dir):
+            return
+        BLACKLISTED = [
+            'baritone', 'horion', 'impact', 'wurst', 'aristois', 'meteor',
+            'sigma', 'ares', 'salhack', 'entropy', 'remix', 'inertia',
+            'liquidbounce', 'flux', 'vape', 'riseclient', 'future', 'astolfo',
+            'novoline', 'rusherhack', 'dripclient', 'vertex', 'azura', 'jello',
+            'datura', 'mathias', 'weave', 'xray', 'killaura', 'aimbot',
+            'scaffold', 'autoclick', 'clickgui', 'hacked', 'cheat', 'inject',
+        ]
+        try:
+            for fname in os.listdir(mods_dir):
+                if not fname.lower().endswith('.jar'):
+                    continue
+                fname_lower = fname.lower()
+                for bl in BLACKLISTED:
+                    if bl in fname_lower:
+                        fpath = os.path.join(mods_dir, fname)
+                        print(f"🚨 MOD PROHIBIDO: {fname}")
+                        self.issues_found.append({
+                            'nombre': f'Mod prohibido detectado en .minecraft/mods/: {fname}',
+                            'ruta': fpath,
+                            'archivo': fname,
+                            'tipo': 'blacklisted_mod',
+                            'categoria': 'GHOST_CLIENT',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.95,
+                            'detected_patterns': [f'blacklisted_mod:{bl}'],
+                        })
+                        break
+        except Exception as e:
+            print(f"Error en scan_minecraft_mods_blacklist: {e}")
+
+    def scan_dll_injection_java(self):
+        """Detecta DLLs no estándar cargadas en procesos Java/Minecraft."""
+        print("🔍 Escaneando DLLs en procesos Java...")
+        SUSPICIOUS_KW = [
+            'vape', 'sigma', 'inject', 'hook', 'hack', 'cheat', 'bypass',
+            'entropy', 'wurst', 'meteor', 'rise', 'flux', 'future', 'astolfo',
+            'payload', 'loader', 'patch', 'crack', 'stealth', 'ghost',
+        ]
+        SAFE_PREFIXES = [
+            'c:\\windows\\', 'c:\\program files\\java',
+            'c:\\program files (x86)\\java', 'c:\\program files\\eclipse',
+        ]
+        try:
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    name = (proc.info.get('name') or '').lower()
+                    if 'java' not in name and 'javaw' not in name:
+                        continue
+                    try:
+                        for mmap in proc.memory_maps():
+                            path = (mmap.path or '').lower()
+                            if not path.endswith('.dll'):
+                                continue
+                            if any(path.startswith(s) for s in SAFE_PREFIXES):
+                                continue
+                            dll_name = os.path.basename(path)
+                            for kw in SUSPICIOUS_KW:
+                                if kw in dll_name:
+                                    print(f"🚨 DLL SOSPECHOSA en Java: {path}")
+                                    self.issues_found.append({
+                                        'nombre': f'DLL sospechosa en Java: {dll_name}',
+                                        'ruta': path,
+                                        'archivo': dll_name,
+                                        'tipo': 'dll_injection_java',
+                                        'categoria': 'JAVA_INJECTION',
+                                        'alerta': 'CRITICAL',
+                                        'confidence': 0.90,
+                                        'detected_patterns': [f'dll_inject:{kw}'],
+                                    })
+                                    break
+                    except (psutil.AccessDenied, psutil.NoSuchProcess):
+                        pass
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_dll_injection_java: {e}")
+
+    def scan_ahk_scripts(self):
+        """Busca scripts AutoHotkey con patrones de autoclick y contexto Minecraft."""
+        print("🔍 Buscando scripts AHK con autoclick...")
+        import re as _re
+        search_paths = [
+            os.path.expanduser('~\\Desktop'),
+            os.path.expanduser('~\\Documents'),
+            os.path.expanduser('~\\Downloads'),
+            os.path.expanduser('~\\AppData\\Roaming'),
+            os.path.expanduser('~\\AppData\\Local'),
+        ]
+        MC_KW = ['minecraft', ' mc', 'lbutton', 'rbutton', 'mbutton']
+        CLICK_RE = [
+            r'click\s*,',
+            r'sleep\s*,\s*[1-9]\d?(?!\d)',
+            r'loop\s*\{',
+            r'mouseevent\s*\(',
+            r'send\s*\{click\}',
+        ]
+        try:
+            for base in search_paths:
+                if not os.path.isdir(base):
+                    continue
+                for root, dirs, files in os.walk(base):
+                    dirs[:] = [d for d in dirs if d.lower() not in {'windows', 'system32', '.git', '__pycache__'}]
+                    for fname in files:
+                        if not fname.lower().endswith('.ahk'):
+                            continue
+                        fpath = os.path.join(root, fname)
+                        try:
+                            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read(8192).lower()
+                            has_click = any(_re.search(p, content, _re.IGNORECASE) for p in CLICK_RE)
+                            if not has_click:
+                                continue
+                            has_mc = any(kw in content for kw in MC_KW)
+                            alert = 'CRITICAL' if has_mc else 'SOSPECHOSO'
+                            conf  = 0.88 if has_mc else 0.65
+                            print(f"{'🚨' if has_mc else '⚠️'} AHK AUTOCLICK: {fpath}")
+                            self.issues_found.append({
+                                'nombre': f'Script AHK con autoclick{"+ Minecraft" if has_mc else ""}: {fname}',
+                                'ruta': fpath,
+                                'archivo': fname,
+                                'tipo': 'ahk_autoclick',
+                                'categoria': 'AUTOCLICK',
+                                'alerta': alert,
+                                'confidence': conf,
+                                'detected_patterns': ['ahk_click'] + (['ahk_minecraft'] if has_mc else []),
+                            })
+                        except Exception:
+                            continue
+        except Exception as e:
+            print(f"Error en scan_ahk_scripts: {e}")
+
+    def scan_bloody_a4tech(self):
+        """Detecta software Bloody/A4Tech instalado (autoclick por hardware)."""
+        print("🔍 Escaneando software Bloody/A4Tech...")
+        pf  = os.environ.get('PROGRAMFILES', 'C:\\Program Files')
+        pf86 = os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)')
+        appdata = os.environ.get('APPDATA', '')
+        PATHS = [
+            os.path.join(pf,   'Bloody'), os.path.join(pf86, 'Bloody'),
+            os.path.join(pf,   'A4Tech'), os.path.join(pf86, 'A4Tech'),
+            os.path.join(appdata, 'Bloody'),
+        ]
+        try:
+            for path in PATHS:
+                if os.path.isdir(path):
+                    print(f"⚠️ SOFTWARE BLOODY/A4TECH: {path}")
+                    self.issues_found.append({
+                        'nombre': f'Software Bloody/A4Tech instalado: {os.path.basename(path)}',
+                        'ruta': path,
+                        'archivo': os.path.basename(path),
+                        'tipo': 'bloody_a4tech',
+                        'categoria': 'AUTOCLICK',
+                        'alerta': 'SOSPECHOSO',
+                        'confidence': 0.72,
+                        'detected_patterns': ['bloody_mouse_software'],
+                    })
+                    break
+        except Exception as e:
+            print(f"Error en scan_bloody_a4tech: {e}")
+
+    def scan_steelseries_corsair(self):
+        """Detecta macros de click rápido en perfiles de SteelSeries GG / Corsair iCUE."""
+        print("🔍 Escaneando SteelSeries GG / Corsair iCUE...")
+        import re as _re
+        localapp = os.environ.get('LOCALAPPDATA', '')
+        appdata  = os.environ.get('APPDATA', '')
+        PROFILE_BASES = [
+            os.path.join(localapp, 'SteelSeries', 'GG'),
+            os.path.join(localapp, 'SteelSeries', 'SteelSeries Engine 3'),
+            os.path.join(appdata,  'Corsair', 'CUE'),
+            os.path.join(localapp, 'Corsair', 'CUE'),
+            os.path.join(appdata,  'Corsair', 'iCUE'),
+        ]
+        try:
+            for base in PROFILE_BASES:
+                if not os.path.isdir(base):
+                    continue
+                for root, dirs, files in os.walk(base):
+                    dirs[:] = dirs[:5]
+                    for fname in files:
+                        if not (fname.endswith('.json') or fname.endswith('.xml')):
+                            continue
+                        fpath = os.path.join(root, fname)
+                        try:
+                            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read(16384).lower()
+                            has_click = bool(_re.search(r'(click|actiontype.*click|mouse.*loop)', content))
+                            has_fast  = bool(_re.search(r'delay["\s:,]*\d{1,2}["\s,}]|ms["\s:,]*1\d["\s,}]', content))
+                            if has_click and has_fast:
+                                print(f"⚠️ MACRO CLICK RAPIDO en {os.path.basename(base)}: {fpath}")
+                                self.issues_found.append({
+                                    'nombre': f'Macro click rápido en {os.path.basename(base)}: {fname}',
+                                    'ruta': fpath,
+                                    'archivo': fname,
+                                    'tipo': 'peripheral_macro',
+                                    'categoria': 'AUTOCLICK',
+                                    'alerta': 'SOSPECHOSO',
+                                    'confidence': 0.75,
+                                    'detected_patterns': ['rapid_click_macro'],
+                                })
+                        except Exception:
+                            continue
+        except Exception as e:
+            print(f"Error en scan_steelseries_corsair: {e}")
+
+    def scan_arduino_hid(self):
+        """Detecta dispositivos HID Arduino/CH340/STM32 conectados (autoclick hardware)."""
+        print("🔍 Escaneando dispositivos HID Arduino/programables...")
+        SUSPICIOUS_VIDS = {'2341', '1a86', '0483', '04d8', '16c0'}
+        try:
+            import subprocess as _sp
+            result = _sp.run(
+                ['wmic', 'path', 'Win32_PnPEntity', 'where',
+                 'PNPClass="HIDClass"', 'get', 'Name,DeviceID', '/FORMAT:CSV'],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode != 0:
+                return
+            import re as _re
+            for line in result.stdout.splitlines():
+                ll = line.lower()
+                vid_m = _re.search(r'vid_([0-9a-f]{4})', ll)
+                if not vid_m or vid_m.group(1) not in SUSPICIOUS_VIDS:
+                    continue
+                if any(kw in ll for kw in ['arduino', 'ch340', 'stm32', 'usbasp', 'pro micro', 'digispark']):
+                    print(f"⚠️ ARDUINO/HID DEVICE: {line.strip()[:120]}")
+                    self.issues_found.append({
+                        'nombre': f'Dispositivo HID Arduino/programable: {line.strip()[:80]}',
+                        'ruta': 'Dispositivos USB del sistema',
+                        'archivo': line.strip()[:80],
+                        'tipo': 'arduino_hid_device',
+                        'categoria': 'AUTOCLICK',
+                        'alerta': 'SOSPECHOSO',
+                        'confidence': 0.75,
+                        'detected_patterns': ['arduino_hid'],
+                    })
+        except Exception as e:
+            print(f"Error en scan_arduino_hid: {e}")
+
+    def scan_active_injectors(self):
+        """Detecta procesos inyectores corriendo durante el scan."""
+        print("🔍 Buscando procesos inyectores activos...")
+        INJECTOR_SIGS = [
+            'extremeinjector', 'xenos', 'dllinjector', 'dll_injector',
+            'processhacker', 'cheatengine', 'cheat_engine', 'ce32', 'ce64',
+            'scylla', 'scyllahide', 'titan', 'injex', 'remoteinjector',
+            'manualmap', 'threadhijack',
+        ]
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'exe']):
+                try:
+                    pname = (proc.info.get('name') or '').lower().replace(' ', '').replace('-', '').replace('_', '')
+                    pexe  = (proc.info.get('exe') or '').lower().replace(' ', '').replace('-', '')
+                    for sig in INJECTOR_SIGS:
+                        if sig in pname or sig in pexe:
+                            print(f"🚨 INYECTOR ACTIVO: {proc.info.get('name')}")
+                            self.issues_found.append({
+                                'nombre': f'Proceso inyector activo: {proc.info.get("name", sig)}',
+                                'ruta': proc.info.get('exe') or 'N/A',
+                                'archivo': proc.info.get('name', sig),
+                                'tipo': 'injector_process',
+                                'categoria': 'JAVA_INJECTION',
+                                'alerta': 'CRITICAL',
+                                'confidence': 0.93,
+                                'detected_patterns': ['active_injector'],
+                            })
+                            break
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_active_injectors: {e}")
+
+    def scan_temp_jars(self):
+        """Detecta archivos .jar creados en las últimas 24h en carpetas temporales."""
+        print("🔍 Buscando JARs recientes en carpetas temporales...")
+        temp_paths = list({
+            os.environ.get('TEMP', ''),
+            os.environ.get('TMP', ''),
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Temp'),
+        })
+        cutoff = time.time() - 86400
+        seen = set()
+        try:
+            for temp_dir in temp_paths:
+                if not temp_dir or not os.path.isdir(temp_dir):
+                    continue
+                for root, dirs, files in os.walk(temp_dir):
+                    dirs[:] = dirs[:10]
+                    for fname in files:
+                        if not fname.lower().endswith('.jar'):
+                            continue
+                        fpath = os.path.join(root, fname)
+                        if fpath in seen:
+                            continue
+                        seen.add(fpath)
+                        try:
+                            if os.path.getmtime(fpath) >= cutoff:
+                                print(f"⚠️ JAR RECIENTE EN TEMP: {fpath}")
+                                self.issues_found.append({
+                                    'nombre': f'JAR reciente en carpeta temporal: {fname}',
+                                    'ruta': fpath,
+                                    'archivo': fname,
+                                    'tipo': 'temp_jar_recent',
+                                    'categoria': 'JAVA_INJECTION',
+                                    'alerta': 'SOSPECHOSO',
+                                    'confidence': 0.70,
+                                    'detected_patterns': ['jar_in_temp_24h'],
+                                })
+                        except Exception:
+                            continue
+        except Exception as e:
+            print(f"Error en scan_temp_jars: {e}")
+
+    def scan_baritone_config(self):
+        """Detecta Baritone instalado y verifica si tiene modos prohibidos activos."""
+        print("🔍 Escaneando configuración de Baritone...")
+        import json as _json
+        appdata = os.environ.get('APPDATA', '')
+        settings_path = os.path.join(appdata, '.minecraft', 'baritone', 'settings.json')
+        if not os.path.exists(settings_path):
+            return
+        PROHIBITED = {
+            'buildRepeat': True, 'elytraFly': True,
+            'allowPlace': True, 'allowBreak': True,
+            'printOptimizerEnabled': True,
+        }
+        try:
+            with open(settings_path, 'r', encoding='utf-8', errors='ignore') as f:
+                config = _json.load(f)
+            violations = [f'{k}={v}' for k, v in PROHIBITED.items() if config.get(k) == v]
+            if violations:
+                print(f"⚠️ BARITONE MODOS PROHIBIDOS: {', '.join(violations)}")
+                self.issues_found.append({
+                    'nombre': f'Baritone con modos prohibidos: {", ".join(violations[:3])}',
+                    'ruta': settings_path,
+                    'archivo': 'settings.json',
+                    'tipo': 'baritone_prohibited',
+                    'categoria': 'COMPLEMENTO_PROHIBIDO',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.80,
+                    'detected_patterns': [f'baritone:{v.split("=")[0]}' for v in violations],
+                })
+            else:
+                self.issues_found.append({
+                    'nombre': 'Baritone instalado (bot de automatización de Minecraft)',
+                    'ruta': settings_path,
+                    'archivo': 'settings.json',
+                    'tipo': 'baritone_installed',
+                    'categoria': 'COMPLEMENTO_PROHIBIDO',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.60,
+                    'detected_patterns': ['baritone_present'],
+                })
+        except Exception as e:
+            print(f"Error en scan_baritone_config: {e}")
+
+    def scan_schematica_litematica(self):
+        """Detecta Schematica/Litematica con Printer Mode activo."""
+        print("🔍 Escaneando configuración de Schematica/Litematica...")
+        import re as _re
+        appdata = os.environ.get('APPDATA', '')
+        CONFIG_PATHS = [
+            (os.path.join(appdata, '.minecraft', 'config', 'schematica.cfg'),         'cfg'),
+            (os.path.join(appdata, '.minecraft', 'config', 'litematica', 'generic.json'), 'json'),
+            (os.path.join(appdata, '.minecraft', 'config', 'easylitematic.json'),     'json'),
+        ]
+        try:
+            for config_path, ftype in CONFIG_PATHS:
+                if not os.path.exists(config_path):
+                    continue
+                try:
+                    with open(config_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read(16384)
+                    cl = content.lower()
+                    if ftype == 'json' and _re.search(r'"print.*?:\s*true|"enable.*?print.*?:\s*true', cl):
+                        print(f"🚨 LITEMATICA PRINTER MODE: {config_path}")
+                        self.issues_found.append({
+                            'nombre': f'Litematica Printer Mode activo',
+                            'ruta': config_path,
+                            'archivo': os.path.basename(config_path),
+                            'tipo': 'litematica_printer',
+                            'categoria': 'COMPLEMENTO_PROHIBIDO',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.85,
+                            'detected_patterns': ['litematica_printer_enabled'],
+                        })
+                    elif ftype == 'cfg' and ('printer=true' in cl or 'printerenabled=true' in cl):
+                        print(f"🚨 SCHEMATICA PRINTER MODE: {config_path}")
+                        self.issues_found.append({
+                            'nombre': 'Schematica Printer Mode activo',
+                            'ruta': config_path,
+                            'archivo': os.path.basename(config_path),
+                            'tipo': 'schematica_printer',
+                            'categoria': 'COMPLEMENTO_PROHIBIDO',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.85,
+                            'detected_patterns': ['schematica_printer_enabled'],
+                        })
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"Error en scan_schematica_litematica: {e}")
+
+    def scan_optifine_zoom(self):
+        """Detecta si el zoom de OptiFine está asignado a tecla de combate en options.txt."""
+        print("🔍 Escaneando options.txt (OptiFine zoom key)...")
+        appdata = os.environ.get('APPDATA', '')
+        options_path = os.path.join(appdata, '.minecraft', 'options.txt')
+        if not os.path.exists(options_path):
+            return
+        SUSPICIOUS_BINDS = {'key_mouse1', 'key_mouse2', 'key_mouse3', 'key_button1', 'key_button2'}
+        try:
+            with open(options_path, 'r', encoding='utf-8', errors='ignore') as f:
+                for line in f:
+                    ll = line.lower().strip()
+                    if ll.startswith('key_of.key.zoom:') or ll.startswith('key_optifine.zoom:'):
+                        zoom_bind = ll.split(':')[-1].strip()
+                        if zoom_bind in SUSPICIOUS_BINDS:
+                            print(f"⚠️ OPTIFINE ZOOM BIND SOSPECHOSO: {line.strip()}")
+                            self.issues_found.append({
+                                'nombre': f'OptiFine zoom en tecla de combate: {line.strip()[:80]}',
+                                'ruta': options_path,
+                                'archivo': 'options.txt',
+                                'tipo': 'optifine_zoom_combat',
+                                'categoria': 'COMPLEMENTO_PROHIBIDO',
+                                'alerta': 'SOSPECHOSO',
+                                'confidence': 0.65,
+                                'detected_patterns': ['optifine_zoom_combat_bind'],
+                            })
+        except Exception as e:
+            print(f"Error en scan_optifine_zoom: {e}")
 
     def second_pass_scanner(self):
         """Segunda pasada: analiza archivos SOSPECHOSO/CRITICAL con mayor profundidad."""
