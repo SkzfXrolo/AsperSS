@@ -1727,6 +1727,42 @@ def start_scan():
         return jsonify({'error': f'Error iniciando escaneo: {str(e)}'}), 500
 
 
+# Rutas/nombres de software legítimo que el scanner client puede mandar como falsos positivos.
+# Aplicado server-side para que funcione con cualquier versión del exe.
+_SERVER_FP_FRAGMENTS = [
+    # Sistema Windows
+    'windows\\system32', 'windows\\syswow64', 'windows\\winsxs',
+    'program files\\microsoft', 'program files (x86)\\microsoft',
+    # AppData — apps legítimas
+    'webview2runtime', 'trust protection lists', 'pspc_sdk',
+    'appdata\\local\\packages',        # Windows Store apps (firmadas, sandboxed)
+    'appdata\\local\\origin',          # EA Origin
+    'appdata\\local\\nvidia',
+    'appdata\\local\\microsoft\\edge',
+    'appdata\\roaming\\opera software',
+    'electronic arts\\ea desktop',
+    'site-packages',                   # librerías Python instaladas
+    # Launchers / clientes legítimos de Minecraft
+    'lunar client', 'lunarclient',
+    'steam\\steamapps', 'epicgames', 'origin games',
+    'tlauncher', 'prismlauncher', 'badlion client',
+    # Otros programas legítimos
+    'voicemod',
+    'minecraftsstool',                 # el propio SS tool del servidor
+    # Drivers y software de hardware
+    'nvidia corporation', 'amd\\radeon', 'intel corporation',
+    'discord\\app-', 'teamspeak 3 client',
+]
+
+
+def _is_server_false_positive(result: dict) -> bool:
+    """Devuelve True si el resultado es un falso positivo conocido y debe descartarse."""
+    ruta   = (result.get('ruta', '') or '').lower().replace('/', '\\')
+    nombre = (result.get('nombre', '') or result.get('archivo', '') or '').lower()
+    combined = ruta + '|' + nombre
+    return any(frag in combined for frag in _SERVER_FP_FRAGMENTS)
+
+
 def _calculate_risk_score(results):
     """Calcula el risk score de un scan según las evidencias encontradas.
     Escalas: javaagent=+90, AHK=+70, macros=+60, DNS=+40, CRITICAL=+50,
@@ -1851,6 +1887,11 @@ def submit_scan_results(scan_id):
                         pass
 
             results = data.get('results', [])
+            # Filtro server-side: descartar falsos positivos conocidos (funciona con cualquier version del exe)
+            before = len(results)
+            results = [r for r in results if not _is_server_false_positive(r)]
+            if len(results) < before:
+                print(f"[DEBUG] FP filter: {before} → {len(results)} resultados ({before - len(results)} descartados)")
             print(f"[DEBUG] Insertando {len(results)} resultados en scan_results")
             if results:
                 batch = [
