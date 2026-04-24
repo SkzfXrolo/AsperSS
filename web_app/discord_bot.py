@@ -387,26 +387,30 @@ def start_bot_thread():
 
     def _run():
         global _bot_instance, _bot_loop
-        delay = 10  # segundos, backoff exponencial
-        for attempt in range(8):
+        delay = 10
+        for attempt in range(12):
             try:
                 _bot_loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(_bot_loop)
                 _bot_instance = _make_bot()
                 if _bot_instance:
-                    log.info(f'[Discord] Intento de conexión #{attempt + 1}...')
+                    print(f'[Discord] Intento de conexión #{attempt + 1}...')
                     _bot_loop.run_until_complete(_bot_instance.start(DISCORD_TOKEN))
-                return  # conexión cerrada limpiamente
+                print('[Discord] Conexión cerrada limpiamente.')
+                return
             except Exception as e:
-                log.warning(f'[Discord] Error conectando (intento {attempt + 1}): {e}')
-                if '429' in str(e) or 'rate limit' in str(e).lower():
-                    delay = min(delay * 3, 3600)  # hasta 1 hora de espera
-                    log.warning(f'[Discord] Rate limited — esperando {delay}s antes de reintentar')
+                err = str(e)
+                print(f'[Discord] Error conectando (intento {attempt + 1}): {err[:120]}')
+                if '429' in err or 'rate limit' in err.lower() or '1015' in err:
+                    delay = min(delay * 3, 3600)
+                    print(f'[Discord] Rate limited por Discord/Cloudflare — esperando {delay}s antes de reintentar...')
                 else:
                     delay = min(delay * 2, 300)
+                    print(f'[Discord] Reintentando en {delay}s...')
                 import time as _t
                 _t.sleep(delay)
+        print('[Discord] Máximo de reintentos alcanzado. Bot desactivado.')
 
     _bot_thread = threading.Thread(target=_run, daemon=True, name='discord-bot')
     _bot_thread.start()
-    log.info('[Discord] Bot thread iniciado.')
+    print('[Discord] Bot thread iniciado.')
