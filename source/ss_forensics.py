@@ -26,19 +26,62 @@ import subprocess
 import winreg
 from datetime import datetime, timedelta
 
-# ── Known hack / cheat / autoclick name patterns ─────────────────────────────
-HACK_PATTERNS = [
-    'vape', 'vapelite', 'entropy', 'whiteout', 'liquidbounce', 'wurst',
-    'impact', 'sigma', 'flux', 'future', 'astolfo', 'exhibition', 'novoline',
-    'rise', 'moon', 'drip', 'phobos', 'komat', 'wasp', 'konas', 'seppuku',
-    'sloth', 'lucid', 'tenacity', 'nyx', 'vanish', 'ploow', 'nextgen',
-    'zeroday', 'ghost', 'bypass', 'stealth', 'undetected', 'injector',
-    'inject', 'dllinjector', 'killaura', 'aimbot', 'triggerbot', 'autoclick',
-    'autoclicker', 'jitter', 'clickbot', 'ghostmouse', 'macro', 'ahk',
-    'autohotkey', 'cpstool', 'weightclick', 'rapidclick', 'cheat', 'hack',
-    'xray', 'scaffold', 'fly', 'bhop', 'nofall', 'reach', 'velocity',
-    'wtap', 'aimassist', 'tinytools', 'tiny_tools',
+# ── Alta confianza: términos exclusivos de hacks de Minecraft ─────────────────
+# Substring match: si aparece en cualquier parte del nombre → positivo
+HACK_PATTERNS_HIGH = [
+    'vape', 'vapelite', 'liquidbounce', 'wurst', 'astolfo', 'exhibition',
+    'novoline', 'komat', 'wasp', 'konas', 'seppuku', 'phobos', 'nyx',
+    'ploow', 'zeroday', 'dllinjector', 'killaura', 'aimbot', 'triggerbot',
+    'autoclicker', 'clickbot', 'ghostmouse', 'autohotkey', 'cpstool',
+    'weightclick', 'rapidclick', 'wtap', 'aimassist', 'tinytools',
+    'tiny_tools', 'bhop', 'nofall', 'drip', 'entropy', 'whiteout',
+    'nextgen', 'undetected',
 ]
+
+# Media confianza: solo flagear si es palabra completa (no subcadena de nombre legítimo)
+# Ej: "butterfly.exe" NO coincide con "fly", "scaffold.sh" SÍ coincide con "scaffold"
+HACK_PATTERNS_WORD = [
+    'sigma', 'ghost', 'bypass', 'stealth', 'injector', 'inject',
+    'xray', 'scaffold', 'reach', 'autoclick', 'ahk', 'jitter',
+    'macro', 'cheat', 'hack', 'impact', 'flux', 'future', 'rise',
+    'moon', 'sloth', 'lucid', 'tenacity', 'vanish', 'fly', 'velocity',
+]
+
+# Nombres exactos de programas legítimos que coinciden con patrones — nunca flagear
+WHITELIST_NAMES = frozenset({
+    'f.lux', 'flux.exe',           # Ajustador de temperatura de pantalla
+    'tenacity', 'tenacity.exe',    # Editor de audio (fork de Audacity)
+    'ghostscript', 'ghostscript.exe',
+    'macrium', 'macrium reflect',  # Backup software (contiene "macro")
+    'fluxus',                       # Entorno de programación legítimo
+    'vlc',                          # VLC media player
+    'velocity.exe',                 # Varios programas legítimos
+})
+
+# Rutas de sistema que nunca deben reportarse aunque coincidan
+WHITELIST_PATH_FRAGMENTS = (
+    r'\windows\system32',
+    r'\windows\syswow64',
+    r'\windows\winsxs',
+    r'\windows\servicing',
+    r'\program files\microsoft',
+    r'\program files (x86)\microsoft',
+    r'\windowsapps',
+    r'\windowsdefender',
+    r'\microsoft\edge',
+    r'\nvidia',
+    r'\amd\ccc',
+    r'\intel\',
+)
+
+# DNS públicos conocidos — usarlos es completamente normal
+SAFE_PUBLIC_DNS = frozenset({
+    '8.8.8.8', '8.8.4.4',          # Google
+    '1.1.1.1', '1.0.0.1',          # Cloudflare
+    '9.9.9.9', '149.112.112.112',  # Quad9
+    '208.67.222.222', '208.67.220.220',  # OpenDNS
+    '94.140.14.14', '94.140.15.15', # AdGuard
+})
 
 # Extensions to watch in USN journal
 WATCH_EXTENSIONS = {'.exe', '.jar', '.dll', '.bat', '.ps1', '.vbs', '.py', '.class'}
@@ -56,8 +99,35 @@ def _rot13(s: str) -> str:
 
 
 def _is_hack(name: str) -> bool:
+    """Devuelve True si el nombre coincide con patrones de hack.
+
+    Usa dos niveles:
+    - HIGH: substring match en términos muy específicos del hack scene
+    - WORD: word-boundary match para términos ambiguos (evita "butterfly"→fly)
+    """
     n = name.lower()
-    return any(p in n for p in HACK_PATTERNS)
+    basename = os.path.basename(n)
+
+    # Whitelist de nombres legítimos conocidos
+    if basename in WHITELIST_NAMES or n in WHITELIST_NAMES:
+        return False
+
+    # Whitelist de rutas del sistema
+    for frag in WHITELIST_PATH_FRAGMENTS:
+        if frag in n:
+            return False
+
+    # Alta confianza: substring
+    if any(p in n for p in HACK_PATTERNS_HIGH):
+        return True
+
+    # Media confianza: palabra completa solamente
+    n_clean = re.sub(r'\.(exe|jar|dll|bat|ps1|zip|rar|7z|pf|lnk)$', '', n)
+    for p in HACK_PATTERNS_WORD:
+        if re.search(r'(?<![a-z])' + re.escape(p) + r'(?![a-z])', n_clean):
+            return True
+
+    return False
 
 
 class SSForensics:
@@ -478,25 +548,23 @@ class SSForensics:
                                         last = _ft_to_dt(ft)
                                         delta_h = (self._now_utc - last).total_seconds() / 3600
 
-                                        if delta_h > 72:
-                                            continue   # only report recent (72h)
+                                        if delta_h > 24:
+                                            continue   # solo reportar USB conectado en las últimas 24h
 
                                         findings.append({
                                             'tipo':        'USBSTOR_DEVICE',
-                                            'nombre':      f'USB Storage: {friendly}',
+                                            'nombre':      f'USB Storage reciente: {friendly}',
                                             'ruta':        f'HKLM\\SYSTEM\\...\\USBSTOR\\{dev_class}',
                                             'detalle':     (
                                                 f'Dispositivo: {friendly}\n'
                                                 f'Última actividad: {last.strftime("%Y-%m-%d %H:%M")} UTC '
                                                 f'(hace {int(delta_h)}h)'
                                             ),
-                                            'alerta':      'SOSPECHOSO' if delta_h < 6 else 'POCO_SOSPECHOSO',
+                                            'alerta':      'POCO_SOSPECHOSO',
                                             'categoria':   'USB_FORENSICS',
                                             'descripcion': (
-                                                f'Dispositivo de almacenamiento USB "{friendly}" '
-                                                f'conectado hace {int(delta_h)}h. '
-                                                'Los jugadores suelen usar USB para transferir hacks '
-                                                'y evitar que aparezcan en el historial del navegador.'
+                                                f'Dispositivo USB "{friendly}" conectado hace {int(delta_h)}h. '
+                                                'Solo relevante si coincide con otros hallazgos sospechosos.'
                                             ),
                                         })
                                 except OSError:
@@ -732,12 +800,12 @@ class SSForensics:
                         'nombre':      f'AppSwitched: {val_name} ({count}x alt-tab)',
                         'ruta':        key_path,
                         'detalle':     f'Aplicación: {val_name} — alt-tabbed {count} veces',
-                        'alerta':      'CRITICAL',
+                        'alerta':      'SOSPECHOSO',
                         'categoria':   'APPSWITCHED',
                         'descripcion': (
                             f'FeatureUsage registra que el usuario hizo alt-tab a "{val_name}" '
-                            f'{count} veces. El nombre coincide con patrones de hack. '
-                            'Indica que la aplicación estaba activa durante la sesión.'
+                            f'{count} veces durante la sesión. '
+                            'Confirmar manualmente si la aplicación es legítima.'
                         ),
                     })
         except OSError:
@@ -895,8 +963,10 @@ class SSForensics:
 
             is_hack_name = _is_hack(exe_name)
 
-            if not is_hack_name and delta_h > 4:
-                continue   # only report recent non-hack prefetches
+            # Solo reportar: nombres de hack siempre, o no-hack SÓLO si ejecutado en <1h
+            # (antes era 4h → demasiado ruido con apps legítimas abiertas recientemente)
+            if not is_hack_name and delta_h > 1:
+                continue
 
             severity = ('CRITICAL' if is_hack_name and delta_h < 2
                         else 'SOSPECHOSO' if is_hack_name
@@ -938,7 +1008,6 @@ class SSForensics:
         (some bypass tools inject custom DNS to avoid detection).
         """
         findings = []
-        SUSPICIOUS_DNS = ['8.8.8.8', '1.1.1.1']  # override from ISP = possible bypass
         try:
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
                                 r'SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces') as ifaces:
@@ -951,24 +1020,36 @@ class SSForensics:
                     i += 1
                     try:
                         with winreg.OpenKey(ifaces, iface_guid) as iface:
-                            for dns_val in ('NameServer', 'DhcpNameServer'):
-                                try:
-                                    dns, _ = winreg.QueryValueEx(iface, dns_val)
-                                    if dns and dns.strip():
-                                        findings.append({
-                                            'tipo':        'TCPIP_DNS_OVERRIDE',
-                                            'nombre':      f'DNS personalizado: {dns.strip()}',
-                                            'ruta':        f'HKLM\\...\\Interfaces\\{iface_guid}',
-                                            'detalle':     f'{dns_val} = {dns.strip()}',
-                                            'alerta':      'POCO_SOSPECHOSO',
-                                            'categoria':   'NETWORK_FORENSICS',
-                                            'descripcion': (
-                                                f'Interfaz {iface_guid} tiene DNS personalizado: {dns.strip()}. '
-                                                'DNS modificado puede indicar bypass de network monitoring.'
-                                            ),
-                                        })
-                                except OSError:
+                            # Solo revisar NameServer (manual) — DhcpNameServer lo asigna el router automáticamente
+                            try:
+                                dns, _ = winreg.QueryValueEx(iface, 'NameServer')
+                                if not dns or not dns.strip():
                                     continue
+                                servers = [s.strip() for s in re.split(r'[,\s]+', dns) if s.strip()]
+                                # Filtrar DNS públicos conocidos y rangos privados (no son sospechosos)
+                                unknown = [
+                                    s for s in servers
+                                    if s not in SAFE_PUBLIC_DNS
+                                    and not s.startswith('192.168.')
+                                    and not s.startswith('10.')
+                                    and not re.match(r'^172\.(1[6-9]|2\d|3[01])\.', s)
+                                ]
+                                if unknown:
+                                    findings.append({
+                                        'tipo':        'TCPIP_DNS_CUSTOM',
+                                        'nombre':      f'DNS manual desconocido: {", ".join(unknown)}',
+                                        'ruta':        f'HKLM\\...\\Interfaces\\{iface_guid}',
+                                        'detalle':     f'NameServer = {dns.strip()}',
+                                        'alerta':      'POCO_SOSPECHOSO',
+                                        'categoria':   'NETWORK_FORENSICS',
+                                        'descripcion': (
+                                            f'DNS configurado manualmente: {", ".join(unknown)}. '
+                                            'DNS no estándar puede indicar redirección de tráfico o bypass. '
+                                            'Revisar si el jugador tiene razón legítima para usarlo.'
+                                        ),
+                                    })
+                            except OSError:
+                                continue
                     except OSError:
                         continue
         except OSError:
@@ -976,32 +1057,43 @@ class SSForensics:
         return findings
 
     def _scan_logitech_macros(self):
+        """Detecta macros reales en Logitech LGHUB: intervalos muy cortos (autoclicker)
+        o scripts de teclas encadenadas. Ignora config normal de ratón gaming."""
         findings = []
         try:
-            import json, os
+            import json as _json
             lghub_path = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'LGHUB', 'settings.json')
-            if os.path.isfile(lghub_path):
-                try:
-                    with open(lghub_path, 'r', encoding='utf-8', errors='replace') as f:
-                        data = json.load(f)
-                    raw = json.dumps(data).lower()
-                    click_keywords = ['click', 'mousebutton', 'leftbutton', 'rightbutton', 'interval', 'repeat', 'macro']
-                    matched = [kw for kw in click_keywords if kw in raw]
-                    if matched:
-                        findings.append({
-                            'tipo':        'LOGITECH_MACRO',
-                            'nombre':      'Logitech LGHUB macros detectados',
-                            'ruta':        lghub_path,
-                            'detalle':     f'Palabras clave encontradas: {", ".join(matched)}',
-                            'alerta':      'SOSPECHOSO',
-                            'categoria':   'MACRO_DETECTION',
-                            'descripcion': (
-                                'El archivo settings.json de Logitech LGHUB contiene configuración de macros '
-                                'que puede incluir autoclicker o secuencias automatizadas.'
-                            ),
-                        })
-                except Exception:
-                    pass
+            if not os.path.isfile(lghub_path):
+                return []
+            with open(lghub_path, 'r', encoding='utf-8', errors='replace') as f:
+                data = _json.load(f)
+            raw = _json.dumps(data).lower()
+
+            # Indicadores reales de autoclicker: intervalos < 50ms en macros de clic
+            has_rapid_interval = bool(re.search(r'"interval"\s*:\s*[0-4]\d(?!\d)', raw))
+            # Scripts que simulan clics repetitivos (no solo un clic de botón)
+            has_repeat_click = bool(re.search(r'"repeat"\s*:\s*[1-9]\d+', raw))
+            # Macros de teclado con delays muy cortos (< 20ms)
+            has_fast_key_macro = bool(re.search(r'"delay"\s*:\s*[0-1]\d(?!\d)', raw))
+
+            if has_rapid_interval or has_repeat_click or has_fast_key_macro:
+                reasons = []
+                if has_rapid_interval: reasons.append('intervalo < 50ms detectado')
+                if has_repeat_click:   reasons.append('repetición automática configurada')
+                if has_fast_key_macro: reasons.append('delay de tecla < 20ms')
+                findings.append({
+                    'tipo':        'LOGITECH_AUTOCLICKER',
+                    'nombre':      'Logitech LGHUB: patrón de autoclicker detectado',
+                    'ruta':        lghub_path,
+                    'detalle':     f'Indicadores: {", ".join(reasons)}',
+                    'alerta':      'SOSPECHOSO',
+                    'categoria':   'MACRO_DETECTION',
+                    'descripcion': (
+                        'El settings.json de Logitech LGHUB muestra configuración compatible con autoclicker: '
+                        + ', '.join(reasons) + '. '
+                        'Un ratón gaming normal no tiene intervalos de clic menores a 50ms.'
+                    ),
+                })
         except Exception:
             pass
         return findings
@@ -1338,41 +1430,47 @@ class SSForensics:
         return findings
 
     def _scan_recent_exe_forfiles(self):
-        """Detecta .exe creados/modificados en los últimos 30 días en dirs de usuario."""
+        """Detecta .exe con nombre sospechoso en dirs de usuario tocados en los últimos 7 días.
+
+        Sólo reporta si el nombre del archivo coincide con patrones de hack.
+        Reportar TODOS los exe recientes genera cientos de falsos positivos.
+        """
         findings = []
         try:
-            import subprocess, os, datetime
+            import datetime as _dt
             user = os.environ.get('USERPROFILE', '')
+            # Sólo Desktop y Downloads — AppData/Temp tiene demasiado ruido legítimo
             search_dirs = [
                 os.path.join(user, 'Downloads'),
                 os.path.join(user, 'Desktop'),
-                os.path.join(user, 'AppData', 'Roaming'),
-                os.path.join(user, 'AppData', 'Local', 'Temp'),
             ]
-            cutoff = datetime.datetime.now() - datetime.timedelta(days=30)
+            cutoff = _dt.datetime.now() - _dt.timedelta(days=7)
             for base in search_dirs:
                 if not base or not os.path.isdir(base):
                     continue
                 for root, _dirs, files in os.walk(base):
                     for fname in files:
-                        if not fname.lower().endswith('.exe'):
+                        if not fname.lower().endswith(('.exe', '.jar')):
                             continue
+                        if not _is_hack(fname):
+                            continue  # ignorar si nombre no es sospechoso
                         fpath = os.path.join(root, fname)
                         try:
-                            mtime = datetime.datetime.fromtimestamp(os.path.getmtime(fpath))
-                            if mtime >= cutoff:
-                                findings.append({
-                                    'tipo':        'RECENT_EXE',
-                                    'nombre':      f'Ejecutable reciente: {fname}',
-                                    'ruta':        fpath,
-                                    'detalle':     f'Modificado: {mtime.strftime("%Y-%m-%d %H:%M")}',
-                                    'alerta':      'POCO_SOSPECHOSO',
-                                    'categoria':   'RECENT_FILES',
-                                    'descripcion': (
-                                        f'Ejecutable "{fname}" creado/modificado hace menos de 30 días '
-                                        f'({mtime.strftime("%Y-%m-%d")}) en {root}.'
-                                    ),
-                                })
+                            mtime = _dt.datetime.fromtimestamp(os.path.getmtime(fpath))
+                            if mtime < cutoff:
+                                continue
+                            findings.append({
+                                'tipo':        'RECENT_HACK_EXE',
+                                'nombre':      f'Ejecutable sospechoso reciente: {fname}',
+                                'ruta':        fpath,
+                                'detalle':     f'Modificado: {mtime.strftime("%Y-%m-%d %H:%M")}',
+                                'alerta':      'SOSPECHOSO',
+                                'categoria':   'HACK_FILES',
+                                'descripcion': (
+                                    f'"{fname}" con nombre relacionado a hacks encontrado en {root}, '
+                                    f'modificado el {mtime.strftime("%Y-%m-%d")}.'
+                                ),
+                            })
                         except OSError:
                             continue
         except Exception:
