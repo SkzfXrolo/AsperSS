@@ -2146,12 +2146,29 @@ class ArgusApp:
         # FILTRADO MEJORADO
         # ============================================================
         
+        # Tipos generados por scanners especializados — siempre pasan el filtro
+        TRUSTED_TYPES = {
+            'ghost_client_config', 'ghost_client_registry', 'jdwp_debug_port',
+            'vpn_active', 'hosts_minecraft_redirect', 'hosts_file_custom',
+            'blacklisted_mod', 'dll_injection_java', 'ahk_autoclick',
+            'bloody_a4tech', 'peripheral_macro', 'arduino_hid_device',
+            'injector_process', 'temp_jar_recent', 'baritone_prohibited',
+            'baritone_installed', 'litematica_printer', 'schematica_printer',
+            'optifine_zoom_combat', 'modified_minecraft_jar', 'hack_string_in_loaded_jar',
+            'javaagent_injection', 'bootclasspath_modification',
+        }
+
         for item in issues:
             nombre = item.get('nombre', '').lower()
             ruta = item.get('ruta', '').lower()
             archivo = item.get('archivo', '').lower()
             tipo = item.get('tipo', '').lower()
-            
+
+            # Tipos de scanners especializados — confiar en ellos sin filtrar
+            if tipo in TRUSTED_TYPES:
+                filtered.append(item)
+                continue
+
             # 1. EXCLUIR SOLO FALSOS POSITIVOS MUY OBVIOS
             is_false_positive = False
             
