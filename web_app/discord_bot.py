@@ -387,11 +387,25 @@ def start_bot_thread():
 
     def _run():
         global _bot_instance, _bot_loop
-        _bot_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(_bot_loop)
-        _bot_instance = _make_bot()
-        if _bot_instance:
-            _bot_loop.run_until_complete(_bot_instance.start(DISCORD_TOKEN))
+        delay = 10  # segundos, backoff exponencial
+        for attempt in range(8):
+            try:
+                _bot_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(_bot_loop)
+                _bot_instance = _make_bot()
+                if _bot_instance:
+                    log.info(f'[Discord] Intento de conexión #{attempt + 1}...')
+                    _bot_loop.run_until_complete(_bot_instance.start(DISCORD_TOKEN))
+                return  # conexión cerrada limpiamente
+            except Exception as e:
+                log.warning(f'[Discord] Error conectando (intento {attempt + 1}): {e}')
+                if '429' in str(e) or 'rate limit' in str(e).lower():
+                    delay = min(delay * 3, 3600)  # hasta 1 hora de espera
+                    log.warning(f'[Discord] Rate limited — esperando {delay}s antes de reintentar')
+                else:
+                    delay = min(delay * 2, 300)
+                import time as _t
+                _t.sleep(delay)
 
     _bot_thread = threading.Thread(target=_run, daemon=True, name='discord-bot')
     _bot_thread.start()
