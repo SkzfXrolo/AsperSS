@@ -1973,7 +1973,9 @@ def submit_scan_results(scan_id):
             _discord_notify(
                 scan_id,
                 data.get('machine_name', 'N/A'),
-                data.get('username', 'N/A'),
+                data.get('username', data.get('minecraft_username', 'N/A')),
+                risk_score=locals().get('risk_score', 0),
+                issues_found=len(results),
             )
         except Exception:
             pass
@@ -4277,9 +4279,22 @@ def set_scan_verdict(scan_id):
                 f' VALUES ({_PH},{_PH},{_PH},{_PH})',
                 (scan_id, verdict, reason, user)
             )
+            cursor.execute(
+                f'SELECT machine_name, minecraft_username FROM scans WHERE id={_PH}',
+                (scan_id,)
+            )
+            srow = cursor.fetchone()
+        machine  = (_row_get(srow, 0, 'machine_name')       or 'N/A') if srow else 'N/A'
+        username = (_row_get(srow, 1, 'minecraft_username')  or 'N/A') if srow else 'N/A'
         # Invalidar caché de estadísticas
         if 'statistics' in _stats_cache: del _stats_cache['statistics']
         if 'dashboard_extended' in _stats_cache: del _stats_cache['dashboard_extended']
+        # Notificar Discord
+        try:
+            from discord_bot import notify_verdict_change as _dv
+            _dv(scan_id, machine, username, verdict, reason, user)
+        except Exception:
+            pass
         return jsonify({'success': True}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
