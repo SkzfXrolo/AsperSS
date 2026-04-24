@@ -1,6 +1,5 @@
-const CACHE_NAME = 'argus-v1';
-const SHELL_URLS = [
-  '/panel',
+const CACHE_NAME = 'argus-v2';
+const STATIC_URLS = [
   '/static/css/style.css',
   '/static/css/panel.css',
   '/static/js/panel.js',
@@ -12,7 +11,7 @@ const SHELL_URLS = [
 
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL_URLS)).catch(() => {})
+    caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_URLS)).catch(() => {})
   );
   self.skipWaiting();
 });
@@ -33,7 +32,6 @@ self.addEventListener('fetch', event => {
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(event.request).then(resp => {
-        // Cache the scans list response so offline can show it
         if (url.pathname === '/api/scans' && resp.ok) {
           const clone = resp.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
@@ -44,7 +42,15 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Shell — cache first
+  // HTML pages — network first so the server always sends fresh HTML
+  if (event.request.mode === 'navigate' || url.pathname === '/panel' || url.pathname === '/') {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Static assets — cache first
   event.respondWith(
     caches.match(event.request).then(cached => cached || fetch(event.request).then(resp => {
       if (resp.ok) {
