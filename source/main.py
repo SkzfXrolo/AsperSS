@@ -2111,7 +2111,7 @@ class ArgusApp:
             'iris-', 'sodium-', 'lithium-', 'phosphor-', 'rubidium-',
             'jei-', 'create-', 'botania-', 'cobblemon-',
             # Launchers legítimos
-            'tlauncher-', 'prismlauncher', 'lunarclient\\', 'badlion client\\',
+            'tlauncher-', 'prismlauncher', 'lunarclient\\', 'lunar client', 'badlion client\\',
             # DLLs del sistema Windows
             'api-ms-win-', 'msvcr', 'msvcp', 'vcruntime', 'ucrtbase',
             'kernel32.dll', 'user32.dll', 'advapi32.dll', 'shell32.dll',
@@ -2123,10 +2123,15 @@ class ArgusApp:
             'jetbrains\\', '\\jetbrains\\', 'rider\\', 'goland\\', 'webstorm\\', 'clion\\',
             # AppData: rutas de sistema / browsers / apps legítimas (NO son hacks)
             'webview2runtime', 'trust protection lists', 'pspc_sdk',
-            '\\appdata\\local\\packages\\microsoft.', '\\appdata\\local\\packages\\operasoftware.',
-            '\\appdata\\local\\origin\\', '\\appdata\\local\\nvidia\\',
-            '\\appdata\\local\\microsoft\\edge', '\\appdata\\roaming\\opera software',
-            'voicemod',  # voice changer legítimo
+            'appdata\\local\\packages',          # Windows Store apps (firmadas, sandboxed)
+            'appdata\\local\\origin',            # EA Origin
+            'appdata\\local\\nvidia',
+            'appdata\\local\\microsoft\\edge',
+            'appdata\\roaming\\opera software',
+            'electronic arts\\ea desktop',       # EA Desktop launcher
+            'site-packages',                     # librerías Python instaladas
+            'voicemod',                          # voice changer legítimo
+            'minecraftsstool',                   # el propio SS tool del servidor
         ]
         
         # ============================================================
