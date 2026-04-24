@@ -2280,11 +2280,11 @@ def get_scan(scan_id):
                     except Exception:
                         pass
                 
-                # Obtener resultados
+                # Obtener resultados (incluye feedback_status para mostrar veredicto del staff)
                 cursor.execute(f'''
                     SELECT id, issue_type, issue_name, issue_path, issue_category,
                            alert_level, confidence, detected_patterns, obfuscation_detected,
-                           file_hash, ai_analysis, ai_confidence
+                           file_hash, ai_analysis, ai_confidence, feedback_status
                     FROM scan_results
                     WHERE scan_id = {_PH}
                 ''', (scan_id,))
@@ -2304,7 +2304,8 @@ def get_scan(scan_id):
                         'obfuscation_detected': bool(_row_get(r, 8, 'obfuscation_detected')),
                         'file_hash': _row_get(r, 9, 'file_hash'),
                         'ai_analysis': _row_get(r, 10, 'ai_analysis'),
-                        'ai_confidence': _row_get(r, 11, 'ai_confidence')
+                        'ai_confidence': _row_get(r, 11, 'ai_confidence'),
+                        'feedback_status': _row_get(r, 12, 'feedback_status'),
                     })
                 
                 scan['results'] = results
@@ -2477,7 +2478,26 @@ def submit_feedback():
                 SET extracted_patterns = %s, extracted_features = %s
                 WHERE id = %s
             ''', (json.dumps(extracted_patterns), json.dumps(extracted_features), feedback_id))
-            
+
+            # Persistir feedback_status en scan_results para que sobreviva recargas
+            cursor.execute(
+                f'UPDATE scan_results SET feedback_status = {_PH} WHERE id = {_PH}',
+                (staff_verification, result_id)
+            )
+
+            # Aprender rutas legítimas (no solo file_hash) para mejorar el filtro server-side
+            if staff_verification == 'legitimate' and issue_path:
+                cursor.execute(f'''
+                    INSERT INTO learned_patterns
+                        (pattern_type, pattern_value, pattern_category, source_feedback_id,
+                         learned_from_count, last_updated_at, is_active)
+                    VALUES ('legitimate_path', {_PH}, 'whitelist', {_PH}, 1, CURRENT_TIMESTAMP, TRUE)
+                    ON CONFLICT (pattern_value) DO UPDATE SET
+                        learned_from_count = learned_patterns.learned_from_count + 1,
+                        last_updated_at = CURRENT_TIMESTAMP,
+                        is_active = TRUE
+                ''', (issue_path, feedback_id))
+
             # Limpiar caché relacionado
             if f'scan_{scan_id}' in _stats_cache:
                 del _stats_cache[f'scan_{scan_id}']
@@ -2485,7 +2505,7 @@ def submit_feedback():
                 del _stats_cache['statistics']
             if 'learned_patterns' in _stats_cache:
                 del _stats_cache['learned_patterns']
-        
+
         return jsonify({
             'success': True,
             'feedback_id': feedback_id,
@@ -2609,18 +2629,37 @@ def submit_feedback_batch():
                         'obfuscation': bool(obfuscation),
                         'confidence': confidence or 0
                     }
-                elif staff_verification == 'legitimate' and file_hash:
-                    # Si es legítimo, guardar hash en whitelist
-                    cursor.execute('''
-                        INSERT INTO learned_hashes (
-                            file_hash, is_hack, confirmed_count, last_confirmed_at, source_feedback_id
-                        ) VALUES (%s, 0, 1, CURRENT_TIMESTAMP, %s)
-                        ON CONFLICT (file_hash) DO UPDATE SET
-                            is_hack = 0,
-                            confirmed_count = learned_hashes.confirmed_count + 1,
-                            last_confirmed_at = CURRENT_TIMESTAMP,
-                            source_feedback_id = EXCLUDED.source_feedback_id
-                    ''', (file_hash, feedback_id))
+                elif staff_verification == 'legitimate':
+                    # Guardar hash si existe
+                    if file_hash:
+                        cursor.execute('''
+                            INSERT INTO learned_hashes (
+                                file_hash, is_hack, confirmed_count, last_confirmed_at, source_feedback_id
+                            ) VALUES (%s, 0, 1, CURRENT_TIMESTAMP, %s)
+                            ON CONFLICT (file_hash) DO UPDATE SET
+                                is_hack = 0,
+                                confirmed_count = learned_hashes.confirmed_count + 1,
+                                last_confirmed_at = CURRENT_TIMESTAMP,
+                                source_feedback_id = EXCLUDED.source_feedback_id
+                        ''', (file_hash, feedback_id))
+                    # Aprender ruta legítima (aunque no haya hash)
+                    if issue_path:
+                        cursor.execute(f'''
+                            INSERT INTO learned_patterns
+                                (pattern_type, pattern_value, pattern_category, source_feedback_id,
+                                 learned_from_count, last_updated_at, is_active)
+                            VALUES ('legitimate_path', {_PH}, 'whitelist', {_PH}, 1, CURRENT_TIMESTAMP, TRUE)
+                            ON CONFLICT (pattern_value) DO UPDATE SET
+                                learned_from_count = learned_patterns.learned_from_count + 1,
+                                last_updated_at = CURRENT_TIMESTAMP,
+                                is_active = TRUE
+                        ''', (issue_path, feedback_id))
+
+                # Persistir feedback_status en scan_results para que sobreviva recargas
+                cursor.execute(
+                    f'UPDATE scan_results SET feedback_status = {_PH} WHERE id = {_PH}',
+                    (staff_verification, result_id)
+                )
 
                 # Actualizar feedback con características extraídas
                 cursor.execute('''
@@ -2628,7 +2667,7 @@ def submit_feedback_batch():
                     SET extracted_patterns = %s, extracted_features = %s
                     WHERE id = %s
                 ''', (json.dumps(extracted_patterns), json.dumps(extracted_features), feedback_id))
-            
+
             # Limpiar caché relacionado
             for key in list(_stats_cache.keys()):
                 if key.startswith('scan_') or key in ['statistics', 'learned_patterns']:
@@ -2687,9 +2726,11 @@ def update_model():
     """Retorna estadísticas de patrones aprendidos directamente desde BD"""
     try:
         with get_api_db_cursor() as cursor:
-            cursor.execute(f'SELECT COUNT(*) as c FROM learned_patterns WHERE is_active = TRUE')
+            cursor.execute("SELECT COUNT(*) as c FROM learned_patterns WHERE is_active = TRUE AND pattern_type != 'legitimate_path'")
             patterns_count = _row_get(cursor.fetchone(), 0, 'c') or 0
-            cursor.execute(f'SELECT COUNT(*) as c FROM learned_hashes')
+            cursor.execute("SELECT COUNT(*) as c FROM learned_patterns WHERE is_active = TRUE AND pattern_type = 'legitimate_path'")
+            legit_paths_count = _row_get(cursor.fetchone(), 0, 'c') or 0
+            cursor.execute('SELECT COUNT(*) as c FROM learned_hashes')
             hashes_count = _row_get(cursor.fetchone(), 0, 'c') or 0
         return jsonify({
             'success': True,
@@ -2697,6 +2738,7 @@ def update_model():
             'version': '1.0',
             'patterns_count': patterns_count,
             'hashes_count': hashes_count,
+            'legit_paths_count': legit_paths_count,
         })
     except Exception as e:
         print(f"Error en update_model: {str(e)}")

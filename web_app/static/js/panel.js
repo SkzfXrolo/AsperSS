@@ -1634,14 +1634,32 @@ async function viewScanDetails(scanId) {
             }
         }
 
-        // Ejecutados
-        const EXECUTED_TYPES = new Set([
+        // ── Ejecutados ─────────────────────────────────────────────────────────
+        // Categorías/tipos que indican que un programa fue ejecutado (no borrado)
+        const EJECUTADOS_CATS = new Set(['APPCOMPAT','APPSWITCHED','USN_FORENSICS']);
+        const EJECUTADOS_TYPES = new Set(['USN_CREATED','USN_RENAMED_OLD','USN_RENAMED_NEW',
+            'APPCOMPAT_HACK','APPSWITCHED_HACK','RECENT_HACK_EXE',
             'prefetch_history','prefetch_suspicious','userassist_history','userassist_suspicious',
-            'bam_history','bam_suspicious','recent_lnk_history','recent_lnk_suspicious',
             'shimcache_history','shimcache_suspicious','muicache_history','muicache_suspicious',
-            'minecraft_process_info',
         ]);
-        const ejecutados = allResults.filter(r => r.issue_category === 'EXECUTED_FILES' || EXECUTED_TYPES.has(r.issue_type));
+        const BORRADOS_CATS  = new Set(['EXECUTED_DELETED','USN_FORENSICS']);
+        const BORRADOS_TYPES = new Set(['USN_DELETED','USN_PREFETCH_DELETED','executed_deleted_file',
+            'deleted_suspicious','deleted_history',
+        ]);
+
+        const ejecutados = allResults.filter(r => {
+            const cat  = (r.issue_category || '').toUpperCase();
+            const tipo = (r.issue_type || '').toUpperCase();
+            if (BORRADOS_TYPES.has(tipo) || cat === 'EXECUTED_DELETED') return false; // son borrados, no ejecutados
+            return EJECUTADOS_CATS.has(cat) || EJECUTADOS_TYPES.has(tipo);
+        });
+        const eliminados = allResults.filter(r => {
+            const cat  = (r.issue_category || '').toUpperCase();
+            const tipo = (r.issue_type || '').toUpperCase();
+            return BORRADOS_TYPES.has(tipo) || cat === 'EXECUTED_DELETED' ||
+                   (BORRADOS_CATS.has(cat) && BORRADOS_TYPES.has(tipo));
+        });
+
         const ejBtn = document.getElementById('subnav-ejecutados');
         if (ejBtn) ejBtn.style.display = ejecutados.length > 0 ? '' : 'none';
         const ejList = document.getElementById('ejecutados-list');
@@ -1650,9 +1668,10 @@ async function viewScanDetails(scanId) {
                 const isSusp = r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO';
                 const accent = isSusp ? '#ef4444' : '#38bdf8';
                 const bg = isSusp ? 'rgba(239,68,68,0.06)' : 'rgba(56,189,248,0.04)';
+                const nameStr = (r.issue_name || r.issue_path || '—').slice(0, 120);
                 return `<div style="background:${bg};border:1px solid ${accent}33;border-radius:8px;padding:12px 14px;">
-                    <div style="font-size:12px;font-weight:600;color:${accent};">${isSusp?'⚠️ ':'▶️ '}${r.issue_name||r.issue_path||'—'}</div>
-                    ${r.issue_path?`<div style="font-size:11px;color:var(--text-d);margin-top:3px;word-break:break-all;">${r.issue_path}</div>`:''}
+                    <div style="font-size:12px;font-weight:600;color:${accent};">${isSusp?'⚠️ ':'▶️ '}${nameStr}</div>
+                    ${r.issue_path?`<div style="font-size:11px;color:var(--text-d);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.issue_path}">${r.issue_path.length>100?'…'+r.issue_path.slice(-97):r.issue_path}</div>`:''}
                     ${r.alert_level?`<div style="margin-top:4px;font-size:10px;font-weight:700;color:${accent};text-transform:uppercase;">${r.alert_level}</div>`:''}
                 </div>`;
             }).join('');
@@ -1660,8 +1679,6 @@ async function viewScanDetails(scanId) {
             ejList.innerHTML = '<p style="color:var(--text-m);font-size:13px;">Sin historial de ejecutados para este escaneo.</p>';
         }
 
-        // Eliminados
-        const eliminados = allResults.filter(r => r.issue_category === 'DELETED_FILES' || r.issue_type === 'deleted_suspicious' || r.issue_type === 'deleted_history');
         const elBtn = document.getElementById('subnav-eliminados');
         if (elBtn) elBtn.style.display = eliminados.length > 0 ? '' : 'none';
         const elList = document.getElementById('eliminados-list');
@@ -1669,9 +1686,10 @@ async function viewScanDetails(scanId) {
             elList.innerHTML = eliminados.map(r => {
                 const isSusp = r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO';
                 const accent = isSusp ? '#ef4444' : '#f59e0b';
+                const nameStr = (r.issue_name || r.issue_path || '—').slice(0, 120);
                 return `<div style="background:rgba(${isSusp?'239,68,68':'245,158,11'},0.06);border:1px solid ${accent}33;border-radius:8px;padding:12px 14px;">
-                    <div style="font-size:12px;font-weight:600;color:${accent};">🗑️ ${r.issue_name||r.issue_path||'—'}</div>
-                    ${r.issue_path?`<div style="font-size:11px;color:var(--text-d);margin-top:3px;word-break:break-all;">${r.issue_path}</div>`:''}
+                    <div style="font-size:12px;font-weight:600;color:${accent};">🗑️ ${nameStr}</div>
+                    ${r.issue_path?`<div style="font-size:11px;color:var(--text-d);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.issue_path}">${r.issue_path.length>100?'…'+r.issue_path.slice(-97):r.issue_path}</div>`:''}
                 </div>`;
             }).join('');
         } else if (elList) {

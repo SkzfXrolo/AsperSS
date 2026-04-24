@@ -147,6 +147,8 @@ def init_postgresql_db():
         cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_type TYPE TEXT")
         cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_name TYPE TEXT")
         cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_category TYPE TEXT")
+        # feedback_status: persiste el veredicto de staff en la fila del resultado
+        cursor.execute("ALTER TABLE scan_results ADD COLUMN IF NOT EXISTS feedback_status VARCHAR(20) DEFAULT NULL")
 
         # Tabla de historial de bans
         cursor.execute('''
