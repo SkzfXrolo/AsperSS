@@ -308,10 +308,12 @@ def _make_bot():
     # ── on_ready ──────────────────────────────────────────────────────────────
     @client.event
     async def on_ready():
-        log.info(f'[Discord] Bot conectado como {client.user}')
+        print(f'[Discord] ✅ Bot conectado como {client.user} (ID: {client.user.id})')
         if guild_obj:
             await tree.sync(guild=guild_obj)
-            log.info('[Discord] Slash commands sincronizados.')
+            print('[Discord] ✅ Slash commands sincronizados.')
+        else:
+            print('[Discord] ⚠️ DISCORD_GUILD no configurado — slash commands no sincronizados')
 
     return client
 
