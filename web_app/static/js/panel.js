@@ -1090,8 +1090,8 @@ function renderIssuePage(container, scanId) {
             border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:10px;">
             <span style="font-size:14px;flex-shrink:0;margin-top:1px;">${dot}</span>
             <div style="flex:1;min-width:0;">
-                <div style="font-size:12px;font-weight:600;color:var(--text-h);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                    <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:380px;">${name}</span>
+                <div style="font-size:12px;font-weight:600;color:var(--text-h);display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;overflow:hidden;">
+                    <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(380px,60vw);">${name}</span>
                     ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;flex-shrink:0;">${_getCategoryLabel(cat)}</span>` : ''}
                 </div>
                 ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${path}">${truncPath}</div>` : ''}
@@ -1449,7 +1449,12 @@ async function viewScanDetails(scanId) {
                     <button class="btn btn-sm" style="margin-top:18px" onclick="viewScanDetails(${scanId})">Actualizar</button>
                 </div>`;
             document.getElementById('bulk-actions-bar').style.display = 'none';
+        } else if (data.verdict === 'hack') {
+            if (detectionBanner) detectionBanner.style.display = 'flex';
+        } else if (data.verdict === 'clean' || data.verdict === 'limpio') {
+            if (detectionBanner) detectionBanner.style.display = 'none';
         } else if (severityStats.severe > 0 || severityStats.alert > 0) {
+            // Sin veredicto explícito — mostrar banner si hay hallazgos críticos
             if (detectionBanner) detectionBanner.style.display = 'flex';
         } else {
             if (detectionBanner) detectionBanner.style.display = 'none';

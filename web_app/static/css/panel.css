@@ -1396,7 +1396,7 @@ body.light-theme .sidebar {
 /* ══════════════════════════════════════════════
    ISSUE CARDS — Vista detallada de un escaneo
 ══════════════════════════════════════════════ */
-.issues-list-container { display: flex; flex-direction: column; gap: 10px; }
+.issues-list-container { display: flex; flex-direction: column; gap: 10px; overflow: hidden; min-width: 0; }
 
 .issue-card {
     display: flex;
