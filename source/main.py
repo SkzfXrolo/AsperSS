@@ -1460,28 +1460,36 @@ class ArgusApp:
         return issues
     
     def scan_dns_cache(self):
-        """Escanea caché DNS"""
+        """Escanea caché DNS buscando dominios de distribución de ghost clients."""
         print("🔍 ESCANEANDO CACHÉ DNS...")
         issues = []
-        
-        def scan():
-            try:
-                result = subprocess.run(['ipconfig', '/displaydns'], capture_output=True, text=True)
-                if result.returncode == 0:
-                    dns_output = result.stdout
-                    if any(hack in dns_output.lower() for hack in ['vape', 'entropy', 'liquidbounce']):
-                        issues.append({
-                            'tipo': 'DNS_CACHE',
-                            'nombre': 'DNS Cache',
-                            'ruta': 'DNS Cache',
-                            'alerta': 'POCO_SOSPECHOSO',
-                            'categoria': 'DNS_CACHE'
-                        })
-                        
-            except Exception as e:
-                print(f"Error escaneando caché DNS: {e}")
-                
-        scan()
+        HACK_DOMAINS = [
+            'vape', 'entropy', 'liquidbounce', 'sigma.rip', 'riseclient',
+            'meteorclient', 'wurst-client', 'lbest.pw', 'vape.gg',
+            'drazclient', 'drip-client', 'rusherhack', 'novoline',
+            'astolfoclient', 'fluxclient', 'futureclient', 'inertia',
+            'salhack', 'azuraclient', 'vertexclient', 'daturamc',
+            'jelloclient', 'weavemcr', 'weaveclient',
+        ]
+        try:
+            result = subprocess.run(['ipconfig', '/displaydns'], capture_output=True, text=True)
+            if result.returncode == 0:
+                dns_output = result.stdout.lower()
+                matched = [d for d in HACK_DOMAINS if d in dns_output]
+                if matched:
+                    print(f"⚠️ DNS CACHE SOSPECHOSA: {matched}")
+                    issues.append({
+                        'tipo': 'dns_cache_hack',
+                        'nombre': f'DNS cache con dominio de hack: {", ".join(matched)}',
+                        'ruta': 'DNS Cache',
+                        'archivo': ', '.join(matched),
+                        'alerta': 'SOSPECHOSO',
+                        'categoria': 'DNS_CACHE',
+                        'confidence': 0.80,
+                        'detected_patterns': [f'dns:{d}' for d in matched],
+                    })
+        except Exception as e:
+            print(f"Error escaneando caché DNS: {e}")
         return issues
     
     def scan_services(self):
@@ -3109,6 +3117,8 @@ class ArgusApp:
                 _run_safe(self.scan_typed_paths)
                 self._set_scan_phase("🔌 Historial USB...")
                 _run_safe(self.scan_usb_history)
+                self._set_scan_phase("🌐 Hosts file...")
+                _run_safe(self.scan_hosts_file)
                 self._set_scan_phase("🚀 Entradas de inicio automático...")
                 _run_safe(self.scan_startup_entries)
                 self._set_scan_phase("📦 Programas instalados...")
@@ -3121,6 +3131,10 @@ class ArgusApp:
                 _run_safe(self.scan_razer_macros)
                 _extend_safe(_run_safe(self.scan_usb_devices))
                 _extend_safe(_run_safe(self.scan_network_connections))
+                self._set_scan_phase("🔌 Adaptadores VPN...")
+                _run_safe(self.scan_vpn_adapters)
+                self._set_scan_phase("☕ JDWP debug port...")
+                _run_safe(self.scan_jdwp_port)
 
             # Grupo E — Ubicaciones de hacks (I/O alto)
             def _group_hack_locations():
@@ -3128,6 +3142,8 @@ class ArgusApp:
                 _run_safe(self.scan_common_hack_locations)
                 _run_safe(self.scan_suspicious_folders)
                 _run_safe(self.scan_exact_hack_names)
+                self._set_scan_phase("👻 Config de ghost clients...")
+                _run_safe(self.scan_ghost_client_configs)
 
             # Grupo F — Técnicas avanzadas
             def _group_advanced():
@@ -5649,46 +5665,105 @@ class ArgusApp:
             print(f"Error escaneando registro: {str(e)}")
     
     def scan_logitech_macros(self):
-        """Escanea macros de Logitech"""
+        """Escanea macros de Logitech G Hub — lee la DB para buscar macros de autoclick."""
+        print("🔍 ESCANEANDO MACROS LOGITECH...")
+        localapp = os.environ.get('LOCALAPPDATA', '')
+        lghub_dir = os.path.join(localapp, 'LGHUB')
+        if not os.path.exists(lghub_dir):
+            return
         try:
-            print("🔍 ESCANEANDO MACROS LOGITECH...")
-            import os
-            
-            lghub_path = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'LGHUB', 'Settings.json')
-            
-            if os.path.exists(lghub_path):
-                print("⚠️ MACROS LOGITECH DETECTADAS")
-                self.issues_found.append({
-                    'nombre': "Macros Logitech detectadas",
-                    'ruta': os.path.dirname(lghub_path),
-                    'archivo': lghub_path,
-                    'tipo': 'logitech_macros',
-                    'categoria': 'LOGITECH',
-                    'alerta': 'SOSPECHOSO'
-                })
+            import sqlite3, glob as _glob, json as _json
+            # LGHUB guarda su configuración en settings.db (SQLite)
+            db_candidates = _glob.glob(os.path.join(lghub_dir, '*.db'))
+            macro_found = False
+            for db_path in db_candidates:
+                try:
+                    conn = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
+                    c = conn.cursor()
+                    c.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                    tables = [r[0] for r in c.fetchall()]
+                    # Buscar tablas de assignments/macros
+                    for table in tables:
+                        if any(kw in table.lower() for kw in ('assignment', 'macro', 'key', 'profile')):
+                            try:
+                                c.execute(f'SELECT * FROM "{table}" LIMIT 200')
+                                rows = c.fetchall()
+                                raw = ' '.join(str(r) for r in rows).lower()
+                                # Indicadores de autoclick: delays cortos + repetición
+                                if any(kw in raw for kw in ('mousebutton', 'leftbutton', 'rightbutton',
+                                                             'delay', 'repeat', 'keystroke')):
+                                    if any(str(d) in raw for d in range(1, 20)):  # delay < 20ms
+                                        macro_found = True
+                                        print(f"🚨 MACRO DE CLICK LOGITECH en {table}")
+                            except Exception:
+                                pass
+                    conn.close()
+                except Exception:
+                    pass
+            alerta = 'CRITICAL' if macro_found else 'SOSPECHOSO'
+            desc   = 'Macro de autoclick Logitech detectada (delay < 20ms)' if macro_found else 'Software Logitech G Hub instalado con macros configuradas'
+            print(f"⚠️ LOGITECH G HUB DETECTADO — {desc}")
+            self.issues_found.append({
+                'nombre': desc,
+                'ruta': lghub_dir,
+                'archivo': 'LGHUB/settings.db',
+                'tipo': 'logitech_macros',
+                'categoria': 'AUTOCLICK',
+                'alerta': alerta,
+                'confidence': 0.85 if macro_found else 0.45,
+                'detected_patterns': ['logitech_macro_click' if macro_found else 'logitech_installed'],
+            })
         except Exception as e:
-            print(f"Error escaneando macros Logitech: {str(e)}")
-    
+            print(f"Error escaneando macros Logitech: {e}")
+
     def scan_razer_macros(self):
-        """Escanea macros de Razer"""
+        """Escanea macros de Razer Synapse — busca perfiles con secuencias de click."""
+        print("🔍 ESCANEANDO MACROS RAZER...")
+        import glob as _glob, json as _json
+        localapp  = os.environ.get('LOCALAPPDATA', '')
+        appdata   = os.environ.get('APPDATA', '')
+        razer_dirs = [
+            os.path.join(localapp, 'Razer'),
+            os.path.join(appdata, 'Razer'),
+            os.path.join(os.environ.get('PROGRAMDATA', ''), 'Razer'),
+        ]
         try:
-            print("🔍 ESCANEANDO MACROS RAZER...")
-            import os
-            
-            razer_path = os.path.join(os.environ.get('PROGRAMDATA', ''), 'Razer', 'Synapse Accounts')
-            
-            if os.path.exists(razer_path):
-                print("⚠️ MACROS RAZER DETECTADAS")
+            macro_found = False
+            for razer_dir in razer_dirs:
+                if not os.path.exists(razer_dir):
+                    continue
+                # Buscar archivos de perfil JSON/XML
+                for ext in ('*.json', '*.xml', '*.cfg'):
+                    for profile_path in _glob.glob(os.path.join(razer_dir, '**', ext), recursive=True):
+                        try:
+                            with open(profile_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read().lower()
+                            # Indicadores de macro de click con delay bajo
+                            if any(kw in content for kw in ('mousedown', 'mouseclick', 'leftclick',
+                                                              'keystroke', 'macro', 'actiontype')):
+                                # Buscar delays bajos (< 20ms)
+                                import re as _re
+                                delays = _re.findall(r'delay["\s:]+(\d+)', content)
+                                if any(int(d) < 20 for d in delays if d.isdigit()):
+                                    macro_found = True
+                                    print(f"🚨 MACRO RAZER CON DELAY BAJO: {profile_path}")
+                        except Exception:
+                            pass
+            if any(os.path.exists(d) for d in razer_dirs):
+                alerta = 'CRITICAL' if macro_found else 'SOSPECHOSO'
+                desc   = 'Macro de autoclick Razer detectada (delay < 20ms)' if macro_found else 'Razer Synapse instalado con perfiles configurados'
                 self.issues_found.append({
-                    'nombre': "Macros Razer detectadas",
-                    'ruta': razer_path,
-                    'archivo': 'Synapse Accounts',
+                    'nombre': desc,
+                    'ruta': next(d for d in razer_dirs if os.path.exists(d)),
+                    'archivo': 'Razer profile',
                     'tipo': 'razer_macros',
-                    'categoria': 'RAZER',
-                    'alerta': 'SOSPECHOSO'
+                    'categoria': 'AUTOCLICK',
+                    'alerta': alerta,
+                    'confidence': 0.85 if macro_found else 0.40,
+                    'detected_patterns': ['razer_macro_click' if macro_found else 'razer_installed'],
                 })
         except Exception as e:
-            print(f"Error escaneando macros Razer: {str(e)}")
+            print(f"Error escaneando macros Razer: {e}")
     
     def scan_event_logs(self):
         """Escanea logs de eventos para cambios de fecha"""
@@ -5978,10 +6053,20 @@ class ArgusApp:
             return
 
         hack_names = [
+            # Ghost clients conocidos
             'vape', 'entropy', 'wurst', 'liquidbounce', 'sigma', 'flux', 'future',
-            'killaura', 'aimbot', 'inject', 'hack', 'cheat', 'bypass', 'crack',
-            'autoclick', 'clicker', 'phobos', 'astolfo', 'novoline', 'dllinjector',
-            'keylogger', 'rat.', 'trojan', 'ghost', 'undetected'
+            'astolfo', 'novoline', 'phobos', 'rise', 'meteor', 'weave', 'jello',
+            'datura', 'drip', 'vertex', 'mathias', 'rusherhack', 'azura', 'salhack',
+            'inertia', 'remix', 'ares', 'aristois', 'komat', 'wasp', 'konas',
+            'seppuku', 'sloth', 'moon', 'exhibition', 'liqd', 'exhib',
+            # Módulos y tipos de hack
+            'killaura', 'aimbot', 'triggerbot', 'scaffold', 'autoclick', 'clicker',
+            # Herramientas de inyección
+            'inject', 'injector', 'dllinjector', 'xenos', 'extreme.inject',
+            # Términos genéricos de evasión
+            'bypass', 'undetected', 'ghost', 'stealth',
+            # Malware genérico
+            'hack', 'cheat', 'crack', 'keylogger', 'rat.', 'trojan',
         ]
         legit_names = [
             'windows', 'microsoft', 'chrome', 'firefox', 'explorer', 'system',
@@ -6137,6 +6222,165 @@ class ArgusApp:
             })
         except Exception as e:
             print(f"Error en scan_deleted_recycle: {e}")
+
+    # ──────────────────────────────────────────────────────────────
+    #  NUEVAS DETECCIONES — Ghost clients, JDWP, VPN, Hosts
+    # ──────────────────────────────────────────────────────────────
+
+    def scan_ghost_client_configs(self):
+        """Detecta carpetas y archivos de configuración de ghost clients conocidos."""
+        print("🔍 Escaneando configs de ghost clients...")
+        appdata  = os.environ.get('APPDATA', '')
+        localapp = os.environ.get('LOCALAPPDATA', '')
+        home     = os.path.expanduser('~')
+        GHOST_CONFIGS = [
+            ('Rise Client',      os.path.join(appdata,  '.rise')),
+            ('Sigma Client',     os.path.join(appdata,  '.sigma')),
+            ('Meteor Client',    os.path.join(appdata,  '.meteor')),
+            ('LiquidBounce',     os.path.join(appdata,  '.liquidbounce')),
+            ('Weave Loader',     os.path.join(appdata,  '.weave')),
+            ('WeaveLoader',      os.path.join(localapp, 'WeaveLoader')),
+            ('Jello Client',     os.path.join(appdata,  'jello')),
+            ('Datura Client',    os.path.join(appdata,  '.datura')),
+            ('Drip Client',      os.path.join(appdata,  '.drip')),
+            ('Vertex Client',    os.path.join(appdata,  '.vertex')),
+            ('Mathias Client',   os.path.join(appdata,  '.mathias')),
+            ('RusherHack',       os.path.join(appdata,  '.rusherhack')),
+            ('Azura Client',     os.path.join(appdata,  '.azura')),
+            ('Novoline Client',  os.path.join(appdata,  '.novoline')),
+            ('Future Client',    os.path.join(appdata,  '.future')),
+            ('Flux Client',      os.path.join(appdata,  '.flux')),
+            ('Astolfo Client',   os.path.join(appdata,  '.astolfo')),
+            ('Salhack Client',   os.path.join(appdata,  '.salhack')),
+            ('Entropy Client',   os.path.join(appdata,  '.entropy')),
+            ('Wurst Client',     os.path.join(appdata,  '.wurst')),
+            ('Inertia Client',   os.path.join(home,     '.inertia')),
+            ('Remix Client',     os.path.join(appdata,  '.remix')),
+            ('Ares Client',      os.path.join(appdata,  '.ares')),
+            ('Vape (encrypted)', os.path.join(appdata,  'vape.encrypted')),
+            ('Vape (json)',       os.path.join(appdata,  'vape.json')),
+        ]
+        try:
+            for client_name, config_path in GHOST_CONFIGS:
+                if os.path.exists(config_path):
+                    print(f"🚨 GHOST CLIENT CONFIG: {client_name} → {config_path}")
+                    self.issues_found.append({
+                        'nombre': f'Config de ghost client detectada: {client_name}',
+                        'ruta': config_path,
+                        'archivo': os.path.basename(config_path),
+                        'tipo': 'ghost_client_config',
+                        'categoria': 'GHOST_CLIENT',
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.98,
+                        'detected_patterns': [f'ghost_config:{client_name.lower().replace(" ", "_")}'],
+                    })
+        except Exception as e:
+            print(f"Error en scan_ghost_client_configs: {e}")
+
+    def scan_jdwp_port(self):
+        """Detecta puerto de debug JDWP activo en procesos Java (permite inyección en runtime)."""
+        print("🔍 Escaneando JDWP en procesos Java...")
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    name = (proc.info.get('name') or '').lower()
+                    if 'java' not in name:
+                        continue
+                    cmdline = ' '.join(proc.info.get('cmdline') or [])
+                    if 'jdwp' in cmdline.lower() or 'agentlib:jdwp' in cmdline.lower():
+                        print(f"🚨 JDWP PORT ACTIVO en PID {proc.pid}")
+                        self.issues_found.append({
+                            'nombre': f'Puerto debug JDWP activo en Java (PID {proc.pid}) — permite inyección de bytecode',
+                            'ruta': cmdline[:255],
+                            'archivo': proc.info.get('name', 'javaw.exe'),
+                            'tipo': 'jdwp_debug_port',
+                            'categoria': 'JAVA_INJECTION',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.95,
+                            'detected_patterns': ['jdwp_active'],
+                        })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_jdwp_port: {e}")
+
+    def scan_vpn_adapters(self):
+        """Detecta adaptadores VPN activos durante el scan (posible intento de evasión)."""
+        print("🔍 Escaneando adaptadores VPN...")
+        VPN_KEYWORDS = [
+            'vpn', 'mullvad', 'nordvpn', 'expressvpn', 'protonvpn', 'surfshark',
+            'private internet', 'ipvanish', 'cyberghost', 'windscribe', 'tunnelbear',
+            'wireguard', 'openvpn', 'tap-windows', 'tap0901', 'psiphon',
+            'hotspot shield', 'hide.me', 'pia vpn', 'privatevpn',
+        ]
+        try:
+            for iface_name, stat in psutil.net_if_stats().items():
+                if not stat.isup:
+                    continue
+                if any(kw in iface_name.lower() for kw in VPN_KEYWORDS):
+                    print(f"⚠️ VPN ACTIVA: {iface_name}")
+                    self.issues_found.append({
+                        'nombre': f'Adaptador VPN activo durante el scan: {iface_name}',
+                        'ruta': 'Adaptadores de red del sistema',
+                        'archivo': iface_name,
+                        'tipo': 'vpn_active',
+                        'categoria': 'EVASION',
+                        'alerta': 'SOSPECHOSO',
+                        'confidence': 0.70,
+                        'detected_patterns': ['vpn_active_during_scan'],
+                    })
+        except Exception as e:
+            print(f"Error en scan_vpn_adapters: {e}")
+
+    def scan_hosts_file(self):
+        """Detecta modificaciones en el hosts de Windows (redirección de dominios de Minecraft)."""
+        print("🔍 Escaneando archivo hosts...")
+        hosts_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'),
+                                  'System32', 'drivers', 'etc', 'hosts')
+        if not os.path.exists(hosts_path):
+            return
+        MINECRAFT_DOMAINS = [
+            'session.minecraft.net', 'authserver.mojang.com', 'account.mojang.com',
+            'api.mojang.com', 'mojang.com', 'minecraft.net', 'multiplayer.minecraft',
+            'hypixel.net', 'mineplex.com', 'cubecraft.net',
+        ]
+        try:
+            with open(hosts_path, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+            custom = []
+            for line in lines:
+                stripped = line.strip()
+                if not stripped or stripped.startswith('#'):
+                    continue
+                if stripped in ('127.0.0.1 localhost', '::1 localhost', '127.0.0.1 localhost.localdomain'):
+                    continue
+                custom.append(stripped)
+                if any(d in stripped.lower() for d in MINECRAFT_DOMAINS):
+                    print(f"🚨 HOSTS REDIRIGE DOMINIO DE MINECRAFT: {stripped}")
+                    self.issues_found.append({
+                        'nombre': f'Hosts redirige dominio de Minecraft/Mojang: {stripped[:120]}',
+                        'ruta': hosts_path,
+                        'archivo': 'hosts',
+                        'tipo': 'hosts_minecraft_redirect',
+                        'categoria': 'EVASION',
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.92,
+                        'detected_patterns': ['hosts_mojang_redirect'],
+                    })
+            if custom:
+                print(f"⚠️ HOSTS FILE CON {len(custom)} ENTRADA(S) NO ESTÁNDAR")
+                self.issues_found.append({
+                    'nombre': f'Hosts file modificado: {len(custom)} entrada(s) no estándar',
+                    'ruta': hosts_path,
+                    'archivo': '; '.join(custom[:5])[:255],
+                    'tipo': 'hosts_file_custom',
+                    'categoria': 'EVASION',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.55,
+                    'detected_patterns': ['hosts_custom_entries'],
+                })
+        except Exception as e:
+            print(f"Error en scan_hosts_file: {e}")
 
     def scan_executed_userassist(self):
         """Lee UserAssist del registro para detectar ejecutables recientes con timestamps."""
