@@ -1,0 +1,382 @@
+═══════════════════════════════════════════════════════════════════
+   MEJORAS PENDIENTES — ARGUS SCANNER
+   Fecha: 2026-04-24
+═══════════════════════════════════════════════════════════════════
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ PARTE 1 — 30 MEJORAS DE DETECCIÓN DE HACKS PARA MINECRAFT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ GHOST CLIENTS & CLIENTES MODIFICADOS ]
+
+1.  -javaagent EN JVM ARGS
+    Leer proc.cmdline() del proceso Java/Minecraft. Si tiene
+    -javaagent:algo.jar es inyección directa. Weave, ForgeHax y la
+    mayoría de ghost clients modernos usan esto.
+    Implementar en: astro_ss_techniques.py → nueva función detect_javaagent()
+
+2.  JDWP DEBUG PORT ABIERTO
+    Si el proceso Java tiene agentlib:jdwp activo (puerto 5005 u otro),
+    permite inyección de bytecode en runtime. Nadie legítimo juega con
+    esto activo.
+    Usar psutil: proc.connections() buscando puerto 5005 o args JDWP.
+
+3.  HASH DEL minecraft.jar VS VANILLA
+    Hashear versions/X.X.X/X.X.X.jar y comparar contra hashes oficiales
+    de Mojang. Si no matchea → jar modificado (ghost client clásico).
+    Mantener tabla de hashes vanilla en config.json o en la cloud DB.
+
+4.  WEAVE LOADER ARTIFACTS
+    Carpeta .weave/ en AppData, weave.json, o WeaveLoader en módulos JVM.
+    Weave es el framework de inyección más popular actualmente.
+    Rutas: %APPDATA%\.weave\, %APPDATA%\WeaveLoader\
+
+5.  CONFIG FILES DE GHOST CLIENTS CONOCIDOS
+    Escanear rutas específicas:
+      .rise/              → Rise Client
+      vape.encrypted      → Vape
+      vape.json           → Vape (sin cifrar)
+      .sigma/             → Sigma
+      .meteor/            → Meteor Client
+      .liquidbounce/      → LiquidBounce
+      .mathias/           → Mathias
+      .datura/            → Datura
+      jello/              → Jello
+      .drip/              → Drip Client
+      .vertex/            → Vertex Client
+      .azura/             → Azura
+      .novoline/          → Novoline
+      .rusherhack/        → RusherHack
+
+6.  REGISTRY DE GHOST CLIENTS INSTALADOS
+    HKCU\Software\ y HKLM\Software\ por nombres: Sigma, Rise, Vape,
+    Drip, Vertex. Algunos instaladores dejan claves permanentes.
+
+7.  MODS PROHIBIDOS EN .minecraft/mods/
+    Escanear nombres y hashes contra lista negra:
+    Baritone standalone, Horion, Impact, Wurst-MC, Aristois,
+    Meteor Client, Sigma, Ares, Salhack, Entropy, Remix, Inertia.
+    También detectar nombres ofuscados por tamaño/fecha inusual.
+
+8.  MÓDULOS DLL INYECTADOS EN PROCESO JAVA
+    Enumerar todas las DLLs cargadas en java.exe/javaw.exe con psutil
+    o ctypes.windll. Cualquier DLL que no sea del JDK, Visual C++
+    Runtime o drivers estándar del sistema es sospechosa.
+
+[ AUTOCLICK & MACROS ]
+
+9.  SCRIPTS AUTOHOTKEY CON CONTEXTO MINECRAFT
+    Buscar .ahk en todo el disco que contengan "minecraft", "lbutton",
+    "click" combinados con delays de ~8ms-15ms (rango de autoclick).
+    Tambien buscar scripts compilados .exe con recursos AHK embebidos.
+
+10. LOGITECH G HUB / LGS SCRIPTS
+    AppData\Local\LGHUB\settings.db (SQLite).
+    Parsear scripts asignados a botones buscando loops de click
+    con delays bajos específicos para Minecraft.
+
+11. RAZER SYNAPSE MACROS
+    AppData\Roaming\Razer Chroma\ y AppData\Synapse3\.
+    Buscar macros con secuencias de click repetitivo con delay < 20ms.
+
+12. BLOODY / A4TECH SOFTWARE
+    Program Files\Bloody\ → archivos de perfil con macros de mouse.
+    Estos mice tienen autoclick hardcodeado en el driver.
+
+13. STEELSERIES GG / CORSAIR iCUE
+    SteelSeries GG: AppData\Local\SteelSeries\
+    iCUE: AppData\Roaming\Corsair\
+    Buscar perfiles con ActionType: Click en loops.
+
+14. DISPOSITIVOS HID TIPO ARDUINO (AUTOCLICK POR HARDWARE)
+    Enumerar dispositivos USB con WMI/pyusb. Un Arduino que se registra
+    como HID mouse + keyboard con VID/PID genérico es autoclick hardware.
+    VIDs sospechosos: 2341 (Arduino), 1A86 (CH340), 0483 (STM32).
+
+15. JITTER SCRIPTS EN MOUSE SOFTWARE
+    Buscar configuraciones de "aim assist" o jitter patterns en
+    cualquier software de mouse instalado. Jitter clicking es
+    frecuentemente implementado via macro en el software del mouse.
+
+[ INYECCIÓN & MEMORY MANIPULATION ]
+
+16. STRINGS DE HACK MODULES EN MEMORIA DE MINECRAFT
+    Volcar strings del proceso javaw.exe y buscar nombres de módulos:
+    KillAura, Scaffold, BunnyHop, Velocity, ESP, Reach, AimAssist,
+    Blink, Strafe, Criticals, AntiKnockback, FastBow, Triggerbot,
+    AutoSprint, NoFall, Flight, Speed, Timer, Nuker, AutoClicker.
+
+17. PROCESOS INYECTORES ACTIVOS SIMULTÁNEAMENTE
+    Durante el scan, detectar procesos conocidos de inyección corriendo
+    al mismo tiempo que Minecraft:
+    extreme injector.exe, xenos injector, process hacker, cheatengine.
+
+18. ARCHIVOS .JAR RECIENTES EN CARPETAS TEMP
+    %TEMP%, %LOCALAPPDATA%\Temp — .jar descargados en las últimas 24h
+    que no estén en la carpeta mods oficial.
+    Técnica común para inyectar sin rastro permanente.
+
+[ FORENSICS & ARTEFACTOS ]
+
+19. RECYCLE BIN — HACKS ELIMINADOS ANTES DEL SS
+    Parsear $Recycle.Bin por archivos borrados recientemente que
+    matcheen nombres de ghost clients. El jugador lo borró antes del
+    SS pero el forense lo encuentra con metadata de fecha.
+
+20. HISTORIAL DE DESCARGAS DEL BROWSER
+    Chrome:  AppData\Local\Google\Chrome\User Data\Default\History (SQLite)
+    Firefox: AppData\Roaming\Mozilla\Firefox\Profiles\*.default\downloads.sqlite
+    Edge:    AppData\Local\Microsoft\Edge\User Data\Default\History
+    Buscar URLs/nombres de archivo de hacks conocidos.
+
+21. PREFETCH DE EJECUTABLES DE HACKS
+    C:\Windows\Prefetch\ — archivos .pf de hacks ejecutados.
+    Si existe SIGMA.EXE-XXXXXXXX.pf o VAPE.EXE-... fue ejecutado
+    aunque el exe esté borrado.
+
+22. USN JOURNAL — JARS BORRADOS EN ÚLTIMAS 72H
+    Ya tenemos USN implementado. Filtrar específicamente por *.jar
+    borrados en %APPDATA%\.minecraft\ en las últimas 72 horas.
+
+23. USN JOURNAL — CARPETAS DE GHOST CLIENTS ELIMINADAS
+    USN Journal buscando UPDATE_REASON:DELETE en rutas que contengan
+    nombres de clients conocidos (.rise, .sigma, vape, .meteor, etc.)
+
+[ COMPLEMENTOS PROHIBIDOS & CONFIGURACIONES ]
+
+24. BARITONE CON MODOS PROHIBIDOS ACTIVOS
+    AppData\Roaming\.minecraft\baritone\settings.json
+    Verificar si buildRepeat, elytraFly, allowPlace, allowBreak = true.
+    Baritone puede estar permitido pero con printer mode prohibido.
+
+25. SCHEMATICA / LITEMATICA PRINTER MODE
+    schematica\config.json o .minecraft\config\litematica\
+    Si printerEnabled: true o placementRestriction: false → prohibido.
+
+26. X-RAY RESOURCE PACKS
+    Escanear resource packs activos en .minecraft\resourcepacks\.
+    Dentro de cada pack buscar texturas de bloques sólidos (stone, dirt,
+    sand, gravel, deepslate) con canal alpha < 50 (transparentes).
+    Requiere Pillow para leer PNGs.
+
+27. OPTIFINE ZOOM COMO COMBAT KEY
+    .minecraft\options.txt — si el keybind de zoom de OptiFine está
+    asignado a click derecho o teclas de combate, puede ser exploit.
+
+[ RED & EVASIÓN ]
+
+28. VPN ACTIVO DURANTE EL SCAN
+    Detectar interfaces de red tipo TAP/TUN (OpenVPN), WireGuard, o
+    adaptadores con nombres Mullvad, NordVPN, ProtonVPN, ExpressVPN
+    activos durante el SS. Evasión para ocultar IP o evitar detección.
+
+29. HOSTS FILE MODIFICADO
+    Parsear C:\Windows\System32\drivers\etc\hosts.
+    Cualquier entrada que redireccione dominios de Minecraft o
+    anti-cheat a 127.0.0.1 o IP alternativa es sospechosa.
+
+30. DNS CACHE — DOMINIOS DE DISTRIBUCIÓN DE HACKS
+    ipconfig /displaydns o leer cache DNS del sistema.
+    Buscar dominios de ghost clients en historial reciente:
+    sigma.rip, liquidbounce.net, lbest.pw, vape.gg, riseclient.net,
+    meteorclient.com, drazclient.xyz, drip-client.xyz, etc.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ PARTE 2 — 30 MEJORAS PARA ANÁLISIS Y REDUCCIÓN DE FALSOS POSITIVOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ FILTROS DE CONTEXTO ]
+
+1.  WHITELIST DINÁMICA DE MODS LEGÍTIMOS (HASH + NOMBRE)
+    Mantener en la cloud DB una tabla mod_whitelist con SHA256 de mods
+    legítimos: OptiFine, Sodium, Fabric API, Forge, JEI, REI, Xaero's
+    Minimap legítimo, etc. Antes de reportar un .jar como sospechoso,
+    verificar contra esta lista. Actualizable sin recompilar el exe.
+
+2.  WHITELIST POR SERVIDOR
+    Cada servidor tiene mods permitidos diferentes. Agregar campo
+    allowed_mods[] al token de escaneo para que el servidor indique
+    qué está permitido. El scanner solo reporta lo que no esté en esa
+    lista.
+
+3.  SCORE MÍNIMO PARA REPORTAR
+    No reportar un hallazgo si su confidence < 30%.
+    Actualmente se reportan todos — muchos con confidence 10-20% son
+    puro ruido. Umbral configurable en config.json.
+
+4.  CORRELACIÓN DE EVIDENCIAS MÚLTIPLES
+    Un solo indicador no debería ser CRITICAL. Solo escalar a CRITICAL
+    si hay 2+ evidencias independientes del mismo tipo de hack.
+    Ejemplo: archivo AHK sospechoso SOLO → SOSPECHOSO.
+    Archivo AHK + proceso AHK corriendo → CRITICAL.
+
+5.  IGNORAR ARCHIVOS FUERA DEL RANGO TEMPORAL
+    Si un archivo .jar tiene fecha de creación de hace más de 180 días
+    y nunca fue ejecutado (no aparece en Prefetch ni USN Journal),
+    es probablemente software legítimo instalado hace mucho.
+    Reducir su alert_level automáticamente.
+
+6.  CONTEXTO DE PROCESO PADRE
+    Si un ejecutable sospechoso fue lanzado por un instalador de juego
+    legítimo (Steam, Epic, Minecraft Launcher oficial), reducir su
+    nivel de alerta. Revisar PPID del proceso en el historial.
+
+7.  VERIFICACIÓN DE FIRMA DIGITAL (AUTHENTICODE)
+    Antes de reportar un .exe o .dll como sospechoso, verificar si
+    tiene firma digital válida de Microsoft, Oracle (JVM), NVIDIA, etc.
+    Si está firmado por empresa conocida → whitelist automática.
+    Usar subprocess + sigcheck o ctypes con WinVerifyTrust.
+
+8.  FILTRO POR TAMAÑO DE ARCHIVO
+    Un .jar de 3KB no es un hack client (demasiado pequeño para tener
+    lógica). Un mod legítimo de OptiFine pesa 3-10MB. Usar rangos de
+    tamaño como indicador de confianza, no como criterio único.
+
+[ MEJORAS EN ANÁLISIS DE STRINGS ]
+
+9.  LONGITUD MÍNIMA DE STRING PARA ANALIZAR
+    Strings de menos de 8 caracteres generan masas de falsos positivos.
+    Elevar el umbral mínimo de 4 a 8-10 caracteres en el volcado de
+    strings de memoria. Los módulos de hacks tienen nombres largos.
+
+10. FILTRO DE STRINGS POR ENCODING
+    Strings en memoria que son solo caracteres ASCII imprimibles Y
+    tienen estructura de nombre de clase Java (com.example.Module)
+    son las interesantes. Descartar strings sin ese patrón.
+
+11. REGEX DE PATRONES DE CLASE JAVA PARA MEMORY STRINGS
+    En vez de buscar palabras clave sueltas, buscar patrones de
+    package Java: com.client.*, net.hack.*, me.username.module.*
+    Son mucho más específicos y dan menos falsos positivos.
+
+12. BLACKLIST DE STRINGS COMUNES DE JAVA LEGÍTIMO
+    "java.lang", "javax.", "sun.reflect", "org.lwjgl", "net.minecraft",
+    "com.mojang", "org.apache", "com.google" — ignorar completamente
+    en el análisis de memory strings. Son del JVM o Minecraft vanilla.
+
+[ MEJORAS EN DETECCIÓN DE PROCESOS ]
+
+13. LISTA BLANCA DE PROCESOS CONOCIDOS
+    Mantener en cloud una lista de procesos legítimos comunes que
+    siempre aparecen en PCs de gamers: Discord, Steam, NVIDIA overlay,
+    GeForce Experience, Xbox Game Bar, Spotify, OBS, etc.
+    No reportar estos jamás sin evidencia adicional muy fuerte.
+
+14. CORRELACIÓN PROCESO + RUTA
+    Un proceso llamado "update.exe" desde C:\Program Files\NVIDIA\ es
+    legítimo. El mismo nombre desde %TEMP% es sospechoso.
+    La combinación nombre+ruta debe evaluarse junta, nunca por separado.
+
+15. TIEMPO DE VIDA DEL PROCESO
+    Un proceso que lleva menos de 60 segundos corriendo cuando empieza
+    el scan es más sospechoso (podría haber sido lanzado justo antes).
+    Un proceso con uptime > 2 horas es probablemente legítimo.
+
+16. HASH DE PROCESO CONTRA CLOUD DB
+    Para cada ejecutable de proceso activo, calcular SHA256 del binario
+    en disco y verificar contra hack_hashes en la cloud DB.
+    Si está en la DB → CRITICAL inmediato sin análisis adicional.
+
+[ MEJORAS EN ANÁLISIS DE ARCHIVOS ]
+
+17. ENTROPÍA DE ARCHIVOS (DETECTAR PACKERS/OBFUSCADORES)
+    Calcular la entropía de Shannon de archivos .jar y .exe sospechosos.
+    Entropía > 7.5 bits/byte indica compresión o cifrado → posible
+    packer o ofuscador (común en ghost clients para evadir detección).
+
+18. ANÁLISIS DE MANIFEST DE JAR
+    Abrir .jar como ZIP y leer META-INF/MANIFEST.MF. Si Main-Class
+    apunta a algo que no es un mod loader conocido y el jar está en
+    la carpeta mods, es muy sospechoso.
+
+19. VERIFICAR ESTRUCTURA INTERNA DEL JAR
+    Un mod Forge/Fabric legítimo tiene mcmod.info o fabric.mod.json
+    en la raíz del jar. Si no los tiene → no es un mod legítimo, es
+    un jar de otro propósito (posible inyector o hack standalone).
+
+20. FECHA DE COMPILACIÓN VS FECHA DE ARCHIVO
+    Comparar el timestamp de compilación embebido en el .class dentro
+    del jar contra la fecha de modificación del archivo. Si fue
+    "recompilado" hace menos de 24h pero el archivo tiene fecha antigua,
+    fue modificado y re-empaquetado.
+
+[ MEJORAS EN REPORTE Y SCORING ]
+
+21. PENALIZAR COMBINACIONES, NO INDICADORES ÚNICOS
+    Rediseñar el risk_score para que combinaciones específicas sumen
+    mucho más que la suma de sus partes individuales:
+    AHK script + timing mouse bajo + deleted jar = ×2.5 del score
+    JDWP port + javaagent + memory strings = automático CRITICAL
+
+22. DECAY DE SCORE POR ANTIGÜEDAD
+    Si la evidencia es de hace más de 30 días (archivo viejo, prefetch
+    antiguo), aplicar un multiplicador de 0.5 al score que aporta.
+    Evidencia vieja es menos relevante para el SS actual.
+
+23. CAMPO "EXPLICACIÓN HUMANA" EN CADA RESULTADO
+    En vez de solo reportar el tipo técnico, generar una frase en
+    español para el staff: "Se encontró un script de autoclick de
+    Logitech configurado con delay de 10ms, consistente con
+    autoclicker de 100 CPS." El staff no necesita saber qué es LOGITECH_MACRO.
+
+24. AGRUPAR RESULTADOS RELACIONADOS
+    Si se encuentran 5 configs de LiquidBounce (.liquidbounce/config1,
+    config2, etc.), reportar como UN solo resultado con count=5 en vez
+    de 5 resultados individuales. Reduce el ruido visual masivamente.
+
+[ MEJORAS EN FALSOS POSITIVOS ESPECÍFICOS ]
+
+25. LAUNCHER WHITELIST EXTENDIDA
+    Prism Launcher, PolyMC, ATLauncher, CurseForge, FTB App, GDLauncher,
+    MultiMC — todos crean carpetas y archivos en AppData que pueden
+    parecer sospechosos. Agregar sus rutas a la whitelist server-side.
+
+26. MODS DE ACCESIBILIDAD Y PERFORMANCE
+    Sodium, Lithium, Phosphor, FerriteCore, LazyDFU, EntityCulling,
+    DynamicFPS, Iris Shaders — mods legítimos muy comunes que a veces
+    tienen nombres o estructuras que disparan falsos positivos.
+    Whitelistear por hash SHA256.
+
+27. DISTINGUIR BADLION CLIENT DE GHOST CLIENTS
+    Badlion Client es permitido en muchos servidores. Tiene firma
+    digital, instalador conocido y rutas específicas. Detectarlo pero
+    clasificarlo como PERMITIDO o INFORMATIVO, no SOSPECHOSO.
+
+28. IGNORAR ARCHIVOS EN RUTAS DE BACKUP/SYNC
+    OneDrive, Google Drive, Dropbox, iCloud — si un archivo sospechoso
+    está SOLO dentro de una carpeta de sincronización en la nube (no
+    en la ruta activa de Minecraft), reducir drásticamente su score.
+    Probablemente es un backup de otra PC.
+
+29. DETECCIÓN DE MODO "SAFE MODE" DE MINECRAFT
+    Si Minecraft fue lanzado con --safeMode, los mods no cargan.
+    Reportar esto como información pero no afectar el score de riesgo
+    por mods no cargados (el jugador podría estar manipulando esto).
+
+30. SISTEMA DE FEEDBACK LOOP AUTOMÁTICO
+    Cuando el staff marca 3+ resultados del mismo tipo como "legítimo"
+    en diferentes scans, el sistema automáticamente sube el umbral de
+    confianza mínima para ese tipo de detección en un 10%.
+    Los falsos positivos sistemáticos se auto-reducen con el tiempo
+    sin intervención manual.
+
+
+═══════════════════════════════════════════════════════════════════
+ ORDEN DE IMPLEMENTACIÓN RECOMENDADO
+═══════════════════════════════════════════════════════════════════
+
+ALTA PRIORIDAD (mayor impacto, menos falsos positivos):
+  Detección: #1 (javaagent), #3 (hash jar), #5 (config files), #16 (memory strings), #21 (prefetch)
+  Análisis:  #1 (whitelist mods), #4 (correlación múltiple), #7 (firma digital), #17 (entropía), #23 (explicación humana)
+
+MEDIA PRIORIDAD:
+  Detección: #9 (AHK), #10 (Logitech), #19 (recycle bin), #22 (USN jars), #28 (VPN), #30 (DNS cache)
+  Análisis:  #2 (whitelist por servidor), #11 (regex Java), #16 (hash proceso), #21 (combinaciones score), #24 (agrupar)
+
+BAJA PRIORIDAD (nice to have):
+  Detección: #14 (Arduino HID), #25 (Litematica), #26 (X-ray resource packs)
+  Análisis:  #20 (fecha compilación), #22 (decay score), #29 (safemode), #30 (feedback loop)
+
+═══════════════════════════════════════════════════════════════════
