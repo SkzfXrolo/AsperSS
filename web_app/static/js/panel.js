@@ -1085,7 +1085,7 @@ function renderIssuePage(container, scanId) {
         const dot    = isCrit ? '🔴' : isMid ? '🟠' : '🔵';
         const cat    = result.issue_category || '';
         const hasFeedback = result.feedback_status;
-        const name = result.issue_name || 'Hallazgo';
+        const name = (result.issue_name || 'Hallazgo').slice(0, 100);
         const path = result.issue_path || '';
         const truncPath = path.length > 90 ? '…' + path.slice(-87) : path;
 
@@ -1095,7 +1095,7 @@ function renderIssuePage(container, scanId) {
             <span style="font-size:14px;flex-shrink:0;margin-top:1px;">${dot}</span>
             <div style="flex:1;min-width:0;">
                 <div style="font-size:12px;font-weight:600;color:var(--text-h);display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;overflow:hidden;">
-                    <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(380px,60vw);">${name}</span>
+                    <span style="display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(380px,60vw);vertical-align:middle;">${name}</span>
                     ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;flex-shrink:0;">${_getCategoryLabel(cat)}</span>` : ''}
                 </div>
                 ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${path}">${truncPath}</div>` : ''}
