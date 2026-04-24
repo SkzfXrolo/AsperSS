@@ -2121,6 +2121,12 @@ class ArgusApp:
             # Herramientas de edición de video y desarrollo
             'wondershare\\', 'wondershare filmora', 'filmora\\',
             'jetbrains\\', '\\jetbrains\\', 'rider\\', 'goland\\', 'webstorm\\', 'clion\\',
+            # AppData: rutas de sistema / browsers / apps legítimas (NO son hacks)
+            'webview2runtime', 'trust protection lists', 'pspc_sdk',
+            '\\appdata\\local\\packages\\microsoft.', '\\appdata\\local\\packages\\operasoftware.',
+            '\\appdata\\local\\origin\\', '\\appdata\\local\\nvidia\\',
+            '\\appdata\\local\\microsoft\\edge', '\\appdata\\roaming\\opera software',
+            'voicemod',  # voice changer legítimo
         ]
         
         # ============================================================
@@ -2197,9 +2203,9 @@ class ArgusApp:
             # 4. TAMBIÉN ACEPTAR SI ESTÁ EN CARPETAS SOSPECHOSAS
             suspicious_paths = [
                 'minecraft', 'mc', 'forge', 'fabric', 'mods', 'versions',
-                'libraries', 'natives', 'assets', 'resourcepacks', 'saves',
-                'launcher', 'client', 'hack', 'cheat', 'downloads', 'desktop',
-                'temp', 'tmp', 'appdata', 'documents'
+                'libraries', 'natives', 'assets', 'resourcepacks',
+                'hack', 'cheat', 'downloads', 'desktop',
+                'temp', 'tmp',
             ]
             
             is_in_suspicious_folder = any(path in ruta for path in suspicious_paths)

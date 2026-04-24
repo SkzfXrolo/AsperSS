@@ -402,39 +402,49 @@ class AstroSSTechniques:
             deleted = {}
             
             # Método 01: Comparar strings de PcaSvc con Explorer
+            # Límite de 260 chars (MAX_PATH de Windows) para descartar dumps de catálogos
+            # enteros de Epic/Steam que el strings2 extrae como un único string gigante.
             for string in pcasvc_strings:
+                if len(string) > 260:
+                    continue
                 string_lower = string.lower()
                 if string_lower.startswith(drive_letter.lower()) and string_lower.endswith('.exe'):
                     if not os.path.isfile(string):
                         if string in explorer_strings:
-                            filename = string.split('/')[-1]
+                            # os.path.basename maneja tanto / como \ como separador
+                            filename = os.path.basename(string.replace('/', '\\'))
                             deleted[string] = {
                                 'filename': filename,
                                 'method': '01'
                             }
-            
+
             # Método 02: Buscar en Explorer strings con 'trace' y 'pcaclient'
             for string in explorer_strings:
+                if len(string) > 2000:
+                    continue
                 string_lower = string.lower()
                 if 'trace' in string_lower and 'pcaclient' in string_lower:
                     # Extraer path del string
                     parts = string.split(',')
                     for part in parts:
-                        if '.exe' in part:
-                            path = part.strip()
+                        part = part.strip()
+                        if len(part) > 260:
+                            continue
+                        if '.exe' in part.lower():
+                            path = part
                             if not os.path.isfile(path):
-                                filename = path.split('/')[-1]
+                                filename = os.path.basename(path.replace('/', '\\'))
                                 deleted[path] = {
                                     'filename': filename,
                                     'method': '02'
                                 }
-            
+
             # Agregar issues para archivos borrados
             for path, info in deleted.items():
                 issues.append({
                     'tipo': 'executed_deleted_file',
                     'nombre': f"Archivo ejecutado y borrado: {info['filename']}",
-                    'ruta': os.path.dirname(path) if '/' in path else 'Desconocida',
+                    'ruta': os.path.dirname(path.replace('/', '\\')) or 'Desconocida',
                     'archivo': path,
                     'alerta': 'CRITICAL',
                     'categoria': 'EXECUTED_DELETED',
