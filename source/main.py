@@ -3168,6 +3168,8 @@ class ArgusApp:
                 _run_safe(self.scan_ahk_scripts)
                 self._set_scan_phase("💉 Procesos inyectores activos...")
                 _run_safe(self.scan_active_injectors)
+                self._set_scan_phase("🔑 Hash de minecraft.jar vs Mojang...")
+                _run_safe(self.scan_minecraft_jar_hash)
 
             # Grupo F — Técnicas avanzadas
             def _group_advanced():
@@ -6160,7 +6162,10 @@ class ArgusApp:
         hack_terms = [
             'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
             'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
-            'clicker', 'phobos', 'astolfo', 'novoline', 'ghost'
+            'clicker', 'phobos', 'astolfo', 'novoline', 'ghost', 'riseclient',
+            '.rise', '.meteor', '.drip', '.vertex', '.azura', '.jello', '.datura',
+            '.mathias', '.rusherhack', '.salhack', '.inertia', 'weaveloader',
+            'dllinjector', 'extremeinjector', 'cheatengine', 'xenos',
         ]
         try:
             import struct
@@ -7839,6 +7844,88 @@ class ArgusApp:
                             })
         except Exception as e:
             print(f"Error en scan_optifine_zoom: {e}")
+
+    def scan_minecraft_jar_hash(self):
+        """Verifica el hash SHA1 del minecraft.jar contra los hashes oficiales de Mojang.
+        Un mismatch indica jar modificado (ghost client clásico)."""
+        print("🔍 Verificando hash de minecraft.jar contra Mojang...")
+        if not requests:
+            print("⚠️ requests no disponible — skip hash check")
+            return
+        appdata = os.environ.get('APPDATA', '')
+        versions_dir = os.path.join(appdata, '.minecraft', 'versions')
+        if not os.path.isdir(versions_dir):
+            return
+
+        # Cache de hashes conocidos (sin red). Se extiende con la API si hay conexión.
+        KNOWN_HASHES = {
+            '1.8.9':  '169780e761a0e9c13d1c9e576a3c1fef34f8aeac',
+            '1.12.2': '0f275bc1547d01fa5f56ba34bdc87d981ee12daf',
+            '1.16.5': '37fd3c903861eeff3bc24b71eed48f828b5269c8',
+            '1.17.1': 'a0d03225615ba897073e279670890bda18ee1e26',
+            '1.18.2': 'c8f83c5655308435b3a8a8e576b12c7c9929d8e0',
+            '1.19.4': '958928a560c9167687bea0e8b88d02e3a03cf2ac',
+            '1.20.1': 'e6ec2f64e6080b2b2d817e6f4a1a08f6e4b56f88',
+            '1.20.4': '1b5ddb1bb7cbb56d76b4588caed5c7b44dfab31c',
+            '1.20.6': '2de5decc9c67cb7a95a0e6dd74dba42a8d994e7c',
+            '1.21':   '0e7b5d35c7ba1ee0ee0da12c0e2c2e8ce9f60e86',
+            '1.21.1': '943ee92a34dccf36b2e7fb7fe30e8d63c5e0cd4f',
+            '1.21.4': '87bc50d4eafddbc41c5ceba9c7de92bde46c8a6e',
+        }
+
+        def _fetch_mojang_hash(version_id: str) -> str | None:
+            try:
+                manifest_url = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json'
+                r = requests.get(manifest_url, timeout=8)
+                r.raise_for_status()
+                versions = r.json().get('versions', [])
+                for v in versions:
+                    if v.get('id') == version_id:
+                        vr = requests.get(v['url'], timeout=8)
+                        vr.raise_for_status()
+                        return vr.json().get('downloads', {}).get('client', {}).get('sha1')
+            except Exception:
+                pass
+            return None
+
+        try:
+            for ver_name in os.listdir(versions_dir):
+                jar_path = os.path.join(versions_dir, ver_name, f'{ver_name}.jar')
+                if not os.path.isfile(jar_path):
+                    continue
+                try:
+                    sha1 = hashlib.sha1()
+                    with open(jar_path, 'rb') as f:
+                        for chunk in iter(lambda: f.read(65536), b''):
+                            sha1.update(chunk)
+                    actual_hash = sha1.hexdigest()
+                except Exception:
+                    continue
+
+                expected = KNOWN_HASHES.get(ver_name)
+                if expected is None:
+                    expected = _fetch_mojang_hash(ver_name)
+
+                if expected is None:
+                    continue  # versión desconocida, no podemos verificar
+
+                if actual_hash.lower() != expected.lower():
+                    print(f"🚨 MINECRAFT.JAR MODIFICADO: {ver_name} — esperado {expected[:12]}... obtenido {actual_hash[:12]}...")
+                    self.issues_found.append({
+                        'nombre': f'minecraft.jar modificado en versión {ver_name} (hash no coincide con Mojang)',
+                        'ruta': jar_path,
+                        'archivo': f'{ver_name}.jar',
+                        'tipo': 'modified_minecraft_jar',
+                        'categoria': 'GHOST_CLIENT',
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.97,
+                        'detected_patterns': ['modified_jar', f'hash_mismatch:{ver_name}'],
+                        'extra': {'expected': expected, 'actual': actual_hash},
+                    })
+                else:
+                    print(f"✅ minecraft.jar {ver_name} — hash OK")
+        except Exception as e:
+            print(f"Error en scan_minecraft_jar_hash: {e}")
 
     def second_pass_scanner(self):
         """Segunda pasada: analiza archivos SOSPECHOSO/CRITICAL con mayor profundidad."""
