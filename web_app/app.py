@@ -703,6 +703,101 @@ def get_dashboard_extended():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/statistics/recidivism', methods=['GET'])
+@login_required
+def get_recidivism():
+    """Máquinas con múltiples veredictos 'hack' en los últimos N días.
+    Útil para identificar jugadores reincidentes."""
+    import time
+    days    = request.args.get('days', 90, type=int)
+    min_h   = request.args.get('min_hacks', 2, type=int)
+    limit   = min(request.args.get('limit', 20, type=int), 50)
+    cache_key = f'recidivism_{days}_{min_h}_{limit}'
+    if cache_key in _stats_cache:
+        if time.time() - _stats_cache_time.get(cache_key, 0) < 120:
+            return jsonify(_stats_cache[cache_key]), 200
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(f'''
+                SELECT machine_name, minecraft_username,
+                       COUNT(*) AS hack_count,
+                       AVG(risk_score) AS avg_risk,
+                       MAX(started_at) AS last_scan,
+                       MAX(id) AS last_scan_id
+                FROM scans
+                WHERE verdict = 'hack'
+                  AND started_at >= CURRENT_TIMESTAMP - INTERVAL '{days} days'
+                GROUP BY machine_name, minecraft_username
+                HAVING COUNT(*) >= {min_h}
+                ORDER BY hack_count DESC, avg_risk DESC
+                LIMIT {limit}
+            ''')
+            rows = cursor.fetchall() or []
+        result = [{
+            'machine_name':      str(_row_get(r, 0, 'machine_name') or ''),
+            'minecraft_username': str(_row_get(r, 1, 'minecraft_username') or 'N/A'),
+            'hack_count':        int(_row_get(r, 2, 'hack_count') or 0),
+            'avg_risk':          round(float(_row_get(r, 3, 'avg_risk') or 0), 1),
+            'last_scan':         str(_row_get(r, 4, 'last_scan') or '')[:19],
+            'last_scan_id':      int(_row_get(r, 5, 'last_scan_id') or 0),
+        } for r in rows]
+        out = {'recidivists': result, 'days': days, 'min_hacks': min_h}
+        _stats_cache[cache_key] = out
+        _stats_cache_time[cache_key] = time.time()
+        return jsonify(out), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/statistics/issue_types', methods=['GET'])
+@login_required
+def get_issue_type_stats():
+    """Top issue_types por frecuencia y hack_rate. Útil para entender
+    qué tipos de hacks están circulando en el servidor."""
+    import time
+    days  = request.args.get('days', 30, type=int)
+    limit = min(request.args.get('limit', 15, type=int), 50)
+    cache_key = f'issue_types_{days}_{limit}'
+    if cache_key in _stats_cache:
+        if time.time() - _stats_cache_time.get(cache_key, 0) < 120:
+            return jsonify(_stats_cache[cache_key]), 200
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(f'''
+                SELECT sr.issue_type,
+                       COUNT(*) AS total,
+                       COUNT(*) FILTER (WHERE s.verdict = 'hack') AS in_hacks,
+                       AVG(sr.confidence) AS avg_conf,
+                       MAX(sr.alert_level) AS max_alert
+                FROM scan_results sr
+                JOIN scans s ON sr.scan_id = s.id
+                WHERE sr.created_at >= CURRENT_TIMESTAMP - INTERVAL '{days} days'
+                  AND sr.issue_type IS NOT NULL
+                GROUP BY sr.issue_type
+                ORDER BY total DESC
+                LIMIT {limit}
+            ''')
+            rows = cursor.fetchall() or []
+        result = []
+        for r in rows:
+            total   = int(_row_get(r, 1, 'total') or 0)
+            in_hacks = int(_row_get(r, 2, 'in_hacks') or 0)
+            result.append({
+                'issue_type':  str(_row_get(r, 0, 'issue_type') or ''),
+                'total':       total,
+                'in_hacks':    in_hacks,
+                'hack_rate':   round(in_hacks / total, 3) if total else 0,
+                'avg_conf':    round(float(_row_get(r, 3, 'avg_conf') or 0), 3),
+                'max_alert':   str(_row_get(r, 4, 'max_alert') or ''),
+            })
+        out = {'issue_types': result, 'days': days}
+        _stats_cache[cache_key] = out
+        _stats_cache_time[cache_key] = time.time()
+        return jsonify(out), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ============================================================
 # API DE AUTENTICACIÓN
 # ============================================================

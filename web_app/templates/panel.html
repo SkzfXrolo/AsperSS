@@ -311,6 +311,28 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Recidivism + Issue type stats row -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+                <div class="dashboard-card">
+                    <div class="dashboard-card-header">
+                        <span class="dashboard-card-title">Reincidentes (90 días)</span>
+                        <span class="dashboard-card-sub">Máquinas con 2+ hacks verificados</span>
+                    </div>
+                    <div class="dashboard-card-body" id="recidivism-list" style="padding:8px 12px;max-height:200px;overflow-y:auto;">
+                        <div style="color:var(--text-d);font-size:13px;padding:8px 0;">Cargando...</div>
+                    </div>
+                </div>
+                <div class="dashboard-card">
+                    <div class="dashboard-card-header">
+                        <span class="dashboard-card-title">Top tipos de hallazgos (30 días)</span>
+                        <span class="dashboard-card-sub">Más frecuentes con tasa de hack</span>
+                    </div>
+                    <div class="dashboard-card-body" id="issue-types-list" style="padding:8px 12px;max-height:200px;overflow-y:auto;">
+                        <div style="color:var(--text-d);font-size:13px;padding:8px 0;">Cargando...</div>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <!-- Generar App Section -->
@@ -1499,7 +1521,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=8"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=9"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────

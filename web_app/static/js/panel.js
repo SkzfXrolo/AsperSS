@@ -544,6 +544,79 @@ async function loadExtendedDashboard() {
             avgEl.textContent = s >= 60 ? `${Math.round(s/60)} min` : `${Math.round(s)} seg`;
         }
     } catch(e) { /* silent */ }
+
+    // Load recidivism and issue type stats in parallel
+    _loadRecidivism();
+    _loadIssueTypeStats();
+}
+
+async function _loadRecidivism() {
+    const el = document.getElementById('recidivism-list');
+    if (!el) return;
+    try {
+        const res  = await fetch('/api/statistics/recidivism?days=90&min_hacks=2&limit=10');
+        const data = await res.json();
+        const list = data.recidivists || [];
+        if (list.length === 0) {
+            el.innerHTML = '<div style="color:var(--text-d);font-size:13px;padding:8px 0;">Sin reincidentes en los últimos 90 días.</div>';
+            return;
+        }
+        el.innerHTML = list.map(r => `
+            <div onclick="loadScansForMachine('${r.machine_name}')"
+                 style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--border);cursor:pointer;">
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.machine_name}</div>
+                    <div style="font-size:11px;color:var(--text-d);">${r.minecraft_username} — último: ${r.last_scan.slice(0,10)}</div>
+                </div>
+                <div style="text-align:right;flex-shrink:0;">
+                    <div style="font-size:13px;font-weight:800;color:#ef4444;">${r.hack_count}x</div>
+                    <div style="font-size:10px;color:var(--text-d);">risk avg ${r.avg_risk}</div>
+                </div>
+            </div>`).join('');
+    } catch(e) {
+        if (el) el.innerHTML = '<div style="color:var(--text-d);font-size:12px;padding:8px 0;">No disponible</div>';
+    }
+}
+
+async function _loadIssueTypeStats() {
+    const el = document.getElementById('issue-types-list');
+    if (!el) return;
+    try {
+        const res  = await fetch('/api/statistics/issue_types?days=30&limit=12');
+        const data = await res.json();
+        const list = data.issue_types || [];
+        if (list.length === 0) {
+            el.innerHTML = '<div style="color:var(--text-d);font-size:13px;padding:8px 0;">Sin datos este mes.</div>';
+            return;
+        }
+        const maxTotal = list[0].total || 1;
+        const ALERT_C  = { CRITICAL:'#ef4444', SOSPECHOSO:'#f59e0b', MUY_SOSPECHOSO:'#ea580c' };
+        el.innerHTML = list.map(item => {
+            const hackPct = Math.round((item.hack_rate || 0) * 100);
+            const barColor = hackPct >= 70 ? '#ef4444' : hackPct >= 30 ? '#f59e0b' : '#6b7280';
+            return `
+            <div style="padding:4px 0;border-bottom:1px solid var(--border);">
+                <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">
+                    <span style="color:var(--text-s);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%;">${item.issue_type}</span>
+                    <span style="color:${ALERT_C[item.max_alert]||'var(--text-d)'};font-weight:700;flex-shrink:0;margin-left:6px;">${item.total} <span style="color:${barColor};font-size:10px;">${hackPct}% hack</span></span>
+                </div>
+                <div style="height:2px;background:var(--border);border-radius:1px;">
+                    <div style="height:2px;width:${Math.round(item.total/maxTotal*100)}%;background:${barColor};border-radius:1px;"></div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        if (el) el.innerHTML = '<div style="color:var(--text-d);font-size:12px;padding:8px 0;">No disponible</div>';
+    }
+}
+
+function loadScansForMachine(machineName) {
+    showSection('escaneos');
+    const searchInput = document.getElementById('filter-search');
+    if (searchInput) {
+        searchInput.value = machineName;
+        loadScans();
+    }
 }
 
 // ============================================================
