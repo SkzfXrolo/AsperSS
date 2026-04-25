@@ -2175,10 +2175,10 @@ class ArgusApp:
             'baritone_installed', 'litematica_printer', 'schematica_printer',
             'optifine_zoom_combat', 'modified_minecraft_jar', 'hack_string_in_loaded_jar',
             'javaagent_injection', 'bootclasspath_modification',
-            # Nuevas detecciones P1
+            # Nuevas detecciones P1 y P3
             'weave_loader', 'prefetch_hack', 'usn_deleted_hack',
             'jitter_script', 'java_suspicious_parent', 'java_unusual_parent',
-            'evasion_indicators',
+            'evasion_indicators', 'kill_chain', 'minecraft_safe_mode',
         }
 
         for item in issues:
@@ -2339,6 +2339,12 @@ class ArgusApp:
             print(f"\n🟡 HACKS POCO SOSPECHOSOS ENCONTRADOS:")
             for item in hacks_poco_sospechoso[:5]:
                 print(f"  - {item.get('archivo', 'N/A')} en {item.get('ruta', 'N/A')}")
+
+        # P2 #8 — Descartar JARs demasiado pequeños (< 3KB)
+        filtered = self._filter_by_file_size(filtered)
+
+        # P2 #28 — Reducir score de archivos en rutas de sync cloud
+        filtered = self._filter_backup_sync(filtered)
 
         # P2 #22 — Decay de score por antigüedad de evidencia
         filtered = self._apply_score_decay(filtered)
@@ -3255,6 +3261,12 @@ class ArgusApp:
                 _run_safe(self.scan_usn_minecraft_jars)
                 self._set_scan_phase("🎯 Jitter/aim assist en software de mouse...")
                 _run_safe(self.scan_jitter_scripts)
+                self._set_scan_phase("🖥️ Minecraft Safe Mode...")
+                _run_safe(self.scan_minecraft_safe_mode)
+                self._set_scan_phase("🎯 Fingerprints compuestos de ghost clients...")
+                _run_safe(self.scan_hack_fingerprints)
+                self._set_scan_phase("⛓️ Kill chain temporal (USN Journal)...")
+                _run_safe(self.scan_kill_chain)
 
             # Grupo F — Técnicas avanzadas
             def _group_advanced():
@@ -8538,6 +8550,254 @@ class ArgusApp:
                             continue
         except Exception as e:
             print(f"Error en scan_jitter_scripts: {e}")
+
+    def scan_minecraft_safe_mode(self):
+        """#29 — Detecta si Minecraft fue lanzado con --safeMode (mods no cargan)."""
+        print("🔍 Verificando si Minecraft corre en Safe Mode...")
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    name = (proc.info.get('name') or '').lower()
+                    if 'java' not in name:
+                        continue
+                    cmdline = ' '.join(proc.info.get('cmdline') or []).lower()
+                    if '--safemode' in cmdline or '--safe-mode' in cmdline:
+                        print("⚠️ Minecraft lanzado con --safeMode — mods deshabilitados")
+                        self.issues_found.append({
+                            'nombre': 'Minecraft lanzado en Safe Mode (mods desactivados)',
+                            'ruta': 'cmdline',
+                            'archivo': 'javaw.exe',
+                            'tipo': 'minecraft_safe_mode',
+                            'categoria': 'EVASION',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.70,
+                            'detected_patterns': ['safe_mode_launch'],
+                            'explicacion': 'Minecraft fue lanzado con --safeMode, lo que deshabilita la carga '
+                                           'de mods. El jugador puede estar usando esto para ocultar mods activos '
+                                           'o para que no se detecten modificaciones en el arranque.',
+                        })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_minecraft_safe_mode: {e}")
+
+    def scan_backup_sync_locations(self):
+        """#28 — Marca archivos en rutas de backup/sync con score reducido."""
+        SYNC_PATHS = ['onedrive', 'google drive', 'dropbox', 'icloudrive', 'box\\', 'mega\\']
+        try:
+            for issue in self.issues_found:
+                ruta = (issue.get('ruta') or '').lower()
+                if any(s in ruta for s in SYNC_PATHS):
+                    if issue.get('tipo') not in {
+                        'ghost_client_config', 'ghost_client_registry',
+                        'blacklisted_mod', 'modified_minecraft_jar'
+                    }:
+                        issue['confidence'] = round(issue.get('confidence', 0.5) * 0.4, 3)
+                        issue['alerta'] = 'POCO_SOSPECHOSO'
+                        issue['explicacion'] = (issue.get('explicacion', '') +
+                            ' (Archivo en carpeta de sincronización cloud — posiblemente backup de otro PC.)')
+        except Exception as e:
+            print(f"Error en scan_backup_sync_locations: {e}")
+
+    def scan_hack_fingerprints(self):
+        """P3 #15 — Detecta firmas compuestas de ghost clients específicos."""
+        print("🔍 Verificando fingerprints compuestos de ghost clients...")
+        appdata  = os.environ.get('APPDATA', '')
+        local    = os.environ.get('LOCALAPPDATA', '')
+
+        FINGERPRINTS = {
+            'Vape': [
+                os.path.join(appdata, 'vape.encrypted'),
+                os.path.join(appdata, 'vape.json'),
+                os.path.join(appdata, '.vape'),
+            ],
+            'Sigma': [
+                os.path.join(appdata, '.sigma'),
+                os.path.join(appdata, 'Sigma'),
+            ],
+            'Rise Client': [
+                os.path.join(appdata, '.rise'),
+                os.path.join(local,   'Rise Client'),
+            ],
+            'LiquidBounce': [
+                os.path.join(appdata, '.liquidbounce'),
+                os.path.join(appdata, 'LiquidBounce'),
+            ],
+            'Meteor Client': [
+                os.path.join(appdata, '.meteor'),
+                os.path.join(appdata, '.minecraft', 'mods', 'meteor-client'),
+            ],
+            'Future Client': [
+                os.path.join(appdata, '.future'),
+                os.path.join(local,   'Future'),
+            ],
+            'Flux': [
+                os.path.join(appdata, '.flux'),
+                os.path.join(appdata, 'Flux'),
+            ],
+            'Astolfo': [
+                os.path.join(appdata, '.astolfo'),
+                os.path.join(appdata, 'Astolfo'),
+            ],
+            'RusherHack': [
+                os.path.join(appdata, '.rusherhack'),
+                os.path.join(appdata, 'RusherHack'),
+            ],
+            'Novoline': [
+                os.path.join(appdata, '.novoline'),
+                os.path.join(appdata, 'Novoline'),
+            ],
+            'Datura': [
+                os.path.join(appdata, '.datura'),
+            ],
+            'Jello': [
+                os.path.join(appdata, 'jello'),
+                os.path.join(appdata, '.jello'),
+            ],
+            'Mathias': [
+                os.path.join(appdata, '.mathias'),
+            ],
+            'SalHack': [
+                os.path.join(appdata, '.salhack'),
+                os.path.join(appdata, 'SalHack'),
+            ],
+        }
+
+        try:
+            for client_name, paths in FINGERPRINTS.items():
+                found = [p for p in paths if os.path.exists(p)]
+                if not found:
+                    continue
+                print(f"🚨 FINGERPRINT GHOST CLIENT: {client_name} ({len(found)} artefactos)")
+                self.issues_found.append({
+                    'nombre': f'Ghost client identificado: {client_name}',
+                    'ruta': found[0],
+                    'archivo': os.path.basename(found[0]),
+                    'tipo': 'ghost_client_config',
+                    'categoria': 'GHOST_CLIENT',
+                    'alerta': 'CRITICAL',
+                    'confidence': min(0.95, 0.80 + len(found) * 0.05),
+                    'detected_patterns': [f'fingerprint:{client_name.lower().replace(" ", "_")}'],
+                    'explicacion': f'Se identificó el ghost client {client_name} por {len(found)} artefacto(s) '
+                                   f'encontrados en rutas características: {", ".join(os.path.basename(p) for p in found)}.',
+                    'count': len(found),
+                    'grouped_paths': found,
+                })
+        except Exception as e:
+            print(f"Error en scan_hack_fingerprints: {e}")
+
+    def scan_kill_chain(self):
+        """P3 #3 — Detecta secuencias temporales sospechosas en el USN Journal (kill chain)."""
+        print("🔍 Analizando kill chain en USN Journal...")
+        import subprocess as _sp
+        import datetime as _dt
+        import re as _re
+
+        try:
+            result = _sp.run(
+                ['fsutil', 'usn', 'readjournal', 'C:', 'csv'],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode != 0:
+                return
+
+            lines = result.stdout.splitlines()
+            events = []
+            for line in lines:
+                ll = line.lower()
+                if not ('.jar' in ll or '.exe' in ll or '.minecraft' in ll):
+                    continue
+                is_created = '0x00000100' in line
+                is_deleted = '0x80000200' in line or '0x80000020' in line
+                is_renamed = '0x00001000' in line or '0x00002000' in line
+                if not (is_created or is_deleted or is_renamed):
+                    continue
+                parts = line.split(',')
+                fname = parts[3].strip('"') if len(parts) > 3 else ''
+                action = 'created' if is_created else 'deleted' if is_deleted else 'renamed'
+                events.append({'file': fname.lower(), 'action': action})
+
+            # Detectar kill chain: descargado → ejecutado → borrado
+            files_created  = {e['file'] for e in events if e['action'] == 'created'}
+            files_deleted  = {e['file'] for e in events if e['action'] == 'deleted'}
+            files_renamed  = {e['file'] for e in events if e['action'] == 'renamed'}
+
+            HACK_KW = ['sigma','vape','liquid','wurst','meteor','rise','flux','future',
+                       'astolfo','ghost','inject','cheat','hack','aimbot','killaura']
+
+            # Archivos creados Y borrados con nombre de hack = kill chain
+            for fname in files_created & files_deleted:
+                if any(kw in fname for kw in HACK_KW):
+                    print(f"🚨 KILL CHAIN: {fname} — creado y borrado")
+                    self.issues_found.append({
+                        'nombre': f'Kill chain detectada: {os.path.basename(fname)} (descargado y borrado)',
+                        'ruta': fname,
+                        'archivo': os.path.basename(fname),
+                        'tipo': 'kill_chain',
+                        'categoria': 'FORENSE',
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.88,
+                        'detected_patterns': ['kill_chain_download_delete'],
+                        'explicacion': f'El archivo {os.path.basename(fname)} fue descargado y borrado en la '
+                                       f'misma sesión. Esta secuencia (descargar → ejecutar → borrar) es '
+                                       f'característica de jugadores que usan hacks y limpian evidencia.',
+                    })
+
+            # Muchos archivos borrados en .minecraft en poco tiempo = limpieza activa
+            mc_deleted = [e for e in events if '.minecraft' in e['file'] and e['action'] == 'deleted']
+            if len(mc_deleted) >= 10:
+                print(f"🚨 LIMPIEZA ACTIVA: {len(mc_deleted)} archivos borrados en .minecraft")
+                self.issues_found.append({
+                    'nombre': f'Limpieza activa detectada: {len(mc_deleted)} archivos borrados en .minecraft',
+                    'ruta': '.minecraft',
+                    'archivo': 'USN Journal',
+                    'tipo': 'kill_chain',
+                    'categoria': 'EVASION',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.72,
+                    'detected_patterns': ['active_cleanup'],
+                    'explicacion': f'Se detectaron {len(mc_deleted)} archivos borrados en la carpeta .minecraft '
+                                   f'recientemente. Esto puede indicar que el jugador limpió evidencia de hacks '
+                                   f'antes del Screen Share.',
+                })
+        except Exception as e:
+            print(f"Error en scan_kill_chain: {e}")
+
+    def _filter_by_file_size(self, issues):
+        """P2 #8 — Descarta JARs demasiado pequeños para ser un hack real (< 3KB)."""
+        result = []
+        for issue in issues:
+            tipo = issue.get('tipo', '')
+            if tipo not in ('file', 'jar_file', 'minecraft_file'):
+                result.append(issue)
+                continue
+            ruta = issue.get('ruta') or issue.get('archivo', '')
+            if ruta and os.path.isfile(str(ruta)):
+                try:
+                    size = os.path.getsize(str(ruta))
+                    if size < 3072:  # < 3KB — imposible que sea un hack funcional
+                        continue
+                except Exception:
+                    pass
+            result.append(issue)
+        return result
+
+    def _filter_backup_sync(self, issues):
+        """P2 #28 — Reduce score de archivos en rutas de sincronización cloud."""
+        SYNC_KW = ['onedrive', 'google drive', 'dropbox', 'icloudrive', r'box\\', r'mega\\', 'nextcloud']
+        ALWAYS_TRUSTED = {'ghost_client_config','ghost_client_registry','blacklisted_mod',
+                          'modified_minecraft_jar','javaagent_injection','weave_loader'}
+        for issue in issues:
+            if issue.get('tipo') in ALWAYS_TRUSTED:
+                continue
+            ruta = (issue.get('ruta') or '').lower()
+            if any(s in ruta for s in SYNC_KW):
+                issue['confidence'] = round(issue.get('confidence', 0.5) * 0.35, 3)
+                if issue.get('alerta') in ('CRITICAL', 'SOSPECHOSO'):
+                    issue['alerta'] = 'POCO_SOSPECHOSO'
+                issue['explicacion'] = (issue.get('explicacion', '') +
+                    ' (En carpeta de sync cloud — posiblemente backup de otro PC.)')
+        return issues
 
     # ── PARTE 2 — Mejoras de filtrado (FP reduction) ───────────────────────────
 
