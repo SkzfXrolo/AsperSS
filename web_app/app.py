@@ -4954,6 +4954,94 @@ def get_player_baseline(machine_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/scans/<int:scan_a>/compare/<int:scan_b>', methods=['GET'])
+@login_required
+def compare_scans(scan_a, scan_b):
+    """Compara dos scans del mismo jugador y retorna el diff de hallazgos.
+    Útil para detectar qué apareció o desapareció entre sesiones."""
+    try:
+        with get_api_db_cursor() as cursor:
+            def _fetch_scan(sid):
+                cursor.execute(
+                    f'SELECT id, machine_name, minecraft_username, started_at, risk_score,'
+                    f' verdict, issues_found FROM scans WHERE id = {_PH}',
+                    (sid,)
+                )
+                r = cursor.fetchone()
+                if not r:
+                    return None
+                return {
+                    'id':        _row_get(r, 0, 'id'),
+                    'machine':   _row_get(r, 1, 'machine_name') or '',
+                    'username':  _row_get(r, 2, 'minecraft_username') or '',
+                    'date':      str(_row_get(r, 3, 'started_at') or '')[:19],
+                    'risk':      int(_row_get(r, 4, 'risk_score') or 0),
+                    'verdict':   _row_get(r, 5, 'verdict') or 'pending',
+                    'total':     int(_row_get(r, 6, 'issues_found') or 0),
+                }
+
+            def _fetch_results(sid):
+                cursor.execute(
+                    f'SELECT issue_type, issue_name, alert_level, confidence, issue_category'
+                    f' FROM scan_results WHERE scan_id = {_PH}',
+                    (sid,)
+                )
+                out = {}
+                for r in (cursor.fetchall() or []):
+                    tipo = str(_row_get(r, 0, 'issue_type') or 'unknown')
+                    out[tipo] = {
+                        'name':       str(_row_get(r, 1, 'issue_name') or '')[:80],
+                        'alert':      str(_row_get(r, 2, 'alert_level') or ''),
+                        'confidence': float(_row_get(r, 3, 'confidence') or 0),
+                        'category':   str(_row_get(r, 4, 'issue_category') or ''),
+                    }
+                return out
+
+            meta_a = _fetch_scan(scan_a)
+            meta_b = _fetch_scan(scan_b)
+            if not meta_a or not meta_b:
+                return jsonify({'error': 'Uno o ambos scans no existen'}), 404
+
+            res_a = _fetch_results(scan_a)
+            res_b = _fetch_results(scan_b)
+
+        types_a = set(res_a.keys())
+        types_b = set(res_b.keys())
+
+        new_in_b    = sorted(types_b - types_a)   # appeared in B, not A
+        gone_from_b = sorted(types_a - types_b)   # was in A, gone in B
+        common      = sorted(types_a & types_b)
+
+        diff = {
+            'scan_a': meta_a,
+            'scan_b': meta_b,
+            'risk_delta':    meta_b['risk'] - meta_a['risk'],
+            'verdict_change': meta_a['verdict'] != meta_b['verdict'],
+            'new_findings': [
+                {**res_b[t], 'type': t} for t in new_in_b
+            ],
+            'resolved_findings': [
+                {**res_a[t], 'type': t} for t in gone_from_b
+            ],
+            'persistent_findings': [
+                {
+                    'type': t,
+                    **res_b[t],
+                    'conf_delta': round(res_b[t]['confidence'] - res_a[t]['confidence'], 3),
+                }
+                for t in common
+            ],
+            'summary': {
+                'new_count':        len(new_in_b),
+                'resolved_count':   len(gone_from_b),
+                'persistent_count': len(common),
+            }
+        }
+        return jsonify(diff), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ── P3 #2 — Scoring por rareza ────────────────────────────────────────────────
 
 @app.route('/api/rarity', methods=['GET'])

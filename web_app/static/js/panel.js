@@ -1939,7 +1939,7 @@ async function loadPreviousScans(machineName) {
                 const verdictBadge = scan.verdict === 'hack'  ? '<span style="font-size:10px;font-weight:700;color:#ef4444;background:rgba(220,38,38,0.12);padding:1px 6px;border-radius:6px;">HACKS</span>' :
                                      scan.verdict === 'clean' ? '<span style="font-size:10px;font-weight:700;color:#10b981;background:rgba(16,185,129,0.12);padding:1px 6px;border-radius:6px;">LIMPIO</span>' : '';
                 return `
-                    <div class="previous-scan-item" onclick="viewScanDetails(${scan.id})">
+                    <div class="previous-scan-item" onclick="viewScanDetails(${scan.id})" style="cursor:pointer;">
                         <div class="previous-scan-header">
                             <span class="previous-scan-id">Escaneo #${scan.id} ${verdictBadge}</span>
                             <span class="previous-scan-date">${formatDate(scan.started_at)}</span>
@@ -1947,6 +1947,11 @@ async function loadPreviousScans(machineName) {
                         <div class="previous-scan-stats">
                             <span class="previous-scan-stat"><strong>${scan.issues_found || 0}</strong> issues ${diffBadge}</span>
                             <span class="previous-scan-stat"><strong>${scan.total_files_scanned || 0}</strong> archivos</span>
+                            <button onclick="event.stopPropagation();compareScanWith(${scan.id})"
+                                style="margin-left:auto;font-size:10px;padding:2px 8px;background:rgba(139,92,246,0.15);
+                                       border:1px solid rgba(139,92,246,0.4);color:var(--accent);border-radius:6px;cursor:pointer;">
+                                Comparar
+                            </button>
                         </div>
                     </div>`;
             }).join('');
@@ -1959,6 +1964,75 @@ async function loadPreviousScans(machineName) {
         if (container) {
             container.innerHTML = '<div class="loading-cell">Error al cargar escaneos previos.</div>';
         }
+    }
+}
+
+async function compareScanWith(scanIdB) {
+    if (!currentScanId) return;
+    const modal = document.getElementById('compare-modal');
+    const body  = document.getElementById('compare-modal-body');
+    if (!modal || !body) return;
+    body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-m);">Cargando comparación...</div>';
+    modal.style.display = 'flex';
+    try {
+        const res  = await fetch(`/api/scans/${currentScanId}/compare/${scanIdB}`);
+        const diff = await res.json();
+        if (diff.error) { body.innerHTML = `<p style="color:#ef4444">${diff.error}</p>`; return; }
+
+        const ALERT_COLOR = { CRITICAL:'#ef4444', SOSPECHOSO:'#f59e0b', MUY_SOSPECHOSO:'#ea580c', POCO_SOSPECHOSO:'#6366f1' };
+        const riskDelta = diff.risk_delta;
+        const riskColor = riskDelta > 0 ? '#ef4444' : riskDelta < 0 ? '#10b981' : 'var(--text-m)';
+        const riskSign  = riskDelta > 0 ? '+' : '';
+
+        const renderIssueList = (items, bgColor) => items.length === 0
+            ? `<p style="color:var(--text-d);font-size:12px;margin:0;">Ninguno</p>`
+            : items.map(f => `
+                <div style="padding:6px 10px;border-radius:6px;background:${bgColor};margin-bottom:4px;font-size:12px;">
+                    <span style="color:${ALERT_COLOR[f.alert]||'var(--text-m)'};font-weight:700;margin-right:6px;">${f.alert||''}</span>
+                    <span style="color:var(--text);">${f.name||f.type}</span>
+                    <span style="float:right;color:var(--text-d);">${Math.round((f.confidence||0)*100)}%</span>
+                </div>`).join('');
+
+        body.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+                <div style="background:var(--bg-s);border-radius:8px;padding:14px;">
+                    <div style="font-size:11px;color:var(--text-d);margin-bottom:4px;">ESCANEO BASE</div>
+                    <div style="font-weight:700;font-size:15px;">Scan #${diff.scan_a.id}</div>
+                    <div style="font-size:12px;color:var(--text-m);">${diff.scan_a.date}</div>
+                    <div style="font-size:13px;margin-top:6px;">Risk: <strong>${diff.scan_a.risk}</strong></div>
+                </div>
+                <div style="background:var(--bg-s);border-radius:8px;padding:14px;">
+                    <div style="font-size:11px;color:var(--text-d);margin-bottom:4px;">ESCANEO COMPARADO</div>
+                    <div style="font-weight:700;font-size:15px;">Scan #${diff.scan_b.id}</div>
+                    <div style="font-size:12px;color:var(--text-m);">${diff.scan_b.date}</div>
+                    <div style="font-size:13px;margin-top:6px;">Risk: <strong>${diff.scan_b.risk}</strong>
+                        <span style="color:${riskColor};margin-left:8px;font-weight:700;">${riskSign}${riskDelta} pts</span>
+                    </div>
+                </div>
+            </div>
+            ${diff.verdict_change ? `<div style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:8px;padding:10px;margin-bottom:16px;font-size:13px;color:#f59e0b;">
+                Veredicto cambió: <strong>${diff.scan_a.verdict.toUpperCase()}</strong> → <strong>${diff.scan_b.verdict.toUpperCase()}</strong>
+            </div>` : ''}
+            <div style="margin-bottom:16px;">
+                <div style="font-size:13px;font-weight:700;color:#ef4444;margin-bottom:8px;">
+                    Hallazgos nuevos (${diff.summary.new_count})
+                </div>
+                ${renderIssueList(diff.new_findings, 'rgba(220,38,38,0.08)')}
+            </div>
+            <div style="margin-bottom:16px;">
+                <div style="font-size:13px;font-weight:700;color:#10b981;margin-bottom:8px;">
+                    Hallazgos resueltos / desaparecidos (${diff.summary.resolved_count})
+                </div>
+                ${renderIssueList(diff.resolved_findings, 'rgba(16,185,129,0.08)')}
+            </div>
+            <div>
+                <div style="font-size:13px;font-weight:700;color:var(--text-m);margin-bottom:8px;">
+                    Persistentes en ambos scans (${diff.summary.persistent_count})
+                </div>
+                ${renderIssueList(diff.persistent_findings, 'var(--bg-s)')}
+            </div>`;
+    } catch (e) {
+        body.innerHTML = `<p style="color:#ef4444">Error: ${e.message}</p>`;
     }
 }
 

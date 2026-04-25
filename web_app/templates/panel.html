@@ -1472,6 +1472,21 @@
         </div>
     </div>
 
+    <!-- Modal: Comparar scans -->
+    <div id="compare-modal" style="display:none;position:fixed;inset:0;z-index:1200;
+         background:rgba(0,0,0,0.65);align-items:center;justify-content:center;">
+        <div style="background:var(--bg-s);border:1px solid var(--border-m);border-radius:14px;
+                    width:min(720px,95vw);max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+            <div style="display:flex;align-items:center;justify-content:space-between;
+                        padding:16px 20px;border-bottom:1px solid var(--border-m);flex-shrink:0;">
+                <h3 style="margin:0;font-size:15px;font-weight:700;color:var(--accent);">Comparar Escaneos</h3>
+                <button onclick="document.getElementById('compare-modal').style.display='none'"
+                    style="background:none;border:none;color:var(--text-m);font-size:20px;cursor:pointer;line-height:1;">&times;</button>
+            </div>
+            <div id="compare-modal-body" style="padding:20px;overflow-y:auto;flex:1;"></div>
+        </div>
+    </div>
+
     <script>
     // Permisos de staff inyectados desde Flask
     window.STAFF_ROLE     = "{{ staff_role }}";
@@ -1482,6 +1497,10 @@
     <script src="{{ url_for('static', filename='js/panel.js') }}?v=8"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
+    // ── Cerrar modal comparar al click fuera ──────────────────
+    document.getElementById('compare-modal').addEventListener('click', function(e) {
+        if (e.target === this) this.style.display = 'none';
+    });
     // ── Theme Toggle ──────────────────────────────────────────
     function toggleTheme() {
         const isLight = document.body.classList.toggle('light-theme');
