@@ -2133,14 +2133,14 @@ def list_scans():
                     SELECT s.id, s.scan_token, s.started_at, s.completed_at, s.status,
                            s.total_files_scanned, s.issues_found, s.scan_duration, s.machine_name,
                            s.minecraft_username, s.ip_address, s.country,
-                           st.created_by AS scanned_by
+                           st.created_by AS scanned_by, s.risk_score, s.verdict
                     FROM scans s
                     LEFT JOIN scan_tokens st ON s.token_id = st.id
                     {where}
                     ORDER BY s.started_at DESC
                     LIMIT {_PH} OFFSET {_PH}
                 ''', params)
-                
+
                 scans = []
                 scan_ids = []
                 for row in cursor.fetchall():
@@ -2160,6 +2160,8 @@ def list_scans():
                         'ip_address': _row_get(row, 10, 'ip_address'),
                         'country': _row_get(row, 11, 'country'),
                         'scanned_by': _row_get(row, 12, 'scanned_by') or '',
+                        'risk_score': int(_row_get(row, 13, 'risk_score') or 0),
+                        'verdict': _row_get(row, 14, 'verdict') or 'pending',
                     })
                 
                 print(f"📊 Escaneos encontrados en BD local: {len(scans)}")

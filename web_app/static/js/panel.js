@@ -1908,6 +1908,44 @@ async function loadPreviousScans(machineName) {
         const current   = allScans.find(s => s.id === currentScanId);
 
         if (prevScans.length > 0) {
+            // ── Risk score trend chart ───────────────────────────────
+            const trendWrap = document.getElementById('risk-trend-wrap');
+            const trendCanvas = document.getElementById('risk-trend-chart');
+            if (trendWrap && trendCanvas && allScans.length >= 2) {
+                trendWrap.style.display = 'block';
+                const sorted = [...allScans].sort((a, b) => new Date(a.started_at) - new Date(b.started_at));
+                const labels = sorted.map(s => s.started_at ? s.started_at.toString().slice(5,10) : '?');
+                const scores = sorted.map(s => s.risk_score || 0);
+                const colors = scores.map(v => v >= 70 ? '#ef4444' : v >= 30 ? '#f59e0b' : '#10b981');
+                if (window._riskTrendChart) window._riskTrendChart.destroy();
+                window._riskTrendChart = new Chart(trendCanvas, {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [{
+                            data: scores,
+                            borderColor: '#8b5cf6',
+                            backgroundColor: 'rgba(139,92,246,0.10)',
+                            pointBackgroundColor: colors,
+                            pointRadius: 5,
+                            tension: 0.3,
+                            fill: true,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false }, tooltip: {
+                            callbacks: { label: ctx => ` Risk: ${ctx.parsed.y}` }
+                        }},
+                        scales: {
+                            y: { min: 0, max: 100, grid: { color: 'rgba(255,255,255,0.05)' },
+                                 ticks: { color: '#6b7280', font: { size: 10 } } },
+                            x: { grid: { display: false }, ticks: { color: '#6b7280', font: { size: 10 } } }
+                        }
+                    }
+                });
+            }
+            // ────────────────────────────────────────────────────────
             // Estadísticas de historial
             const totalScans = allScans.length;
             const withHacks  = allScans.filter(s => s.verdict === 'hack').length;
@@ -1947,6 +1985,7 @@ async function loadPreviousScans(machineName) {
                         <div class="previous-scan-stats">
                             <span class="previous-scan-stat"><strong>${scan.issues_found || 0}</strong> issues ${diffBadge}</span>
                             <span class="previous-scan-stat"><strong>${scan.total_files_scanned || 0}</strong> archivos</span>
+                            ${scan.risk_score != null ? `<span class="previous-scan-stat" style="color:${scan.risk_score>=70?'#ef4444':scan.risk_score>=30?'#f59e0b':'#10b981'};font-weight:700;">Risk ${scan.risk_score}</span>` : ''}
                             <button onclick="event.stopPropagation();compareScanWith(${scan.id})"
                                 style="margin-left:auto;font-size:10px;padding:2px 8px;background:rgba(139,92,246,0.15);
                                        border:1px solid rgba(139,92,246,0.4);color:var(--accent);border-radius:6px;cursor:pointer;">

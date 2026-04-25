@@ -781,6 +781,11 @@
                     <div class="subpage-placeholder">
                         <h3>Escaneos Previos</h3>
                         <p>Historial de escaneos anteriores de esta máquina.</p>
+                        <!-- Risk trend chart -->
+                        <div id="risk-trend-wrap" style="display:none;margin-bottom:20px;background:var(--bg-s);border:1px solid var(--border);border-radius:10px;padding:14px;">
+                            <div style="font-size:12px;font-weight:700;color:var(--text-d);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em;">Tendencia Risk Score</div>
+                            <canvas id="risk-trend-chart" height="90"></canvas>
+                        </div>
                         <div id="previous-scans-list" class="previous-scans-container">
                             <div class="loading-cell">Cargando escaneos previos...</div>
                         </div>
