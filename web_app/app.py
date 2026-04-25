@@ -1969,16 +1969,19 @@ def submit_scan_results(scan_id):
         print(f"[DEBUG] ===== SCAN {scan_id} COMPLETADO OK: "
               f"{len(data.get('results',[]))} resultados, status={data.get('status','completed')} =====\n")
 
-        # Notificar al bot de Discord
+        # Encolar notificación para el Discord worker
         try:
-            from discord_bot import notify_new_scan as _discord_notify
-            _discord_notify(
-                scan_id,
-                data.get('machine_name', 'N/A'),
-                data.get('username', data.get('minecraft_username', 'N/A')),
-                risk_score=locals().get('risk_score', 0),
-                issues_found=len(results),
-            )
+            with get_api_db_cursor() as _cur:
+                _cur.execute(
+                    "INSERT INTO discord_queue (event_type, data) VALUES (%s, %s)",
+                    ('new_scan', json.dumps({
+                        'scan_id': scan_id,
+                        'machine_name': data.get('machine_name', 'N/A'),
+                        'username': data.get('username', data.get('minecraft_username', 'N/A')),
+                        'risk_score': locals().get('risk_score', 0),
+                        'issues_found': len(results),
+                    }))
+                )
         except Exception:
             pass
 
@@ -4291,10 +4294,20 @@ def set_scan_verdict(scan_id):
         # Invalidar caché de estadísticas
         if 'statistics' in _stats_cache: del _stats_cache['statistics']
         if 'dashboard_extended' in _stats_cache: del _stats_cache['dashboard_extended']
-        # Notificar Discord
+        # Encolar notificación de veredicto para el Discord worker
         try:
-            from discord_bot import notify_verdict_change as _dv
-            _dv(scan_id, machine, username, verdict, reason, user)
+            with get_api_db_cursor() as _cur:
+                _cur.execute(
+                    "INSERT INTO discord_queue (event_type, data) VALUES (%s, %s)",
+                    ('verdict_change', json.dumps({
+                        'scan_id': scan_id,
+                        'machine_name': machine,
+                        'username': username,
+                        'verdict': verdict,
+                        'reason': reason,
+                        'changed_by': user,
+                    }))
+                )
         except Exception:
             pass
         return jsonify({'success': True}), 200

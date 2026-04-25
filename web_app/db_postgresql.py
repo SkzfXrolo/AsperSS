@@ -489,6 +489,18 @@ def init_postgresql_db():
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_hack_hashes_sha256 ON hack_hashes(sha256)')
 
+        # Cola de notificaciones para el Discord worker separado
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS discord_queue (
+                id SERIAL PRIMARY KEY,
+                event_type VARCHAR(50) NOT NULL,
+                data JSONB NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_discord_queue_processed ON discord_queue(processed_at) WHERE processed_at IS NULL')
+
         # UNIQUE constraint en learned_patterns.pattern_value (necesario para ON CONFLICT DO UPDATE)
         try:
             cursor.execute(
