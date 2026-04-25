@@ -1497,27 +1497,34 @@ def delete_token(token_id):
 # ============================================================
 
 def _validate_scan_token_direct(token):
-    """Valida un token de escaneo en la BD. Retorna (token_id, error_msg, created_by)."""
+    """Valida un token de escaneo en la BD. Retorna (token_id, error_msg, created_by, allowed_mods)."""
     try:
         with get_api_db_cursor() as cursor:
-            cursor.execute(
-                f'SELECT id, expires_at, used_count, max_uses, is_active, created_by FROM scan_tokens WHERE token = {_PH}',
-                (token,)
-            )
+            try:
+                cursor.execute(
+                    f'SELECT id, expires_at, used_count, max_uses, is_active, created_by, allowed_mods FROM scan_tokens WHERE token = {_PH}',
+                    (token,)
+                )
+            except Exception:
+                cursor.execute(
+                    f'SELECT id, expires_at, used_count, max_uses, is_active, created_by FROM scan_tokens WHERE token = {_PH}',
+                    (token,)
+                )
             row = cursor.fetchone()
 
         if not row:
-            return None, 'Token no encontrado', None
+            return None, 'Token no encontrado', None, None
 
-        token_id   = _row_get(row, 0, 'id')
-        expires_at = _row_get(row, 1, 'expires_at')
-        used_count = _row_get(row, 2, 'used_count') or 0
-        max_uses   = _row_get(row, 3, 'max_uses')
-        is_active  = _row_get(row, 4, 'is_active')
-        created_by = _row_get(row, 5, 'created_by')
+        token_id     = _row_get(row, 0, 'id')
+        expires_at   = _row_get(row, 1, 'expires_at')
+        used_count   = _row_get(row, 2, 'used_count') or 0
+        max_uses     = _row_get(row, 3, 'max_uses')
+        is_active    = _row_get(row, 4, 'is_active')
+        created_by   = _row_get(row, 5, 'created_by')
+        allowed_mods_raw = _row_get(row, 6, 'allowed_mods') if len(row) > 6 else None
 
         if not is_active:
-            return None, 'Token desactivado', None
+            return None, 'Token desactivado', None, None
 
         if expires_at:
             if isinstance(expires_at, str):
@@ -1525,15 +1532,22 @@ def _validate_scan_token_direct(token):
             else:
                 exp = expires_at.replace(tzinfo=None) if hasattr(expires_at, 'tzinfo') else expires_at
             if datetime.datetime.now() > exp:
-                return None, 'Token expirado', None
+                return None, 'Token expirado', None, None
 
         if max_uses and max_uses > 0 and used_count >= max_uses:
-            return None, 'Token ha alcanzado el limite de usos', None
+            return None, 'Token ha alcanzado el limite de usos', None, None
 
-        return token_id, None, created_by
+        allowed_mods = []
+        if allowed_mods_raw:
+            try:
+                allowed_mods = json.loads(allowed_mods_raw) if isinstance(allowed_mods_raw, str) else allowed_mods_raw
+            except Exception:
+                allowed_mods = []
+
+        return token_id, None, created_by, allowed_mods
     except Exception as e:
         print(f"Error validando token: {e}\n{traceback.format_exc()}")
-        return None, f'Error validando token: {str(e)}', None
+        return None, f'Error validando token: {str(e)}', None, None
 
 
 @app.route('/setup-admin-aspers2024', methods=['GET'])
@@ -1602,11 +1616,15 @@ def validate_token_endpoint():
         if not token:
             return jsonify({'valid': False, 'error': 'Token no proporcionado'}), 400
 
-        token_id, error, created_by = _validate_scan_token_direct(token)
+        token_id, error, created_by, allowed_mods = _validate_scan_token_direct(token)
         if error:
             return jsonify({'valid': False, 'error': error}), 200
 
-        return jsonify({'valid': True, 'token_id': token_id, 'created_by': created_by, 'message': 'Token valido'}), 200
+        return jsonify({
+            'valid': True, 'token_id': token_id, 'created_by': created_by,
+            'allowed_mods': allowed_mods or [],
+            'message': 'Token valido',
+        }), 200
     except Exception as e:
         print(f"Error en validate_token_endpoint: {e}\n{traceback.format_exc()}")
         return jsonify({'valid': False, 'error': str(e)}), 500
@@ -1694,7 +1712,7 @@ def start_scan():
         os_name      = data.get('os', 'Windows')[:32]
 
         print(f"[DEBUG start_scan] token={scan_token[:12]}..., machine={machine_name}, ip={ip_address}")
-        token_id, error, _created_by = _validate_scan_token_direct(scan_token)
+        token_id, error, _created_by, _allowed_mods = _validate_scan_token_direct(scan_token)
         if error:
             print(f"[DEBUG start_scan] token inválido: {error}")
             return jsonify({'error': error}), 401
@@ -4547,6 +4565,60 @@ def delete_hack_hash(sha256):
         return jsonify({'error': str(e)}), 500
 
 
+# ── P3 #1 — Clasificador Random Forest ───────────────────────────────────────
+
+@app.route('/api/ml/train', methods=['POST'])
+@login_required
+def ml_train():
+    """Reentrena el clasificador RF con todos los feedbacks disponibles. Solo Admin+."""
+    current_user = get_user_by_id(session.get('user_id'))
+    if not can_manage_tokens(current_user):
+        return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
+    try:
+        from ml_classifier import get_classifier
+        clf = get_classifier()
+        with get_api_db_cursor() as cursor:
+            result = clf.train(cursor)
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({'trained': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ml/predict', methods=['POST'])
+@login_required
+def ml_predict():
+    """Predice hack/clean para un hallazgo dado sus features. Solo Admin+."""
+    current_user = get_user_by_id(session.get('user_id'))
+    if not can_manage_tokens(current_user):
+        return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
+    data = request.json or {}
+    try:
+        from ml_classifier import get_classifier
+        clf = get_classifier()
+        result = clf.predict(data)
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({'available': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ml/status', methods=['GET'])
+@login_required
+def ml_status():
+    """Estado del clasificador ML: si está disponible y con cuántas muestras."""
+    try:
+        from ml_classifier import get_classifier
+        clf = get_classifier()
+        return jsonify({
+            'available': clf.is_available,
+            'trained_on': clf._trained_on,
+            'model_path_exists': __import__('os').path.isfile(
+                __import__('ml_classifier').MODEL_PATH
+            ),
+        }), 200
+    except Exception as e:
+        return jsonify({'available': False, 'error': str(e)}), 200
+
+
 # ── P2 #1 — Whitelist dinámica de mods legítimos ─────────────────────────────
 
 @app.route('/api/mod_whitelist', methods=['GET'])
@@ -4636,7 +4708,27 @@ def get_score_breakdown(scan_id):
             for r in rows
         ]
         score, breakdown = _calculate_risk_score(results, return_breakdown=True)
-        return jsonify({'scan_id': scan_id, 'risk_score': score, 'breakdown': breakdown}), 200
+
+        # P3 #12 — Intervalo de confianza basado en varianza de confidence de los hallazgos
+        confidences = [r['confidence'] for r in results if r.get('confidence', 0) > 0]
+        if len(confidences) >= 2:
+            avg_conf = sum(confidences) / len(confidences)
+            variance = sum((c - avg_conf)**2 for c in confidences) / len(confidences)
+            std_dev  = variance ** 0.5
+            # Margen ±15 puntos de risk_score cuando std_dev es alto
+            margin = round(min(25, std_dev * 30), 1)
+            ci = {'low': max(0, score - margin), 'high': min(100, score + margin), 'margin': margin}
+            needs_review = margin > 12  # Alta incertidumbre
+        else:
+            ci = {'low': score, 'high': score, 'margin': 0}
+            needs_review = False
+
+        return jsonify({
+            'scan_id': scan_id, 'risk_score': score,
+            'breakdown': breakdown,
+            'confidence_interval': ci,
+            'needs_manual_review': needs_review,
+        }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

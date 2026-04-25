@@ -693,6 +693,11 @@
                                         <div id="detail-risk-score-bar" class="risk-score-bar risk-clean" style="width:0%"></div>
                                     </div>
                                 </div>
+                                <!-- P3 #13 — Active learning marker -->
+                                <div id="active-learning-badge" style="display:none;align-items:center;gap:6px;margin-top:8px;padding:6px 10px;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:8px;font-size:11px;color:#a855f7;">
+                                    <span>🎯</span>
+                                    <span><strong>Caso incierto</strong> — Tu revisión aquí mejora el modelo más que en casos obvios</span>
+                                </div>
                             </div>
                             <div id="ban-history-item" style="display:none;margin-top:4px;">
                                 <div style="font-size:11px;font-weight:700;color:#f43f5e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">⚠ Historial de Bans</div>
@@ -927,6 +932,21 @@
                     <div class="patterns-list" id="patterns-list">
                         <div class="loading-cell">Cargando patrones aprendidos...</div>
                     </div>
+                </div>
+
+                <!-- P3 #1 — Clasificador Random Forest -->
+                <div style="margin-top:24px;padding:20px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                        <div>
+                            <h3 style="font-size:14px;font-weight:700;color:var(--text);margin:0 0 4px;">🤖 Clasificador Random Forest</h3>
+                            <p style="font-size:12px;color:var(--text-muted);margin:0;">Entrena un modelo ML con los feedbacks acumulados (mín. 5 hacks + 5 limpios)</p>
+                        </div>
+                        <button class="btn btn-primary btn-sm" id="ml-train-btn" onclick="mlTrain()">Entrenar ahora</button>
+                    </div>
+                    <div id="ml-status-row" style="font-size:12px;color:var(--text-muted);">
+                        <span id="ml-status-text">Comprobando estado...</span>
+                    </div>
+                    <div id="ml-train-result" style="display:none;margin-top:12px;padding:10px 14px;border-radius:8px;font-size:12px;"></div>
                 </div>
             </div>
         </section>

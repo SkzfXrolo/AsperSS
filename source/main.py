@@ -3814,21 +3814,46 @@ class ArgusApp:
                         except Exception:
                             pass
 
-                    # Shannon entropy of the jar
+                    # P3 #14 — Entropía por secciones de 4KB (detecta packers/ofuscación)
+                    # Un packer tiene secciones de altísima entropía mezcladas con baja.
+                    # Un ZIP legítimo tiene entropía uniformemente alta en todo el archivo.
                     try:
                         fsize = os.path.getsize(file_path)
                         if 0 < fsize < 50 * 1024 * 1024:
+                            CHUNK = 4096
+                            section_entropies = []
                             with open(file_path, 'rb') as f:
-                                raw = f.read(min(fsize, 2 * 1024 * 1024))
-                            freq = [0] * 256
-                            for b in raw: freq[b] += 1
-                            n = len(raw)
-                            entropy = -sum((c/n) * _math.log2(c/n) for c in freq if c > 0)
-                            result['entropy'] = round(entropy, 3)
-                            if entropy > 7.5:
-                                result['obfuscation_detected'] = True
-                                result['confidence'] += 15
-                                result['detected_patterns'].append(f'high_entropy:{entropy:.2f}')
+                                while True:
+                                    chunk = f.read(CHUNK)
+                                    if not chunk:
+                                        break
+                                    freq = [0] * 256
+                                    for b in chunk: freq[b] += 1
+                                    n = len(chunk)
+                                    ent = -sum((c/n) * _math.log2(c/n) for c in freq if c > 0)
+                                    section_entropies.append(ent)
+
+                            if section_entropies:
+                                avg_ent  = sum(section_entropies) / len(section_entropies)
+                                max_ent  = max(section_entropies)
+                                min_ent  = min(section_entropies)
+                                variance = sum((e - avg_ent)**2 for e in section_entropies) / len(section_entropies)
+                                result['entropy']         = round(avg_ent, 3)
+                                result['entropy_variance']= round(variance, 3)
+
+                                # Packer signature: high-variance + some sections > 7.8
+                                very_high = sum(1 for e in section_entropies if e > 7.8)
+                                very_low  = sum(1 for e in section_entropies if e < 2.0)
+                                packer_sig = variance > 4.0 and very_high > 0 and very_low > 0
+
+                                if packer_sig:
+                                    result['obfuscation_detected'] = True
+                                    result['confidence'] += 25
+                                    result['detected_patterns'].append(f'packer_entropy_variance:{variance:.2f}')
+                                elif avg_ent > 7.5:
+                                    result['obfuscation_detected'] = True
+                                    result['confidence'] += 15
+                                    result['detected_patterns'].append(f'high_entropy:{avg_ent:.2f}')
                     except Exception:
                         pass
                 except Exception:
@@ -5009,6 +5034,9 @@ class ArgusApp:
                             print(f"✅ Token válido encontrado en config, autenticación automática exitosa")
                             if data.get('created_by'):
                                 self.config['staff_name'] = data['created_by']
+                            # P2 #2 — guardar allowed_mods del servidor en config
+                            if data.get('allowed_mods'):
+                                self.config['server_allowed_mods'] = data['allowed_mods']
                             if hasattr(self, 'db_integration') and self.db_integration:
                                 self.db_integration.scan_token = scan_token
                             return True
@@ -7843,6 +7871,8 @@ class ArgusApp:
             return
         # P2 #1 — Whitelist dinámica de mods legítimos
         cloud_whitelist = self._get_cloud_mod_whitelist()
+        # P2 #2 — Whitelist por servidor (mods permitidos explícitamente en este token)
+        server_allowed  = set(str(m).lower() for m in self.config.get('server_allowed_mods', []))
         BLACKLISTED = [
             'baritone', 'horion', 'impact', 'wurst', 'aristois', 'meteor',
             'sigma', 'ares', 'salhack', 'entropy', 'remix', 'inertia',
@@ -7857,7 +7887,10 @@ class ArgusApp:
                     continue
                 fpath = os.path.join(mods_dir, fname)
                 fname_lower = fname.lower()
-                # P2 #1 — Verificar contra whitelist dinámica de mods legítimos
+                # P2 #2 — Verificar contra whitelist por servidor (nombre)
+                if server_allowed and fname_lower in server_allowed:
+                    continue
+                # P2 #1 — Verificar contra whitelist dinámica de mods legítimos (hash)
                 if cloud_whitelist:
                     try:
                         h = hashlib.sha256()

@@ -113,6 +113,11 @@ def init_postgresql_db():
         
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_token ON scan_tokens(token)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_active ON scan_tokens(is_active, expires_at)')
+        # P2 #2 — allowed_mods por servidor (JSON array de SHA256 o nombres)
+        try:
+            cursor.execute("ALTER TABLE scan_tokens ADD COLUMN IF NOT EXISTS allowed_mods TEXT DEFAULT NULL")
+        except Exception:
+            pass
         
         # Tabla de escaneos
         cursor.execute('''

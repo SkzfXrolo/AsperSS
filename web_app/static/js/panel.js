@@ -1438,6 +1438,14 @@ async function viewScanDetails(scanId) {
             riskBar.className = `risk-score-bar ${riskClass}`;
             riskBar.style.width = `${Math.min(riskScore, 100)}%`;
         }
+
+        // P3 #13 — Active learning: marcar casos inciertos donde la revisión del staff es más valiosa
+        const verdict = data.verdict || '';
+        const alBadge = document.getElementById('active-learning-badge');
+        if (alBadge) {
+            const uncertain = riskScore >= 30 && riskScore < 65 && !verdict && data.status === 'completed';
+            alBadge.style.display = uncertain ? 'inline-flex' : 'none';
+        }
         
         // Mostrar/ocultar banner de detección
         const detectionBanner = document.getElementById('detection-banner');
@@ -1785,6 +1793,12 @@ async function loadScoreBreakdown(scanId) {
                     <div>
                         <div style="font-size:13px;font-weight:700;color:var(--text);">Risk Score Total</div>
                         <div style="font-size:11px;color:var(--text-muted);">Calculado de ${breakdown.length} factores</div>
+                        ${data.confidence_interval && data.confidence_interval.margin > 2
+                            ? `<div style="font-size:11px;color:#a855f7;margin-top:4px;">
+                                IC 95%: ${Math.round(data.confidence_interval.low)}–${Math.round(data.confidence_interval.high)}
+                                ${data.needs_manual_review ? ' · <strong>⚠ Revisión recomendada</strong>' : ''}
+                               </div>`
+                            : ''}
                     </div>
                 </div>
                 ${breakdown.map(b => `
@@ -2350,15 +2364,59 @@ async function loadLearningStats() {
     try {
         const response = await fetch('/api/learned-patterns');
         const data = await response.json();
-        
         document.getElementById('learned-patterns-count').textContent = data.total || 0;
-        
-        // Cargar hashes (simulado por ahora)
-        // En producción, esto vendría de un endpoint específico
-        document.getElementById('learned-hashes-count').textContent = '0';
+        document.getElementById('learned-hashes-count').textContent  = '0';
         document.getElementById('total-feedbacks-count').textContent = '0';
     } catch (error) {
         console.error('Error cargando estadísticas de aprendizaje:', error);
+    }
+    // P3 #1 — Estado del clasificador RF
+    try {
+        const r2  = await fetch('/api/ml/status');
+        const ml  = await r2.json();
+        const txt = document.getElementById('ml-status-text');
+        if (txt) {
+            if (ml.available) {
+                txt.textContent = `✅ Modelo activo — entrenado con ${ml.trained_on} muestras`;
+                txt.style.color = 'var(--success, #22c55e)';
+            } else {
+                txt.textContent = '⚠ Modelo no disponible — haz clic en "Entrenar ahora" para generarlo';
+                txt.style.color = 'var(--warning, #f59e0b)';
+            }
+        }
+    } catch (_) {}
+}
+
+async function mlTrain() {
+    const btn = document.getElementById('ml-train-btn');
+    const res = document.getElementById('ml-train-result');
+    if (!btn || !res) return;
+    btn.disabled = true;
+    btn.textContent = 'Entrenando...';
+    res.style.display = 'none';
+    try {
+        const r = await fetch('/api/ml/train', {method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}'});
+        const d = await r.json();
+        res.style.display = 'block';
+        if (d.trained) {
+            res.style.background = 'rgba(34,197,94,0.1)';
+            res.style.border = '1px solid rgba(34,197,94,0.3)';
+            res.style.color = '#22c55e';
+            res.innerHTML = `✅ Entrenado: ${d.samples} muestras (${d.hack_count} hacks / ${d.clean_count} limpios) &nbsp;·&nbsp; Accuracy: ${(d.accuracy*100).toFixed(1)}%`;
+        } else {
+            res.style.background = 'rgba(239,68,68,0.1)';
+            res.style.border = '1px solid rgba(239,68,68,0.3)';
+            res.style.color = '#ef4444';
+            res.innerHTML = `❌ ${d.error || 'Error desconocido'}`;
+        }
+        loadLearningStats();
+    } catch (e) {
+        res.style.display = 'block';
+        res.style.color = '#ef4444';
+        res.textContent = `Error: ${e.message}`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Entrenar ahora';
     }
 }
 
