@@ -2550,6 +2550,45 @@ def submit_feedback():
                         is_active = TRUE
                 ''', (issue_path, feedback_id))
 
+            # P2 #30 — Feedback loop: si 3+ marcas de "legítimo" para el mismo issue_type
+            # en los últimos 30 días, subir el umbral mínimo de confianza un 10% para ese tipo.
+            if staff_verification == 'legitimate':
+                try:
+                    issue_type_val = data.get('issue_type', '').strip()
+                    if issue_type_val:
+                        if _USE_PG:
+                            cursor.execute('''
+                                SELECT COUNT(*) FROM staff_feedback sf
+                                JOIN scan_results sr ON sf.result_id = sr.id
+                                WHERE sf.staff_verification = 'legitimate'
+                                  AND sr.issue_type = %s
+                                  AND sf.created_at >= NOW() - INTERVAL '30 days'
+                            ''', (issue_type_val,))
+                        else:
+                            cursor.execute('''
+                                SELECT COUNT(*) FROM staff_feedback sf
+                                JOIN scan_results sr ON sf.result_id = sr.id
+                                WHERE sf.staff_verification = 'legitimate'
+                                  AND sr.issue_type = ?
+                                  AND sf.created_at >= datetime('now', '-30 days')
+                            ''', (issue_type_val,))
+                        count_row = cursor.fetchone()
+                        legit_count = int(_row_get(count_row, 0, 'count') or 0)
+                        if legit_count > 0 and legit_count % 3 == 0:
+                            bump = 10 * (legit_count // 3)
+                            if _USE_PG:
+                                cursor.execute('''
+                                    INSERT INTO type_confidence_thresholds (issue_type, min_confidence, auto_bumps)
+                                    VALUES (%s, LEAST(90, 30 + %s), 1)
+                                    ON CONFLICT (issue_type) DO UPDATE
+                                    SET min_confidence = LEAST(90, type_confidence_thresholds.min_confidence + 10),
+                                        auto_bumps = type_confidence_thresholds.auto_bumps + 1,
+                                        updated_at = NOW()
+                                ''', (issue_type_val, bump))
+                            print(f"[Feedback loop] {issue_type_val}: {legit_count} legit marks → threshold bumped")
+                except Exception as _fe:
+                    print(f"[Feedback loop] Error: {_fe}")
+
             # Limpiar caché relacionado
             if f'scan_{scan_id}' in _stats_cache:
                 del _stats_cache[f'scan_{scan_id}']
@@ -4559,6 +4598,29 @@ def delete_mod_whitelist(sha256):
         return jsonify({'success': True}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ── P2 #30 — Umbrales de confianza por tipo (feedback loop) ──────────────────
+
+@app.route('/api/thresholds', methods=['GET'])
+def get_confidence_thresholds():
+    """Returns per-issue-type confidence thresholds adjusted by feedback loop.
+    Scanner downloads this at startup and uses it to filter low-confidence results.
+    """
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute('SELECT issue_type, min_confidence, auto_bumps FROM type_confidence_thresholds ORDER BY issue_type')
+            rows = cursor.fetchall() or []
+        result = {
+            _row_get(r, 0, 'issue_type'): {
+                'min_confidence': int(_row_get(r, 1, 'min_confidence') or 30),
+                'auto_bumps':     int(_row_get(r, 2, 'auto_bumps') or 0),
+            }
+            for r in rows
+        }
+        return jsonify({'thresholds': result}), 200
+    except Exception as e:
+        return jsonify({'thresholds': {}, 'error': str(e)}), 200  # 200 so scanner doesn't abort
 
 
 # ── P3 #5 — Perfil de jugador / baseline ─────────────────────────────────────

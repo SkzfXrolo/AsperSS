@@ -501,6 +501,17 @@ def init_postgresql_db():
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_mod_whitelist_sha256 ON mod_whitelist(sha256)')
 
+        # Umbrales de confianza por tipo — ajuste automático vía feedback loop (P2 #30)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS type_confidence_thresholds (
+                id SERIAL PRIMARY KEY,
+                issue_type VARCHAR(100) NOT NULL UNIQUE,
+                min_confidence INTEGER NOT NULL DEFAULT 30,
+                auto_bumps INTEGER NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
         # Cola de notificaciones para el Discord worker separado
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS discord_queue (

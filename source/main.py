@@ -2352,6 +2352,9 @@ class ArgusApp:
         # P2 #22 — Decay de score por antigüedad de evidencia
         filtered = self._apply_score_decay(filtered)
 
+        # P2 #30 — Umbrales dinámicos ajustados por feedback loop
+        filtered = self._apply_feedback_thresholds(filtered)
+
         # P2 #23 — Agregar explicaciones en español a todos los hallazgos
         filtered = self._apply_human_explanations(filtered)
 
@@ -9175,6 +9178,49 @@ class ArgusApp:
             except Exception:
                 continue
         return issues
+
+    def _fetch_cloud_thresholds(self):
+        """P2 #30 — Descarga umbrales de confianza ajustados por feedback loop desde la cloud."""
+        import json as _json, datetime as _dt
+        cache_path = os.path.join(os.environ.get('APPDATA', ''), 'ASPERSProjectsSS', 'thresholds.json')
+        try:
+            if os.path.isfile(cache_path):
+                age = (_dt.datetime.now() - _dt.datetime.fromtimestamp(os.path.getmtime(cache_path))).total_seconds()
+                if age < 1800:  # 30-minute cache
+                    with open(cache_path, 'r') as f:
+                        return _json.load(f).get('thresholds', {})
+        except Exception:
+            pass
+        try:
+            base_url = self.config.get('api_url', '').rstrip('/')
+            if not base_url:
+                return {}
+            r = requests.get(f'{base_url}/api/thresholds', timeout=6)
+            if r.ok:
+                data = r.json()
+                os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+                with open(cache_path, 'w') as f:
+                    _json.dump(data, f)
+                return data.get('thresholds', {})
+        except Exception:
+            pass
+        return {}
+
+    def _apply_feedback_thresholds(self, issues):
+        """P2 #30 — Aplica umbrales dinámicos por tipo descargados del feedback loop."""
+        thresholds = self._fetch_cloud_thresholds()
+        if not thresholds:
+            return issues
+        result = []
+        for issue in issues:
+            tipo = issue.get('tipo', '')
+            if tipo in thresholds:
+                min_conf = thresholds[tipo]['min_confidence'] / 100.0
+                if issue.get('confidence', 1.0) < min_conf:
+                    print(f"[Threshold] Descartando {tipo} con conf {issue.get('confidence'):.2f} < {min_conf:.2f}")
+                    continue
+            result.append(issue)
+        return result
 
     def _apply_cloud_rarity_and_ban_patterns(self, issues):
         """P3 #2 + #16 — Ajusta confidence dinámicamente usando hack_rate por issue_type
