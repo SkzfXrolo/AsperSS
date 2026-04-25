@@ -3780,6 +3780,29 @@ class ArgusApp:
                             except Exception:
                                 pass
 
+                        # P2 #20 — Compilation date vs file date
+                        # If the newest .class inside the jar is much newer than the jar file
+                        # itself, the jar was re-packed (tampering / custom build).
+                        try:
+                            import datetime as _dt
+                            file_mtime = _dt.datetime.fromtimestamp(os.path.getmtime(file_path))
+                            class_times = []
+                            for info in zf.infolist():
+                                if info.filename.endswith('.class') and info.date_time[0] >= 2000:
+                                    dt = _dt.datetime(*info.date_time[:6])
+                                    class_times.append(dt)
+                            if class_times:
+                                newest_class = max(class_times)
+                                delta_days = (newest_class - file_mtime).days
+                                # Class compiled AFTER file date = jar was re-packed
+                                if delta_days > 1:
+                                    result['detected_patterns'].append(
+                                        f'class_newer_than_jar:{delta_days}d')
+                                    result['confidence'] = min(100, result['confidence'] + 20)
+                                    result['is_hack'] = True
+                        except Exception:
+                            pass
+
                     # Shannon entropy of the jar
                     try:
                         fsize = os.path.getsize(file_path)
@@ -7770,6 +7793,36 @@ class ArgusApp:
         except Exception as e:
             print(f"Error en scan_ghost_client_registry: {e}")
 
+    def _get_cloud_mod_whitelist(self):
+        """P2 #1 — Descarga whitelist de mods legítimos desde la cloud (caché 1h en APPDATA)."""
+        import json as _json, hashlib as _hl, datetime as _dt
+        cache_path = os.path.join(os.environ.get('APPDATA', ''), 'ASPERSProjectsSS', 'mod_whitelist.json')
+        # Intentar usar caché válida
+        try:
+            if os.path.isfile(cache_path):
+                age = (_dt.datetime.now() - _dt.datetime.fromtimestamp(os.path.getmtime(cache_path))).total_seconds()
+                if age < 3600:
+                    with open(cache_path, 'r') as f:
+                        data = _json.load(f)
+                    return set(data.get('hashes', []))
+        except Exception:
+            pass
+        # Descargar desde cloud
+        try:
+            base_url = self.config.get('api_url', '').rstrip('/')
+            if not base_url:
+                return set()
+            r = requests.get(f'{base_url}/api/mod_whitelist', timeout=8)
+            if r.ok:
+                data = r.json()
+                os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+                with open(cache_path, 'w') as f:
+                    _json.dump(data, f)
+                return set(data.get('hashes', []))
+        except Exception:
+            pass
+        return set()
+
     def scan_minecraft_mods_blacklist(self):
         """Detecta mods prohibidos en .minecraft/mods/ por nombre."""
         print("🔍 Escaneando mods de Minecraft contra lista negra...")
@@ -7777,6 +7830,8 @@ class ArgusApp:
         mods_dir = os.path.join(appdata, '.minecraft', 'mods')
         if not os.path.isdir(mods_dir):
             return
+        # P2 #1 — Whitelist dinámica de mods legítimos
+        cloud_whitelist = self._get_cloud_mod_whitelist()
         BLACKLISTED = [
             'baritone', 'horion', 'impact', 'wurst', 'aristois', 'meteor',
             'sigma', 'ares', 'salhack', 'entropy', 'remix', 'inertia',
@@ -7789,10 +7844,21 @@ class ArgusApp:
             for fname in os.listdir(mods_dir):
                 if not fname.lower().endswith('.jar'):
                     continue
+                fpath = os.path.join(mods_dir, fname)
                 fname_lower = fname.lower()
+                # P2 #1 — Verificar contra whitelist dinámica de mods legítimos
+                if cloud_whitelist:
+                    try:
+                        h = hashlib.sha256()
+                        with open(fpath, 'rb') as f:
+                            for chunk in iter(lambda: f.read(65536), b''):
+                                h.update(chunk)
+                        if h.hexdigest().lower() in cloud_whitelist:
+                            continue  # mod legítimo confirmado
+                    except Exception:
+                        pass
                 for bl in BLACKLISTED:
                     if bl in fname_lower:
-                        fpath = os.path.join(mods_dir, fname)
                         print(f"🚨 MOD PROHIBIDO: {fname}")
                         self.issues_found.append({
                             'nombre': f'Mod prohibido detectado en .minecraft/mods/: {fname}',

@@ -4499,6 +4499,68 @@ def delete_hack_hash(sha256):
         return jsonify({'error': str(e)}), 500
 
 
+# ── P2 #1 — Whitelist dinámica de mods legítimos ─────────────────────────────
+
+@app.route('/api/mod_whitelist', methods=['GET'])
+def get_mod_whitelist():
+    """Returns SHA256 hashes of known-legitimate Minecraft mods.
+    Used by the scanner to skip false-positive mod detections.
+    """
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute('SELECT sha256, mod_name FROM mod_whitelist ORDER BY mod_name')
+            rows = cursor.fetchall() or []
+        hashes  = [_row_get(r, 0, 'sha256') for r in rows]
+        details = [{'sha256': _row_get(r, 0, 'sha256'), 'mod_name': _row_get(r, 1, 'mod_name')} for r in rows]
+        return jsonify({'hashes': hashes, 'details': details, 'count': len(hashes)}), 200
+    except Exception as e:
+        return jsonify({'hashes': [], 'error': str(e)}), 200  # 200 so scanner doesn't abort on missing table
+
+
+@app.route('/api/mod_whitelist', methods=['POST'])
+@login_required
+def add_mod_whitelist():
+    """Add a known-legitimate mod hash. Requires Admin or above."""
+    current_user = get_user_by_id(session.get('user_id'))
+    if not can_manage_tokens(current_user):
+        return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
+    data = request.json or {}
+    sha256   = (data.get('sha256') or '').strip().lower()
+    mod_name = (data.get('mod_name') or '').strip()
+    if len(sha256) != 64 or not all(c in '0123456789abcdef' for c in sha256):
+        return jsonify({'error': 'SHA256 inválido'}), 400
+    if not mod_name:
+        return jsonify({'error': 'mod_name es obligatorio'}), 400
+    try:
+        with get_api_db_cursor() as cursor:
+            if _USE_PG:
+                cursor.execute(
+                    'INSERT INTO mod_whitelist (sha256, mod_name) VALUES (%s, %s) ON CONFLICT (sha256) DO UPDATE SET mod_name = EXCLUDED.mod_name',
+                    (sha256, mod_name)
+                )
+            else:
+                cursor.execute('INSERT OR REPLACE INTO mod_whitelist (sha256, mod_name) VALUES (?, ?)', (sha256, mod_name))
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mod_whitelist/<string:sha256>', methods=['DELETE'])
+@login_required
+def delete_mod_whitelist(sha256):
+    """Remove a mod from the whitelist. Requires Admin or above."""
+    current_user = get_user_by_id(session.get('user_id'))
+    if not can_manage_tokens(current_user):
+        return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
+    sha256 = sha256.strip().lower()
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(f'DELETE FROM mod_whitelist WHERE sha256 = {_PH}', (sha256,))
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ── P3 #2 — Scoring por rareza ────────────────────────────────────────────────
 
 @app.route('/api/rarity', methods=['GET'])

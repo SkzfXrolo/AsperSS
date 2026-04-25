@@ -489,6 +489,18 @@ def init_postgresql_db():
         ''')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_hack_hashes_sha256 ON hack_hashes(sha256)')
 
+        # Whitelist dinámica de mods legítimos (P2 #1)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS mod_whitelist (
+                id SERIAL PRIMARY KEY,
+                sha256 VARCHAR(64) NOT NULL UNIQUE,
+                mod_name VARCHAR(200) NOT NULL,
+                added_by VARCHAR(100),
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_mod_whitelist_sha256 ON mod_whitelist(sha256)')
+
         # Cola de notificaciones para el Discord worker separado
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS discord_queue (
