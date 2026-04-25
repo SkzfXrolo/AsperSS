@@ -4499,6 +4499,119 @@ def delete_hack_hash(sha256):
         return jsonify({'error': str(e)}), 500
 
 
+# ── P3 #2 — Scoring por rareza ────────────────────────────────────────────────
+
+@app.route('/api/rarity', methods=['GET'])
+def get_issue_rarity():
+    """Returns hack-rate per issue_type based on staff feedback + verdicts.
+    Used by the scanner to dynamically adjust confidence.
+    Formula: hack_rate = feedback_hacks / (feedback_hacks + feedback_legitimos)
+    """
+    try:
+        with get_api_db_cursor() as cursor:
+            if _USE_PG:
+                cursor.execute('''
+                    SELECT
+                        sr.issue_type,
+                        COUNT(*) FILTER (WHERE s.verdict = 'hack')   AS hack_count,
+                        COUNT(*) FILTER (WHERE s.verdict = 'clean')  AS clean_count,
+                        COUNT(*)                                       AS total
+                    FROM scan_results sr
+                    JOIN scans s ON sr.scan_id = s.id
+                    WHERE s.verdict IN ('hack', 'clean')
+                      AND sr.issue_type IS NOT NULL
+                      AND sr.issue_type != ''
+                    GROUP BY sr.issue_type
+                    HAVING COUNT(*) >= 5
+                    ORDER BY (COUNT(*) FILTER (WHERE s.verdict = 'hack')::float / COUNT(*)) DESC
+                ''')
+            else:
+                cursor.execute('''
+                    SELECT sr.issue_type,
+                        SUM(CASE WHEN s.verdict='hack'  THEN 1 ELSE 0 END) AS hack_count,
+                        SUM(CASE WHEN s.verdict='clean' THEN 1 ELSE 0 END) AS clean_count,
+                        COUNT(*) AS total
+                    FROM scan_results sr
+                    JOIN scans s ON sr.scan_id = s.id
+                    WHERE s.verdict IN ('hack','clean')
+                      AND sr.issue_type IS NOT NULL AND sr.issue_type != ''
+                    GROUP BY sr.issue_type HAVING COUNT(*) >= 5
+                    ORDER BY (SUM(CASE WHEN s.verdict='hack' THEN 1.0 ELSE 0 END)/COUNT(*)) DESC
+                ''')
+            rows = cursor.fetchall() or []
+        result = []
+        for r in rows:
+            issue_type  = _row_get(r, 0, 'issue_type') or ''
+            hack_count  = int(_row_get(r, 1, 'hack_count') or 0)
+            clean_count = int(_row_get(r, 2, 'clean_count') or 0)
+            total       = int(_row_get(r, 3, 'total') or 1)
+            hack_rate   = round(hack_count / total, 4) if total > 0 else 0.5
+            result.append({
+                'issue_type':  issue_type,
+                'hack_rate':   hack_rate,
+                'hack_count':  hack_count,
+                'clean_count': clean_count,
+                'total':       total,
+            })
+        return jsonify({'rarity': result, 'count': len(result)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── P3 #16 — Patrones de bans (cruce con historial) ──────────────────────────
+
+@app.route('/api/ban_patterns', methods=['GET'])
+def get_ban_patterns():
+    """Returns issue types that appear frequently in banned players.
+    Used by the scanner to multiply confidence when a pattern matches ban history.
+    Returns: [{issue_type, ban_rate, ban_count, total_banned_scans}]
+    """
+    try:
+        with get_api_db_cursor() as cursor:
+            if _USE_PG:
+                cursor.execute('''
+                    SELECT
+                        sr.issue_type,
+                        COUNT(DISTINCT s.id)    AS banned_scans_with_issue,
+                        (SELECT COUNT(DISTINCT id) FROM scans WHERE verdict = 'hack') AS total_banned
+                    FROM scan_results sr
+                    JOIN scans s ON sr.scan_id = s.id
+                    WHERE s.verdict = 'hack'
+                      AND sr.issue_type IS NOT NULL AND sr.issue_type != ''
+                    GROUP BY sr.issue_type
+                    HAVING COUNT(DISTINCT s.id) >= 3
+                    ORDER BY COUNT(DISTINCT s.id) DESC
+                    LIMIT 100
+                ''')
+            else:
+                cursor.execute('''
+                    SELECT sr.issue_type,
+                        COUNT(DISTINCT s.id) AS banned_scans_with_issue,
+                        (SELECT COUNT(DISTINCT id) FROM scans WHERE verdict='hack') AS total_banned
+                    FROM scan_results sr
+                    JOIN scans s ON sr.scan_id = s.id
+                    WHERE s.verdict='hack' AND sr.issue_type IS NOT NULL AND sr.issue_type!=''
+                    GROUP BY sr.issue_type HAVING COUNT(DISTINCT s.id) >= 3
+                    ORDER BY COUNT(DISTINCT s.id) DESC LIMIT 100
+                ''')
+            rows = cursor.fetchall() or []
+        result = []
+        for r in rows:
+            issue_type   = _row_get(r, 0, 'issue_type') or ''
+            banned_with  = int(_row_get(r, 1, 'banned_scans_with_issue') or 0)
+            total_banned = int(_row_get(r, 2, 'total_banned') or 1)
+            ban_rate     = round(banned_with / total_banned, 4) if total_banned > 0 else 0.0
+            result.append({
+                'issue_type':  issue_type,
+                'ban_rate':    ban_rate,
+                'ban_count':   banned_with,
+                'total_banned': total_banned,
+            })
+        return jsonify({'ban_patterns': result, 'count': len(result)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ============================================================
 # GESTIÓN DE STAFF / ROLES
 # ============================================================

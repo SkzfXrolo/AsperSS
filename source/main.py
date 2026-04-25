@@ -2180,6 +2180,7 @@ class ArgusApp:
             'jitter_script', 'java_suspicious_parent', 'java_unusual_parent',
             'evasion_indicators', 'kill_chain', 'minecraft_safe_mode',
             'suspicious_process_location', 'short_lived_process', 'cloud_hash_match',
+            'prescan_cleanup',
         }
 
         for item in issues:
@@ -2355,6 +2356,15 @@ class ArgusApp:
 
         # P2 #24 — Agrupar resultados repetidos del mismo tipo
         filtered = self._group_related_results(filtered)
+
+        # P2 #13 — Descartar procesos conocidos y seguros
+        filtered = self._apply_process_whitelist(filtered)
+
+        # P3 #2 + #16 — Ajuste dinámico de confidence por rareza y patrones de bans
+        filtered = self._apply_cloud_rarity_and_ban_patterns(filtered)
+
+        # P2 #21 — Escalar a CRITICAL por combinaciones de evidencias
+        filtered = self._apply_combination_penalties(filtered)
 
         print(f"📋 TOTAL FINAL (tras decay + agrupación): {len(filtered)}")
         return filtered
@@ -3237,6 +3247,8 @@ class ArgusApp:
                 _run_safe(self.scan_process_path_correlation)
                 self._set_scan_phase("☁️ Hashes de procesos vs base de datos cloud...")
                 _run_safe(self.scan_process_hashes_cloud)
+                self._set_scan_phase("🧹 Actividad de borrado pre-scan (últimos 10 min)...")
+                _run_safe(self.scan_prescan_disk_activity)
 
             # Grupo E — Ubicaciones de hacks (I/O alto)
             def _group_hack_locations():
@@ -9089,6 +9101,233 @@ class ArgusApp:
             except Exception:
                 continue
         return issues
+
+    def _apply_cloud_rarity_and_ban_patterns(self, issues):
+        """P3 #2 + #16 — Ajusta confidence dinámicamente usando hack_rate por issue_type
+        (rareza epidemiológica) y ban_rate del historial de bans del servidor."""
+        if not issues:
+            return issues
+        try:
+            base_url = self.config.get('api_url', '').rstrip('/')
+            if not base_url:
+                return issues
+
+            rarity_map  = {}
+            ban_map     = {}
+
+            try:
+                r = requests.get(f'{base_url}/api/rarity', timeout=8)
+                if r.ok:
+                    for entry in r.json().get('rarity', []):
+                        rarity_map[entry['issue_type']] = entry['hack_rate']
+            except Exception:
+                pass
+
+            try:
+                r = requests.get(f'{base_url}/api/ban_patterns', timeout=8)
+                if r.ok:
+                    for entry in r.json().get('ban_patterns', []):
+                        ban_map[entry['issue_type']] = entry['ban_rate']
+            except Exception:
+                pass
+
+            if not rarity_map and not ban_map:
+                return issues
+
+            for issue in issues:
+                tipo = issue.get('tipo', '')
+                base_conf = issue.get('confidence', 0.5)
+
+                hack_rate = rarity_map.get(tipo)
+                ban_rate  = ban_map.get(tipo)
+
+                if hack_rate is not None:
+                    # Blending: 60% base_conf + 40% hack_rate (para no sobreescribir reglas locales)
+                    new_conf = round(base_conf * 0.6 + hack_rate * 0.4, 3)
+                    issue['confidence'] = new_conf
+                    issue['hack_rate_cloud'] = hack_rate
+
+                if ban_rate is not None and ban_rate >= 0.7:
+                    # Si aparece en ≥70% de los baneados, multiplicar ×1.8
+                    issue['confidence'] = min(1.0, round(issue.get('confidence', base_conf) * 1.8, 3))
+                    issue['ban_rate_cloud'] = ban_rate
+                    if issue.get('confidence', 0) >= 0.85 and issue.get('alerta') == 'SOSPECHOSO':
+                        issue['alerta'] = 'CRITICAL'
+
+        except Exception as e:
+            print(f"Error en _apply_cloud_rarity_and_ban_patterns: {e}")
+        return issues
+
+    def _apply_combination_penalties(self, issues):
+        """P2 #21 — Escala a CRITICAL cuando hay combinaciones de evidencias independientes."""
+        tipos = {i.get('tipo', '') for i in issues}
+        alertas = {i.get('alerta', '') for i in issues}
+
+        # JDWP + javaagent + memory strings = automático CRITICAL
+        if {'jdwp_debug_port', 'javaagent_injection', 'hack_string_in_loaded_jar'}.issubset(tipos):
+            for i in issues:
+                if i.get('tipo') in ('jdwp_debug_port', 'javaagent_injection', 'hack_string_in_loaded_jar'):
+                    i['alerta'] = 'CRITICAL'
+                    i['confidence'] = min(1.0, i.get('confidence', 0.8) * 1.3)
+                    i['combination_penalty'] = 'JDWP+javaagent+memory_strings'
+
+        # AHK script + proceso AHK corriendo → CRITICAL
+        if 'ahk_autoclick' in tipos and any('ahk' in (i.get('nombre', '') + i.get('ruta', '')).lower()
+                                              and i.get('categoria') == 'PROCESO' for i in issues):
+            for i in issues:
+                if i.get('tipo') == 'ahk_autoclick':
+                    i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'AHK_script+AHK_process'
+
+        # Ghost client config + prefetch de ese client → muy alta confianza
+        if 'ghost_client_config' in tipos and 'prefetch_hack' in tipos:
+            for i in issues:
+                if i.get('tipo') in ('ghost_client_config', 'prefetch_hack'):
+                    i['alerta'] = 'CRITICAL'
+                    i['confidence'] = min(1.0, i.get('confidence', 0.8) * 1.2)
+                    i['combination_penalty'] = 'config+prefetch'
+
+        # USN jar borrado + kill chain → confirma limpieza activa
+        if 'usn_deleted_hack' in tipos and 'kill_chain' in tipos:
+            for i in issues:
+                if i.get('tipo') in ('usn_deleted_hack', 'kill_chain'):
+                    i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'USN+kill_chain'
+
+        # 3+ CRITICAL de categorías distintas → riesgo extremo
+        critical_cats = {i.get('categoria', '') for i in issues if i.get('alerta') == 'CRITICAL'}
+        if len(critical_cats) >= 3:
+            for i in issues:
+                if i.get('alerta') == 'CRITICAL':
+                    i['confidence'] = min(1.0, i.get('confidence', 0.9) * 1.15)
+
+        return issues
+
+    def scan_prescan_disk_activity(self):
+        """P3 #17 — Anomalía de actividad de disco en los 10 minutos previos al inicio del scan.
+        Si el jugador borró muchos archivos en .minecraft justo antes, es señal de limpieza activa."""
+        print("🔍 Actividad de disco pre-scan (USN Journal últimos 10 min)...")
+        import subprocess
+        import datetime as _dt
+
+        try:
+            result = subprocess.run(
+                ['fsutil', 'usn', 'readjournal', 'C:', 'csv'],
+                capture_output=True, text=True, timeout=20,
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+            )
+            if result.returncode != 0 or not result.stdout:
+                return
+
+            lines = result.stdout.splitlines()
+            now = _dt.datetime.now()
+            cutoff = now - _dt.timedelta(minutes=10)
+
+            DELETION_FLAG = '0x80000200'
+            MC_KEYWORDS = ['.minecraft', 'appdata', 'roaming', 'localappdata']
+            HACK_KEYWORDS = [
+                '.jar', '.exe', '.dll', 'vape', 'sigma', 'rise', 'meteor',
+                'liquidbounce', 'future', 'flux', 'ghost', 'hack', 'cheat',
+            ]
+
+            deleted_mc = []
+            deleted_total = 0
+
+            for line in lines[1:]:
+                parts = line.split(',')
+                if len(parts) < 6:
+                    continue
+                try:
+                    # Columnas típicas: Usn,Filename,Timestamp,Reason,FileAttributes,...
+                    ts_str = parts[2].strip().strip('"')
+                    reason = parts[3].strip().strip('"').lower()
+                    fname  = parts[1].strip().strip('"').lower()
+
+                    if DELETION_FLAG.lower() not in reason:
+                        continue
+
+                    ts = _dt.datetime.strptime(ts_str[:19], '%Y-%m-%d %H:%M:%S')
+                    if ts < cutoff:
+                        continue
+
+                    deleted_total += 1
+                    if any(k in fname for k in MC_KEYWORDS):
+                        deleted_mc.append(fname)
+                except Exception:
+                    continue
+
+            if deleted_mc:
+                hack_deleted = [f for f in deleted_mc if any(k in f for k in HACK_KEYWORDS)]
+                msg = (f'Se borraron {len(deleted_mc)} archivos en carpetas de Minecraft '
+                       f'en los 10 minutos previos al scan ({deleted_total} borrados totales). '
+                       f'Posible limpieza activa de evidencias.')
+                alert = 'CRITICAL' if hack_deleted else 'SOSPECHOSO'
+                conf  = 0.85 if hack_deleted else 0.60
+                print(f"🚨 LIMPIEZA PRE-SCAN: {len(deleted_mc)} archivos MC, {len(hack_deleted)} con keywords de hack")
+                self.issues_found.append({
+                    'nombre': f'Limpieza activa pre-scan: {len(deleted_mc)} archivos borrados en .minecraft',
+                    'ruta': 'USN Journal',
+                    'archivo': 'usn_prescan',
+                    'tipo': 'prescan_cleanup',
+                    'categoria': 'FORENSE',
+                    'alerta': alert,
+                    'confidence': conf,
+                    'detected_patterns': [f'deleted_mc_files:{len(deleted_mc)}', f'hack_files:{len(hack_deleted)}'],
+                    'deleted_files': deleted_mc[:20],
+                    'explicacion': msg,
+                })
+            elif deleted_total > 50:
+                print(f"⚠️ Alta actividad de borrado pre-scan: {deleted_total} archivos")
+                self.issues_found.append({
+                    'nombre': f'Alta actividad de borrado pre-scan: {deleted_total} archivos',
+                    'ruta': 'USN Journal',
+                    'archivo': 'usn_prescan',
+                    'tipo': 'prescan_cleanup',
+                    'categoria': 'FORENSE',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.45,
+                    'detected_patterns': [f'total_deleted:{deleted_total}'],
+                    'explicacion': f'Se borraron {deleted_total} archivos en los 10 minutos previos al scan. '
+                                   f'Puede indicar limpieza activa aunque no se detectaron archivos de Minecraft.',
+                })
+        except Exception as e:
+            print(f"Error en scan_prescan_disk_activity: {e}")
+
+    def _apply_process_whitelist(self, issues):
+        """P2 #13 — Descarta procesos conocidos y seguros del listado de hallazgos."""
+        SAFE_PROCESSES = {
+            # Sistema / drivers
+            'svchost.exe', 'lsass.exe', 'winlogon.exe', 'csrss.exe', 'smss.exe',
+            'services.exe', 'wininit.exe', 'dwm.exe', 'taskhost.exe', 'taskhostw.exe',
+            'conhost.exe', 'dllhost.exe', 'rundll32.exe', 'regsvr32.exe',
+            # Gamer / overlay
+            'discord.exe', 'discordptb.exe', 'discordcanary.exe',
+            'steam.exe', 'steamwebhelper.exe', 'gameoverlayui.exe',
+            'nvcontainer.exe', 'nvdisplay.container.exe', 'nvcplui.exe',
+            'nvtelemetrycontainer.exe', 'nvidia web helper.exe',
+            'xboxapp.exe', 'gamebar.exe', 'gamebarftserver.exe',
+            'obs64.exe', 'obs.exe', 'obs-browser-page.exe',
+            'spotify.exe', 'spoticrashhandler.exe',
+            'msedge.exe', 'chrome.exe', 'firefox.exe', 'opera.exe',
+            'epicgameslauncher.exe', 'easyanticheat.exe',
+            'geforceexperience.exe', 'geforcenow.exe',
+            # Minecraft legítimos
+            'javaw.exe', 'java.exe', 'minecraft.exe', 'minecraftlauncher.exe',
+            'prismlauncher.exe', 'multimc.exe', 'ftblauncher.exe',
+            'curseforgeapp.exe', 'gdlauncher.exe', 'atlauncher.exe',
+            # Windows utilities
+            'explorer.exe', 'taskmgr.exe', 'notepad.exe', 'mspaint.exe',
+            'cmd.exe', 'powershell.exe', 'windowsterminal.exe',
+        }
+        result = []
+        for issue in issues:
+            archivo = (issue.get('archivo') or '').lower().strip()
+            if issue.get('categoria') == 'PROCESO' and archivo in SAFE_PROCESSES:
+                # Solo descartar si la confianza es baja y no tiene combo penalty
+                if issue.get('confidence', 1.0) < 0.75 and not issue.get('combination_penalty'):
+                    continue
+            result.append(issue)
+        return result
 
     def second_pass_scanner(self):
         """Segunda pasada: analiza archivos SOSPECHOSO/CRITICAL con mayor profundidad."""
