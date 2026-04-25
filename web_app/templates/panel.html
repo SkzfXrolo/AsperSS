@@ -948,6 +948,18 @@
                     </div>
                     <div id="ml-train-result" style="display:none;margin-top:12px;padding:10px 14px;border-radius:8px;font-size:12px;"></div>
                 </div>
+
+                <!-- P3 #4 — Clustering de perfiles -->
+                <div style="margin-top:16px;padding:20px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                        <div>
+                            <h3 style="font-size:14px;font-weight:700;color:var(--text);margin:0 0 4px;">🔬 Clustering de Perfiles (K-Means)</h3>
+                            <p style="font-size:12px;color:var(--text-muted);margin:0;">Agrupa scans por patrones similares. Detecta hacks nuevos distribuyéndose.</p>
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="mlCluster()">Analizar</button>
+                    </div>
+                    <div id="ml-cluster-result" style="display:none;margin-top:8px;font-size:12px;"></div>
+                </div>
             </div>
         </section>
 

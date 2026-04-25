@@ -42,6 +42,31 @@ def init_db_async():
 import threading
 threading.Thread(target=init_db_async, daemon=True).start()
 
+# P3 #20 — Reentrenamiento automático semanal del clasificador RF
+def _weekly_ml_retrain():
+    """Reentrena el clasificador RF y registra el resultado."""
+    try:
+        from ml_classifier import get_classifier
+        clf = get_classifier()
+        with get_api_db_cursor() as cursor:
+            result = clf.train(cursor)
+        if result.get('trained'):
+            print(f"[ML Weekly] Reentrenamiento OK: accuracy={result.get('accuracy')}, samples={result.get('samples')}")
+        else:
+            print(f"[ML Weekly] No reentrenado: {result.get('error')}")
+    except Exception as e:
+        print(f"[ML Weekly] Error: {e}")
+
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    _scheduler = BackgroundScheduler(daemon=True)
+    _scheduler.add_job(_weekly_ml_retrain, 'cron', day_of_week='sun', hour=3, minute=0,
+                       id='weekly_ml_retrain', replace_existing=True)
+    _scheduler.start()
+    print('[Scheduler] Reentrenamiento semanal ML activado (domingos 03:00 UTC)')
+except Exception as _sch_err:
+    print(f'[Scheduler] APScheduler no disponible: {_sch_err}')
+
 # Discord HTTP Interactions (sin gateway, sin rate-limit)
 try:
     import discord_interactions as _di
@@ -4561,6 +4586,117 @@ def delete_hack_hash(sha256):
         with get_api_db_cursor() as cursor:
             cursor.execute(f'DELETE FROM hack_hashes WHERE sha256 = {_PH}', (sha256,))
         return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── P3 #4 — Clustering de perfiles de scan ───────────────────────────────────
+
+@app.route('/api/ml/cluster', methods=['POST'])
+@login_required
+def ml_cluster():
+    """K-Means clustering sobre los últimos N scans completados.
+    Detecta grupos de scans con patrones similares y alerta si un cluster nuevo emerge.
+    Body: {days: 30, n_clusters: 5}
+    """
+    current_user = get_user_by_id(session.get('user_id'))
+    if not can_manage_tokens(current_user):
+        return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
+    data = request.json or {}
+    days       = int(data.get('days', 30))
+    n_clusters = int(data.get('n_clusters', 5))
+    try:
+        import numpy as np
+        from sklearn.cluster import KMeans
+        from sklearn.preprocessing import StandardScaler
+    except ImportError:
+        return jsonify({'error': 'scikit-learn no instalado'}), 500
+
+    try:
+        with get_api_db_cursor() as cursor:
+            if _USE_PG:
+                cursor.execute(f'''
+                    SELECT s.id, s.issues_found, s.risk_score,
+                           COUNT(CASE WHEN sr.alert_level = 'CRITICAL' THEN 1 END) AS criticals,
+                           COUNT(CASE WHEN sr.alert_level = 'SOSPECHOSO' THEN 1 END) AS suspicious,
+                           COUNT(DISTINCT sr.issue_category) AS categories
+                    FROM scans s
+                    LEFT JOIN scan_results sr ON sr.scan_id = s.id
+                    WHERE s.status = 'completed'
+                      AND s.started_at >= NOW() - INTERVAL '{days} days'
+                    GROUP BY s.id
+                    ORDER BY s.id DESC
+                    LIMIT 500
+                ''')
+            else:
+                cursor.execute(f'''
+                    SELECT s.id, s.issues_found, s.risk_score,
+                           SUM(CASE WHEN sr.alert_level='CRITICAL' THEN 1 ELSE 0 END),
+                           SUM(CASE WHEN sr.alert_level='SOSPECHOSO' THEN 1 ELSE 0 END),
+                           COUNT(DISTINCT sr.issue_category)
+                    FROM scans s LEFT JOIN scan_results sr ON sr.scan_id=s.id
+                    WHERE s.status='completed' AND s.started_at >= datetime('now','-{days} days')
+                    GROUP BY s.id ORDER BY s.id DESC LIMIT 500
+                ''')
+            rows = cursor.fetchall() or []
+
+        if len(rows) < n_clusters * 2:
+            return jsonify({'error': f'Insuficientes scans: {len(rows)} (mín {n_clusters*2})'}), 200
+
+        scan_ids = []
+        X = []
+        for r in rows:
+            scan_ids.append(int(_row_get(r, 0, 'id') or 0))
+            X.append([
+                float(_row_get(r, 1, 'issues_found') or 0),
+                float(_row_get(r, 2, 'risk_score') or 0),
+                float(_row_get(r, 3, 'criticals') or 0),
+                float(_row_get(r, 4, 'suspicious') or 0),
+                float(_row_get(r, 5, 'categories') or 0),
+            ])
+
+        X_arr = np.array(X)
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X_arr)
+
+        km = KMeans(n_clusters=min(n_clusters, len(rows)), random_state=42, n_init=10)
+        labels = km.fit_predict(X_scaled)
+
+        # Resumir clusters
+        clusters = {}
+        for i, label in enumerate(labels):
+            label = int(label)
+            if label not in clusters:
+                clusters[label] = {'scan_ids': [], 'avg_risk': 0, 'avg_issues': 0, 'size': 0}
+            clusters[label]['scan_ids'].append(scan_ids[i])
+            clusters[label]['avg_risk']   += X[i][1]
+            clusters[label]['avg_issues'] += X[i][0]
+            clusters[label]['size']       += 1
+
+        result_clusters = []
+        for label, info in clusters.items():
+            sz = info['size']
+            result_clusters.append({
+                'cluster_id':  label,
+                'size':        sz,
+                'avg_risk':    round(info['avg_risk'] / sz, 1),
+                'avg_issues':  round(info['avg_issues'] / sz, 1),
+                'scan_ids':    info['scan_ids'][:10],
+                'alert': sz >= 3 and (info['avg_risk'] / sz) >= 60,
+            })
+
+        result_clusters.sort(key=lambda c: c['avg_risk'], reverse=True)
+        high_risk_clusters = [c for c in result_clusters if c['alert']]
+
+        return jsonify({
+            'total_scans': len(rows),
+            'n_clusters': len(result_clusters),
+            'clusters': result_clusters,
+            'high_risk_clusters': len(high_risk_clusters),
+            'alert': len(high_risk_clusters) > 0,
+            'alert_message': (f'⚠ {len(high_risk_clusters)} cluster(s) de alto riesgo detectados con risk_score promedio ≥ 60'
+                             if high_risk_clusters else None),
+        }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

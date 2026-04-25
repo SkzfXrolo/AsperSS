@@ -2387,6 +2387,41 @@ async function loadLearningStats() {
     } catch (_) {}
 }
 
+async function mlCluster() {
+    const res = document.getElementById('ml-cluster-result');
+    if (!res) return;
+    res.style.display = 'block';
+    res.style.color = 'var(--text-muted)';
+    res.textContent = 'Analizando clusters...';
+    try {
+        const r = await fetch('/api/ml/cluster', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({days: 30, n_clusters: 5})
+        });
+        const d = await r.json();
+        if (d.error) { res.style.color='#ef4444'; res.textContent=d.error; return; }
+        const alertColor = d.alert ? '#ef4444' : '#22c55e';
+        res.style.color = alertColor;
+        let html = `<strong>${d.alert ? '⚠ ' : '✅ '}${d.n_clusters} clusters</strong> en ${d.total_scans} scans (últimos 30 días)<br>`;
+        if (d.alert_message) html += `<span style="color:#ef4444">${d.alert_message}</span><br>`;
+        html += '<br>';
+        (d.clusters || []).forEach(c => {
+            const riskColor = c.avg_risk >= 70 ? '#ef4444' : c.avg_risk >= 30 ? '#f59e0b' : '#22c55e';
+            html += `<div style="display:flex;gap:12px;align-items:center;margin-bottom:6px;padding:6px 10px;background:var(--bg);border-radius:6px;">
+                <span style="font-weight:700;color:${riskColor};">Cluster ${c.cluster_id}</span>
+                <span>${c.size} scans</span>
+                <span>Risk avg: <strong style="color:${riskColor}">${c.avg_risk}</strong></span>
+                <span>Issues avg: ${c.avg_issues}</span>
+                ${c.alert ? '<span style="color:#ef4444;font-weight:700;">⚠ ALTO RIESGO</span>' : ''}
+            </div>`;
+        });
+        res.innerHTML = html;
+    } catch (e) {
+        res.style.color = '#ef4444';
+        res.textContent = `Error: ${e.message}`;
+    }
+}
+
 async function mlTrain() {
     const btn = document.getElementById('ml-train-btn');
     const res = document.getElementById('ml-train-result');
