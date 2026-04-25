@@ -155,10 +155,6 @@ def run_worker():
 
         asyncio.create_task(_poll_loop())
 
-    # Slash commands (mismos que discord_bot.py)
-    from discord_bot import _make_bot as _orig_make_bot  # reutilizar lógica existente
-    # No reutilizamos _make_bot completo, los slash commands están en el worker directamente
-
     delay = 10
     for attempt in range(20):
         try:
