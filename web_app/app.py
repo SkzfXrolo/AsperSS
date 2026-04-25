@@ -4216,13 +4216,22 @@ def export_scan_pdf(scan_id):
             results = cursor.fetchall()
 
         # ── Build PDF ──
+        _LOGO_PATH = os.path.join(os.path.dirname(__file__), 'static', 'img', 'logo.png')
+        _has_logo  = os.path.isfile(_LOGO_PATH)
+
         class _PDF(FPDF):
             def header(self):
-                self.set_font('Helvetica', 'B', 10)
                 self.set_fill_color(13, 17, 36)
                 self.rect(0, 0, 210, 18, 'F')
+                # Logo in header (12mm tall, auto-width to preserve aspect)
+                if _has_logo:
+                    self.image(_LOGO_PATH, x=6, y=3, h=12)
+                    text_x = 24
+                else:
+                    text_x = 8
+                self.set_font('Helvetica', 'B', 10)
                 self.set_text_color(139, 92, 246)
-                self.set_xy(8, 4)
+                self.set_xy(text_x, 4)
                 self.cell(0, 10, 'ASPERS PROJECTS  |  REPORTE DE SS', ln=False)
                 self.set_text_color(100, 100, 120)
                 self.set_xy(0, 4)
