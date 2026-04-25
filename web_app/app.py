@@ -42,12 +42,13 @@ def init_db_async():
 import threading
 threading.Thread(target=init_db_async, daemon=True).start()
 
-# Iniciar bot de Discord si DISCORD_TOKEN está configurado
+# Discord HTTP Interactions (sin gateway, sin rate-limit)
 try:
-    from discord_bot import start_bot_thread as _start_discord_bot
-    threading.Thread(target=_start_discord_bot, daemon=True).start()
+    import discord_interactions as _di
+    threading.Thread(target=_di.register_commands, daemon=True).start()
+    print('[Discord] HTTP Interactions activado.')
 except Exception as _disc_err:
-    print(f'[Discord] Bot no disponible: {_disc_err}')
+    print(f'[Discord] Interactions no disponible: {_disc_err}')
 
 # Health check endpoints (simplificado - sin import externo)
 
@@ -111,6 +112,25 @@ def index():
     # Agregar headers de caché para recursos estáticos
     response.headers['Cache-Control'] = 'public, max-age=300'  # 5 minutos
     return response
+
+@app.route('/discord/interactions', methods=['POST'])
+def discord_interactions():
+    """Endpoint para Discord HTTP Interactions (slash commands sin gateway)."""
+    try:
+        import discord_interactions as _di
+        from flask import request as _req
+        sig  = _req.headers.get('X-Signature-Ed25519', '')
+        ts   = _req.headers.get('X-Signature-Timestamp', '')
+        body = _req.get_data(as_text=True)
+        if not _di.verify_signature(sig, ts, body):
+            return make_response('Invalid signature', 401)
+        data = _req.get_json(force=True)
+        result = _di.handle_interaction(data)
+        return jsonify(result)
+    except Exception as e:
+        print(f'[Discord] Error en /discord/interactions: {e}')
+        return make_response('Internal error', 500)
+
 
 @app.route('/health', methods=['GET'])
 @app.route('/healthz', methods=['GET'])
@@ -1969,19 +1989,14 @@ def submit_scan_results(scan_id):
         print(f"[DEBUG] ===== SCAN {scan_id} COMPLETADO OK: "
               f"{len(data.get('results',[]))} resultados, status={data.get('status','completed')} =====\n")
 
-        # Encolar notificación para el Discord worker
         try:
-            with get_api_db_cursor() as _cur:
-                _cur.execute(
-                    "INSERT INTO discord_queue (event_type, data) VALUES (%s, %s)",
-                    ('new_scan', json.dumps({
-                        'scan_id': scan_id,
-                        'machine_name': data.get('machine_name', 'N/A'),
-                        'username': data.get('username', data.get('minecraft_username', 'N/A')),
-                        'risk_score': locals().get('risk_score', 0),
-                        'issues_found': len(results),
-                    }))
-                )
+            _di.notify_new_scan(
+                scan_id,
+                data.get('machine_name', 'N/A'),
+                data.get('username', data.get('minecraft_username', 'N/A')),
+                locals().get('risk_score', 0),
+                len(results),
+            )
         except Exception:
             pass
 
@@ -4294,20 +4309,8 @@ def set_scan_verdict(scan_id):
         # Invalidar caché de estadísticas
         if 'statistics' in _stats_cache: del _stats_cache['statistics']
         if 'dashboard_extended' in _stats_cache: del _stats_cache['dashboard_extended']
-        # Encolar notificación de veredicto para el Discord worker
         try:
-            with get_api_db_cursor() as _cur:
-                _cur.execute(
-                    "INSERT INTO discord_queue (event_type, data) VALUES (%s, %s)",
-                    ('verdict_change', json.dumps({
-                        'scan_id': scan_id,
-                        'machine_name': machine,
-                        'username': username,
-                        'verdict': verdict,
-                        'reason': reason,
-                        'changed_by': user,
-                    }))
-                )
+            _di.notify_verdict_change(scan_id, machine, username, verdict, reason, user)
         except Exception:
             pass
         return jsonify({'success': True}), 200
