@@ -285,13 +285,13 @@ def _make_bot():
             from app import get_api_db_cursor
             with get_api_db_cursor() as cursor:
                 cursor.execute("SELECT COUNT(*) FROM scans")
-                total = list(cursor.fetchone().values())[0]
+                total = (cursor.fetchone() or (0,))[0]
                 cursor.execute("SELECT COUNT(*) FROM scans WHERE verdict = 'hack'")
-                hacks = list(cursor.fetchone().values())[0]
+                hacks = (cursor.fetchone() or (0,))[0]
                 cursor.execute("SELECT COUNT(*) FROM scans WHERE verdict = 'clean'")
-                clean = list(cursor.fetchone().values())[0]
+                clean = (cursor.fetchone() or (0,))[0]
                 cursor.execute("SELECT COUNT(*) FROM scans WHERE started_at >= NOW() - INTERVAL '24 hours'")
-                today = list(cursor.fetchone().values())[0]
+                today = (cursor.fetchone() or (0,))[0]
             embed = discord.Embed(
                 title='📊 Argus Projects — Estadísticas',
                 color=discord.Color.blurple(),
