@@ -11,6 +11,7 @@ Variables de entorno requeridas:
 Requiere: pip install discord.py>=2.3
 """
 import os
+import json
 import threading
 import asyncio
 import logging
@@ -18,6 +19,8 @@ import secrets
 import datetime
 
 log = logging.getLogger('discord_bot')
+
+_DATABASE_URL = os.environ.get('DATABASE_URL', '').replace('postgres://', 'postgresql://', 1)
 
 try:
     import discord
@@ -314,6 +317,85 @@ def _make_bot():
             print('[Discord] ✅ Slash commands sincronizados.')
         else:
             print('[Discord] ⚠️ DISCORD_GUILD no configurado — slash commands no sincronizados')
+
+        asyncio.create_task(_queue_poll_loop(client))
+
+    async def _queue_poll_loop(bot):
+        """Procesa discord_queue cada 10s desde el mismo event loop del bot."""
+        try:
+            import psycopg2
+            from psycopg2.extras import RealDictCursor
+        except ImportError:
+            print('[Discord] ⚠️ psycopg2 no disponible — queue polling desactivado')
+            return
+
+        if not DISCORD_CHANNEL.isdigit():
+            print('[Discord] ⚠️ DISCORD_CHANNEL no válido — queue polling desactivado')
+            return
+
+        channel_id = int(DISCORD_CHANNEL)
+        print('[Discord] 🔄 Queue polling iniciado (cada 10s)')
+
+        while not bot.is_closed():
+            try:
+                conn = psycopg2.connect(_DATABASE_URL, cursor_factory=RealDictCursor, connect_timeout=10)
+                cur  = conn.cursor()
+                cur.execute(
+                    "SELECT id, event_type, data FROM discord_queue "
+                    "WHERE processed_at IS NULL ORDER BY created_at LIMIT 20"
+                )
+                rows = cur.fetchall()
+
+                for row in rows:
+                    event_id   = row['id']
+                    event_type = row['event_type']
+                    data       = row['data'] if isinstance(row['data'], dict) else json.loads(row['data'])
+                    try:
+                        ch = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
+                        if event_type == 'new_scan':
+                            risk = data.get('risk_score', 0)
+                            bar  = '🟥' if risk >= 70 else '🟧' if risk >= 30 else '🟩'
+                            emb  = discord.Embed(
+                                title=f'🔔 Nuevo scan — #{data.get("scan_id")}',
+                                color=0xE74C3C if risk >= 70 else 0xF39C12 if risk >= 30 else 0x2ECC71,
+                                description=(
+                                    f'**Máquina:** {data.get("machine_name","N/A")}\n'
+                                    f'**Usuario:** {data.get("username","N/A")}\n'
+                                    f'{bar} **Risk score:** {risk}/100\n'
+                                    f'**Hallazgos:** {data.get("issues_found",0)}'
+                                ),
+                            )
+                            await ch.send(embed=emb)
+                        elif event_type == 'verdict_change':
+                            verdict = data.get('verdict', 'pending')
+                            color   = {'hack': 0xE74C3C, 'clean': 0x2ECC71}.get(verdict, 0x64748B)
+                            emb     = discord.Embed(
+                                title=f'⚖️ Veredicto — Scan #{data.get("scan_id")}',
+                                color=color,
+                                description=(
+                                    f'**Máquina:** {data.get("machine_name","N/A")}\n'
+                                    f'**Usuario:** {data.get("username","N/A")}\n'
+                                    f'**Veredicto:** {verdict.upper()}\n'
+                                    f'**Razón:** {data.get("reason","-")}\n'
+                                    f'**Por:** {data.get("changed_by","-")}'
+                                ),
+                            )
+                            await ch.send(embed=emb)
+                    except Exception as e:
+                        print(f'[Discord] Error enviando evento {event_id}: {e}')
+
+                    cur.execute("UPDATE discord_queue SET processed_at = NOW() WHERE id = %s", (event_id,))
+
+                if rows:
+                    conn.commit()
+                    print(f'[Discord] {len(rows)} evento(s) de cola enviados')
+
+                cur.close()
+                conn.close()
+            except Exception as e:
+                print(f'[Discord] Error en queue poll: {e}')
+
+            await asyncio.sleep(10)
 
     return client
 
