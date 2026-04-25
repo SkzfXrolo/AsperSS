@@ -62,18 +62,27 @@ def _opt(options: list, name: str):
 
 # ── Command handlers ───────────────────────────────────────────────────────
 
+def _n(row):
+    """Extrae el primer valor de una fila, compatible con tuple y RealDictRow."""
+    if row is None:
+        return 0
+    if hasattr(row, 'values'):
+        return next(iter(row.values()), 0)
+    return row[0]
+
+
 def _cmd_stats() -> dict:
     try:
         from app import get_api_db_cursor
         with get_api_db_cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM scans")
-            total = (cur.fetchone() or (0,))[0]
+            total = _n(cur.fetchone())
             cur.execute("SELECT COUNT(*) FROM scans WHERE verdict='hack'")
-            hacks = (cur.fetchone() or (0,))[0]
+            hacks = _n(cur.fetchone())
             cur.execute("SELECT COUNT(*) FROM scans WHERE verdict='clean'")
-            clean = (cur.fetchone() or (0,))[0]
+            clean = _n(cur.fetchone())
             cur.execute("SELECT COUNT(*) FROM scans WHERE started_at >= NOW() - INTERVAL '24 hours'")
-            today = (cur.fetchone() or (0,))[0]
+            today = _n(cur.fetchone())
         return _embed({'title': '📊 ASPERS — Estadísticas', 'color': 0x5865F2, 'fields': [
             {'name': 'Total scans',   'value': str(total),             'inline': True},
             {'name': 'Hoy',           'value': str(today),             'inline': True},
