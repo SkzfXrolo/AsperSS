@@ -1815,13 +1815,12 @@ def _is_server_false_positive(result: dict) -> bool:
     return False
 
 
-def _calculate_risk_score(results):
+def _calculate_risk_score(results, return_breakdown=False):
     """Calcula el risk score de un scan según las evidencias encontradas.
-    Escalas: javaagent=+90, AHK=+70, macros=+60, DNS=+40, CRITICAL=+50,
-             MUY_SOSPECHOSO=+40, SOSPECHOSO=+25, POCO_SOSPECHOSO=+10.
-    Retorna un valor 0–100 (capped).
+    Retorna score 0–100. Con return_breakdown=True devuelve (score, breakdown_list).
     """
     score = 0
+    breakdown = []
     _counted = set()  # evitar sumar el mismo tipo varias veces (solo el primer hit)
 
     CATEGORY_SCORES = {
@@ -1858,9 +1857,10 @@ def _calculate_risk_score(results):
     }
 
     for r in results:
-        tipo = (r.get('tipo') or '').lower().replace(' ', '_')
-        cat  = (r.get('categoria') or '').lower().replace(' ', '_')
+        tipo   = (r.get('tipo') or '').lower().replace(' ', '_')
+        cat    = (r.get('categoria') or '').lower().replace(' ', '_')
         alerta = (r.get('alerta') or '').upper()
+        nombre = (r.get('issue_name') or r.get('nombre') or tipo)[:80]
 
         # Bonus por categoría/tipo (una sola vez por categoría)
         for key, pts in CATEGORY_SCORES.items():
@@ -1868,12 +1868,21 @@ def _calculate_risk_score(results):
                 if key not in _counted:
                     score += pts
                     _counted.add(key)
+                    breakdown.append({'source': nombre, 'points': pts, 'reason': f'Tipo detectado: {key}'})
                 break
 
         # Puntos adicionales por nivel de alerta
-        score += ALERT_SCORES.get(alerta, 0)
+        alert_pts = ALERT_SCORES.get(alerta, 0)
+        if alert_pts > 0:
+            score += alert_pts
+            breakdown.append({'source': nombre, 'points': alert_pts, 'reason': f'Nivel de alerta: {alerta}'})
 
-    return min(score, 100)
+    final_score = min(score, 100)
+    if return_breakdown:
+        # Sort by points desc, only keep top contributors
+        breakdown_sorted = sorted(breakdown, key=lambda x: x['points'], reverse=True)[:15]
+        return final_score, breakdown_sorted
+    return final_score
 
 
 @app.route('/api/scans/<int:scan_id>/results', methods=['POST'])
@@ -4596,6 +4605,38 @@ def delete_mod_whitelist(sha256):
         with get_api_db_cursor() as cursor:
             cursor.execute(f'DELETE FROM mod_whitelist WHERE sha256 = {_PH}', (sha256,))
         return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── P3 #18 — Score breakdown (SHAP-style explanation) ────────────────────────
+
+@app.route('/api/scans/<int:scan_id>/score_breakdown', methods=['GET'])
+@login_required
+def get_score_breakdown(scan_id):
+    """Returns which findings contributed most to the risk_score, SHAP-style.
+    [{source, points, reason}] sorted by contribution descending.
+    """
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f'''SELECT issue_type, issue_name, issue_category, alert_level, confidence
+                    FROM scan_results WHERE scan_id = {_PH}''',
+                (scan_id,)
+            )
+            rows = cursor.fetchall() or []
+        results = [
+            {
+                'tipo':      _row_get(r, 0, 'issue_type') or '',
+                'nombre':    _row_get(r, 1, 'issue_name') or '',
+                'categoria': _row_get(r, 2, 'issue_category') or '',
+                'alerta':    _row_get(r, 3, 'alert_level') or '',
+                'confidence': float(_row_get(r, 4, 'confidence') or 0),
+            }
+            for r in rows
+        ]
+        score, breakdown = _calculate_risk_score(results, return_breakdown=True)
+        return jsonify({'scan_id': scan_id, 'risk_score': score, 'breakdown': breakdown}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

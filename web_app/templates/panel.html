@@ -562,12 +562,12 @@
                         </svg>
                         <span>Captura</span>
                     </button>
-                    <button class="subnav-item" data-subpage="detecciones-personalizadas">
+                    <button class="subnav-item" data-subpage="detecciones-personalizadas" id="subnav-score-breakdown">
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
                             <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="2"/>
                             <path d="M7 10L9.5 12.5L13.5 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <span>Detecciones</span>
+                        <span>Score</span>
                     </button>
                     <button class="subnav-item" data-subpage="escaneos-previos">
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
@@ -759,10 +759,15 @@
 
                 <!-- Detecciones Personalizadas -->
                 <div class="subpage-content" id="subpage-detecciones-personalizadas">
-                    <div class="subpage-placeholder">
-                        <h3>Detecciones Personalizadas</h3>
-                        <p>Detecciones configuradas personalmente por el staff.</p>
-                        <p class="placeholder-note">Esta sección se mostrará cuando se implementen las detecciones personalizadas.</p>
+                    <div style="padding:8px 0 24px;">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+                            <span style="font-size:22px;">📊</span>
+                            <h3 style="font-size:16px;font-weight:700;color:var(--accent);">Desglose del Risk Score</h3>
+                            <span style="font-size:12px;color:var(--text-muted);">Qué factores impulsaron el score</span>
+                        </div>
+                        <div id="score-breakdown-container">
+                            <div class="loading-cell">Cargando desglose...</div>
+                        </div>
                     </div>
                 </div>
 

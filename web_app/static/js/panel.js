@@ -1749,8 +1749,60 @@ function setupSubpageNavigation() {
             if (subpage === 'captura-pantalla') {
                 renderScreenshot(_currentScanData);
             }
+            // Cargar desglose del score
+            if (subpage === 'detecciones-personalizadas' && currentScanId) {
+                loadScoreBreakdown(currentScanId);
+            }
         });
     });
+}
+
+// ============================================================
+// SCORE BREAKDOWN (P3 #18 — SHAP-style)
+// ============================================================
+
+async function loadScoreBreakdown(scanId) {
+    const container = document.getElementById('score-breakdown-container');
+    if (!container) return;
+    container.innerHTML = '<div class="loading-cell">Cargando desglose...</div>';
+    try {
+        const res  = await fetch(`/api/scans/${scanId}/score_breakdown`);
+        const data = await res.json();
+        if (data.error) { container.innerHTML = `<div class="loading-cell" style="color:#ef4444">${data.error}</div>`; return; }
+        const breakdown = data.breakdown || [];
+        const score     = data.risk_score || 0;
+        const scoreColor = score >= 70 ? '#ef4444' : score >= 30 ? '#f59e0b' : '#22c55e';
+
+        if (!breakdown.length) {
+            container.innerHTML = '<div class="loading-cell">No se encontraron factores de riesgo.</div>';
+            return;
+        }
+        const maxPts = Math.max(...breakdown.map(b => b.points), 1);
+        container.innerHTML = `
+            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
+                <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+                    <div style="font-size:42px;font-weight:900;color:${scoreColor};">${score}</div>
+                    <div>
+                        <div style="font-size:13px;font-weight:700;color:var(--text);">Risk Score Total</div>
+                        <div style="font-size:11px;color:var(--text-muted);">Calculado de ${breakdown.length} factores</div>
+                    </div>
+                </div>
+                ${breakdown.map(b => `
+                    <div style="margin-bottom:12px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                            <span style="font-size:12px;color:var(--text);flex:1;margin-right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${b.source}">${b.source}</span>
+                            <span style="font-size:13px;font-weight:700;color:${scoreColor};min-width:36px;text-align:right;">+${b.points}</span>
+                        </div>
+                        <div style="background:var(--bg);border-radius:4px;height:6px;overflow:hidden;">
+                            <div style="background:${scoreColor};height:100%;width:${Math.round(b.points/maxPts*100)}%;border-radius:4px;transition:width 0.4s;"></div>
+                        </div>
+                        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${b.reason}</div>
+                    </div>
+                `).join('')}
+            </div>`;
+    } catch (e) {
+        container.innerHTML = `<div class="loading-cell" style="color:#ef4444">Error: ${e.message}</div>`;
+    }
 }
 
 // ============================================================
