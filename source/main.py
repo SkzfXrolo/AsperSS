@@ -2179,6 +2179,7 @@ class ArgusApp:
             'weave_loader', 'prefetch_hack', 'usn_deleted_hack',
             'jitter_script', 'java_suspicious_parent', 'java_unusual_parent',
             'evasion_indicators', 'kill_chain', 'minecraft_safe_mode',
+            'suspicious_process_location', 'short_lived_process', 'cloud_hash_match',
         }
 
         for item in issues:
@@ -3232,6 +3233,10 @@ class ArgusApp:
                 _run_safe(self.scan_dll_injection_java)
                 self._set_scan_phase("🔬 Strings de hack en JARs cargados por Java...")
                 _run_safe(self.scan_process_memory_strings)
+                self._set_scan_phase("📍 Correlación de ruta de proceso sospechoso...")
+                _run_safe(self.scan_process_path_correlation)
+                self._set_scan_phase("☁️ Hashes de procesos vs base de datos cloud...")
+                _run_safe(self.scan_process_hashes_cloud)
 
             # Grupo E — Ubicaciones de hacks (I/O alto)
             def _group_hack_locations():
@@ -8194,22 +8199,35 @@ class ArgusApp:
             print(f"Error en scan_optifine_zoom: {e}")
 
     def scan_process_memory_strings(self):
-        """Escanea JARs cargados por javaw.exe buscando strings de módulos de hack en memoria."""
+        """Escanea JARs cargados por javaw.exe buscando strings de módulos de hack.
+        P2 #9-12: longitud mínima 8 chars, regex Java package, blacklist strings legítimos."""
         print("🔍 Escaneando JARs cargados en memoria de Minecraft...")
-        HACK_CLASS_STRINGS = [
-            b'KillAura', b'killaura', b'Scaffold', b'scaffold',
-            b'BunnyHop', b'bunnyhop', b'Velocity', b'velocity',
-            b'NoFall', b'nofall', b'Reach', b'reach', b'AimAssist',
-            b'aimassist', b'Blink', b'blink', b'Strafe', b'strafe',
-            b'Criticals', b'criticals', b'AntiKnockback', b'Triggerbot',
-            b'triggerbot', b'FastBow', b'AutoSprint', b'Timer',
-            b'timer', b'Nuker', b'nuker', b'AutoClicker', b'autoclicker',
-            b'XRay', b'xray', b'ESP', b'Flight', b'flight',
-            b'LiquidBounce', b'liquidbounce', b'WurstClient', b'VapeClient',
-            b'SigmaClient', b'FutureClient', b'MeteorClient',
-            b'com/rise/', b'com/sigma/', b'net/vapor/', b'dev/liquidbounce',
-        ]
+        import re as _re
         import zipfile as _zf
+
+        # Strings de módulos de hack (>= 8 chars, específicos)
+        HACK_SIGNATURES = [
+            b'KillAura', b'Scaffold', b'BunnyHop', b'AimAssist', b'Triggerbot',
+            b'NoFall', b'AntiKnockback', b'AutoClicker', b'AutoSprint', b'FastBow',
+            b'Criticals', b'LiquidBounce', b'WurstClient', b'VapeClient',
+            b'SigmaClient', b'FutureClient', b'MeteorClient', b'AstolfoClient',
+            b'com/rise/', b'com/sigma/', b'net/vapor/', b'dev/liquidbounce',
+            b'me/sigma/', b'me/astolfo/', b'net/rusherhack/', b'com/moonrise/',
+        ]
+        # #12 — Blacklist de packages Java legítimos (ignorar siempre)
+        JAVA_LEGIT_PREFIXES = (
+            b'java/', b'javax/', b'sun/', b'com/sun/', b'jdk/',
+            b'net/minecraft/', b'com/mojang/', b'net/minecraftforge/',
+            b'org/lwjgl/', b'org/apache/', b'com/google/', b'org/slf4j/',
+            b'io/netty/', b'com/github/steveice10/', b'net/fabricmc/',
+            b'org/objectweb/asm/', b'com/llamalad7/',
+        )
+        # #11 — Regex de paquetes Java sospechosos (com.client.*, net.hack.*, etc.)
+        HACK_PACKAGE_RE = _re.compile(
+            rb'(?:com|net|me|dev|io)/(?:hack|hacks|cheat|ghost|client|module|modules|feature|bypass)/',
+            _re.IGNORECASE
+        )
+
         try:
             for proc in psutil.process_iter(['pid', 'name']):
                 try:
@@ -8226,27 +8244,52 @@ class ArgusApp:
                         pass
 
                     for jar_path in loaded_jars:
-                        if 'jdk' in jar_path.lower() or 'jre' in jar_path.lower():
+                        jar_l = jar_path.lower()
+                        # Ignorar JDK/JRE y mods legítimos conocidos
+                        if any(s in jar_l for s in ('jdk', 'jre', 'optifine_', 'sodium-',
+                                                      'fabricloader', 'forge-', 'authlib')):
                             continue
                         try:
                             with _zf.ZipFile(jar_path, 'r') as zf:
                                 class_names = [n for n in zf.namelist() if n.endswith('.class')]
-                                for class_name in class_names[:5000]:
-                                    cn_bytes = class_name.encode('utf-8', errors='ignore')
-                                    for sig in HACK_CLASS_STRINGS:
-                                        if sig in cn_bytes:
-                                            print(f"🚨 STRING DE HACK EN JAR CARGADO: {sig.decode()} → {jar_path}")
-                                            self.issues_found.append({
-                                                'nombre': f'Módulo de hack en JAR cargado en Java: {sig.decode()}',
-                                                'ruta': jar_path,
-                                                'archivo': os.path.basename(jar_path),
-                                                'tipo': 'hack_string_in_loaded_jar',
-                                                'categoria': 'JAVA_INJECTION',
-                                                'alerta': 'CRITICAL',
-                                                'confidence': 0.92,
-                                                'detected_patterns': [f'hack_class:{sig.decode()}'],
-                                            })
+                                matched_sig = None
+                                matched_pkg = None
+                                for class_name in class_names[:8000]:
+                                    cn = class_name.encode('utf-8', errors='ignore')
+                                    # #12 — Skip strings de Java legítimo
+                                    if cn.startswith(JAVA_LEGIT_PREFIXES):
+                                        continue
+                                    # #9 — Skip strings < 8 chars (sin la extensión)
+                                    base = cn.replace(b'.class', b'').split(b'/')[-1]
+                                    if len(base) < 8:
+                                        continue
+                                    # Buscar signatures de hacks
+                                    for sig in HACK_SIGNATURES:
+                                        if sig in cn:
+                                            matched_sig = sig.decode('utf-8', errors='ignore')
                                             break
+                                    # #11 — Regex de paquetes hack
+                                    if not matched_sig and HACK_PACKAGE_RE.search(cn):
+                                        matched_pkg = cn.decode('utf-8', errors='ignore')
+                                    if matched_sig or matched_pkg:
+                                        break
+
+                                if matched_sig or matched_pkg:
+                                    label = matched_sig or matched_pkg
+                                    print(f"🚨 STRING DE HACK EN JAR: {label} → {jar_path}")
+                                    self.issues_found.append({
+                                        'nombre': f'Módulo de hack en JAR cargado: {label}',
+                                        'ruta': jar_path,
+                                        'archivo': os.path.basename(jar_path),
+                                        'tipo': 'hack_string_in_loaded_jar',
+                                        'categoria': 'JAVA_INJECTION',
+                                        'alerta': 'CRITICAL',
+                                        'confidence': 0.92 if matched_sig else 0.75,
+                                        'detected_patterns': [f'hack_class:{label}'],
+                                        'explicacion': f'Se encontró el módulo de hack "{label}" en el JAR '
+                                                       f'{os.path.basename(jar_path)} cargado por Minecraft. '
+                                                       f'Esto indica que un ghost client está activo en memoria.',
+                                    })
                         except Exception:
                             continue
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -8337,6 +8380,144 @@ class ArgusApp:
             print(f"Error en scan_minecraft_jar_hash: {e}")
 
     # ── PARTE 1 — Mejoras pendientes de detección ─────────────────────────────
+
+    def scan_process_path_correlation(self):
+        """P2 #14/#15 — Correlación proceso+ruta y tiempo de vida del proceso.
+        Un update.exe desde %TEMP% es sospechoso; desde Program Files no.
+        Proceso con < 60s de uptime al empezar el scan es más sospechoso."""
+        print("🔍 Correlación proceso+ruta y uptime de procesos...")
+        import datetime as _dt
+        import re as _re
+
+        SUSPICIOUS_NAMES = [
+            'update.exe', 'updater.exe', 'helper.exe', 'service.exe',
+            'loader.exe', 'launcher.exe', 'inject.exe', 'patch.exe',
+            'install.exe', 'setup.exe', 'uninstall.exe', 'agent.exe',
+        ]
+        SUSPICIOUS_TEMP_DIRS = [
+            os.environ.get('TEMP', '').lower(),
+            os.environ.get('TMP', '').lower(),
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'temp').lower(),
+            os.path.join(os.environ.get('APPDATA', ''), 'temp').lower(),
+        ]
+        SAFE_DIRS = [
+            'program files', 'windows', 'system32', 'syswow64',
+            'nvidia', 'microsoft', 'steam', 'discord',
+        ]
+
+        now = _dt.datetime.now()
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'exe', 'create_time']):
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                    exe   = (proc.info.get('exe') or '').lower()
+                    ctime = proc.info.get('create_time') or 0
+
+                    if not exe or not pname:
+                        continue
+
+                    # #14 — Correlación nombre + ruta
+                    is_generic_name = pname in SUSPICIOUS_NAMES
+                    in_temp = any(td and exe.startswith(td) for td in SUSPICIOUS_TEMP_DIRS if td)
+                    in_safe = any(sd in exe for sd in SAFE_DIRS)
+
+                    if is_generic_name and in_temp and not in_safe:
+                        print(f"⚠️ PROCESO SOSPECHOSO EN TEMP: {pname} desde {exe}")
+                        self.issues_found.append({
+                            'nombre': f'Proceso con nombre genérico en carpeta temporal: {pname}',
+                            'ruta': exe,
+                            'archivo': pname,
+                            'tipo': 'suspicious_process_location',
+                            'categoria': 'PROCESO',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.65,
+                            'detected_patterns': ['generic_name_in_temp'],
+                            'explicacion': f'{pname} está corriendo desde una carpeta temporal ({exe}). '
+                                           f'Procesos legítimos con este nombre se ejecutan desde Program Files, '
+                                           f'no desde carpetas temporales. Puede ser un inyector o loader.',
+                        })
+
+                    # #15 — Tiempo de vida del proceso
+                    if ctime > 0:
+                        uptime_secs = (now - _dt.datetime.fromtimestamp(ctime)).total_seconds()
+                        if uptime_secs < 60 and in_temp and not in_safe:
+                            print(f"⚠️ PROCESO RECIENTE EN TEMP (<60s): {pname}")
+                            self.issues_found.append({
+                                'nombre': f'Proceso muy reciente en carpeta temporal: {pname} ({int(uptime_secs)}s)',
+                                'ruta': exe,
+                                'archivo': pname,
+                                'tipo': 'short_lived_process',
+                                'categoria': 'PROCESO',
+                                'alerta': 'SOSPECHOSO',
+                                'confidence': 0.70,
+                                'detected_patterns': ['short_lived_temp_process'],
+                                'explicacion': f'{pname} lleva solo {int(uptime_secs)} segundos corriendo y está '
+                                               f'en una carpeta temporal. Puede haber sido lanzado justo antes del SS '
+                                               f'para inyectar código y luego cerrarse.',
+                            })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_process_path_correlation: {e}")
+
+    def scan_process_hashes_cloud(self):
+        """P2 #16 — Verifica el hash SHA256 de procesos activos contra hack_hashes en la cloud."""
+        print("🔍 Verificando hashes de procesos contra cloud DB...")
+        if not requests:
+            return
+        try:
+            base_url = self.config.get('api_url', '').rstrip('/')
+            if not base_url:
+                return
+            r = requests.get(f'{base_url}/api/hashes', timeout=8)
+            if not r.ok:
+                return
+            cloud_hashes = {h['sha256'].lower(): h['hack_name'] for h in r.json().get('hashes', [])}
+            if not cloud_hashes:
+                return
+        except Exception:
+            return
+
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'exe']):
+                try:
+                    exe = proc.info.get('exe') or ''
+                    if not exe or not os.path.isfile(exe):
+                        continue
+                    exe_l = exe.lower()
+                    if any(s in exe_l for s in ('windows', 'program files', 'system32')):
+                        continue
+                    try:
+                        h = hashlib.sha256()
+                        with open(exe, 'rb') as f:
+                            for chunk in iter(lambda: f.read(65536), b''):
+                                h.update(chunk)
+                        file_hash = h.hexdigest().lower()
+                    except Exception:
+                        continue
+
+                    if file_hash in cloud_hashes:
+                        hack_name = cloud_hashes[file_hash]
+                        pname = proc.info.get('name', '')
+                        print(f"🚨 HASH EN CLOUD DB: {pname} → {hack_name}")
+                        self.issues_found.append({
+                            'nombre': f'Proceso en cloud DB de hacks: {pname} ({hack_name})',
+                            'ruta': exe,
+                            'archivo': pname,
+                            'tipo': 'cloud_hash_match',
+                            'categoria': 'GHOST_CLIENT',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.99,
+                            'detected_patterns': [f'cloud_hash:{hack_name}'],
+                            'file_hash': file_hash,
+                            'explicacion': f'El proceso {pname} coincide con el hash de {hack_name} '
+                                           f'en la base de datos de hacks confirmados. '
+                                           f'Detección 100% confiable por hash.',
+                        })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_process_hashes_cloud: {e}")
 
     def scan_javaagent_args(self):
         """#1 — Detecta -javaagent en cmdline de javaw.exe (inyección directa en JVM)."""
