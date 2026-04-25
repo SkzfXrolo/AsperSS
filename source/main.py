@@ -2180,7 +2180,7 @@ class ArgusApp:
             'jitter_script', 'java_suspicious_parent', 'java_unusual_parent',
             'evasion_indicators', 'kill_chain', 'minecraft_safe_mode',
             'suspicious_process_location', 'short_lived_process', 'cloud_hash_match',
-            'prescan_cleanup',
+            'prescan_cleanup', 'suspicious_process_tree', 'unknown_parent_process',
         }
 
         for item in issues:
@@ -2362,6 +2362,9 @@ class ArgusApp:
 
         # P3 #2 + #16 — Ajuste dinámico de confidence por rareza y patrones de bans
         filtered = self._apply_cloud_rarity_and_ban_patterns(filtered)
+
+        # P2 #4 — Indicador aislado: cap a SOSPECHOSO si no hay 2+ evidencias independientes
+        filtered = self._apply_single_indicator_cap(filtered)
 
         # P2 #21 — Escalar a CRITICAL por combinaciones de evidencias
         filtered = self._apply_combination_penalties(filtered)
@@ -3249,6 +3252,8 @@ class ArgusApp:
                 _run_safe(self.scan_process_hashes_cloud)
                 self._set_scan_phase("🧹 Actividad de borrado pre-scan (últimos 10 min)...")
                 _run_safe(self.scan_prescan_disk_activity)
+                self._set_scan_phase("🌳 Árbol de procesos — cadenas anómalas...")
+                _run_safe(self.scan_process_tree)
 
             # Grupo E — Ubicaciones de hacks (I/O alto)
             def _group_hack_locations():
@@ -9224,6 +9229,26 @@ class ArgusApp:
             print(f"Error en _apply_cloud_rarity_and_ban_patterns: {e}")
         return issues
 
+    def _apply_single_indicator_cap(self, issues):
+        """P2 #4 — Un solo indicador aislado no debería ser CRITICAL.
+        Si un tipo de evidencia aparece solo UNA VEZ y no hay ningún otro CRITICAL,
+        lo baja a SOSPECHOSO (excepto tipos de altísima confianza)."""
+        ALWAYS_CRITICAL_TYPES = {
+            'ghost_client_config', 'ghost_client_registry', 'jdwp_debug_port',
+            'dll_injection_java', 'javaagent_injection', 'bootclasspath_modification',
+            'modified_minecraft_jar', 'hack_string_in_loaded_jar',
+            'cloud_hash_match', 'kill_chain', 'weave_loader',
+            'suspicious_process_tree',
+        }
+        critical_items = [i for i in issues if i.get('alerta') == 'CRITICAL']
+        if len(critical_items) <= 1:
+            for i in issues:
+                if i.get('alerta') == 'CRITICAL' and i.get('tipo', '') not in ALWAYS_CRITICAL_TYPES:
+                    if not i.get('combination_penalty') and i.get('confidence', 1.0) < 0.90:
+                        i['alerta'] = 'SOSPECHOSO'
+                        i['capped_from_critical'] = True
+        return issues
+
     def _apply_combination_penalties(self, issues):
         """P2 #21 — Escala a CRITICAL cuando hay combinaciones de evidencias independientes."""
         tipos = {i.get('tipo', '') for i in issues}
@@ -9268,6 +9293,103 @@ class ArgusApp:
                     i['confidence'] = min(1.0, i.get('confidence', 0.9) * 1.15)
 
         return issues
+
+    def scan_process_tree(self):
+        """P3 #9 — Análisis de árbol de procesos completo: detecta cadenas anómalas.
+        Un Minecraft legítimo siempre es lanzado por un launcher conocido.
+        Detecta: explorer.exe → unknown.exe → javaw.exe (cadena sospechosa)."""
+        print("🔍 Analizando árbol de procesos completo...")
+        try:
+            # Construir mapa pid → process info
+            proc_map = {}
+            for proc in psutil.process_iter(['pid', 'ppid', 'name', 'exe']):
+                try:
+                    proc_map[proc.info['pid']] = proc.info
+                except Exception:
+                    continue
+
+            KNOWN_LAUNCHERS = {
+                'minecraftlauncher.exe', 'javaw.exe', 'java.exe',
+                'lunarclient.exe', 'badlion.exe', 'prismlauncher.exe',
+                'multimc.exe', 'gdlauncher.exe', 'ftb_app.exe',
+                'curseforge.exe', 'atlauncher.exe', 'polymc.exe',
+                'tlauncher.exe', 'featherlauncher.exe',
+                'explorer.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe',
+                'steam.exe',
+            }
+
+            INJECTOR_KEYWORDS = {
+                'inject', 'hook', 'patch', 'loader', 'cheat', 'hack',
+                'bypass', 'ghost', 'stealth', 'aimbot', 'killaura',
+                'extremeinjector', 'xenosinjector', 'cheatengine',
+            }
+
+            def get_ancestors(pid, depth=0):
+                if depth > 5 or pid not in proc_map:
+                    return []
+                info = proc_map[pid]
+                ppid = info.get('ppid', 0)
+                return [info] + get_ancestors(ppid, depth + 1)
+
+            # Find all javaw.exe processes and check their ancestry
+            for pid, info in proc_map.items():
+                try:
+                    name = (info.get('name') or '').lower()
+                    if 'javaw' not in name:
+                        continue
+                    ancestors = get_ancestors(info.get('ppid', 0))
+                    if not ancestors:
+                        continue
+
+                    # Check for injector keywords anywhere in the tree
+                    for anc in ancestors:
+                        anc_name = (anc.get('name') or '').lower()
+                        anc_exe  = (anc.get('exe') or '').lower()
+                        if any(kw in anc_name or kw in anc_exe for kw in INJECTOR_KEYWORDS):
+                            print(f"🚨 ÁRBOL SOSPECHOSO: javaw ← {anc_name}")
+                            self.issues_found.append({
+                                'nombre': f'Minecraft lanzado por proceso sospechoso: {anc_name}',
+                                'ruta': anc_exe or anc_name,
+                                'archivo': anc_name,
+                                'tipo': 'suspicious_process_tree',
+                                'categoria': 'PROCESO',
+                                'alerta': 'CRITICAL',
+                                'confidence': 0.88,
+                                'detected_patterns': [f'parent:{anc_name}'],
+                                'explicacion': (
+                                    f'El proceso de Minecraft (javaw.exe) fue iniciado por '
+                                    f'"{anc_name}", que tiene nombre asociado a herramientas de hack. '
+                                    f'Un Minecraft legítimo siempre es lanzado por un launcher oficial.'
+                                ),
+                            })
+                            break
+
+                    # Check if immediate parent is completely unknown
+                    if ancestors:
+                        parent_name = (ancestors[0].get('name') or '').lower()
+                        if parent_name and parent_name not in KNOWN_LAUNCHERS:
+                            parent_exe = (ancestors[0].get('exe') or '').lower()
+                            in_safe = any(s in parent_exe for s in ('program files', 'windows', 'steam'))
+                            if not in_safe:
+                                print(f"⚠️ PARENT DESCONOCIDO: javaw ← {parent_name}")
+                                self.issues_found.append({
+                                    'nombre': f'Minecraft lanzado por proceso desconocido: {parent_name}',
+                                    'ruta': parent_exe or parent_name,
+                                    'archivo': parent_name,
+                                    'tipo': 'unknown_parent_process',
+                                    'categoria': 'PROCESO',
+                                    'alerta': 'SOSPECHOSO',
+                                    'confidence': 0.60,
+                                    'detected_patterns': [f'unknown_parent:{parent_name}'],
+                                    'explicacion': (
+                                        f'Minecraft fue iniciado por "{parent_name}", un proceso no '
+                                        f'reconocido como launcher oficial. Puede ser un loader o inyector.'
+                                    ),
+                                })
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"Error en scan_process_tree: {e}")
 
     def scan_prescan_disk_activity(self):
         """P3 #17 — Anomalía de actividad de disco en los 10 minutos previos al inicio del scan.
