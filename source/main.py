@@ -3103,6 +3103,8 @@ class ArgusApp:
                 self._set_scan_phase("🎮 Procesos Java / Minecraft...")
                 _run_safe(self.scan_processes)
                 _run_safe(self.advanced_minecraft_process_analysis)
+                self._set_scan_phase("🌳 Árbol de procesos Java (parent analysis)...")
+                _run_safe(self.scan_java_process_parent)
                 self._set_scan_phase("🔒 Procesos deshabilitados / ocultos...")
                 _run_safe(self.scan_disabled_processes)
                 _run_safe(self.scan_running_processes)
@@ -3293,6 +3295,10 @@ class ArgusApp:
                             print(f"   ⚠️  {f['nombre']} [{f['alerta']}]")
                 except Exception as _me:
                     print(f"⚠️ Error recolectando hallazgos de mouse: {_me}")
+
+            # Análisis de evasión activa (post-scan, requiere todos los hallazgos previos)
+            self._set_scan_phase("🎭 Detección de evasión activa...")
+            _run_safe(self.scan_evasion_indicators)
 
             # Fase 9: Filtrado y clasificación (100%)
             self._update_progress_safe(100, "🔍 Filtrando resultados", "Aplicando filtros ultra estrictos...")
@@ -7469,6 +7475,197 @@ class ArgusApp:
                     pass
         except Exception as e:
             print(f"Error en scan_exploit_tools: {e}")
+
+    def scan_java_process_parent(self):
+        """Analiza el proceso padre de javaw.exe para detectar launchers sospechosos."""
+        print("🔍 Analizando árbol de procesos Java (parent process analysis)...")
+        LEGITIMATE_PARENTS = {
+            'javaw.exe', 'java.exe', 'explorer.exe',
+            'tlauncher.exe', 'tlauncher-legacy.exe', 'minecraftlauncher.exe',
+            'lunarclient.exe', 'badlion.exe', 'prismlauncher.exe', 'multimc.exe',
+            'gdlauncher.exe', 'gdlauncher_next.exe', 'ftb_app.exe', 'curseforge.exe',
+            'atlauncher.exe', 'polymc.exe', 'featherlauncher.exe',
+            'cmd.exe', 'powershell.exe', 'pwsh.exe',
+        }
+        SUSPICIOUS_PARENTS = {
+            'extremeinjector.exe', 'xenos.exe', 'dllinjector.exe',
+            'cheatengine.exe', 'cheat engine.exe', 'processhacker.exe',
+            'x64dbg.exe', 'x32dbg.exe', 'ollydbg.exe',
+        }
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'ppid']):
+                try:
+                    name = (proc.info.get('name') or '').lower()
+                    if 'javaw' not in name and 'java' not in name:
+                        continue
+                    ppid = proc.info.get('ppid')
+                    if not ppid:
+                        continue
+                    try:
+                        parent = psutil.Process(ppid)
+                        parent_name = (parent.name() or '').lower()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+
+                    if parent_name in SUSPICIOUS_PARENTS:
+                        print(f"🚨 JAVA LANZADO POR INYECTOR: {name} → padre={parent_name}")
+                        self.issues_found.append({
+                            'nombre': f'Java lanzado por proceso inyector: {name} ← {parent_name}',
+                            'ruta': f'PID:{proc.pid} PPID:{ppid}',
+                            'archivo': parent_name,
+                            'tipo': 'java_suspicious_parent',
+                            'categoria': 'JAVA_INJECTION',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.95,
+                            'detected_patterns': ['java_launched_by_injector', f'parent:{parent_name}'],
+                        })
+                    elif parent_name not in LEGITIMATE_PARENTS and 'minecraft' not in parent_name:
+                        print(f"⚠️ JAVA CON PADRE INUSUAL: {name} → {parent_name}")
+                        self.issues_found.append({
+                            'nombre': f'Java lanzado por proceso inusual: {parent_name}',
+                            'ruta': f'PID:{proc.pid} PPID:{ppid}',
+                            'archivo': parent_name,
+                            'tipo': 'java_unusual_parent',
+                            'categoria': 'JAVA_INJECTION',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.60,
+                            'detected_patterns': ['java_unusual_parent', f'parent:{parent_name}'],
+                        })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_java_process_parent: {e}")
+
+    def scan_evasion_indicators(self):
+        """Detecta indicadores de limpieza activa antes del SS (evasión)."""
+        print("🔍 Evaluando indicadores de evasión...")
+        evasion_score = 0
+        indicators = []
+
+        # Indicator 1: VPN activa (ya detectada por scan_vpn_adapters)
+        vpn_active = any(i.get('tipo') == 'vpn_active' for i in self.issues_found)
+        if vpn_active:
+            evasion_score += 25
+            indicators.append('VPN activa durante el scan')
+
+        # Indicator 2: Prefetch vacío o muy pequeño (posible limpieza manual)
+        try:
+            prefetch_dir = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Prefetch')
+            if os.path.isdir(prefetch_dir):
+                pf_count = len([f for f in os.listdir(prefetch_dir) if f.endswith('.pf')])
+                if pf_count < 5:
+                    evasion_score += 30
+                    indicators.append(f'Prefetch inusualmente vacío ({pf_count} archivos)')
+                elif pf_count < 20:
+                    evasion_score += 10
+                    indicators.append(f'Prefetch escaso ({pf_count} archivos)')
+        except Exception:
+            pass
+
+        # Indicator 3: Muy pocos procesos corriendo (jugador apagó todo)
+        try:
+            proc_count = sum(1 for _ in psutil.process_iter())
+            if proc_count < 30:
+                evasion_score += 20
+                indicators.append(f'Muy pocos procesos activos ({proc_count}) — posible limpieza pre-SS')
+        except Exception:
+            pass
+
+        # Indicator 4: Muchos archivos borrados recientemente (scan_deleted_recycle ya detectó)
+        recent_deletions = sum(1 for i in self.issues_found if i.get('tipo') == 'deleted_suspicious')
+        if recent_deletions >= 3:
+            evasion_score += 20 + recent_deletions * 5
+            indicators.append(f'{recent_deletions} archivos sospechosos eliminados recientemente')
+
+        # Indicator 5: Hosts file modificado
+        hosts_mod = any(i.get('tipo') in ('hosts_minecraft_redirect', 'hosts_file_custom') for i in self.issues_found)
+        if hosts_mod:
+            evasion_score += 15
+            indicators.append('Hosts file modificado (posible bypass de autenticación)')
+
+        if evasion_score >= 25 and indicators:
+            alerta = 'CRITICAL' if evasion_score >= 50 else 'SOSPECHOSO'
+            print(f"{'🚨' if alerta == 'CRITICAL' else '⚠️'} EVASION SCORE: {evasion_score} — {', '.join(indicators)}")
+            self.issues_found.append({
+                'nombre': f'Indicadores de evasión activa detectados (score: {evasion_score}): {"; ".join(indicators[:3])}',
+                'ruta': 'Análisis de comportamiento del sistema',
+                'archivo': '; '.join(indicators[:3])[:255],
+                'tipo': 'evasion_indicators',
+                'categoria': 'EVASION',
+                'alerta': alerta,
+                'confidence': min(0.95, evasion_score / 100),
+                'detected_patterns': ['evasion_' + ind.split(' ')[0].lower().replace(' ', '_') for ind in indicators],
+                'extra': {'evasion_score': evasion_score, 'indicators': indicators},
+            })
+
+    def scan_digital_signature(self, file_path: str) -> bool:
+        """Verifica la firma digital Authenticode de un ejecutable. Retorna True si está firmado."""
+        try:
+            import ctypes as _ct
+            import ctypes.wintypes as _wt
+            WINTRUST_ACTION_GENERIC_VERIFY_V2 = '{00AAC56B-CD44-11d0-8CC2-00C04FC295EE}'
+
+            class WINTRUST_FILE_INFO(_ct.Structure):
+                _fields_ = [
+                    ('cbStruct', _wt.DWORD),
+                    ('pcwszFilePath', _wt.LPCWSTR),
+                    ('hFile', _wt.HANDLE),
+                    ('pgKnownSubject', _ct.c_void_p),
+                ]
+
+            class WINTRUST_DATA(_ct.Structure):
+                _fields_ = [
+                    ('cbStruct', _wt.DWORD),
+                    ('pPolicyCallbackData', _ct.c_void_p),
+                    ('pSIPClientData', _ct.c_void_p),
+                    ('dwUIChoice', _wt.DWORD),
+                    ('fdwRevocationChecks', _wt.DWORD),
+                    ('dwUnionChoice', _wt.DWORD),
+                    ('pFile', _ct.POINTER(WINTRUST_FILE_INFO)),
+                    ('dwStateAction', _wt.DWORD),
+                    ('hWVTStateData', _wt.HANDLE),
+                    ('pwszURLReference', _wt.LPCWSTR),
+                    ('dwProvFlags', _wt.DWORD),
+                    ('dwUIContext', _wt.DWORD),
+                ]
+
+            wfi = WINTRUST_FILE_INFO()
+            wfi.cbStruct = _ct.sizeof(WINTRUST_FILE_INFO)
+            wfi.pcwszFilePath = file_path
+            wfi.hFile = None
+            wfi.pgKnownSubject = None
+
+            wd = WINTRUST_DATA()
+            wd.cbStruct = _ct.sizeof(WINTRUST_DATA)
+            wd.pPolicyCallbackData = None
+            wd.pSIPClientData = None
+            wd.dwUIChoice = 2   # WTD_UI_NONE
+            wd.fdwRevocationChecks = 0
+            wd.dwUnionChoice = 1  # WTD_CHOICE_FILE
+            wd.pFile = _ct.pointer(wfi)
+            wd.dwStateAction = 0
+            wd.hWVTStateData = None
+            wd.pwszURLReference = None
+            wd.dwProvFlags = 0x10  # WTD_CACHE_ONLY_URL_RETRIEVAL
+            wd.dwUIContext = 0
+
+            wintrust = _ct.windll.wintrust
+            import uuid
+            action_guid = '{00AAC56B-CD44-11d0-8CC2-00C04FC295EE}'
+            # Create GUID struct
+            class GUID(_ct.Structure):
+                _fields_ = [('Data1', _wt.DWORD), ('Data2', _wt.WORD), ('Data3', _wt.WORD),
+                             ('Data4', _ct.c_byte * 8)]
+            g = GUID()
+            u = uuid.UUID(action_guid)
+            g.Data1, g.Data2, g.Data3 = u.time_low, u.time_mid, u.time_hi_version
+            for i, b in enumerate(u.bytes[8:]):
+                g.Data4[i] = b
+
+            result = wintrust.WinVerifyTrust(None, _ct.byref(g), _ct.byref(wd))
+            return result == 0  # 0 = TRUST_E_SUBJECT_FORM_UNKNOWN would not be 0
+        except Exception:
+            return False
 
     def scan_ghost_client_registry(self):
         """Detecta claves de registro dejadas por ghost clients instalados."""

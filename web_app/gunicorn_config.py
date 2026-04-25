@@ -25,6 +25,10 @@ accesslog = "-"
 errorlog = "-"
 loglevel = "info"
 
+# Forzar stdout sin buffer (necesario para que print() aparezca en Render logs inmediatamente)
+import os as _os
+_os.environ.setdefault('PYTHONUNBUFFERED', '1')
+
 # NO preload con gthread — el bot se inicia dentro del worker, no en el master
 preload_app = False
 
