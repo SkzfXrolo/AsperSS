@@ -57,9 +57,14 @@ class HackClassifier:
                 data = joblib.load(MODEL_PATH)
                 self._model       = data.get('model')
                 self._trained_on  = data.get('trained_on', 0)
-                print(f"[ML] Modelo cargado ({self._trained_on} muestras)")
+                self._calibrated  = data.get('calibrated', False)
+                cal_tag = ' [Platt calibrado]' if self._calibrated else ''
+                print(f"[ML] Modelo cargado ({self._trained_on} muestras){cal_tag}")
         except Exception as e:
             print(f"[ML] No se pudo cargar modelo: {e}")
+        else:
+            if not hasattr(self, '_calibrated'):
+                self._calibrated = False
 
     def train(self, cursor):
         """Reentrena el clasificador con todos los feedbacks disponibles.
@@ -68,6 +73,7 @@ class HackClassifier:
         """
         try:
             from sklearn.ensemble import RandomForestClassifier
+            from sklearn.calibration import CalibratedClassifierCV
             from sklearn.model_selection import cross_val_score
             import joblib, numpy as np
         except ImportError:
@@ -104,28 +110,33 @@ class HackClassifier:
         X_arr = np.array(X, dtype=float)
         y_arr = np.array(y)
 
-        clf = RandomForestClassifier(
+        base_clf = RandomForestClassifier(
             n_estimators=100, max_depth=6, random_state=42,
             class_weight='balanced', n_jobs=-1
         )
-        # Cross-validation para medir accuracy
+        # Cross-validate base RF for accuracy metric before calibration
+        cv_folds = min(5, hack_count, clean_count)
         try:
-            scores = cross_val_score(clf, X_arr, y_arr, cv=min(5, hack_count, clean_count), scoring='accuracy')
+            scores = cross_val_score(base_clf, X_arr, y_arr, cv=cv_folds, scoring='accuracy')
             accuracy = round(float(scores.mean()), 4)
         except Exception:
             accuracy = 0.0
 
+        # P3 #11 — Platt Scaling: CalibratedClassifierCV wraps RF with sigmoid calibration
+        # method='sigmoid' = Platt Scaling; cv=3 uses 3-fold internal CV for calibration
+        cal_cv = min(3, hack_count, clean_count)
+        clf = CalibratedClassifierCV(base_clf, method='sigmoid', cv=cal_cv)
         clf.fit(X_arr, y_arr)
         self._model = clf
         self._trained_on = len(y)
 
         os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
-        joblib.dump({'model': clf, 'trained_on': len(y), 'accuracy': accuracy}, MODEL_PATH)
-        print(f"[ML] Entrenado: {len(y)} muestras, accuracy={accuracy:.3f}")
+        joblib.dump({'model': clf, 'trained_on': len(y), 'accuracy': accuracy, 'calibrated': True}, MODEL_PATH)
+        print(f"[ML] Entrenado (Platt Scaling): {len(y)} muestras, accuracy={accuracy:.3f}")
         return {
             'trained': True, 'samples': len(y),
             'hack_count': hack_count, 'clean_count': clean_count,
-            'accuracy': accuracy,
+            'accuracy': accuracy, 'calibrated': True,
         }
 
     def predict(self, features: dict) -> dict:
@@ -145,6 +156,7 @@ class HackClassifier:
                 'hack_prob': round(float(proba[1]), 4),
                 'available': True,
                 'trained_on': self._trained_on,
+                'calibrated': getattr(self, '_calibrated', False),
             }
         except Exception as e:
             return {'label': None, 'confidence': None, 'available': False, 'error': str(e)}

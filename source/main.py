@@ -2181,7 +2181,7 @@ class ArgusApp:
             'evasion_indicators', 'kill_chain', 'minecraft_safe_mode',
             'suspicious_process_location', 'short_lived_process', 'cloud_hash_match',
             'prescan_cleanup', 'suspicious_process_tree', 'unknown_parent_process',
-            'baseline_anomaly',
+            'baseline_anomaly', 'config_tfidf_match',
         }
 
         for item in issues:
@@ -3260,6 +3260,8 @@ class ArgusApp:
                 _run_safe(self.scan_process_tree)
                 self._set_scan_phase("📊 Delta vs baseline histórico del jugador...")
                 _run_safe(self.scan_player_baseline_delta)
+                self._set_scan_phase("📝 TF-IDF en config files de ghost clients...")
+                _run_safe(self.scan_config_tfidf)
 
             # Grupo E — Ubicaciones de hacks (I/O alto)
             def _group_hack_locations():
@@ -6542,6 +6544,109 @@ class ArgusApp:
         except Exception as e:
             print(f"Error en scan_ghost_client_configs: {e}")
 
+    def scan_config_tfidf(self):
+        """P3 #8 — Analiza el contenido de archivos JSON/config buscando campos
+        característicos de ghost clients, aunque el archivo esté renombrado.
+        Usa un enfoque TF-IDF simplificado: peso de términos en vocabulario de hacks."""
+        print("🔍 TF-IDF análisis de config files...")
+        import json as _json
+
+        # Vocabulario de campos altamente específicos de ghost clients
+        HACK_FIELDS = {
+            # Módulos de combate
+            'killaura': 3.0, 'killaurarange': 3.0, 'kaaura': 3.0,
+            'aimassist': 2.5, 'aimbot': 3.0, 'triggerbot': 3.0,
+            'velocity': 2.0, 'antikb': 2.5, 'antiknockback': 2.5,
+            'reach': 2.0, 'reachrange': 2.5, 'hitbox': 2.0,
+            'criticals': 2.0, 'autocrit': 2.5, 'wtap': 2.5, 'blatant': 2.5,
+            # Movimiento
+            'bhop': 2.5, 'bunny': 2.0, 'sprint': 1.5, 'nofall': 2.5,
+            'flight': 3.0, 'fly': 2.0, 'elytra': 1.5, 'speed': 1.5,
+            'scaffold': 2.5, 'tower': 2.0,
+            # Visión
+            'xray': 3.0, 'wallhack': 3.0, 'esp': 2.5, 'fullbright': 2.0,
+            'chams': 2.0, 'tracers': 2.0, 'nametags': 1.5,
+            # Red/bypass
+            'nopacket': 2.5, 'packetfly': 2.5, 'nomotion': 2.0,
+            'blink': 2.5, 'phase': 2.5, 'timer': 2.0, 'speedhack': 3.0,
+            # Campos de configuración internos de hacks conocidos
+            'yawspeed': 3.0, 'pitchspeed': 2.5, 'rotations': 2.0,
+            'bypassed': 2.0, 'undetected': 2.5, 'silent': 2.0,
+            'autoblock': 2.5, 'noswing': 2.0, 'critplace': 2.5,
+            # LiquidBounce-specific
+            'liquidbounce': 4.0, 'lbmodule': 3.5,
+            # Vape-specific
+            'vapeconfig': 4.0, 'vapesettings': 3.5,
+            # General ghost client markers
+            'clickgui': 2.0, 'modulelist': 2.0, 'hackmodule': 3.5,
+        }
+        SCORE_THRESHOLD = 6.0  # Suma de pesos para reportar
+
+        # Rutas donde buscar configs sospechosas renombradas
+        appdata  = os.environ.get('APPDATA', '')
+        localapp = os.environ.get('LOCALAPPDATA', '')
+        desktop  = os.path.join(os.path.expanduser('~'), 'Desktop')
+        downloads = os.path.join(os.path.expanduser('~'), 'Downloads')
+
+        SEARCH_PATHS = [appdata, localapp, desktop, downloads]
+        EXTENSIONS   = {'.json', '.cfg', '.ini', '.yml', '.yaml', '.conf', '.properties'}
+        MAX_FILES    = 200
+        scanned = 0
+
+        try:
+            for base_path in SEARCH_PATHS:
+                if not os.path.isdir(base_path) or scanned >= MAX_FILES:
+                    break
+                for root, dirs, files in os.walk(base_path):
+                    dirs[:] = [d for d in dirs if d not in {
+                        'node_modules', '.git', 'AppData', 'Microsoft', 'Windows',
+                        'System32', 'chrome', 'firefox', 'edge', 'Google',
+                    }]
+                    for fname in files:
+                        if scanned >= MAX_FILES:
+                            break
+                        ext = os.path.splitext(fname.lower())[1]
+                        if ext not in EXTENSIONS:
+                            continue
+                        fpath = os.path.join(root, fname)
+                        try:
+                            fsize = os.path.getsize(fpath)
+                            if fsize < 20 or fsize > 500 * 1024:  # 500KB max
+                                continue
+                            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read(8000).lower()
+                            scanned += 1
+
+                            # Calcular score TF-IDF simplificado
+                            score = 0.0
+                            matched = []
+                            for field, weight in HACK_FIELDS.items():
+                                if field in content:
+                                    score += weight
+                                    matched.append(field)
+
+                            if score >= SCORE_THRESHOLD:
+                                print(f"⚠️ CONFIG TFIDF: {fpath} (score={score:.1f})")
+                                self.issues_found.append({
+                                    'nombre': f'Config con campos de ghost client (score={score:.1f}): {fname}',
+                                    'ruta': fpath,
+                                    'archivo': fname,
+                                    'tipo': 'config_tfidf_match',
+                                    'categoria': 'GHOST_CLIENT',
+                                    'alerta': 'CRITICAL' if score >= 10.0 else 'SOSPECHOSO',
+                                    'confidence': min(0.92, 0.50 + score / 25),
+                                    'detected_patterns': [f'field:{f}' for f in matched[:8]],
+                                    'explicacion': (
+                                        f'El archivo {fname} contiene {len(matched)} campos '
+                                        f'asociados a ghost clients ({", ".join(matched[:5])}). '
+                                        f'Esto puede indicar una config de hack renombrada para evadir detección.'
+                                    ),
+                                })
+                        except Exception:
+                            continue
+        except Exception as e:
+            print(f"Error en scan_config_tfidf: {e}")
+
     def scan_jdwp_port(self):
         """Detecta puerto de debug JDWP activo en procesos Java (permite inyección en runtime)."""
         print("🔍 Escaneando JDWP en procesos Java...")
@@ -7901,20 +8006,36 @@ class ArgusApp:
                             continue  # mod legítimo confirmado
                     except Exception:
                         pass
-                for bl in BLACKLISTED:
-                    if bl in fname_lower:
-                        print(f"🚨 MOD PROHIBIDO: {fname}")
+                matched_bl = next((bl for bl in BLACKLISTED if bl in fname_lower), None)
+                if matched_bl:
+                    print(f"🚨 MOD PROHIBIDO: {fname}")
+                    self.issues_found.append({
+                        'nombre': f'Mod prohibido detectado en .minecraft/mods/: {fname}',
+                        'ruta': fpath,
+                        'archivo': fname,
+                        'tipo': 'blacklisted_mod',
+                        'categoria': 'GHOST_CLIENT',
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.95,
+                        'detected_patterns': [f'blacklisted_mod:{matched_bl}'],
+                    })
+                else:
+                    # P3 #10 — character n-gram similarity for renamed/obfuscated hack mods
+                    sim, matched_hack = self._score_path_hack_similarity(fname)
+                    if sim >= 0.40:
+                        print(f"⚠️ MOD SIMILAR A HACK (N-GRAM): {fname} ~ {matched_hack} ({sim:.2f})")
                         self.issues_found.append({
-                            'nombre': f'Mod prohibido detectado en .minecraft/mods/: {fname}',
+                            'nombre': f'Mod con nombre similar a hack conocido: {fname} ≈ {matched_hack}',
                             'ruta': fpath,
                             'archivo': fname,
                             'tipo': 'blacklisted_mod',
                             'categoria': 'GHOST_CLIENT',
-                            'alerta': 'CRITICAL',
-                            'confidence': 0.95,
-                            'detected_patterns': [f'blacklisted_mod:{bl}'],
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': round(min(0.85, 0.50 + sim * 0.7), 2),
+                            'detected_patterns': [f'name_similar_to:{matched_hack}({sim:.2f})'],
+                            'explicacion': f'El mod "{fname}" tiene alta similitud de caracteres (n-gram Jaccard={sim:.2f}) '
+                                           f'con el cliente de hack conocido "{matched_hack}". Puede estar renombrado para evadir detección.',
                         })
-                        break
         except Exception as e:
             print(f"Error en scan_minecraft_mods_blacklist: {e}")
 
@@ -8160,6 +8281,40 @@ class ArgusApp:
         except Exception as e:
             print(f"Error en scan_active_injectors: {e}")
 
+    def _score_path_hack_similarity(self, filename: str) -> tuple:
+        """P3 #10: Character trigram Jaccard similarity between filename and known hack names.
+        Returns (max_similarity 0-1, best_match_name). Detects obfuscated/renamed hack jars."""
+        import re as _re
+        base = _re.sub(r'\.[^.]+$', '', filename).lower()
+        # Strip generic noise tokens before comparing
+        base = _re.sub(r'[-_]?(?:v\d+[\d.]*|patch|update|mod|client|loader|latest|\d{3,})', '', base)
+        base = base.strip('-_ ')
+        if len(base) < 3:
+            return 0.0, ''
+        HACK_NAMES = [
+            'sigma', 'liquidbounce', 'wurst', 'meteorclient', 'meteor',
+            'vape', 'rise', 'drip', 'vertex', 'azura', 'novoline',
+            'rusherhack', 'astolfo', 'future', 'entropy', 'salhack',
+            'remix', 'inertia', 'aristois', 'impact', 'horion', 'ares',
+            'mathias', 'datura', 'jello', 'weave', 'xray', 'ghostclient',
+            'killaura', 'aimbot', 'scaffold', 'hacked', 'cheat',
+        ]
+        def _tg(s):
+            return set(s[i:i+3] for i in range(len(s) - 2)) if len(s) >= 3 else set()
+        base_tg = _tg(base)
+        if not base_tg:
+            return 0.0, ''
+        best_sim, best_name = 0.0, ''
+        for hack in HACK_NAMES:
+            hack_tg = _tg(hack)
+            if not hack_tg:
+                continue
+            union = len(base_tg | hack_tg)
+            sim = len(base_tg & hack_tg) / union if union else 0.0
+            if sim > best_sim:
+                best_sim, best_name = sim, hack
+        return best_sim, best_name
+
     def scan_temp_jars(self):
         """Detecta archivos .jar creados en las últimas 24h en carpetas temporales."""
         print("🔍 Buscando JARs recientes en carpetas temporales...")
@@ -8185,16 +8340,29 @@ class ArgusApp:
                         seen.add(fpath)
                         try:
                             if os.path.getmtime(fpath) >= cutoff:
-                                print(f"⚠️ JAR RECIENTE EN TEMP: {fpath}")
+                                # P3 #10 — path similarity to known hack client names
+                                sim, matched_hack = self._score_path_hack_similarity(fname)
+                                if sim >= 0.35:
+                                    alerta = 'CRITICAL'
+                                    conf = min(0.95, 0.70 + sim * 0.5)
+                                    patterns = ['jar_in_temp_24h', f'name_similar_to:{matched_hack}({sim:.2f})']
+                                    label = f'JAR sospechoso (similar a "{matched_hack}") en temp: {fname}'
+                                    print(f"🚨 JAR SIMILAR A HACK EN TEMP: {fname} ~ {matched_hack} ({sim:.2f})")
+                                else:
+                                    alerta = 'SOSPECHOSO'
+                                    conf = 0.70
+                                    patterns = ['jar_in_temp_24h']
+                                    label = f'JAR reciente en carpeta temporal: {fname}'
+                                    print(f"⚠️ JAR RECIENTE EN TEMP: {fpath}")
                                 self.issues_found.append({
-                                    'nombre': f'JAR reciente en carpeta temporal: {fname}',
+                                    'nombre': label,
                                     'ruta': fpath,
                                     'archivo': fname,
                                     'tipo': 'temp_jar_recent',
                                     'categoria': 'JAVA_INJECTION',
-                                    'alerta': 'SOSPECHOSO',
-                                    'confidence': 0.70,
-                                    'detected_patterns': ['jar_in_temp_24h'],
+                                    'alerta': alerta,
+                                    'confidence': round(conf, 2),
+                                    'detected_patterns': patterns,
                                 })
                         except Exception:
                             continue
@@ -8320,9 +8488,54 @@ class ArgusApp:
         except Exception as e:
             print(f"Error en scan_optifine_zoom: {e}")
 
+    def _score_string_hack_likelihood(self, base_name: str) -> float:
+        """P3 #7: Character n-gram heuristic to score a class name as hack module.
+        Returns 0.0-5.0; >= 3.5 considered suspicious."""
+        import re as _re
+        if len(base_name) < 8 or len(base_name) > 45:
+            return 0.0
+        # Obfuscated single/double letter names are noise, not hacks
+        if len(base_name) <= 3:
+            return 0.0
+        score = 0.0
+        low = base_name.lower()
+        HACK_KEYWORDS = [
+            'killaura', 'aimbot', 'aimassist', 'scaffold', 'bunnyhop', 'bhop',
+            'triggerbot', 'nofall', 'antiknock', 'autoclicker', 'autoclick',
+            'criticals', 'velocity', 'wallhack', 'freecam', 'xray', 'fullbright',
+            'speedhack', 'flyhack', 'speedmine', 'timer', 'fastplace',
+        ]
+        HACK_PARTIAL = [
+            'kill', 'aura', 'aimb', 'cheat', 'ghost', 'inject', 'bypass',
+            'hack', 'module', 'payload', 'remap', 'hook',
+        ]
+        for kw in HACK_KEYWORDS:
+            if kw in low:
+                score += 2.5
+                break
+        else:
+            for kw in HACK_PARTIAL:
+                if kw in low:
+                    score += 1.5
+                    break
+        # PascalCase with 2+ segments = typical hack module name (KillAura, AimAssist)
+        pascal_parts = _re.findall(r'[A-Z][a-z]+', base_name)
+        if len(pascal_parts) >= 2:
+            score += 1.0
+        elif len(pascal_parts) == 1 and len(base_name) >= 12:
+            score += 0.3
+        # Clean CamelCase (no underscores, no digits prefix) bonus
+        if _re.match(r'^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+$', base_name):
+            score += 0.5
+        # Sweet-spot length for named hack modules
+        if 10 <= len(base_name) <= 25:
+            score += 0.3
+        return max(0.0, score)
+
     def scan_process_memory_strings(self):
         """Escanea JARs cargados por javaw.exe buscando strings de módulos de hack.
-        P2 #9-12: longitud mínima 8 chars, regex Java package, blacklist strings legítimos."""
+        P2 #9-12: longitud mínima 8 chars, regex Java package, blacklist strings legítimos.
+        P3 #7: NLP n-gram heuristic para módulos de hack sin firma exacta."""
         print("🔍 Escaneando JARs cargados en memoria de Minecraft...")
         import re as _re
         import zipfile as _zf
@@ -8376,6 +8589,8 @@ class ArgusApp:
                                 class_names = [n for n in zf.namelist() if n.endswith('.class')]
                                 matched_sig = None
                                 matched_pkg = None
+                                # P3 #7 — NLP accumulator for hack-like class names
+                                nlp_hits = []
                                 for class_name in class_names[:8000]:
                                     cn = class_name.encode('utf-8', errors='ignore')
                                     # #12 — Skip strings de Java legítimo
@@ -8395,6 +8610,13 @@ class ArgusApp:
                                         matched_pkg = cn.decode('utf-8', errors='ignore')
                                     if matched_sig or matched_pkg:
                                         break
+                                    # P3 #7 — NLP heuristic score for unlisted hack modules
+                                    base_str = base.decode('utf-8', errors='ignore')
+                                    nlp_score = self._score_string_hack_likelihood(base_str)
+                                    if nlp_score >= 3.5:
+                                        nlp_hits.append((base_str, nlp_score))
+                                        if len(nlp_hits) >= 10:
+                                            break  # cap scan cost
 
                                 if matched_sig or matched_pkg:
                                     label = matched_sig or matched_pkg
@@ -8411,6 +8633,27 @@ class ArgusApp:
                                         'explicacion': f'Se encontró el módulo de hack "{label}" en el JAR '
                                                        f'{os.path.basename(jar_path)} cargado por Minecraft. '
                                                        f'Esto indica que un ghost client está activo en memoria.',
+                                    })
+                                elif len(nlp_hits) >= 3:
+                                    # P3 #7: enough hack-like class names to flag without exact signature
+                                    top_names = ', '.join(h[0] for h in sorted(nlp_hits, key=lambda x: -x[1])[:4])
+                                    avg_nlp = sum(h[1] for h in nlp_hits) / len(nlp_hits)
+                                    conf = min(0.82, 0.55 + avg_nlp * 0.05)
+                                    print(f"⚠️ CLASES SOSPECHOSAS (NLP) EN JAR: {top_names} → {jar_path}")
+                                    self.issues_found.append({
+                                        'nombre': f'Clases sospechosas (NLP) en JAR cargado: {top_names}',
+                                        'ruta': jar_path,
+                                        'archivo': os.path.basename(jar_path),
+                                        'tipo': 'hack_string_in_loaded_jar',
+                                        'categoria': 'JAVA_INJECTION',
+                                        'alerta': 'SOSPECHOSO',
+                                        'confidence': round(conf, 2),
+                                        'detected_patterns': [f'nlp_hack_class:{n}' for n, _ in nlp_hits[:4]],
+                                        'explicacion': f'Se detectaron {len(nlp_hits)} clases con nombres '
+                                                       f'típicos de módulos de hack (NLP n-gram) en '
+                                                       f'{os.path.basename(jar_path)}: {top_names}. '
+                                                       f'No coinciden con firmas exactas pero presentan '
+                                                       f'características lingüísticas de ghost clients.',
                                     })
                         except Exception:
                             continue
