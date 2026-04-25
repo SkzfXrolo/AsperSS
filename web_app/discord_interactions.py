@@ -171,17 +171,23 @@ def _cmd_ss(options: list, resolved: dict, member: dict) -> dict:
     staff_name  = member.get('user', {}).get('username', 'staff')
     try:
         from app import get_api_db_cursor, _PH, _insert_id
-        scan_token = secrets.token_urlsafe(32)
-        expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
+        scan_token  = secrets.token_urlsafe(32)
+        dl_token    = secrets.token_urlsafe(32)
+        expires_at  = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
+        dl_expires  = (datetime.datetime.utcnow() + datetime.timedelta(minutes=30)).isoformat()
+        panel_url   = os.environ.get('RENDER_EXTERNAL_URL', 'https://asperss.onrender.com').rstrip('/')
         with get_api_db_cursor() as cur:
             _insert_id(cur,
                 f'INSERT INTO scan_tokens (token, expires_at, max_uses, created_by, description) VALUES ({_PH},{_PH},{_PH},{_PH},{_PH})',
                 (scan_token, expires_at, 1, f'Discord:{staff_name}', f'SS a {target_name} vía Discord'))
-        panel_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://asperss.onrender.com').rstrip('/')
+            _insert_id(cur,
+                f'INSERT INTO download_links (token, filename, created_by, expires_at, max_downloads) VALUES ({_PH},{_PH},{_PH},{_PH},{_PH})',
+                (dl_token, 'ArgusScanner.exe', f'Discord:{staff_name}', dl_expires, 1))
+        link = f'{panel_url}/d/{dl_token}?token={scan_token}'
         return _msg(
-            f'✅ Token SS creado para **{target_name}**.\n'
-            f'Envíale este token manualmente:\n```\n{scan_token}\n```'
-            f'\n🔗 Descarga scanner: {panel_url}/download\n'
+            f'✅ SS iniciado para **{target_name}**.\n'
+            f'Envíale este enlace — descarga el scanner con el token ya incluido:\n'
+            f'{link}\n'
             f'⏰ Expira en 30 minutos.',
             ephemeral=True
         )
