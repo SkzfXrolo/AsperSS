@@ -2130,8 +2130,15 @@ class ArgusApp:
             'optifine_', 'fabricloader-', 'forge-', 'minecraftforge-',
             'iris-', 'sodium-', 'lithium-', 'phosphor-', 'rubidium-',
             'jei-', 'create-', 'botania-', 'cobblemon-',
-            # Launchers legítimos
+            # Launchers legítimos (#25 — whitelist extendida)
             'tlauncher-', 'prismlauncher', 'lunarclient\\', 'lunar client', 'badlion client\\',
+            'polymc\\', 'atlauncher\\', 'curseforge\\', 'ftb app\\', 'gdlauncher\\', 'multimc\\',
+            'gdlauncher', 'ftbapp', 'ftb_app', 'overwolf\\', 'curseforge\\',
+            # Mods de performance y accesibilidad (#26)
+            'ferritecore-', 'lazydfu-', 'entityculling-', 'dynamicfps-',
+            'smoothboot-', 'starlight-', 'c2me-', 'noxesium-', 'krypton-',
+            # Badlion como permitido (#27)
+            'badlion\\', 'badlionclient\\', 'blclient\\',
             # DLLs del sistema Windows
             'api-ms-win-', 'msvcr', 'msvcp', 'vcruntime', 'ucrtbase',
             'kernel32.dll', 'user32.dll', 'advapi32.dll', 'shell32.dll',
@@ -2168,6 +2175,10 @@ class ArgusApp:
             'baritone_installed', 'litematica_printer', 'schematica_printer',
             'optifine_zoom_combat', 'modified_minecraft_jar', 'hack_string_in_loaded_jar',
             'javaagent_injection', 'bootclasspath_modification',
+            # Nuevas detecciones P1
+            'weave_loader', 'prefetch_hack', 'usn_deleted_hack',
+            'jitter_script', 'java_suspicious_parent', 'java_unusual_parent',
+            'evasion_indicators',
         }
 
         for item in issues:
@@ -2326,9 +2337,19 @@ class ArgusApp:
         
         if hacks_poco_sospechoso:
             print(f"\n🟡 HACKS POCO SOSPECHOSOS ENCONTRADOS:")
-            for item in hacks_poco_sospechoso[:5]:  # Mostrar solo los primeros 5
+            for item in hacks_poco_sospechoso[:5]:
                 print(f"  - {item.get('archivo', 'N/A')} en {item.get('ruta', 'N/A')}")
-        
+
+        # P2 #22 — Decay de score por antigüedad de evidencia
+        filtered = self._apply_score_decay(filtered)
+
+        # P2 #23 — Agregar explicaciones en español a todos los hallazgos
+        filtered = self._apply_human_explanations(filtered)
+
+        # P2 #24 — Agrupar resultados repetidos del mismo tipo
+        filtered = self._group_related_results(filtered)
+
+        print(f"📋 TOTAL FINAL (tras decay + agrupación): {len(filtered)}")
         return filtered
         
     def load_config(self):
@@ -3224,6 +3245,16 @@ class ArgusApp:
                 _run_safe(self.scan_active_injectors)
                 self._set_scan_phase("🔑 Hash de minecraft.jar vs Mojang...")
                 _run_safe(self.scan_minecraft_jar_hash)
+                self._set_scan_phase("🪝 -javaagent en JVM args...")
+                _run_safe(self.scan_javaagent_args)
+                self._set_scan_phase("🕸️ Weave Loader artifacts...")
+                _run_safe(self.scan_weave_loader)
+                self._set_scan_phase("📋 Prefetch de hacks ejecutados...")
+                _run_safe(self.scan_prefetch_hacks)
+                self._set_scan_phase("📝 USN Journal — JARs/carpetas borrados...")
+                _run_safe(self.scan_usn_minecraft_jars)
+                self._set_scan_phase("🎯 Jitter/aim assist en software de mouse...")
+                _run_safe(self.scan_jitter_scripts)
 
             # Grupo F — Técnicas avanzadas
             def _group_advanced():
@@ -8292,6 +8323,331 @@ class ArgusApp:
                     print(f"✅ minecraft.jar {ver_name} — hash OK")
         except Exception as e:
             print(f"Error en scan_minecraft_jar_hash: {e}")
+
+    # ── PARTE 1 — Mejoras pendientes de detección ─────────────────────────────
+
+    def scan_javaagent_args(self):
+        """#1 — Detecta -javaagent en cmdline de javaw.exe (inyección directa en JVM)."""
+        print("🔍 Buscando -javaagent en args de Java...")
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    name = (proc.info.get('name') or '').lower()
+                    if 'java' not in name:
+                        continue
+                    cmdline = proc.info.get('cmdline') or []
+                    for arg in cmdline:
+                        arg_l = arg.lower()
+                        if '-javaagent' in arg_l:
+                            jar_name = arg.split('=')[-1].split('\\')[-1].split('/')[-1]
+                            # Ignorar agentes de launchers oficiales conocidos
+                            safe_agents = ['authlib', 'oshi', 'legacylauncher', 'lunarclient', 'badlion']
+                            if any(s in arg_l for s in safe_agents):
+                                continue
+                            print(f"🚨 JAVAAGENT: {arg}")
+                            self.issues_found.append({
+                                'nombre': f'-javaagent detectado en JVM: {jar_name}',
+                                'ruta': arg,
+                                'archivo': jar_name,
+                                'tipo': 'javaagent_injection',
+                                'categoria': 'INYECCION',
+                                'alerta': 'CRITICAL',
+                                'confidence': 0.95,
+                                'detected_patterns': ['javaagent_injection'],
+                                'explicacion': f'Se detectó un agente Java inyectado en Minecraft: {jar_name}. '
+                                               f'Frameworks como Weave, ForgeHax y la mayoría de ghost clients modernos '
+                                               f'usan -javaagent para inyectar código en runtime.',
+                            })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_javaagent_args: {e}")
+
+    def scan_weave_loader(self):
+        """#4 — Detecta artefactos de Weave Loader (framework de inyección más popular)."""
+        print("🔍 Buscando artefactos de Weave Loader...")
+        appdata = os.environ.get('APPDATA', '')
+        local   = os.environ.get('LOCALAPPDATA', '')
+        WEAVE_PATHS = [
+            (os.path.join(appdata,  '.weave'),          'Directorio de Weave Loader'),
+            (os.path.join(appdata,  '.weave', 'weave.json'), 'Configuración de Weave'),
+            (os.path.join(appdata,  'WeaveLoader'),     'WeaveLoader AppData'),
+            (os.path.join(local,    'WeaveLoader'),     'WeaveLoader LocalAppData'),
+        ]
+        try:
+            for path, desc in WEAVE_PATHS:
+                if os.path.exists(path):
+                    print(f"🚨 WEAVE LOADER: {path}")
+                    self.issues_found.append({
+                        'nombre': f'Weave Loader detectado: {desc}',
+                        'ruta': path,
+                        'archivo': os.path.basename(path),
+                        'tipo': 'ghost_client_config',
+                        'categoria': 'GHOST_CLIENT',
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.96,
+                        'detected_patterns': ['weave_loader'],
+                        'explicacion': 'Weave Loader es el framework de inyección de mods más popular actualmente. '
+                                       'Permite cargar ghost clients y módulos de hacks en Minecraft sin dejar '
+                                       'archivos .jar visibles en la carpeta mods.',
+                    })
+        except Exception as e:
+            print(f"Error en scan_weave_loader: {e}")
+
+    def scan_prefetch_hacks(self):
+        """#21 — Detecta archivos Prefetch de hacks ejecutados (aunque el exe esté borrado)."""
+        print("🔍 Escaneando Prefetch por hacks ejecutados...")
+        prefetch_dir = r'C:\Windows\Prefetch'
+        HACK_NAMES = [
+            'sigma', 'vape', 'liquidbounce', 'wurst', 'meteor', 'rise', 'flux',
+            'future', 'astolfo', 'novoline', 'rusherhack', 'drip', 'vertex',
+            'entropy', 'remix', 'inertia', 'salhack', 'jello', 'datura',
+            'impact', 'aristois', 'weaveloader', 'extremeinjector', 'xenos',
+            'cheatengine', 'injector', 'ghostclient', 'aimbot', 'killaura',
+            'autoclicker', 'autoclick', 'scaffold', 'baritone',
+        ]
+        if not os.path.isdir(prefetch_dir):
+            return
+        try:
+            for fname in os.listdir(prefetch_dir):
+                if not fname.lower().endswith('.pf'):
+                    continue
+                fname_lower = fname.lower()
+                for hack in HACK_NAMES:
+                    if hack in fname_lower:
+                        exe_name = fname.split('-')[0]
+                        full_path = os.path.join(prefetch_dir, fname)
+                        mtime = os.path.getmtime(full_path)
+                        import datetime as _dt
+                        last_run = _dt.datetime.fromtimestamp(mtime).strftime('%d/%m/%Y %H:%M')
+                        print(f"🚨 PREFETCH HACK: {fname} (última ejecución: {last_run})")
+                        self.issues_found.append({
+                            'nombre': f'Prefetch de hack encontrado: {exe_name}',
+                            'ruta': full_path,
+                            'archivo': fname,
+                            'tipo': 'prefetch_hack',
+                            'categoria': 'FORENSE',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.90,
+                            'detected_patterns': [f'prefetch:{hack}'],
+                            'explicacion': f'Se encontró un archivo Prefetch de {exe_name} (última ejecución: {last_run}). '
+                                           f'El Prefetch confirma que este programa fue ejecutado en este PC aunque '
+                                           f'el archivo original haya sido borrado.',
+                        })
+                        break
+        except Exception as e:
+            print(f"Error en scan_prefetch_hacks: {e}")
+
+    def scan_usn_minecraft_jars(self):
+        """#22/#23 — Detecta JARs y carpetas de ghost clients eliminados via USN Journal."""
+        print("🔍 Buscando JARs/.minecraft borrados en USN Journal (últimas 72h)...")
+        HACK_PATTERNS = [
+            'sigma', 'vape', 'liquidbounce', 'wurst', 'meteor', 'rise', 'flux',
+            'future', 'astolfo', 'novoline', 'rusherhack', 'drip', 'vertex',
+            'entropy', 'remix', 'inertia', 'salhack', 'jello', 'datura',
+            'impact', '.weave', '.rise', '.sigma', '.meteor', '.liquidbounce',
+            'ghostclient', 'ghost_client', 'baritone', 'schematica',
+        ]
+        import subprocess as _sp
+        try:
+            result = _sp.run(
+                ['fsutil', 'usn', 'readjournal', 'C:', 'csv'],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode != 0:
+                return
+            # Filtrar eliminaciones (0x80000200) de .jar y carpetas de ghost clients
+            lines = result.stdout.splitlines()
+            for line in lines:
+                line_l = line.lower()
+                is_delete = '0x80000200' in line or '0x80000020' in line
+                is_rename = '0x00001000' in line or '0x00002000' in line
+                if not (is_delete or is_rename):
+                    continue
+                has_hack = any(p in line_l for p in HACK_PATTERNS)
+                has_mc   = '.minecraft' in line_l
+                is_jar   = '.jar' in line_l
+                if not (has_hack or (has_mc and is_jar)):
+                    continue
+                # Extraer nombre de archivo del CSV
+                parts = line.split(',')
+                fname = parts[3].strip('"') if len(parts) > 3 else line[:80]
+                action = 'borrado' if is_delete else 'renombrado'
+                print(f"🚨 USN JAR {action.upper()}: {fname}")
+                self.issues_found.append({
+                    'nombre': f'JAR/carpeta de hack {action} recientemente: {fname}',
+                    'ruta': fname,
+                    'archivo': fname,
+                    'tipo': 'usn_deleted_hack',
+                    'categoria': 'FORENSE',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.75,
+                    'detected_patterns': [f'usn_{action}'],
+                    'explicacion': f'El USN Journal registra que {fname} fue {action} recientemente. '
+                                   f'Esto indica que el jugador pudo haber eliminado evidencia de hacks '
+                                   f'antes del Screen Share.',
+                })
+        except Exception as e:
+            print(f"Error en scan_usn_minecraft_jars: {e}")
+
+    def scan_jitter_scripts(self):
+        """#15 — Detecta configuraciones de jitter/aim assist en software de mouse."""
+        print("🔍 Buscando jitter scripts en software de mouse...")
+        appdata = os.environ.get('APPDATA', '')
+        local   = os.environ.get('LOCALAPPDATA', '')
+        JITTER_KEYWORDS = ['jitter', 'aimassist', 'aim_assist', 'smoothaim', 'recoil',
+                           'firerate', 'fire_rate', 'autofire', 'rapidfire', 'rapid_fire']
+        PATHS_TO_SCAN = [
+            os.path.join(local,  'LGHUB'),
+            os.path.join(appdata, 'Razer'),
+            os.path.join(local,  'SteelSeries', 'GG'),
+            os.path.join(appdata, 'Corsair'),
+            os.path.join(local,  'Corsair'),
+        ]
+        try:
+            for base in PATHS_TO_SCAN:
+                if not os.path.isdir(base):
+                    continue
+                for root, _, files in os.walk(base):
+                    for fname in files:
+                        if not fname.lower().endswith(('.json', '.xml', '.db', '.lua')):
+                            continue
+                        fpath = os.path.join(root, fname)
+                        try:
+                            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read(8192).lower()
+                            if any(kw in content for kw in JITTER_KEYWORDS):
+                                # Verificar que no sea solo comentario o descripción
+                                app_name = os.path.basename(base)
+                                print(f"🚨 JITTER CONFIG: {fpath}")
+                                self.issues_found.append({
+                                    'nombre': f'Config de jitter/aim assist en {app_name}: {fname}',
+                                    'ruta': fpath,
+                                    'archivo': fname,
+                                    'tipo': 'jitter_script',
+                                    'categoria': 'MACRO',
+                                    'alerta': 'SOSPECHOSO',
+                                    'confidence': 0.65,
+                                    'detected_patterns': ['jitter_config'],
+                                    'explicacion': f'Se encontró configuración de jitter o aim assist en {app_name}. '
+                                                   f'El jitter clicking y el aim assist por software están '
+                                                   f'prohibidos en la mayoría de servidores de Minecraft.',
+                                })
+                                break
+                        except Exception:
+                            continue
+        except Exception as e:
+            print(f"Error en scan_jitter_scripts: {e}")
+
+    # ── PARTE 2 — Mejoras de filtrado (FP reduction) ───────────────────────────
+
+    def _apply_human_explanations(self, issues):
+        """#23 — Genera explicaciones en español para hallazgos que no tengan una."""
+        TIPO_EXPLANATIONS = {
+            'ghost_client_config':     'Se encontró un archivo de configuración de un ghost client conocido. '
+                                       'Esto indica que el jugador ha ejecutado este hack en este PC.',
+            'ghost_client_registry':   'El registro de Windows contiene una clave dejada por la instalación '
+                                       'de un ghost client. Persiste aunque se desinstale.',
+            'blacklisted_mod':         'Se encontró un mod prohibido en la carpeta de mods de Minecraft. '
+                                       'Este mod tiene capacidades de hack.',
+            'jdwp_debug_port':         'El proceso de Minecraft tiene activo el puerto de debug JDWP. '
+                                       'Esto permite inyectar bytecode en runtime — nadie legítimo juega con esto.',
+            'vpn_active':              'Hay una VPN activa durante el Screen Share. '
+                                       'Puede usarse para ocultar la IP o evadir sistemas de detección.',
+            'hosts_minecraft_redirect':'El archivo hosts redirige dominios de Minecraft o anti-cheat. '
+                                       'Técnica usada para evadir sistemas de anti-cheat online.',
+            'javaagent_injection':     'Se detectó un agente inyectado en la JVM de Minecraft. '
+                                       'Todos los ghost clients modernos como Weave usan esta técnica.',
+            'dll_injection_java':      'Se encontró una DLL sospechosa cargada en el proceso de Java/Minecraft. '
+                                       'Las DLLs de hack se inyectan para añadir módulos en runtime.',
+            'ahk_autoclick':           'Script AutoHotKey con patrones de autoclick detectado. '
+                                       'Clicks automáticos con delay de 8-15ms son característicos de autoclic.',
+            'injector_process':        'Se detectó un proceso inyector corriendo al mismo tiempo que Minecraft. '
+                                       'Los inyectores cargan DLLs o JARs de hacks en el proceso del juego.',
+            'temp_jar_recent':         'Se encontró un .jar descargado recientemente en carpetas temporales. '
+                                       'Técnica común para inyectar sin dejar rastro permanente.',
+            'modified_minecraft_jar':  'El hash del minecraft.jar no coincide con la versión oficial de Mojang. '
+                                       'Indica que el jar del juego fue modificado, típico de ghost clients clásicos.',
+            'prefetch_hack':           'El Prefetch de Windows confirma que un hack fue ejecutado en este PC. '
+                                       'Aunque el archivo esté borrado, la ejecución queda registrada.',
+            'usn_deleted_hack':        'El USN Journal registra que un archivo de hack fue borrado recientemente. '
+                                       'El jugador puede haber limpiado evidencia antes del SS.',
+            'hack_string_in_loaded_jar':'Se encontraron nombres de módulos de hack en los JARs cargados por Java. '
+                                        'Esto indica que un ghost client está activo en memoria.',
+            'weave_loader':            'Weave Loader es el framework de inyección de hacks más popular actualmente. '
+                                       'Su presencia indica que el jugador usa mods no autorizados.',
+            'jitter_script':           'Configuración de jitter o aim assist encontrada en software de periférico. '
+                                       'El jitter clicking automatizado está prohibido en la mayoría de servidores.',
+            'baritone_prohibited':     'Baritone está configurado con modos prohibidos activos (printer, elytraFly). '
+                                       'En modo printer puede construir estructuras automáticamente.',
+            'litematica_printer':      'Litematica tiene el Printer Mode activado. '
+                                       'Permite colocar bloques automáticamente, prohibido en servidores survival.',
+            'arduino_hid_device':      'Se detectó un dispositivo HID (Arduino/CH340/STM32) conectado. '
+                                       'Estos dispositivos pueden emular un mouse para autoclick por hardware.',
+        }
+        for issue in issues:
+            if not issue.get('explicacion'):
+                tipo = issue.get('tipo', '')
+                if tipo in TIPO_EXPLANATIONS:
+                    issue['explicacion'] = TIPO_EXPLANATIONS[tipo]
+        return issues
+
+    def _group_related_results(self, issues):
+        """#24 — Agrupa hallazgos repetidos del mismo tipo/hack en un solo resultado con count."""
+        from collections import defaultdict
+        groups = defaultdict(list)
+        ungrouped = []
+
+        GROUPABLE_TYPES = {
+            'ghost_client_config', 'blacklisted_mod', 'temp_jar_recent',
+            'prefetch_hack', 'usn_deleted_hack', 'jitter_script',
+        }
+
+        for issue in issues:
+            tipo = issue.get('tipo', '')
+            if tipo in GROUPABLE_TYPES:
+                # Agrupar por tipo + hack detectado (primer detected_pattern)
+                dp = issue.get('detected_patterns', [''])[0].split(':')[-1]
+                key = f"{tipo}:{dp}"
+                groups[key].append(issue)
+            else:
+                ungrouped.append(issue)
+
+        result = list(ungrouped)
+        for key, group in groups.items():
+            if len(group) == 1:
+                result.append(group[0])
+            else:
+                # Tomar el de mayor confianza como representante
+                best = max(group, key=lambda x: x.get('confidence', 0))
+                best = dict(best)
+                best['nombre'] = f"{best['nombre']} (+{len(group)-1} más)"
+                best['count'] = len(group)
+                best['grouped_paths'] = [g.get('ruta', '') for g in group]
+                result.append(best)
+
+        return result
+
+    def _apply_score_decay(self, issues):
+        """#22 — Reduce el score de evidencia antigua (> 30 días)."""
+        import datetime as _dt
+        now = _dt.datetime.now()
+        for issue in issues:
+            ruta = issue.get('ruta', '') or issue.get('archivo', '')
+            if not ruta or not os.path.exists(str(ruta)):
+                continue
+            try:
+                mtime = os.path.getmtime(str(ruta))
+                age_days = (now - _dt.datetime.fromtimestamp(mtime)).days
+                if age_days > 30:
+                    decay = max(0.5, 1.0 - (age_days - 30) / 180)
+                    old_conf = issue.get('confidence', 0.5)
+                    issue['confidence'] = round(old_conf * decay, 3)
+                    if age_days > 60 and issue.get('alerta') == 'CRITICAL':
+                        issue['alerta'] = 'SOSPECHOSO'
+            except Exception:
+                continue
+        return issues
 
     def second_pass_scanner(self):
         """Segunda pasada: analiza archivos SOSPECHOSO/CRITICAL con mayor profundidad."""
