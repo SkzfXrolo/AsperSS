@@ -45,7 +45,6 @@ threading.Thread(target=init_db_async, daemon=True).start()
 # Discord HTTP Interactions (sin gateway, sin rate-limit)
 try:
     import discord_interactions as _di
-    threading.Thread(target=_di.register_commands, daemon=True).start()
     print('[Discord] HTTP Interactions activado.')
 except Exception as _disc_err:
     print(f'[Discord] Interactions no disponible: {_disc_err}')
