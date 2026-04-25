@@ -2181,6 +2181,7 @@ class ArgusApp:
             'evasion_indicators', 'kill_chain', 'minecraft_safe_mode',
             'suspicious_process_location', 'short_lived_process', 'cloud_hash_match',
             'prescan_cleanup', 'suspicious_process_tree', 'unknown_parent_process',
+            'baseline_anomaly',
         }
 
         for item in issues:
@@ -3254,6 +3255,8 @@ class ArgusApp:
                 _run_safe(self.scan_prescan_disk_activity)
                 self._set_scan_phase("🌳 Árbol de procesos — cadenas anómalas...")
                 _run_safe(self.scan_process_tree)
+                self._set_scan_phase("📊 Delta vs baseline histórico del jugador...")
+                _run_safe(self.scan_player_baseline_delta)
 
             # Grupo E — Ubicaciones de hacks (I/O alto)
             def _group_hack_locations():
@@ -9293,6 +9296,94 @@ class ArgusApp:
                     i['confidence'] = min(1.0, i.get('confidence', 0.9) * 1.15)
 
         return issues
+
+    def scan_player_baseline_delta(self):
+        """P3 #5 — Compara el scan actual con el baseline histórico del mismo machine.
+        Si hay muchos hallazgos nuevos respecto al historial, es sospechoso.
+        Si el jugador siempre sale limpio y hoy tiene CRITICAL, es muy sospechoso."""
+        print("🔍 Comparando con baseline histórico del jugador...")
+        try:
+            base_url = self.config.get('api_url', '').rstrip('/')
+            machine_id = self.config.get('machine_id', '')
+            if not base_url or not machine_id:
+                return
+
+            r = requests.get(f'{base_url}/api/player_baseline/{machine_id}', timeout=8)
+            if not r.ok:
+                return
+            data = r.json()
+            baseline = data.get('baseline')
+            scan_count = data.get('scan_count', 0)
+            if not baseline or scan_count < 2:
+                return  # Not enough history
+
+            avg_issues   = baseline.get('avg_issues', 0)
+            avg_risk     = baseline.get('avg_risk', 0)
+            known_types  = set(baseline.get('known_types', []))
+            hack_verdicts = baseline.get('hack_verdicts', 0)
+
+            current_issues = len(self.issues_found)
+            current_crits  = sum(1 for i in self.issues_found if i.get('alerta') == 'CRITICAL')
+            current_types  = {i.get('tipo', '') for i in self.issues_found}
+            new_types = current_types - known_types - {''}
+
+            # Case 1: Current has way more issues than average
+            if avg_issues > 0 and current_issues > avg_issues * 3 and current_issues > 5:
+                print(f"📊 ANOMALÍA BASELINE: {current_issues} issues vs avg {avg_issues:.1f}")
+                self.issues_found.append({
+                    'nombre': f'Anomalía vs historial: {current_issues} hallazgos (promedio {avg_issues:.1f})',
+                    'ruta': 'player_baseline',
+                    'archivo': 'baseline_delta',
+                    'tipo': 'baseline_anomaly',
+                    'categoria': 'FORENSE',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': min(0.85, 0.50 + (current_issues - avg_issues) / (avg_issues * 10)),
+                    'detected_patterns': [f'issues_delta:{current_issues - avg_issues:.0f}', f'baseline_scans:{scan_count}'],
+                    'explicacion': (
+                        f'Este equipo tuvo {avg_issues:.1f} hallazgos en promedio en sus últimos '
+                        f'{scan_count} scans. Hoy tiene {current_issues}. '
+                        f'Un aumento de 3x+ respecto al historial es inusual.'
+                    ),
+                })
+
+            # Case 2: Player always clean, now has CRITICALs
+            if hack_verdicts == 0 and current_crits >= 2:
+                self.issues_found.append({
+                    'nombre': f'Jugador históricamente limpio con {current_crits} hallazgos CRITICAL',
+                    'ruta': 'player_baseline',
+                    'archivo': 'baseline_delta',
+                    'tipo': 'baseline_anomaly',
+                    'categoria': 'FORENSE',
+                    'alerta': 'CRITICAL',
+                    'confidence': 0.80,
+                    'detected_patterns': ['always_clean_now_critical', f'prior_scans:{scan_count}'],
+                    'explicacion': (
+                        f'En {scan_count} scans anteriores este jugador siempre salió limpio. '
+                        f'Hoy tiene {current_crits} hallazgos CRITICAL que nunca habían aparecido. '
+                        f'Cambio repentino muy sospechoso.'
+                    ),
+                })
+
+            # Case 3: New issue types never seen before in this machine
+            if len(new_types) >= 3:
+                self.issues_found.append({
+                    'nombre': f'{len(new_types)} tipos de hallazgo nuevos nunca vistos en este equipo',
+                    'ruta': 'player_baseline',
+                    'archivo': 'baseline_delta',
+                    'tipo': 'baseline_anomaly',
+                    'categoria': 'FORENSE',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.65,
+                    'detected_patterns': list(new_types)[:5],
+                    'explicacion': (
+                        f'Aparecieron {len(new_types)} tipos de hallazgo que nunca se habían visto '
+                        f'en este equipo en {scan_count} scans anteriores: '
+                        f'{", ".join(list(new_types)[:3])}.'
+                    ),
+                })
+
+        except Exception as e:
+            print(f"Error en scan_player_baseline_delta: {e}")
 
     def scan_process_tree(self):
         """P3 #9 — Análisis de árbol de procesos completo: detecta cadenas anómalas.

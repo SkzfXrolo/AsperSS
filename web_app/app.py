@@ -4561,6 +4561,59 @@ def delete_mod_whitelist(sha256):
         return jsonify({'error': str(e)}), 500
 
 
+# ── P3 #5 — Perfil de jugador / baseline ─────────────────────────────────────
+
+@app.route('/api/player_baseline/<string:machine_id>', methods=['GET'])
+def get_player_baseline(machine_id):
+    """Returns historical baseline for a machine (avg issues_found, risk_score, known issue types).
+    Used by the scanner to compare current scan vs historical behaviour.
+    Only returns data for the last 10 scans of this machine.
+    """
+    machine_id = machine_id.strip()
+    if not machine_id or len(machine_id) > 200:
+        return jsonify({'error': 'machine_id inválido'}), 400
+    try:
+        with get_api_db_cursor() as cursor:
+            # Last 10 completed scans for this machine
+            cursor.execute(
+                f'''SELECT s.id, s.issues_found, s.risk_score, s.verdict, s.started_at
+                    FROM scans s
+                    WHERE s.machine_id = {_PH}
+                      AND s.status = 'completed'
+                    ORDER BY s.id DESC LIMIT 10''',
+                (machine_id,)
+            )
+            scans = cursor.fetchall() or []
+            if not scans:
+                return jsonify({'machine_id': machine_id, 'scan_count': 0, 'baseline': None}), 200
+
+            scan_ids   = [_row_get(r, 0, 'id') for r in scans]
+            issues_arr = [int(_row_get(r, 1, 'issues_found') or 0) for r in scans]
+            risk_arr   = [float(_row_get(r, 2, 'risk_score') or 0) for r in scans]
+            verdicts   = [str(_row_get(r, 3, 'verdict') or 'pending') for r in scans]
+
+            # Get typical issue types seen in this machine's previous scans
+            placeholders = ','.join([_PH] * len(scan_ids))
+            cursor.execute(
+                f'SELECT DISTINCT issue_type FROM scan_results WHERE scan_id IN ({placeholders}) AND issue_type IS NOT NULL',
+                scan_ids
+            )
+            known_types = [str(r[0] if not hasattr(r, 'keys') else r['issue_type']) for r in (cursor.fetchall() or [])]
+
+        baseline = {
+            'avg_issues':    round(sum(issues_arr) / len(issues_arr), 1),
+            'avg_risk':      round(sum(risk_arr) / len(risk_arr), 1),
+            'max_issues':    max(issues_arr),
+            'min_issues':    min(issues_arr),
+            'known_types':   known_types,
+            'hack_verdicts': sum(1 for v in verdicts if v == 'hack'),
+            'scan_count':    len(scans),
+        }
+        return jsonify({'machine_id': machine_id, 'scan_count': len(scans), 'baseline': baseline}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ── P3 #2 — Scoring por rareza ────────────────────────────────────────────────
 
 @app.route('/api/rarity', methods=['GET'])
