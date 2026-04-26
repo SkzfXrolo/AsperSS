@@ -281,14 +281,13 @@ def init_postgresql_db():
                 id SERIAL PRIMARY KEY,
                 token VARCHAR(255) UNIQUE NOT NULL,
                 filename VARCHAR(255) NOT NULL,
-                created_by INTEGER NOT NULL,
+                created_by VARCHAR(100),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 expires_at TIMESTAMP,
                 max_downloads INTEGER DEFAULT 1,
                 download_count INTEGER DEFAULT 0,
                 is_active BOOLEAN DEFAULT TRUE,
-                description TEXT,
-                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+                description TEXT
             )
         ''')
         
@@ -455,6 +454,19 @@ def init_postgresql_db():
                 cursor.execute(f'ALTER TABLE scans ADD COLUMN IF NOT EXISTS {_col} {_def}')
             except Exception:
                 pass
+
+        # Migración: download_links.created_by era INTEGER FK, ahora debe ser VARCHAR(100)
+        try:
+            cursor.execute('''
+                ALTER TABLE download_links
+                DROP CONSTRAINT IF EXISTS download_links_created_by_fkey
+            ''')
+            cursor.execute('''
+                ALTER TABLE download_links
+                ALTER COLUMN created_by TYPE VARCHAR(100) USING created_by::text
+            ''')
+        except Exception:
+            pass
 
         # Notas por scan
         cursor.execute('''
