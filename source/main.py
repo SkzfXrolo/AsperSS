@@ -54,7 +54,99 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.3.0"
+SCANNER_VERSION = "1.3.1"
+
+# ── Detección de carpetas hack — lógica centralizada ─────────────────────────
+import re as _re
+
+# Nombres exclusivos de hack clients: seguros para buscar como substring
+# (nunca aparecen en software legítimo)
+_DEFINITE_HACK_NAMES = {
+    'vape', 'vapelite', 'entropy', 'entropyclient',
+    'whiteout', 'liquidbounce', 'wurst', 'wurstclient',
+    'sigmaclient', 'fluxclient', 'flux1.8', 'flux1',
+    'astolfo', 'astolfoclient', 'exhibition', 'exhibitionclient',
+    'novoline', 'ghostclient', 'ghost-client', 'ghost_client',
+    'phobos', 'komat', 'wasp', 'konas', 'seppuku', 'sloth',
+    'blatant', 'killaura', 'aimbot', 'triggerbot',
+    'wallhack', 'autoclicker', 'xray-mod', 'nofall',
+    'freecam', 'weave-loader', 'weaveclient',
+    'riseclient', 'moonclient', 'dripclient',
+    'futureclient', 'impactclient', 'bypasser',
+    'hackclient', 'hackmod', 'cracked-mc', 'crackedmc',
+}
+
+# Palabras genéricas que sólo se marcan cuando son palabra completa
+# (no substring de otra palabra)
+_WORD_BOUNDARY_HACK_WORDS = ['hack', 'cheat', 'cracked', 'crack', 'bypass']
+
+# Rutas de software legítimo — si el root las contiene, ignorar la carpeta
+_SAFE_ROOT_FRAGMENTS = {
+    'google\\chrome', 'appdata\\local\\google',
+    'mozilla\\firefox', 'appdata\\roaming\\mozilla',
+    'microsoft\\edge', 'appdata\\local\\microsoft\\edge',
+    'opera software', 'appdata\\local\\brave-browser',
+    'appdata\\local\\vivaldi',
+    'windows\\prefetch', 'windows\\system32', 'windows\\syswow64',
+    'windows\\winsxs', 'windows\\softwaredistribution',
+    'program files\\microsoft', 'program files (x86)\\microsoft',
+    'steam\\steamapps', 'epicgames', 'origin games', 'ubisoft game launcher',
+    'riotgames', 'riot games', 'battlenet', 'battle.net',
+    'nvidia corporation', 'nvidia\\cubins', 'amd\\radeon', 'intel corporation',
+    'discord\\app-', 'teamspeak 3 client', 'zoom\\', 'skype\\',
+    'microsoft teams', 'appdata\\local\\packages',
+    'appdata\\local\\nvidia', 'wondershare', 'obs-studio', 'obs studio',
+    'site-packages', 'voicemod', 'node_modules',
+    'lunarclient', 'badlionclient', 'badlion', 'blclient',
+    'tlauncher', 'prismlauncher', 'multimc', 'polymc',
+    'curseforge', 'ftbapp', 'gdlauncher', 'atlauncher', 'overwolf',
+    'visual studio', 'intellij idea', 'pycharm', 'webstorm', 'jetbrains',
+    'minecraftsstool',
+}
+
+def _is_hack_folder(dir_name: str, root_lower: str) -> bool:
+    """Devuelve True si el nombre de carpeta parece ser de un hack client.
+
+    Evita falsos positivos de:
+    - Carpetas de Chrome (ClientCertificates, AutofillAIModelCache, etc.)
+    - Carpetas con 'mod' en 'model', 'modify', etc.
+    - Carpetas de launchers/software legítimo
+    """
+    # 1. Excluir rutas conocidas como seguras
+    if any(frag in root_lower for frag in _SAFE_ROOT_FRAGMENTS):
+        return False
+
+    name_lower = dir_name.lower()
+
+    # 2. Excluir nombres de carpetas específicamente legítimos
+    _SAFE_FOLDER_NAMES = {
+        'shaders', 'textures', 'resourcepacks', 'shaderpacks',
+        'screenshots', 'saves', 'schematics', 'servers',
+        'logs', 'crash-reports', 'updates', 'versions',
+        'assets', 'libraries', 'natives', 'runtime',
+        'backups', 'config', 'data', 'world', 'worlds',
+        'node_modules', 'venv', '__pycache__', '.git',
+        'zomboid', 'media', 'pylance', 'skimage',
+        'client data',  # término legítimo en apps
+    }
+    if name_lower in _SAFE_FOLDER_NAMES:
+        return False
+
+    # 3. Nombres exactos de hack clients conocidos (substring seguro)
+    if any(hack in name_lower for hack in _DEFINITE_HACK_NAMES):
+        return True
+
+    # 4. Palabras genéricas con word-boundary (no substring de otra palabra)
+    # Ejemplo: 'hack' matchea 'hack-menu' pero NO 'shack' ni 'unhackable'
+    # 'crack' matchea 'crack-mc' pero NO 'crackdown' (→ 'c' después de 'crack')
+    # 'cheat' matchea 'cheatengine' pero NO palabra legítima que empiece con cheat
+    for word in _WORD_BOUNDARY_HACK_WORDS:
+        # Busca que el patrón NO esté precedido por una letra
+        if _re.search(r'(?<![a-z])' + _re.escape(word), name_lower):
+            return True
+
+    return False
+# ─────────────────────────────────────────────────────────────────────────────
 
 class DetallesVentana:
     """Ventana avanzada para mostrar detalles con gráfico y 4 niveles"""
@@ -2185,11 +2277,61 @@ class ArgusApp:
             'suspicious_network_connection',
         }
 
+        # ── Rutas que NUNCA son hacks — se aplican ANTES del bypass de TRUSTED_TYPES ──
+        # Razón: tipos como usn_deleted_hack, prefetch_hack saltaban el exclude_patterns
+        # y flagueaban archivos temporales de Chrome, Edge, Firefox como hacks.
+        ABSOLUTE_SAFE_PATHS = {
+            # Navegadores (sus carpetas de perfil generan cientos de false positives)
+            'google\\chrome', 'appdata\\local\\google',
+            'mozilla\\firefox', 'appdata\\roaming\\mozilla',
+            'microsoft\\edge', 'appdata\\local\\microsoft\\edge',
+            'opera software', 'appdata\\roaming\\opera',
+            'appdata\\local\\brave-browser',
+            'appdata\\local\\vivaldi',
+            # Sistema Windows — prefetch, temp del sistema
+            'windows\\prefetch', 'windows\\system32', 'windows\\syswow64',
+            'windows\\winsxs', 'windows\\softwaredistribution',
+            # Launchers legítimos de Minecraft (clientes oficiales)
+            'lunarclient', 'lunar client', 'lunar-client',
+            'badlion', 'badlionclient', 'blclient',
+            'tlauncher', 'prismlauncher', 'multimc', 'polymc',
+            'curseforge', 'ftb app', 'ftbapp', 'gdlauncher', 'atlauncher', 'overwolf',
+            # Plataformas de juego legítimas
+            'steam\\steamapps', 'epicgames', 'origin games', 'ubisoft game launcher',
+            'riotgames', 'riot games', 'battlenet', 'battle.net',
+            # IDEs y desarrollo
+            'visual studio', 'intellij idea', 'pycharm', 'webstorm', 'clion',
+            'jetbrains', '\\vscode\\', '\\.vscode\\', 'node_modules',
+            # Drivers y software del sistema
+            'nvidia corporation', 'nvidia\\cubins', 'nvidia\\displaydriver',
+            'amd\\radeon', 'intel corporation',
+            # Comunicación
+            'discord\\app-', 'teamspeak 3 client', 'zoom\\', 'skype\\',
+            'microsoft teams',
+            # Software legítimo
+            'appdata\\local\\packages',   # Windows Store (sandboxed)
+            'appdata\\local\\nvidia',
+            'wondershare', 'filmora', 'obs-studio', 'obs studio',
+            'site-packages',              # librerías Python instaladas
+            'voicemod',
+            'program files\\microsoft',
+            'program files (x86)\\microsoft',
+            'minecraftsstool',            # el propio scanner
+        }
+
         for item in issues:
             nombre = item.get('nombre', '').lower()
             ruta = item.get('ruta', '').lower()
             archivo = item.get('archivo', '').lower()
             tipo = item.get('tipo', '').lower()
+
+            # ── FILTRO ABSOLUTO — se ejecuta antes de cualquier otra lógica ──
+            # Bloquea rutas de software legítimo sin importar el tipo del hallazgo.
+            _combined_path = ruta + '|' + archivo
+            _is_absolute_safe = any(safe in _combined_path for safe in ABSOLUTE_SAFE_PATHS)
+            if _is_absolute_safe:
+                print(f"✅ [SAFE_PATH] Excluido por ruta segura: {nombre} @ {ruta[:80]}")
+                continue
 
             # Tipos de scanners especializados — confiar en ellos sin filtrar
             if tipo in TRUSTED_TYPES:
@@ -3515,6 +3657,15 @@ class ArgusApp:
             skip_folders = {
                 'node_modules', '.git', '__pycache__', 'venv', '.venv',
                 'WinSxS', 'servicing', 'en-US', 'MUI', 'winsxs',
+                # Directorios de navegadores — generan cientos de false positives
+                # porque sus subcarpetas internas tienen nombres como "ClientCertificates"
+                'User Data', 'Default', 'Profiles',  # Chrome/Edge profile dirs
+                'chrome', 'Chrome', 'firefox', 'Firefox', 'edge', 'Edge',
+                'Brave-Browser', 'vivaldi', 'opera',
+                # Drivers y sistema
+                'DriverStore', 'SystemResources', 'Panther',
+                # Cache del sistema — no relevante para hacks de Minecraft
+                'Temp', 'temp', 'tmp', 'cache', 'Cache',
             }
 
             # Solo rutas relevantes para Minecraft hacks — no System32 ni Program Files completos
@@ -3600,8 +3751,9 @@ class ArgusApp:
                         folder_scanned += len(files)
 
                         # Verificar carpetas sospechosas
+                        _root_lower = root.lower()
                         for dir_name in dirs:
-                            if any(pattern in dir_name.lower() for pattern in ['flux', 'vape', 'entropy', 'liquidbounce', 'wurst', 'impact', 'sigma', 'future', 'ghost', 'hack', 'cheat', 'mod', 'client']):
+                            if _is_hack_folder(dir_name, _root_lower):
                                 self.issues_found.append({
                                     'nombre': dir_name,
                                     'ruta': root,
@@ -4246,38 +4398,32 @@ class ArgusApp:
                 'E:\\Desktop'
             ]
             
-            # Patrones de hacks más amplios para detectar carpetas
-            hack_patterns = [
-                'hack', 'cheat', 'client', 'mod', 'modded', 'modified', 'altered',
-                'cracked', 'crack', 'premium', 'vip', 'private', 'secret', 'hidden',
-                'vape', 'entropy', 'whiteout', 'liquidbounce', 'wurst', 'impact',
-                'sigma', 'flux', 'future', 'astolfo', 'exhibition', 'novoline',
-                'rise', 'moon', 'drip', 'ghost', 'ghostclient', 'bypass', 'stealth',
-                'undetected', 'incognito', 'minecraft', 'mc', 'jar', 'exe', 'dll'
-            ]
-            
+            _BROWSER_SKIP_COMMON = {
+                'google\\chrome', 'mozilla\\firefox', 'microsoft\\edge',
+                'brave-browser', 'vivaldi', 'opera software',
+                'appdata\\local\\google', 'appdata\\roaming\\mozilla',
+            }
+
             for location in common_locations:
                 if os.path.exists(location):
                     print(f"📁 ESCANEANDO: {location}")
                     try:
                         for root, dirs, files in os.walk(location):
-                            # Buscar en nombres de carpetas
+                            _root_lower = root.lower()
+                            if any(frag in _root_lower for frag in _BROWSER_SKIP_COMMON):
+                                dirs[:] = []
+                                continue
                             for dir_name in dirs:
-                                dir_lower = dir_name.lower()
-                                for pattern in hack_patterns:
-                                    if pattern in dir_lower:
-                                        # Verificar si no es un falso positivo
-                                        if not any(false_positive in dir_lower or false_positive in root.lower() 
-                                                  for false_positive in ['zomboid', 'shaders', 'textures', 'media', 'vscode', 'pylance', 'skimage', 'pyi']):
-                                            print(f"🎯 HACK DETECTADO EN UBICACIÓN COMÚN: {dir_name} en {root}")
-                                            self.issues_found.append({
-                                                'nombre': dir_name,
-                                                'ruta': root,
-                                                'archivo': os.path.join(root, dir_name),
-                                                'tipo': 'hack_folder_common',
-                                                'categoria': 'HACKS',
-                                                'alerta': 'CRITICAL'
-                                            })
+                                if _is_hack_folder(dir_name, _root_lower):
+                                    print(f"🎯 HACK DETECTADO EN UBICACIÓN COMÚN: {dir_name} en {root}")
+                                    self.issues_found.append({
+                                        'nombre': dir_name,
+                                        'ruta': root,
+                                        'archivo': os.path.join(root, dir_name),
+                                        'tipo': 'hack_folder_common',
+                                        'categoria': 'HACKS',
+                                        'alerta': 'CRITICAL'
+                                    })
                     except Exception as e:
                         print(f"Error escaneando {location}: {str(e)}")
                         continue
@@ -4289,17 +4435,6 @@ class ArgusApp:
         try:
             print("🔍 ESCANEANDO CARPETAS SOSPECHOSAS EN TODO EL SISTEMA...")
             import os
-            
-            # Patrones de carpetas sospechosas (más específicos para Flux)
-            suspicious_folder_patterns = [
-                'flux', 'flux 1.8', 'flux1.8', 'flux 1.8.8', 'flux1.8.8',
-                'hack', 'cheat', 'client', 'mod', 'modded', 'modified', 'altered',
-                'cracked', 'crack', 'premium', 'vip', 'private', 'secret', 'hidden',
-                'vape', 'entropy', 'whiteout', 'liquidbounce', 'wurst', 'impact',
-                'sigma', 'future', 'astolfo', 'exhibition', 'novoline',
-                'rise', 'moon', 'drip', 'ghost', 'ghostclient', 'bypass', 'stealth',
-                'undetected', 'incognito', 'minecraft', 'mc'
-            ]
             
             # Escanear en TODAS las ubicaciones posibles (más exhaustivo)
             search_locations = [
@@ -4323,6 +4458,13 @@ class ArgusApp:
                 'D:\\', 'E:\\', 'F:\\', 'G:\\', 'H:\\'
             ]
             
+            # Fragmentos de ruta de navegadores — se saltan COMPLETAMENTE durante el walk
+            _BROWSER_SKIP = {
+                'google\\chrome', 'mozilla\\firefox', 'microsoft\\edge',
+                'brave-browser', 'vivaldi', 'opera software',
+                'appdata\\local\\google', 'appdata\\roaming\\mozilla',
+            }
+
             for location in search_locations:
                 if os.path.exists(location):
                     print(f"📁 ESCANEANDO CARPETAS EN: {location}")
@@ -4330,45 +4472,44 @@ class ArgusApp:
                         # Limitar profundidad para evitar cuelgues
                         max_depth = 3
                         for root, dirs, files in os.walk(location):
+                            # Saltar directorios de navegadores ANTES de explorar subdirectorios
+                            _root_lower = root.lower()
+                            if any(frag in _root_lower for frag in _BROWSER_SKIP):
+                                dirs[:] = []  # No descender en directorios de navegadores
+                                continue
                             # Controlar profundidad
                             depth = root[len(location):].count(os.sep)
                             if depth >= max_depth:
                                 dirs[:] = []  # No explorar más profundamente
                                 continue
-                                
+
                             for dir_name in dirs:
-                                dir_lower = dir_name.lower()
-                                for pattern in suspicious_folder_patterns:
-                                    if pattern in dir_lower:
-                                        # Verificar si no es un falso positivo
-                                        if not any(false_positive in dir_lower or false_positive in root.lower() 
-                                                  for false_positive in ['zomboid', 'shaders', 'textures', 'media', 'vscode', 'pylance', 'skimage', 'pyi', 'system32', 'program files', 'windows']):
-                                            print(f"🎯 CARPETA SOSPECHOSA ENCONTRADA: {dir_name} en {root}")
-                                            self.issues_found.append({
-                                                'nombre': dir_name,
-                                                'ruta': root,
-                                                'archivo': os.path.join(root, dir_name),
-                                                'tipo': 'suspicious_folder',
-                                                'categoria': 'HACKS',
-                                                'alerta': 'CRITICAL'
-                                            })
-                                            
-                                            # También escanear archivos dentro de esta carpeta
-                                            try:
-                                                folder_path = os.path.join(root, dir_name)
-                                                for file in os.listdir(folder_path):
-                                                    if file.lower().endswith(('.jar', '.exe', '.dll')):
-                                                        self.issues_found.append({
-                                                            'nombre': file,
-                                                            'ruta': folder_path,
-                                                            'archivo': os.path.join(folder_path, file),
-                                                            'tipo': 'hack_file',
-                                                            'categoria': 'HACKS',
-                                                            'alerta': 'CRITICAL'
-                                                        })
-                                                        print(f"🎯 ARCHIVO DE HACK ENCONTRADO: {file} en {folder_path}")
-                                            except:
-                                                pass
+                                if _is_hack_folder(dir_name, _root_lower):
+                                    print(f"🎯 CARPETA SOSPECHOSA ENCONTRADA: {dir_name} en {root}")
+                                    self.issues_found.append({
+                                        'nombre': dir_name,
+                                        'ruta': root,
+                                        'archivo': os.path.join(root, dir_name),
+                                        'tipo': 'suspicious_folder',
+                                        'categoria': 'HACKS',
+                                        'alerta': 'CRITICAL'
+                                    })
+                                    # También escanear archivos .jar/.exe/.dll dentro de esta carpeta
+                                    try:
+                                        folder_path = os.path.join(root, dir_name)
+                                        for file in os.listdir(folder_path):
+                                            if file.lower().endswith(('.jar', '.exe', '.dll')):
+                                                self.issues_found.append({
+                                                    'nombre': file,
+                                                    'ruta': folder_path,
+                                                    'archivo': os.path.join(folder_path, file),
+                                                    'tipo': 'hack_file',
+                                                    'categoria': 'HACKS',
+                                                    'alerta': 'CRITICAL'
+                                                })
+                                                print(f"🎯 ARCHIVO DE HACK ENCONTRADO: {file} en {folder_path}")
+                                    except:
+                                        pass
                     except Exception as e:
                         print(f"Error escaneando {location}: {str(e)}")
                         continue
