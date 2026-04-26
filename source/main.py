@@ -54,30 +54,82 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.3.1"
+SCANNER_VERSION = "1.5.0"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
+import unicodedata as _unicodedata
 
-# Nombres exclusivos de hack clients: seguros para buscar como substring
-# (nunca aparecen en software legítimo)
+def _normalize(text: str) -> str:
+    """Normaliza texto a ASCII para detectar homoglyphs cirílicos/unicode.
+    Ejemplo: 'vаpe' (con 'а' cirílico) → 'vape'
+    """
+    return _unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii').lower()
+
+# Nombres exclusivos de hack clients — seguros para buscar como substring.
+# Estos nombres NUNCA aparecen en software legítimo.
 _DEFINITE_HACK_NAMES = {
-    'vape', 'vapelite', 'entropy', 'entropyclient',
-    'whiteout', 'liquidbounce', 'wurst', 'wurstclient',
-    'sigmaclient', 'fluxclient', 'flux1.8', 'flux1',
-    'astolfo', 'astolfoclient', 'exhibition', 'exhibitionclient',
-    'novoline', 'ghostclient', 'ghost-client', 'ghost_client',
-    'phobos', 'komat', 'wasp', 'konas', 'seppuku', 'sloth',
-    'blatant', 'killaura', 'aimbot', 'triggerbot',
-    'wallhack', 'autoclicker', 'xray-mod', 'nofall',
-    'freecam', 'weave-loader', 'weaveclient',
+    # ── Clientes clásicos ──────────────────────────────────────────────────
+    'vape', 'vapelite', 'vapev4', 'vapev2',
+    'entropy', 'entropyclient',
+    'whiteout', 'whiteoutclient',
+    'liquidbounce', 'liquidbounce+',
+    'wurst', 'wurstclient',
+    'impactclient',
+    'sigmaclient', 'sigma5',
+    'fluxclient', 'flux1.8', 'flux1',
+    'futureclient',
+    'astolfo', 'astolfoclient',
+    'exhibition', 'exhibitionclient',
+    'novoline', 'novolineclient',
+    'ghostclient', 'ghost-client', 'ghost_client',
     'riseclient', 'moonclient', 'dripclient',
-    'futureclient', 'impactclient', 'bypasser',
+    # ── Clientes modernos (2022-2025) ─────────────────────────────────────
+    'meteorclient', 'meteor-client',
+    'rusherhack', 'rusher-hack',
+    'aristois',
+    'tenacity', 'tenacityclient',
+    'vertex', 'vertexclient',
+    'inertia', 'inertiaclient',
+    'salhack', 'sal-hack',
+    'jello', 'jelloclient',
+    'datura', 'daturamc',
+    'remix', 'remixclient',
+    'pandora', 'pandoraclient',
+    'azura', 'azuraclient',
+    'kami', 'kamiclient', 'kamiblue',
+    'konas', 'konasclient',
+    'weepcraft',
+    'nextgen', 'tegernako', 'zeroday',
+    'lucid', 'lucidclient',
+    'nyx', 'nyxclient',
+    'cloud', 'cloudclient',  # especifico de hacks, no "cloud backup"
+    'vanish',
+    # ── Módulos y herramientas ────────────────────────────────────────────
+    'phobos', 'komat', 'wasp', 'seppuku', 'sloth', 'blatant',
+    'killaura', 'kill-aura',
+    'aimbot', 'aim-bot',
+    'triggerbot', 'trigger-bot',
+    'wallhack', 'wall-hack',
+    'autoclick', 'autoclicker',
+    'xray-mod', 'xraymod',
+    'nofall', 'no-fall',
+    'freecam', 'free-cam',
+    'scaffold', 'scaffoldhack',
+    'clickgui',
+    # ── Loaders e injectors ───────────────────────────────────────────────
+    'weave-loader', 'weaveclient', 'weaveloader',
+    'extremeinjector', 'xenos', 'dllinjector',
+    'cheatengine', 'cheat-engine',
+    'processhollowing', 'dllhijacking',
+    # ── Nombres de carpetas de hack ───────────────────────────────────────
     'hackclient', 'hackmod', 'cracked-mc', 'crackedmc',
+    'bypasser', 'bypassmc',
+    # ── Baritone (bot de movimiento automático prohibido) ─────────────────
+    'baritone',
 }
 
 # Palabras genéricas que sólo se marcan cuando son palabra completa
-# (no substring de otra palabra)
 _WORD_BOUNDARY_HACK_WORDS = ['hack', 'cheat', 'cracked', 'crack', 'bypass']
 
 # Rutas de software legítimo — si el root las contiene, ignorar la carpeta
@@ -3440,6 +3492,8 @@ class ArgusApp:
                 _run_safe(self.scan_prefetch_hacks)
                 self._set_scan_phase("📝 USN Journal — JARs/carpetas borrados...")
                 _run_safe(self.scan_usn_minecraft_jars)
+                self._set_scan_phase("📡 Discord webhooks en configs de hacks (C2)...")
+                _run_safe(self.scan_discord_webhooks)
                 self._set_scan_phase("🎯 Jitter/aim assist en software de mouse...")
                 _run_safe(self.scan_jitter_scripts)
                 self._set_scan_phase("🖥️ Minecraft Safe Mode...")
@@ -3882,12 +3936,66 @@ class ArgusApp:
             # Excluidos a propósito: reach, velocity, fly, bypass, inject, ghost, scaffold
             # (son términos genéricos presentes en cualquier mod legítimo de Minecraft)
             hack_content_patterns = [
-                b'vape', b'entropy', b'whiteout', b'liquidbounce', b'wurst',
-                b'killaura', b'aimbot', b'triggerbot', b'xray', b'fullbright',
-                b'flux', b'sigma', b'astolfo', b'exhibition',
-                b'novoline', b'drip', b'phobos', b'dllinjector',
-                b'autoclick', b'clickgui', b'anticheat.bypass'
+                # Clientes clásicos
+                b'vape', b'vapelite', b'vapev4',
+                b'entropy', b'entropyclient',
+                b'whiteout',
+                b'liquidbounce',
+                b'wurst', b'wurstclient',
+                b'impactclient',
+                b'sigmaclient', b'sigma5',
+                b'fluxclient',
+                b'futureclient',
+                b'astolfo', b'astolfoclient',
+                b'exhibition',
+                b'novoline',
+                b'dripclient',
+                # Clientes modernos (2022-2025)
+                b'meteorclient', b'meteor-client',
+                b'rusherhack',
+                b'aristois',
+                b'tenacity',
+                b'inertiaclient',
+                b'salhack',
+                b'jelloclient',
+                b'daturamc',
+                b'remixclient',
+                b'pandoraclient',
+                b'azuraclient',
+                b'kamiblue',
+                b'konasclient',
+                b'weepcraft',
+                b'zeroday',
+                b'nyxclient',
+                # Módulos y herramientas
+                b'killaura', b'kill-aura',
+                b'aimbot', b'aim-bot',
+                b'triggerbot',
+                b'xray', b'fullbright',
+                b'autoclick', b'autoclicker',
+                b'clickgui',
+                b'anticheat.bypass', b'anticheat bypass',
+                b'nofall', b'no-fall',
+                b'scaffoldhack',
+                # Loaders e injectors
+                b'weaveloader', b'weave-loader',
+                b'extremeinjector',
+                b'dllinjector',
+                b'cheatengine',
+                # C2 y exfiltración
+                b'discord.com/api/webhooks/',
+                b'drip', b'phobos',
             ]
+            # Umbrales: 1 patrón "definitivo" (nombre exacto de cliente) = hack directo
+            # 2+ patrones genéricos = hack probable
+            DEFINITE_CONTENT_PATTERNS = {
+                b'meteorclient', b'rusherhack', b'aristois', b'tenacity',
+                b'inertiaclient', b'salhack', b'jelloclient', b'daturamc',
+                b'kamiblue', b'weaveloader', b'weave-loader', b'extremeinjector',
+                b'astolfoclient', b'entropyclient', b'liquidbounce', b'wurstclient',
+                b'futureclient', b'fluxclient', b'sigmaclient', b'vapelite',
+                b'pandoraclient', b'azuraclient', b'nyxclient', b'remixclient',
+            }
 
             # Análisis de strings sospechosos
             try:
@@ -3896,15 +4004,24 @@ class ArgusApp:
                         content = f.read(1024 * 1024)  # Leer primeros 1MB
 
                         # Detectar patrones de hack en contenido
+                        # Normalizar contenido para detectar homoglyphs cirílicos
+                        content_norm = _normalize(content.decode('utf-8', errors='ignore')).encode('ascii')
                         detected_count = 0
+                        definite_hit = False
                         for pattern in hack_content_patterns:
-                            if pattern in content:
+                            if pattern in content or pattern in content_norm:
                                 detected_count += 1
                                 result['detected_patterns'].append(pattern.decode('utf-8', errors='ignore'))
+                                if pattern in DEFINITE_CONTENT_PATTERNS:
+                                    definite_hit = True
 
-                        if detected_count >= 3:
+                        if definite_hit:
+                            # Un nombre exclusivo de hack client = hit directo
                             result['is_hack'] = True
-                            result['confidence'] = min(90, detected_count * 15)
+                            result['confidence'] = min(95, 70 + detected_count * 5)
+                        elif detected_count >= 3:
+                            result['is_hack'] = True
+                            result['confidence'] = min(90, detected_count * 12)
                         elif detected_count == 2:
                             result['is_hack'] = True
                             result['confidence'] = 55
@@ -3928,9 +4045,32 @@ class ArgusApp:
                         'mods.toml', 'pack.mcmeta',
                     }
                     SUSPICIOUS_MANIFEST_PACKAGES = [
+                        # Clientes clásicos
                         'com.vape', 'net.sigma', 'com.entropy', 'me.drip',
                         'net.liquidbounce', 'com.wurst', 'com.future', 'com.flux',
-                        'com.meteor', 'com.astolfo', 'net.rise', 'com.novoline',
+                        'com.astolfo', 'net.rise', 'com.novoline', 'com.ghost',
+                        # Clientes modernos (2022-2025)
+                        'com.meteor', 'meteordevelopment',
+                        'net.rusherhack', 'com.rusherhack',
+                        'com.aristois', 'net.aristois',
+                        'com.tenacity', 'net.tenacity',
+                        'com.vertex', 'net.vertex',
+                        'com.inertia', 'net.inertia',
+                        'me.kami', 'net.kamiblue',
+                        'com.salhack', 'me.salhack',
+                        'com.jello', 'me.jello',
+                        'com.datura', 'me.datura',
+                        'com.pandora', 'net.pandora',
+                        'com.azura', 'me.azura',
+                        'com.konas', 'net.konas',
+                        'com.remix', 'net.remix',
+                        # Loaders e injectors
+                        'me.weaveclient', 'net.weaveloader',
+                        'com.salhack',
+                        # Módulos/cheats genéricos
+                        'me.baritone',  # bot de movimiento automático
+                        'com.phobos', 'net.phobos',
+                        'com.seppuku', 'com.sloth',
                     ]
                     with _zf.ZipFile(file_path, 'r') as zf:
                         names_lower = {n.lower() for n in zf.namelist()}
@@ -4153,19 +4293,27 @@ class ArgusApp:
 
             # Nombre de archivo exacto o como parte del stem (sin extensión)
             file_stem = os.path.splitext(filename)[0]
+            # Normalizar también para detectar homoglyphs cirílicos en nombres de archivo
+            filename_norm = _normalize(filename)
+            file_stem_norm = _normalize(file_stem)
+            full_path_norm = _normalize(full_path_lower)
             for pattern in HIGH_CONFIDENCE_HACK_PATTERNS:
                 # Match en nombre del archivo (stem) o en la ruta completa como segmento
                 stem_match = (pattern == file_stem or file_stem.startswith(pattern + '-')
                               or file_stem.startswith(pattern + '_') or file_stem.endswith('-' + pattern)
                               or file_stem.endswith('_' + pattern) or (' ' + pattern) in file_stem
                               or (pattern + ' ') in file_stem)
+                # Mismo chequeo pero sobre nombre normalizado (detecta homoglyphs)
+                stem_match_norm = (pattern in file_stem_norm)
                 path_segment_match = ('\\' + pattern + '\\') in full_path_lower or \
                                      ('/' + pattern + '/') in full_path_lower or \
                                      full_path_lower.endswith('\\' + pattern) or \
                                      full_path_lower.endswith('/' + pattern)
                 # Clientes conocidos también pueden aparecer como substring en el nombre
-                client_match = (pattern in KNOWN_HACK_CLIENTS and pattern in filename)
-                if (stem_match or path_segment_match or client_match) and not self.is_whitelisted(file_path):
+                client_match = (pattern in KNOWN_HACK_CLIENTS and
+                                (pattern in filename or pattern in filename_norm))
+                if (stem_match or stem_match_norm or path_segment_match or client_match) and \
+                        not self.is_whitelisted(file_path):
                     is_suspicious = True
                     confidence = max(confidence, 82)
                     detected_patterns.append(pattern)
@@ -6038,43 +6186,152 @@ class ArgusApp:
             print(f"Error escaneando temp JNA: {str(e)}")
     
     def scan_registry_suspicious(self):
-        """Escanea registro de Windows para entradas sospechosas"""
+        """Escanea registro de Windows para entradas sospechosas de hacks."""
         try:
             print("🔍 ESCANEANDO REGISTRO DE WINDOWS...")
-            import winreg
-            
-            # Escanear HKEY_CURRENT_USER para entradas sospechosas
+            import winreg as _wr
+
+            HACK_KW = list(_DEFINITE_HACK_NAMES) + _WORD_BOUNDARY_HACK_WORDS + [
+                'autoclick', 'autoclicker', 'injector', 'weaveloader',
+                'cheatengine', 'extremeinjector', 'xenos',
+            ]
+
+            def _scan_run_key(hive, subkey_path, hive_name):
+                """Escanea una clave Run/RunOnce buscando entradas de hacks."""
+                try:
+                    key = _wr.OpenKey(hive, subkey_path)
+                    i = 0
+                    while True:
+                        try:
+                            name, data, _ = _wr.EnumValue(key, i)
+                            combined = (name + ' ' + str(data)).lower()
+                            # Normalizar para homoglyphs
+                            combined_norm = _normalize(combined)
+                            hit = next((kw for kw in HACK_KW
+                                        if kw in combined or kw in combined_norm), None)
+                            if hit:
+                                full_key = f'{hive_name}\\{subkey_path}'
+                                print(f"🚨 REGISTRO RUN/RUNONCE HACK: {name} → {str(data)[:80]}")
+                                self.issues_found.append({
+                                    'nombre': f'Entrada de inicio automático sospechosa: {name}',
+                                    'ruta': full_key,
+                                    'archivo': name,
+                                    'tipo': 'registry_run_hack',
+                                    'categoria': 'HACKS',
+                                    'alerta': 'CRITICAL',
+                                    'confidence': 0.88,
+                                    'detected_patterns': [f'registry_run:{hit}'],
+                                    'explicacion': (
+                                        f'La clave de registro {full_key} contiene una entrada de '
+                                        f'inicio automático con nombre "{name}" que coincide con un '
+                                        f'hack client conocido ({hit}). Esto indica que el hack '
+                                        f'se ejecuta automáticamente al iniciar Windows.'
+                                    ),
+                                })
+                            i += 1
+                        except OSError:
+                            break
+                    _wr.CloseKey(key)
+                except Exception:
+                    pass
+
+            # HKCU Run / RunOnce
+            _scan_run_key(_wr.HKEY_CURRENT_USER,
+                          r'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'HKCU')
+            _scan_run_key(_wr.HKEY_CURRENT_USER,
+                          r'SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce', 'HKCU')
+            # HKLM Run / RunOnce
+            _scan_run_key(_wr.HKEY_LOCAL_MACHINE,
+                          r'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'HKLM')
+            _scan_run_key(_wr.HKEY_LOCAL_MACHINE,
+                          r'SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce', 'HKLM')
+            # WOW6432Node (apps de 32 bits en Windows 64)
+            _scan_run_key(_wr.HKEY_LOCAL_MACHINE,
+                          r'SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run', 'HKLM_WOW')
+
+            # UserAssist — historial de programas ejecutados por el usuario
             try:
-                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\OpenSavePidlMRU\txt")
-                print("⚠️ ENTRADA SOSPECHOSA EN REGISTRO: OpenSavePidlMRU")
-                self.issues_found.append({
-                    'nombre': "Entrada sospechosa en registro: OpenSavePidlMRU",
-                    'ruta': 'Registry',
-                    'archivo': 'HKEY_CURRENT_USER',
-                    'tipo': 'registry_suspicious',
-                    'categoria': 'HACKS',
-                    'alerta': 'SOSPECHOSO'
-                })
-                winreg.CloseKey(key)
-            except:
+                ua_path = r'SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\UserAssist'
+                ua_key = _wr.OpenKey(_wr.HKEY_CURRENT_USER, ua_path)
+                j = 0
+                while True:
+                    try:
+                        guid = _wr.EnumKey(ua_key, j)
+                        count_key = _wr.OpenKey(ua_key, guid + r'\Count')
+                        k = 0
+                        while True:
+                            try:
+                                name, data, _ = _wr.EnumValue(count_key, k)
+                                # UserAssist usa ROT13 para codificar el nombre del exe
+                                import codecs as _codecs
+                                decoded = _codecs.decode(name, 'rot_13').lower()
+                                decoded_norm = _normalize(decoded)
+                                hit = next((kw for kw in HACK_KW
+                                            if kw in decoded or kw in decoded_norm), None)
+                                if hit:
+                                    print(f"🚨 REGISTRO USERASSIST HACK: {decoded[:80]}")
+                                    self.issues_found.append({
+                                        'nombre': f'UserAssist: programa sospechoso ejecutado: {decoded[:60]}',
+                                        'ruta': f'HKCU\\{ua_path}\\{guid}\\Count',
+                                        'archivo': decoded[:60],
+                                        'tipo': 'registry_userassist_hack',
+                                        'categoria': 'FORENSE',
+                                        'alerta': 'CRITICAL',
+                                        'confidence': 0.85,
+                                        'detected_patterns': [f'userassist:{hit}'],
+                                        'explicacion': (
+                                            f'El registro UserAssist confirma que "{decoded[:60]}" fue '
+                                            f'ejecutado por el usuario. UserAssist registra todos los '
+                                            f'programas lanzados desde el Explorador de Windows.'
+                                        ),
+                                    })
+                                k += 1
+                            except OSError:
+                                break
+                        _wr.CloseKey(count_key)
+                        j += 1
+                    except OSError:
+                        break
+                _wr.CloseKey(ua_key)
+            except Exception:
                 pass
-                
-            # Escanear Compatibility Assistant
+
+            # AppCompatFlags — programas que solicitaron compatibilidad (frecuente en loaders)
             try:
-                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store")
-                print("⚠️ ENTRADA SOSPECHOSA EN REGISTRO: Compatibility Assistant")
-                self.issues_found.append({
-                    'nombre': "Entrada sospechosa en registro: Compatibility Assistant",
-                    'ruta': 'Registry',
-                    'archivo': 'HKEY_CURRENT_USER',
-                    'tipo': 'registry_suspicious',
-                    'categoria': 'HACKS',
-                    'alerta': 'SOSPECHOSO'
-                })
-                winreg.CloseKey(key)
-            except:
+                compat_path = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers'
+                compat_key = _wr.OpenKey(_wr.HKEY_CURRENT_USER, compat_path)
+                i = 0
+                while True:
+                    try:
+                        name, data, _ = _wr.EnumValue(compat_key, i)
+                        combined = (name + ' ' + str(data)).lower()
+                        combined_norm = _normalize(combined)
+                        hit = next((kw for kw in HACK_KW
+                                    if kw in combined or kw in combined_norm), None)
+                        if hit:
+                            print(f"🚨 REGISTRO APPCOMPAT HACK: {name[:80]}")
+                            self.issues_found.append({
+                                'nombre': f'AppCompat Layers: programa sospechoso: {os.path.basename(name)}',
+                                'ruta': f'HKCU\\{compat_path}',
+                                'archivo': name,
+                                'tipo': 'registry_appcompat_hack',
+                                'categoria': 'FORENSE',
+                                'alerta': 'SOSPECHOSO',
+                                'confidence': 0.78,
+                                'detected_patterns': [f'appcompat:{hit}'],
+                                'explicacion': (
+                                    f'AppCompatFlags registra que "{os.path.basename(name)}" fue ejecutado '
+                                    f'con flags de compatibilidad. Los loaders de hacks frecuentemente '
+                                    f'requieren modos de compatibilidad de Windows para funcionar.'
+                                ),
+                            })
+                        i += 1
+                    except OSError:
+                        break
+                _wr.CloseKey(compat_key)
+            except Exception:
                 pass
-                
+
         except Exception as e:
             print(f"Error escaneando registro: {str(e)}")
     
@@ -8237,7 +8494,9 @@ class ArgusApp:
             print(f"Error en scan_dll_injection_java: {e}")
 
     def scan_ahk_scripts(self):
-        """Busca scripts AutoHotkey con patrones de autoclick y contexto Minecraft."""
+        """Busca scripts AutoHotkey con patrones de autoclick y contexto Minecraft.
+        También detecta ejecutables AHK compilados en ubicaciones sospechosas.
+        """
         print("🔍 Buscando scripts AHK con autoclick...")
         import re as _re
         search_paths = [
@@ -8247,33 +8506,99 @@ class ArgusApp:
             os.path.expanduser('~\\AppData\\Roaming'),
             os.path.expanduser('~\\AppData\\Local'),
         ]
-        MC_KW = ['minecraft', ' mc', 'lbutton', 'rbutton', 'mbutton']
+        MC_KW = ['minecraft', ' mc', 'lbutton', 'rbutton', 'mbutton', 'java.exe', 'javaw']
         CLICK_RE = [
-            r'click\s*,',
-            r'sleep\s*,\s*[1-9]\d?(?!\d)',
-            r'loop\s*\{',
+            r'click\s*,?\s*\d*',         # Click, / Click 3
+            r'sleep\s*,\s*[1-9]\d{0,2}', # Sleep corto < 1000ms
+            r'loop\s*[,\{]',             # Loop { / Loop, 10
             r'mouseevent\s*\(',
             r'send\s*\{click\}',
+            r'sendinput\s*\{lbutton\}',
+            r'controlclick',
+            r'\bsetmousedelay\b',
+            r'\btoggle\b.*\bclick\b',
         ]
+        # Patrones de ofuscación AHK: variables largas aleatorias, chr() chains, etc.
+        OBFUSC_RE = [
+            r'chr\(\d+\)\s*\.\s*chr\(\d+\)',  # chr(86).chr(65)... string building
+            r'#noenv\s*\n.*#persistent',       # flags de AHK ofuscado
+        ]
+        # Nombres de archivo que indican autoclick directamente
+        AUTOCLICK_NAME_KW = ['autoclick', 'autoclicker', 'clicker', 'click-bot',
+                              'jitter', 'butterfly', 'drag-click', 'dragclick',
+                              'cps', 'bypass-click', 'aim', 'macro']
         try:
             for base in search_paths:
                 if not os.path.isdir(base):
                     continue
                 for root, dirs, files in os.walk(base):
-                    dirs[:] = [d for d in dirs if d.lower() not in {'windows', 'system32', '.git', '__pycache__'}]
+                    dirs[:] = [d for d in dirs if d.lower() not in {
+                        'windows', 'system32', '.git', '__pycache__',
+                        'google', 'mozilla', 'microsoft',
+                    }]
                     for fname in files:
-                        if not fname.lower().endswith('.ahk'):
-                            continue
+                        fname_lower = fname.lower()
                         fpath = os.path.join(root, fname)
+
+                        # Detectar AHK compilado (.exe) con nombre sospechoso
+                        if fname_lower.endswith('.exe'):
+                            if any(kw in fname_lower for kw in AUTOCLICK_NAME_KW):
+                                try:
+                                    # Verificar si es AHK compilado leyendo firma del PE
+                                    with open(fpath, 'rb') as f:
+                                        header = f.read(512)
+                                    is_ahk_compiled = (b'AutoHotkey' in header or
+                                                        b'AHK_L' in header or
+                                                        b'AutoHotkeyL' in header or
+                                                        b'AUTOHOTKEY' in header.upper())
+                                    if is_ahk_compiled:
+                                        print(f"🚨 AHK EXE COMPILADO (autoclick): {fpath}")
+                                        self.issues_found.append({
+                                            'nombre': f'Ejecutable AHK compilado (autoclick): {fname}',
+                                            'ruta': fpath,
+                                            'archivo': fname,
+                                            'tipo': 'ahk_autoclick',
+                                            'categoria': 'AUTOCLICK',
+                                            'alerta': 'CRITICAL',
+                                            'confidence': 0.91,
+                                            'detected_patterns': ['ahk_compiled_exe', 'autoclick_name'],
+                                            'explicacion': (
+                                                f'{fname} es un ejecutable AHK compilado con nombre de autoclick. '
+                                                'Los AHK compilados son scripts de autoclick que ocultan el código '
+                                                'fuente para evitar ser detectados durante el Screen Share.'
+                                            ),
+                                        })
+                                except Exception:
+                                    pass
+                            continue  # No analizar otros .exe como scripts AHK
+
+                        if not fname_lower.endswith('.ahk'):
+                            continue
+
                         try:
                             with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
-                                content = f.read(8192).lower()
+                                content = f.read(16384).lower()
+
                             has_click = any(_re.search(p, content, _re.IGNORECASE) for p in CLICK_RE)
-                            if not has_click:
+                            is_obfusc = any(_re.search(p, content, _re.IGNORECASE | _re.DOTALL)
+                                            for p in OBFUSC_RE)
+                            name_match = any(kw in fname_lower for kw in AUTOCLICK_NAME_KW)
+
+                            if not (has_click or is_obfusc or name_match):
                                 continue
+
                             has_mc = any(kw in content for kw in MC_KW)
+                            if is_obfusc and not has_mc:
+                                has_mc = True  # ofuscación sin MC keyword = sospechoso igual
+
                             alert = 'CRITICAL' if has_mc else 'SOSPECHOSO'
-                            conf  = 0.88 if has_mc else 0.65
+                            conf  = 0.91 if has_mc else 0.68
+                            patterns = ['ahk_click'] + (['ahk_minecraft'] if has_mc else [])
+                            if is_obfusc:
+                                patterns.append('ahk_obfuscated')
+                            if name_match:
+                                patterns.append('ahk_autoclick_name')
+
                             print(f"{'🚨' if has_mc else '⚠️'} AHK AUTOCLICK: {fpath}")
                             self.issues_found.append({
                                 'nombre': f'Script AHK con autoclick{"+ Minecraft" if has_mc else ""}: {fname}',
@@ -8283,7 +8608,13 @@ class ArgusApp:
                                 'categoria': 'AUTOCLICK',
                                 'alerta': alert,
                                 'confidence': conf,
-                                'detected_patterns': ['ahk_click'] + (['ahk_minecraft'] if has_mc else []),
+                                'detected_patterns': patterns,
+                                'explicacion': (
+                                    f'{fname} contiene patrones de autoclick{"con contexto Minecraft" if has_mc else ""}. '
+                                    + ('Script ofuscado — se está ocultando el código. ' if is_obfusc else '')
+                                    + 'Los scripts AHK de autoclick simulan clics de ratón automáticos para '
+                                    'obtener mayor CPS del que es humanamente posible.'
+                                ),
                             })
                         except Exception:
                             continue
@@ -9095,31 +9426,74 @@ class ArgusApp:
     def scan_weave_loader(self):
         """#4 — Detecta artefactos de Weave Loader (framework de inyección más popular)."""
         print("🔍 Buscando artefactos de Weave Loader...")
-        appdata = os.environ.get('APPDATA', '')
-        local   = os.environ.get('LOCALAPPDATA', '')
+        appdata  = os.environ.get('APPDATA', '')
+        local    = os.environ.get('LOCALAPPDATA', '')
+        mc_dir   = os.path.join(appdata, '.minecraft')
         WEAVE_PATHS = [
-            (os.path.join(appdata,  '.weave'),          'Directorio de Weave Loader'),
+            (os.path.join(appdata,  '.weave'),               'Directorio de Weave Loader'),
             (os.path.join(appdata,  '.weave', 'weave.json'), 'Configuración de Weave'),
-            (os.path.join(appdata,  'WeaveLoader'),     'WeaveLoader AppData'),
-            (os.path.join(local,    'WeaveLoader'),     'WeaveLoader LocalAppData'),
+            (os.path.join(appdata,  'WeaveLoader'),          'WeaveLoader AppData'),
+            (os.path.join(local,    'WeaveLoader'),          'WeaveLoader LocalAppData'),
+            (os.path.join(mc_dir,   '.weave'),               'Weave en .minecraft'),
+            (os.path.join(mc_dir,   'weave'),                'Weave folder en .minecraft'),
         ]
+        # Módulos de Weave que son hacks conocidos
+        WEAVE_HACK_MODULES = {
+            'killaura', 'aimassist', 'triggerbot', 'reach', 'velocity',
+            'scaffold', 'nofall', 'fly', 'speed', 'fullbright', 'xray',
+            'autoclick', 'clickgui', 'freecam', 'nametag', 'blink',
+        }
         try:
+            reported_dirs = set()
             for path, desc in WEAVE_PATHS:
-                if os.path.exists(path):
-                    print(f"🚨 WEAVE LOADER: {path}")
-                    self.issues_found.append({
-                        'nombre': f'Weave Loader detectado: {desc}',
-                        'ruta': path,
-                        'archivo': os.path.basename(path),
-                        'tipo': 'ghost_client_config',
-                        'categoria': 'GHOST_CLIENT',
-                        'alerta': 'CRITICAL',
-                        'confidence': 0.96,
-                        'detected_patterns': ['weave_loader'],
-                        'explicacion': 'Weave Loader es el framework de inyección de mods más popular actualmente. '
-                                       'Permite cargar ghost clients y módulos de hacks en Minecraft sin dejar '
-                                       'archivos .jar visibles en la carpeta mods.',
-                    })
+                if not os.path.exists(path):
+                    continue
+                base_dir = path if os.path.isdir(path) else os.path.dirname(path)
+                if base_dir in reported_dirs:
+                    continue
+                reported_dirs.add(base_dir)
+
+                extra_patterns = ['weave_loader']
+                extra_info = ''
+                # Leer weave.json para detectar módulos de hacks cargados
+                weave_json_path = os.path.join(base_dir, 'weave.json')
+                if os.path.isfile(weave_json_path):
+                    try:
+                        import json as _json
+                        with open(weave_json_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            wdata = _json.load(f)
+                        mods_list = []
+                        # weave.json puede tener "modules", "mods", "enabled"
+                        for key in ('modules', 'mods', 'enabled', 'addons'):
+                            val = wdata.get(key, [])
+                            if isinstance(val, list):
+                                mods_list.extend(str(m).lower() for m in val)
+                            elif isinstance(val, dict):
+                                mods_list.extend(k.lower() for k in val.keys())
+                        hack_mods = [m for m in mods_list
+                                     if any(h in m for h in WEAVE_HACK_MODULES)]
+                        if hack_mods:
+                            extra_patterns.append(f'weave_modules:{",".join(hack_mods[:5])}')
+                            extra_info = f' Módulos detectados: {", ".join(hack_mods[:5])}.'
+                    except Exception:
+                        pass
+
+                print(f"🚨 WEAVE LOADER: {path}")
+                self.issues_found.append({
+                    'nombre': f'Weave Loader detectado: {desc}',
+                    'ruta': path,
+                    'archivo': os.path.basename(path),
+                    'tipo': 'ghost_client_config',
+                    'categoria': 'GHOST_CLIENT',
+                    'alerta': 'CRITICAL',
+                    'confidence': 0.96,
+                    'detected_patterns': extra_patterns,
+                    'explicacion': (
+                        'Weave Loader es el framework de inyección de mods más popular actualmente. '
+                        'Permite cargar ghost clients y módulos de hacks en Minecraft sin dejar '
+                        f'archivos .jar visibles en la carpeta mods.{extra_info}'
+                    ),
+                })
         except Exception as e:
             print(f"Error en scan_weave_loader: {e}")
 
@@ -9128,12 +9502,41 @@ class ArgusApp:
         print("🔍 Escaneando Prefetch por hacks ejecutados...")
         prefetch_dir = r'C:\Windows\Prefetch'
         HACK_NAMES = [
-            'sigma', 'vape', 'liquidbounce', 'wurst', 'meteor', 'rise', 'flux',
-            'future', 'astolfo', 'novoline', 'rusherhack', 'drip', 'vertex',
-            'entropy', 'remix', 'inertia', 'salhack', 'jello', 'datura',
-            'impact', 'aristois', 'weaveloader', 'extremeinjector', 'xenos',
-            'cheatengine', 'injector', 'ghostclient', 'aimbot', 'killaura',
-            'autoclicker', 'autoclick', 'scaffold', 'baritone',
+            # Clientes clásicos
+            'sigma', 'vape', 'vapelite', 'liquidbounce', 'wurst', 'rise',
+            'flux', 'future', 'astolfo', 'novoline', 'drip', 'entropy',
+            'whiteout', 'exhibition', 'impact',
+            # Clientes modernos (2022-2025)
+            'meteor', 'meteorclient',
+            'rusherhack', 'rusher',
+            'aristois',
+            'tenacity',
+            'vertex', 'vertexclient',
+            'inertia', 'inertiaclient',
+            'salhack',
+            'jello', 'jelloclient',
+            'datura', 'daturamc',
+            'remix', 'remixclient',
+            'pandora', 'pandoraclient',
+            'azura',
+            'kamiblue',
+            'konas',
+            'weepcraft',
+            'zeroday',
+            'nyx', 'nyxclient',
+            'lucid', 'lucidclient',
+            'nextgen', 'tegernako',
+            # Loaders e injectors
+            'weaveloader', 'weave-loader',
+            'extremeinjector', 'xenos',
+            'cheatengine', 'processhacker',
+            'injector',
+            # Nombres genéricos de ghost clients
+            'ghostclient', 'ghost-client',
+            'hackclient',
+            'aimbot', 'killaura',
+            'autoclicker', 'autoclick',
+            'scaffold', 'baritone',
         ]
         if not os.path.isdir(prefetch_dir):
             return
@@ -9171,11 +9574,20 @@ class ArgusApp:
         """#22/#23 — Detecta JARs y carpetas de ghost clients eliminados via USN Journal."""
         print("🔍 Buscando JARs/.minecraft borrados en USN Journal (últimas 72h)...")
         HACK_PATTERNS = [
-            'sigma', 'vape', 'liquidbounce', 'wurst', 'meteor', 'rise', 'flux',
-            'future', 'astolfo', 'novoline', 'rusherhack', 'drip', 'vertex',
-            'entropy', 'remix', 'inertia', 'salhack', 'jello', 'datura',
-            'impact', '.weave', '.rise', '.sigma', '.meteor', '.liquidbounce',
+            # Clientes clásicos
+            'sigma', 'vape', 'vapelite', 'liquidbounce', 'wurst', 'rise',
+            'flux', 'future', 'astolfo', 'novoline', 'drip', 'entropy',
+            'whiteout', 'exhibition',
+            # Clientes modernos (2022-2025)
+            'meteor', 'rusherhack', 'aristois', 'tenacity', 'vertex',
+            'inertia', 'salhack', 'jello', 'datura', 'remix', 'pandora',
+            'azura', 'kamiblue', 'konas', 'weepcraft', 'zeroday',
+            'nyx', 'lucid', 'nextgen', 'impact',
+            # Fingerprints de directorio
+            '.weave', '.rise', '.sigma', '.meteor', '.liquidbounce',
+            # Misc
             'ghostclient', 'ghost_client', 'baritone', 'schematica',
+            'hackclient', 'hackmod', 'weaveloader',
         ]
         import subprocess as _sp
         try:
@@ -9218,6 +9630,88 @@ class ArgusApp:
                 })
         except Exception as e:
             print(f"Error en scan_usn_minecraft_jars: {e}")
+
+    def scan_discord_webhooks(self):
+        """Detecta URLs de Discord webhooks en archivos de config de hack clients (C2/exfiltración)."""
+        print("🔍 Buscando Discord webhooks en configs de hacks...")
+        import re as _re
+        appdata = os.environ.get('APPDATA', '')
+        local   = os.environ.get('LOCALAPPDATA', '')
+        home    = os.path.expanduser('~')
+        # Carpetas donde los hacks guardan sus configs
+        SEARCH_BASES = [
+            os.path.join(appdata, '.minecraft'),
+            os.path.join(appdata, '.weave'),
+            os.path.join(appdata, 'WeaveLoader'),
+            os.path.join(local,   'WeaveLoader'),
+            os.path.join(home,    'Desktop'),
+            os.path.join(home,    'Downloads'),
+            os.path.join(home,    'Documents'),
+        ]
+        # Extensiones de archivo de config
+        CONFIG_EXTS = {'.json', '.txt', '.cfg', '.yml', '.yaml', '.toml', '.properties', '.log'}
+        WEBHOOK_RE = _re.compile(
+            r'https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/\d+/[\w-]+',
+            _re.IGNORECASE
+        )
+        HACK_CONFIG_KW = ['hack', 'client', 'cheat', 'config', 'setting', 'weave',
+                          'module', 'baritone', 'meteor', 'vape', 'sigma', 'flux']
+        found_paths = set()
+        try:
+            for base in SEARCH_BASES:
+                if not os.path.isdir(base):
+                    continue
+                for root, dirs, files in os.walk(base):
+                    dirs[:] = [d for d in dirs if d.lower() not in {
+                        'google', 'mozilla', 'microsoft', 'windows',
+                        'node_modules', '__pycache__', '.git',
+                    }]
+                    for fname in files:
+                        if os.path.splitext(fname.lower())[1] not in CONFIG_EXTS:
+                            continue
+                        fpath = os.path.join(root, fname)
+                        if fpath in found_paths:
+                            continue
+                        try:
+                            fsize = os.path.getsize(fpath)
+                            if fsize > 2 * 1024 * 1024:  # skip > 2MB
+                                continue
+                            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read()
+                            matches = WEBHOOK_RE.findall(content)
+                            if not matches:
+                                continue
+                            found_paths.add(fpath)
+                            # ¿El archivo está en una carpeta de hack o tiene keyword de hack?
+                            root_lower = root.lower()
+                            fname_lower = fname.lower()
+                            is_hack_context = (
+                                any(kw in root_lower for kw in HACK_CONFIG_KW) or
+                                any(kw in fname_lower for kw in HACK_CONFIG_KW)
+                            )
+                            alert = 'CRITICAL' if is_hack_context else 'SOSPECHOSO'
+                            conf  = 0.92 if is_hack_context else 0.72
+                            print(f"🚨 DISCORD WEBHOOK en config: {fpath} ({len(matches)} URL(s))")
+                            self.issues_found.append({
+                                'nombre': f'Discord webhook en config de hack: {fname}',
+                                'ruta': fpath,
+                                'archivo': fname,
+                                'tipo': 'discord_webhook_config',
+                                'categoria': 'C2_EXFIL',
+                                'alerta': alert,
+                                'confidence': conf,
+                                'detected_patterns': [f'discord_webhook:{m[:60]}' for m in matches[:3]],
+                                'explicacion': (
+                                    f'Se encontraron {len(matches)} URL(s) de Discord webhook en {fpath}. '
+                                    'Los hack clients modernos usan webhooks de Discord para enviar '
+                                    'notificaciones al cheater (logros de hack, alerta de SS, etc.) '
+                                    'o para exfiltrar datos del servidor/jugador.'
+                                ),
+                            })
+                        except Exception:
+                            continue
+        except Exception as e:
+            print(f"Error en scan_discord_webhooks: {e}")
 
     def scan_jitter_scripts(self):
         """#15 — Detecta configuraciones de jitter/aim assist en software de mouse."""
