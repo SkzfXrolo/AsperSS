@@ -2202,55 +2202,33 @@ class ArgusApp:
         # FILTRO MEJORADO - DETECTA HACKS REALES PERO MENOS ESTRICTO
         # ============================================================
         
-        # PATRONES DE HACKS REALES (MÁS AMPLIO)
-        real_hack_patterns = [
-            # Vape (cliente más común - CRITICAL)
-            'vape', 'vapelite', 'vapev2', 'vapev4', 'vape.exe', 'vape.jar',
-            
-            # Entropy (CRITICAL)
-            'entropy', 'entropyclient', 'entropy.exe', 'entropy.jar',
-            
-            # Whiteout (CRITICAL)
-            'whiteout', 'whiteoutclient', 'whiteout.exe', 'whiteout.jar',
-            
-            # LiquidBounce (SOSPECHOSO)
-            'liquidbounce', 'liquid bounce', 'lb', 'liquidbounceclient',
-            
-            # Wurst (SOSPECHOSO)
-            'wurst', 'wurstclient', 'wurst loader',
-            
-            # Impact (SOSPECHOSO)
-            'impact', 'impact client', 'impactclient',
-            
-            # Sigma (SOSPECHOSO)
-            'sigma', 'sigmaclient', 'sigma5.0', 'sigma-5.0',
-            
-            # Flux (SOSPECHOSO)
-            'flux', 'fluxclient', 'flux b1.6', 'flux 1.8.8', 'flux1.8.8',
-            
-            # Future (SOSPECHOSO)
-            'future', 'futureclient',
-            
-            # Otros clientes conocidos
-            'astolfo', 'exhibition', 'novoline', 'rise', 'moon', 'drip',
-            'phobos', 'komat', 'wasp', 'konas', 'seppuku', 'sloth',
-            'lucid', 'tenacity', 'nyx', 'vanish', 'ploow', 'cloud',
-            'nextgen', 'tegernako', 'zeroday',
-            
-            # Injectors (CRITICAL)
-            'injector', 'inject', 'inyector', 'injection', 'dllinjector',
-            
-            # Ghost clients
-            'ghost', 'ghostclient',
-            
-            # Bypass tools
-            'bypass', 'stealth', 'undetected', 'incognito', 'unbypass',
-            
-            # Módulos específicos de hacks (CRITICAL)
-            'killaura', 'aimbot', 'triggerbot', 'reach', 'velocity',
-            'antiknockback', 'scaffold', 'fly', 'xray', 'fullbright',
-            'speedhack', 'wtap', 'aimassist', 'bhop', 'nofall'
+        # ── PATRONES DE HACKS REALES — SOLO nombres exclusivos, sin genéricos ──────────
+        # REGLA: si el término aparece en mods legítimos de Minecraft, NO va aquí.
+        # Términos eliminados: inject, bypass, ghost, fly, reach, velocity, scaffold,
+        # nofall, impact, flux, rise, sigma, lb (liquid bounce), ghost, stealth, etc.
+        # Esos términos se evalúan en analyze_file_content() con múltiples co-ocurrencias.
+        real_hack_patterns = list(_DEFINITE_HACK_NAMES) + [
+            # Variantes de nombre con extensión
+            'vape.exe', 'vape.jar', 'entropy.exe', 'entropy.jar',
+            'whiteout.exe', 'liquidbounce.jar', 'wurst.jar',
+            # Módulos cuyo nombre NUNCA aparece en mods legítimos
+            'killaura', 'aimbot', 'triggerbot', 'antikb', 'antiknockback',
+            'xraymod', 'wallhack', 'boxesp', 'chams', 'traceline',
+            'autoclicker', 'clickgui', 'bunnyhop', 'bhop', 'aimassist',
+            'wtap', 'speedhack',
+            # Injectors con nombre específico
+            'dllinjector', 'extremeinjector',
+            # Weave
+            'weaveloader', 'weave-loader',
         ]
+        # Deduplicate preservando orden
+        _seen = set()
+        _dedup = []
+        for p in real_hack_patterns:
+            if p not in _seen:
+                _seen.add(p)
+                _dedup.append(p)
+        real_hack_patterns = _dedup
         
         # PATRONES DE FALSOS POSITIVOS — solo nombres/rutas muy específicas de software legítimo.
         # IMPORTANTE: NO incluir palabras genéricas como 'appdata', 'roaming', 'client', 'java',
@@ -2327,6 +2305,13 @@ class ArgusApp:
             'prescan_cleanup', 'suspicious_process_tree', 'unknown_parent_process',
             'baseline_anomaly', 'config_tfidf_match',
             'suspicious_network_connection',
+            # v1.5.0 — nuevos detectores especializados
+            'ghost_client_config',      # ya estaba pero incluir explícitamente
+            'discord_webhook_config',   # Discord C2 en configs de hacks
+            'registry_run_hack',        # Run/RunOnce con nombre de hack
+            'registry_userassist_hack', # UserAssist: hack ejecutado
+            'registry_appcompat_hack',  # AppCompat: loader ejecutado
+            'ahk_autoclick',            # Script/exe AHK con autoclick
         }
 
         # ── Rutas que NUNCA son hacks — se aplican ANTES del bypass de TRUSTED_TYPES ──
@@ -2451,46 +2436,84 @@ class ArgusApp:
                     is_potential_hack = True
                     break
             
-            # 4. TAMBIÉN ACEPTAR SI ESTÁ EN CARPETAS SOSPECHOSAS
+            # 4. TAMBIÉN ACEPTAR SI ESTÁ EN CARPETAS ESPECÍFICAMENTE SOSPECHOSAS
+            # Regla: el path debe ser un segmento de directorio completo, no substring.
+            # Eliminado: 'mc', 'temp', 'tmp' (demasiado genéricos → falsos positivos masivos)
+            # 'mc' matchea C:\Program Files (x86)\Microsoft\..., 'temp' matchea qualquier temp.
             suspicious_paths = [
-                'minecraft', 'mc', 'forge', 'fabric', 'mods', 'versions',
-                'libraries', 'natives', 'assets', 'resourcepacks',
-                'hack', 'cheat', 'downloads', 'desktop',
-                'temp', 'tmp',
+                '\\.minecraft\\', '\\minecraft\\',
+                '\\hack\\', '\\hacks\\',
+                '\\cheat\\', '\\cheats\\',
+                '\\ghostclient\\', '\\ghost_client\\',
+                '\\weaveloader\\', '\\.weave\\',
+                '\\killaura\\', '\\aimbot\\',
             ]
-            
             is_in_suspicious_folder = any(path in ruta for path in suspicious_paths)
             
-            # 5. CLASIFICAR POR SEVERIDAD (usando análisis de contenido si está disponible)
-            if is_potential_hack or is_in_suspicious_folder or content_confidence >= 60:
-                # Usar análisis de contenido para determinar severidad si está disponible
-                # IMPORTANTE: no sobreescribir categoria si ya fue asignada por el scanner
-                if content_confidence >= 80:
-                    item['alerta'] = 'CRITICAL'
-                    if not item.get('categoria'): item['categoria'] = 'HACKS'
-                    hacks_critical.append(item)
-                elif content_confidence >= 60:
-                    item['alerta'] = 'SOSPECHOSO'
-                    if not item.get('categoria'): item['categoria'] = 'HACKS'
-                    hacks_sospechoso.append(item)
-                elif any(hack in archivo for hack in ['vape', 'entropy', 'whiteout', 'injector', 'dllinjector']):
-                    item['alerta'] = 'CRITICAL'
-                    if not item.get('categoria'): item['categoria'] = 'HACKS'
-                    hacks_critical.append(item)
-                elif any(hack in archivo for hack in ['liquidbounce', 'wurst', 'impact', 'inject', 'killaura', 'aimbot']):
-                    item['alerta'] = 'SOSPECHOSO'
-                    if not item.get('categoria'): item['categoria'] = 'HACKS'
-                    hacks_sospechoso.append(item)
-                elif any(hack in archivo for hack in ['sigma', 'flux', 'future', 'ghost', 'bypass']):
-                    item['alerta'] = 'POCO_SOSPECHOSO'
-                    if not item.get('categoria'): item['categoria'] = 'HACKS'
-                    hacks_poco_sospechoso.append(item)
+            # 5. SCORING MULTI-FACTOR — la IA decide la severidad basándose en evidencias
+            # Acumular puntos de confianza de múltiples fuentes independientes:
+            ai_score = 0
+
+            # Factor A: Nombre del archivo/hallazgo contiene patrón definitivo
+            if is_potential_hack:
+                # Si el pattern es de _DEFINITE_HACK_NAMES (nombre exclusivo), score alto
+                matched_definite = next(
+                    (p for p in real_hack_patterns if p in archivo or p in nombre),
+                    None
+                )
+                if matched_definite and matched_definite in _DEFINITE_HACK_NAMES:
+                    ai_score += 55  # Nombre exclusivo = evidencia fuerte
                 else:
-                    item['alerta'] = 'NORMAL'
-                    if not item.get('categoria'): item['categoria'] = 'HACKS'
-                    hacks_normal.append(item)
-                
-                filtered.append(item)
+                    ai_score += 35  # Módulo/herramienta = evidencia media
+
+            # Factor B: Análisis de contenido del archivo
+            if content_confidence >= 85:
+                ai_score += 45
+            elif content_confidence >= 70:
+                ai_score += 30
+            elif content_confidence >= 55:
+                ai_score += 15
+
+            # Factor C: Ubicación en ruta sospechosa específica
+            if is_in_suspicious_folder:
+                ai_score += 20
+
+            # Factor D: Confidence original del scanner especializado
+            orig_conf = item.get('confidence', 0)
+            if isinstance(orig_conf, float) and orig_conf <= 1.0:
+                orig_conf *= 100
+            if orig_conf >= 90:
+                ai_score += 30
+            elif orig_conf >= 75:
+                ai_score += 20
+            elif orig_conf >= 60:
+                ai_score += 10
+
+            # Solo mostrar si hay evidencia real (ai_score mínimo)
+            if ai_score < 25 and not is_potential_hack and not is_in_suspicious_folder:
+                # Ruido sin evidencia concreta — descartar
+                print(f"🗑️ [AI-FILTER] Descartado por score bajo ({ai_score}): {nombre[:60]}")
+                continue
+
+            # Clasificar por score acumulado
+            if not item.get('categoria'):
+                item['categoria'] = 'HACKS'
+            item['ai_score'] = ai_score
+
+            if ai_score >= 75 or content_confidence >= 80:
+                item['alerta'] = 'CRITICAL'
+                hacks_critical.append(item)
+            elif ai_score >= 50 or content_confidence >= 60:
+                item['alerta'] = 'SOSPECHOSO'
+                hacks_sospechoso.append(item)
+            elif ai_score >= 30:
+                item['alerta'] = 'POCO_SOSPECHOSO'
+                hacks_poco_sospechoso.append(item)
+            else:
+                item['alerta'] = 'NORMAL'
+                hacks_normal.append(item)
+
+            filtered.append(item)
         
         # Correlación de evidencias: escalar si hay 2+ indicadores del mismo tipo
         JAVA_INJECTION_TYPES = {
@@ -2567,6 +2590,9 @@ class ArgusApp:
 
         # P2 #21 — Escalar a CRITICAL por combinaciones de evidencias
         filtered = self._apply_combination_penalties(filtered)
+
+        # v1.5 — Boost/desescalar por contexto global del scan
+        filtered = self._ai_contextual_boost(filtered)
 
         print(f"📋 TOTAL FINAL (tras decay + agrupación): {len(filtered)}")
         return filtered
@@ -10058,6 +10084,18 @@ class ArgusApp:
             'suspicious_network_connection': 'javaw.exe tiene una conexión activa a un servidor externo desconocido. '
                                        'Los ghost clients con licencia online (Vape, Future, Sigma) se conectan '
                                        'a sus servidores para verificar la licencia del usuario.',
+            'discord_webhook_config':   'Se encontró una URL de webhook de Discord en un archivo de configuración. '
+                                       'Los hack clients modernos la usan para notificar al jugador o para '
+                                       'exfiltrar datos del servidor a un canal de Discord privado.',
+            'registry_run_hack':        'Una clave de inicio automático (Run/RunOnce) del registro de Windows '
+                                       'contiene el nombre de un hack client. El hack se ejecuta automáticamente '
+                                       'al iniciar Windows sin necesidad de ejecutarlo manualmente.',
+            'registry_userassist_hack': 'UserAssist es un registro forense de Windows que almacena el historial '
+                                       'de todos los programas ejecutados desde el Explorador. Confirma que el '
+                                       'hack fue lanzado aunque el archivo esté ahora borrado.',
+            'registry_appcompat_hack':  'AppCompatFlags registra programas que solicitaron compatibilidad de Windows. '
+                                       'Los loaders de hacks frecuentemente necesitan este flag para inyectar en '
+                                       'procesos de 64 bits desde un ejecutable de 32 bits.',
         }
         for issue in issues:
             if not issue.get('explicacion'):
@@ -10232,6 +10270,11 @@ class ArgusApp:
             'modified_minecraft_jar', 'hack_string_in_loaded_jar',
             'cloud_hash_match', 'kill_chain', 'weave_loader',
             'suspicious_process_tree',
+            # v1.5.0 — nuevos tipos de alta confianza
+            'discord_webhook_config',   # C2 en config de hack = siempre crítico
+            'registry_run_hack',        # Persistencia en Run/RunOnce
+            'registry_userassist_hack', # Ejecución confirmada por forense
+            'prefetch_hack',            # Prefetch de hack = ejecución confirmada
         }
         critical_items = [i for i in issues if i.get('alerta') == 'CRITICAL']
         if len(critical_items) <= 1:
@@ -10278,12 +10321,119 @@ class ArgusApp:
                     i['alerta'] = 'CRITICAL'
                     i['combination_penalty'] = 'USN+kill_chain'
 
+        # Discord webhook en config + ghost client config → C2 activo
+        if 'discord_webhook_config' in tipos and (
+                'ghost_client_config' in tipos or 'ghost_client_registry' in tipos):
+            for i in issues:
+                if i.get('tipo') in ('discord_webhook_config', 'ghost_client_config',
+                                     'ghost_client_registry'):
+                    i['alerta'] = 'CRITICAL'
+                    i['confidence'] = min(1.0, i.get('confidence', 0.85) * 1.2)
+                    i['combination_penalty'] = 'C2_webhook+ghost_config'
+
+        # Registry Run + Prefetch del mismo hack → startup persistente confirmado
+        if 'registry_run_hack' in tipos and 'prefetch_hack' in tipos:
+            for i in issues:
+                if i.get('tipo') in ('registry_run_hack', 'prefetch_hack'):
+                    i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'registry_run+prefetch'
+
+        # UserAssist + Prefetch → ejecución confirmada por 2 fuentes forenses independientes
+        if 'registry_userassist_hack' in tipos and 'prefetch_hack' in tipos:
+            for i in issues:
+                if i.get('tipo') in ('registry_userassist_hack', 'prefetch_hack'):
+                    i['alerta'] = 'CRITICAL'
+                    i['confidence'] = min(1.0, i.get('confidence', 0.85) * 1.25)
+                    i['combination_penalty'] = 'userassist+prefetch'
+
+        # Weave Loader + Discord webhook → hack con exfiltración activa
+        if 'ghost_client_config' in tipos and 'discord_webhook_config' in tipos:
+            for i in issues:
+                if i.get('tipo') in ('ghost_client_config', 'discord_webhook_config'):
+                    i['combination_penalty'] = 'weave+C2'
+
+        # AHK compilado + Minecraft detectado = autoclicker definitivo
+        ahk_exes = [i for i in issues if i.get('tipo') == 'ahk_autoclick'
+                    and 'ahk_compiled_exe' in i.get('detected_patterns', [])]
+        if ahk_exes:
+            for i in ahk_exes:
+                i['alerta'] = 'CRITICAL'
+                i['combination_penalty'] = 'compiled_ahk'
+
         # 3+ CRITICAL de categorías distintas → riesgo extremo
         critical_cats = {i.get('categoria', '') for i in issues if i.get('alerta') == 'CRITICAL'}
         if len(critical_cats) >= 3:
             for i in issues:
                 if i.get('alerta') == 'CRITICAL':
                     i['confidence'] = min(1.0, i.get('confidence', 0.9) * 1.15)
+
+        return issues
+
+    def _ai_contextual_boost(self, issues):
+        """v1.5 — Ajuste de severidad basado en el contexto global del scan.
+
+        La IA observa el conjunto completo de hallazgos y:
+        - Escala indicadores SOSPECHOSO→CRITICAL cuando hay suficiente evidencia cruzada
+        - Desescala hallazgos CRITICAL aislados sin respaldo de otras fuentes
+        - Marca 'clean_context' si el contexto global es inocente
+        """
+        if not issues:
+            return issues
+
+        tipos_presentes = {i.get('tipo', '') for i in issues}
+        categorias_criticas = {i.get('categoria', '') for i in issues
+                               if i.get('alerta') == 'CRITICAL'}
+        n_critical = sum(1 for i in issues if i.get('alerta') == 'CRITICAL')
+        n_sospechoso = sum(1 for i in issues if i.get('alerta') == 'SOSPECHOSO')
+        n_total = len(issues)
+
+        # Tipos forenses de alta confianza — si hay 2+, todo el scan es más confiable
+        HIGH_CONF_FORENSE = {
+            'prefetch_hack', 'usn_deleted_hack', 'registry_userassist_hack',
+            'registry_run_hack', 'weave_loader', 'discord_webhook_config',
+            'kill_chain', 'modified_minecraft_jar',
+        }
+        n_forense = sum(1 for i in issues if i.get('tipo', '') in HIGH_CONF_FORENSE)
+
+        # BOOST: si hay 2+ fuentes forenses independientes, confirmar todos los CRITICAL
+        if n_forense >= 2:
+            for i in issues:
+                if i.get('alerta') in ('SOSPECHOSO', 'CRITICAL'):
+                    old = i.get('alerta')
+                    i['alerta'] = 'CRITICAL'
+                    i['confidence'] = min(1.0, i.get('confidence', 0.75) * 1.15)
+                    if old != 'CRITICAL':
+                        i['ai_boosted'] = f'forense_x{n_forense}'
+            print(f"🧠 [AI] Boost forense x{n_forense}: SOSPECHOSO→CRITICAL aplicado")
+
+        # BOOST: contexto de múltiples categorías confirma patrón de cheating
+        elif n_critical >= 2 and len(categorias_criticas) >= 2:
+            for i in issues:
+                if i.get('alerta') == 'SOSPECHOSO':
+                    i['alerta'] = 'CRITICAL'
+                    i['ai_boosted'] = 'multi_categoria'
+            print(f"🧠 [AI] Boost multi-categoria ({len(categorias_criticas)} cats): SOSPECHOSO→CRITICAL")
+
+        # DECAY: si solo hay 1 CRITICAL y 0 forenses, bajar a SOSPECHOSO para ser conservador
+        elif n_critical == 1 and n_forense == 0 and n_sospechoso == 0:
+            for i in issues:
+                if i.get('alerta') == 'CRITICAL':
+                    tipo = i.get('tipo', '')
+                    # Tipos que son siempre CRITICAL aunque estén solos
+                    if tipo not in {
+                        'ghost_client_config', 'modified_minecraft_jar',
+                        'jdwp_debug_port', 'javaagent_injection',
+                        'dll_injection_java', 'weave_loader',
+                        'discord_webhook_config', 'registry_run_hack',
+                    }:
+                        i['alerta'] = 'SOSPECHOSO'
+                        i['ai_decayed'] = 'single_critical_no_forense'
+            print("🧠 [AI] Decay: único CRITICAL sin forense → SOSPECHOSO")
+
+        # CONTEXTO LIMPIO: si hay 0 CRITICAL y 0 forenses, marcar como limpio
+        if n_critical == 0 and n_forense == 0 and n_sospechoso <= 1:
+            for i in issues:
+                i['clean_context'] = True
 
         return issues
 
