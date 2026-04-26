@@ -3269,6 +3269,8 @@ class ArgusApp:
                 _run_safe(self.scan_temp_dlls)
                 self._set_scan_phase("⚡ Múltiples instancias de javaw.exe...")
                 _run_safe(self.scan_multiple_javaw)
+                self._set_scan_phase("🧠 Regiones de memoria RWX en javaw.exe...")
+                _run_safe(self.scan_java_rwx_memory)
 
             # Grupo E — Ubicaciones de hacks (I/O alto)
             def _group_hack_locations():
@@ -9924,6 +9926,85 @@ class ArgusApp:
                 })
         except Exception as e:
             print(f"Error en scan_prescan_disk_activity: {e}")
+
+    def scan_java_rwx_memory(self):
+        """Detecta regiones de memoria Private+RWX (Read+Write+Execute) en javaw.exe.
+        Java legítimo no tiene regiones ejecutables privadas — son señal de código inyectado."""
+        print("🔍 Escaneando regiones de memoria RWX en javaw.exe...")
+        try:
+            import ctypes
+            import ctypes.wintypes as wt
+        except ImportError:
+            return
+
+        PAGE_EXECUTE_READWRITE = 0x40
+        PAGE_EXECUTE_WRITECOPY = 0x80
+        MEM_PRIVATE = 0x20000
+        MEM_COMMIT  = 0x1000
+
+        class MEMORY_BASIC_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ('BaseAddress',       ctypes.c_size_t),
+                ('AllocationBase',    ctypes.c_size_t),
+                ('AllocationProtect', wt.DWORD),
+                ('RegionSize',        ctypes.c_size_t),
+                ('State',             wt.DWORD),
+                ('Protect',           wt.DWORD),
+                ('Type',              wt.DWORD),
+            ]
+
+        PROCESS_QUERY_INFORMATION = 0x0400
+        PROCESS_VM_READ           = 0x0010
+        k32 = ctypes.windll.kernel32
+
+        try:
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    name = (proc.info.get('name') or '').lower()
+                    if 'javaw' not in name and 'java.exe' != name:
+                        continue
+                    pid = proc.pid
+                    h = k32.OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, False, pid)
+                    if not h:
+                        continue
+                    try:
+                        addr    = 0
+                        mbi     = MEMORY_BASIC_INFORMATION()
+                        mbi_sz  = ctypes.sizeof(mbi)
+                        rwx_count = 0
+                        rwx_total_kb = 0
+                        while k32.VirtualQueryEx(h, ctypes.c_void_p(addr), ctypes.byref(mbi), mbi_sz):
+                            if (mbi.State == MEM_COMMIT
+                                    and mbi.Type == MEM_PRIVATE
+                                    and mbi.Protect in (PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY)):
+                                rwx_count    += 1
+                                rwx_total_kb += mbi.RegionSize // 1024
+                            next_addr = mbi.BaseAddress + mbi.RegionSize
+                            if next_addr <= addr:
+                                break
+                            addr = next_addr
+                        if rwx_count >= 3:  # Umbral: >=3 regiones RWX privadas
+                            print(f"🚨 REGIONES RWX EN JAVAW (PID {pid}): {rwx_count} regiones, {rwx_total_kb}KB total")
+                            self.issues_found.append({
+                                'nombre': f'Regiones de memoria ejecutable privada (RWX) en Minecraft: {rwx_count} regiones',
+                                'ruta': f'PID:{pid}',
+                                'archivo': 'javaw.exe',
+                                'tipo': 'javaagent_injection',
+                                'categoria': 'JAVA_INJECTION',
+                                'alerta': 'CRITICAL' if rwx_count >= 8 else 'SOSPECHOSO',
+                                'confidence': min(0.92, 0.60 + rwx_count * 0.04),
+                                'detected_patterns': [f'rwx_regions:{rwx_count}', f'rwx_kb:{rwx_total_kb}'],
+                                'explicacion': f'javaw.exe (PID {pid}) tiene {rwx_count} regiones de memoria '
+                                               f'privadas con permisos Read+Write+Execute ({rwx_total_kb}KB). '
+                                               f'Java legítimo no crea estas regiones — indican código '
+                                               f'inyectado en runtime (DLL injection, JVM bytecode injection).',
+                            })
+                    finally:
+                        k32.CloseHandle(h)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_java_rwx_memory: {e}")
 
     def scan_temp_dlls(self):
         """Detecta DLLs sospechosas en carpetas temporales (%TEMP%, C:\\Windows\\Temp).
