@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.5.0"
+SCANNER_VERSION = "1.6.0"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -2306,12 +2306,15 @@ class ArgusApp:
             'baseline_anomaly', 'config_tfidf_match',
             'suspicious_network_connection',
             # v1.5.0 — nuevos detectores especializados
-            'ghost_client_config',      # ya estaba pero incluir explícitamente
-            'discord_webhook_config',   # Discord C2 en configs de hacks
-            'registry_run_hack',        # Run/RunOnce con nombre de hack
-            'registry_userassist_hack', # UserAssist: hack ejecutado
-            'registry_appcompat_hack',  # AppCompat: loader ejecutado
-            'ahk_autoclick',            # Script/exe AHK con autoclick
+            'ghost_client_config',       # ya estaba pero incluir explícitamente
+            'discord_webhook_config',    # Discord C2 en configs de hacks
+            'registry_run_hack',         # Run/RunOnce con nombre de hack
+            'registry_userassist_hack',  # UserAssist: hack ejecutado
+            'registry_appcompat_hack',   # AppCompat: loader ejecutado
+            'ahk_autoclick',             # Script/exe AHK con autoclick
+            # v1.6.0 — nuevos detectores
+            'browser_download_hack',     # Historial de descargas del navegador
+            'clipboard_hack_evidence',   # Portapapeles con hack evidence
         }
 
         # ── Rutas que NUNCA son hacks — se aplican ANTES del bypass de TRUSTED_TYPES ──
@@ -3520,6 +3523,10 @@ class ArgusApp:
                 _run_safe(self.scan_usn_minecraft_jars)
                 self._set_scan_phase("📡 Discord webhooks en configs de hacks (C2)...")
                 _run_safe(self.scan_discord_webhooks)
+                self._set_scan_phase("🌐 Historial de descargas del navegador...")
+                _run_safe(self.scan_browser_downloads)
+                self._set_scan_phase("📋 Portapapeles — webhooks y nombres de hacks...")
+                _run_safe(self.scan_clipboard_content)
                 self._set_scan_phase("🎯 Jitter/aim assist en software de mouse...")
                 _run_safe(self.scan_jitter_scripts)
                 self._set_scan_phase("🖥️ Minecraft Safe Mode...")
@@ -6933,47 +6940,97 @@ class ArgusApp:
         appdata  = os.environ.get('APPDATA', '')
         localapp = os.environ.get('LOCALAPPDATA', '')
         home     = os.path.expanduser('~')
+        mc_dir   = os.path.join(appdata, '.minecraft')
         GHOST_CONFIGS = [
-            ('Rise Client',      os.path.join(appdata,  '.rise')),
-            ('Sigma Client',     os.path.join(appdata,  '.sigma')),
-            ('Meteor Client',    os.path.join(appdata,  '.meteor')),
-            ('LiquidBounce',     os.path.join(appdata,  '.liquidbounce')),
-            ('Weave Loader',     os.path.join(appdata,  '.weave')),
-            ('WeaveLoader',      os.path.join(localapp, 'WeaveLoader')),
-            ('Jello Client',     os.path.join(appdata,  'jello')),
-            ('Datura Client',    os.path.join(appdata,  '.datura')),
-            ('Drip Client',      os.path.join(appdata,  '.drip')),
-            ('Vertex Client',    os.path.join(appdata,  '.vertex')),
-            ('Mathias Client',   os.path.join(appdata,  '.mathias')),
-            ('RusherHack',       os.path.join(appdata,  '.rusherhack')),
-            ('Azura Client',     os.path.join(appdata,  '.azura')),
-            ('Novoline Client',  os.path.join(appdata,  '.novoline')),
-            ('Future Client',    os.path.join(appdata,  '.future')),
-            ('Flux Client',      os.path.join(appdata,  '.flux')),
-            ('Astolfo Client',   os.path.join(appdata,  '.astolfo')),
-            ('Salhack Client',   os.path.join(appdata,  '.salhack')),
-            ('Entropy Client',   os.path.join(appdata,  '.entropy')),
-            ('Wurst Client',     os.path.join(appdata,  '.wurst')),
-            ('Inertia Client',   os.path.join(home,     '.inertia')),
-            ('Remix Client',     os.path.join(appdata,  '.remix')),
-            ('Ares Client',      os.path.join(appdata,  '.ares')),
-            ('Vape (encrypted)', os.path.join(appdata,  'vape.encrypted')),
-            ('Vape (json)',       os.path.join(appdata,  'vape.json')),
+            # Rutas en AppData/Roaming
+            ('Rise Client',        os.path.join(appdata,  '.rise')),
+            ('Sigma Client',       os.path.join(appdata,  '.sigma')),
+            ('Meteor Client',      os.path.join(appdata,  '.meteor')),
+            ('LiquidBounce',       os.path.join(appdata,  '.liquidbounce')),
+            ('Weave Loader',       os.path.join(appdata,  '.weave')),
+            ('Jello Client',       os.path.join(appdata,  'jello')),
+            ('Datura Client',      os.path.join(appdata,  '.datura')),
+            ('Drip Client',        os.path.join(appdata,  '.drip')),
+            ('Vertex Client',      os.path.join(appdata,  '.vertex')),
+            ('Mathias Client',     os.path.join(appdata,  '.mathias')),
+            ('RusherHack',         os.path.join(appdata,  '.rusherhack')),
+            ('Azura Client',       os.path.join(appdata,  '.azura')),
+            ('Novoline Client',    os.path.join(appdata,  '.novoline')),
+            ('Future Client',      os.path.join(appdata,  '.future')),
+            ('Flux Client',        os.path.join(appdata,  '.flux')),
+            ('Astolfo Client',     os.path.join(appdata,  '.astolfo')),
+            ('Salhack Client',     os.path.join(appdata,  '.salhack')),
+            ('Entropy Client',     os.path.join(appdata,  '.entropy')),
+            ('Wurst Client',       os.path.join(appdata,  '.wurst')),
+            ('Remix Client',       os.path.join(appdata,  '.remix')),
+            ('Ares Client',        os.path.join(appdata,  '.ares')),
+            ('Kami/KamiBlue',      os.path.join(appdata,  '.kamiblue')),
+            ('Konas Client',       os.path.join(appdata,  '.konas')),
+            ('Pandora Client',     os.path.join(appdata,  '.pandora')),
+            ('Nyx Client',         os.path.join(appdata,  '.nyx')),
+            ('Lucid Client',       os.path.join(appdata,  '.lucid')),
+            ('Tenacity Client',    os.path.join(appdata,  '.tenacity')),
+            ('Aristois Client',    os.path.join(appdata,  '.aristois')),
+            ('Inertia Client',     os.path.join(appdata,  '.inertia')),
+            ('Baritone',           os.path.join(appdata,  '.minecraft', 'baritone')),
+            ('Phobos Client',      os.path.join(appdata,  '.phobos')),
+            ('Weepcraft Client',   os.path.join(appdata,  '.weepcraft')),
+            ('GhostClient',        os.path.join(appdata,  '.ghostclient')),
+            # AppData/Local
+            ('WeaveLoader (Local)',os.path.join(localapp, 'WeaveLoader')),
+            ('Kami Local',         os.path.join(localapp, '.kamiblue')),
+            # Archivos de configuración específicos en home
+            ('Inertia (home)',     os.path.join(home,     '.inertia')),
+            ('Vape (encrypted)',   os.path.join(appdata,  'vape.encrypted')),
+            ('Vape (json)',        os.path.join(appdata,  'vape.json')),
+            ('Vape (settings)',    os.path.join(appdata,  'vapesettings.json')),
+            # En carpeta de Minecraft directamente
+            ('Baritone (mc)',      os.path.join(mc_dir,   'baritone')),
+            ('Weave (mc)',         os.path.join(mc_dir,   '.weave')),
+            ('LiquidBounce (mc)', os.path.join(mc_dir,   '.liquidbounce')),
         ]
+        # Campos en JSON que confirman que el archivo es un config de hack
+        HACK_JSON_FIELDS = {
+            'killaura', 'aimassist', 'triggerbot', 'reach', 'velocity',
+            'antikb', 'scaffold', 'nofall', 'fly', 'xray', 'wallhack',
+            'autoclick', 'clickgui', 'bhop', 'timer', 'speedhack',
+            'silent', 'blatant', 'bypass', 'undetected',
+        }
         try:
             for client_name, config_path in GHOST_CONFIGS:
-                if os.path.exists(config_path):
-                    print(f"🚨 GHOST CLIENT CONFIG: {client_name} → {config_path}")
-                    self.issues_found.append({
-                        'nombre': f'Config de ghost client detectada: {client_name}',
-                        'ruta': config_path,
-                        'archivo': os.path.basename(config_path),
-                        'tipo': 'ghost_client_config',
-                        'categoria': 'GHOST_CLIENT',
-                        'alerta': 'CRITICAL',
-                        'confidence': 0.98,
-                        'detected_patterns': [f'ghost_config:{client_name.lower().replace(" ", "_")}'],
-                    })
+                if not os.path.exists(config_path):
+                    continue
+                print(f"🚨 GHOST CLIENT CONFIG: {client_name} → {config_path}")
+
+                # Si es un archivo JSON, verificar contenido para aumentar confianza
+                extra_patterns = [f'ghost_config:{client_name.lower().replace(" ", "_")}']
+                confidence = 0.97
+                if os.path.isfile(config_path) and config_path.endswith('.json'):
+                    try:
+                        import json as _json
+                        with open(config_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            raw = f.read(8192).lower()
+                        matched_fields = [kw for kw in HACK_JSON_FIELDS if kw in raw]
+                        if matched_fields:
+                            extra_patterns.append(f'json_fields:{",".join(matched_fields[:5])}')
+                            confidence = 0.99
+                    except Exception:
+                        pass
+
+                self.issues_found.append({
+                    'nombre': f'Config de ghost client detectada: {client_name}',
+                    'ruta': config_path,
+                    'archivo': os.path.basename(config_path),
+                    'tipo': 'ghost_client_config',
+                    'categoria': 'GHOST_CLIENT',
+                    'alerta': 'CRITICAL',
+                    'confidence': confidence,
+                    'detected_patterns': extra_patterns,
+                    'explicacion': (
+                        f'Se encontró la carpeta/archivo de configuración de {client_name} en {config_path}. '
+                        f'Esta ruta solo existe si el jugador ha ejecutado {client_name} en este PC.'
+                    ),
+                })
         except Exception as e:
             print(f"Error en scan_ghost_client_configs: {e}")
 
@@ -8451,67 +8508,155 @@ class ArgusApp:
                         'alerta': 'CRITICAL',
                         'confidence': 0.95,
                         'detected_patterns': [f'blacklisted_mod:{matched_bl}'],
+                        'explicacion': f'El archivo "{fname}" en la carpeta de mods contiene el nombre de un hack client '
+                                       f'conocido ({matched_bl}). Está directamente instalado como mod en Minecraft.',
                     })
                 else:
-                    # P3 #10 — character n-gram similarity for renamed/obfuscated hack mods
-                    sim, matched_hack = self._score_path_hack_similarity(fname)
-                    if sim >= 0.40:
-                        print(f"⚠️ MOD SIMILAR A HACK (N-GRAM): {fname} ~ {matched_hack} ({sim:.2f})")
+                    # Analizar nombres de clases internas del JAR — detecta mods renombrados
+                    class_hit = None
+                    try:
+                        import zipfile as _zf
+                        HACK_PKG_PREFIXES = [
+                            'com/vape/', 'net/sigma/', 'com/entropy/', 'net/liquidbounce/',
+                            'com/wurst/', 'com/future/', 'com/flux/', 'com/meteor/',
+                            'com/astolfo/', 'net/rise/', 'com/novoline/', 'me/kami/',
+                            'net/rusherhack/', 'com/aristois/', 'com/tenacity/',
+                            'com/vertex/', 'com/inertia/', 'com/salhack/', 'com/jello/',
+                            'me/baritone/', 'com/phobos/', 'com/pandora/', 'com/azura/',
+                            'com/konas/', 'com/remix/', 'me/weave/', 'net/weaveloader/',
+                            'meteordevelopment/', 'me/drip/',
+                        ]
+                        with _zf.ZipFile(fpath, 'r') as zf:
+                            for entry in zf.namelist():
+                                entry_lower = entry.lower()
+                                if entry_lower.endswith('.class'):
+                                    for pkg in HACK_PKG_PREFIXES:
+                                        if entry_lower.startswith(pkg):
+                                            class_hit = pkg.rstrip('/').replace('/', '.')
+                                            break
+                                if class_hit:
+                                    break
+                    except Exception:
+                        pass
+
+                    if class_hit:
+                        print(f"🚨 CLASE DE HACK EN JAR RENOMBRADO: {fname} → paquete {class_hit}")
                         self.issues_found.append({
-                            'nombre': f'Mod con nombre similar a hack conocido: {fname} ≈ {matched_hack}',
+                            'nombre': f'JAR renombrado con clases de hack: {fname}',
                             'ruta': fpath,
                             'archivo': fname,
                             'tipo': 'blacklisted_mod',
                             'categoria': 'GHOST_CLIENT',
-                            'alerta': 'SOSPECHOSO',
-                            'confidence': round(min(0.85, 0.50 + sim * 0.7), 2),
-                            'detected_patterns': [f'name_similar_to:{matched_hack}({sim:.2f})'],
-                            'explicacion': f'El mod "{fname}" tiene alta similitud de caracteres (n-gram Jaccard={sim:.2f}) '
-                                           f'con el cliente de hack conocido "{matched_hack}". Puede estar renombrado para evadir detección.',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.93,
+                            'detected_patterns': [f'jar_class_pkg:{class_hit}'],
+                            'explicacion': (
+                                f'El archivo "{fname}" tiene un nombre inocente, pero sus clases internas '
+                                f'pertenecen al paquete "{class_hit}" — un hack client conocido. '
+                                f'El jugador renombró el JAR para evadir la detección por nombre.'
+                            ),
                         })
+                    else:
+                        # P3 #10 — character n-gram similarity for renamed/obfuscated hack mods
+                        sim, matched_hack = self._score_path_hack_similarity(fname)
+                        if sim >= 0.40:
+                            print(f"⚠️ MOD SIMILAR A HACK (N-GRAM): {fname} ~ {matched_hack} ({sim:.2f})")
+                            self.issues_found.append({
+                                'nombre': f'Mod con nombre similar a hack conocido: {fname} ≈ {matched_hack}',
+                                'ruta': fpath,
+                                'archivo': fname,
+                                'tipo': 'blacklisted_mod',
+                                'categoria': 'GHOST_CLIENT',
+                                'alerta': 'SOSPECHOSO',
+                                'confidence': round(min(0.85, 0.50 + sim * 0.7), 2),
+                                'detected_patterns': [f'name_similar_to:{matched_hack}({sim:.2f})'],
+                                'explicacion': f'El mod "{fname}" tiene alta similitud de caracteres (n-gram Jaccard={sim:.2f}) '
+                                               f'con el cliente de hack conocido "{matched_hack}". Puede estar renombrado para evadir detección.',
+                            })
         except Exception as e:
             print(f"Error en scan_minecraft_mods_blacklist: {e}")
 
     def scan_dll_injection_java(self):
-        """Detecta DLLs no estándar cargadas en procesos Java/Minecraft."""
+        """Detecta DLLs sospechosas cargadas en procesos Java/Minecraft en tiempo real."""
         print("🔍 Escaneando DLLs en procesos Java...")
-        SUSPICIOUS_KW = [
-            'vape', 'sigma', 'inject', 'hook', 'hack', 'cheat', 'bypass',
-            'entropy', 'wurst', 'meteor', 'rise', 'flux', 'future', 'astolfo',
-            'payload', 'loader', 'patch', 'crack', 'stealth', 'ghost',
+        # Nombres exclusivos de hack clients — misma lógica que _DEFINITE_HACK_NAMES
+        SUSPICIOUS_DLL_KW = list(_DEFINITE_HACK_NAMES) + [
+            'injector', 'xinput_hook', 'payload', 'loader_dll',
+            'aimhook', 'killaura_dll', 'bypass_dll',
         ]
+        # DLLs del sistema y JRE que NUNCA son hacks
         SAFE_PREFIXES = [
-            'c:\\windows\\', 'c:\\program files\\java',
-            'c:\\program files (x86)\\java', 'c:\\program files\\eclipse',
+            'c:\\windows\\',
+            'c:\\program files\\java',
+            'c:\\program files (x86)\\java',
+            'c:\\program files\\eclipse adoptium',
+            'c:\\program files\\eclipse foundation',
+            'c:\\program files\\microsoft',
+            'c:\\program files (x86)\\microsoft',
+            '\\jdk', '\\jre', '\\runtime\\jre',
+            '\\lunarclient\\', '\\badlionclient\\', '\\tlauncher\\',
+            '\\prismlauncher\\', '\\multimc\\', '\\atlauncher\\',
         ]
+        # DLL de sistema y JVM conocidas — false positive frecuente
+        SAFE_DLL_NAMES = {
+            'jvm.dll', 'jawt.dll', 'verify.dll', 'java.dll', 'net.dll',
+            'nio.dll', 'zip.dll', 'fontmanager.dll', 'freetype.dll',
+            'glass.dll', 'prism_sw.dll', 'd3d12.dll', 'dxgi.dll',
+            'ntdll.dll', 'kernel32.dll', 'user32.dll', 'advapi32.dll',
+            'shell32.dll', 'msvcrt.dll', 'vcruntime140.dll', 'ucrtbase.dll',
+            'opengl32.dll', 'glu32.dll', 'lwjgl.dll', 'lwjgl64.dll',
+            'openal.dll', 'openal64.dll', 'jinput-dx8.dll', 'jinput-raw.dll',
+        }
         try:
-            for proc in psutil.process_iter(['pid', 'name']):
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                 try:
                     name = (proc.info.get('name') or '').lower()
-                    if 'java' not in name and 'javaw' not in name:
+                    if 'java' not in name:
+                        continue
+                    # Verificar que es Minecraft (cmdline contiene net.minecraft o launcher)
+                    cmdline = ' '.join(proc.info.get('cmdline') or []).lower()
+                    is_minecraft = ('net.minecraft' in cmdline or
+                                    'minecraft' in cmdline or
+                                    'forge' in cmdline or
+                                    'fabric' in cmdline)
+                    if not is_minecraft:
                         continue
                     try:
                         for mmap in proc.memory_maps():
                             path = (mmap.path or '').lower()
                             if not path.endswith('.dll'):
                                 continue
+                            dll_name = os.path.basename(path)
+                            if dll_name in SAFE_DLL_NAMES:
+                                continue
                             if any(path.startswith(s) for s in SAFE_PREFIXES):
                                 continue
-                            dll_name = os.path.basename(path)
-                            for kw in SUSPICIOUS_KW:
-                                if kw in dll_name:
-                                    print(f"🚨 DLL SOSPECHOSA en Java: {path}")
-                                    self.issues_found.append({
-                                        'nombre': f'DLL sospechosa en Java: {dll_name}',
-                                        'ruta': path,
-                                        'archivo': dll_name,
-                                        'tipo': 'dll_injection_java',
-                                        'categoria': 'JAVA_INJECTION',
-                                        'alerta': 'CRITICAL',
-                                        'confidence': 0.90,
-                                        'detected_patterns': [f'dll_inject:{kw}'],
-                                    })
-                                    break
+                            # Normalizar el nombre de la DLL para homoglyphs
+                            dll_norm = _normalize(dll_name)
+                            hit = next(
+                                (kw for kw in SUSPICIOUS_DLL_KW
+                                 if kw in dll_name or kw in dll_norm),
+                                None
+                            )
+                            if hit:
+                                print(f"🚨 DLL HACK en javaw.exe (PID {proc.pid}): {path}")
+                                self.issues_found.append({
+                                    'nombre': f'DLL de hack cargada en Minecraft: {dll_name}',
+                                    'ruta': path,
+                                    'archivo': dll_name,
+                                    'tipo': 'dll_injection_java',
+                                    'categoria': 'JAVA_INJECTION',
+                                    'alerta': 'CRITICAL',
+                                    'confidence': 0.93,
+                                    'detected_patterns': [f'dll_hack:{hit}'],
+                                    'explicacion': (
+                                        f'La DLL "{dll_name}" está cargada en el proceso de Minecraft (PID {proc.pid}). '
+                                        f'Su nombre coincide con el hack client "{hit}". '
+                                        f'Las DLLs de hack se inyectan en el proceso del juego para añadir '
+                                        f'módulos como killaura, aimbot o scaffold sin dejar archivos visibles.'
+                                    ),
+                                })
+                                break  # Solo reportar 1 hit por DLL
                     except (psutil.AccessDenied, psutil.NoSuchProcess):
                         pass
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -9739,6 +9884,255 @@ class ArgusApp:
         except Exception as e:
             print(f"Error en scan_discord_webhooks: {e}")
 
+    def scan_browser_downloads(self):
+        """Detecta descargas de hack clients en el historial de Chrome, Edge y Firefox."""
+        print("🔍 Escaneando historial de descargas del navegador...")
+        import sqlite3 as _sqlite3
+        import shutil as _shutil
+        import tempfile as _tempfile
+        import re as _re
+        import datetime as _dt
+
+        localapp = os.environ.get('LOCALAPPDATA', '')
+        appdata  = os.environ.get('APPDATA', '')
+
+        # Perfiles de navegadores con su base de datos de historial
+        BROWSER_HISTORIES = [
+            ('Chrome',  os.path.join(localapp, 'Google', 'Chrome', 'User Data', 'Default', 'History')),
+            ('Edge',    os.path.join(localapp, 'Microsoft', 'Edge', 'User Data', 'Default', 'History')),
+            ('Brave',   os.path.join(localapp, 'BraveSoftware', 'Brave-Browser', 'User Data', 'Default', 'History')),
+            ('Vivaldi', os.path.join(localapp, 'Vivaldi', 'User Data', 'Default', 'History')),
+            ('Opera',   os.path.join(appdata,  'Opera Software', 'Opera Stable', 'History')),
+        ]
+        # Firefox guarda el historial en places.sqlite
+        firefox_base = os.path.join(appdata, 'Mozilla', 'Firefox', 'Profiles')
+        if os.path.isdir(firefox_base):
+            for profile in os.listdir(firefox_base):
+                places = os.path.join(firefox_base, profile, 'places.sqlite')
+                if os.path.isfile(places):
+                    BROWSER_HISTORIES.append(('Firefox', places))
+                    break  # Solo primer perfil
+
+        # Patrones que indican descarga de hack (URL o nombre de archivo)
+        HACK_URL_KW = list(_DEFINITE_HACK_NAMES) + [
+            'hack', 'cheat', 'bypass', 'injector', 'ghostclient',
+            'cracked', 'nulled', 'leaked', 'skid',
+        ]
+        SAFE_DOMAINS = {
+            'modrinth.com', 'curseforge.com', 'minecraft.net', 'mojang.com',
+            'fabricmc.net', 'minecraftforge.net', 'optifine.net',
+            'github.com', 'github.io',  # mayoría legítimos
+        }
+
+        def _is_hack_url(url: str) -> tuple:
+            url_lower = url.lower()
+            # Excluir dominios seguros
+            for safe in SAFE_DOMAINS:
+                if safe in url_lower:
+                    return False, None
+            hit = next((kw for kw in HACK_URL_KW if kw in url_lower), None)
+            return bool(hit), hit
+
+        try:
+            for browser_name, history_path in BROWSER_HISTORIES:
+                if not os.path.isfile(history_path):
+                    continue
+                # Copiar la DB porque puede estar bloqueada por el navegador
+                tmp_path = None
+                try:
+                    tmp_fd, tmp_path = _tempfile.mkstemp(suffix='.db')
+                    os.close(tmp_fd)
+                    _shutil.copy2(history_path, tmp_path)
+
+                    conn = _sqlite3.connect(f'file:{tmp_path}?mode=ro', uri=True)
+                    cur = conn.cursor()
+
+                    # Chrome/Edge/Brave/Vivaldi usan tabla 'downloads'
+                    try:
+                        cur.execute("""
+                            SELECT target_path, tab_url, start_time, total_bytes
+                            FROM downloads
+                            ORDER BY start_time DESC
+                            LIMIT 2000
+                        """)
+                        rows = cur.fetchall()
+                        for target_path, url, start_time, size in rows:
+                            target_path = target_path or ''
+                            url         = url or ''
+                            fname = os.path.basename(target_path).lower()
+                            # Comprobar URL y nombre de archivo
+                            url_hit, url_kw = _is_hack_url(url)
+                            fname_hit = next((kw for kw in HACK_URL_KW if kw in fname), None)
+                            if not url_hit and not fname_hit:
+                                continue
+                            # Convertir timestamp Chrome (microsegundos desde 1601-01-01)
+                            try:
+                                epoch = _dt.datetime(1601, 1, 1) + _dt.timedelta(microseconds=start_time)
+                                date_str = epoch.strftime('%d/%m/%Y %H:%M')
+                            except Exception:
+                                date_str = 'desconocido'
+                            hit_kw = url_kw or fname_hit
+                            size_kb = (size or 0) // 1024
+                            print(f"🚨 DESCARGA HACK ({browser_name}): {fname} ({size_kb}KB) — {date_str}")
+                            self.issues_found.append({
+                                'nombre': f'Descarga de hack en {browser_name}: {os.path.basename(target_path) or url[:60]}',
+                                'ruta': target_path or url[:200],
+                                'archivo': os.path.basename(target_path) or url[:60],
+                                'tipo': 'browser_download_hack',
+                                'categoria': 'FORENSE',
+                                'alerta': 'CRITICAL' if (fname_hit and fname_hit in _DEFINITE_HACK_NAMES) else 'SOSPECHOSO',
+                                'confidence': 0.88 if fname_hit else 0.72,
+                                'detected_patterns': [f'browser_dl:{hit_kw}', f'browser:{browser_name}'],
+                                'explicacion': (
+                                    f'{browser_name} tiene registrado en su historial la descarga de '
+                                    f'"{os.path.basename(target_path) or url[:80]}" ({size_kb}KB) '
+                                    f'el {date_str}. El nombre/URL contiene la palabra "{hit_kw}" '
+                                    f'que coincide con un hack client conocido. '
+                                    f'El historial de descargas persiste aunque el archivo haya sido borrado.'
+                                ),
+                            })
+                    except _sqlite3.OperationalError:
+                        pass  # Tabla no existe (Firefox usa formato diferente)
+
+                    # Firefox usa tabla 'moz_downloads' (places.sqlite)
+                    try:
+                        cur.execute("""
+                            SELECT p.url, a.content
+                            FROM moz_annos a
+                            JOIN moz_places p ON a.place_id = p.id
+                            WHERE a.anno_attribute_id IN (
+                                SELECT id FROM moz_anno_attributes WHERE name = 'downloads/destinationFileURI'
+                            )
+                            ORDER BY a.dateAdded DESC
+                            LIMIT 1000
+                        """)
+                        for url, dest in cur.fetchall():
+                            url   = url or ''
+                            fname = os.path.basename(dest or '').lower()
+                            url_hit, url_kw = _is_hack_url(url)
+                            fname_hit = next((kw for kw in HACK_URL_KW if kw in fname), None)
+                            if not url_hit and not fname_hit:
+                                continue
+                            hit_kw = url_kw or fname_hit
+                            print(f"🚨 DESCARGA HACK (Firefox): {fname}")
+                            self.issues_found.append({
+                                'nombre': f'Descarga de hack en Firefox: {fname or url[:60]}',
+                                'ruta': url[:200],
+                                'archivo': fname or url[:60],
+                                'tipo': 'browser_download_hack',
+                                'categoria': 'FORENSE',
+                                'alerta': 'SOSPECHOSO',
+                                'confidence': 0.78,
+                                'detected_patterns': [f'browser_dl:{hit_kw}', 'browser:firefox'],
+                                'explicacion': (
+                                    f'Firefox tiene registrado en su historial la descarga de "{fname or url[:80]}". '
+                                    f'El nombre/URL coincide con el patrón "{hit_kw}" de un hack client conocido.'
+                                ),
+                            })
+                    except _sqlite3.OperationalError:
+                        pass
+
+                    conn.close()
+                except Exception:
+                    pass
+                finally:
+                    if tmp_path and os.path.exists(tmp_path):
+                        try:
+                            os.unlink(tmp_path)
+                        except Exception:
+                            pass
+        except Exception as e:
+            print(f"Error en scan_browser_downloads: {e}")
+
+    def scan_clipboard_content(self):
+        """Detecta evidencia de hacks en el portapapeles (Discord webhooks, hack names, etc.)."""
+        print("🔍 Escaneando contenido del portapapeles...")
+        try:
+            import ctypes as _ct
+            import ctypes.wintypes as _wt
+
+            # Leer el portapapeles usando la API de Windows directamente
+            user32 = _ct.windll.user32
+            kernel32 = _ct.windll.kernel32
+
+            CF_TEXT      = 1
+            CF_UNICODETEXT = 13
+            GMEM_MOVEABLE = 0x0002
+
+            if not user32.OpenClipboard(0):
+                return
+            try:
+                # Intentar texto Unicode primero
+                h_data = user32.GetClipboardData(CF_UNICODETEXT)
+                if h_data:
+                    ptr = kernel32.GlobalLock(h_data)
+                    if ptr:
+                        try:
+                            clip_text = _ct.wstring_at(ptr, 4096)
+                        finally:
+                            kernel32.GlobalUnlock(h_data)
+                else:
+                    clip_text = ''
+            finally:
+                user32.CloseClipboard()
+
+            if not clip_text:
+                return
+
+            clip_lower = clip_text.lower().strip()
+            clip_norm  = _normalize(clip_lower)
+
+            import re as _re
+            WEBHOOK_RE = _re.compile(
+                r'https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/\d+/[\w-]+',
+                _re.IGNORECASE
+            )
+            # 1. Webhook de Discord en portapapeles
+            webhooks = WEBHOOK_RE.findall(clip_text)
+            if webhooks:
+                print(f"🚨 DISCORD WEBHOOK EN PORTAPAPELES: {webhooks[0][:60]}")
+                self.issues_found.append({
+                    'nombre': f'Discord webhook en portapapeles ({len(webhooks)} URL(s))',
+                    'ruta': 'Clipboard',
+                    'archivo': 'clipboard',
+                    'tipo': 'discord_webhook_config',
+                    'categoria': 'C2_EXFIL',
+                    'alerta': 'CRITICAL',
+                    'confidence': 0.95,
+                    'detected_patterns': [f'clipboard_webhook:{webhooks[0][:40]}'],
+                    'explicacion': (
+                        f'El portapapeles contiene {len(webhooks)} URL(s) de webhook de Discord. '
+                        'El jugador puede haber copiado la URL para configurar un hack client '
+                        'con C2 (Command & Control) basado en Discord.'
+                    ),
+                })
+
+            # 2. Nombre de hack client copiado en portapapeles
+            clip_hit = next(
+                (h for h in _DEFINITE_HACK_NAMES
+                 if h in clip_lower or h in clip_norm),
+                None
+            )
+            if clip_hit and len(clip_lower) < 200:  # Evitar FP en texto largo
+                print(f"⚠️ HACK NAME EN PORTAPAPELES: '{clip_hit}' en '{clip_lower[:60]}'")
+                self.issues_found.append({
+                    'nombre': f'Nombre de hack client en portapapeles: "{clip_hit}"',
+                    'ruta': 'Clipboard',
+                    'archivo': 'clipboard',
+                    'tipo': 'clipboard_hack_evidence',
+                    'categoria': 'FORENSE',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.70,
+                    'detected_patterns': [f'clipboard_hack:{clip_hit}'],
+                    'explicacion': (
+                        f'El portapapeles contiene el texto "{clip_lower[:60]}" que incluye '
+                        f'el nombre del hack client "{clip_hit}". Puede indicar que el jugador '
+                        f'estaba copiando el nombre del hack para descargarlo o configurarlo.'
+                    ),
+                })
+        except Exception as e:
+            print(f"Error en scan_clipboard_content: {e}")
+
     def scan_jitter_scripts(self):
         """#15 — Detecta configuraciones de jitter/aim assist en software de mouse."""
         print("🔍 Buscando jitter scripts en software de mouse...")
@@ -10096,6 +10490,12 @@ class ArgusApp:
             'registry_appcompat_hack':  'AppCompatFlags registra programas que solicitaron compatibilidad de Windows. '
                                        'Los loaders de hacks frecuentemente necesitan este flag para inyectar en '
                                        'procesos de 64 bits desde un ejecutable de 32 bits.',
+            'browser_download_hack':   'El historial de descargas del navegador muestra que se descargó un archivo '
+                                       'cuyo nombre o URL coincide con un hack client conocido. El historial persiste '
+                                       'aunque el archivo haya sido borrado del sistema.',
+            'clipboard_hack_evidence': 'El portapapeles del sistema contiene texto relacionado con un hack client. '
+                                       'Puede indicar que el jugador estaba copiando la configuración de un hack '
+                                       'o la URL de descarga para instalarlo.',
         }
         for issue in issues:
             if not issue.get('explicacion'):
@@ -10360,6 +10760,31 @@ class ArgusApp:
                 i['alerta'] = 'CRITICAL'
                 i['combination_penalty'] = 'compiled_ahk'
 
+        # Browser download + ghost client config → descargó Y usó el hack
+        if 'browser_download_hack' in tipos and (
+                'ghost_client_config' in tipos or 'prefetch_hack' in tipos):
+            for i in issues:
+                if i.get('tipo') in ('browser_download_hack', 'ghost_client_config',
+                                     'prefetch_hack'):
+                    i['alerta'] = 'CRITICAL'
+                    i['confidence'] = min(1.0, i.get('confidence', 0.85) * 1.15)
+                    i['combination_penalty'] = 'browser_dl+ghost_config'
+
+        # Browser download + registry userassist → evidencia forense completa
+        if 'browser_download_hack' in tipos and 'registry_userassist_hack' in tipos:
+            for i in issues:
+                if i.get('tipo') in ('browser_download_hack', 'registry_userassist_hack'):
+                    i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'browser_dl+userassist'
+
+        # JAR con clases de hack + prefetch = hack instalado y ejecutado
+        jar_class_hits = [i for i in issues if i.get('tipo') == 'blacklisted_mod'
+                          and any('jar_class_pkg' in p for p in i.get('detected_patterns', []))]
+        if jar_class_hits and 'prefetch_hack' in tipos:
+            for i in jar_class_hits:
+                i['alerta'] = 'CRITICAL'
+                i['combination_penalty'] = 'jar_class+prefetch'
+
         # 3+ CRITICAL de categorías distintas → riesgo extremo
         critical_cats = {i.get('categoria', '') for i in issues if i.get('alerta') == 'CRITICAL'}
         if len(critical_cats) >= 3:
@@ -10392,6 +10817,8 @@ class ArgusApp:
             'prefetch_hack', 'usn_deleted_hack', 'registry_userassist_hack',
             'registry_run_hack', 'weave_loader', 'discord_webhook_config',
             'kill_chain', 'modified_minecraft_jar',
+            'browser_download_hack',  # historial de descargas del navegador
+            'ghost_client_config',    # carpeta .vape/.meteor/.rise confirmada
         }
         n_forense = sum(1 for i in issues if i.get('tipo', '') in HIGH_CONF_FORENSE)
 
