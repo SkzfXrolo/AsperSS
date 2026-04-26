@@ -5317,12 +5317,22 @@ def update_staff_role(user_id):
 @app.route('/api/staff/users/<int:user_id>/avatar', methods=['PUT'])
 @login_required
 def update_user_avatar(user_id):
-    """Actualiza la URL del avatar de un usuario. Admin o superior."""
+    """Actualiza el avatar de un usuario. Acepta URL externa o data URL base64. Admin o superior."""
     current_user = get_user_by_id(session.get('user_id'))
     if not can_manage_staff(current_user):
         return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
     data = request.json or {}
-    avatar_url = (data.get('avatar_url') or '').strip()[:500]
+    avatar_url = (data.get('avatar_url') or '').strip()
+    # Validar tamaño: máx 600 KB de texto (cubre imágenes base64 de ~430 KB originales)
+    if len(avatar_url) > 614_400:
+        return jsonify({'error': 'Imagen demasiado grande (máx 450 KB)'}), 413
+    # Validar que sea URL o data URL de imagen
+    if avatar_url and not (
+        avatar_url.startswith('http://') or
+        avatar_url.startswith('https://') or
+        avatar_url.startswith('data:image/')
+    ):
+        return jsonify({'error': 'Formato no válido: se esperaba URL o data URL de imagen'}), 400
     try:
         from auth import _auth_cursor, _ph
         ph = _ph()

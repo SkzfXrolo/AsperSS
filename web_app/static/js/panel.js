@@ -1164,7 +1164,7 @@ async function loadStaffUsers() {
                 <td style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                     <select id="role-sel-${u.id}" class="filter-select" style="min-width:110px;font-size:12px;padding:5px 8px;">${roleOptions}</select>
                     <button class="btn btn-sm btn-primary" onclick="updateStaffRole(${u.id})">Guardar</button>
-                    <button class="btn btn-sm btn-secondary" onclick="setUserAvatar(${u.id})" title="Cambiar avatar">🖼️</button>
+                    <button class="btn btn-sm btn-secondary" onclick="setUserAvatar(${u.id}, ${JSON.stringify(u.avatar_url || '')})" title="Cambiar avatar">🖼️</button>
                 </td>
             </tr>`;
         }).join('');
@@ -3570,20 +3570,140 @@ async function loadEquipoCompanyData() {
     }
 }
 
-async function setUserAvatar(userId) {
-    const url = prompt('URL del avatar (imagen):', '');
-    if (url === null) return; // cancelado
+function setUserAvatar(userId, currentAvatarUrl) {
+    // Reutilizar o crear el modal de avatar
+    let modal = document.getElementById('avatar-upload-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'avatar-upload-modal';
+        modal.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);align-items:center;justify-content:center;';
+        modal.innerHTML = `
+            <div style="background:var(--bg-card);border:1px solid var(--border-m);border-radius:16px;padding:28px 32px;min-width:320px;max-width:420px;width:90vw;box-shadow:0 8px 40px rgba(0,0,0,0.4);">
+                <h3 style="margin:0 0 20px;font-size:16px;font-weight:700;color:var(--text-h);">Cambiar avatar</h3>
+                <!-- Preview -->
+                <div style="display:flex;justify-content:center;margin-bottom:20px;">
+                    <div id="avatar-preview-wrap" style="width:90px;height:90px;border-radius:50%;border:3px solid var(--accent);overflow:hidden;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;color:var(--accent);">
+                        <img id="avatar-preview-img" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:none;">
+                        <span id="avatar-preview-initial">?</span>
+                    </div>
+                </div>
+                <!-- Zona de drop/click para subir archivo -->
+                <label id="avatar-drop-zone" style="display:block;border:2px dashed var(--border-m);border-radius:12px;padding:22px;text-align:center;cursor:pointer;color:var(--text-d);font-size:13px;transition:border-color .15s,background .15s;margin-bottom:12px;"
+                    ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='var(--accent-bg)'"
+                    ondragleave="this.style.borderColor='';this.style.background=''"
+                    ondrop="_avatarDrop(event)">
+                    <div style="font-size:28px;margin-bottom:6px;">🖼️</div>
+                    <div style="font-weight:600;">Arrastra una imagen o <span style="color:var(--accent)">haz clic para seleccionar</span></div>
+                    <div style="font-size:11px;margin-top:4px;">JPG, PNG, WEBP · máx 450 KB</div>
+                    <input id="avatar-file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;" onchange="_avatarFileSelected(event)">
+                </label>
+                <!-- O pegar URL -->
+                <div style="font-size:11px;color:var(--text-d);text-align:center;margin-bottom:8px;">— o pega una URL externa —</div>
+                <input id="avatar-url-input" type="url" placeholder="https://..." style="width:100%;box-sizing:border-box;background:var(--bg-t);border:1px solid var(--border-m);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;outline:none;" oninput="_avatarUrlPreview(this.value)">
+                <div id="avatar-error" style="color:#ef4444;font-size:12px;margin-top:8px;display:none;"></div>
+                <!-- Botones -->
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;">
+                    <button onclick="_closeAvatarModal()" style="padding:8px 18px;border-radius:8px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;font-size:13px;">Cancelar</button>
+                    <button id="avatar-save-btn" onclick="_saveAvatar()" style="padding:8px 20px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-weight:600;font-size:13px;">Guardar</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+    }
+
+    // Reset state
+    modal._userId = userId;
+    modal._dataUrl = currentAvatarUrl || '';
+    document.getElementById('avatar-url-input').value = currentAvatarUrl && currentAvatarUrl.startsWith('http') ? currentAvatarUrl : '';
+    document.getElementById('avatar-error').style.display = 'none';
+    _avatarUpdatePreview(currentAvatarUrl || '');
+    modal.style.display = 'flex';
+}
+
+function _avatarUpdatePreview(src) {
+    const img     = document.getElementById('avatar-preview-img');
+    const initial = document.getElementById('avatar-preview-initial');
+    if (!img) return;
+    if (src) {
+        img.src = src;
+        img.style.display = 'block';
+        img.onerror = () => { img.style.display = 'none'; if (initial) initial.style.display = ''; };
+        if (initial) initial.style.display = 'none';
+    } else {
+        img.style.display = 'none';
+        if (initial) initial.style.display = '';
+    }
+}
+
+function _avatarUrlPreview(val) {
+    const modal = document.getElementById('avatar-upload-modal');
+    if (modal) modal._dataUrl = val.trim();
+    _avatarUpdatePreview(val.trim());
+}
+
+function _avatarFileSelected(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    _avatarReadFile(file);
+}
+
+function _avatarDrop(event) {
+    event.preventDefault();
+    const dz = document.getElementById('avatar-drop-zone');
+    if (dz) { dz.style.borderColor = ''; dz.style.background = ''; }
+    const file = event.dataTransfer.files[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    _avatarReadFile(file);
+}
+
+function _avatarReadFile(file) {
+    const errEl = document.getElementById('avatar-error');
+    if (file.size > 460_000) {
+        if (errEl) { errEl.textContent = 'Imagen demasiado grande. Máx 450 KB.'; errEl.style.display = 'block'; }
+        return;
+    }
+    if (errEl) errEl.style.display = 'none';
+    const reader = new FileReader();
+    reader.onload = e => {
+        const dataUrl = e.target.result;
+        const modal = document.getElementById('avatar-upload-modal');
+        if (modal) modal._dataUrl = dataUrl;
+        const urlInput = document.getElementById('avatar-url-input');
+        if (urlInput) urlInput.value = '';
+        _avatarUpdatePreview(dataUrl);
+    };
+    reader.readAsDataURL(file);
+}
+
+function _closeAvatarModal() {
+    const modal = document.getElementById('avatar-upload-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function _saveAvatar() {
+    const modal  = document.getElementById('avatar-upload-modal');
+    const errEl  = document.getElementById('avatar-error');
+    const btn    = document.getElementById('avatar-save-btn');
+    if (!modal) return;
+    const avatarUrl = modal._dataUrl || '';
+    if (errEl) errEl.style.display = 'none';
+    if (btn) { btn.textContent = 'Guardando…'; btn.disabled = true; }
     try {
-        const res = await fetch(`/api/staff/users/${userId}/avatar`, {
+        const res = await fetch(`/api/staff/users/${modal._userId}/avatar`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ avatar_url: url.trim() }),
+            body: JSON.stringify({ avatar_url: avatarUrl }),
         });
         const data = await res.json();
-        if (data.success) loadStaffUsers();
-        else alert('Error: ' + (data.error || 'No se pudo actualizar'));
+        if (data.success) {
+            _closeAvatarModal();
+            loadStaffUsers();
+        } else {
+            if (errEl) { errEl.textContent = data.error || 'Error al guardar'; errEl.style.display = 'block'; }
+        }
     } catch(e) {
-        alert('Error: ' + e.message);
+        if (errEl) { errEl.textContent = 'Error de red: ' + e.message; errEl.style.display = 'block'; }
+    } finally {
+        if (btn) { btn.textContent = 'Guardar'; btn.disabled = false; }
     }
 }
 
