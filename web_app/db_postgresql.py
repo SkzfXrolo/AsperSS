@@ -455,6 +455,12 @@ def init_postgresql_db():
             except Exception:
                 pass
 
+        # Migración: avatar_url para personalización de perfil de staff
+        try:
+            cursor.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT')
+        except Exception:
+            pass
+
         # Migración: download_links.created_by era INTEGER FK, ahora debe ser VARCHAR(100)
         try:
             cursor.execute('''

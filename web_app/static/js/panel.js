@@ -8,16 +8,87 @@ let currentScanId = null;
 let currentResultId = null;
 let currentIssuesList = [];
 let currentIssuesPage = 0;
-const ISSUES_PER_PAGE = 25;
+const ISSUES_PER_PAGE = 30;
 let _issuesFilter = 'all'; // filtro de categoría activo
+let _issuesSearchText = '';  // buscador in-scan
+let _issuesSeverity = '';    // filtro severidad in-scan
 let _currentScanData = null;
+
+// ── Paleta de colores ──────────────────────────────────────────────────────
+const ARGUS_PALETTES = {
+    purple: { label:'Morado',  swatch:'#8B5CF6', accent:'#8B5CF6', d:'#6D28D9', bg:'rgba(139,92,246,0.08)', glow:'rgba(139,92,246,0.22)', border:'rgba(139,92,246,0.12)', borderM:'rgba(139,92,246,0.28)', borderH:'rgba(139,92,246,0.55)' },
+    blue:   { label:'Azul',    swatch:'#3B82F6', accent:'#3B82F6', d:'#1D4ED8', bg:'rgba(59,130,246,0.08)',  glow:'rgba(59,130,246,0.22)',  border:'rgba(59,130,246,0.12)',  borderM:'rgba(59,130,246,0.28)',  borderH:'rgba(59,130,246,0.55)'  },
+    green:  { label:'Verde',   swatch:'#10B981', accent:'#10B981', d:'#059669', bg:'rgba(16,185,129,0.08)',  glow:'rgba(16,185,129,0.22)',  border:'rgba(16,185,129,0.12)',  borderM:'rgba(16,185,129,0.28)',  borderH:'rgba(16,185,129,0.55)'  },
+    orange: { label:'Naranja', swatch:'#F59E0B', accent:'#F59E0B', d:'#D97706', bg:'rgba(245,158,11,0.08)',  glow:'rgba(245,158,11,0.22)',  border:'rgba(245,158,11,0.12)',  borderM:'rgba(245,158,11,0.28)',  borderH:'rgba(245,158,11,0.55)'  },
+    red:    { label:'Rojo',    swatch:'#EF4444', accent:'#EF4444', d:'#DC2626', bg:'rgba(239,68,68,0.08)',   glow:'rgba(239,68,68,0.22)',   border:'rgba(239,68,68,0.12)',   borderM:'rgba(239,68,68,0.28)',   borderH:'rgba(239,68,68,0.55)'   },
+    pink:   { label:'Rosa',    swatch:'#EC4899', accent:'#EC4899', d:'#DB2777', bg:'rgba(236,72,153,0.08)',  glow:'rgba(236,72,153,0.22)',  border:'rgba(236,72,153,0.12)',  borderM:'rgba(236,72,153,0.28)',  borderH:'rgba(236,72,153,0.55)'  },
+    cyan:   { label:'Cyan',    swatch:'#06B6D4', accent:'#06B6D4', d:'#0891B2', bg:'rgba(6,182,212,0.08)',   glow:'rgba(6,182,212,0.22)',   border:'rgba(6,182,212,0.12)',   borderM:'rgba(6,182,212,0.28)',   borderH:'rgba(6,182,212,0.55)'   },
+    white:  { label:'Blanco',  swatch:'#E2E8F7', accent:'#E2E8F7', d:'#C4CFDF', bg:'rgba(226,232,247,0.08)', glow:'rgba(226,232,247,0.15)', border:'rgba(226,232,247,0.10)', borderM:'rgba(226,232,247,0.22)', borderH:'rgba(226,232,247,0.45)' },
+};
+let _currentPalette = 'purple';
+
+function applyPalette(name) {
+    const p = ARGUS_PALETTES[name];
+    if (!p) return;
+    _currentPalette = name;
+    const r = document.documentElement;
+    r.style.setProperty('--accent',   p.accent);
+    r.style.setProperty('--accent-d', p.d);
+    r.style.setProperty('--accent-bg',  p.bg);
+    r.style.setProperty('--accent-glow',p.glow);
+    r.style.setProperty('--border',   p.border);
+    r.style.setProperty('--border-m', p.borderM);
+    r.style.setProperty('--border-h', p.borderH);
+    localStorage.setItem('argus_palette', name);
+    // Highlight active swatch
+    document.querySelectorAll('.palette-swatch').forEach(el => {
+        el.style.outline = el.dataset.palette === name ? '3px solid #fff' : 'none';
+    });
+}
+
+function _buildPaletteSwatches() {
+    const wrap = document.getElementById('palette-swatches');
+    if (!wrap) return;
+    wrap.innerHTML = Object.entries(ARGUS_PALETTES).map(([k, p]) =>
+        `<button class="palette-swatch" data-palette="${k}" onclick="applyPalette('${k}');document.getElementById('palette-panel').style.display='none';"
+            title="${p.label}" style="
+            width:32px;height:32px;border-radius:50%;border:2px solid rgba(255,255,255,0.15);
+            background:${p.swatch};cursor:pointer;transition:transform 0.15s;
+            outline:${k === _currentPalette ? '3px solid #fff' : 'none'};outline-offset:2px;"
+            onmouseover="this.style.transform='scale(1.2)'"
+            onmouseout="this.style.transform='scale(1)'"></button>`
+    ).join('');
+}
+
+function togglePalettePanel(e) {
+    if (e) e.stopPropagation();
+    const panel = document.getElementById('palette-panel');
+    if (!panel) return;
+    const isOpen = panel.style.display !== 'none';
+    panel.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) _buildPaletteSwatches();
+}
+
+function _loadSavedPalette() {
+    const saved = localStorage.getItem('argus_palette');
+    if (saved && ARGUS_PALETTES[saved]) applyPalette(saved);
+}
 
 // Inicialización - OPTIMIZADO: Cargar datos críticos primero, el resto en background
 document.addEventListener('DOMContentLoaded', function() {
+    _loadSavedPalette();
     initializeNavigation();
     setupEventListeners();
     setupAdminListeners();
     setupCompanyListeners();
+    // Cerrar palette panel al hacer click fuera
+    document.addEventListener('click', e => {
+        const panel = document.getElementById('palette-panel');
+        const btn   = document.getElementById('palette-toggle');
+        if (panel && btn && !panel.contains(e.target) && !btn.contains(e.target)) {
+            panel.style.display = 'none';
+        }
+    });
 
     // Cargar datos críticos primero
     loadDashboard();
@@ -224,8 +295,9 @@ function initializeNavigation() {
             'resultados': 'resultados',
             'aprendizaje': 'aprendizaje',
             'administracion': 'administracion',
-            'mi-empresa': 'mi-empresa',
-            'staff': 'staff',
+            'mi-empresa': 'equipo',
+            'staff': 'equipo',
+            'equipo': 'equipo',
         };
         if (sectionMap[hash]) {
             showSection(sectionMap[hash]);
@@ -268,10 +340,12 @@ function showSection(sectionName) {
         'dashboard': 'Dashboard',
         'generar-app': 'Generar Aplicación',
         'tokens': 'Gestión de Tokens',
-        'resultados': 'Resultados de Escaneos - ASPERS Projects',
-        'aprendizaje': 'Sistema de Aprendizaje - ASPERS Projects',
-        'administracion': 'Administración - ASPERS Projects',
-        'mi-empresa': 'Mi Empresa - ASPERS Projects'
+        'resultados': 'Resultados de Escaneos',
+        'aprendizaje': 'Sistema de Aprendizaje',
+        'administracion': 'Administración',
+        'mi-empresa': 'Mi Empresa',
+        'equipo': 'Equipo',
+        'super-admin': 'Super Admin',
     };
     const titleElement = document.getElementById('section-title');
     if (titleElement) {
@@ -281,15 +355,18 @@ function showSection(sectionName) {
     // Cargar datos específicos de cada sección
     if (sectionName === 'administracion') {
         loadRegistrationTokens();
-        loadDownloadLinks(); // Cargar enlaces de descarga
+        loadDownloadLinks();
         loadUsers();
-        loadCompanyUsersForAdmin(); // Cargar usuarios de empresa para admin de empresa
+        loadCompanyUsersForAdmin();
     } else if (sectionName === 'mi-empresa') {
         loadCompanyInfo();
         loadCompanyTokens();
         loadCompanyUsers();
     } else if (sectionName === 'staff') {
         loadStaffUsers();
+    } else if (sectionName === 'equipo') {
+        loadStaffUsers();
+        loadEquipoCompanyData();
     }
 
     // Limpiar badge de nuevos scans al visitar las secciones relacionadas
@@ -981,10 +1058,40 @@ function applyFilters() { loadScans(); }
 
 function clearFilters() {
     const ids = ['filter-search','filter-verdict','filter-date-from','filter-date-to','filter-country','filter-risk','filter-os','filter-staff'];
-    ids.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = '';
+    ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    // Reset quick-chip active state
+    document.querySelectorAll('.quick-chip').forEach(b => b.classList.remove('active'));
+    const clearChip = document.getElementById('quick-clear-chip');
+    if (clearChip) clearChip.style.display = 'none';
+    loadScans();
+}
+
+function quickFilter(type) {
+    // Reset all filters first
+    const ids = ['filter-search','filter-verdict','filter-date-from','filter-date-to','filter-risk','filter-os','filter-country','filter-staff'];
+    ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+    const today   = new Date().toISOString().slice(0, 10);
+    const weekAgo = new Date(Date.now() - 7*24*60*60*1000).toISOString().slice(0, 10);
+
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    switch (type) {
+        case 'pending':  set('filter-verdict', 'pending');  break;
+        case 'hacks':    set('filter-verdict', 'hacks');    break;  // 'hacks' matches server verdict
+        case 'today':    set('filter-date-from', today);    set('filter-date-to', today); break;
+        case 'week':     set('filter-date-from', weekAgo);  set('filter-date-to', today); break;
+        case 'critical': set('filter-risk', 'hack');        break;  // risk >= 70 on server
+        case 'running':  set('filter-search', '');          break;  // no status filter; show all
+    }
+
+    // Show clear chip
+    const clearChip = document.getElementById('quick-clear-chip');
+    if (clearChip) clearChip.style.display = '';
+    // Mark active chip
+    document.querySelectorAll('.quick-chip:not(.chip-clear)').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('onclick')?.includes(`'${type}'`));
     });
+
     loadScans();
 }
 
@@ -1031,31 +1138,38 @@ const STAFF_ROLE_LABELS = { helper: 'Helper', moderador: 'Moderador', admin: 'Ad
 async function loadStaffUsers() {
     const tbody = document.getElementById('staff-table-body');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="4" class="loading-cell">Cargando...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Cargando...</td></tr>';
     try {
         const res = await fetch('/api/staff/users');
-        if (!res.ok) { tbody.innerHTML = `<tr><td colspan="4" class="loading-cell">Sin acceso</td></tr>`; return; }
+        if (!res.ok) { tbody.innerHTML = `<tr><td colspan="6" class="loading-cell">Sin acceso</td></tr>`; return; }
         const data = await res.json();
         if (!data.users || !data.users.length) {
-            tbody.innerHTML = '<tr><td colspan="4" class="loading-cell">Sin usuarios</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Sin usuarios</td></tr>';
             return;
         }
         tbody.innerHTML = data.users.map(u => {
             const roleOptions = STAFF_ROLES.map(r =>
                 `<option value="${r}" ${u.staff_role === r ? 'selected' : ''}>${STAFF_ROLE_LABELS[r]}</option>`
             ).join('');
+            const avatarHtml = u.avatar_url
+                ? `<img src="${u.avatar_url}" alt="${u.username}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid var(--border-m);"
+                       onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                   <div style="display:none;width:32px;height:32px;border-radius:50%;background:var(--accent-bg);border:2px solid var(--border-m);align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--accent);">${u.username[0].toUpperCase()}</div>`
+                : `<div style="width:32px;height:32px;border-radius:50%;background:var(--accent-bg);border:2px solid var(--border-m);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--accent);">${u.username[0].toUpperCase()}</div>`;
             return `<tr>
+                <td style="width:44px;padding:6px 8px;">${avatarHtml}</td>
                 <td><strong>${u.username}</strong>${u.email ? `<div style="font-size:11px;color:var(--text-d);">${u.email}</div>` : ''}</td>
                 <td><span class="badge badge-${_staffBadge(u.staff_role)}">${STAFF_ROLE_LABELS[u.staff_role] || u.staff_role}</span></td>
                 <td>${u.is_active ? '✅' : '❌'}</td>
-                <td style="display:flex;gap:6px;align-items:center;">
+                <td style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                     <select id="role-sel-${u.id}" class="filter-select" style="min-width:110px;font-size:12px;padding:5px 8px;">${roleOptions}</select>
                     <button class="btn btn-sm btn-primary" onclick="updateStaffRole(${u.id})">Guardar</button>
+                    <button class="btn btn-sm btn-secondary" onclick="setUserAvatar(${u.id})" title="Cambiar avatar">🖼️</button>
                 </td>
             </tr>`;
         }).join('');
     } catch(e) {
-        tbody.innerHTML = `<tr><td colspan="4" class="loading-cell">Error: ${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="loading-cell">Error: ${e.message}</td></tr>`;
     }
 }
 
@@ -1123,6 +1237,18 @@ function _getCategoryLabel(cat) {
     return map[cat] || cat || 'Otro';
 }
 
+// ── Buscador in-scan ────────────────────────────────────────────────────────
+
+function _onIssuesSearch(scanId) {
+    const q   = (document.getElementById('issues-search-input')?.value || '').toLowerCase().trim();
+    const sev = (document.getElementById('issues-severity-select')?.value || '').trim();
+    _issuesSearchText = q;
+    _issuesSeverity   = sev;
+    currentIssuesPage = 0;
+    const container   = document.getElementById('issues-list-container');
+    if (container) renderIssuePage(container, scanId);
+}
+
 function renderIssuePage(container, scanId) {
     const all = currentIssuesList;
     if (!all || all.length === 0) {
@@ -1132,7 +1258,25 @@ function renderIssuePage(container, scanId) {
 
     // Categorías disponibles
     const cats = ['all', ...new Set(all.map(r => r.issue_category || 'Otro').filter(Boolean))];
-    const filtered = _issuesFilter === 'all' ? all : all.filter(r => (r.issue_category || 'Otro') === _issuesFilter);
+
+    // Filtro: categoría + búsqueda + severidad
+    let filtered = _issuesFilter === 'all' ? all : all.filter(r => (r.issue_category || 'Otro') === _issuesFilter);
+    if (_issuesSeverity) filtered = filtered.filter(r => r.alert_level === _issuesSeverity);
+    if (_issuesSearchText) {
+        const q = _issuesSearchText;
+        filtered = filtered.filter(r =>
+            (r.issue_name  || '').toLowerCase().includes(q) ||
+            (r.issue_path  || '').toLowerCase().includes(q)
+        );
+    }
+
+    // Actualizar contador
+    const countLabel = document.getElementById('issues-count-label');
+    if (countLabel) {
+        countLabel.textContent = filtered.length === all.length
+            ? `${all.length} hallazgo(s)`
+            : `${filtered.length} de ${all.length}`;
+    }
     const showCount = (currentIssuesPage + 1) * ISSUES_PER_PAGE;
     const slice = filtered.slice(0, showCount);
     const hasMore = filtered.length > showCount;
@@ -1557,6 +1701,15 @@ async function viewScanDetails(scanId) {
         const issuesContainer = document.getElementById('issues-list-container');
         currentIssuesPage = 0;
         _issuesFilter = 'all';
+        _issuesSearchText = '';
+        _issuesSeverity   = '';
+        // Reset search UI
+        const _si = document.getElementById('issues-search-input');
+        const _ss = document.getElementById('issues-severity-select');
+        if (_si) _si.value = '';
+        if (_ss) _ss.value = '';
+        const _cl = document.getElementById('issues-count-label');
+        if (_cl) _cl.textContent = '';
         const _alertOrder = { CRITICAL: 0, SOSPECHOSO: 1, MUY_SOSPECHOSO: 2, POCO_SOSPECHOSO: 3 };
         currentIssuesList = (data.results || [])
             .filter(r => r.alert_level && r.alert_level !== 'CLEAN')
@@ -3357,6 +3510,105 @@ async function deleteUser(userId, username) {
     } catch (error) {
         console.error('Error eliminando usuario:', error);
         alert('Error al eliminar usuario');
+    }
+}
+
+// ── Equipo section ─────────────────────────────────────────────────────────
+
+function showEquipoTab(tabName) {
+    document.querySelectorAll('.equipo-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.equipoTab === tabName);
+    });
+    // Show/hide tab content divs by ID convention equipo-tab-<name>
+    ['miembros', 'empresa'].forEach(name => {
+        const el = document.getElementById(`equipo-tab-${name}`);
+        if (el) el.classList.toggle('equipo-tab-hidden', name !== tabName);
+    });
+}
+
+async function loadEquipoCompanyData() {
+    const infoWrap  = document.getElementById('equipo-company-info-body');
+    const usersWrap = document.getElementById('equipo-company-users-body');
+    if (!infoWrap && !usersWrap) return;
+
+    if (infoWrap) infoWrap.innerHTML = '<div style="color:var(--text-d);font-size:13px;">Cargando...</div>';
+    try {
+        const res = await fetch('/api/company/info');
+        if (!res.ok) {
+            if (infoWrap) infoWrap.innerHTML = '<div style="color:var(--text-d);font-size:13px;">Sin empresa asignada.</div>';
+            return;
+        }
+        const data = await res.json();
+        const c = data.company || {};
+        if (infoWrap) infoWrap.innerHTML = `
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;">
+                <div class="info-field"><div class="info-label">Nombre</div><div class="info-value">${c.name || '—'}</div></div>
+                <div class="info-field"><div class="info-label">País</div><div class="info-value">${c.country || '—'}</div></div>
+                <div class="info-field"><div class="info-label">Tipo</div><div class="info-value">${c.company_type || '—'}</div></div>
+                <div class="info-field"><div class="info-label">Creada</div><div class="info-value">${c.created_at ? formatDate(c.created_at) : '—'}</div></div>
+            </div>`;
+    } catch(e) {
+        if (infoWrap) infoWrap.innerHTML = `<div style="color:var(--text-d);font-size:13px;">Error: ${e.message}</div>`;
+    }
+
+    if (!usersWrap) return;
+    try {
+        const ures = await fetch('/api/company/users');
+        if (!ures.ok) { usersWrap.innerHTML = '<tr><td colspan="4" class="loading-cell">Sin acceso.</td></tr>'; return; }
+        const ud = await ures.json();
+        const users = ud.users || [];
+        usersWrap.innerHTML = users.length ? users.map(u => `
+            <tr>
+                <td><strong>${u.username}</strong></td>
+                <td style="font-size:11px;color:var(--text-d);">${u.email||'—'}</td>
+                <td><span class="badge badge-${_staffBadge(u.staff_role)}">${STAFF_ROLE_LABELS[u.staff_role]||u.staff_role||'—'}</span></td>
+                <td>${u.is_active ? '✅' : '❌'}</td>
+            </tr>`).join('')
+            : '<tr><td colspan="4" class="loading-cell">Sin usuarios en la empresa.</td></tr>';
+    } catch(e) {
+        usersWrap.innerHTML = `<tr><td colspan="4" class="loading-cell">Error: ${e.message}</td></tr>`;
+    }
+}
+
+async function setUserAvatar(userId) {
+    const url = prompt('URL del avatar (imagen):', '');
+    if (url === null) return; // cancelado
+    try {
+        const res = await fetch(`/api/staff/users/${userId}/avatar`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ avatar_url: url.trim() }),
+        });
+        const data = await res.json();
+        if (data.success) loadStaffUsers();
+        else alert('Error: ' + (data.error || 'No se pudo actualizar'));
+    } catch(e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function submitEquipoRegToken(event) {
+    event.preventDefault();
+    const desc    = (document.getElementById('equipo-reg-token-desc')?.value || '').trim();
+    const hours   = parseInt(document.getElementById('equipo-reg-token-hours')?.value) || 24;
+    const isAdmin = document.getElementById('equipo-reg-token-admin')?.checked || false;
+    try {
+        const res = await fetch('/api/admin/registration-tokens', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ description: desc, expires_hours: hours, is_admin: isAdmin }),
+        });
+        const data = await res.json();
+        if (data.success && data.token) {
+            const tokenEl  = document.getElementById('equipo-generated-token');
+            const resultEl = document.getElementById('equipo-reg-token-result');
+            if (tokenEl)  tokenEl.textContent = data.token;
+            if (resultEl) resultEl.style.display = 'block';
+        } else {
+            alert('Error: ' + (data.error || 'No se pudo generar el token'));
+        }
+    } catch(e) {
+        alert('Error: ' + e.message);
     }
 }
 

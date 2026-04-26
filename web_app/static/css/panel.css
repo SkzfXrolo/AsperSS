@@ -2553,3 +2553,116 @@ body.light-theme .scan-back-btn {
 .risk-score-bar.risk-suspicious { background: var(--amber); }
 .risk-score-bar.risk-hack     { background: var(--red); }
 
+/* ── Quick-filter chips ─────────────────────────────────────────────────── */
+.quick-filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+.quick-chip {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border-m);
+    background: var(--bg-t);
+    color: var(--text-m);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+    white-space: nowrap;
+    user-select: none;
+}
+.quick-chip:hover {
+    background: var(--accent-bg);
+    border-color: var(--border-h);
+    color: var(--accent);
+    transform: translateY(-1px);
+}
+.quick-chip.active {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+.chip-clear {
+    border-color: rgba(239,68,68,0.3);
+    color: #ef4444;
+}
+.chip-clear:hover {
+    background: rgba(239,68,68,0.1);
+    border-color: rgba(239,68,68,0.6);
+    color: #ef4444;
+}
+
+/* ── Issues search bar ──────────────────────────────────────────────────── */
+.issues-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+.issues-search-bar input,
+.issues-search-bar select {
+    background: var(--bg-t);
+    border: 1px solid var(--border-m);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 7px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+.issues-search-bar input:focus,
+.issues-search-bar select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+/* ── Scrollable issues list ─────────────────────────────────────────────── */
+.issues-list-scroll {
+    max-height: 560px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-m) transparent;
+}
+.issues-list-scroll::-webkit-scrollbar { width: 5px; }
+.issues-list-scroll::-webkit-scrollbar-track { background: transparent; }
+.issues-list-scroll::-webkit-scrollbar-thumb { background: var(--border-m); border-radius: 3px; }
+
+/* ── Equipo tabs ────────────────────────────────────────────────────────── */
+.equipo-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+    padding-bottom: 0;
+}
+.equipo-tab {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--text-m);
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+    margin-bottom: -1px;
+}
+.equipo-tab:hover {
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+.equipo-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: var(--accent-bg);
+}
+.equipo-tab-content { display: block; }
+.equipo-tab-hidden  { display: none !important; }
+

@@ -11,7 +11,7 @@
     <title>Panel Staff - Argus Projects</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=8">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=9">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -74,22 +74,20 @@
                 <span>Aprendizaje IA</span>
             </a>
 
-            {% if staff_role in ('admin','owner') %}
-            <a href="/panel" class="nav-item" data-section="staff">
+            {% if staff_role in ('admin','owner') or (user and user.company_id) %}
+            <a href="/panel" class="nav-item" data-section="equipo">
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                     <circle cx="6" cy="6" r="2.5" stroke="currentColor" stroke-width="1.5"/>
                     <circle cx="12" cy="6" r="2.5" stroke="currentColor" stroke-width="1.5"/>
                     <path d="M1 16c0-2.2 2.239-4 5-4s5 1.8 5 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                     <path d="M12 12c2.761 0 5 1.8 5 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                 </svg>
-                <span>Staff</span>
+                <span>Equipo</span>
             </a>
             {% endif %}
 
-            {% if user and ('admin' in user.roles or 'administrador' in user.roles or user.company_id) %}
-            <div class="nav-group-label">ADMIN</div>
-            {% endif %}
             {% if user and ('admin' in user.roles or 'administrador' in user.roles) %}
+            <div class="nav-group-label">ADMIN</div>
             <a href="/panel" class="nav-item" data-section="administracion">
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                     <circle cx="9" cy="6" r="3" stroke="currentColor" stroke-width="1.6"/>
@@ -104,14 +102,6 @@
                     <path d="M9 1.5L10.8 6.5H16L11.6 9.6L13.4 14.5L9 11.4L4.6 14.5L6.4 9.6L2 6.5H7.2L9 1.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
                 </svg>
                 <span>Super Admin</span>
-            </a>
-            {% endif %}
-            {% if user and user.company_id %}
-            <a href="/panel" class="nav-item" data-section="mi-empresa">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                    <path d="M2 16V7.5L9 2L16 7.5V16H11V12H7V16H2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-                </svg>
-                <span>Mi Empresa</span>
             </a>
             {% endif %}
         </nav>
@@ -169,6 +159,19 @@
                 " onmouseover="this.style.background='var(--border-m)'" onmouseout="this.style.background='var(--accent-bg)'">
                     <span id="theme-icon">☀️</span>
                 </button>
+                <!-- Palette picker -->
+                <div style="position:relative;">
+                    <button id="palette-toggle" onclick="togglePalettePanel(event)" title="Paleta de colores" style="
+                        background:var(--accent-bg);border:1px solid var(--border-m);border-radius:var(--radius-sm);
+                        color:var(--accent);width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+                        cursor:pointer;transition:var(--trans);font-size:16px;" aria-label="Paleta de colores">🎨</button>
+                    <div id="palette-panel" style="display:none;position:absolute;top:44px;right:0;z-index:200;
+                        background:var(--bg-s);border:1px solid var(--border-m);border-radius:var(--radius);
+                        padding:12px 14px;box-shadow:0 8px 32px rgba(0,0,0,0.35);min-width:200px;">
+                        <div style="font-size:11px;font-weight:700;color:var(--text-d);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Paleta de Colores</div>
+                        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;" id="palette-swatches"></div>
+                    </div>
+                </div>
                 <div class="user-info">
                     <span class="user-name">{{ user.username if user else 'Usuario' }}</span>
                     {% if user and 'admin' in user.roles %}
@@ -430,26 +433,109 @@
             </div>
         </section>
 
-        <!-- Staff Management Section -->
-        <section class="panel-section" id="staff-section">
-            <div class="section-header-actions">
-                <h2 class="section-subtitle">Gestión de Staff</h2>
+        <!-- Equipo Section (Staff + Empresa unificados) -->
+        <section class="panel-section" id="equipo-section">
+            <!-- Tabs de navegación -->
+            <div class="equipo-tabs" id="equipo-tabs">
+                {% if staff_role in ('admin','owner') %}
+                <button class="equipo-tab active" data-equipo-tab="miembros" onclick="showEquipoTab('miembros')">
+                    <svg width="15" height="15" viewBox="0 0 18 18" fill="none">
+                        <circle cx="6" cy="6" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+                        <circle cx="12" cy="6" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M1 16c0-2.2 2.239-4 5-4s5 1.8 5 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        <path d="M12 12c2.761 0 5 1.8 5 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    Miembros
+                </button>
+                {% endif %}
+                {% if user and user.company_id %}
+                <button class="equipo-tab {% if not staff_role in ('admin','owner') %}active{% endif %}" data-equipo-tab="empresa" onclick="showEquipoTab('empresa')">
+                    <svg width="15" height="15" viewBox="0 0 18 18" fill="none">
+                        <path d="M2 16V7.5L9 2L16 7.5V16H11V12H7V16H2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                    </svg>
+                    Mi Empresa
+                </button>
+                {% endif %}
             </div>
-            <div style="overflow-x:auto;">
-                <table class="data-table" id="staff-table">
-                    <thead>
-                        <tr>
-                            <th>Usuario</th>
-                            <th>Rol actual</th>
-                            <th>Activo</th>
-                            <th>Cambiar rol</th>
-                        </tr>
-                    </thead>
-                    <tbody id="staff-table-body">
-                        <tr><td colspan="4" class="loading-cell">Cargando staff...</td></tr>
-                    </tbody>
-                </table>
+
+            <!-- Tab: Miembros (Staff) -->
+            {% if staff_role in ('admin','owner') %}
+            <div class="equipo-tab-content" id="equipo-tab-miembros">
+                <div style="overflow-x:auto;">
+                    <table class="data-table" id="staff-table">
+                        <thead>
+                            <tr>
+                                <th style="width:44px;"></th>
+                                <th>Usuario</th>
+                                <th>Rol actual</th>
+                                <th>Activo</th>
+                                <th>Cambiar rol</th>
+                                <th>Avatar</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staff-table-body">
+                            <tr><td colspan="6" class="loading-cell">Cargando miembros...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
+            {% endif %}
+
+            <!-- Tab: Mi Empresa -->
+            {% if user and user.company_id %}
+            <div class="equipo-tab-content {% if staff_role in ('admin','owner') %}equipo-tab-hidden{% endif %}" id="equipo-tab-empresa">
+                <!-- Información de la Empresa -->
+                <div class="card" id="equipo-company-info-card">
+                    <h3 class="card-title">Información de la Empresa</h3>
+                    <div id="equipo-company-info-body" class="loading-cell">Cargando...</div>
+                </div>
+                {% if user and 'administrador' in user.roles %}
+                <!-- Generar Token de Registro -->
+                <div class="card" style="margin-top:20px;">
+                    <h3 class="card-title">Generar Token de Registro</h3>
+                    <p class="card-description">Crea tokens para que nuevos usuarios se unan a tu empresa</p>
+                    <form id="equipo-reg-token-form" onsubmit="submitEquipoRegToken(event)">
+                        <div class="form-group">
+                            <label>Descripción (opcional)</label>
+                            <input type="text" id="equipo-reg-token-desc" placeholder="Ej: Token para nuevo staff">
+                        </div>
+                        <div class="form-group">
+                            <label>Horas de validez</label>
+                            <input type="number" id="equipo-reg-token-hours" value="24" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                                <input type="checkbox" id="equipo-reg-token-admin">
+                                <span>Token de administrador</span>
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Generar Token</button>
+                    </form>
+                    <div id="equipo-reg-token-result" style="display:none;margin-top:16px;">
+                        <div class="token-display">
+                            <code id="equipo-generated-token"></code>
+                            <button class="btn btn-secondary" onclick="copyToClipboard(document.getElementById('equipo-generated-token').textContent)">Copiar</button>
+                        </div>
+                        <p class="warning-text">⚠️ Este token solo se mostrará una vez.</p>
+                    </div>
+                </div>
+                {% endif %}
+                <!-- Usuarios de la Empresa -->
+                <div class="card" style="margin-top:20px;">
+                    <h3 class="card-title">Usuarios de la Empresa</h3>
+                    <div style="overflow-x:auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Usuario</th><th>Email</th><th>Roles</th><th>Estado</th></tr>
+                            </thead>
+                            <tbody id="equipo-company-users-body">
+                                <tr><td colspan="4" class="loading-cell">Cargando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </section>
 
         <!-- Resultados Section -->
@@ -458,10 +544,21 @@
                 <h2 class="section-subtitle">Resultados de Escaneos - Argus Projects</h2>
             </div>
 
-            <!-- Barra de filtros -->
+            <!-- Chips de filtro rápido -->
+            <div class="quick-filter-chips" id="quick-filter-chips">
+                <button class="quick-chip" onclick="quickFilter('pending')">⏳ Pendientes</button>
+                <button class="quick-chip" onclick="quickFilter('hacks')">🔴 Con Hacks</button>
+                <button class="quick-chip" onclick="quickFilter('today')">📅 Hoy</button>
+                <button class="quick-chip" onclick="quickFilter('week')">📆 Esta semana</button>
+                <button class="quick-chip" onclick="quickFilter('critical')">🚨 Risk Alto (70+)</button>
+                <button class="quick-chip" onclick="quickFilter('running')">🔄 En progreso</button>
+                <button class="quick-chip chip-clear" onclick="clearFilters()" id="quick-clear-chip" style="display:none;">✕ Limpiar</button>
+            </div>
+
+            <!-- Barra de filtros avanzados -->
             <div class="scans-filter-bar" id="scans-filter-bar">
                 <input type="text" class="filter-input" id="filter-search"
-                       placeholder="Buscar máquina, usuario, IP..."
+                       placeholder="🔍 Máquina, usuario, IP, país..."
                        onkeydown="if(event.key==='Enter')applyFilters()">
                 <select class="filter-select" id="filter-verdict">
                     <option value="">Todos los veredictos</option>
@@ -743,8 +840,24 @@
                                 </div>
                                 <div id="verdict-history-panel" style="display:none;margin-top:6px;font-size:12px;color:var(--text-s);"></div>
                             </div>
-                            <!-- Issues list -->
-                            <div id="issues-list-container">
+                            <!-- Buscador dentro del scan -->
+                            <div class="issues-search-bar">
+                                <input type="text" id="issues-search-input"
+                                    placeholder="🔍 Buscar hallazgo por nombre o ruta..."
+                                    oninput="_onIssuesSearch(currentScanId)"
+                                    style="flex:1;min-width:0;">
+                                <select id="issues-severity-select" onchange="_onIssuesSearch(currentScanId)">
+                                    <option value="">Todos los niveles</option>
+                                    <option value="CRITICAL">🔴 Crítico</option>
+                                    <option value="MUY_SOSPECHOSO">🟠 Muy Sosp.</option>
+                                    <option value="SOSPECHOSO">🟡 Sospechoso</option>
+                                    <option value="POCO_SOSPECHOSO">🔵 Poco Sosp.</option>
+                                    <option value="NORMAL">⚪ Normal</option>
+                                </select>
+                                <span id="issues-count-label" style="font-size:11px;color:var(--text-d);white-space:nowrap;flex-shrink:0;"></span>
+                            </div>
+                            <!-- Issues list (scrollable) -->
+                            <div id="issues-list-container" class="issues-list-scroll">
                                 <div style="padding:40px;text-align:center;color:var(--text-d);font-size:13px;">Cargando...</div>
                             </div>
                         </div>
@@ -1521,7 +1634,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=9"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=11"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────

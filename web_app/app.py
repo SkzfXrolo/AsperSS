@@ -5274,6 +5274,7 @@ def list_staff_users():
             'staff_role': get_staff_role(u),
             'is_active':  u.get('is_active', True),
             'created_at': str(u.get('created_at', '')),
+            'avatar_url': u.get('avatar_url') or '',
         })
     return jsonify({'users': result}), 200
 
@@ -5309,6 +5310,28 @@ def update_staff_role(user_id):
                 (_json.dumps(updated), user_id)
             )
         return jsonify({'success': True, 'role': new_role}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/staff/users/<int:user_id>/avatar', methods=['PUT'])
+@login_required
+def update_user_avatar(user_id):
+    """Actualiza la URL del avatar de un usuario. Admin o superior."""
+    current_user = get_user_by_id(session.get('user_id'))
+    if not can_manage_staff(current_user):
+        return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
+    data = request.json or {}
+    avatar_url = (data.get('avatar_url') or '').strip()[:500]
+    try:
+        from auth import _auth_cursor, _ph
+        ph = _ph()
+        with _auth_cursor() as cursor:
+            cursor.execute(
+                f'UPDATE users SET avatar_url = {ph} WHERE id = {ph}',
+                (avatar_url or None, user_id)
+            )
+        return jsonify({'success': True}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
