@@ -2182,6 +2182,7 @@ class ArgusApp:
             'suspicious_process_location', 'short_lived_process', 'cloud_hash_match',
             'prescan_cleanup', 'suspicious_process_tree', 'unknown_parent_process',
             'baseline_anomaly', 'config_tfidf_match',
+            'suspicious_network_connection',
         }
 
         for item in issues:
@@ -3262,6 +3263,12 @@ class ArgusApp:
                 _run_safe(self.scan_player_baseline_delta)
                 self._set_scan_phase("📝 TF-IDF en config files de ghost clients...")
                 _run_safe(self.scan_config_tfidf)
+                self._set_scan_phase("🔌 Conexiones de red de javaw a hosts externos...")
+                _run_safe(self.scan_javaw_network_connections)
+                self._set_scan_phase("🗂️ DLLs sospechosas en carpetas temporales...")
+                _run_safe(self.scan_temp_dlls)
+                self._set_scan_phase("⚡ Múltiples instancias de javaw.exe...")
+                _run_safe(self.scan_multiple_javaw)
 
             # Grupo E — Ubicaciones de hacks (I/O alto)
             def _group_hack_locations():
@@ -8916,6 +8923,27 @@ class ArgusApp:
                                                f'Frameworks como Weave, ForgeHax y la mayoría de ghost clients modernos '
                                                f'usan -javaagent para inyectar código en runtime.',
                             })
+                        # -Xbootclasspath y -agentpath/-agentlib (otras formas de injection JVM)
+                        for boot_arg in ('-xbootclasspath/p:', '-xbootclasspath/a:', '-agentpath:', '-agentlib:'):
+                            if boot_arg in arg_l:
+                                arg_val = arg.split(':', 1)[-1] if ':' in arg else arg
+                                fname   = arg_val.split('\\')[-1].split('/')[-1]
+                                safe_agentlibs = ('jdwp', 'hprof', 'instrument')
+                                if any(s in arg_l for s in safe_agentlibs) and boot_arg == '-agentlib:':
+                                    continue
+                                self.issues_found.append({
+                                    'nombre': f'Arg JVM de inyección detectado: {arg[:80]}',
+                                    'ruta': arg,
+                                    'archivo': fname,
+                                    'tipo': 'javaagent_injection',
+                                    'categoria': 'INYECCION',
+                                    'alerta': 'CRITICAL',
+                                    'confidence': 0.93,
+                                    'detected_patterns': [f'jvm_injection_arg:{boot_arg.rstrip(":")}'],
+                                    'explicacion': f'Se detectó {boot_arg} en los argumentos JVM de Minecraft. '
+                                                   f'Este flag permite cargar código nativo o bytecode arbitrario '
+                                                   f'en la JVM antes de que Minecraft arranque (técnica de injection avanzada).',
+                                })
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
         except Exception as e:
@@ -9390,6 +9418,9 @@ class ArgusApp:
                                        'Permite colocar bloques automáticamente, prohibido en servidores survival.',
             'arduino_hid_device':      'Se detectó un dispositivo HID (Arduino/CH340/STM32) conectado. '
                                        'Estos dispositivos pueden emular un mouse para autoclick por hardware.',
+            'suspicious_network_connection': 'javaw.exe tiene una conexión activa a un servidor externo desconocido. '
+                                       'Los ghost clients con licencia online (Vape, Future, Sigma) se conectan '
+                                       'a sus servidores para verificar la licencia del usuario.',
         }
         for issue in issues:
             if not issue.get('explicacion'):
@@ -9893,6 +9924,187 @@ class ArgusApp:
                 })
         except Exception as e:
             print(f"Error en scan_prescan_disk_activity: {e}")
+
+    def scan_temp_dlls(self):
+        """Detecta DLLs sospechosas en carpetas temporales (%TEMP%, C:\\Windows\\Temp).
+        Hacks basados en inyección nativa frecuentemente cargan DLLs desde rutas temporales."""
+        print("🔍 Buscando DLLs sospechosas en carpetas Temp...")
+        temp_dirs = list({
+            os.environ.get('TEMP', ''),
+            os.environ.get('TMP', ''),
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Temp'),
+            r'C:\Windows\Temp',
+        })
+        SAFE_PATTERNS = ('jna', 'fontconfig', 'hsperfdata', 'msi', 'msedge', 'chrome', 'setup')
+        cutoff_24h = time.time() - 86400
+        seen = set()
+        try:
+            for tdir in temp_dirs:
+                if not tdir or not os.path.isdir(tdir):
+                    continue
+                for root, dirs, files in os.walk(tdir):
+                    dirs[:] = dirs[:6]  # cap depth
+                    for fname in files:
+                        if not fname.lower().endswith('.dll'):
+                            continue
+                        fpath = os.path.join(root, fname)
+                        if fpath in seen:
+                            continue
+                        seen.add(fpath)
+                        fname_l = fname.lower()
+                        if any(s in fname_l for s in SAFE_PATTERNS):
+                            continue
+                        try:
+                            mtime = os.path.getmtime(fpath)
+                            size  = os.path.getsize(fpath)
+                            if mtime >= cutoff_24h and size > 10240:  # >10KB y reciente
+                                conf = 0.75 if size > 524288 else 0.60  # >512KB más sospechoso
+                                print(f"⚠️ DLL SOSPECHOSA EN TEMP: {fpath}")
+                                self.issues_found.append({
+                                    'nombre': f'DLL sospechosa en carpeta temporal: {fname}',
+                                    'ruta': fpath,
+                                    'archivo': fname,
+                                    'tipo': 'dll_injection_java',
+                                    'categoria': 'JAVA_INJECTION',
+                                    'alerta': 'SOSPECHOSO',
+                                    'confidence': conf,
+                                    'detected_patterns': ['dll_in_temp', f'size:{size}'],
+                                    'explicacion': f'DLL de {size//1024}KB encontrada en carpeta temporal '
+                                                   f'en las últimas 24h. Los hacks basados en inyección '
+                                                   f'nativa suelen cargar DLLs desde rutas temporales para '
+                                                   f'no dejar rastro permanente en el sistema.',
+                                })
+                        except Exception:
+                            continue
+        except Exception as e:
+            print(f"Error en scan_temp_dlls: {e}")
+
+    def scan_multiple_javaw(self):
+        """Detecta múltiples instancias de javaw.exe corriendo simultáneamente.
+        Un jugador legítimo raramente tiene más de 1 instancia de Minecraft abierta.
+        Múltiples instancias pueden indicar un proceso de inyección separado del juego."""
+        print("🔍 Verificando instancias múltiples de javaw.exe...")
+        try:
+            java_procs = []
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'create_time']):
+                try:
+                    name = (proc.info.get('name') or '').lower()
+                    if 'javaw' in name or ('java.exe' == name):
+                        cmdline = ' '.join(proc.info.get('cmdline') or []).lower()
+                        java_procs.append({
+                            'pid':      proc.pid,
+                            'name':     proc.info['name'],
+                            'cmdline':  cmdline[:200],
+                            'is_mc':    '.minecraft' in cmdline or 'minecraft' in cmdline,
+                        })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            mc_procs = [p for p in java_procs if p['is_mc']]
+            non_mc   = [p for p in java_procs if not p['is_mc']]
+
+            if len(mc_procs) > 1:
+                pids = ', '.join(str(p['pid']) for p in mc_procs)
+                print(f"🚨 MÚLTIPLES INSTANCIAS MINECRAFT: {len(mc_procs)} ({pids})")
+                self.issues_found.append({
+                    'nombre': f'Múltiples instancias de Minecraft simultáneas: {len(mc_procs)}',
+                    'ruta': f'PIDs: {pids}',
+                    'archivo': 'javaw.exe',
+                    'tipo': 'suspicious_process_location',
+                    'categoria': 'PROCESO',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.70,
+                    'detected_patterns': [f'multiple_javaw:{len(mc_procs)}'],
+                    'explicacion': f'Se detectaron {len(mc_procs)} instancias de javaw.exe con '
+                                   f'contexto de Minecraft. Esto puede indicar un proceso de inyección '
+                                   f'separado haciéndose pasar por una instancia legítima del juego.',
+                })
+            if non_mc and mc_procs:
+                pids_non = ', '.join(str(p['pid']) for p in non_mc[:3])
+                self.issues_found.append({
+                    'nombre': f'Proceso Java sin contexto Minecraft corriendo junto al juego: PID {pids_non}',
+                    'ruta': f'PIDs: {pids_non}',
+                    'archivo': 'java.exe',
+                    'tipo': 'suspicious_process_location',
+                    'categoria': 'PROCESO',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.60,
+                    'detected_patterns': ['java_process_without_minecraft'],
+                    'explicacion': f'Hay {len(non_mc)} proceso(s) Java corriendo sin contexto de Minecraft '
+                                   f'mientras el juego está abierto. Un inyector basado en JVM puede '
+                                   f'ejecutarse como proceso Java independiente.',
+                })
+        except Exception as e:
+            print(f"Error en scan_multiple_javaw: {e}")
+
+    def scan_javaw_network_connections(self):
+        """Detecta conexiones de red de javaw.exe a hosts distintos al servidor y a Mojang.
+        Los ghost clients con licencia online se conectan a servidores de autenticación propios."""
+        print("🔍 Analizando conexiones de red de javaw.exe...")
+        TRUSTED_DOMAINS_SUFFIX = (
+            '.mojang.com', '.minecraft.net', '.minecraftservices.com',
+            '.amazonaws.com', '.microsoft.com', '.xbox.com', '.live.com',
+            '.akamai.net', '.akamaiedge.net', '.fastly.net', '.cloudfront.net',
+        )
+        TRUSTED_IPS_PREFIX = ('127.', '::1', '0.0.0.0', '192.168.', '10.', '172.')
+        try:
+            import socket as _sock
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    name = (proc.info.get('name') or '').lower()
+                    if 'javaw' not in name and 'java.exe' != name:
+                        continue
+                    try:
+                        conns = proc.net_connections(kind='inet')
+                    except (psutil.AccessDenied, AttributeError):
+                        try:
+                            conns = proc.connections(kind='inet')
+                        except Exception:
+                            continue
+                    for conn in conns:
+                        if conn.status != 'ESTABLISHED':
+                            continue
+                        raddr = conn.raddr
+                        if not raddr or not raddr.ip:
+                            continue
+                        remote_ip = raddr.ip
+                        if any(remote_ip.startswith(p) for p in TRUSTED_IPS_PREFIX):
+                            continue
+                        # Try reverse DNS (non-blocking, short timeout)
+                        hostname = ''
+                        try:
+                            _sock.setdefaulttimeout(0.5)
+                            hostname = _sock.gethostbyaddr(remote_ip)[0].lower()
+                        except Exception:
+                            hostname = ''
+                        finally:
+                            _sock.setdefaulttimeout(None)
+
+                        if hostname and any(hostname.endswith(d) for d in TRUSTED_DOMAINS_SUFFIX):
+                            continue  # trusted host
+                        # External connection not to Mojang/CDN
+                        label = hostname or remote_ip
+                        port  = raddr.port
+                        print(f"⚠️ CONEXIÓN EXTERNA DE JAVAW: {label}:{port}")
+                        self.issues_found.append({
+                            'nombre': f'Conexión de Minecraft a host externo desconocido: {label}',
+                            'ruta': f'{remote_ip}:{port}',
+                            'archivo': 'javaw.exe',
+                            'tipo': 'suspicious_network_connection',
+                            'categoria': 'RED',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.65,
+                            'detected_patterns': [f'javaw_external_conn:{label}:{port}'],
+                            'explicacion': f'javaw.exe tiene una conexión activa a {label}:{port}, '
+                                           f'que no es un servidor de Mojang ni CDN conocido. '
+                                           f'Los ghost clients con sistema de licencias online '
+                                           f'(Vape, Future, Sigma) se conectan a sus propios servidores '
+                                           f'para verificar la licencia del usuario.',
+                        })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_javaw_network_connections: {e}")
 
     def _apply_process_whitelist(self, issues):
         """P2 #13 — Descarta procesos conocidos y seguros del listado de hallazgos."""
