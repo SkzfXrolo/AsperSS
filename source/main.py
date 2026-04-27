@@ -9591,6 +9591,9 @@ class ArgusApp:
         SAFE_DIRS = [
             'program files', 'windows', 'system32', 'syswow64',
             'nvidia', 'microsoft', 'steam', 'discord',
+            # Herramientas de análisis anticheat — nunca son sospechosas
+            'argusscanner', 'argus scanner', 'echo-acb', 'echoscanner',
+            'astross', 'minecraftsstool',
         ]
 
         now = _dt.datetime.now()
