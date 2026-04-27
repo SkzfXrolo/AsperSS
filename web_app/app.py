@@ -37,6 +37,27 @@ def init_db_async():
     except Exception as e:
         print(f"⚠️ Error al inicializar base de datos: {e}")
         print("⚠️ La aplicación continuará, pero algunas funciones pueden no funcionar")
+    # Migración de seguridad: crear download_links en PostgreSQL si no existe
+    try:
+        with get_api_db_cursor() as _cur:
+            _cur.execute('''
+                CREATE TABLE IF NOT EXISTS download_links (
+                    id SERIAL PRIMARY KEY,
+                    token VARCHAR(255) UNIQUE NOT NULL,
+                    filename VARCHAR(255) NOT NULL,
+                    created_by VARCHAR(100),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP,
+                    max_downloads INTEGER DEFAULT 1,
+                    download_count INTEGER DEFAULT 0,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    description TEXT
+                )
+            ''')
+            _cur.execute('CREATE INDEX IF NOT EXISTS idx_dl_token ON download_links(token)')
+        print("✅ Tabla download_links verificada/creada en PostgreSQL")
+    except Exception as _e:
+        print(f"⚠️ Error verificando download_links: {_e}")
 
 # Inicializar en un thread separado para no bloquear el inicio
 import threading
@@ -403,15 +424,25 @@ def admin_subscriptions():
     if not session.get('admin_subscriptions'):
         return render_template('admin_subscriptions_login.html')
 
-    from auth import list_companies, list_users, create_company, update_company
-    companies = list_companies()
-    users = list_users()
-    individual_users = [u for u in users if not u.get('company_id')]
-    company_users = [u for u in users if u.get('company_id')]
-    return render_template('admin_subscriptions.html',
-                           companies=companies,
-                           individual_users=individual_users,
-                           company_users=company_users)
+    try:
+        from auth import list_companies, list_users
+        companies = list_companies() or []
+        users = list_users() or []
+        individual_users = [u for u in users if not u.get('company_id')]
+        company_users = [u for u in users if u.get('company_id')]
+        # Convertir Decimal a float para que Jinja2 lo maneje sin problemas
+        for c in companies:
+            if c.get('subscription_price') is not None:
+                c['subscription_price'] = float(c['subscription_price'])
+        return render_template('admin_subscriptions.html',
+                               companies=companies,
+                               individual_users=individual_users,
+                               company_users=company_users)
+    except Exception as _e:
+        import traceback as _tb
+        _err = _tb.format_exc()
+        print(f"❌ Error en /aspers-sa: {_e}\n{_err}")
+        return f"<pre style='color:red;padding:20px'>Error interno en Super Admin:\n{_err}</pre>", 500
 
 @app.route('/aspers-sa/logout')
 def admin_subscriptions_logout():
@@ -2696,9 +2727,9 @@ def submit_feedback():
                     cursor.execute(f'''
                         INSERT INTO learned_hashes (
                             file_hash, is_hack, confirmed_count, last_confirmed_at, source_feedback_id
-                        ) VALUES ({_PH}, 1, 1, CURRENT_TIMESTAMP, {_PH})
+                        ) VALUES ({_PH}, TRUE, 1, CURRENT_TIMESTAMP, {_PH})
                         ON CONFLICT (file_hash) DO UPDATE SET
-                            is_hack = 1,
+                            is_hack = TRUE,
                             confirmed_count = learned_hashes.confirmed_count + 1,
                             last_confirmed_at = CURRENT_TIMESTAMP,
                             source_feedback_id = EXCLUDED.source_feedback_id
@@ -2728,9 +2759,9 @@ def submit_feedback():
                 cursor.execute('''
                     INSERT INTO learned_hashes (
                         file_hash, is_hack, confirmed_count, last_confirmed_at, source_feedback_id
-                    ) VALUES (%s, 0, 1, CURRENT_TIMESTAMP, %s)
+                    ) VALUES (%s, FALSE, 1, CURRENT_TIMESTAMP, %s)
                     ON CONFLICT (file_hash) DO UPDATE SET
-                        is_hack = 0,
+                        is_hack = FALSE,
                         confirmed_count = learned_hashes.confirmed_count + 1,
                         last_confirmed_at = CURRENT_TIMESTAMP,
                         source_feedback_id = EXCLUDED.source_feedback_id
@@ -3558,76 +3589,66 @@ def _send_file_download(filename):
 def download_with_token(token):
     """Endpoint público para descargar usando token temporal (similar a Ocean)"""
     import os
-    import sqlite3
-    from flask import send_file, jsonify, request
     from datetime import datetime
-    from auth import DATABASE
-    
+
     try:
-        # Buscar el enlace en la BD
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT id, filename, expires_at, max_downloads, download_count, is_active
-            FROM download_links
-            WHERE token = ? AND is_active = 1
-        ''', (token,))
-        
-        link = cursor.fetchone()
-        
-        if not link:
-            conn.close()
-            return jsonify({'error': 'Enlace de descarga inválido o expirado'}), 404
-        
-        link_id, filename, expires_at, max_downloads, download_count, is_active = link
-        
-        # Obtener el token de escaneo del parámetro de la URL (si existe)
-        scan_token = request.args.get('token', None)
-        
-        # Asegurar que max_downloads sea un entero (puede venir como string desde SQLite)
-        try:
-            max_downloads = int(max_downloads) if max_downloads is not None else -1
-            download_count = int(download_count) if download_count is not None else 0
-        except (ValueError, TypeError):
-            max_downloads = -1
-            download_count = 0
-        
-        print(f"🔍 Verificando enlace de descarga: ID={link_id}, max_downloads={max_downloads}, download_count={download_count}, is_active={is_active}")
-        
-        # Verificar expiración
-        if expires_at:
-            expires_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
-            if datetime.now() > expires_dt:
-                conn.close()
-                print(f"❌ Enlace expirado: {expires_at}")
-                return jsonify({'error': 'Este enlace de descarga ha expirado'}), 410
-        
-        # Verificar límite de descargas (solo si max_downloads no es -1, que significa ilimitado)
-        if max_downloads != -1 and download_count >= max_downloads:
-            conn.close()
-            print(f"❌ Límite alcanzado: download_count={download_count} >= max_downloads={max_downloads}")
-            return jsonify({'error': 'Este enlace ha alcanzado el límite de descargas'}), 403
-        
-        print(f"✅ Enlace válido, procediendo con descarga")
-        
-        # Incrementar contador de descargas
-        cursor.execute('''
-            UPDATE download_links
-            SET download_count = download_count + 1
-            WHERE id = ?
-        ''', (link_id,))
-        
-        # Si alcanzó el límite, desactivar el enlace (solo si max_downloads no es -1)
-        if max_downloads != -1 and download_count + 1 >= max_downloads:
-            cursor.execute('''
-                UPDATE download_links
-                SET is_active = 0
-                WHERE id = ?
-            ''', (link_id,))
-        
-        conn.commit()
-        conn.close()
+        # Buscar el enlace en la BD (PostgreSQL)
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f'SELECT id, filename, expires_at, max_downloads, download_count, is_active'
+                f' FROM download_links WHERE token = {_PH} AND is_active = TRUE',
+                (token,)
+            )
+            link = cursor.fetchone()
+
+            if not link:
+                return jsonify({'error': 'Enlace de descarga inválido o expirado'}), 404
+
+            link_id       = _row_get(link, 0, 'id')
+            filename      = _row_get(link, 1, 'filename')
+            expires_at    = _row_get(link, 2, 'expires_at')
+            max_downloads = _row_get(link, 3, 'max_downloads')
+            download_count= _row_get(link, 4, 'download_count')
+
+            # Obtener el token de escaneo del parámetro de la URL (si existe)
+            scan_token = request.args.get('token', None)
+
+            try:
+                max_downloads  = int(max_downloads)  if max_downloads  is not None else -1
+                download_count = int(download_count) if download_count is not None else 0
+            except (ValueError, TypeError):
+                max_downloads = -1
+                download_count = 0
+
+            print(f"🔍 Verificando enlace: ID={link_id}, max={max_downloads}, count={download_count}")
+
+            # Verificar expiración
+            if expires_at:
+                if isinstance(expires_at, str):
+                    expires_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                else:
+                    expires_dt = expires_at  # psycopg2 ya devuelve datetime
+                if datetime.now() > expires_dt.replace(tzinfo=None):
+                    print(f"❌ Enlace expirado: {expires_at}")
+                    return jsonify({'error': 'Este enlace de descarga ha expirado'}), 410
+
+            # Verificar límite de descargas (-1 = ilimitado)
+            if max_downloads != -1 and download_count >= max_downloads:
+                print(f"❌ Límite alcanzado: {download_count} >= {max_downloads}")
+                return jsonify({'error': 'Este enlace ha alcanzado el límite de descargas'}), 403
+
+            print(f"✅ Enlace válido, procediendo con descarga")
+
+            # Incrementar contador
+            cursor.execute(
+                f'UPDATE download_links SET download_count = download_count + 1 WHERE id = {_PH}',
+                (link_id,)
+            )
+            if max_downloads != -1 and download_count + 1 >= max_downloads:
+                cursor.execute(
+                    f'UPDATE download_links SET is_active = FALSE WHERE id = {_PH}',
+                    (link_id,)
+                )
         
         # Buscar y enviar el archivo
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -4130,51 +4151,38 @@ def get_latest_exe():
 def create_download_link():
     """Crea un nuevo enlace de descarga temporal (solo para staff/admin)"""
     import secrets
-    import sqlite3
     from datetime import datetime, timedelta
-    from auth import is_admin, DATABASE
-    
+
     print(f"🔗 Solicitud de creación de enlace de descarga recibida")
     print(f"📋 Datos recibidos: {request.json}")
-    
-    # Verificar permisos (solo staff/admin)
+
+    # Verificar permisos (solo admin)
     user_id = session.get('user_id')
-    print(f"👤 User ID: {user_id}")
-    
-    if not is_admin(user_id):
+    current_user = get_user_by_id(user_id)
+    if not is_admin(current_user):
         print(f"❌ Usuario {user_id} no tiene permisos de admin")
         return jsonify({'error': 'No tienes permisos para crear enlaces de descarga'}), 403
-    
+
     data = request.json or {}
-    filename = data.get('filename', 'MinecraftSSTool.exe')
-    expires_hours = data.get('expires_hours', 24)  # Por defecto 24 horas
-    max_downloads = data.get('max_downloads', 1)  # Por defecto 1 descarga
-    description = data.get('description', '')
-    
-    print(f"📁 Archivo: {filename}")
-    print(f"⏰ Expira en: {expires_hours} horas")
-    print(f"📊 Máximo de descargas: {max_downloads}")
-    
-    # Generar token único
-    token = secrets.token_urlsafe(32)
-    print(f"🔑 Token generado: {token[:20]}...")
-    
-    # Calcular fecha de expiración
+    filename      = data.get('filename', 'MinecraftSSTool.exe')
+    expires_hours = data.get('expires_hours', 24)
+    max_downloads = data.get('max_downloads', 1)
+    description   = data.get('description', '')
+
+    print(f"📁 Archivo: {filename}, ⏰ {expires_hours}h, 📊 max={max_downloads}")
+
+    token      = secrets.token_urlsafe(32)
     expires_at = datetime.now() + timedelta(hours=expires_hours)
-    
+
     try:
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT INTO download_links (token, filename, created_by, expires_at, max_downloads, description)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (token, filename, user_id, expires_at.isoformat(), max_downloads, description))
-        
-        link_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        
+        with get_api_db_cursor() as cursor:
+            link_id = _insert_id(
+                cursor,
+                f'INSERT INTO download_links (token, filename, created_by, expires_at, max_downloads, description)'
+                f' VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH})',
+                (token, filename, str(user_id), expires_at.isoformat(), max_downloads, description)
+            )
+
         print(f"✅ Enlace guardado en BD con ID: {link_id}")
         
         # Generar URL completa
@@ -4206,43 +4214,36 @@ def create_download_link():
 @login_required
 def list_download_links():
     """Lista todos los enlaces de descarga (solo para staff/admin)"""
-    import sqlite3
-    from auth import is_admin
-    
-    # Verificar permisos
-    if not is_admin(session.get('user_id')):
+    if not is_admin(get_user_by_id(session.get('user_id'))):
         return jsonify({'error': 'No tienes permisos para ver enlaces de descarga'}), 403
-    
+
     try:
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT dl.id, dl.token, dl.filename, dl.created_at, dl.expires_at,
-                   dl.max_downloads, dl.download_count, dl.is_active, dl.description,
-                   u.username as created_by_username
-            FROM download_links dl
-            LEFT JOIN users u ON dl.created_by = u.id
-            ORDER BY dl.created_at DESC
-            LIMIT 50
-        ''')
-        
+        with get_api_db_cursor() as cursor:
+            cursor.execute('''
+                SELECT dl.id, dl.token, dl.filename, dl.created_at, dl.expires_at,
+                       dl.max_downloads, dl.download_count, dl.is_active, dl.description,
+                       u.username as created_by_username
+                FROM download_links dl
+                LEFT JOIN users u ON dl.created_by::text = u.id::text
+                ORDER BY dl.created_at DESC
+                LIMIT 50
+            ''')
+            rows = cursor.fetchall()
+
         links = []
-        for row in cursor.fetchall():
+        for row in rows:
             links.append({
-                'id': row[0],
-                'token': row[1],
-                'filename': row[2],
-                'created_at': row[3],
-                'expires_at': row[4],
-                'max_downloads': row[5],
-                'download_count': row[6],
-                'is_active': bool(row[7]),
-                'description': row[8],
-                'created_by': row[9]
+                'id':             _row_get(row, 0, 'id'),
+                'token':          _row_get(row, 1, 'token'),
+                'filename':       _row_get(row, 2, 'filename'),
+                'created_at':     str(_row_get(row, 3, 'created_at') or ''),
+                'expires_at':     str(_row_get(row, 4, 'expires_at') or ''),
+                'max_downloads':  _row_get(row, 5, 'max_downloads'),
+                'download_count': _row_get(row, 6, 'download_count'),
+                'is_active':      bool(_row_get(row, 7, 'is_active')),
+                'description':    _row_get(row, 8, 'description'),
+                'created_by':     _row_get(row, 9, 'created_by_username'),
             })
-        
-        conn.close()
         
         # Generar URLs completas
         base_url = request.host_url.rstrip('/')
@@ -4265,28 +4266,16 @@ def list_download_links():
 @login_required
 def delete_download_link(link_id):
     """Desactiva un enlace de descarga (solo para staff/admin)"""
-    import sqlite3
-    from auth import is_admin
-    
-    # Verificar permisos
-    if not is_admin(session.get('user_id')):
+    if not is_admin(get_user_by_id(session.get('user_id'))):
         return jsonify({'error': 'No tienes permisos para eliminar enlaces'}), 403
-    
+
     try:
-        conn = sqlite3.connect(DATABASE)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE download_links
-            SET is_active = 0
-            WHERE id = ?
-        ''', (link_id,))
-        
-        conn.commit()
-        conn.close()
-        
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f'UPDATE download_links SET is_active = FALSE WHERE id = {_PH}',
+                (link_id,)
+            )
         return jsonify({'success': True, 'message': 'Enlace desactivado'}), 200
-        
     except Exception as e:
         return jsonify({'error': f'Error al desactivar enlace: {str(e)}'}), 500
 
