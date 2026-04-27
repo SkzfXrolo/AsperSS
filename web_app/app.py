@@ -5477,6 +5477,58 @@ def update_user_avatar(user_id):
         return jsonify({'error': str(e)}), 500
 
 
+_REVIEW_SECRET = 'aspers-claude-review-2026'
+
+@app.route('/internal/scan-review/<int:scan_id>')
+def internal_scan_review(scan_id):
+    if request.args.get('token') != _REVIEW_SECRET:
+        return 'Acceso denegado', 403
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f'SELECT id, machine_name, minecraft_username, country, created_at, verdict, '
+                f'total_score, total_files_scanned, total_dirs_scanned, is_vm, connection_type '
+                f'FROM scans WHERE id = {_PH}', (scan_id,)
+            )
+            scan = cur.fetchone()
+            if not scan:
+                return jsonify({'error': 'Scan no encontrado'}), 404
+            cur.execute(
+                f'SELECT file_path, alert_level, detection_reason, score, category '
+                f'FROM scan_results WHERE scan_id = {_PH} ORDER BY score DESC',
+                (scan_id,)
+            )
+            results = cur.fetchall()
+        scan_data = {
+            'id': _row_get(scan, 0, 'id'),
+            'machine': _row_get(scan, 1, 'machine_name'),
+            'minecraft_username': _row_get(scan, 2, 'minecraft_username'),
+            'country': _row_get(scan, 3, 'country'),
+            'created_at': str(_row_get(scan, 4, 'created_at')),
+            'verdict': _row_get(scan, 5, 'verdict'),
+            'total_score': _row_get(scan, 6, 'total_score'),
+            'total_files_scanned': _row_get(scan, 7, 'total_files_scanned'),
+            'total_dirs_scanned': _row_get(scan, 8, 'total_dirs_scanned'),
+            'is_vm': _row_get(scan, 9, 'is_vm'),
+            'connection_type': _row_get(scan, 10, 'connection_type'),
+            'results_count': len(results),
+            'results': [
+                {
+                    'path': _row_get(r, 0, 'file_path'),
+                    'level': _row_get(r, 1, 'alert_level'),
+                    'reason': _row_get(r, 2, 'detection_reason'),
+                    'score': _row_get(r, 3, 'score'),
+                    'category': _row_get(r, 4, 'category'),
+                }
+                for r in results
+            ]
+        }
+        return jsonify(scan_data), 200
+    except Exception as exc:
+        import traceback as _tb
+        return jsonify({'error': str(exc), 'trace': _tb.format_exc()}), 500
+
+
 if __name__ == '__main__':
     print("🌐 Iniciando aplicación web de ASPERS Projects...")
     api_url_display = os.environ.get('API_URL') or (API_BASE_URL if IS_RENDER else API_BASE_URL)
