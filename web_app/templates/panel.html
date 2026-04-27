@@ -1490,7 +1490,7 @@
                         <span class="info-label">Issues Detectados:</span>
                         <span class="info-value" id="scan-issues-count">-</span>
                     </div>
-                    {% if is_admin(user) %}
+                    {% if staff_role in ('admin','owner') %}
                     <div class="info-item" style="margin-left:auto;">
                         <button id="btn-delete-machine-scans" onclick="deleteMachineScans()"
                             style="font-size:11px;padding:5px 12px;border-radius:6px;border:1px solid rgba(239,68,68,0.4);
