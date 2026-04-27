@@ -156,6 +156,42 @@ _SAFE_ROOT_FRAGMENTS = {
     'minecraftsstool',
 }
 
+_MINECRAFT_INSTANCE_FRAGMENTS = [
+    '.minecraft\\mods', '.minecraft/mods',
+    '.minecraft\\versions', '.minecraft/versions',
+    '.minecraft\\resourcepacks', '.minecraft/resourcepacks',
+    '.minecraft\\shaderpacks', '.minecraft/shaderpacks',
+    '.minecraft\\saves', '.minecraft/saves',
+    '.minecraft\\config', '.minecraft/config',
+    # Launchers alternativos con instancias
+    'multimc\\instances', 'multimc/instances',
+    'prismlauncher\\instances', 'prismlauncher/instances',
+    'curseforge\\minecraft\\instances', 'curseforge/minecraft/instances',
+    'gdlauncher\\instances', 'gdlauncher/instances',
+    'atlauncher\\instances', 'atlauncher/instances',
+    'ftbapp\\instances', 'ftbapp/instances',
+]
+
+# Rutas que NO son instancias activas (archivos descargados pero no cargados)
+_NON_INSTANCE_FRAGMENTS = [
+    '\\downloads\\', '/downloads/',
+    '\\desktop\\', '/desktop/',
+    '\\documents\\', '/documents/',
+    '\\temp\\', '/temp/',
+    '\\tmp\\', '/tmp/',
+    '\\appdata\\local\\temp', '/appdata/local/temp',
+]
+
+def _is_minecraft_instance(path: str) -> bool:
+    """Devuelve True si el path está dentro de una instancia activa de Minecraft."""
+    p = path.lower()
+    return any(frag in p for frag in _MINECRAFT_INSTANCE_FRAGMENTS)
+
+def _is_non_instance_location(path: str) -> bool:
+    """Devuelve True si el path está en una ubicación de descarga/temp (no instancia activa)."""
+    p = path.lower()
+    return any(frag in p for frag in _NON_INSTANCE_FRAGMENTS)
+
 def _is_hack_folder(dir_name: str, root_lower: str) -> bool:
     """Devuelve True si el nombre de carpeta parece ser de un hack client.
 
@@ -972,10 +1008,16 @@ class ArgusApp:
             'chrome', 'firefox', 'edge', 'adobe', 'winrar', '7zip', 'winzip',
             'vlc', 'media player', 'potplayer', 'mpc-hc', 'k-lite', 'codec',
             
-            # ========== LAUNCHERS LEGÍTIMOS DE MINECRAFT ==========
+            # ========== LAUNCHERS Y CLIENTES LEGÍTIMOS DE MINECRAFT ==========
             'tlauncher', 'curseforge', 'prism', 'multimc', 'gdlauncher',
             'badlion client', 'badlion', 'feather client', 'feather', 'pvp lounge',
             'lunar client', 'lunar', 'lunarclient', 'polymc', 'atlauncher',
+            'beast client', 'beastclient', 'beast-client',  # cliente FPS/cosméticos, no hack
+            'nether client', 'netherclient',                # cliente FPS legítimo
+            # Herramientas de análisis anticheat (no marcar el propio scanner como hack)
+            'argusscanner', 'argus scanner', 'argus-scanner',
+            'echo', 'echoscanner', 'echo-scanner', 'echo-acb',  # Echo anticheat
+            'astross', 'astro-ss', 'astroanticheck',
             
             # ========== MODS LEGÍTIMOS DE MINECRAFT (EXPANDIDO 200%) ==========
             'optifine', 'forge', 'fabric', 'iris', 'sodium', 'lithium', 'phosphor',
@@ -4376,14 +4418,21 @@ class ArgusApp:
             
             # ========== PASO 5: DETECCIÓN DE OFUSCACIÓN EXCESIVA ==========
             if content_analysis.get('obfuscation_detected', False):
-                # Si está muy ofuscado Y no está en whitelist, es sospechoso
                 if content_analysis['confidence'] >= 50 and not self.is_whitelisted(file_path):
-                    # Pero solo si no es software conocido (launchers, etc.)
-                    known_software = ['anydesk', 'teamviewer', 'gtavlauncher', 'rockstar', 'steam', 'epic']
+                    known_software = ['anydesk', 'teamviewer', 'gtavlauncher', 'rockstar', 'steam', 'epic',
+                                      'discord', 'roblox', '3utools', '4ukey', 'echo-acb', 'argusscanner']
                     if not any(sw in full_path_lower for sw in known_software):
-                        is_suspicious = True
-                        confidence = max(confidence, 60)
-                        detected_patterns.append('obfuscation')
+                        # Solo marcar como sospechoso si está en una instancia activa de Minecraft
+                        # o si la confianza es muy alta (>=80). Archivos en Downloads/Temp = ignorar.
+                        if _is_minecraft_instance(file_path):
+                            is_suspicious = True
+                            confidence = max(confidence, 65)
+                            detected_patterns.append('obfuscation_in_instance')
+                        elif not _is_non_instance_location(file_path) and content_analysis['confidence'] >= 80:
+                            # Fuera de instancia pero confianza muy alta — marcar como poco sospechoso
+                            is_suspicious = True
+                            confidence = max(confidence, 40)
+                            detected_patterns.append('obfuscation_out_of_instance')
             
             # ========== PASO 6: DETECCIÓN POR HASH CONOCIDO ==========
             if content_analysis.get('file_hash') in self.known_hack_hashes:

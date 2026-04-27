@@ -1249,6 +1249,29 @@ function _onIssuesSearch(scanId) {
     if (container) renderIssuePage(container, scanId);
 }
 
+// Detecta si un path está dentro de una instancia activa de Minecraft
+function _isInMinecraftInstance(path) {
+    if (!path) return false;
+    const p = path.toLowerCase().replace(/\\/g, '/');
+    const instanceFrags = [
+        '.minecraft/mods', '.minecraft/versions', '.minecraft/resourcepacks',
+        '.minecraft/shaderpacks', '.minecraft/saves', '.minecraft/config',
+        'multimc/instances', 'prismlauncher/instances',
+        'curseforge/minecraft/instances', 'gdlauncher/instances',
+        'atlauncher/instances',
+    ];
+    return instanceFrags.some(f => p.includes(f));
+}
+
+// Detecta si un path está en una ubicación de descarga (no cargado en el juego)
+function _isNonInstanceLocation(path) {
+    if (!path) return false;
+    const p = path.toLowerCase().replace(/\\/g, '/');
+    return p.includes('/downloads/') || p.includes('/desktop/') ||
+           p.includes('/documents/') || p.includes('/temp/') ||
+           p.includes('/appdata/local/temp');
+}
+
 function renderIssuePage(container, scanId) {
     const all = currentIssuesList;
     if (!all || all.length === 0) {
@@ -1259,9 +1282,10 @@ function renderIssuePage(container, scanId) {
     // Categorías disponibles
     const cats = ['all', ...new Set(all.map(r => r.issue_category || 'Otro').filter(Boolean))];
 
-    // Filtro: categoría + búsqueda + severidad
+    // Filtro: categoría + búsqueda + severidad + solo-instancia
     let filtered = _issuesFilter === 'all' ? all : all.filter(r => (r.issue_category || 'Otro') === _issuesFilter);
     if (_issuesSeverity) filtered = filtered.filter(r => r.alert_level === _issuesSeverity);
+    if (window._issuesOnlyInstance) filtered = filtered.filter(r => _isInMinecraftInstance(r.issue_path));
     if (_issuesSearchText) {
         const q = _issuesSearchText;
         filtered = filtered.filter(r =>
@@ -1282,6 +1306,9 @@ function renderIssuePage(container, scanId) {
     const hasMore = filtered.length > showCount;
 
     // Chips de categoría
+    const onlyInst = !!window._issuesOnlyInstance;
+    const instCount = all.filter(r => _isInMinecraftInstance(r.issue_path)).length;
+
     const chips = cats.map(c => {
         const count = c === 'all' ? all.length : all.filter(r => (r.issue_category || 'Otro') === c).length;
         const active = _issuesFilter === c;
@@ -1292,19 +1319,33 @@ function renderIssuePage(container, scanId) {
             color:${active ? '#8B5CF6' : 'var(--text-m)'};white-space:nowrap;">
             ${c === 'all' ? '🔍 Todos' : _getCategoryLabel(c)} <span style="opacity:.7">${count}</span>
         </button>`;
-    }).join('');
+    }).join('') + `<button onclick="_toggleOnlyInstance(${scanId})" style="
+        font-size:11px;padding:4px 10px;border-radius:20px;cursor:pointer;font-weight:600;
+        border:1px solid ${onlyInst ? '#10b981' : 'var(--border-m)'};
+        background:${onlyInst ? 'rgba(16,185,129,0.15)' : 'var(--bg-t)'};
+        color:${onlyInst ? '#10b981' : 'var(--text-m)'};white-space:nowrap;"
+        title="Mostrar solo archivos cargados en una instancia activa de Minecraft">
+        En instancia <span style="opacity:.7">${instCount}</span>
+    </button>`;
 
     const rows = slice.map((result) => {
-        const isCrit = result.alert_level === 'CRITICAL';
-        const isMid  = result.alert_level === 'SOSPECHOSO';
-        const accent = isCrit ? '#ef4444' : isMid ? '#f59e0b' : '#6b7280';
-        const bg     = isCrit ? 'rgba(239,68,68,0.05)' : isMid ? 'rgba(245,158,11,0.04)' : 'rgba(107,114,128,0.03)';
-        const dot    = isCrit ? '🔴' : isMid ? '🟠' : '🔵';
-        const cat    = result.issue_category || '';
+        const isCrit  = result.alert_level === 'CRITICAL';
+        const isMid   = result.alert_level === 'SOSPECHOSO';
+        const accent  = isCrit ? '#ef4444' : isMid ? '#f59e0b' : '#6b7280';
+        const bg      = isCrit ? 'rgba(239,68,68,0.05)' : isMid ? 'rgba(245,158,11,0.04)' : 'rgba(107,114,128,0.03)';
+        const dot     = isCrit ? '🔴' : isMid ? '🟠' : '🔵';
+        const cat     = result.issue_category || '';
         const hasFeedback = result.feedback_status;
-        const name = (result.issue_name || 'Hallazgo').slice(0, 100);
-        const path = result.issue_path || '';
+        const name    = (result.issue_name || 'Hallazgo').slice(0, 100);
+        const path    = result.issue_path || '';
         const truncPath = path.length > 90 ? '…' + path.slice(-87) : path;
+        const inInst  = _isInMinecraftInstance(path);
+        const inDl    = _isNonInstanceLocation(path);
+        const instBadge = inInst
+            ? `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);flex-shrink:0;white-space:nowrap;">En instancia</span>`
+            : inDl
+            ? `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(107,114,128,0.1);color:var(--text-d);border:1px solid var(--border-m);flex-shrink:0;white-space:nowrap;">No cargado</span>`
+            : '';
 
         return `<div data-result-id="${result.id}" style="
             background:${bg};border:1px solid ${accent}33;border-left:3px solid ${accent};
@@ -1314,6 +1355,7 @@ function renderIssuePage(container, scanId) {
             <div style="flex:1;min-width:0;overflow:hidden;">
                 <div style="font-size:12px;font-weight:600;color:var(--text-h);display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;overflow:hidden;">
                     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;word-break:break-all;min-width:0;flex:1;">${name}</span>
+                    ${instBadge}
                     ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;flex-shrink:0;white-space:nowrap;">${_getCategoryLabel(cat)}</span>` : ''}
                 </div>
                 ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;" title="${path}">${truncPath}</div>` : ''}
@@ -1343,6 +1385,13 @@ function renderIssuePage(container, scanId) {
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border);">${chips}</div>
         <div style="display:flex;flex-direction:column;gap:6px;">${rows || '<div style="padding:20px;text-align:center;color:var(--text-d);font-size:12px;">Sin hallazgos en esta categoría.</div>'}</div>
         ${loadMoreBtn}`;
+}
+
+function _toggleOnlyInstance(scanId) {
+    window._issuesOnlyInstance = !window._issuesOnlyInstance;
+    currentIssuesPage = 0;
+    const container = document.getElementById('issues-list-container');
+    if (container) renderIssuePage(container, scanId);
 }
 
 function _setIssueFilter(cat, scanId) {
@@ -1704,6 +1753,7 @@ async function viewScanDetails(scanId) {
         _issuesFilter = 'all';
         _issuesSearchText = '';
         _issuesSeverity   = '';
+        window._issuesOnlyInstance = false;
         // Reset search UI
         const _si = document.getElementById('issues-search-input');
         const _ss = document.getElementById('issues-severity-select');
@@ -1714,7 +1764,13 @@ async function viewScanDetails(scanId) {
         const _alertOrder = { CRITICAL: 0, SOSPECHOSO: 1, MUY_SOSPECHOSO: 2, POCO_SOSPECHOSO: 3 };
         currentIssuesList = (data.results || [])
             .filter(r => r.alert_level && r.alert_level !== 'CLEAN')
-            .sort((a, b) => (_alertOrder[a.alert_level] ?? 9) - (_alertOrder[b.alert_level] ?? 9));
+            // Primero en-instancia, luego por severidad dentro de cada grupo
+            .sort((a, b) => {
+                const ai = _isInMinecraftInstance(a.issue_path) ? 0 : 1;
+                const bi = _isInMinecraftInstance(b.issue_path) ? 0 : 1;
+                if (ai !== bi) return ai - bi;
+                return (_alertOrder[a.alert_level] ?? 9) - (_alertOrder[b.alert_level] ?? 9);
+            });
         renderIssuePage(issuesContainer, scanId);
 
         const hasUnprocessed = currentIssuesList.some(r => !r.feedback_status);
