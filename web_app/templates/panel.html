@@ -1480,6 +1480,16 @@
                         <span class="info-label">Issues Detectados:</span>
                         <span class="info-value" id="scan-issues-count">-</span>
                     </div>
+                    {% if is_admin(user) %}
+                    <div class="info-item" style="margin-left:auto;">
+                        <button id="btn-delete-machine-scans" onclick="deleteMachineScans()"
+                            style="font-size:11px;padding:5px 12px;border-radius:6px;border:1px solid rgba(239,68,68,0.4);
+                                   background:rgba(239,68,68,0.08);color:#ef4444;cursor:pointer;font-weight:600;"
+                            title="Eliminar todos los scans de esta máquina (para limpiar scans de prueba)">
+                            🗑 Limpiar scans de prueba
+                        </button>
+                    </div>
+                    {% endif %}
                 </div>
 
                 <div class="scan-results-container">

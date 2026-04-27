@@ -2702,11 +2702,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadLearningStats() {
     try {
-        const response = await fetch('/api/learned-patterns');
+        const response = await fetch('/api/learning-stats');
         const data = await response.json();
-        document.getElementById('learned-patterns-count').textContent = data.total || 0;
-        document.getElementById('learned-hashes-count').textContent  = '0';
-        document.getElementById('total-feedbacks-count').textContent = '0';
+        document.getElementById('learned-patterns-count').textContent = data.patterns_count  ?? 0;
+        document.getElementById('learned-hashes-count').textContent   = data.hashes_count   ?? 0;
+        document.getElementById('total-feedbacks-count').textContent  = data.feedbacks_count ?? 0;
     } catch (error) {
         console.error('Error cargando estadísticas de aprendizaje:', error);
     }
@@ -2855,6 +2855,37 @@ async function updateModel() {
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<span>Actualizar Modelo de IA</span><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3L10 17M3 10L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    }
+}
+
+// ============================================================
+// ADMIN: BORRAR SCANS DE PRUEBA
+// ============================================================
+
+async function deleteMachineScans() {
+    const machineName = document.getElementById('scan-machine-name')?.textContent?.trim();
+    if (!machineName || machineName === '-') {
+        alert('No se encontró el nombre de la máquina.');
+        return;
+    }
+    if (!confirm(`⚠️ Esto eliminará TODOS los scans de "${machineName}" de la base de datos.\n\nÚsalo solo para limpiar scans de prueba propios.\n\n¿Continuar?`)) return;
+
+    try {
+        const res = await fetch('/api/admin/scans/bulk-delete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({machine_name: machineName})
+        });
+        const d = await res.json();
+        if (d.error) { alert('Error: ' + d.error); return; }
+        alert(`✅ ${d.message}`);
+        // Volver a la lista de scans
+        document.querySelectorAll('.panel-section').forEach(s => { s.classList.remove('active'); s.style.display = 'none'; });
+        const rs = document.getElementById('resultados-section');
+        if (rs) { rs.classList.add('active'); rs.style.display = ''; }
+        if (typeof loadScans === 'function') loadScans();
+    } catch (e) {
+        alert('Error de conexión: ' + e.message);
     }
 }
 

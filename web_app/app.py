@@ -2644,16 +2644,37 @@ def submit_feedback():
             if staff_verification == 'hack':
                 name_lower = (issue_name or '').lower()
                 path_lower = (issue_path or '').lower()
-                hack_keywords = re.findall(r'\b(vape|entropy|inject|bypass|killaura|aimbot|reach|velocity|scaffold|fly|xray|ghost|stealth|undetected|sigma|flux|future|astolfo|whiteout|liquidbounce|wurst|impact)\w*\b',
-                                          name_lower + ' ' + path_lower, re.IGNORECASE)
-                extracted_patterns = list(set(hack_keywords))
+
+                # 1) Patrones ya identificados por el scanner (fuente primaria)
+                scanner_patterns = []
+                try:
+                    raw = detected_patterns_json
+                    if isinstance(raw, str):
+                        raw = json.loads(raw)
+                    if isinstance(raw, list):
+                        scanner_patterns = [str(p).strip().lower() for p in raw if p and len(str(p).strip()) >= 3]
+                except Exception:
+                    pass
+
+                # 2) Keywords del nombre/ruta usando lista extendida
+                _HACK_KW_PATTERN = re.compile(
+                    r'\b(vape|vapelite|entropy|entropyclient|liquidbounce|wurst|wurstclient|'
+                    r'sigma|flux|future|astolfo|novoline|phobos|rusherhack|salhack|inertia|'
+                    r'meteor|riseclient|aristois|konasen|kami|pandora|tenacity|weave|'
+                    r'killaura|aimbot|triggerbot|autoclicker|dllinjector|cheatengine|'
+                    r'bspoof|ghostclient|silentclient|fluxclient|bypasser)\w*',
+                    re.IGNORECASE
+                )
+                regex_patterns = [m.group(0).lower() for m in _HACK_KW_PATTERN.finditer(name_lower + ' ' + path_lower)]
+
+                extracted_patterns = list(set(scanner_patterns + regex_patterns))
 
                 # Guardar hash si existe
                 if file_hash:
-                    cursor.execute('''
+                    cursor.execute(f'''
                         INSERT INTO learned_hashes (
                             file_hash, is_hack, confirmed_count, last_confirmed_at, source_feedback_id
-                        ) VALUES (%s, 1, 1, CURRENT_TIMESTAMP, %s)
+                        ) VALUES ({_PH}, 1, 1, CURRENT_TIMESTAMP, {_PH})
                         ON CONFLICT (file_hash) DO UPDATE SET
                             is_hack = 1,
                             confirmed_count = learned_hashes.confirmed_count + 1,
@@ -2663,15 +2684,17 @@ def submit_feedback():
 
                 # Guardar patrones aprendidos
                 for pattern in extracted_patterns:
-                    cursor.execute('''
+                    if not pattern or len(pattern) < 3:
+                        continue
+                    cursor.execute(f'''
                         INSERT INTO learned_patterns (
                             pattern_type, pattern_value, pattern_category, source_feedback_id,
                             learned_from_count, last_updated_at, is_active
-                        ) VALUES ('keyword', %s, 'high_risk', %s, 1, CURRENT_TIMESTAMP, 1)
+                        ) VALUES ('keyword', {_PH}, 'high_risk', {_PH}, 1, CURRENT_TIMESTAMP, TRUE)
                         ON CONFLICT (pattern_value) DO UPDATE SET
                             learned_from_count = learned_patterns.learned_from_count + 1,
                             last_updated_at = CURRENT_TIMESTAMP,
-                            is_active = 1
+                            is_active = TRUE
                     ''', (pattern, feedback_id))
 
                 extracted_features = {
@@ -3002,6 +3025,56 @@ def update_model():
         print(f"Error en update_model: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': f'Error inesperado: {str(e)}'}), 500
+
+@app.route('/api/learning-stats', methods=['GET'])
+def get_learning_stats():
+    """Estadísticas del sistema de aprendizaje: patrones, hashes y feedbacks."""
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM learned_patterns WHERE is_active = TRUE AND pattern_type != 'legitimate_path'")
+            patterns_count = (_row_get(cursor.fetchone(), 0, 'count') or 0)
+            cursor.execute("SELECT COUNT(*) FROM learned_hashes")
+            hashes_count = (_row_get(cursor.fetchone(), 0, 'count') or 0)
+            cursor.execute("SELECT COUNT(*) FROM staff_feedback")
+            feedbacks_count = (_row_get(cursor.fetchone(), 0, 'count') or 0)
+        return jsonify({
+            'patterns_count': int(patterns_count),
+            'hashes_count': int(hashes_count),
+            'feedbacks_count': int(feedbacks_count),
+        }), 200
+    except Exception as e:
+        return jsonify({'patterns_count': 0, 'hashes_count': 0, 'feedbacks_count': 0, 'error': str(e)}), 200
+
+
+@app.route('/api/admin/scans/bulk-delete', methods=['POST'])
+@login_required
+def bulk_delete_scans():
+    """Elimina scans de prueba por machine_name o machine_id. Solo admin."""
+    current_user = get_user_by_id(session.get('user_id'))
+    if not is_admin(current_user):
+        return jsonify({'error': 'Se requiere rol admin'}), 403
+    data = request.json or {}
+    machine_name = (data.get('machine_name') or '').strip()
+    machine_id   = (data.get('machine_id') or '').strip()
+    if not machine_name and not machine_id:
+        return jsonify({'error': 'Se requiere machine_name o machine_id'}), 400
+    try:
+        with get_api_db_cursor() as cursor:
+            if machine_name:
+                cursor.execute(f'SELECT id FROM scans WHERE machine_name = {_PH}', (machine_name,))
+            else:
+                cursor.execute(f'SELECT id FROM scans WHERE machine_id = {_PH}', (machine_id,))
+            scan_ids = [_row_get(r, 0, 'id') for r in cursor.fetchall()]
+            if not scan_ids:
+                return jsonify({'deleted': 0, 'message': 'No se encontraron scans para ese equipo'}), 200
+            _ids_ph = ','.join([_PH] * len(scan_ids))
+            cursor.execute(f'DELETE FROM scan_results WHERE scan_id IN ({_ids_ph})', scan_ids)
+            cursor.execute(f'DELETE FROM staff_feedback WHERE scan_id IN ({_ids_ph})', scan_ids)
+            cursor.execute(f'DELETE FROM scans WHERE id IN ({_ids_ph})', scan_ids)
+        return jsonify({'deleted': len(scan_ids), 'message': f'{len(scan_ids)} scan(s) eliminados'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/learned-patterns', methods=['GET'])
 def get_learned_patterns():
