@@ -5477,45 +5477,6 @@ def update_user_avatar(user_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ── ENDPOINT TEMPORAL: promover usuario a admin ─────────────────────────────
-# Eliminar después de usar. Token hardcoded — solo sirve para una operación puntual.
-_PROMOTE_SECRET = 'aspers-fix-arefy2024'
-
-@app.route('/internal/promote-admin')
-def promote_admin_once():
-    token    = request.args.get('token', '')
-    username = request.args.get('user', 'arefy_admin')
-    new_role = request.args.get('role', 'admin')
-
-    if token != _PROMOTE_SECRET:
-        return 'Acceso denegado', 403
-    if new_role not in STAFF_ROLE_HIERARCHY:
-        return f'Rol inválido. Válidos: {STAFF_ROLE_HIERARCHY}', 400
-
-    try:
-        import json as _j
-        with get_api_db_cursor() as cur:
-            cur.execute(f'SELECT id, roles FROM users WHERE username = {_PH}', (username,))
-            row = cur.fetchone()
-            if not row:
-                return f'Usuario {username!r} no encontrado', 404
-            uid = _row_get(row, 0, 'id')
-            try:
-                roles = _j.loads(_row_get(row, 1, 'roles') or '[]')
-            except Exception:
-                roles = []
-            # Quitar roles de staff anteriores y añadir el nuevo
-            roles = [r for r in roles if r not in STAFF_ROLE_HIERARCHY]
-            roles.append(new_role)
-            if new_role in ('admin', 'owner') and 'admin' not in roles:
-                roles.append('admin')
-            cur.execute(f'UPDATE users SET roles = {_PH} WHERE id = {_PH}', (_j.dumps(roles), uid))
-        return f'✅ Roles de {username!r} actualizados a: {roles}', 200
-    except Exception as exc:
-        return f'❌ Error: {exc}', 500
-# ── FIN ENDPOINT TEMPORAL ────────────────────────────────────────────────────
-
-
 if __name__ == '__main__':
     print("🌐 Iniciando aplicación web de ASPERS Projects...")
     api_url_display = os.environ.get('API_URL') or (API_BASE_URL if IS_RENDER else API_BASE_URL)

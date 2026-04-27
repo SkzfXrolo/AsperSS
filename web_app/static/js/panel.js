@@ -1575,7 +1575,7 @@ async function viewScanDetails(scanId) {
         const sc = document.getElementById('sum-critical'); if (sc) sc.textContent = severityStats.severe;
         const ss = document.getElementById('sum-suspicious'); if (ss) ss.textContent = severityStats.alert;
         const sl = document.getElementById('sum-low'); if (sl) sl.textContent = severityStats.low;
-        const sk = document.getElementById('sum-clean'); if (sk) sk.textContent = severityStats.clean;
+        const sk = document.getElementById('sum-clean'); if (sk) sk.textContent = (data.total_files_scanned || severityStats.clean).toLocaleString();
         
         // Actualizar información del escaneo (columna izquierda)
         const scanIdEl = document.getElementById('detail-scan-id');
