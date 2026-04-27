@@ -5485,44 +5485,66 @@ def internal_scan_review(scan_id):
         return 'Acceso denegado', 403
     try:
         with get_api_db_cursor() as cur:
+            # Columnas base del schema real
             cur.execute(
-                f'SELECT id, machine_name, minecraft_username, country, created_at, verdict, '
-                f'total_score, total_files_scanned, total_dirs_scanned, is_vm, connection_type '
+                f'SELECT id, machine_name, minecraft_username, country, started_at, '
+                f'total_files_scanned, issues_found, scan_duration, status '
                 f'FROM scans WHERE id = {_PH}', (scan_id,)
             )
             scan = cur.fetchone()
             if not scan:
                 return jsonify({'error': 'Scan no encontrado'}), 404
+
+            scan_data = {
+                'id':                  _row_get(scan, 0, 'id'),
+                'machine':             _row_get(scan, 1, 'machine_name'),
+                'minecraft_username':  _row_get(scan, 2, 'minecraft_username'),
+                'country':             _row_get(scan, 3, 'country'),
+                'started_at':          str(_row_get(scan, 4, 'started_at') or ''),
+                'total_files_scanned': _row_get(scan, 5, 'total_files_scanned') or 0,
+                'issues_found':        _row_get(scan, 6, 'issues_found') or 0,
+                'scan_duration':       _row_get(scan, 7, 'scan_duration') or 0,
+                'status':              _row_get(scan, 8, 'status'),
+                'verdict': None, 'risk_score': None, 'total_dirs_scanned': 0,
+            }
+
+            # Columnas opcionales (pueden no existir en filas antiguas)
+            try:
+                cur.execute('SAVEPOINT rv_opt')
+                cur.execute(
+                    f'SELECT verdict, risk_score, total_dirs_scanned FROM scans WHERE id = {_PH}',
+                    (scan_id,)
+                )
+                opt = cur.fetchone()
+                if opt:
+                    scan_data['verdict']             = _row_get(opt, 0, 'verdict')
+                    scan_data['risk_score']          = _row_get(opt, 1, 'risk_score')
+                    scan_data['total_dirs_scanned']  = _row_get(opt, 2, 'total_dirs_scanned') or 0
+                cur.execute('RELEASE SAVEPOINT rv_opt')
+            except Exception:
+                try: cur.execute('ROLLBACK TO SAVEPOINT rv_opt')
+                except Exception: pass
+
+            # Resultados ordenados por confianza DESC
             cur.execute(
-                f'SELECT file_path, alert_level, detection_reason, score, category '
-                f'FROM scan_results WHERE scan_id = {_PH} ORDER BY score DESC',
+                f'SELECT issue_name, issue_path, issue_category, alert_level, confidence, detected_patterns '
+                f'FROM scan_results WHERE scan_id = {_PH} ORDER BY confidence DESC NULLS LAST',
                 (scan_id,)
             )
             results = cur.fetchall()
-        scan_data = {
-            'id': _row_get(scan, 0, 'id'),
-            'machine': _row_get(scan, 1, 'machine_name'),
-            'minecraft_username': _row_get(scan, 2, 'minecraft_username'),
-            'country': _row_get(scan, 3, 'country'),
-            'created_at': str(_row_get(scan, 4, 'created_at')),
-            'verdict': _row_get(scan, 5, 'verdict'),
-            'total_score': _row_get(scan, 6, 'total_score'),
-            'total_files_scanned': _row_get(scan, 7, 'total_files_scanned'),
-            'total_dirs_scanned': _row_get(scan, 8, 'total_dirs_scanned'),
-            'is_vm': _row_get(scan, 9, 'is_vm'),
-            'connection_type': _row_get(scan, 10, 'connection_type'),
-            'results_count': len(results),
-            'results': [
-                {
-                    'path': _row_get(r, 0, 'file_path'),
-                    'level': _row_get(r, 1, 'alert_level'),
-                    'reason': _row_get(r, 2, 'detection_reason'),
-                    'score': _row_get(r, 3, 'score'),
-                    'category': _row_get(r, 4, 'category'),
-                }
-                for r in results
-            ]
-        }
+
+        scan_data['results_count'] = len(results)
+        scan_data['results'] = [
+            {
+                'name':      _row_get(r, 0, 'issue_name'),
+                'path':      _row_get(r, 1, 'issue_path'),
+                'category':  _row_get(r, 2, 'issue_category'),
+                'level':     _row_get(r, 3, 'alert_level'),
+                'confidence':_row_get(r, 4, 'confidence'),
+                'patterns':  _row_get(r, 5, 'detected_patterns'),
+            }
+            for r in results
+        ]
         return jsonify(scan_data), 200
     except Exception as exc:
         import traceback as _tb
