@@ -1957,11 +1957,33 @@ def _get_learned_legit_paths() -> list:
     return _lp_cache['paths']
 
 
+import re as _re_fp
+# Categorías que solo existían en EXEs viejos con parsers buggeados — 100% FP
+_LEGACY_FP_CATEGORIES = {'EXECUTED_DELETED', 'APPCOMPAT', 'USN_FORENSICS'}
+# Patrones de basura binaria en nombres — parser viejo decodificaba .pf como UTF-16
+_BINARY_GARBAGE_RE = _re_fp.compile(
+    r'\bLMEM\b|Windows\.Data\.|Matrix3x2|\.CenterX|\.CenterY|'
+    r'ItemReference|MEOW\b|CloudData|RevealBrush|XamlAnim|'
+    r'BaseM\s+I&|BorderBrush\s+[A-Z]|\bMEM\s+[A-Z]|\bLE[A-Z]\b',
+    _re_fp.IGNORECASE
+)
+
+
 def _is_server_false_positive(result: dict) -> bool:
     """Devuelve True si el resultado es un falso positivo conocido y debe descartarse."""
+    # Categorías de EXE antiguo con parsers buggeados
+    categoria = (result.get('categoria') or result.get('issue_category') or '').upper()
+    if categoria in _LEGACY_FP_CATEGORIES:
+        return True
+
     ruta     = (result.get('ruta', '') or '').lower().replace('/', '\\')
-    nombre   = (result.get('nombre', '') or result.get('archivo', '') or '').lower()
-    combined = ruta + '|' + nombre
+    nombre   = (result.get('nombre', '') or result.get('archivo', '') or '')
+    combined = ruta + '|' + nombre.lower()
+
+    # Basura binaria decodificada por parsers viejos (prefetch/shimcache binario)
+    if _BINARY_GARBAGE_RE.search(nombre):
+        return True
+
     if any(frag in combined for frag in _SERVER_FP_FRAGMENTS):
         return True
     # También revisar rutas aprendidas por el staff (cacheadas 5 min)
@@ -3072,6 +3094,35 @@ def bulk_delete_scans():
             cursor.execute(f'DELETE FROM staff_feedback WHERE scan_id IN ({_ids_ph})', scan_ids)
             cursor.execute(f'DELETE FROM scans WHERE id IN ({_ids_ph})', scan_ids)
         return jsonify({'deleted': len(scan_ids), 'message': f'{len(scan_ids)} scan(s) eliminados'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/purge-garbage-results', methods=['POST'])
+@login_required
+def purge_garbage_results():
+    """Elimina resultados basura de EXEs viejos (EXECUTED_DELETED + nombres binarios). Solo admin."""
+    current_user = get_user_by_id(session.get('user_id'))
+    if not is_admin(current_user):
+        return jsonify({'error': 'Se requiere rol admin'}), 403
+    try:
+        with get_api_db_cursor() as cursor:
+            # Eliminar por categoría legacy
+            cursor.execute(
+                f"DELETE FROM scan_results WHERE issue_category IN ('EXECUTED_DELETED','APPCOMPAT','USN_FORENSICS')"
+            )
+            deleted_cat = cursor.rowcount or 0
+            # Eliminar por nombres de basura binaria
+            garbage_patterns = [
+                '%LMEM%', '%Windows.Data.%', '%Matrix3x2%', '%ItemReference%',
+                '%CloudData%', '%RevealBrush%', '%XamlAnim%', '%MEOW%',
+            ]
+            deleted_bin = 0
+            for pat in garbage_patterns:
+                cursor.execute(f"DELETE FROM scan_results WHERE issue_name LIKE {_PH}", (pat,))
+                deleted_bin += (cursor.rowcount or 0)
+        total = deleted_cat + deleted_bin
+        return jsonify({'deleted': total, 'message': f'{total} resultados basura eliminados'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

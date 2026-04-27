@@ -2862,6 +2862,14 @@ async function updateModel() {
 // ADMIN: BORRAR SCANS DE PRUEBA
 // ============================================================
 
+async function purgeGarbageResults() {
+    if (!confirm('⚠️ Eliminará TODOS los resultados basura de la BD completa (EXECUTED_DELETED, nombres binarios).\n\n¿Continuar?')) return;
+    const res = await fetch('/api/admin/purge-garbage-results', {method: 'POST', headers: {'Content-Type':'application/json'}});
+    const d = await res.json();
+    const el = document.getElementById('purge-result');
+    if (el) el.textContent = d.error ? '❌ ' + d.error : '✅ ' + d.message;
+}
+
 async function deleteMachineScans() {
     const machineName = document.getElementById('scan-machine-name')?.textContent?.trim();
     if (!machineName || machineName === '-') {

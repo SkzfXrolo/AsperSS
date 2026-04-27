@@ -1112,6 +1112,16 @@
 
                 {% if user and 'admin' in user.roles %}
                 <!-- Contenido para Super Admin -->
+                <!-- Limpieza de datos basura -->
+                <div class="card" style="border:1px solid rgba(239,68,68,0.3);margin-bottom:16px;">
+                    <h3 class="card-title" style="color:#ef4444;">🧹 Limpieza de datos basura</h3>
+                    <p class="card-description">Elimina resultados de EXEs viejos con parsers buggeados (EXECUTED_DELETED, nombres binarios tipo "LMEM", "MEOW", etc.).</p>
+                    <button class="btn btn-primary" onclick="purgeGarbageResults()"
+                        style="background:rgba(239,68,68,0.15);color:#ef4444;border-color:rgba(239,68,68,0.4);">
+                        🗑 Purgar resultados basura de toda la BD
+                    </button>
+                    <div id="purge-result" style="margin-top:10px;font-size:13px;color:var(--text-m);"></div>
+                </div>
                 <!-- Generar Token de Registro -->
                 <div class="card">
                     <h3 class="card-title">Generar Token de Registro</h3>
