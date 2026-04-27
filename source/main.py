@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.1"
+SCANNER_VERSION = "1.6.2"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -6840,13 +6840,11 @@ class ArgusApp:
     def scan_deleted_recycle(self):
         """Escanea la papelera de reciclaje con timestamps y nombres originales."""
         print("🔍 Escaneando Recycle Bin con timestamps...")
-        hack_terms = [
-            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
-            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
-            'clicker', 'phobos', 'astolfo', 'novoline', 'ghost', 'riseclient',
+        hack_terms = list(_DEFINITE_HACK_NAMES) + [
+            'killaura', 'aimbot', 'autoclick', 'clicker',
+            'dllinjector', 'extremeinjector', 'cheatengine', 'xenos',
             '.rise', '.meteor', '.drip', '.vertex', '.azura', '.jello', '.datura',
             '.mathias', '.rusherhack', '.salhack', '.inertia', 'weaveloader',
-            'dllinjector', 'extremeinjector', 'cheatengine', 'xenos',
         ]
         try:
             import struct
@@ -7248,10 +7246,8 @@ class ArgusApp:
     def scan_executed_userassist(self):
         """Lee UserAssist del registro para detectar ejecutables recientes con timestamps."""
         print("🔍 Escaneando UserAssist (ejecutables recientes)...")
-        hack_terms = [
-            'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
-            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
-            'clicker', 'phobos', 'astolfo', 'novoline', 'ghost', 'dllinjector'
+        hack_terms = list(_DEFINITE_HACK_NAMES) + [
+            'killaura', 'aimbot', 'autoclick', 'dllinjector', 'cheatengine',
         ]
         import codecs
         import struct
@@ -7338,11 +7334,8 @@ class ArgusApp:
     def scan_run_mru(self):
         """Escanea comandos ejecutados desde el cuadro Ejecutar (Win+R)."""
         print("🔍 Escaneando RunMRU (Win+R)...")
-        hack_terms = [
-            'vape', 'vapelite', 'entropy', 'entropyclient', 'wurst', 'wurstclient',
-            'liquidbounce', 'killaura', 'aimbot', 'cheatengine', 'xray', 'triggerbot',
-            'dllinjector', 'bspoof', 'phobos', 'astolfo', 'novoline',
-            'ghostclient', 'silentclient', 'fluxclient',
+        hack_terms = list(_DEFINITE_HACK_NAMES) + [
+            'killaura', 'aimbot', 'triggerbot', 'dllinjector', 'cheatengine',
         ]
         key_path = r'Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU'
         try:
@@ -7380,11 +7373,8 @@ class ArgusApp:
     def scan_typed_paths(self):
         """Escanea rutas escritas en la barra de direcciones de Explorer."""
         print("🔍 Escaneando TypedPaths...")
-        hack_terms = [
-            'vape', 'vapelite', 'entropy', 'entropyclient', 'wurst', 'wurstclient',
-            'liquidbounce', 'killaura', 'aimbot', 'cheatengine', 'xray', 'triggerbot',
-            'dllinjector', 'bspoof', 'phobos', 'astolfo', 'novoline',
-            'ghostclient', 'silentclient', 'fluxclient',
+        hack_terms = list(_DEFINITE_HACK_NAMES) + [
+            'killaura', 'aimbot', 'triggerbot', 'dllinjector', 'cheatengine',
         ]
         key_path = r'Software\Microsoft\Windows\CurrentVersion\Explorer\TypedPaths'
         try:
@@ -7464,10 +7454,8 @@ class ArgusApp:
     def scan_startup_entries(self):
         """Escanea entradas de autoarranque (Run/RunOnce) en busca de hacks con persistencia."""
         print("🔍 Escaneando entradas de inicio automático...")
-        hack_terms = [
-            'vape', 'vapelite', 'entropy', 'wurst', 'liquidbounce',
-            'killaura', 'aimbot', 'cheatengine', 'xray', 'triggerbot',
-            'dllinjector', 'phobos', 'astolfo', 'ghostclient', 'silentclient', 'fluxclient',
+        hack_terms = list(_DEFINITE_HACK_NAMES) + [
+            'killaura', 'aimbot', 'triggerbot', 'dllinjector', 'cheatengine',
         ]
         run_keys = [
             (winreg.HKEY_CURRENT_USER,  r'Software\Microsoft\Windows\CurrentVersion\Run'),

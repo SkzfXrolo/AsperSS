@@ -1308,14 +1308,15 @@ function renderIssuePage(container, scanId) {
 
         return `<div data-result-id="${result.id}" style="
             background:${bg};border:1px solid ${accent}33;border-left:3px solid ${accent};
-            border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:10px;">
+            border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:10px;
+            overflow:hidden;max-width:100%;min-width:0;">
             <span style="font-size:14px;flex-shrink:0;margin-top:1px;">${dot}</span>
-            <div style="flex:1;min-width:0;">
-                <div style="font-size:12px;font-weight:600;color:var(--text-h);display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;overflow:hidden;">
-                    <span style="display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(380px,60vw);vertical-align:middle;">${name}</span>
-                    ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;flex-shrink:0;">${_getCategoryLabel(cat)}</span>` : ''}
+            <div style="flex:1;min-width:0;overflow:hidden;">
+                <div style="font-size:12px;font-weight:600;color:var(--text-h);display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;overflow:hidden;">
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;word-break:break-all;min-width:0;flex:1;">${name}</span>
+                    ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;flex-shrink:0;white-space:nowrap;">${_getCategoryLabel(cat)}</span>` : ''}
                 </div>
-                ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${path}">${truncPath}</div>` : ''}
+                ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;" title="${path}">${truncPath}</div>` : ''}
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0;align-items:center;margin-top:1px;">
                 ${hasFeedback === 'hack'

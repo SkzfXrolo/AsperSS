@@ -2623,6 +2623,8 @@ body.light-theme .scan-back-btn {
 .issues-list-scroll {
     max-height: 560px;
     overflow-y: auto;
+    overflow-x: hidden;
+    min-width: 0;
     scrollbar-width: thin;
     scrollbar-color: var(--border-m) transparent;
 }
