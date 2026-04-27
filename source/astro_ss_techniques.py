@@ -439,11 +439,16 @@ class AstroSSTechniques:
                                     'method': '02'
                                 }
 
-            # Agregar issues para archivos borrados
+            # Solo reportar si el nombre coincide con un hack conocido
+            # (cualquier EXE borrado genera demasiado ruido — instaladores, updaters, etc.)
+            from main import _DEFINITE_HACK_NAMES
             for path, info in deleted.items():
+                fname_lower = info['filename'].lower().replace('.exe', '')
+                if not any(hack in fname_lower for hack in _DEFINITE_HACK_NAMES):
+                    continue
                 issues.append({
                     'tipo': 'executed_deleted_file',
-                    'nombre': f"Archivo ejecutado y borrado: {info['filename']}",
+                    'nombre': f"Hack ejecutado y borrado: {info['filename']}",
                     'ruta': os.path.dirname(path.replace('/', '\\')) or 'Desconocida',
                     'archivo': path,
                     'alerta': 'CRITICAL',
