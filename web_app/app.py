@@ -5483,18 +5483,19 @@ _REVIEW_SECRET = 'aspers-claude-review-2026'
 def internal_scan_review(scan_id):
     if request.args.get('token') != _REVIEW_SECRET:
         return 'Acceso denegado', 403
+    import traceback as _tb
     try:
+        scan_data = {}
+        results_rows = []
         with get_api_db_cursor() as cur:
-            # Columnas base del schema real
             cur.execute(
                 f'SELECT id, machine_name, minecraft_username, country, started_at, '
-                f'total_files_scanned, issues_found, scan_duration, status '
+                f'total_files_scanned, issues_found, scan_duration, status, verdict '
                 f'FROM scans WHERE id = {_PH}', (scan_id,)
             )
             scan = cur.fetchone()
             if not scan:
                 return jsonify({'error': 'Scan no encontrado'}), 404
-
             scan_data = {
                 'id':                  _row_get(scan, 0, 'id'),
                 'machine':             _row_get(scan, 1, 'machine_name'),
@@ -5505,49 +5506,28 @@ def internal_scan_review(scan_id):
                 'issues_found':        _row_get(scan, 6, 'issues_found') or 0,
                 'scan_duration':       _row_get(scan, 7, 'scan_duration') or 0,
                 'status':              _row_get(scan, 8, 'status'),
-                'verdict': None, 'risk_score': None, 'total_dirs_scanned': 0,
+                'verdict':             _row_get(scan, 9, 'verdict'),
             }
-
-            # Columnas opcionales (pueden no existir en filas antiguas)
-            try:
-                cur.execute('SAVEPOINT rv_opt')
-                cur.execute(
-                    f'SELECT verdict, risk_score, total_dirs_scanned FROM scans WHERE id = {_PH}',
-                    (scan_id,)
-                )
-                opt = cur.fetchone()
-                if opt:
-                    scan_data['verdict']             = _row_get(opt, 0, 'verdict')
-                    scan_data['risk_score']          = _row_get(opt, 1, 'risk_score')
-                    scan_data['total_dirs_scanned']  = _row_get(opt, 2, 'total_dirs_scanned') or 0
-                cur.execute('RELEASE SAVEPOINT rv_opt')
-            except Exception:
-                try: cur.execute('ROLLBACK TO SAVEPOINT rv_opt')
-                except Exception: pass
-
-            # Resultados ordenados por confianza DESC
             cur.execute(
-                f'SELECT issue_name, issue_path, issue_category, alert_level, confidence, detected_patterns '
-                f'FROM scan_results WHERE scan_id = {_PH} ORDER BY confidence DESC NULLS LAST',
+                f'SELECT issue_name, issue_path, issue_category, alert_level, confidence '
+                f'FROM scan_results WHERE scan_id = {_PH} ORDER BY confidence DESC',
                 (scan_id,)
             )
-            results = cur.fetchall()
+            results_rows = cur.fetchall()
 
-        scan_data['results_count'] = len(results)
+        scan_data['results_count'] = len(results_rows)
         scan_data['results'] = [
             {
-                'name':      _row_get(r, 0, 'issue_name'),
-                'path':      _row_get(r, 1, 'issue_path'),
-                'category':  _row_get(r, 2, 'issue_category'),
-                'level':     _row_get(r, 3, 'alert_level'),
-                'confidence':_row_get(r, 4, 'confidence'),
-                'patterns':  _row_get(r, 5, 'detected_patterns'),
+                'name':       _row_get(r, 0, 'issue_name'),
+                'path':       _row_get(r, 1, 'issue_path'),
+                'category':   _row_get(r, 2, 'issue_category'),
+                'level':      _row_get(r, 3, 'alert_level'),
+                'confidence': _row_get(r, 4, 'confidence'),
             }
-            for r in results
+            for r in results_rows
         ]
         return jsonify(scan_data), 200
     except Exception as exc:
-        import traceback as _tb
         return jsonify({'error': str(exc), 'trace': _tb.format_exc()}), 500
 
 
