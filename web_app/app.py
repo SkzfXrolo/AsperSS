@@ -1897,14 +1897,32 @@ _SERVER_FP_FRAGMENTS = [
     'appdata\\local\\packages',        # Windows Store apps (firmadas, sandboxed)
     'appdata\\local\\origin',          # EA Origin
     'appdata\\local\\nvidia',
-    'appdata\\local\\microsoft\\edge',
     'appdata\\roaming\\opera software',
     'electronic arts\\ea desktop',
     'site-packages',                   # librerías Python instaladas
+    # Navegadores — rutas de datos del perfil
+    'appdata\\local\\google\\chrome',
+    'appdata\\local\\microsoft\\edge',
+    'appdata\\local\\brave-browser',
+    'appdata\\local\\vivaldi',
+    'appdata\\roaming\\mozilla\\firefox',
     # Launchers / clientes legítimos de Minecraft
     'lunar client', 'lunarclient',
     'steam\\steamapps', 'epicgames', 'origin games',
     'tlauncher', 'prismlauncher', 'badlion client',
+    'gdlauncher', 'multimc', 'atlauncher', 'curseforgeapp',
+    # Dominios seguros en URLs de historial/descargas de navegador
+    'github.com', 'modrinth.com', 'curseforge.com', 'files.minecraftforge.net',
+    'spigotmc.org', 'papermc.io', 'fabricmc.net', 'quiltmc.org',
+    'optifine.net', 'minecraftforge.net', 'cdn.modrinth.com',
+    'minecraft.net', 'mojang.com', 'minecraftjava.com',
+    'lifehacker.com', 'lifehack.org', 'medium.com',
+    'stackoverflow.com', 'reddit.com', 'youtube.com',
+    'google.com', 'bing.com', 'wikipedia.org',
+    # Mods legítimos conocidos (nombres de archivo)
+    'optifine', 'fabricmc', 'quiltmc', 'sodium', 'lithium', 'phosphor',
+    'iris', 'indium', 'ferritecore', 'lazydfu', 'starlight',
+    'journeymap', 'just enough items', 'jei-', 'rei-',
     # Otros programas legítimos
     'voicemod',
     'minecraftsstool',                 # el propio SS tool del servidor

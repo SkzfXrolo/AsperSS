@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.0"
+SCANNER_VERSION = "1.6.1"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -2312,9 +2312,9 @@ class ArgusApp:
             'registry_userassist_hack',  # UserAssist: hack ejecutado
             'registry_appcompat_hack',   # AppCompat: loader ejecutado
             'ahk_autoclick',             # Script/exe AHK con autoclick
-            # v1.6.0 — nuevos detectores
-            'browser_download_hack',     # Historial de descargas del navegador
-            'clipboard_hack_evidence',   # Portapapeles con hack evidence
+            # v1.6.0 — clipboard: pasa por filtro AI, no como trusted
+            # browser_download_hack y clipboard_hack_evidence NO están en TRUSTED_TYPES
+            # porque pueden generar falsos positivos — pasan por el scoring engine
         }
 
         # ── Rutas que NUNCA son hacks — se aplican ANTES del bypass de TRUSTED_TYPES ──
@@ -3430,8 +3430,6 @@ class ArgusApp:
                 _run_safe(self.scan_recent_lnk)
                 self._set_scan_phase("📅 Tareas programadas...")
                 _run_safe(self.scan_scheduled_tasks)
-                self._set_scan_phase("🌐 Descargas de navegadores...")
-                _run_safe(self.scan_browser_downloads)
                 self._set_scan_phase("🖥️ Comandos Run (Win+R)...")
                 _run_safe(self.scan_run_mru)
                 self._set_scan_phase("📁 Rutas escritas en Explorer...")
@@ -6224,9 +6222,14 @@ class ArgusApp:
             print("🔍 ESCANEANDO REGISTRO DE WINDOWS...")
             import winreg as _wr
 
-            HACK_KW = list(_DEFINITE_HACK_NAMES) + _WORD_BOUNDARY_HACK_WORDS + [
-                'autoclick', 'autoclicker', 'injector', 'weaveloader',
-                'cheatengine', 'extremeinjector', 'xenos',
+            # REGLA: solo términos EXCLUSIVOS para registro.
+            # _WORD_BOUNDARY_HACK_WORDS ('hack','cheat','cracked','crack','bypass') eliminados
+            # porque 'crack' matchea programas legítimos (Crackdown, crack tools de Windows),
+            # 'bypass' aparece en muchas herramientas de seguridad y UAC bypass legítimas.
+            HACK_KW = list(_DEFINITE_HACK_NAMES) + [
+                'autoclick', 'autoclicker', 'weaveloader', 'weave-loader',
+                'cheatengine', 'extremeinjector', 'xenos', 'dllinjector',
+                'killaura', 'aimbot', 'triggerbot',
             ]
 
             def _scan_run_key(hive, subkey_path, hive_name):
@@ -7868,14 +7871,7 @@ class ArgusApp:
         """Lee AppCompatCache (ShimCache) del registro — ejecuciones históricas de aplicaciones."""
         print("🔍 Escaneando AppCompatCache (ShimCache)...")
         import re as _re
-        hack_terms = [
-            'vape', 'vapelite', 'entropy', 'entropyclient',
-            'wurst', 'wurstclient', 'liquidbounce',
-            'killaura', 'aimbot', 'cheatengine',
-            'xray', 'triggerbot', 'dllinjector', 'bspoof',
-            'phobos', 'astolfo', 'novoline',
-            'ghostclient', 'silentclient', 'fluxclient',
-        ]
+        hack_terms = list(_DEFINITE_HACK_NAMES)
 
         def _valid_path(p):
             """Ruta válida de Windows: empieza con letra de unidad o \\Device\\, sin chars raros."""
@@ -9914,14 +9910,20 @@ class ArgusApp:
                     break  # Solo primer perfil
 
         # Patrones que indican descarga de hack (URL o nombre de archivo)
+        # REGLA: solo términos EXCLUSIVOS de hack clients. 'hack', 'cheat', 'bypass' eliminados
+        # porque aparecen en lifehacker.com, artículos de tecnología, herramientas legítimas.
         HACK_URL_KW = list(_DEFINITE_HACK_NAMES) + [
-            'hack', 'cheat', 'bypass', 'injector', 'ghostclient',
-            'cracked', 'nulled', 'leaked', 'skid',
+            'ghostclient', 'ghost-client', 'hackmod',
+            'dllinjector', 'extremeinjector', 'cheatengine',
+            'weaveloader', 'weave-loader',
         ]
         SAFE_DOMAINS = {
             'modrinth.com', 'curseforge.com', 'minecraft.net', 'mojang.com',
             'fabricmc.net', 'minecraftforge.net', 'optifine.net',
-            'github.com', 'github.io',  # mayoría legítimos
+            'github.com', 'github.io',
+            'reddit.com', 'youtube.com', 'google.com', 'twitch.tv',
+            'discord.com', 'discord.gg',
+            'spigotmc.org', 'bukkit.org', 'papermc.io',
         }
 
         def _is_hack_url(url: str) -> tuple:

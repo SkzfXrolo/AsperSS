@@ -165,9 +165,19 @@ class DatabaseIntegration:
             print(f"✅ Escaneo iniciado - Scan ID: {self.scan_id}")
         
         try:
-            # Preparar resultados para la API
+            # Preparar resultados para la API — ordenar por severidad y limitar payload
+            _severity_order = {'CRITICAL': 0, 'SOSPECHOSO': 1, 'POCO_SOSPECHOSO': 2, 'NORMAL': 3}
+            sorted_issues = sorted(
+                issues_found,
+                key=lambda x: (_severity_order.get(x.get('alerta', 'NORMAL'), 3), -x.get('confidence', 0))
+            )
+            MAX_RESULTS = 200
+            if len(sorted_issues) > MAX_RESULTS:
+                print(f"⚠️ Truncando resultados: {len(sorted_issues)} → {MAX_RESULTS} (por severidad)")
+                sorted_issues = sorted_issues[:MAX_RESULTS]
+
             results = []
-            for issue in issues_found:
+            for issue in sorted_issues:
                 results.append({
                     'tipo': issue.get('tipo', ''),
                     'nombre': issue.get('nombre', ''),
@@ -182,7 +192,7 @@ class DatabaseIntegration:
                     'ai_analysis': issue.get('ai_analysis', ''),
                     'ai_confidence': issue.get('ai_confidence', 0)
                 })
-            
+
             screenshot_b64 = self.take_screenshot()
             payload = {
                 'status': 'completed',
@@ -193,15 +203,15 @@ class DatabaseIntegration:
                 'results': results,
                 'screenshot': screenshot_b64,
             }
-            
+
             url = f"{self.api_url}/api/scans/{self.scan_id}/results"
             print(f"📤 Enviando POST a: {url}")
             print(f"📤 Payload: {len(results)} resultados, {total_files_scanned} archivos")
-            
+
             response = requests.post(
                 url,
                 json=payload,
-                timeout=30
+                timeout=60
             )
             
             print(f"📤 Respuesta recibida:")
@@ -219,7 +229,7 @@ class DatabaseIntegration:
                 print(f"{'='*60}\n")
                 return False
         except requests.exceptions.Timeout:
-            print(f"❌ ERROR: Timeout al conectar con la API (30s)")
+            print(f"❌ ERROR: Timeout al conectar con la API (60s)")
             print(f"   - URL: {self.api_url}")
             print(f"   - Esto puede indicar que la API está lenta o no responde")
             print(f"{'='*60}\n")
