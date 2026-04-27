@@ -3,7 +3,7 @@ Aplicación Web Flask para Panel del Staff de ASPERS Projects
 """
 import sys as _sys
 _sys.stdout.reconfigure(line_buffering=True)  # forzar stdout unbuffered
-from flask import Flask, render_template, request, jsonify, session, Response, redirect, url_for, make_response, flash
+from flask import Flask, render_template, request, jsonify, session, Response, redirect, url_for, make_response, flash, send_file
 from flask_cors import CORS
 import os
 import requests
