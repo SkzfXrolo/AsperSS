@@ -187,6 +187,30 @@ def _is_minecraft_instance(path: str) -> bool:
     p = path.lower()
     return any(frag in p for frag in _MINECRAFT_INSTANCE_FRAGMENTS)
 
+def _is_process_running(name_or_path: str) -> bool:
+    """Devuelve True si hay un proceso corriendo cuyo exe coincide con name_or_path."""
+    target = os.path.basename(name_or_path).lower()
+    try:
+        for proc in psutil.process_iter(['name', 'exe']):
+            try:
+                pname = (proc.info.get('name') or '').lower()
+                pexe  = os.path.basename(proc.info.get('exe') or '').lower()
+                if target in (pname, pexe):
+                    return True
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+    except Exception:
+        pass
+    return False
+
+def _get_last_opened(path: str) -> str:
+    """Devuelve la última fecha de apertura de un archivo (UserAssist → mtime → ctime)."""
+    try:
+        mtime = os.path.getmtime(path)
+        return datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
+    except Exception:
+        return 'Desconocida'
+
 def _is_non_instance_location(path: str) -> bool:
     """Devuelve True si el path está en una ubicación de descarga/temp (no instancia activa)."""
     p = path.lower()
@@ -1433,14 +1457,22 @@ class ArgusApp:
                                         
                                         # Si el análisis de contenido indica hack con alta confianza
                                         if content_analysis['is_hack'] and content_analysis['confidence'] >= 60:
+                                            in_inst = _is_minecraft_instance(full_path)
+                                            running = in_inst and _is_process_running(file)
+                                            last_opened = _get_last_opened(full_path)
+                                            if in_inst:
+                                                alerta = 'CRITICAL' if running else 'SOSPECHOSO'
+                                            else:
+                                                alerta = 'CRITICAL' if content_analysis['confidence'] >= 80 else 'SOSPECHOSO'
                                             issues.append({
                                                 'tipo': 'JAR_FILE',
-                                                'nombre': file,
+                                                'nombre': file + (' [CORRIENDO]' if running else ''),
                                                 'ruta': full_path,
                                                 'archivo': file,
                                                 'hash': content_analysis.get('file_hash', 'N/A'),
-                                                'alerta': 'CRITICAL' if content_analysis['confidence'] >= 80 else 'SOSPECHOSO',
+                                                'alerta': alerta,
                                                 'categoria': 'JAR_FILES',
+                                                'extra': {'running': running, 'last_opened': last_opened},
                                                 'confidence': content_analysis['confidence'],
                                                 'detected_patterns': content_analysis.get('detected_patterns', []),
                                                 'obfuscation': content_analysis.get('obfuscation_detected', False)
@@ -1790,31 +1822,101 @@ class ArgusApp:
         return issues
     
     def scan_deleted_files(self):
-        """Escanea archivos eliminados usando USN Journal"""
-        print("🔍 ESCANEANDO ARCHIVOS ELIMINADOS...")
-        issues = []
-        
-        def scan():
+        """Escanea archivos eliminados en las últimas 24hs via Recycle Bin + Prefetch."""
+        print("🔍 ESCANEANDO ARCHIVOS BORRADOS (últimas 24hs)...")
+        cutoff = time.time() - 86400  # 24 horas
+        found_names = set()
+
+        # ── 1. Recycle Bin — lee archivos $I* que contienen ruta y fecha de borrado ──
+        for drive in ['C:\\', 'D:\\', 'E:\\', 'F:\\']:
+            recycle = os.path.join(drive, '$RECYCLE.BIN')
+            if not os.path.exists(recycle):
+                continue
             try:
-                # Usar fsutil para leer el USN Journal
-                result = subprocess.run(['fsutil', 'usn', 'readjournal', 'C:', '1'], 
-                                      capture_output=True, text=True)
-                if result.returncode == 0:
-                    usn_output = result.stdout
-                    if any(hack in usn_output.lower() for hack in ['vape', 'entropy', 'liquidbounce']):
-                        issues.append({
-                            'tipo': 'DELETED_FILE',
-                            'nombre': 'Deleted File',
-                            'ruta': 'USN Journal',
-                            'alerta': 'SOSPECHOSO',
-                            'categoria': 'DELETED_FILES'
+                for root, dirs, files in os.walk(recycle):
+                    for fname in files:
+                        if not fname.startswith('$I'):
+                            continue
+                        fpath = os.path.join(root, fname)
+                        try:
+                            mtime = os.path.getmtime(fpath)
+                            if mtime < cutoff:
+                                continue
+                            # Parsear $I: header 8 bytes, tamaño 8 bytes, timestamp 8 bytes, ruta UTF-16
+                            with open(fpath, 'rb') as f:
+                                data = f.read()
+                            if len(data) < 28:
+                                continue
+                            # Offset 24: ruta original en UTF-16LE (Windows 10+)
+                            orig_path = data[28:].decode('utf-16-le', errors='ignore').rstrip('\x00')
+                            if not orig_path:
+                                orig_path = fname
+                            orig_lower = orig_path.lower()
+                            base = os.path.basename(orig_path)
+                            # Siempre reportar EXEs/JARs borrados; filtrar por hack si es otro tipo
+                            ext = os.path.splitext(orig_lower)[1]
+                            is_executable = ext in ('.exe', '.jar', '.dll', '.bat', '.ps1')
+                            is_hack_name  = any(h in orig_lower for h in _DEFINITE_HACK_NAMES)
+                            if not (is_executable or is_hack_name):
+                                continue
+                            if base in found_names:
+                                continue
+                            found_names.add(base)
+                            deleted_at = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
+                            alerta = 'CRITICAL' if is_hack_name else 'SOSPECHOSO'
+                            print(f"🗑️ BORRADO RECIENTE: {base} @ {deleted_at}")
+                            self.issues_found.append({
+                                'nombre': f'Archivo borrado (últimas 24h): {base}',
+                                'ruta': orig_path[:255],
+                                'archivo': base,
+                                'tipo': 'deleted_recent',
+                                'categoria': 'DELETED_FILES',
+                                'alerta': alerta,
+                                'confidence': 80 if is_hack_name else 40,
+                                'detected_patterns': ['deleted_within_24h'],
+                                'extra': {'deleted_at': deleted_at},
+                            })
+                        except Exception:
+                            continue
+            except Exception:
+                continue
+
+        # ── 2. Prefetch — EXEs que aparecen en prefetch pero ya no existen en disco ──
+        try:
+            prefetch_dir = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Prefetch')
+            if os.path.isdir(prefetch_dir):
+                for pf in os.listdir(prefetch_dir):
+                    if not pf.endswith('.pf'):
+                        continue
+                    pf_path = os.path.join(prefetch_dir, pf)
+                    try:
+                        mtime = os.path.getmtime(pf_path)
+                        if mtime < cutoff:
+                            continue
+                        # Nombre del exe está antes del guion en el nombre del .pf
+                        exe_name = pf.split('-')[0].lower()
+                        if not any(h in exe_name for h in _DEFINITE_HACK_NAMES):
+                            continue
+                        if exe_name in found_names:
+                            continue
+                        found_names.add(exe_name)
+                        last_run = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
+                        print(f"🗑️ PREFETCH HACK BORRADO: {exe_name} @ {last_run}")
+                        self.issues_found.append({
+                            'nombre': f'Hack ejecutado recientemente (prefetch): {exe_name}',
+                            'ruta': pf_path,
+                            'archivo': exe_name,
+                            'tipo': 'deleted_prefetch_hack',
+                            'categoria': 'DELETED_FILES',
+                            'alerta': 'CRITICAL',
+                            'confidence': 85,
+                            'detected_patterns': ['prefetch_hack_deleted'],
+                            'extra': {'last_run': last_run},
                         })
-                        
-            except Exception as e:
-                print(f"Error escaneando archivos eliminados: {e}")
-                
-        scan()
-        return issues
+                    except Exception:
+                        continue
+        except Exception as e:
+            print(f"Error escaneando prefetch borrados: {e}")
     
     def scan_new_files(self):
         """Escanea archivos nuevos"""
@@ -5951,29 +6053,57 @@ class ArgusApp:
         '''
     
     def scan_disabled_processes(self):
-        """Escanea procesos deshabilitados usando sc query dps"""
+        """Detecta servicios críticos de Windows detenidos por tramposos (DPS, WerSvc, etc.)"""
+        # Servicios críticos que los tramposos deshabilitan para evadir anticheat.
+        # DPS (Diagnostic Policy Service) detenido = ban inmediato en la mayoría de servidores.
+        CRITICAL_SERVICES = {
+            'dps':    ('Diagnostic Policy Service (DPS)', 'Servicio usado por anticheats para monitoreo. Tramposos lo detienen para evadir detección. Indicador de ban inmediato.'),
+            'wersvc': ('Windows Error Reporting (WerSvc)', 'Reportes de errores — detenido para ocultar crashes de hacks/injectors.'),
+        }
+        SUSPICIOUS_SERVICES = {
+            'diagtrack': ('Connected User Experiences (DiagTrack)', 'Telemetría — a veces detenida para evitar reportes.'),
+        }
         try:
-            print("🔍 ESCANEANDO PROCESOS DESHABILITADOS (sc query dps)...")
-            import subprocess
-            
-            # Ejecutar sc query dps
-            result = subprocess.run(['sc', 'query', 'dps'], capture_output=True, text=True, shell=True)
-            
-            if result.returncode == 0:
-                lines = result.stdout.split('\n')
-                for line in lines:
-                    if 'STOPPED' in line.upper():
-                        print(f"⚠️ PROCESO DESHABILITADO DETECTADO: {line.strip()}")
+            print("🔍 ESCANEANDO SERVICIOS CRÍTICOS (sc query)...")
+            for svc_name, (display, reason) in CRITICAL_SERVICES.items():
+                try:
+                    result = subprocess.run(['sc', 'query', svc_name],
+                                            capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0 and 'STOPPED' in result.stdout.upper():
+                        print(f"🚨 SERVICIO CRÍTICO DETENIDO: {svc_name.upper()}")
                         self.issues_found.append({
-                            'nombre': f"Proceso deshabilitado: {line.strip()}",
-                            'ruta': 'Sistema',
-                            'archivo': 'sc query dps',
-                            'tipo': 'disabled_process',
-                            'categoria': 'PROCESSES',
-                            'alerta': 'SOSPECHOSO'
+                            'nombre': f'Servicio crítico detenido: {display}',
+                            'ruta': f'sc query {svc_name}',
+                            'archivo': svc_name,
+                            'tipo': 'critical_service_stopped',
+                            'categoria': 'EVASION',
+                            'alerta': 'CRITICAL',
+                            'confidence': 95,
+                            'detected_patterns': [f'service_stopped:{svc_name}'],
+                            'extra': {'reason': reason},
                         })
+                except Exception:
+                    pass
+            for svc_name, (display, reason) in SUSPICIOUS_SERVICES.items():
+                try:
+                    result = subprocess.run(['sc', 'query', svc_name],
+                                            capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0 and 'STOPPED' in result.stdout.upper():
+                        print(f"⚠️ SERVICIO SOSPECHOSO DETENIDO: {svc_name.upper()}")
+                        self.issues_found.append({
+                            'nombre': f'Servicio detenido: {display}',
+                            'ruta': f'sc query {svc_name}',
+                            'archivo': svc_name,
+                            'tipo': 'service_stopped',
+                            'categoria': 'EVASION',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 60,
+                            'detected_patterns': [f'service_stopped:{svc_name}'],
+                        })
+                except Exception:
+                    pass
         except Exception as e:
-            print(f"Error escaneando procesos deshabilitados: {str(e)}")
+            print(f"Error escaneando servicios: {str(e)}")
     
     def scan_dns_cache(self):
         """Escanea caché DNS usando ipconfig/displaydns"""

@@ -1236,6 +1236,7 @@ function _getCategoryLabel(cat) {
         'VPN': '🔒 VPN', 'EVASION': '🛡️ Evasión', 'EXECUTED_FILES': '▶️ Ejecutados',
         'FORENSE': '🔬 Forense', 'TEXTURE_PACKS': '🎨 Texturas', 'OBFUSCATION': '🔀 Ofuscación',
         'JAR_FILES': '📦 JARs', 'MINECRAFT': '⛏️ Minecraft',
+        'DELETED_FILES': '🗑️ Borrados', 'PROCESSES': '⚙️ Procesos', 'DNS_CACHE': '🌐 DNS',
     };
     return map[cat] || cat || 'Otro';
 }
