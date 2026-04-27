@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 echo [BUILD] Compilando ArgusScanner con PyInstaller...
-pyinstaller ArgusScanner.spec --clean --noconfirm
+python -m PyInstaller ArgusScanner.spec --clean --noconfirm
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Compilacion fallida.
     pause
