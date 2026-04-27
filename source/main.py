@@ -4569,7 +4569,7 @@ class ArgusApp:
                 'vape', 'vapelite', 'vapev2', 'vapev4', 'vape.exe', 'vape.jar',
                 'entropy', 'entropyclient', 'entropy.exe', 'entropy.jar',
                 'whiteout', 'whiteoutclient', 'whiteout.exe', 'whiteout.jar',
-                'liquidbounce', 'liquid bounce', 'lb', 'liquidbounceclient',
+                'liquidbounce', 'liquid bounce', 'liquidbounceclient',
                 'wurst', 'wurstclient', 'wurst loader', 'wurst.exe',
                 'impact', 'impact client', 'impactclient', 'impact.exe',
                 'sigma', 'sigmaclient', 'sigma5.0', 'sigma-5.0',
@@ -4580,7 +4580,7 @@ class ArgusApp:
                 'moon', 'moonclient', 'drip', 'dripclient',
                 'ghost', 'ghostclient', 'ghost.exe',
                 'phobos', 'komat', 'wasp', 'konas', 'seppuku', 'sloth',
-                'lucid', 'tenacity', 'nyx', 'vanish', 'ploow', 'cloud',
+                'lucid', 'tenacity', 'nyx', 'vanish', 'ploow', 'cloudclient', 'cloud-client',
                 'nextgen', 'tegernako', 'zeroday',
                 
                 # Módulos de hack cuyo nombre es exclusivo (no aparece en software legítimo)
@@ -4647,6 +4647,12 @@ class ArgusApp:
                     break
                 depth = root.count(os.sep) - drive.count(os.sep)
                 if depth > _max_depth:
+                    dirs[:] = []
+                    continue
+
+                # Saltar rutas seguras conocidas
+                _root_l = root.lower()
+                if any(frag in _root_l for frag in _SAFE_ROOT_FRAGMENTS):
                     dirs[:] = []
                     continue
 
@@ -4869,7 +4875,7 @@ class ArgusApp:
                 'whiteout', 'whiteout client', 'whiteoutclient', 'whiteout.exe', 'whiteout.jar',
                 
                 # LiquidBounce y variantes
-                'liquidbounce', 'liquid bounce', 'liquidbounce client', 'lb', 'lbclient',
+                'liquidbounce', 'liquid bounce', 'liquidbounce client', 'lbclient',
                 
                 # Wurst y variantes
                 'wurst', 'wurst client', 'wurstclient', 'wurst loader', 'wurst.exe',
@@ -4888,9 +4894,9 @@ class ArgusApp:
                 'drip', 'drip client', 'dripclient',
                 'ghost', 'ghost client', 'ghostclient',
                 'phobos', 'komat', 'wasp', 'konas', 'seppuku', 'sloth',
-                'lucid', 'tenacity', 'nyx', 'vanish', 'ploow', 'cloud',
+                'lucid', 'tenacity', 'nyx', 'vanish', 'ploow', 'cloudclient', 'cloud-client',
                 'nextgen', 'tegernako', 'zeroday',
-                
+
                 # Silent-scanner y variantes
                 'silent', 'silent-scanner', 'silentscanner', 'silent client',
                 'silent.exe', 'silent.jar'
@@ -4913,6 +4919,10 @@ class ArgusApp:
                     print(f"🎯 BUSCANDO NOMBRES EXACTOS EN: {location}")
                     try:
                         for root, dirs, files in os.walk(location):
+                            _root_l = root.lower()
+                            if any(frag in _root_l for frag in _SAFE_ROOT_FRAGMENTS):
+                                dirs[:] = []
+                                continue
                             for dir_name in dirs:
                                 dir_lower = dir_name.lower().strip()
                                 for hack_name in exact_hack_names:
@@ -6718,11 +6728,11 @@ class ArgusApp:
         # Patrones críticos de procesos de hack
         critical_processes = [
             'vape', 'vapelite', 'vapev2', 'vapev4', 'entropy', 'entropyclient',
-            'whiteout', 'whiteoutclient', 'liquidbounce', 'lb', 'wurst', 'wurstclient',
+            'whiteout', 'whiteoutclient', 'liquidbounce', 'wurst', 'wurstclient',
             'impact', 'impactclient', 'sigma', 'sigmaclient', 'flux', 'fluxclient',
             'future', 'futureclient', 'astolfo', 'exhibition', 'novoline', 'rise',
             'moon', 'drip', 'phobos', 'komat', 'wasp', 'konas', 'seppuku', 'sloth',
-            'lucid', 'tenacity', 'nyx', 'vanish', 'ploow', 'cloud', 'nextgen',
+            'lucid', 'tenacity', 'nyx', 'vanish', 'ploow', 'cloudclient', 'cloud-client', 'nextgen',
             'tegernako', 'zeroday', 'injector', 'inject', 'inyector', 'injection',
             'dllinjector', 'ghost', 'ghostclient', 'bypass', 'stealth', 'undetected',
             'incognito', 'unbypass', 'killaura', 'aimbot', 'triggerbot', 'reach',
