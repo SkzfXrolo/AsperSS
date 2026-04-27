@@ -103,7 +103,7 @@ _DEFINITE_HACK_NAMES = {
     'nextgen', 'tegernako', 'zeroday',
     'lucid', 'lucidclient',
     'nyx', 'nyxclient',
-    'cloud', 'cloudclient',  # especifico de hacks, no "cloud backup"
+    'cloudclient', 'cloud-client',  # NO agregar 'cloud' solo — matchea CloudExperienceHost (Windows)
     'vanish',
     # ── Módulos y herramientas ────────────────────────────────────────────
     'phobos', 'komat', 'wasp', 'seppuku', 'sloth', 'blatant',
@@ -7228,15 +7228,15 @@ class ArgusApp:
                 if not stat.isup:
                     continue
                 if any(kw in iface_name.lower() for kw in VPN_KEYWORDS):
-                    print(f"⚠️ VPN ACTIVA: {iface_name}")
+                    print(f"ℹ️ VPN ACTIVA: {iface_name}")
                     self.issues_found.append({
-                        'nombre': f'Adaptador VPN activo durante el scan: {iface_name}',
+                        'nombre': f'VPN activa durante el scan: {iface_name}',
                         'ruta': 'Adaptadores de red del sistema',
                         'archivo': iface_name,
                         'tipo': 'vpn_active',
-                        'categoria': 'EVASION',
-                        'alerta': 'SOSPECHOSO',
-                        'confidence': 0.70,
+                        'categoria': 'VPN',
+                        'alerta': 'POCO_SOSPECHOSO',
+                        'confidence': 0.30,
                         'detected_patterns': ['vpn_active_during_scan'],
                     })
         except Exception as e:
@@ -7298,6 +7298,15 @@ class ArgusApp:
         hack_terms = list(_DEFINITE_HACK_NAMES) + [
             'killaura', 'aimbot', 'autoclick', 'dllinjector', 'cheatengine',
         ]
+        # Apps del sistema Windows que nunca son hacks aunque contengan palabras clave
+        _UA_SYSTEM_WHITELIST = [
+            'cloudexperiencehost', 'microsoftedge', 'microsoftedgeupdate',
+            'windows.immersivecontrolpanel', 'windows.store', 'microsoft.windows',
+            'windowsdefender', 'windowssecurity', 'backgroundtransfer',
+            'shellexperiencehost', 'startmenuexperiencehost', 'searchhost',
+            'runtimebroker', 'applicationframehost', 'systemsettings',
+            'textinputhost', 'cortana', 'lockapp', 'microsoft.ui.',
+        ]
         import codecs
         import struct
 
@@ -7345,6 +7354,9 @@ class ArgusApp:
             suspicious = []
             for item in executed:
                 name_lower = item['name'].lower()
+                # Ignorar apps del sistema Windows
+                if any(sys_app in name_lower for sys_app in _UA_SYSTEM_WHITELIST):
+                    continue
                 for term in hack_terms:
                     if term in name_lower:
                         suspicious.append(item)
@@ -8292,11 +8304,7 @@ class ArgusApp:
         evasion_score = 0
         indicators = []
 
-        # Indicator 1: VPN activa (ya detectada por scan_vpn_adapters)
-        vpn_active = any(i.get('tipo') == 'vpn_active' for i in self.issues_found)
-        if vpn_active:
-            evasion_score += 25
-            indicators.append('VPN activa durante el scan')
+        # VPN ya no suma al evasion score — es legal y se muestra como categoría propia
 
         # Indicator 2: Prefetch vacío o muy pequeño (posible limpieza manual)
         try:

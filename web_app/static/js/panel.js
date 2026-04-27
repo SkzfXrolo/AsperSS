@@ -1233,6 +1233,9 @@ function _getCategoryLabel(cat) {
         'JAVA_MEMORY': '☕ Java', 'JAVA_AGENT': '🔌 Agentes', 'NETWORK_FORENSICS': '🌐 Red',
         'SYSTEM_TAMPERING': '⚙️ Sistema', 'RECENT_FILES': '📅 Recientes',
         'REGISTRY': '📋 Registro', 'PROCESS': '⚙️ Procesos',
+        'VPN': '🔒 VPN', 'EVASION': '🛡️ Evasión', 'EXECUTED_FILES': '▶️ Ejecutados',
+        'FORENSE': '🔬 Forense', 'TEXTURE_PACKS': '🎨 Texturas', 'OBFUSCATION': '🔀 Ofuscación',
+        'JAR_FILES': '📦 JARs', 'MINECRAFT': '⛏️ Minecraft',
     };
     return map[cat] || cat || 'Otro';
 }
