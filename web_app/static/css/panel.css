@@ -1842,6 +1842,8 @@ body.light-theme .subscription-table-header {
     letter-spacing: 0;
 }
 
+.sidebar-user-avatar:hover .avatar-edit-overlay { opacity: 1 !important; }
+
 .avatar-online {
     position: absolute;
     bottom: 0;

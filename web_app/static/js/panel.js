@@ -3807,6 +3807,25 @@ async function _saveAvatar() {
         if (data.success) {
             _closeAvatarModal();
             loadStaffUsers();
+            // If editing own avatar, refresh sidebar immediately
+            const currentUserId = parseInt(document.body.dataset.userId || '0');
+            if (modal._userId === currentUserId) {
+                const circle = document.querySelector('.sidebar-user-avatar .avatar-circle');
+                if (circle) {
+                    let img = circle.querySelector('img');
+                    const initial = circle.querySelector('span');
+                    if (avatarUrl) {
+                        if (!img) { img = document.createElement('img'); img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;'; circle.prepend(img); }
+                        img.src = avatarUrl;
+                        img.style.display = 'block';
+                        img.onerror = () => { img.style.display = 'none'; };
+                        if (initial) initial.style.display = 'none';
+                    } else if (img) {
+                        img.style.display = 'none';
+                        if (initial) initial.style.display = '';
+                    }
+                }
+            }
         } else {
             if (errEl) { errEl.textContent = data.error || 'Error al guardar'; errEl.style.display = 'block'; }
         }
