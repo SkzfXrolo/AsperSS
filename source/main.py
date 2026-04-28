@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.2"
+SCANNER_VERSION = "1.6.4"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -6116,187 +6116,80 @@ class ArgusApp:
             print(f"Error escaneando servicios: {str(e)}")
     
     def scan_dns_cache(self):
-        """Escanea caché DNS usando ipconfig/displaydns"""
+        """Escanea caché DNS buscando dominios de distribución de hack clients."""
         try:
             print("🔍 ESCANEANDO CACHÉ DNS (ipconfig/displaydns)...")
             import subprocess
-            
-            # Ejecutar ipconfig/displaydns
-            result = subprocess.run(['ipconfig', '/displaydns'], capture_output=True, text=True, shell=True)
-            
+            HACK_DOMAINS = [
+                'vape.gg', 'liquidbounce', 'sigma.rip', 'riseclient',
+                'meteorclient', 'wurst-client', 'lbest.pw',
+                'rusherhack', 'astolfoclient', 'fluxclient', 'futureclient',
+                'inertia.rip', 'salhack', 'azuraclient', 'vertexclient',
+                'daturamc', 'jelloclient', 'weavemcr',
+            ]
+            result = subprocess.run(['ipconfig', '/displaydns'], capture_output=True, text=True)
             if result.returncode == 0:
-                lines = result.stdout.split('\n')
-                suspicious_domains = []
-                
-                for line in lines:
-                    if any(domain in line.lower() for domain in ['minecraft', 'hack', 'cheat', 'ghost', 'vape', 'entropy']):
-                        suspicious_domains.append(line.strip())
-                
-                if suspicious_domains:
-                    print(f"⚠️ DOMINIOS SOSPECHOSOS EN CACHÉ DNS: {len(suspicious_domains)}")
+                dns_output = result.stdout.lower()
+                matched = [d for d in HACK_DOMAINS if d in dns_output]
+                if matched:
+                    print(f"⚠️ DNS CACHE CON DOMINIO DE HACK: {matched}")
                     self.issues_found.append({
-                        'nombre': f"Dominios sospechosos en DNS: {len(suspicious_domains)}",
+                        'nombre': f'DNS cache con dominio de hack: {", ".join(matched)}',
                         'ruta': 'DNS Cache',
-                        'archivo': 'ipconfig/displaydns',
-                        'tipo': 'dns_cache',
+                        'archivo': ', '.join(matched),
+                        'tipo': 'dns_cache_hack',
                         'categoria': 'DNS_CACHE',
-                        'alerta': 'SOSPECHOSO'
+                        'alerta': 'SOSPECHOSO',
+                        'confidence': 80,
+                        'detected_patterns': [f'dns:{d}' for d in matched],
                     })
         except Exception as e:
             print(f"Error escaneando caché DNS: {str(e)}")
     
     def scan_running_processes(self):
-        """Escanea procesos ejecutados usando tasklist"""
+        """Escanea procesos ejecutados buscando nombres exclusivos de hack clients."""
         try:
             print("🔍 ESCANEANDO PROCESOS EJECUTADOS (tasklist)...")
             import subprocess
-            
-            # Ejecutar tasklist
+            HACK_PROCESS_NAMES = [
+                'vape', 'vapelite', 'liquidbounce', 'wurst', 'sigma.exe',
+                'fluxclient', 'futureclient', 'rusherhack', 'meteorclient',
+                'killaura', 'aimbot', 'inject', 'dllinjector',
+            ]
             result = subprocess.run(['tasklist'], capture_output=True, text=True, shell=True)
-            
             if result.returncode == 0:
-                lines = result.stdout.split('\n')
-                suspicious_processes = []
-                
-                for line in lines:
-                    if any(process in line.lower() for process in ['minecraft', 'java', 'hack', 'cheat', 'ghost', 'vape', 'entropy', 'inject']):
-                        suspicious_processes.append(line.strip())
-                
-                if suspicious_processes:
-                    print(f"⚠️ PROCESOS SOSPECHOSOS EJECUTÁNDOSE: {len(suspicious_processes)}")
+                tasklist_lower = result.stdout.lower()
+                matched = [p for p in HACK_PROCESS_NAMES if p in tasklist_lower]
+                if matched:
+                    print(f"⚠️ PROCESO DE HACK DETECTADO: {matched}")
                     self.issues_found.append({
-                        'nombre': f"Procesos sospechosos: {len(suspicious_processes)}",
+                        'nombre': f"Proceso de hack en ejecución: {', '.join(matched)}",
                         'ruta': 'Procesos Activos',
-                        'archivo': 'tasklist',
-                        'tipo': 'running_process',
+                        'archivo': ', '.join(matched),
+                        'tipo': 'running_hack_process',
                         'categoria': 'PROCESSES',
-                        'alerta': 'SOSPECHOSO'
+                        'alerta': 'CRITICAL',
+                        'confidence': 85,
+                        'detected_patterns': matched,
                     })
         except Exception as e:
             print(f"Error escaneando procesos ejecutados: {str(e)}")
     
     def scan_exe_files(self):
-        """Escanea archivos .exe usando dir /b/s"""
-        try:
-            print("🔍 ESCANEANDO ARCHIVOS .EXE (dir /b/s)...")
-            import subprocess
-            
-            # Ejecutar dir /b/s *.exe
-            result = subprocess.run(['dir', '/b/s', '*.exe'], capture_output=True, text=True, shell=True)
-            
-            if result.returncode == 0:
-                lines = result.stdout.split('\n')
-                suspicious_exes = []
-                
-                for line in lines:
-                    if any(exe in line.lower() for exe in ['minecraft', 'hack', 'cheat', 'ghost', 'vape', 'entropy', 'inject']):
-                        suspicious_exes.append(line.strip())
-                
-                if suspicious_exes:
-                    print(f"⚠️ ARCHIVOS .EXE SOSPECHOSOS: {len(suspicious_exes)}")
-                    for exe in suspicious_exes[:5]:  # Mostrar solo los primeros 5
-                        self.issues_found.append({
-                            'nombre': f"Archivo .exe sospechoso: {os.path.basename(exe)}",
-                            'ruta': os.path.dirname(exe),
-                            'archivo': exe,
-                            'tipo': 'suspicious_exe',
-                            'categoria': 'HACKS',
-                            'alerta': 'SOSPECHOSO'
-                        })
-        except Exception as e:
-            print(f"Error escaneando archivos .exe: {str(e)}")
+        """Cubierto por _scan_for_specific_hacks y scan_common_hack_locations."""
+        pass
     
     def scan_jar_files(self):
-        """Escanea archivos .jar usando dir /b/s"""
-        try:
-            print("🔍 ESCANEANDO ARCHIVOS .JAR (dir /b/s)...")
-            import subprocess
-            
-            # Ejecutar dir /b/s *.jar
-            result = subprocess.run(['dir', '/b/s', '*.jar'], capture_output=True, text=True, shell=True)
-            
-            if result.returncode == 0:
-                lines = result.stdout.split('\n')
-                suspicious_jars = []
-                
-                for line in lines:
-                    if any(jar in line.lower() for jar in ['minecraft', 'hack', 'cheat', 'ghost', 'vape', 'entropy', 'inject']):
-                        suspicious_jars.append(line.strip())
-                
-                if suspicious_jars:
-                    print(f"⚠️ ARCHIVOS .JAR SOSPECHOSOS: {len(suspicious_jars)}")
-                    for jar in suspicious_jars[:5]:  # Mostrar solo los primeros 5
-                        self.issues_found.append({
-                            'nombre': f"Archivo .jar sospechoso: {os.path.basename(jar)}",
-                            'ruta': os.path.dirname(jar),
-                            'archivo': jar,
-                            'tipo': 'suspicious_jar',
-                            'categoria': 'JAR_FILES',
-                            'alerta': 'SOSPECHOSO'
-                        })
-        except Exception as e:
-            print(f"Error escaneando archivos .jar: {str(e)}")
+        """Cubierto por _scan_for_specific_hacks y scan_jar_files en el scanner principal."""
+        pass
     
     def scan_files_by_date(self):
-        """Escanea archivos por fecha usando FORFILES"""
-        try:
-            print("🔍 ESCANEANDO ARCHIVOS POR FECHA (FORFILES)...")
-            import subprocess
-            
-            # Ejecutar FORFILES para buscar archivos .exe desde 2021
-            result = subprocess.run(['FORFILES', '/M', '*.exe', '/S', '/D', '+04/08/2021', '/C', 'cmd /C echo @fdate @file @path'], capture_output=True, text=True, shell=True)
-            
-            if result.returncode == 0:
-                lines = result.stdout.split('\n')
-                suspicious_files = []
-                
-                for line in lines:
-                    if any(file in line.lower() for file in ['minecraft', 'hack', 'cheat', 'ghost', 'vape', 'entropy', 'inject']):
-                        suspicious_files.append(line.strip())
-                
-                if suspicious_files:
-                    print(f"⚠️ ARCHIVOS SOSPECHOSOS POR FECHA: {len(suspicious_files)}")
-                    for file in suspicious_files[:5]:  # Mostrar solo los primeros 5
-                        self.issues_found.append({
-                            'nombre': f"Archivo sospechoso por fecha: {file}",
-                            'ruta': 'Sistema',
-                            'archivo': file,
-                            'tipo': 'suspicious_by_date',
-                            'categoria': 'HACKS',
-                            'alerta': 'SOSPECHOSO'
-                        })
-        except Exception as e:
-            print(f"Error escaneando archivos por fecha: {str(e)}")
+        """Deshabilitado — FORFILES con patrones genéricos genera demasiados FPs."""
+        pass
     
     def scan_deleted_files(self):
-        """Escanea archivos borrados usando fsutil usn"""
-        try:
-            print("🔍 ESCANEANDO ARCHIVOS BORRADOS (fsutil usn)...")
-            import subprocess
-            
-            # Ejecutar fsutil usn para archivos borrados
-            result = subprocess.run(['fsutil', 'usn', 'readjournal', 'c:', 'csv'], capture_output=True, text=True, shell=True)
-            
-            if result.returncode == 0:
-                lines = result.stdout.split('\n')
-                deleted_files = []
-                
-                for line in lines:
-                    if '.exe' in line and '0x80000200' in line:
-                        deleted_files.append(line.strip())
-                
-                if deleted_files:
-                    print(f"⚠️ ARCHIVOS .EXE BORRADOS: {len(deleted_files)}")
-                    self.issues_found.append({
-                        'nombre': f"Archivos .exe borrados: {len(deleted_files)}",
-                        'ruta': 'USN Journal',
-                        'archivo': 'fsutil usn',
-                        'tipo': 'deleted_files',
-                        'categoria': 'DELETED_FILES',
-                        'alerta': 'SOSPECHOSO'
-                    })
-        except Exception as e:
-            print(f"Error escaneando archivos borrados: {str(e)}")
+        """Cubierto por scan_deleted_recycle — no usar fsutil (requiere admin y da FPs)."""
+        pass
     
     def scan_created_files(self):
         """Escanea archivos creados usando fsutil usn"""
