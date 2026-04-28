@@ -217,13 +217,35 @@ function showToast(message, type = 'info', scanId = null) {
         _toastContainer.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
         document.body.appendChild(_toastContainer);
     }
-    const colors = { info: '#8B5CF6', success: '#10b981', error: '#ef4444' };
-    const toast  = document.createElement('div');
-    toast.style.cssText = `background:var(--bg-card,#1e1e2e);border:1px solid ${colors[type]||colors.info};border-left:3px solid ${colors[type]||colors.info};border-radius:10px;padding:12px 16px;font-size:13px;color:var(--text,#e2e8f0);box-shadow:0 4px 20px rgba(0,0,0,0.3);pointer-events:all;cursor:${scanId?'pointer':'default'};max-width:280px;animation:slideInRight .25s ease;`;
-    toast.innerHTML = `<div style="font-weight:600;margin-bottom:2px;">Argus Projects</div><div style="color:var(--text-s,#94a3b8);">${message}</div>`;
+    const cfg = {
+        info:    { color: '#8B5CF6', bg: 'rgba(139,92,246,0.12)', icon: '◆' },
+        success: { color: '#10b981', bg: 'rgba(16,185,129,0.12)',  icon: '✓' },
+        error:   { color: '#ef4444', bg: 'rgba(239,68,68,0.12)',   icon: '✗' },
+    };
+    const c = cfg[type] || cfg.info;
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        background:var(--bg-card,#1e1e2e);
+        border:1px solid ${c.color}55;
+        border-left:3px solid ${c.color};
+        border-radius:10px;padding:11px 15px;
+        font-size:13px;color:var(--text,#e2e8f0);
+        box-shadow:0 8px 32px rgba(0,0,0,0.35),0 0 0 0 ${c.color};
+        pointer-events:all;cursor:${scanId?'pointer':'default'};
+        max-width:290px;min-width:220px;
+        animation:slideInRight .22s cubic-bezier(0.4,0,0.2,1);
+        display:flex;gap:10px;align-items:flex-start;
+        position:relative;overflow:hidden;`;
+    toast.innerHTML = `
+        <span style="font-size:14px;font-weight:700;color:${c.color};flex-shrink:0;margin-top:1px;">${c.icon}</span>
+        <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;margin-bottom:2px;font-size:12px;color:${c.color};">Argus Projects</div>
+            <div style="color:var(--text-m,#94a3b8);font-size:12.5px;line-height:1.4;">${message}</div>
+        </div>
+        <div style="position:absolute;bottom:0;left:0;height:2px;background:${c.color};opacity:0.5;animation:toast-drain 5s linear forwards;width:100%;transform-origin:left;"></div>`;
     if (scanId) toast.onclick = () => { viewScanDetails(scanId); toast.remove(); };
     _toastContainer.appendChild(toast);
-    setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity .4s'; setTimeout(() => toast.remove(), 400); }, 5000);
+    setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity .35s'; setTimeout(() => toast.remove(), 350); }, 5000);
 }
 
 let _soundEnabled = localStorage.getItem('notif-sound') !== 'false';
@@ -399,6 +421,28 @@ function showSection(sectionName) {
 // DASHBOARD
 // ============================================================
 
+function animateNumber(el, target, duration = 750) {
+    if (!el) return;
+    const start = parseInt(el.textContent) || 0;
+    if (start === target) { el.textContent = target; return; }
+    const t0 = performance.now();
+    const easeOut = t => 1 - (1 - t) ** 3;
+    function step(now) {
+        const p = Math.min((now - t0) / duration, 1);
+        el.textContent = Math.round(start + (target - start) * easeOut(p));
+        if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+}
+
+function _scanVerdict(scan) {
+    const s = scan.verdict || scan.severity_summary || '';
+    if (s === 'hack' || s === 'CRITICO' || s === 'SOSPECHOSO') return 'detected';
+    if (s === 'POCO_SOSPECHOSO') return 'suspicious';
+    if (s === 'clean' || s === 'LIMPIO') return 'clean';
+    return '';
+}
+
 async function loadDashboard() {
     // Greeting text
     const greetEl = document.getElementById('greeting-text');
@@ -418,10 +462,10 @@ async function loadDashboard() {
         const response = await fetch('/api/statistics');
         const data = await response.json();
 
-        document.getElementById('total-scans').textContent    = data.total_scans    || 0;
-        document.getElementById('total-issues').textContent   = data.total_issues   || 0;
-        document.getElementById('unique-machines').textContent = data.unique_machines || 0;
-        document.getElementById('active-tokens').textContent  = data.active_tokens  || 0;
+        animateNumber(document.getElementById('total-scans'),     data.total_scans     || 0);
+        animateNumber(document.getElementById('total-issues'),    data.total_issues    || 0);
+        animateNumber(document.getElementById('unique-machines'), data.unique_machines || 0);
+        animateNumber(document.getElementById('active-tokens'),   data.active_tokens   || 0);
 
         loadRecentScans();
         loadMonthlyChart();
@@ -478,24 +522,38 @@ function _indicatorDots(scan) {
 }
 
 async function loadRecentScans() {
+    const container = document.getElementById('recent-scans');
+    if (container) {
+        container.innerHTML = Array(4).fill(0).map(() => `
+            <div class="skel-row">
+                <div class="skel skel-circle" style="width:34px;height:34px;flex-shrink:0;"></div>
+                <div style="flex:1;">
+                    <div class="skel" style="height:12px;width:58%;margin-bottom:6px;"></div>
+                    <div class="skel" style="height:9px;width:38%;"></div>
+                </div>
+                <div class="skel" style="width:68px;height:22px;border-radius:20px;flex-shrink:0;"></div>
+            </div>`).join('');
+    }
     try {
         const response = await fetch('/api/scans?limit=6');
         const data = await response.json();
-        const container = document.getElementById('recent-scans');
         if (data.scans && data.scans.length > 0) {
-            container.innerHTML = data.scans.map(scan => `
-                <div class="echo-scan-row" onclick="viewScanDetails(${scan.id})">
-                    <div class="scan-avatar-circle">${_scanInitials(scan.machine_name)}</div>
+            container.innerHTML = data.scans.map((scan, i) => {
+                const v = _scanVerdict(scan);
+                const rowCls = v ? `row-${v}` : '';
+                const avCls  = v ? `av-${v}` : '';
+                return `<div class="echo-scan-row stagger-item ${rowCls}" style="animation-delay:${i*55}ms" onclick="viewScanDetails(${scan.id})">
+                    <div class="scan-avatar-circle ${avCls}">${_scanInitials(scan.machine_name)}</div>
                     <div class="scan-row-info">
                         <div class="scan-row-machine">${scan.machine_name || 'N/A'}</div>
                         <div class="scan-row-date">${formatDate(scan.started_at)}</div>
                     </div>
                     <div class="indicator-dots">${_indicatorDots(scan)}</div>
                     ${_resultBadge(scan)}
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         } else {
-            container.innerHTML = '<div class="echo-scan-row"><div class="scan-row-info"><div class="scan-row-machine" style="color:var(--text-d)">No hay escaneos recientes</div></div></div>';
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">No hay escaneos recientes</div></div>';
         }
     } catch (error) {
         console.error('Error cargando escaneos recientes:', error);

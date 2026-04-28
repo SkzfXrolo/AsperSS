@@ -2670,3 +2670,181 @@ body.light-theme .scan-back-btn {
 .equipo-tab-content { display: block; }
 .equipo-tab-hidden  { display: none !important; }
 
+/* ══════════════════════════════════════════════
+   VISUAL POLISH v2 — MICRO-ANIMATIONS & DEPTH
+══════════════════════════════════════════════ */
+
+/* ── Aurora ambient orb ── */
+body::after {
+    content: '';
+    position: fixed;
+    width: 700px; height: 700px;
+    top: -250px; left: 35%;
+    background: radial-gradient(circle, rgba(139,92,246,0.06) 0%, transparent 65%);
+    pointer-events: none;
+    z-index: 0;
+    animation: aurora-drift 22s ease-in-out infinite;
+}
+@keyframes aurora-drift {
+    0%,100% { transform: translate(0,0); }
+    33%      { transform: translate(100px,-80px); }
+    66%      { transform: translate(-70px,60px); }
+}
+body.light-theme::after {
+    background: radial-gradient(circle, rgba(124,58,237,0.04) 0%, transparent 65%);
+}
+
+/* ── Skeleton loader ── */
+@keyframes skel-shimmer {
+    0%   { background-position: -600px 0; }
+    100% { background-position:  600px 0; }
+}
+.skel {
+    background: linear-gradient(90deg,
+        rgba(139,92,246,0.04) 25%,
+        rgba(139,92,246,0.11) 50%,
+        rgba(139,92,246,0.04) 75%
+    );
+    background-size: 1200px 100%;
+    animation: skel-shimmer 1.5s ease-in-out infinite;
+    border-radius: 6px;
+    display: block;
+}
+.skel-circle { border-radius: 50% !important; }
+.skel-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+}
+body.light-theme .skel {
+    background: linear-gradient(90deg,
+        rgba(109,40,217,0.05) 25%,
+        rgba(109,40,217,0.13) 50%,
+        rgba(109,40,217,0.05) 75%
+    );
+    background-size: 1200px 100%;
+}
+
+/* ── Staggered list entrance ── */
+@keyframes stagger-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.stagger-item { animation: stagger-up 0.28s cubic-bezier(0.4,0,0.2,1) both; }
+.stagger-item:nth-child(1) { animation-delay:   0ms; }
+.stagger-item:nth-child(2) { animation-delay:  55ms; }
+.stagger-item:nth-child(3) { animation-delay: 110ms; }
+.stagger-item:nth-child(4) { animation-delay: 165ms; }
+.stagger-item:nth-child(5) { animation-delay: 220ms; }
+.stagger-item:nth-child(6) { animation-delay: 275ms; }
+.stagger-item:nth-child(n+7) { animation-delay: 300ms; }
+
+/* ── Stat card: overflow hidden for shine sweep ── */
+.stat-card { overflow: hidden; }
+.stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -120%;
+    width: 50%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+    pointer-events: none;
+    transition: left 0.6s ease;
+}
+.stat-card:hover::after { left: 160%; }
+
+/* ── Stat icon pop on card hover ── */
+.stat-icon-wrap { transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1); }
+.stat-card:hover .stat-icon-wrap { transform: scale(1.12); }
+
+/* ── Nav active: SVG glow ── */
+.nav-item.active svg { filter: drop-shadow(0 0 5px rgba(139,92,246,0.55)); }
+
+/* ── Button active press micro-animation ── */
+.btn:active { transform: scale(0.97) !important; transition: transform 0.06s !important; }
+
+/* ── Dashboard card hover glow ── */
+.dashboard-card { transition: border-color 0.25s, box-shadow 0.25s; }
+.dashboard-card:hover {
+    border-color: var(--border-m);
+    box-shadow: 0 4px 28px rgba(139,92,246,0.08);
+}
+
+/* ── Echo scan row: verdict inset left indicator ── */
+.echo-scan-row {
+    box-shadow: inset 3px 0 0 transparent;
+    transition: background 0.15s, box-shadow 0.2s;
+}
+.echo-scan-row.row-detected  { box-shadow: inset 3px 0 0 rgba(244,63,94,  0.65); }
+.echo-scan-row.row-suspicious{ box-shadow: inset 3px 0 0 rgba(245,158,11, 0.65); }
+.echo-scan-row.row-clean     { box-shadow: inset 3px 0 0 rgba(16,185,129, 0.65); }
+
+/* ── Scan avatar verdict color ── */
+.scan-avatar-circle.av-detected {
+    background: linear-gradient(135deg, rgba(244,63,94,0.22), rgba(244,63,94,0.38));
+    border-color: rgba(244,63,94,0.30);
+    color: var(--red);
+}
+.scan-avatar-circle.av-suspicious {
+    background: linear-gradient(135deg, rgba(245,158,11,0.22), rgba(245,158,11,0.38));
+    border-color: rgba(245,158,11,0.30);
+    color: var(--amber);
+}
+.scan-avatar-circle.av-clean {
+    background: linear-gradient(135deg, rgba(16,185,129,0.20), rgba(16,185,129,0.35));
+    border-color: rgba(16,185,129,0.28);
+    color: var(--green);
+}
+
+/* ── Greeting decoration slow spin ── */
+.greeting-decoration svg {
+    animation: slow-spin 30s linear infinite;
+    transform-origin: 55px 45px;
+}
+@keyframes slow-spin { to { transform: rotate(360deg); } }
+
+/* ── Greeting banner animated top border sweep ── */
+.greeting-banner::before {
+    background: linear-gradient(90deg, transparent 0%, var(--accent) 30%, #C4B5FD 50%, var(--accent) 70%, transparent 100%);
+    background-size: 200% 100%;
+    animation: border-sweep 5s linear infinite;
+}
+@keyframes border-sweep {
+    0%   { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+}
+
+/* ── Empty state component ── */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+    text-align: center;
+    gap: 10px;
+}
+.empty-state-icon { font-size: 32px; opacity: 0.4; }
+.empty-state-text { font-size: 13px; color: var(--text-d); }
+.empty-state-sub  { font-size: 12px; color: var(--text-d); opacity: 0.7; }
+
+/* ── Section card hover ── */
+.section-card { transition: border-color 0.25s; }
+.section-card:hover { border-color: var(--border-m); }
+
+/* ── Toast progress drain animation ── */
+@keyframes toast-drain {
+    from { width: 100%; }
+    to   { width: 0%; }
+}
+
+/* ── Scan indicator pill: critical pulse ── */
+.scan-indicator-pill.active-red {
+    animation: pill-red-pulse 2.5s ease-in-out infinite;
+}
+@keyframes pill-red-pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(244,63,94,0); }
+    50%      { box-shadow: 0 0 0 4px rgba(244,63,94,0.14); }
+}
+
