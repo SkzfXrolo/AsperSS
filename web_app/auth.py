@@ -858,6 +858,7 @@ def _row_to_user(row):
             'created_at': row.get('created_at'),
             'last_login': row.get('last_login'),
             'company_id': row.get('company_id'),
+            'avatar_url': row.get('avatar_url') or '',
         }
     # tuple / sqlite3.Row
     return {
@@ -869,6 +870,7 @@ def _row_to_user(row):
         'created_at': row[5],
         'last_login': row[6],
         'company_id': row[7],
+        'avatar_url': row[8] if len(row) > 8 else '',
     }
 
 
@@ -880,7 +882,7 @@ def get_user_by_id(user_id):
         ph = _ph()
         with _auth_cursor() as cursor:
             cursor.execute(
-                f'SELECT id, username, email, roles, is_active, created_at, last_login, company_id'
+                f'SELECT id, username, email, roles, is_active, created_at, last_login, company_id, avatar_url'
                 f' FROM users WHERE id = {ph}',
                 (user_id,)
             )
