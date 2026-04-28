@@ -6456,42 +6456,55 @@ class ArgusApp:
             print(f"Error escaneando macros Razer: {e}")
     
     def scan_event_logs(self):
-        """Escanea logs de eventos para cambios de fecha"""
-        try:
-            print("🔍 ESCANEANDO LOGS DE EVENTOS...")
-            import subprocess
-            import time
-            
-            # Ejecutar eventvwr.msc para verificar cambios de fecha
-            print("📋 Abriendo Event Viewer...")
-            process = subprocess.Popen(['eventvwr.msc'], shell=True)
-            
-            # Esperar 5 segundos para que se abra
-            time.sleep(5)
-            
-            print("⏰ Esperando 10 segundos para revisar logs...")
-            time.sleep(10)
-            
-            # Cerrar automáticamente el Event Viewer
-            print("🔒 Cerrando Event Viewer automáticamente...")
+        """Escanea logs de eventos del sistema buscando cambios de fecha/hora y borrado de logs."""
+        print("🔍 Escaneando logs de eventos del sistema (sin abrir GUI)...")
+        import subprocess
+        import xml.etree.ElementTree as _ET
+
+        # Eventos de interés: 4616=cambio hora, 1102/104=logs borrados, 4688=proceso creado
+        QUERIES = [
+            ('Security', '*[System[EventID=4616]]',  'Cambio de fecha/hora del sistema', 'CRITICAL'),
+            ('Security', '*[System[EventID=1102]]',  'Logs de seguridad borrados', 'CRITICAL'),
+            ('System',   '*[System[EventID=104]]',   'Logs del sistema borrados', 'CRITICAL'),
+        ]
+
+        for log_name, query, description, severity in QUERIES:
             try:
-                process.terminate()
-                process.wait(timeout=5)
-            except:
-                # Si no se puede cerrar normalmente, forzar cierre
-                subprocess.run(['taskkill', '/f', '/im', 'mmc.exe'], capture_output=True, shell=True)
-            
-            print("⚠️ LOGS DE EVENTOS REVISADOS - Event Viewer cerrado automáticamente")
-            self.issues_found.append({
-                'nombre': "Logs de eventos revisados - Event Viewer cerrado automáticamente",
-                'ruta': 'Event Viewer',
-                'archivo': 'eventvwr.msc',
-                'tipo': 'event_logs',
-                'categoria': 'DATE_CHANGES',
-                'alerta': 'SOSPECHOSO'
-            })
-        except Exception as e:
-            print(f"Error escaneando logs de eventos: {str(e)}")
+                result = subprocess.run(
+                    ['wevtutil', 'qe', log_name,
+                     f'/q:{query}',
+                     '/c:20', '/rd:true', '/f:xml'],
+                    capture_output=True, text=True, timeout=15,
+                    creationflags=0x08000000  # CREATE_NO_WINDOW
+                )
+                if not result.stdout.strip():
+                    continue
+                # Parsear eventos
+                xml_text = f'<root>{result.stdout.strip()}</root>'
+                try:
+                    root = _ET.fromstring(xml_text)
+                    count = len(root.findall('.//{http://schemas.microsoft.com/win/2004/08/events/event}Event'))
+                    if count == 0:
+                        continue
+                    print(f"⚠️ Evento detectado: {description} ({count} ocurrencias)")
+                    self.issues_found.append({
+                        'nombre': f'{description} ({count} evento(s) en logs)',
+                        'ruta':   f'EventLog:{log_name}',
+                        'archivo': log_name,
+                        'tipo':   'event_logs',
+                        'categoria': 'DATE_CHANGES',
+                        'alerta': severity,
+                        'confidence': 0.85,
+                        'detected_patterns': [f'event:{log_name}:{severity.lower()}'],
+                        'explicacion': (
+                            f'El log de eventos "{log_name}" registra {count} ocurrencia(s) de: '
+                            f'{description}. Este tipo de evento es indicador de manipulación del sistema.'
+                        ),
+                    })
+                except _ET.ParseError:
+                    pass
+            except Exception:
+                pass
     
     def scan_processes(self):
         """Escanea procesos activos"""
