@@ -1222,7 +1222,7 @@ async function loadStaffUsers() {
                 <td style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                     <select id="role-sel-${u.id}" class="filter-select" style="min-width:110px;font-size:12px;padding:5px 8px;">${roleOptions}</select>
                     <button class="btn btn-sm btn-primary" onclick="updateStaffRole(${u.id})">Guardar</button>
-                    <button class="btn btn-sm btn-secondary" onclick="setUserAvatar(${u.id}, ${JSON.stringify(u.avatar_url || '')})" title="Cambiar avatar">🖼️</button>
+                    <button class="btn btn-sm btn-secondary" onclick="setUserAvatar(${u.id})" data-av="${(u.avatar_url||'').replace(/"/g,'&quot;')}" title="Cambiar avatar">🖼️</button>
                 </td>
             </tr>`;
         }).join('');
@@ -3739,11 +3739,16 @@ async function loadEquipoCompanyData() {
 }
 
 function setUserAvatar(userId, currentAvatarUrl) {
-    // Si no se pasa URL, leerla desde el img del sidebar (evita pasar base64 en onclick)
     if (currentAvatarUrl === undefined) {
-        const sidebarImg = document.querySelector('.sidebar-user-avatar .avatar-circle img');
-        currentAvatarUrl = (sidebarImg && sidebarImg.src && !sidebarImg.src.startsWith('data:')) ? sidebarImg.src : '';
-        // data: URLs se guardan ya en el servidor, no hace falta mostrarlas como preview inicial
+        // Intentar leer desde el botón que activó el evento (tabla de staff)
+        const btn = document.activeElement;
+        if (btn && btn.dataset && btn.dataset.av) {
+            currentAvatarUrl = btn.dataset.av;
+        } else {
+            // Fallback: leer desde el img del sidebar (propio usuario)
+            const sidebarImg = document.querySelector('.sidebar-user-avatar .avatar-circle img');
+            currentAvatarUrl = (sidebarImg && sidebarImg.src && !sidebarImg.src.startsWith('blob:')) ? sidebarImg.src : '';
+        }
     }
     let modal = document.getElementById('avatar-upload-modal');
     if (!modal) {
