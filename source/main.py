@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.5"
+SCANNER_VERSION = "1.6.6"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -1951,6 +1951,10 @@ class ArgusApp:
                             if os.path.exists(drive_letter):
                                 print(f"📱 USB encontrado: {drive_letter}")
                                 for root, dirs, files in os.walk(drive_letter):
+                                    depth = root[len(drive_letter):].count(os.sep)
+                                    if depth >= 3:
+                                        dirs[:] = []
+                                        continue
                                     for file in files:
                                         if self.is_suspicious_file(file.lower()):
                                             issues.append({
@@ -1968,35 +1972,51 @@ class ArgusApp:
         return issues
     
     def scan_hidden_files(self):
-        """Escanea archivos ocultos"""
+        """Escanea archivos ocultos en ubicaciones de usuario relevantes (no drives completos)."""
         print("🔍 ESCANEANDO ARCHIVOS OCULTOS...")
         issues = []
-        
+
         def scan():
             try:
-                drives = ['C:\\', 'D:\\', 'E:\\', 'F:\\']
-                for drive in drives:
-                    if os.path.exists(drive):
-                        for root, dirs, files in os.walk(drive):
-                            for file in files:
-                                file_path = os.path.join(root, file)
-                                try:
-                                    # Verificar si el archivo está oculto
-                                    if os.path.getattr(file_path, 'st_file_attributes') & 0x2:  # FILE_ATTRIBUTE_HIDDEN
-                                        if self.is_suspicious_file(file.lower()):
-                                            issues.append({
-                                                'tipo': 'HIDDEN_FILE',
-                                                'nombre': file,
-                                                'ruta': file_path,
-                                                'alerta': 'SOSPECHOSO',
-                                                'categoria': 'HIDDEN_FILES'
-                                            })
-                                except:
-                                    continue
-                                    
+                user = os.environ.get('USERPROFILE', '')
+                search_roots = [
+                    os.path.join(user, 'AppData', 'Roaming'),
+                    os.path.join(user, 'AppData', 'Local'),
+                    os.path.join(user, 'Documents'),
+                    os.path.join(user, 'Downloads'),
+                    os.path.join(user, 'Desktop'),
+                ]
+                for base in search_roots:
+                    if not os.path.isdir(base):
+                        continue
+                    for root, dirs, files in os.walk(base):
+                        depth = root[len(base):].count(os.sep)
+                        if depth >= 4:
+                            dirs[:] = []
+                            continue
+                        _root_l = root.lower()
+                        if any(frag in _root_l for frag in _SAFE_ROOT_FRAGMENTS):
+                            dirs[:] = []
+                            continue
+                        for file in files:
+                            if not file.lower().endswith(('.exe', '.jar', '.dll')):
+                                continue
+                            file_path = os.path.join(root, file)
+                            try:
+                                attrs = os.stat(file_path).st_file_attributes
+                                if attrs & 0x2 and self.is_suspicious_file(file.lower()):
+                                    issues.append({
+                                        'tipo': 'HIDDEN_FILE',
+                                        'nombre': file,
+                                        'ruta': file_path,
+                                        'alerta': 'SOSPECHOSO',
+                                        'categoria': 'HIDDEN_FILES'
+                                    })
+                            except Exception:
+                                continue
             except Exception as e:
                 print(f"Error escaneando archivos ocultos: {e}")
-                
+
         scan()
         return issues
     
@@ -2031,6 +2051,8 @@ class ArgusApp:
                                 if file.lower().endswith(('.json', '.txt', '.cfg', '.properties')):
                                     try:
                                         file_path = os.path.join(root, file)
+                                        if os.path.getsize(file_path) > 512_000:
+                                            continue
                                         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                                             content = f.read().lower()
                                             if any(hack in content for hack in ['vape', 'entropy', 'liquidbounce', 'wurst']):
@@ -4896,22 +4918,22 @@ class ArgusApp:
             
             # Patrones de hacks reales conocidos
             real_hack_patterns = [
-                'flux', 'flux 1.8', 'flux1.8', 'flux 1.8.8', 'flux1.8.8',
+                'fluxclient', 'flux 1.8', 'flux1.8', 'flux 1.8.8', 'flux1.8.8',
                 'vape', 'vape v4', 'vapev4', 'vape lite', 'vapelite',
                 'entropy', 'entropy client', 'entropyclient',
                 'whiteout', 'whiteout client', 'whiteoutclient',
                 'liquidbounce', 'liquid bounce', 'liquidbounce client',
                 'wurst', 'wurst client', 'wurstclient',
-                'impact', 'impact client', 'impactclient',
-                'sigma', 'sigma client', 'sigmaclient',
-                'future', 'future client', 'futureclient',
+                'impact client', 'impactclient',
+                'sigma client', 'sigmaclient',
+                'future client', 'futureclient',
                 'astolfo', 'astolfo client', 'astolfoclient',
                 'exhibition', 'exhibition client', 'exhibitionclient',
                 'novoline', 'novoline client', 'novolineclient',
-                'rise', 'rise client', 'riseclient',
-                'moon', 'moon client', 'moonclient',
-                'drip', 'drip client', 'dripclient',
-                'ghost', 'ghost client', 'ghostclient'
+                'riseclient', 'rise client',
+                'moonclient', 'moon client',
+                'dripclient', 'drip client',
+                'ghostclient', 'ghost client',
             ]
             
             # Patrones de archivos de hacks (solo extensiones realmente sospechosas fuera de minecraft)
@@ -6553,8 +6575,8 @@ class ArgusApp:
         """Verifica si una ventana es sospechosa"""
         window_title = window_title.lower()
         suspicious_windows = [
-            'vape', 'entropy', 'whiteout', 'liquidbounce', 'wurst', 'impact',
-            'sigma', 'flux', 'future', 'injector', 'inject', 'ghost'
+            'vape', 'entropy', 'whiteout', 'liquidbounce', 'wurst',
+            'impactclient', 'sigmaclient', 'fluxclient', 'futureclient', 'injector', 'ghostclient'
         ]
         
         for pattern in suspicious_windows:
@@ -6612,8 +6634,9 @@ class ArgusApp:
         """Verifica si una clave del registro es sospechosa"""
         key_name = key_name.lower()
         suspicious_keys = [
-            'vape', 'entropy', 'whiteout', 'liquidbounce', 'wurst', 'impact',
-            'sigma', 'flux', 'future', 'injector', 'inject', 'ghost'
+            'vape', 'entropy', 'whiteout', 'liquidbounce', 'wurst',
+            'impactclient', 'sigmaclient', 'fluxclient', 'futureclient', 'injector', 'ghostclient',
+            'killaura', 'aimbot', 'dllinjector',
         ]
         
         for pattern in suspicious_keys:
@@ -6630,9 +6653,9 @@ class ArgusApp:
         """Escanea historial de comandos CMD, Win+R, búsquedas de carpeta y TypedPaths."""
         print("🔍 Escaneando historial de comandos y búsquedas...")
         suspicious_terms = [
-            'vape', 'entropy', 'wurst', 'liquidbounce', 'sigma', 'flux', 'future',
-            'killaura', 'aimbot', 'inject', 'hack', 'cheat', 'bypass', 'crack',
-            'autoclick', 'clicker', 'phobos', 'astolfo', 'novoline'
+            'vape', 'entropy', 'wurst', 'liquidbounce', 'sigmaclient', 'fluxclient', 'futureclient',
+            'killaura', 'aimbot', 'ghostclient', 'autoclicker', 'phobos', 'astolfo', 'novoline',
+            'liquidbounce', 'riseclient', 'moonclient', 'dllinjector',
         ]
         try:
             keys_to_check = [
