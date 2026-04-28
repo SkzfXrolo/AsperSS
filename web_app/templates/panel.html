@@ -106,7 +106,7 @@
             {% endif %}
         </nav>
         <div class="sidebar-footer">
-            <div class="sidebar-user-avatar" onclick="setUserAvatar({{ user.id if user else 0 }}, '{{ user.avatar_url if user and user.avatar_url else '' }}')" title="Cambiar tu avatar" style="cursor:pointer;">
+            <div class="sidebar-user-avatar" onclick="setUserAvatar({{ user.id if user else 0 }})" title="Cambiar tu avatar" style="cursor:pointer;">
                 <div class="avatar-circle" style="position:relative;">
                     {% if user and user.avatar_url %}
                     <img src="{{ user.avatar_url }}" alt="{{ user.username }}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.style.display='none'">
@@ -1659,7 +1659,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=13"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=14"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────

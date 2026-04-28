@@ -3739,7 +3739,12 @@ async function loadEquipoCompanyData() {
 }
 
 function setUserAvatar(userId, currentAvatarUrl) {
-    // Reutilizar o crear el modal de avatar
+    // Si no se pasa URL, leerla desde el img del sidebar (evita pasar base64 en onclick)
+    if (currentAvatarUrl === undefined) {
+        const sidebarImg = document.querySelector('.sidebar-user-avatar .avatar-circle img');
+        currentAvatarUrl = (sidebarImg && sidebarImg.src && !sidebarImg.src.startsWith('data:')) ? sidebarImg.src : '';
+        // data: URLs se guardan ya en el servidor, no hace falta mostrarlas como preview inicial
+    }
     let modal = document.getElementById('avatar-upload-modal');
     if (!modal) {
         modal = document.createElement('div');
