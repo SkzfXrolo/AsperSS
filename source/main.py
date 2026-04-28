@@ -9430,11 +9430,27 @@ class ArgusApp:
                 pass
             return None
 
+        # Clientes que modifican el JAR legítimamente (crean sus propias versiones)
+        _JAR_MODIFIER_CLIENTS = [
+            os.path.join(os.environ.get('USERPROFILE', ''), '.lunarclient'),
+            os.path.join(os.environ.get('APPDATA', ''), 'lunarclient'),
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'lunarclient'),
+        ]
+        _has_lunar = any(os.path.isdir(p) for p in _JAR_MODIFIER_CLIENTS)
+
         try:
             for ver_name in os.listdir(versions_dir):
                 jar_path = os.path.join(versions_dir, ver_name, f'{ver_name}.jar')
                 if not os.path.isfile(jar_path):
                     continue
+
+                # Versiones con nombre no-vanilla (OptiFine, Forge, Fabric, etc.) — skip
+                # Ejemplo: "1.20.1-OptiFine_HD_U_I7", "1.20.1-forge-47.2.0"
+                _LAUNCHER_SUFFIXES = ['optifine', 'forge', 'fabric', 'quilt', 'lunar', 'feather', 'labymod', 'badlion']
+                if any(s in ver_name.lower() for s in _LAUNCHER_SUFFIXES):
+                    print(f"⏭️ Skip versión modded: {ver_name}")
+                    continue
+
                 try:
                     sha1 = hashlib.sha1()
                     with open(jar_path, 'rb') as f:
@@ -9453,17 +9469,31 @@ class ArgusApp:
 
                 if actual_hash.lower() != expected.lower():
                     print(f"🚨 MINECRAFT.JAR MODIFICADO: {ver_name} — esperado {expected[:12]}... obtenido {actual_hash[:12]}...")
-                    self.issues_found.append({
-                        'nombre': f'minecraft.jar modificado en versión {ver_name} (hash no coincide con Mojang)',
-                        'ruta': jar_path,
-                        'archivo': f'{ver_name}.jar',
-                        'tipo': 'modified_minecraft_jar',
-                        'categoria': 'GHOST_CLIENT',
-                        'alerta': 'CRITICAL',
-                        'confidence': 0.97,
-                        'detected_patterns': ['modified_jar', f'hash_mismatch:{ver_name}'],
-                        'extra': {'expected': expected, 'actual': actual_hash},
-                    })
+                    if _has_lunar:
+                        # Lunar Client parchea JARs vanilla — bajar severidad
+                        self.issues_found.append({
+                            'nombre': f'minecraft.jar con hash modificado en {ver_name} (Lunar Client detectado — puede ser normal)',
+                            'ruta': jar_path,
+                            'archivo': f'{ver_name}.jar',
+                            'tipo': 'modified_minecraft_jar',
+                            'categoria': 'GHOST_CLIENT',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.40,
+                            'detected_patterns': ['modified_jar_lunar', f'hash_mismatch:{ver_name}'],
+                            'extra': {'expected': expected, 'actual': actual_hash, 'lunar_detected': True},
+                        })
+                    else:
+                        self.issues_found.append({
+                            'nombre': f'minecraft.jar modificado en versión {ver_name} (hash no coincide con Mojang)',
+                            'ruta': jar_path,
+                            'archivo': f'{ver_name}.jar',
+                            'tipo': 'modified_minecraft_jar',
+                            'categoria': 'GHOST_CLIENT',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.97,
+                            'detected_patterns': ['modified_jar', f'hash_mismatch:{ver_name}'],
+                            'extra': {'expected': expected, 'actual': actual_hash},
+                        })
                 else:
                     print(f"✅ minecraft.jar {ver_name} — hash OK")
         except Exception as e:
