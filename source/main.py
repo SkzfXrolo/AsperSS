@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.4"
+SCANNER_VERSION = "1.6.5"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -1286,9 +1286,8 @@ class ArgusApp:
                             'vape', 'entropy', 'liquidbounce', 'wurst', 'impact', 'sigma',
                             'flux', 'future', 'astolfo', 'exhibition', 'novoline', 'rise',
                             'moon', 'drip', 'phobos', 'komat', 'wasp', 'konas', 'seppuku',
-                            'inject', 'injector', 'ghost', 'bypass', 'stealth', 'undetected',
-                            'killaura', 'aimbot', 'triggerbot', 'reach', 'velocity', 'scaffold',
-                            'fly', 'xray', 'fullbright', 'speedhack', 'wtap', 'aimassist',
+                            'injector', 'ghostclient', 'killaura', 'aimbot', 'triggerbot',
+                            'xray', 'fullbright', 'speedhack', 'wtap', 'aimassist',
                             'bhop', 'nofall', 'autoclicker', 'ac.exe', 'ac.jar'
                         ]
                         
@@ -1689,39 +1688,6 @@ class ArgusApp:
         scan()
         return issues
     
-    def scan_dns_cache(self):
-        """Escanea caché DNS buscando dominios de distribución de ghost clients."""
-        print("🔍 ESCANEANDO CACHÉ DNS...")
-        issues = []
-        HACK_DOMAINS = [
-            'vape', 'entropy', 'liquidbounce', 'sigma.rip', 'riseclient',
-            'meteorclient', 'wurst-client', 'lbest.pw', 'vape.gg',
-            'drazclient', 'drip-client', 'rusherhack', 'novoline',
-            'astolfoclient', 'fluxclient', 'futureclient', 'inertia',
-            'salhack', 'azuraclient', 'vertexclient', 'daturamc',
-            'jelloclient', 'weavemcr', 'weaveclient',
-        ]
-        try:
-            result = subprocess.run(['ipconfig', '/displaydns'], capture_output=True, text=True)
-            if result.returncode == 0:
-                dns_output = result.stdout.lower()
-                matched = [d for d in HACK_DOMAINS if d in dns_output]
-                if matched:
-                    print(f"⚠️ DNS CACHE SOSPECHOSA: {matched}")
-                    issues.append({
-                        'tipo': 'dns_cache_hack',
-                        'nombre': f'DNS cache con dominio de hack: {", ".join(matched)}',
-                        'ruta': 'DNS Cache',
-                        'archivo': ', '.join(matched),
-                        'alerta': 'SOSPECHOSO',
-                        'categoria': 'DNS_CACHE',
-                        'confidence': 0.80,
-                        'detected_patterns': [f'dns:{d}' for d in matched],
-                    })
-        except Exception as e:
-            print(f"Error escaneando caché DNS: {e}")
-        return issues
-    
     def scan_services(self):
         """Escanea servicios de Windows"""
         print("🔍 ESCANEANDO SERVICIOS...")
@@ -1965,33 +1931,6 @@ class ArgusApp:
         scan()
         return issues
     
-    def scan_renamed_files(self):
-        """Escanea archivos renombrados"""
-        print("🔍 ESCANEANDO ARCHIVOS RENOMBRADOS...")
-        issues = []
-        
-        def scan():
-            try:
-                # Usar fsutil para leer el USN Journal
-                result = subprocess.run(['fsutil', 'usn', 'readjournal', 'C:', '2'], 
-                                      capture_output=True, text=True)
-                if result.returncode == 0:
-                    usn_output = result.stdout
-                    if any(hack in usn_output.lower() for hack in ['vape', 'entropy', 'liquidbounce']):
-                        issues.append({
-                            'tipo': 'RENAMED_FILE',
-                            'nombre': 'Renamed File',
-                            'ruta': 'USN Journal',
-                            'alerta': 'SOSPECHOSO',
-                            'categoria': 'RENAMED_FILES'
-                        })
-                        
-            except Exception as e:
-                print(f"Error escaneando archivos renombrados: {e}")
-                
-        scan()
-        return issues
-    
     def scan_usb_devices(self):
         """Escanea dispositivos USB y pendrives"""
         print("🔍 ESCANEANDO DISPOSITIVOS USB Y PENDRIVES...")
@@ -2067,17 +2006,8 @@ class ArgusApp:
         issues = []
         
         def scan():
-            try:
-                # Escanear conexiones de red
-                for conn in psutil.net_connections(kind='inet'):
-                    if conn.status == 'ESTABLISHED':
-                        # Verificar IPs sospechosas
-                        if False:  # localhost no es sospechoso — Minecraft usa loopback internamente
-                            pass
-                                
-            except Exception as e:
-                print(f"Error escaneando conexiones de red: {e}")
-                
+            pass
+
         scan()
         return issues
     
@@ -4564,24 +4494,24 @@ class ArgusApp:
             
             # Patrones expandidos de hacks reales (incluyendo variantes y técnicas avanzadas)
             hack_patterns = [
-                # Hacks específicos conocidos de Minecraft (nombres exactos y variantes)
+                # Hacks específicos conocidos de Minecraft (variantes explícitas — sin nombres genéricos sueltos)
                 'vape', 'vapelite', 'vapev2', 'vapev4', 'vape.exe', 'vape.jar',
                 'entropy', 'entropyclient', 'entropy.exe', 'entropy.jar',
                 'whiteout', 'whiteoutclient', 'whiteout.exe', 'whiteout.jar',
                 'liquidbounce', 'liquid bounce', 'liquidbounceclient',
                 'wurst', 'wurstclient', 'wurst loader', 'wurst.exe',
-                'impact', 'impact client', 'impactclient', 'impact.exe',
-                'sigma', 'sigmaclient', 'sigma5.0', 'sigma-5.0',
-                'flux', 'fluxclient', 'flux b1.6', 'flux 1.8.8', 'flux1.8.8', 'flux 1.8.9',
-                'future', 'futureclient', 'future.exe',
+                'impact client', 'impactclient', 'impact.exe',
+                'sigmaclient', 'sigma5.0', 'sigma-5.0',
+                'fluxclient', 'flux b1.6', 'flux 1.8.8', 'flux1.8.8', 'flux 1.8.9',
+                'futureclient', 'future.exe',
                 'astolfo', 'astolfoclient', 'exhibition', 'exhibitionclient',
-                'novoline', 'novolineclient', 'rise', 'riseclient',
-                'moon', 'moonclient', 'drip', 'dripclient',
-                'ghost', 'ghostclient', 'ghost.exe',
+                'novoline', 'novolineclient', 'riseclient',
+                'moonclient', 'dripclient',
+                'ghostclient', 'ghost.exe',
                 'phobos', 'komat', 'wasp', 'konas', 'seppuku', 'sloth',
                 'lucid', 'tenacity', 'nyx', 'vanish', 'ploow', 'cloudclient', 'cloud-client',
                 'nextgen', 'tegernako', 'zeroday',
-                
+
                 # Módulos de hack cuyo nombre es exclusivo (no aparece en software legítimo)
                 'xray', 'killaura', 'aimbot', 'wallhack', 'boxesp', 'chams',
                 'autoclicker', 'autotool', 'autosprint', 'speedhack',
@@ -4593,8 +4523,8 @@ class ArgusApp:
                 'dllinjector', 'dllhijacking', 'processhollowing', 'codecave',
                 'cheatengine',
 
-                # Clientes con nombre único (no causan confusión con software legítimo)
-                'silentclient', 'ghostclient'
+                # Clientes con nombre único
+                'silentclient',
             ]
             
             # Lista ampliada de falsos positivos para evitar detecciones incorrectas
@@ -6191,64 +6121,12 @@ class ArgusApp:
         pass
     
     def scan_created_files(self):
-        """Escanea archivos creados usando fsutil usn"""
-        try:
-            print("🔍 ESCANEANDO ARCHIVOS CREADOS (fsutil usn)...")
-            import subprocess
-            
-            # Ejecutar fsutil usn para archivos creados
-            result = subprocess.run(['fsutil', 'usn', 'readjournal', 'c:', 'csv'], capture_output=True, text=True, shell=True)
-            
-            if result.returncode == 0:
-                lines = result.stdout.split('\n')
-                created_files = []
-                
-                for line in lines:
-                    if '.exe' in line and '0x00000100' in line:
-                        created_files.append(line.strip())
-                
-                if created_files:
-                    print(f"⚠️ ARCHIVOS .EXE CREADOS: {len(created_files)}")
-                    self.issues_found.append({
-                        'nombre': f"Archivos .exe creados: {len(created_files)}",
-                        'ruta': 'USN Journal',
-                        'archivo': 'fsutil usn',
-                        'tipo': 'created_files',
-                        'categoria': 'NEW_FILES',
-                        'alerta': 'SOSPECHOSO'
-                    })
-        except Exception as e:
-            print(f"Error escaneando archivos creados: {str(e)}")
+        """Deshabilitado — fsutil USN requiere admin y genera FPs."""
+        pass
     
     def scan_renamed_files(self):
-        """Escanea archivos renombrados usando fsutil usn"""
-        try:
-            print("🔍 ESCANEANDO ARCHIVOS RENOMBRADOS (fsutil usn)...")
-            import subprocess
-            
-            # Ejecutar fsutil usn para archivos renombrados
-            result = subprocess.run(['fsutil', 'usn', 'readjournal', 'c:', 'csv'], capture_output=True, text=True, shell=True)
-            
-            if result.returncode == 0:
-                lines = result.stdout.split('\n')
-                renamed_files = []
-                
-                for line in lines:
-                    if '.exe' in line and ('0x00001000' in line or '0x00002000' in line):
-                        renamed_files.append(line.strip())
-                
-                if renamed_files:
-                    print(f"⚠️ ARCHIVOS .EXE RENOMBRADOS: {len(renamed_files)}")
-                    self.issues_found.append({
-                        'nombre': f"Archivos .exe renombrados: {len(renamed_files)}",
-                        'ruta': 'USN Journal',
-                        'archivo': 'fsutil usn',
-                        'tipo': 'renamed_files',
-                        'categoria': 'RENAMED_FILES',
-                        'alerta': 'SOSPECHOSO'
-                    })
-        except Exception as e:
-            print(f"Error escaneando archivos renombrados: {str(e)}")
+        """Deshabilitado — fsutil USN requiere admin y genera FPs."""
+        pass
     
     def scan_prefetch_jna(self):
         """Escanea prefetch para JNA"""
@@ -6625,10 +6503,10 @@ class ArgusApp:
             'future', 'futureclient', 'astolfo', 'exhibition', 'novoline', 'rise',
             'moon', 'drip', 'phobos', 'komat', 'wasp', 'konas', 'seppuku', 'sloth',
             'lucid', 'tenacity', 'nyx', 'vanish', 'ploow', 'cloudclient', 'cloud-client', 'nextgen',
-            'tegernako', 'zeroday', 'injector', 'inject', 'inyector', 'injection',
-            'dllinjector', 'ghost', 'ghostclient', 'bypass', 'stealth', 'undetected',
-            'incognito', 'unbypass', 'killaura', 'aimbot', 'triggerbot', 'reach',
-            'velocity', 'scaffold', 'fly', 'xray', 'fullbright', 'speedhack',
+            'tegernako', 'zeroday', 'injector', 'inyector',
+            'dllinjector', 'ghostclient', 'bypass', 'undetected',
+            'incognito', 'unbypass', 'killaura', 'aimbot', 'triggerbot',
+            'xray', 'fullbright', 'speedhack',
             'wtap', 'aimassist', 'bhop', 'nofall', 'autoclicker', 'ac.exe'
         ]
         
@@ -7820,133 +7698,6 @@ class ArgusApp:
                 print(f"✅ PS history: {len(all_cmds)} comandos, {len(suspicious_cmds)} sospechosos")
         except Exception as e:
             print(f"Error en scan_powershell_history: {e}")
-
-    def scan_browser_downloads(self):
-        """Escanea historial de descargas de Chrome, Edge y Firefox en busca de hacks."""
-        print("🔍 Escaneando historial de descargas de navegadores...")
-        import sqlite3
-        import shutil
-        import tempfile
-
-        hack_terms = [
-            'vape', 'vapelite', 'entropy', 'entropyclient',
-            'wurst', 'wurstclient', 'liquidbounce',
-            'killaura', 'aimbot', 'cheatengine',
-            'xray', 'triggerbot', 'dllinjector', 'bspoof',
-            'phobos', 'astolfo', 'novoline',
-            'ghostclient', 'silentclient', 'fluxclient',
-        ]
-
-        local = os.environ.get('LOCALAPPDATA', '')
-        appdata = os.environ.get('APPDATA', '')
-
-        db_paths = [
-            os.path.join(local, 'Google', 'Chrome', 'User Data', 'Default', 'History'),
-            os.path.join(local, 'Microsoft', 'Edge', 'User Data', 'Default', 'History'),
-            os.path.join(local, 'Google', 'Chrome', 'User Data', 'Profile 1', 'History'),
-            os.path.join(appdata, 'Mozilla', 'Firefox', 'Profiles'),  # dir, handled separately
-        ]
-
-        def check_chromium_db(db_path):
-            if not os.path.exists(db_path):
-                return
-            tmp = None
-            try:
-                # Copy to temp to avoid SQLite lock
-                fd, tmp = tempfile.mkstemp(suffix='.db')
-                os.close(fd)
-                shutil.copy2(db_path, tmp)
-                con = sqlite3.connect(tmp)
-                cur = con.cursor()
-                cur.execute("SELECT url, target_path FROM downloads LIMIT 5000")
-                rows = cur.fetchall()
-                con.close()
-                suspicious = []
-                all_downloads = []
-                for url, target in rows:
-                    text = ((url or '') + ' ' + (target or '')).lower()
-                    fname = os.path.basename(target or url or '')
-                    all_downloads.append(fname[:60])
-                    for term in hack_terms:
-                        if term in text:
-                            suspicious.append(f"{fname} ({url[:60]})")
-                            self.issues_found.append({
-                                'tipo': 'browser_download_suspicious',
-                                'nombre': f'Descarga sospechosa: {fname}',
-                                'ruta': target[:255] if target else url[:255],
-                                'archivo': url[:255] if url else '',
-                                'categoria': 'CMD_HISTORY',
-                                'alerta': 'CRITICAL',
-                                'confidence': 80,
-                                'detected_patterns': [term],
-                            })
-                            print(f"🚨 DESCARGA SOSPECHOSA: {fname} — {url[:60]}")
-                            break
-                if all_downloads:
-                    self.issues_found.append({
-                        'tipo': 'browser_download_history',
-                        'nombre': f'Historial de descargas ({os.path.basename(os.path.dirname(db_path))}): {len(all_downloads)} entradas',
-                        'ruta': db_path[:255],
-                        'archivo': ' | '.join(all_downloads[-20:])[:500],
-                        'categoria': 'CMD_HISTORY',
-                        'alerta': 'NORMAL',
-                        'confidence': 0,
-                        'detected_patterns': all_downloads[-20:],
-                    })
-            except Exception as e:
-                print(f"  Error leyendo {db_path}: {e}")
-            finally:
-                if tmp and os.path.exists(tmp):
-                    try: os.remove(tmp)
-                    except: pass
-
-        # Chromium-based browsers
-        for db_path in db_paths:
-            if 'Profiles' not in db_path:
-                check_chromium_db(db_path)
-
-        # Firefox — iterate profiles
-        ff_profiles = db_paths[-1]
-        if os.path.isdir(ff_profiles):
-            try:
-                for profile in os.listdir(ff_profiles):
-                    ff_db = os.path.join(ff_profiles, profile, 'places.sqlite')
-                    if os.path.exists(ff_db):
-                        tmp = None
-                        try:
-                            fd, tmp = tempfile.mkstemp(suffix='.db')
-                            os.close(fd)
-                            shutil.copy2(ff_db, tmp)
-                            con = sqlite3.connect(tmp)
-                            cur = con.cursor()
-                            cur.execute("SELECT url FROM moz_places LIMIT 5000")
-                            rows = cur.fetchall()
-                            con.close()
-                            for (url,) in rows:
-                                if not url: continue
-                                url_lower = url.lower()
-                                for term in hack_terms:
-                                    if term in url_lower:
-                                        fname = url.split('/')[-1][:60]
-                                        self.issues_found.append({
-                                            'tipo': 'browser_download_suspicious',
-                                            'nombre': f'Visita/descarga sospechosa (Firefox): {fname}',
-                                            'ruta': url[:255],
-                                            'archivo': url[:255],
-                                            'categoria': 'CMD_HISTORY',
-                                            'alerta': 'SOSPECHOSO',
-                                            'confidence': 65,
-                                            'detected_patterns': [term],
-                                        })
-                                        break
-                        except Exception:
-                            pass
-                        finally:
-                            if tmp and os.path.exists(tmp):
-                                try: os.remove(tmp)
-                                except: pass
-            except Exception as e:
-                print(f"Error en Firefox profiles: {e}")
 
     def scan_appcompat_shimcache(self):
         """Lee AppCompatCache (ShimCache) del registro — ejecuciones históricas de aplicaciones."""
@@ -9415,13 +9166,16 @@ class ArgusApp:
             '1.21.4': '87bc50d4eafddbc41c5ceba9c7de92bde46c8a6e',
         }
 
+        _manifest_versions: list = []  # fetched once per scan run
+
         def _fetch_mojang_hash(version_id: str) -> str | None:
             try:
-                manifest_url = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json'
-                r = requests.get(manifest_url, timeout=8)
-                r.raise_for_status()
-                versions = r.json().get('versions', [])
-                for v in versions:
+                if not _manifest_versions:
+                    manifest_url = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json'
+                    r = requests.get(manifest_url, timeout=8)
+                    r.raise_for_status()
+                    _manifest_versions.extend(r.json().get('versions', []))
+                for v in _manifest_versions:
                     if v.get('id') == version_id:
                         vr = requests.get(v['url'], timeout=8)
                         vr.raise_for_status()
@@ -9438,6 +9192,7 @@ class ArgusApp:
         ]
         _has_lunar = any(os.path.isdir(p) for p in _JAR_MODIFIER_CLIENTS)
 
+        _LAUNCHER_SUFFIXES = ['optifine', 'forge', 'fabric', 'quilt', 'lunar', 'feather', 'labymod', 'badlion']
         try:
             for ver_name in os.listdir(versions_dir):
                 jar_path = os.path.join(versions_dir, ver_name, f'{ver_name}.jar')
@@ -9446,7 +9201,6 @@ class ArgusApp:
 
                 # Versiones con nombre no-vanilla (OptiFine, Forge, Fabric, etc.) — skip
                 # Ejemplo: "1.20.1-OptiFine_HD_U_I7", "1.20.1-forge-47.2.0"
-                _LAUNCHER_SUFFIXES = ['optifine', 'forge', 'fabric', 'quilt', 'lunar', 'feather', 'labymod', 'badlion']
                 if any(s in ver_name.lower() for s in _LAUNCHER_SUFFIXES):
                     print(f"⏭️ Skip versión modded: {ver_name}")
                     continue

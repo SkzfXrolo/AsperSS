@@ -165,6 +165,16 @@ class DatabaseIntegration:
             print(f"✅ Escaneo iniciado - Scan ID: {self.scan_id}")
         
         try:
+            # Deduplicar — múltiples funciones pueden detectar el mismo archivo
+            seen_keys: set = set()
+            deduped: list = []
+            for _iss in issues_found:
+                _key = (_iss.get('tipo', ''), _iss.get('archivo', '') or _iss.get('ruta', ''), _iss.get('nombre', ''))
+                if _key not in seen_keys:
+                    seen_keys.add(_key)
+                    deduped.append(_iss)
+            issues_found = deduped
+
             # Preparar resultados para la API — ordenar por severidad y limitar payload
             _severity_order = {'CRITICAL': 0, 'SOSPECHOSO': 1, 'POCO_SOSPECHOSO': 2, 'NORMAL': 3}
             sorted_issues = sorted(
