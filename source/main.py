@@ -154,6 +154,18 @@ _SAFE_ROOT_FRAGMENTS = {
     'curseforge', 'ftbapp', 'gdlauncher', 'atlauncher', 'overwolf',
     'visual studio', 'intellij idea', 'pycharm', 'webstorm', 'jetbrains',
     'minecraftsstool',
+    # LabyMod y su launcher (legítimo, cliente de Minecraft)
+    'labymod', 'labymodlauncher', 'labymod-neo',
+    # Fabric API — carpeta de mods remapeados (no es obfuscación)
+    '.fabric\\processedmods', '.minecraft\\.fabric',
+    # Librerías legítimas de Minecraft
+    '.minecraft\\libraries',
+    # Grabadores de clips / software de streaming
+    'medal\\', 'medal.tv',
+    # Juegos y apps legítimas
+    'roblox\\', 'innersloth', 'vseeface', 'vseefacex',
+    # Overwolf
+    'ow-electron', 'overwolf',
 }
 
 _MINECRAFT_INSTANCE_FRAGMENTS = [
@@ -2060,21 +2072,8 @@ class ArgusApp:
                 for conn in psutil.net_connections(kind='inet'):
                     if conn.status == 'ESTABLISHED':
                         # Verificar IPs sospechosas
-                        if any(suspicious_ip in str(conn.raddr) for suspicious_ip in ['127.0.0.1', 'localhost']):
-                            # Verificar si es un proceso relacionado con Minecraft
-                            try:
-                                process = psutil.Process(conn.pid)
-                                process_name = process.name().lower()
-                                if 'minecraft' in process_name or 'java' in process_name:
-                                    issues.append({
-                                        'tipo': 'NETWORK_CONNECTION',
-                                        'nombre': f"Connection to {conn.raddr}",
-                                        'ruta': f"PID: {conn.pid}, Process: {process_name}",
-                                        'alerta': 'SOSPECHOSO',
-                                        'categoria': 'NETWORK_CONNECTIONS'
-                                    })
-                            except:
-                                continue
+                        if False:  # localhost no es sospechoso — Minecraft usa loopback internamente
+                            pass
                                 
             except Exception as e:
                 print(f"Error escaneando conexiones de red: {e}")

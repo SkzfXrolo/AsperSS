@@ -1960,6 +1960,18 @@ _SERVER_FP_FRAGMENTS = [
     # Drivers y software de hardware
     'nvidia corporation', 'amd\\radeon', 'intel corporation',
     'discord\\app-', 'teamspeak 3 client',
+    # LabyMod — cliente legítimo de Minecraft
+    'labymod', 'labymodlauncher', 'labymod-neo',
+    # Fabric API processed mods y librerías de Minecraft
+    '.fabric\\processedmods', '.minecraft\\.fabric', '.minecraft\\libraries',
+    # Grabadores de clips
+    'medal\\', 'medal.tv',
+    # Juegos y apps legítimas
+    'roblox\\', 'innersloth', 'vseeface',
+    # Overwolf
+    'ow-electron', 'overwolf',
+    # Conexiones de red internas de Minecraft
+    '127.0.0.1', 'connection to addr(ip=\'127.0.0.1\'',
 ]
 
 

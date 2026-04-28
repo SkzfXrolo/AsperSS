@@ -95,8 +95,8 @@ class XRayTextureAnalyzer:
             total_pixels = len(alpha_data)
             transparency_ratio = transparent_pixels / total_pixels if total_pixels > 0 else 0
             
-            # Analizar si tiene transparencia sospechosa (> 10% transparente es sospechoso para texturas de bloques)
-            if transparency_ratio > 0.1:
+            # XRay real: texturas de bloques sólidos con >40% píxeles transparentes
+            if transparency_ratio > 0.40:
                 return {
                     'type': 'xray_texture',
                     'name': os.path.basename(file_path),
@@ -109,35 +109,7 @@ class XRayTextureAnalyzer:
                     'alert': 'SOSPECHOSO' if transparency_ratio < 0.5 else 'CRITICAL'
                 }
             
-            # Analizar colores (texturas X-ray suelen tener colores muy saturados o modificados)
-            pixels = list(img.getdata())
-            if len(pixels) > 0:
-                # Calcular estadísticas de color
-                r_values = [p[0] for p in pixels if len(p) >= 3]
-                g_values = [p[1] for p in pixels if len(p) >= 3]
-                b_values = [p[2] for p in pixels if len(p) >= 3]
-                
-                if r_values and g_values and b_values:
-                    avg_r = sum(r_values) / len(r_values)
-                    avg_g = sum(g_values) / len(g_values)
-                    avg_b = sum(b_values) / len(b_values)
-                    
-                    # Texturas X-ray suelen tener colores muy brillantes o saturados
-                    brightness = (avg_r + avg_g + avg_b) / 3
-                    saturation = max(r_values) - min(r_values) if r_values else 0
-                    
-                    # Si es muy brillante o muy saturado, podría ser X-ray
-                    if brightness > 200 or saturation > 150:
-                        return {
-                            'type': 'xray_texture',
-                            'name': os.path.basename(file_path),
-                            'path': file_path,
-                            'source_type': source_type,
-                            'brightness': brightness,
-                            'saturation': saturation,
-                            'confidence': 0.6,
-                            'alert': 'POCO_SOSPECHOSO'
-                        }
+            # Colores saturados/brillantes NO son indicador de XRay — son packs PvP normales.
         
         except Exception as e:
             # Error al analizar, no reportar
