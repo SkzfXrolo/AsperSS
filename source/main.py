@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.6"
+SCANNER_VERSION = "1.6.7"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -3618,6 +3618,8 @@ class ArgusApp:
                 _run_safe(self.scan_discord_webhooks)
                 self._set_scan_phase("🌐 Historial de descargas del navegador...")
                 _run_safe(self.scan_browser_downloads)
+                self._set_scan_phase("🌐 Historial de páginas visitadas (hack sites/DDoS)...")
+                _run_safe(self.scan_browser_history_sites)
                 self._set_scan_phase("📋 Portapapeles — webhooks y nombres de hacks...")
                 _run_safe(self.scan_clipboard_content)
                 self._set_scan_phase("🎯 Jitter/aim assist en software de mouse...")
@@ -9933,6 +9935,163 @@ class ArgusApp:
         except Exception as e:
             print(f"Error en scan_browser_downloads: {e}")
 
+    def scan_browser_history_sites(self):
+        """Detecta visitas a sitios de hack clients y stressers/DDoS en el historial de navegadores."""
+        print("🔍 Escaneando historial de páginas visitadas del navegador...")
+        import sqlite3 as _sqlite3
+        import shutil as _shutil
+        import tempfile as _tempfile
+
+        localapp = os.environ.get('LOCALAPPDATA', '')
+        appdata  = os.environ.get('APPDATA', '')
+
+        BROWSER_HISTORIES = [
+            ('Chrome',  os.path.join(localapp, 'Google', 'Chrome', 'User Data', 'Default', 'History'), 'chromium'),
+            ('Edge',    os.path.join(localapp, 'Microsoft', 'Edge', 'User Data', 'Default', 'History'), 'chromium'),
+            ('Brave',   os.path.join(localapp, 'BraveSoftware', 'Brave-Browser', 'User Data', 'Default', 'History'), 'chromium'),
+            ('Vivaldi', os.path.join(localapp, 'Vivaldi', 'User Data', 'Default', 'History'), 'chromium'),
+            ('Opera',   os.path.join(appdata,  'Opera Software', 'Opera Stable', 'History'), 'chromium'),
+        ]
+        firefox_base = os.path.join(appdata, 'Mozilla', 'Firefox', 'Profiles')
+        if os.path.isdir(firefox_base):
+            for profile in os.listdir(firefox_base):
+                places = os.path.join(firefox_base, profile, 'places.sqlite')
+                if os.path.isfile(places):
+                    BROWSER_HISTORIES.append(('Firefox', places, 'firefox'))
+                    break
+
+        # Dominios conocidos de hack clients (solo dominios específicos, sin falsos positivos)
+        HACK_SITES = {
+            'vape.gg':              ('Vape Client', 'CRITICAL'),
+            'vapeclient.net':       ('Vape Client', 'CRITICAL'),
+            'vapeclient.cc':        ('Vape Client', 'CRITICAL'),
+            'liquidbounce.net':     ('LiquidBounce', 'CRITICAL'),
+            'wurst-client.xyz':     ('Wurst Client', 'CRITICAL'),
+            'aristois.net':         ('Aristois', 'CRITICAL'),
+            'meteorclient.com':     ('Meteor Client', 'CRITICAL'),
+            'meteor-client.com':    ('Meteor Client', 'CRITICAL'),
+            'rusherhack.org':       ('RusherHack', 'CRITICAL'),
+            'lambda.cx':            ('Lambda Hack', 'CRITICAL'),
+            'sigma.rip':            ('Sigma Client', 'CRITICAL'),
+            'drip.cx':              ('Drip Client', 'CRITICAL'),
+            'future.gg':            ('Future Client', 'CRITICAL'),
+            'impact.lol':           ('Impact Client', 'CRITICAL'),
+            'riseclient.com':       ('Rise Client', 'CRITICAL'),
+            'rise-client.com':      ('Rise Client', 'CRITICAL'),
+            'fluxclient.net':       ('Flux Client', 'CRITICAL'),
+            'novoline-client.com':  ('Novoline', 'CRITICAL'),
+            'wolfram.codes':        ('Wolfram Client', 'CRITICAL'),
+            'salhack.me':           ('SalHack', 'CRITICAL'),
+            'tenacityclient.com':   ('Tenacity', 'CRITICAL'),
+            'inertiaclient.com':    ('Inertia Client', 'CRITICAL'),
+            'aresclient.net':       ('Ares Client', 'CRITICAL'),
+            'pandahack.net':        ('Panda Hack', 'CRITICAL'),
+            'weaveloader.com':      ('Weave Loader', 'CRITICAL'),
+            'weave.mod.menu':       ('Weave Mod Menu', 'CRITICAL'),
+        }
+        # Palabras clave en URL que indican stresser/DDoS
+        DDOS_KEYWORDS = ['stresser', 'booter', 'ip-booter', 'ddoser', 'layer7stress', 'stresstest.to']
+
+        SAFE_DOMAINS = {
+            'modrinth.com', 'curseforge.com', 'minecraft.net', 'mojang.com',
+            'fabricmc.net', 'minecraftforge.net', 'optifine.net',
+            'github.com', 'github.io', 'reddit.com', 'youtube.com',
+            'google.com', 'twitch.tv', 'discord.com', 'discord.gg',
+            'spigotmc.org', 'bukkit.org', 'papermc.io', 'cloudflare.com',
+        }
+
+        seen_domains = set()
+
+        try:
+            for browser_name, history_path, db_type in BROWSER_HISTORIES:
+                if not os.path.isfile(history_path):
+                    continue
+                tmp_path = None
+                try:
+                    tmp_fd, tmp_path = _tempfile.mkstemp(suffix='.db')
+                    os.close(tmp_fd)
+                    _shutil.copy2(history_path, tmp_path)
+
+                    conn = _sqlite3.connect(f'file:{tmp_path}?mode=ro', uri=True)
+                    cur  = conn.cursor()
+
+                    if db_type == 'chromium':
+                        cur.execute('SELECT url, title, visit_count FROM urls ORDER BY last_visit_time DESC LIMIT 3000')
+                    else:
+                        cur.execute('SELECT url, title, visit_count FROM moz_places ORDER BY last_visit_date DESC LIMIT 3000')
+
+                    for row in cur.fetchall():
+                        url   = (row[0] or '').lower()
+                        title = row[1] or ''
+                        visits = row[2] or 1
+
+                        for safe in SAFE_DOMAINS:
+                            if safe in url:
+                                break
+                        else:
+                            # Verificar hack sites
+                            for domain, (client_name, severity) in HACK_SITES.items():
+                                if domain in url:
+                                    key = f'{browser_name}:{domain}'
+                                    if key in seen_domains:
+                                        break
+                                    seen_domains.add(key)
+                                    print(f"🚨 VISITA HACK ({browser_name}): {domain} — {visits} visita(s)")
+                                    self.issues_found.append({
+                                        'nombre': f'Sitio de hack visitado en {browser_name}: {domain}',
+                                        'ruta':   url[:200],
+                                        'archivo': domain,
+                                        'tipo':   'browser_visited_hack',
+                                        'categoria': 'FORENSE',
+                                        'alerta': severity,
+                                        'confidence': 0.90,
+                                        'detected_patterns': [f'visited:{domain}', f'browser:{browser_name}'],
+                                        'explicacion': (
+                                            f'{browser_name} registra {visits} visita(s) al sitio "{domain}" '
+                                            f'({client_name}). Este es un sitio oficial de descarga/información '
+                                            f'de un hack client conocido para Minecraft. '
+                                            f'El historial del navegador persiste aunque se borre el cliente.'
+                                        ),
+                                    })
+                                    break
+                            else:
+                                # Verificar stressers/DDoS
+                                for kw in DDOS_KEYWORDS:
+                                    if kw in url:
+                                        key = f'{browser_name}:ddos:{kw}'
+                                        if key in seen_domains:
+                                            break
+                                        seen_domains.add(key)
+                                        print(f"🚨 VISITA DDOS ({browser_name}): {url[:80]}")
+                                        self.issues_found.append({
+                                            'nombre': f'Posible sitio stresser/DDoS visitado ({browser_name})',
+                                            'ruta':   url[:200],
+                                            'archivo': url[:80],
+                                            'tipo':   'browser_visited_hack',
+                                            'categoria': 'FORENSE',
+                                            'alerta': 'SOSPECHOSO',
+                                            'confidence': 0.78,
+                                            'detected_patterns': [f'ddos:{kw}', f'browser:{browser_name}'],
+                                            'explicacion': (
+                                                f'{browser_name} registra visitas a una URL que contiene '
+                                                f'"{kw}", un término asociado a herramientas de DDoS/stresser. '
+                                                f'URL: {url[:120]}'
+                                            ),
+                                        })
+                                        break
+
+                    conn.close()
+                except Exception:
+                    pass
+                finally:
+                    if tmp_path and os.path.exists(tmp_path):
+                        try:
+                            os.unlink(tmp_path)
+                        except Exception:
+                            pass
+        except Exception as e:
+            print(f"Error en scan_browser_history_sites: {e}")
+
     def scan_clipboard_content(self):
         """Detecta evidencia de hacks en el portapapeles (Discord webhooks, hack names, etc.)."""
         print("🔍 Escaneando contenido del portapapeles...")
@@ -10382,6 +10541,9 @@ class ArgusApp:
             'browser_download_hack':   'El historial de descargas del navegador muestra que se descargó un archivo '
                                        'cuyo nombre o URL coincide con un hack client conocido. El historial persiste '
                                        'aunque el archivo haya sido borrado del sistema.',
+            'browser_visited_hack':    'El historial del navegador registra visitas al sitio web oficial de un hack '
+                                       'client conocido o una herramienta de DDoS/stresser. Confirma que el jugador '
+                                       'buscó o accedió activamente a ese recurso.',
             'clipboard_hack_evidence': 'El portapapeles del sistema contiene texto relacionado con un hack client. '
                                        'Puede indicar que el jugador estaba copiando la configuración de un hack '
                                        'o la URL de descarga para instalarlo.',
@@ -10707,6 +10869,7 @@ class ArgusApp:
             'registry_run_hack', 'weave_loader', 'discord_webhook_config',
             'kill_chain', 'modified_minecraft_jar',
             'browser_download_hack',  # historial de descargas del navegador
+            'browser_visited_hack',   # visitas a sitios de hack/DDoS
             'ghost_client_config',    # carpeta .vape/.meteor/.rise confirmada
         }
         n_forense = sum(1 for i in issues if i.get('tipo', '') in HIGH_CONF_FORENSE)

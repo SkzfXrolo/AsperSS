@@ -2057,7 +2057,7 @@ async function viewScanDetails(scanId) {
         // Comandos (CMD + PowerShell + descargas + tareas programadas)
         const CMD_TYPES = new Set([
             'cmd_history','cmd_history_full','powershell_history','powershell_suspicious',
-            'browser_download_history','browser_download_suspicious','browser_download_hack',
+            'browser_download_history','browser_download_suspicious','browser_download_hack','browser_visited_hack',
             'scheduled_task_suspicious',
         ]);
         const comandos = allResults.filter(r => {
