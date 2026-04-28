@@ -1931,27 +1931,32 @@ async function viewScanDetails(scanId) {
 
         // ── Ejecutados ─────────────────────────────────────────────────────────
         // Categorías/tipos que indican que un programa fue ejecutado (no borrado)
-        const EJECUTADOS_CATS = new Set(['APPCOMPAT','APPSWITCHED','USN_FORENSICS']);
-        const EJECUTADOS_TYPES = new Set(['USN_CREATED','USN_RENAMED_OLD','USN_RENAMED_NEW',
-            'APPCOMPAT_HACK','APPSWITCHED_HACK','RECENT_HACK_EXE',
-            'prefetch_history','prefetch_suspicious','userassist_history','userassist_suspicious',
-            'shimcache_history','shimcache_suspicious','muicache_history','muicache_suspicious',
+        // Todos los sets en minúscula — comparar con .toLowerCase() para ser case-insensitive
+        const EJECUTADOS_CATS = new Set(['appcompat','appswitched','usn_forensics']);
+        const EJECUTADOS_TYPES = new Set([
+            'usn_created','usn_renamed_old','usn_renamed_new',
+            'appcompat_hack','appswitched_hack','recent_hack_exe',
+            'prefetch_history','prefetch_suspicious',
+            'userassist_history','userassist_suspicious',
+            'shimcache_history','shimcache_suspicious',
+            'muicache_history','muicache_suspicious',
         ]);
-        const BORRADOS_CATS  = new Set(['EXECUTED_DELETED','USN_FORENSICS']);
-        const BORRADOS_TYPES = new Set(['USN_DELETED','USN_PREFETCH_DELETED','executed_deleted_file',
-            'deleted_suspicious','deleted_history',
+        const BORRADOS_CATS  = new Set(['executed_deleted','usn_forensics']);
+        const BORRADOS_TYPES = new Set([
+            'usn_deleted','usn_prefetch_deleted','executed_deleted_file',
+            'deleted_suspicious','deleted_history','deleted_recycle',
         ]);
 
         const ejecutados = allResults.filter(r => {
-            const cat  = (r.issue_category || '').toUpperCase();
-            const tipo = (r.issue_type || '').toUpperCase();
-            if (BORRADOS_TYPES.has(tipo) || cat === 'EXECUTED_DELETED') return false; // son borrados, no ejecutados
+            const cat  = (r.issue_category || '').toLowerCase();
+            const tipo = (r.issue_type || '').toLowerCase();
+            if (BORRADOS_TYPES.has(tipo) || cat === 'executed_deleted') return false;
             return EJECUTADOS_CATS.has(cat) || EJECUTADOS_TYPES.has(tipo);
         });
         const eliminados = allResults.filter(r => {
-            const cat  = (r.issue_category || '').toUpperCase();
-            const tipo = (r.issue_type || '').toUpperCase();
-            return BORRADOS_TYPES.has(tipo) || cat === 'EXECUTED_DELETED' ||
+            const cat  = (r.issue_category || '').toLowerCase();
+            const tipo = (r.issue_type || '').toLowerCase();
+            return BORRADOS_TYPES.has(tipo) || cat === 'executed_deleted' ||
                    (BORRADOS_CATS.has(cat) && BORRADOS_TYPES.has(tipo));
         });
 
@@ -1994,9 +1999,14 @@ async function viewScanDetails(scanId) {
         // Comandos (CMD + PowerShell + descargas + tareas programadas)
         const CMD_TYPES = new Set([
             'cmd_history','cmd_history_full','powershell_history','powershell_suspicious',
-            'browser_download_history','browser_download_suspicious','scheduled_task_suspicious',
+            'browser_download_history','browser_download_suspicious','browser_download_hack',
+            'scheduled_task_suspicious',
         ]);
-        const comandos = allResults.filter(r => r.issue_category === 'CMD_HISTORY' || CMD_TYPES.has(r.issue_type));
+        const comandos = allResults.filter(r => {
+            const cat  = (r.issue_category || '').toLowerCase();
+            const tipo = (r.issue_type || '').toLowerCase();
+            return cat === 'cmd_history' || CMD_TYPES.has(tipo);
+        });
         const cmdBtn = document.getElementById('subnav-comandos');
         if (cmdBtn) cmdBtn.style.display = comandos.length > 0 ? '' : 'none';
         const cmdList = document.getElementById('comandos-list');

@@ -2002,7 +2002,8 @@ def _get_learned_legit_paths() -> list:
 
 import re as _re_fp
 # Categorías que solo existían en EXEs viejos con parsers buggeados — 100% FP
-_LEGACY_FP_CATEGORIES = {'EXECUTED_DELETED', 'APPCOMPAT', 'USN_FORENSICS'}
+# APPCOMPAT y USN_FORENSICS ya no se filtran: el nuevo scanner los usa correctamente
+_LEGACY_FP_CATEGORIES = {'EXECUTED_DELETED'}
 # Patrones de basura binaria en nombres — parser viejo decodificaba .pf como UTF-16
 _BINARY_GARBAGE_RE = _re_fp.compile(
     r'\bLMEM\b|Windows\.Data\.|Matrix3x2|\.CenterX|\.CenterY|'
