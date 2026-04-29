@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.10"
+SCANNER_VERSION = "1.6.11"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -1941,8 +1941,9 @@ class ArgusApp:
                 # Escanear dispositivos USB usando wmic (viene con Windows)
                 import subprocess
                 
-                result = subprocess.run(['wmic', 'logicaldisk', 'where', 'drivetype=2', 'get', 'deviceid'], 
-                                      capture_output=True, text=True, timeout=10)
+                result = subprocess.run(['wmic', 'logicaldisk', 'where', 'drivetype=2', 'get', 'deviceid'],
+                                      capture_output=True, text=True, timeout=10,
+                                      creationflags=0x08000000)
                 if result.returncode == 0:
                     lines = result.stdout.strip().split('\n')
                     for line in lines[1:]:  # Saltar la primera línea (encabezado)
@@ -6033,7 +6034,8 @@ class ArgusApp:
             for svc_name, (display, reason) in CRITICAL_SERVICES.items():
                 try:
                     result = subprocess.run(['sc', 'query', svc_name],
-                                            capture_output=True, text=True, timeout=5)
+                                            capture_output=True, text=True, timeout=5,
+                                            creationflags=0x08000000)
                     if result.returncode == 0 and 'STOPPED' in result.stdout.upper():
                         print(f"🚨 SERVICIO CRÍTICO DETENIDO: {svc_name.upper()}")
                         self.issues_found.append({
@@ -6052,7 +6054,8 @@ class ArgusApp:
             for svc_name, (display, reason) in SUSPICIOUS_SERVICES.items():
                 try:
                     result = subprocess.run(['sc', 'query', svc_name],
-                                            capture_output=True, text=True, timeout=5)
+                                            capture_output=True, text=True, timeout=5,
+                                            creationflags=0x08000000)
                     if result.returncode == 0 and 'STOPPED' in result.stdout.upper():
                         print(f"⚠️ SERVICIO SOSPECHOSO DETENIDO: {svc_name.upper()}")
                         self.issues_found.append({
@@ -6082,7 +6085,8 @@ class ArgusApp:
                 'inertia.rip', 'salhack', 'azuraclient', 'vertexclient',
                 'daturamc', 'jelloclient', 'weavemcr',
             ]
-            result = subprocess.run(['ipconfig', '/displaydns'], capture_output=True, text=True)
+            result = subprocess.run(['ipconfig', '/displaydns'], capture_output=True, text=True,
+                                    creationflags=0x08000000)
             if result.returncode == 0:
                 dns_output = result.stdout.lower()
                 matched = [d for d in HACK_DOMAINS if d in dns_output]
@@ -6111,7 +6115,8 @@ class ArgusApp:
                 'fluxclient', 'futureclient', 'rusherhack', 'meteorclient',
                 'killaura', 'aimbot', 'inject', 'dllinjector',
             ]
-            result = subprocess.run(['tasklist'], capture_output=True, text=True, shell=True)
+            result = subprocess.run(['tasklist'], capture_output=True, text=True,
+                                    creationflags=0x08000000)
             if result.returncode == 0:
                 tasklist_lower = result.stdout.lower()
                 matched = [p for p in HACK_PROCESS_NAMES if p in tasklist_lower]
@@ -12061,8 +12066,9 @@ class ArgusApp:
             try:
                 import subprocess
                 # Usar wmic que viene con Windows
-                result = subprocess.run(['wmic', 'logicaldisk', 'where', 'drivetype=2', 'get', 'deviceid,volumename'], 
-                                      capture_output=True, text=True, timeout=10)
+                result = subprocess.run(['wmic', 'logicaldisk', 'where', 'drivetype=2', 'get', 'deviceid,volumename'],
+                                      capture_output=True, text=True, timeout=10,
+                                      creationflags=0x08000000)
                 if result.returncode == 0:
                     lines = result.stdout.strip().split('\n')
                     for line in lines[1:]:  # Saltar la primera línea (encabezado)
@@ -12421,8 +12427,8 @@ class ArgusApp:
     def get_usb_devices(self):
         """Obtiene lista de dispositivos USB"""
         try:
-            result = subprocess.run(['wmic', 'logicaldisk', 'get', 'size,freespace,caption'], 
-                                  capture_output=True, text=True)
+            result = subprocess.run(['wmic', 'logicaldisk', 'get', 'size,freespace,caption'],
+                                  capture_output=True, text=True, creationflags=0x08000000)
             devices = []
             for line in result.stdout.split('\n'):
                 if ':' in line and 'Caption' not in line:
