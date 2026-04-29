@@ -111,7 +111,8 @@ class SilentScannerTechniques:
                                     ['wmic', 'process', 'where', f'ProcessId={proc.info["pid"]}', 'get', 'CommandLine'],
                                     capture_output=True,
                                     text=True,
-                                    timeout=5
+                                    timeout=5,
+                                    creationflags=0x08000000
                                 )
                                 
                                 if result.returncode == 0:

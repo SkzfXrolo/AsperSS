@@ -584,7 +584,8 @@ class MouseWeightDetector:
         try:
             result = subprocess.run(
                 ['powershell', '-NonInteractive', '-NoProfile', '-Command', ps_cmd],
-                capture_output=True, text=True, timeout=15
+                capture_output=True, text=True, timeout=15,
+                creationflags=0x08000000
             )
             output = result.stdout.strip()
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):

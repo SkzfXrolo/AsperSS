@@ -52,9 +52,8 @@ class AstroSSTechniques:
                 # Para servicios, usar tasklist /svc
                 result = subprocess.run(
                     ['tasklist', '/svc', '/FI', f'Services eq {name}'],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
+                    capture_output=True, text=True, timeout=10,
+                    creationflags=0x08000000
                 )
                 if result.returncode == 0:
                     lines = result.stdout.split('\n')
@@ -85,11 +84,9 @@ class AstroSSTechniques:
             cmd = f'{self.strings2_path} -pid {pid} -raw -nh'
             
             result = subprocess.run(
-                cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=30
+                cmd, shell=True,
+                capture_output=True, text=True, timeout=30,
+                creationflags=0x08000000
             )
             
             if result.returncode == 0:
@@ -116,7 +113,7 @@ class AstroSSTechniques:
                 'screencast': 'Screencast'
             }
             
-            tasks = str(subprocess.check_output('tasklist', shell=True)).lower()
+            tasks = str(subprocess.check_output(['tasklist'], timeout=10, creationflags=0x08000000)).lower()
             found = [x for x in recording_softwares if x in tasks]
             
             for software in found:
@@ -142,11 +139,9 @@ class AstroSSTechniques:
             
             # Obtener SID del usuario
             result = subprocess.run(
-                f'wmic useraccount where name="{win_username}" get sid',
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=10
+                ['wmic', 'useraccount', 'where', f'name="{win_username}"', 'get', 'sid'],
+                capture_output=True, text=True, timeout=10,
+                creationflags=0x08000000
             )
             
             if result.returncode == 0:

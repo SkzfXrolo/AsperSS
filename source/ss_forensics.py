@@ -217,7 +217,8 @@ class SSForensics:
         try:
             proc = subprocess.run(
                 ['fsutil', 'usn', 'readjournal', 'C:', 'csv'],
-                capture_output=True, text=True, timeout=30
+                capture_output=True, text=True, timeout=30,
+                creationflags=0x08000000
             )
             lines = proc.stdout.splitlines()
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
@@ -481,7 +482,8 @@ class SSForensics:
         try:
             result = subprocess.run(
                 ['sc', 'query', 'dps'],
-                capture_output=True, text=True, timeout=10
+                capture_output=True, text=True, timeout=10,
+                creationflags=0x08000000
             )
             output = result.stdout.lower()
             if 'stopped' in output:
@@ -1788,7 +1790,8 @@ class SSForensics:
         ]
         try:
             out = subprocess.check_output(['tasklist', '/fo', 'csv', '/nh'],
-                                          timeout=10, text=True, errors='ignore').lower()
+                                          timeout=10, text=True, errors='ignore',
+                                          creationflags=0x08000000).lower()
             for proc_name, vm_label in VM_PROCS.items():
                 if proc_name in out:
                     findings.append({
@@ -1821,7 +1824,8 @@ class SSForensics:
             wmi_out = subprocess.check_output(
                 ['powershell', '-NoProfile', '-Command',
                  '(Get-WmiObject Win32_ComputerSystem).HypervisorPresent'],
-                timeout=12, text=True, errors='ignore'
+                timeout=12, text=True, errors='ignore',
+                creationflags=0x08000000
             ).strip().lower()
             if wmi_out == 'true' and not detected_vms:
                 findings.append({
