@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.8"
+SCANNER_VERSION = "1.6.9"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -9960,20 +9960,35 @@ class ArgusApp:
         localapp = os.environ.get('LOCALAPPDATA', '')
         appdata  = os.environ.get('APPDATA', '')
 
-        BROWSER_HISTORIES = [
-            ('Chrome',  os.path.join(localapp, 'Google', 'Chrome', 'User Data', 'Default', 'History'), 'chromium'),
-            ('Edge',    os.path.join(localapp, 'Microsoft', 'Edge', 'User Data', 'Default', 'History'), 'chromium'),
-            ('Brave',   os.path.join(localapp, 'BraveSoftware', 'Brave-Browser', 'User Data', 'Default', 'History'), 'chromium'),
-            ('Vivaldi', os.path.join(localapp, 'Vivaldi', 'User Data', 'Default', 'History'), 'chromium'),
-            ('Opera',   os.path.join(appdata,  'Opera Software', 'Opera Stable', 'History'), 'chromium'),
-        ]
+        def _chromium_profiles(browser_name, user_data_dir):
+            """Devuelve (nombre, ruta_History) para todos los perfiles de un navegador Chromium."""
+            entries = []
+            if not os.path.isdir(user_data_dir):
+                return entries
+            for entry in os.listdir(user_data_dir):
+                # Perfiles: Default, Profile 1, Profile 2, Profile 3, …
+                if entry == 'Default' or entry.startswith('Profile '):
+                    h = os.path.join(user_data_dir, entry, 'History')
+                    if os.path.isfile(h):
+                        label = browser_name if entry == 'Default' else f'{browser_name}/{entry}'
+                        entries.append((label, h, 'chromium'))
+            return entries
+
+        BROWSER_HISTORIES = []
+        BROWSER_HISTORIES += _chromium_profiles('Chrome',  os.path.join(localapp, 'Google',        'Chrome',         'User Data'))
+        BROWSER_HISTORIES += _chromium_profiles('Edge',    os.path.join(localapp, 'Microsoft',      'Edge',           'User Data'))
+        BROWSER_HISTORIES += _chromium_profiles('Brave',   os.path.join(localapp, 'BraveSoftware',  'Brave-Browser',  'User Data'))
+        BROWSER_HISTORIES += _chromium_profiles('Vivaldi', os.path.join(localapp, 'Vivaldi',        'User Data'))
+        BROWSER_HISTORIES += _chromium_profiles('Opera',   os.path.join(appdata,  'Opera Software', 'Opera Stable',   'User Data'))
+        # Opera GX
+        BROWSER_HISTORIES += _chromium_profiles('OperaGX', os.path.join(appdata,  'Opera Software', 'Opera GX Stable', 'User Data'))
+
         firefox_base = os.path.join(appdata, 'Mozilla', 'Firefox', 'Profiles')
         if os.path.isdir(firefox_base):
             for profile in os.listdir(firefox_base):
                 places = os.path.join(firefox_base, profile, 'places.sqlite')
                 if os.path.isfile(places):
-                    BROWSER_HISTORIES.append(('Firefox', places, 'firefox'))
-                    break
+                    BROWSER_HISTORIES.append((f'Firefox/{profile[:12]}', places, 'firefox'))
 
         # Dominios conocidos de hack clients (solo dominios específicos, sin falsos positivos)
         HACK_SITES = {
@@ -10046,9 +10061,9 @@ class ArgusApp:
                     cur  = conn.cursor()
 
                     if db_type == 'chromium':
-                        cur.execute('SELECT url, title, visit_count FROM urls ORDER BY last_visit_time DESC LIMIT 3000')
+                        cur.execute('SELECT url, title, visit_count FROM urls ORDER BY last_visit_time DESC LIMIT 10000')
                     else:
-                        cur.execute('SELECT url, title, visit_count FROM moz_places ORDER BY last_visit_date DESC LIMIT 3000')
+                        cur.execute('SELECT url, title, visit_count FROM moz_places ORDER BY last_visit_date DESC LIMIT 10000')
 
                     for row in cur.fetchall():
                         url   = (row[0] or '').lower()
