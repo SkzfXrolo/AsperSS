@@ -1682,11 +1682,57 @@ async function viewScanDetails(scanId) {
                 else severityStats.clean++;
             });
         }
-        // Actualizar tarjetas de resumen
+        // Actualizar IDs de compatibilidad (ocultos)
         const sc = document.getElementById('sum-critical'); if (sc) sc.textContent = severityStats.severe;
         const ss = document.getElementById('sum-suspicious'); if (ss) ss.textContent = severityStats.alert;
         const sl = document.getElementById('sum-low'); if (sl) sl.textContent = severityStats.low;
         const sk = document.getElementById('sum-clean'); if (sk) sk.textContent = (data.total_files_scanned || severityStats.clean).toLocaleString();
+
+        // ── Severity summary bar (log de indicaciones) ──────────────────
+        const _set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        _set('log-severe', severityStats.severe);
+        _set('log-alert',  severityStats.alert);
+        _set('log-clean',  severityStats.clean + severityStats.low);
+        _set('ring-num-critical', severityStats.severe);
+        _set('ring-num-alert',    severityStats.alert);
+        _set('ring-num-low',      severityStats.low);
+        _set('ring-num-clean',    severityStats.clean);
+
+        // ── Donut ring chart (SVG) ───────────────────────────────────────
+        (function renderRingChart(stats) {
+            const total = stats.severe + stats.alert + stats.low + stats.clean;
+            const numEl = document.getElementById('ring-center-num');
+            const lblEl = document.getElementById('ring-center-label');
+            if (numEl) numEl.textContent = stats.severe + stats.alert + stats.low;
+            if (lblEl) lblEl.textContent = total === 0 ? 'sin datos' : stats.severe + stats.alert + stats.low === 0 ? 'limpio ✓' : 'hallazgos';
+
+            const CIRC = 2 * Math.PI * 54; // r=54 → ~339.3
+            const segments = [
+                { id: 'ring-seg-clean',    count: stats.clean },
+                { id: 'ring-seg-low',      count: stats.low   },
+                { id: 'ring-seg-alert',    count: stats.alert  },
+                { id: 'ring-seg-critical', count: stats.severe },
+            ];
+            let offset = 0;
+            for (const seg of segments) {
+                const el = document.getElementById(seg.id);
+                if (!el) continue;
+                if (total === 0 || seg.count === 0) {
+                    el.setAttribute('stroke-dasharray', `0 ${CIRC}`);
+                    el.setAttribute('stroke-dashoffset', '0');
+                    continue;
+                }
+                const len = (seg.count / total) * CIRC;
+                el.setAttribute('stroke-dasharray', `${len.toFixed(2)} ${(CIRC - len).toFixed(2)}`);
+                el.setAttribute('stroke-dashoffset', (-offset).toFixed(2));
+                offset += len;
+            }
+            // If all zero show a grey placeholder ring
+            if (total === 0) {
+                const el = document.getElementById('ring-seg-clean');
+                if (el) { el.setAttribute('stroke', 'rgba(255,255,255,0.08)'); el.setAttribute('stroke-dasharray', `${CIRC} 0`); }
+            }
+        })(severityStats);
         
         // Actualizar información del escaneo (columna izquierda)
         const scanIdEl = document.getElementById('detail-scan-id');

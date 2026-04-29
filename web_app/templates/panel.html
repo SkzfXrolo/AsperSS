@@ -748,36 +748,14 @@
                 <div class="subpage-content active" id="subpage-vista-general">
                 <div style="display:flex;flex-direction:column;gap:0;">
 
-                    <!-- STAT CARDS ROW -->
-                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;">
-                        <div style="position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(239,68,68,0.12) 0%,rgba(239,68,68,0.04) 100%);border:1px solid rgba(239,68,68,0.3);border-radius:14px;padding:20px 18px;box-shadow:0 4px 20px rgba(239,68,68,0.12);">
-                            <div style="position:absolute;top:-18px;right:-18px;width:70px;height:70px;background:rgba(239,68,68,0.08);border-radius:50%;"></div>
-                            <div style="font-size:11px;font-weight:700;color:rgba(239,68,68,0.7);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Críticos</div>
-                            <div style="font-size:36px;font-weight:900;color:#ef4444;line-height:1;letter-spacing:-1px;" id="sum-critical">0</div>
-                            <div style="margin-top:8px;font-size:10px;color:rgba(239,68,68,0.5);">hallazgos de alto riesgo</div>
-                        </div>
-                        <div style="position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(245,158,11,0.12) 0%,rgba(245,158,11,0.04) 100%);border:1px solid rgba(245,158,11,0.3);border-radius:14px;padding:20px 18px;box-shadow:0 4px 20px rgba(245,158,11,0.10);">
-                            <div style="position:absolute;top:-18px;right:-18px;width:70px;height:70px;background:rgba(245,158,11,0.08);border-radius:50%;"></div>
-                            <div style="font-size:11px;font-weight:700;color:rgba(245,158,11,0.7);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Sospechosos</div>
-                            <div style="font-size:36px;font-weight:900;color:#f59e0b;line-height:1;letter-spacing:-1px;" id="sum-suspicious">0</div>
-                            <div style="margin-top:8px;font-size:10px;color:rgba(245,158,11,0.5);">requieren revisión</div>
-                        </div>
-                        <div style="position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(99,102,241,0.10) 0%,rgba(99,102,241,0.03) 100%);border:1px solid rgba(99,102,241,0.25);border-radius:14px;padding:20px 18px;box-shadow:0 4px 20px rgba(99,102,241,0.08);">
-                            <div style="position:absolute;top:-18px;right:-18px;width:70px;height:70px;background:rgba(99,102,241,0.07);border-radius:50%;"></div>
-                            <div style="font-size:11px;font-weight:700;color:rgba(99,102,241,0.7);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Poco sospechoso</div>
-                            <div style="font-size:36px;font-weight:900;color:#6366f1;line-height:1;letter-spacing:-1px;" id="sum-low">0</div>
-                            <div style="margin-top:8px;font-size:10px;color:rgba(99,102,241,0.5);">baja probabilidad</div>
-                        </div>
-                        <div style="position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(16,185,129,0.10) 0%,rgba(16,185,129,0.03) 100%);border:1px solid rgba(16,185,129,0.25);border-radius:14px;padding:20px 18px;box-shadow:0 4px 20px rgba(16,185,129,0.08);">
-                            <div style="position:absolute;top:-18px;right:-18px;width:70px;height:70px;background:rgba(16,185,129,0.07);border-radius:50%;"></div>
-                            <div style="font-size:11px;font-weight:700;color:rgba(16,185,129,0.7);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Normales</div>
-                            <div style="font-size:36px;font-weight:900;color:#10b981;line-height:1;letter-spacing:-1px;" id="sum-clean">0</div>
-                            <div style="margin-top:8px;font-size:10px;color:rgba(16,185,129,0.5);">sin amenazas</div>
-                        </div>
-                    </div>
+                    <!-- IDs ocultos para compatibilidad JS -->
+                    <span id="sum-critical" style="display:none;">0</span>
+                    <span id="sum-suspicious" style="display:none;">0</span>
+                    <span id="sum-low" style="display:none;">0</span>
+                    <span id="sum-clean" style="display:none;">0</span>
 
-                    <!-- MAIN TWO-COLUMN -->
-                    <div style="display:grid;grid-template-columns:260px 1fr;gap:16px;align-items:start;">
+                    <!-- MAIN THREE-COLUMN -->
+                    <div style="display:grid;grid-template-columns:260px 230px 1fr;gap:16px;align-items:start;">
 
                         <!-- LEFT: Scan info -->
                         <div style="background:var(--bg-s);border:1px solid var(--border-m);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;">
@@ -829,9 +807,63 @@
                             </div>
                         </div>
 
-                        <!-- RIGHT: Issues -->
+                        <!-- CENTER: Donut ring chart -->
+                        <div style="background:var(--bg-s);border:1px solid var(--border-m);border-radius:14px;padding:22px 18px;display:flex;flex-direction:column;align-items:center;gap:14px;">
+                            <div style="font-size:10px;font-weight:700;color:var(--text-d);text-transform:uppercase;letter-spacing:.8px;align-self:flex-start;">Gráfico de indicaciones</div>
+                            <!-- SVG Ring -->
+                            <div style="position:relative;width:140px;height:140px;flex-shrink:0;">
+                                <svg id="ring-chart-svg" viewBox="0 0 140 140" style="width:140px;height:140px;">
+                                    <!-- Track -->
+                                    <circle cx="70" cy="70" r="54" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="18"/>
+                                    <!-- Segments (updated by JS) -->
+                                    <circle id="ring-seg-clean"    cx="70" cy="70" r="54" fill="none" stroke="#10b981" stroke-width="18" stroke-linecap="butt" stroke-dasharray="0 339.3" stroke-dashoffset="0" transform="rotate(-90 70 70)"/>
+                                    <circle id="ring-seg-low"      cx="70" cy="70" r="54" fill="none" stroke="#6366f1" stroke-width="18" stroke-linecap="butt" stroke-dasharray="0 339.3" stroke-dashoffset="0" transform="rotate(-90 70 70)"/>
+                                    <circle id="ring-seg-alert"    cx="70" cy="70" r="54" fill="none" stroke="#f59e0b" stroke-width="18" stroke-linecap="butt" stroke-dasharray="0 339.3" stroke-dashoffset="0" transform="rotate(-90 70 70)"/>
+                                    <circle id="ring-seg-critical" cx="70" cy="70" r="54" fill="none" stroke="#ef4444" stroke-width="18" stroke-linecap="butt" stroke-dasharray="0 339.3" stroke-dashoffset="0" transform="rotate(-90 70 70)"/>
+                                </svg>
+                                <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;">
+                                    <div id="ring-center-num"   style="font-size:28px;font-weight:900;color:var(--text-h);line-height:1;">0</div>
+                                    <div id="ring-center-label" style="font-size:10px;color:var(--text-d);margin-top:2px;">hallazgos</div>
+                                </div>
+                            </div>
+                            <!-- Legend -->
+                            <div style="display:flex;flex-direction:column;gap:7px;width:100%;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;">
+                                    <div style="display:flex;align-items:center;gap:6px;"><div style="width:9px;height:9px;border-radius:50%;background:#ef4444;flex-shrink:0;"></div><span style="font-size:12px;color:var(--text-m);">Críticos</span></div>
+                                    <span id="ring-num-critical" style="font-size:14px;font-weight:800;color:#ef4444;">0</span>
+                                </div>
+                                <div style="display:flex;justify-content:space-between;align-items:center;">
+                                    <div style="display:flex;align-items:center;gap:6px;"><div style="width:9px;height:9px;border-radius:50%;background:#f59e0b;flex-shrink:0;"></div><span style="font-size:12px;color:var(--text-m);">Sospechosos</span></div>
+                                    <span id="ring-num-alert"    style="font-size:14px;font-weight:800;color:#f59e0b;">0</span>
+                                </div>
+                                <div style="display:flex;justify-content:space-between;align-items:center;">
+                                    <div style="display:flex;align-items:center;gap:6px;"><div style="width:9px;height:9px;border-radius:50%;background:#6366f1;flex-shrink:0;"></div><span style="font-size:12px;color:var(--text-m);">Bajos</span></div>
+                                    <span id="ring-num-low"      style="font-size:14px;font-weight:800;color:#6366f1;">0</span>
+                                </div>
+                                <div style="display:flex;justify-content:space-between;align-items:center;">
+                                    <div style="display:flex;align-items:center;gap:6px;"><div style="width:9px;height:9px;border-radius:50%;background:#10b981;flex-shrink:0;"></div><span style="font-size:12px;color:var(--text-m);">Limpios</span></div>
+                                    <span id="ring-num-clean"    style="font-size:14px;font-weight:800;color:#10b981;">0</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT: Log de indicaciones -->
                         <div style="display:flex;flex-direction:column;gap:10px;">
-                            <!-- Verdict bar -->
+                            <!-- Severity summary bar -->
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                                <div style="background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.18);border-radius:10px;padding:10px 8px;text-align:center;">
+                                    <div style="font-size:9px;font-weight:700;color:#10b981;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Limpio</div>
+                                    <div id="log-clean"    style="font-size:22px;font-weight:900;color:#10b981;line-height:1;">0</div>
+                                </div>
+                                <div style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.18);border-radius:10px;padding:10px 8px;text-align:center;">
+                                    <div style="font-size:9px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Alerta</div>
+                                    <div id="log-alert"    style="font-size:22px;font-weight:900;color:#f59e0b;line-height:1;">0</div>
+                                </div>
+                                <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.18);border-radius:10px;padding:10px 8px;text-align:center;">
+                                    <div style="font-size:9px;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Severo</div>
+                                    <div id="log-severe"   style="font-size:22px;font-weight:900;color:#ef4444;line-height:1;">0</div>
+                                </div>
+                            </div>
                             <!-- Veredicto actual -->
                             <div id="current-verdict-banner" style="display:none;border-radius:10px;padding:12px 16px;margin-bottom:4px;font-size:13px;"></div>
 
@@ -1659,7 +1691,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=16"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=17"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────
