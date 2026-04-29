@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.14"
+SCANNER_VERSION = "1.6.15"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -3629,6 +3629,8 @@ class ArgusApp:
                 _run_safe(self.scan_jitter_scripts)
                 self._set_scan_phase("🖥️ Minecraft Safe Mode...")
                 _run_safe(self.scan_minecraft_safe_mode)
+                self._set_scan_phase("📋 Bug F3+T (recarga resource packs con click)...")
+                _run_safe(self.scan_f3t_log_exploit)
                 self._set_scan_phase("🎯 Fingerprints compuestos de ghost clients...")
                 _run_safe(self.scan_hack_fingerprints)
                 self._set_scan_phase("⛓️ Kill chain temporal (USN Journal)...")
@@ -10424,6 +10426,138 @@ class ArgusApp:
         except Exception as e:
             print(f"Error en scan_minecraft_safe_mode: {e}")
 
+    def scan_f3t_log_exploit(self):
+        """Detecta el bug F3+T (recarga resource packs con click mantenido) en los logs del cliente."""
+        print("🔍 Buscando bug F3+T en logs del cliente...")
+        import glob as _glob
+        import gzip
+        import re as _re
+
+        PATTERNS = [
+            'se recargaron los packs de recursos',
+            'reloaded resourcepacks',
+            'reloading resourcepacks',
+        ]
+
+        appdata      = os.environ.get('APPDATA', '')
+        userprofile  = os.environ.get('USERPROFILE', os.path.expanduser('~'))
+        localappdata = os.environ.get('LOCALAPPDATA', '')
+
+        # (dir_pattern, launcher_label)
+        LOG_DIR_PATTERNS = [
+            (os.path.join(appdata,      '.minecraft',            'logs'),              'Vanilla/TLauncher/Badlion'),
+            (os.path.join(userprofile,  '.lunarclient',          'logs', 'game'),      'Lunar Client'),
+            (os.path.join(appdata,      'lunarclient',           'logs', 'game'),      'Lunar Client'),
+            (os.path.join(userprofile,  'AppData', 'Local', 'lunarclient', 'logs', 'game'), 'Lunar Client'),
+            (os.path.join(appdata,      'PrismLauncher',  'instances', '*', 'minecraft', 'logs'), 'PrismLauncher'),
+            (os.path.join(appdata,      'MultiMC',        'instances', '*', 'minecraft', 'logs'), 'MultiMC'),
+            (os.path.join(appdata,      'PolyMC',         'instances', '*', 'minecraft', 'logs'), 'PolyMC'),
+            (os.path.join(userprofile,  'curseforge',     'minecraft', 'Instances', '*', 'logs'), 'CurseForge'),
+            (os.path.join(appdata,      'gdlauncher_next','instances', '*', 'logs'),  'GDLauncher'),
+            (os.path.join(appdata,      'gdlauncher',     'instances', '*', 'logs'),  'GDLauncher'),
+            (os.path.join(appdata,      'ATLauncher',     'instances', '*', 'minecraft', 'logs'), 'ATLauncher'),
+            (os.path.join(localappdata, 'ftb-app',        'instances', '*', 'minecraft', 'logs'), 'FTB App'),
+            (os.path.join(appdata,      'feather-client', 'logs'),                    'Feather Client'),
+        ]
+
+        now = time.time()
+        log_files = []
+
+        for pattern, label in LOG_DIR_PATTERNS:
+            dirs = _glob.glob(pattern) if '*' in pattern else ([pattern] if os.path.isdir(pattern) else [])
+            for d in dirs:
+                if not os.path.isdir(d):
+                    continue
+                try:
+                    for fname in os.listdir(d):
+                        if not (fname == 'latest.log' or (fname.endswith('.log') and not fname.endswith('.log.gz'))):
+                            continue
+                        fpath = os.path.join(d, fname)
+                        try:
+                            if now - os.path.getmtime(fpath) > 86400:  # sólo últimas 24h
+                                continue
+                        except OSError:
+                            continue
+                        log_files.append((fpath, label))
+                except OSError:
+                    continue
+
+        if not log_files:
+            print("📂 No se encontraron logs recientes de ningún launcher")
+            return
+
+        TIME_RE = _re.compile(r'^\[(\d{2}):(\d{2}):(\d{2})\]')
+
+        total_hits  = 0
+        hit_details = []  # (log_path, label, [(timestamp_secs, raw_line), ...])
+
+        for log_path, label in log_files:
+            try:
+                lines = []
+                if log_path.endswith('.gz'):
+                    with gzip.open(log_path, 'rt', encoding='utf-8', errors='ignore') as f:
+                        lines = f.readlines()[-8000:]
+                else:
+                    with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        lines = f.readlines()[-8000:]
+
+                hits = []
+                for raw in lines:
+                    if any(p in raw.lower() for p in PATTERNS):
+                        m = TIME_RE.match(raw.strip())
+                        ts = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3)) if m else -1
+                        hits.append((ts, raw.strip()))
+
+                if hits:
+                    total_hits += len(hits)
+                    hit_details.append((log_path, label, hits))
+            except Exception:
+                continue
+
+        if total_hits == 0:
+            print("✅ No se detectó el bug F3+T en los logs")
+            return
+
+        # Check if multiple hits cluster within 5 minutes (suspicious burst)
+        burst_found = False
+        for _, _, hits in hit_details:
+            times = sorted(t for t, _ in hits if t >= 0)
+            for i in range(len(times) - 2):
+                if times[i + 2] - times[i] <= 300:  # 3 hits in 5 min
+                    burst_found = True
+                    break
+
+        if total_hits >= 10 or burst_found:
+            alerta     = 'CRITICAL'
+            confidence = 0.92
+        elif total_hits >= 3:
+            alerta     = 'SOSPECHOSO'
+            confidence = 0.75
+        else:
+            alerta     = 'POCO_SOSPECHOSO'
+            confidence = 0.55
+
+        first_path, first_label, first_hits = hit_details[0]
+        sample = ' | '.join(h[1] for h in first_hits[:3])
+
+        self.issues_found.append({
+            'nombre': f'Bug F3+T detectado — {total_hits} recarga(s) de resource packs ({first_label})',
+            'ruta':   first_path,
+            'archivo': os.path.basename(first_path),
+            'tipo':   'f3t_resourcepack_exploit',
+            'categoria': 'HACKS',
+            'alerta': alerta,
+            'confidence': confidence,
+            'detected_patterns': ['f3t_exploit', 'resourcepack_reload_burst'],
+            'explicacion': (
+                f'El log del cliente ({first_label}) contiene {total_hits} mensaje(s) de recarga de '
+                f'resource packs. El bug F3+T (F3 + T mantenidos) permite simular un click continuo '
+                f'durante la recarga. {"Burst detectado (<5 min). " if burst_found else ""}'
+                f'Muestra: {sample[:200]}'
+            ),
+        })
+        print(f"⚠️ Bug F3+T: {total_hits} ocurrencia(s) en {len(hit_details)} archivo(s) — alerta: {alerta}")
+
     def scan_backup_sync_locations(self):
         """#28 — Marca archivos en rutas de backup/sync con score reducido."""
         SYNC_PATHS = ['onedrive', 'google drive', 'dropbox', 'icloudrive', 'box\\', 'mega\\']
@@ -11039,6 +11173,7 @@ class ArgusApp:
             'browser_visited_hack',   # visitas a sitios de hack/DDoS
             'ghost_client_config',    # carpeta .vape/.meteor/.rise confirmada
             'ddos_application',       # herramienta DDoS encontrada o activa
+            'f3t_resourcepack_exploit',  # bug F3+T en logs del cliente
         }
         n_forense = sum(1 for i in issues if i.get('tipo', '') in HIGH_CONF_FORENSE)
 
