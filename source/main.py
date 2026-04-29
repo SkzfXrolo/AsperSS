@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.15"
+SCANNER_VERSION = "1.6.16"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -9975,20 +9975,37 @@ class ArgusApp:
             return entries
 
         BROWSER_HISTORIES = []
-        BROWSER_HISTORIES += _chromium_profiles('Chrome',  os.path.join(localapp, 'Google',        'Chrome',         'User Data'))
-        BROWSER_HISTORIES += _chromium_profiles('Edge',    os.path.join(localapp, 'Microsoft',      'Edge',           'User Data'))
-        BROWSER_HISTORIES += _chromium_profiles('Brave',   os.path.join(localapp, 'BraveSoftware',  'Brave-Browser',  'User Data'))
-        BROWSER_HISTORIES += _chromium_profiles('Vivaldi', os.path.join(localapp, 'Vivaldi',        'User Data'))
-        BROWSER_HISTORIES += _chromium_profiles('Opera',   os.path.join(appdata,  'Opera Software', 'Opera Stable',   'User Data'))
-        # Opera GX
-        BROWSER_HISTORIES += _chromium_profiles('OperaGX', os.path.join(appdata,  'Opera Software', 'Opera GX Stable', 'User Data'))
+        # Chromium-based: User Data contiene subcarpetas Default / Profile N
+        BROWSER_HISTORIES += _chromium_profiles('Chrome',       os.path.join(localapp, 'Google',        'Chrome',          'User Data'))
+        BROWSER_HISTORIES += _chromium_profiles('ChromeBeta',   os.path.join(localapp, 'Google',        'Chrome Beta',     'User Data'))
+        BROWSER_HISTORIES += _chromium_profiles('Edge',         os.path.join(localapp, 'Microsoft',     'Edge',            'User Data'))
+        BROWSER_HISTORIES += _chromium_profiles('Brave',        os.path.join(localapp, 'BraveSoftware', 'Brave-Browser',   'User Data'))
+        BROWSER_HISTORIES += _chromium_profiles('Vivaldi',      os.path.join(localapp, 'Vivaldi',       'User Data'))
+        BROWSER_HISTORIES += _chromium_profiles('Yandex',       os.path.join(localapp, 'Yandex',        'YandexBrowser',   'User Data'))
+        BROWSER_HISTORIES += _chromium_profiles('Arc',          os.path.join(localapp, 'arc',           'User Data'))
+        BROWSER_HISTORIES += _chromium_profiles('Thorium',      os.path.join(localapp, 'Thorium',       'User Data'))
+        BROWSER_HISTORIES += _chromium_profiles('CentBrowser',  os.path.join(localapp, 'CentBrowser',  'User Data'))
+        BROWSER_HISTORIES += _chromium_profiles('Comodo',       os.path.join(localapp, 'Comodo',        'Dragon',          'User Data'))
+        # Opera: la raíz ES el User Data (sin subdirectorio User Data)
+        BROWSER_HISTORIES += _chromium_profiles('Opera',        os.path.join(appdata,  'Opera Software', 'Opera Stable'))
+        BROWSER_HISTORIES += _chromium_profiles('OperaGX',      os.path.join(appdata,  'Opera Software', 'Opera GX Stable'))
+        BROWSER_HISTORIES += _chromium_profiles('OperaDev',     os.path.join(appdata,  'Opera Software', 'Opera Developer'))
 
-        firefox_base = os.path.join(appdata, 'Mozilla', 'Firefox', 'Profiles')
-        if os.path.isdir(firefox_base):
-            for profile in os.listdir(firefox_base):
-                places = os.path.join(firefox_base, profile, 'places.sqlite')
+        # Firefox-based: cada perfil tiene places.sqlite (+ WAL)
+        for ff_label, ff_base in [
+            ('Firefox',   os.path.join(appdata, 'Mozilla',            'Firefox',  'Profiles')),
+            ('Waterfox',  os.path.join(appdata, 'Waterfox',           'Profiles')),
+            ('LibreWolf', os.path.join(localapp,'LibreWolf',          'Profiles')),
+            ('LibreWolf', os.path.join(appdata, 'librewolf',          'Profiles')),
+            ('PaleMoon',  os.path.join(appdata, 'Moonchild Productions', 'Pale Moon', 'Profiles')),
+            ('SeaMonkey', os.path.join(appdata, 'Mozilla',            'SeaMonkey','Profiles')),
+        ]:
+            if not os.path.isdir(ff_base):
+                continue
+            for profile in os.listdir(ff_base):
+                places = os.path.join(ff_base, profile, 'places.sqlite')
                 if os.path.isfile(places):
-                    BROWSER_HISTORIES.append((f'Firefox/{profile[:12]}', places, 'firefox'))
+                    BROWSER_HISTORIES.append((f'{ff_label}/{profile[:12]}', places, 'firefox'))
 
         # Dominios conocidos de hack clients (solo dominios específicos, sin falsos positivos)
         HACK_SITES = {
@@ -10018,6 +10035,20 @@ class ArgusApp:
             'pandahack.net':        ('Panda Hack', 'CRITICAL'),
             'weaveloader.com':      ('Weave Loader', 'CRITICAL'),
             'weave.mod.menu':       ('Weave Mod Menu', 'CRITICAL'),
+            'dreamhack.gg':         ('Dream Hack Client', 'CRITICAL'),
+            'dreamclient.cc':       ('Dream Client', 'CRITICAL'),
+            'dreamhackclient.com':  ('Dream Hack Client', 'CRITICAL'),
+            'nodus.cc':             ('Nodus Client', 'CRITICAL'),
+            'removalclient.com':    ('Removal Client', 'CRITICAL'),
+            'kilauea.cc':           ('Kilauea Client', 'CRITICAL'),
+            'shadeclient.net':      ('Shade Client', 'CRITICAL'),
+            'externalclient.ru':    ('External Client', 'CRITICAL'),
+            'kingaura.com':         ('KingAura', 'CRITICAL'),
+            'lucidclient.net':      ('Lucid Client', 'CRITICAL'),
+            'predatorhack.net':     ('Predator Hack', 'CRITICAL'),
+            'blackspigot.com':      ('BlackSpigot Leaks', 'SOSPECHOSO'),
+            'leakednation.com':     ('Leaked Hacks', 'CRITICAL'),
+            'nulled.to':            ('Nulled Leaks', 'SOSPECHOSO'),
             # DDoS stressers conocidos
             'stressthem.ru':        ('DDoS Stresser stressthem', 'CRITICAL'),
             'stressthem.to':        ('DDoS Stresser stressthem', 'CRITICAL'),
@@ -10082,7 +10113,16 @@ class ArgusApp:
                     if db_type == 'chromium':
                         cur.execute('SELECT url, title, visit_count FROM urls ORDER BY last_visit_time DESC LIMIT 10000')
                     else:
-                        cur.execute('SELECT url, title, visit_count FROM moz_places ORDER BY last_visit_date DESC LIMIT 10000')
+                        # JOIN con moz_historyvisits para capturar visitas recientes incluso si moz_places.visit_count aún no se actualizó
+                        try:
+                            cur.execute('''
+                                SELECT DISTINCT p.url, p.title, p.visit_count
+                                FROM moz_places p
+                                JOIN moz_historyvisits h ON h.place_id = p.id
+                                ORDER BY h.visit_date DESC LIMIT 10000
+                            ''')
+                        except Exception:
+                            cur.execute('SELECT url, title, visit_count FROM moz_places WHERE visit_count > 0 ORDER BY last_visit_date DESC LIMIT 10000')
 
                     for row in cur.fetchall():
                         url   = (row[0] or '').lower()
