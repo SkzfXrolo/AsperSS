@@ -9,18 +9,43 @@ from typing import List, Dict
 class AutoclickerDetector:
     """Detector de autoclickers activos"""
     
-    # Nombres conocidos de autoclickers
+    # Nombres conocidos de autoclickers (proceso o exe contiene alguno de estos)
     AUTOCLICKER_NAMES = [
-        'autoclicker', 'auto-clicker', 'auto_clicker', 'ac.exe', 'ac.jar',
-        'op autoclicker', 'gs autoclicker', 'cps autoclicker',
-        'fastclick', 'rapidclick', 'clickbot', 'clicker',
-        'tinytools', 'tiny-tools', 'tiny_tools'
+        # Genéricos
+        'autoclicker', 'auto-clicker', 'auto_clicker',
+        'ac.exe', 'ac.jar',
+        # Herramientas nombradas comunes
+        'op autoclicker', 'opautoclicker',
+        'gs autoclicker', 'gsautoclicker',
+        'cps autoclicker', 'speed autoclicker',
+        'murgaa', 'free auto clicker',
+        'fastclick', 'rapidclick', 'clickbot',
+        'clickaider', 'clickassist',
+        'turboclick', 'superclick',
+        'tinytools', 'tiny-tools', 'tiny_tools',
+        # Clickers de Minecraft conocidos
+        'jitter', 'jitterfarm',
+        'minecraft clicker', 'pvp clicker',
+        # Palabras sueltas que suelen aparecer en ejecutables de clickers
+        'clicker',
     ]
-    
-    # Procesos sospechosos relacionados con automatización
+
+    # Paths de instalación conocidos de autoclickers populares
+    KNOWN_INSTALL_SUBPATHS = [
+        r'OP Auto Clicker',
+        r'GS Auto Clicker',
+        r'Murgaa',
+        r'Free Auto Clicker',
+        r'Speed Auto Clicker',
+        r'TinyTools',
+        r'ClickAssist',
+        r'ClickAider',
+    ]
+
+    # Procesos sospechosos relacionados con automatización (menor confianza)
     SUSPICIOUS_PROCESSES = [
-        'autohotkey', 'ahk', 'autoit', 'macro', 'script',
-        'click', 'automation', 'bot'
+        'autohotkey', 'autoit', 'macro',
+        'automation', 'clickbot',
     ]
     
     def __init__(self):
@@ -71,8 +96,47 @@ class AutoclickerDetector:
             print(f"⚠️ Error escaneando procesos: {e}")
         
         self.detected_processes = detected
+
+        # Escanear instalaciones conocidas en el sistema de archivos
+        detected.extend(self._scan_filesystem())
+
         return detected
-    
+
+    def _scan_filesystem(self) -> List[Dict]:
+        """Busca autoclickers instalados en rutas comunes del sistema."""
+        import os
+        found = []
+        search_roots = []
+        for env in ('LOCALAPPDATA', 'APPDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)', 'USERPROFILE'):
+            v = os.environ.get(env, '')
+            if v and os.path.isdir(v):
+                search_roots.append(v)
+
+        checked = set()
+        for root in search_roots:
+            try:
+                for entry in os.listdir(root):
+                    entry_path = os.path.join(root, entry)
+                    if entry_path in checked or not os.path.isdir(entry_path):
+                        continue
+                    checked.add(entry_path)
+                    entry_l = entry.lower()
+                    for sub in self.KNOWN_INSTALL_SUBPATHS:
+                        if sub.lower() in entry_l:
+                            found.append({
+                                'type': 'autoclicker_installed',
+                                'name': entry,
+                                'exe': entry_path,
+                                'pid': None,
+                                'cmdline': '',
+                                'confidence': 0.85,
+                                'alert': 'CRITICAL',
+                            })
+                            break
+            except Exception:
+                pass
+        return found
+
     def _matches_autoclicker_name(self, name: str, exe: str) -> bool:
         """Verifica si un nombre de proceso coincide con autoclickers conocidos"""
         combined = f"{name} {exe}".lower()

@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.7"
+SCANNER_VERSION = "1.6.8"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -3620,6 +3620,8 @@ class ArgusApp:
                 _run_safe(self.scan_browser_downloads)
                 self._set_scan_phase("🌐 Historial de páginas visitadas (hack sites/DDoS)...")
                 _run_safe(self.scan_browser_history_sites)
+                self._set_scan_phase("💣 Aplicaciones DDoS (LOIC, HOIC, stressers)...")
+                _run_safe(self.scan_ddos_applications)
                 self._set_scan_phase("📋 Portapapeles — webhooks y nombres de hacks...")
                 _run_safe(self.scan_clipboard_content)
                 self._set_scan_phase("🎯 Jitter/aim assist en software de mouse...")
@@ -10001,9 +10003,24 @@ class ArgusApp:
             'pandahack.net':        ('Panda Hack', 'CRITICAL'),
             'weaveloader.com':      ('Weave Loader', 'CRITICAL'),
             'weave.mod.menu':       ('Weave Mod Menu', 'CRITICAL'),
+            # DDoS stressers conocidos
+            'stressthem.ru':        ('DDoS Stresser stressthem', 'CRITICAL'),
+            'stressthem.to':        ('DDoS Stresser stressthem', 'CRITICAL'),
+            'stresstest.to':        ('DDoS Stresser stresstest', 'CRITICAL'),
+            'stresser.ai':          ('DDoS Stresser', 'CRITICAL'),
+            'stresser.us':          ('DDoS Stresser', 'CRITICAL'),
+            'hardstresser.com':     ('DDoS Stresser hard', 'CRITICAL'),
+            'astrostress.com':      ('DDoS Stresser astro', 'CRITICAL'),
+            'hackforums.net':       ('Hack Forums', 'CRITICAL'),
+            'leakednation.com':     ('Leaked Hacks', 'CRITICAL'),
+            'iceynetwork.com':      ('DDoS Tool', 'CRITICAL'),
         }
         # Palabras clave en URL que indican stresser/DDoS
-        DDOS_KEYWORDS = ['stresser', 'booter', 'ip-booter', 'ddoser', 'layer7stress', 'stresstest.to']
+        DDOS_KEYWORDS = [
+            'stresser', 'booter', 'ip-booter', 'ddoser', 'layer7stress',
+            'stresstest', 'stressthem', 'ddos-tool', 'ddostool',
+            'ipbooter', 'stress-test', 'l7stress', 'layer4stress',
+        ]
 
         SAFE_DOMAINS = {
             'modrinth.com', 'curseforge.com', 'minecraft.net', 'mojang.com',
@@ -10104,6 +10121,107 @@ class ArgusApp:
                             pass
         except Exception as e:
             print(f"Error en scan_browser_history_sites: {e}")
+
+    def scan_ddos_applications(self):
+        """Detecta aplicaciones de DDoS conocidas (LOIC, HOIC, etc.) en procesos y sistema de archivos."""
+        print("🔍 Escaneando aplicaciones de DDoS/stresser...")
+
+        DDOS_PROCESS_NAMES = {
+            'loic': ('Low Orbit Ion Cannon (LOIC)', 'CRITICAL'),
+            'hoic': ('High Orbit Ion Cannon (HOIC)', 'CRITICAL'),
+            'hulk': ('HULK DoS Tool', 'CRITICAL'),
+            'goldeneye': ('GoldenEye DoS Tool', 'CRITICAL'),
+            'slowloris': ('Slowloris DoS Tool', 'CRITICAL'),
+            'hammer': ('THC-SSL-DOS / Hammer', 'CRITICAL'),
+            'xerxes': ('Xerxes DoS Tool', 'CRITICAL'),
+            'pyloris': ('PyLoris DoS Tool', 'CRITICAL'),
+            'torshammer': ('Tor\'s Hammer DoS', 'CRITICAL'),
+            'ddosim': ('DDoSIM Tool', 'CRITICAL'),
+            'hping': ('HPing (packet flooder)', 'SOSPECHOSO'),
+            'nping': ('NPing (packet flooder)', 'SOSPECHOSO'),
+        }
+
+        DDOS_FILE_PATTERNS = [
+            'loic', 'hoic', 'hulk.py', 'goldeneye.py', 'slowloris',
+            'hammer.py', 'xerxes', 'pyloris', 'torshammer', 'ddosim',
+            'stresser', 'booter', 'ip-booter',
+        ]
+
+        # Directorios donde suelen aparecer estas herramientas
+        search_dirs = []
+        for env in ('USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'TEMP'):
+            v = os.environ.get(env, '')
+            if v:
+                for sub in ('Downloads', 'Desktop', 'Documents', ''):
+                    d = os.path.join(v, sub) if sub else v
+                    if os.path.isdir(d) and d not in search_dirs:
+                        search_dirs.append(d)
+
+        found_files = set()
+
+        # Escanear procesos activos
+        try:
+            import psutil as _psutil
+            for proc in _psutil.process_iter(['pid', 'name', 'exe']):
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                    pexe  = (proc.info.get('exe')  or '').lower()
+                    for kw, (tool_name, severity) in DDOS_PROCESS_NAMES.items():
+                        if kw in pname or kw in pexe:
+                            print(f"🚨 DDOS TOOL ACTIVO: {tool_name} — PID {proc.info.get('pid')}")
+                            self.issues_found.append({
+                                'nombre': f'Herramienta DDoS activa: {tool_name}',
+                                'ruta': pexe or pname,
+                                'archivo': proc.info.get('name', ''),
+                                'tipo': 'ddos_application',
+                                'categoria': 'FORENSE',
+                                'alerta': severity,
+                                'confidence': 0.92,
+                                'detected_patterns': [f'ddos_process:{kw}'],
+                                'is_active_process': True,
+                                'explicacion': (
+                                    f'Se detectó el proceso "{proc.info.get("name","?")}" activo, '
+                                    f'identificado como {tool_name}. Esta es una herramienta de ataque '
+                                    f'DDoS/DoS utilizada para saturar servidores.'
+                                ),
+                            })
+                            break
+                except (Exception,):
+                    continue
+        except Exception as e:
+            print(f"⚠️ Error escaneando procesos DDoS: {e}")
+
+        # Escanear archivos en directorios comunes (solo primer nivel + Downloads)
+        try:
+            for base_dir in search_dirs:
+                try:
+                    for fname in os.listdir(base_dir):
+                        fname_l = fname.lower()
+                        for pat in DDOS_FILE_PATTERNS:
+                            if pat in fname_l and fname_l not in found_files:
+                                fpath = os.path.join(base_dir, fname)
+                                if os.path.isfile(fpath):
+                                    found_files.add(fname_l)
+                                    print(f"⚠️ DDOS FILE: {fpath}")
+                                    self.issues_found.append({
+                                        'nombre': f'Archivo de herramienta DDoS encontrado: {fname}',
+                                        'ruta': fpath,
+                                        'archivo': fname,
+                                        'tipo': 'ddos_application',
+                                        'categoria': 'FORENSE',
+                                        'alerta': 'CRITICAL',
+                                        'confidence': 0.82,
+                                        'detected_patterns': [f'ddos_file:{pat}'],
+                                        'explicacion': (
+                                            f'Se encontró el archivo "{fname}" en {base_dir}, '
+                                            f'cuyo nombre coincide con herramientas de DDoS/stresser conocidas.'
+                                        ),
+                                    })
+                                break
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"⚠️ Error escaneando archivos DDoS: {e}")
 
     def scan_clipboard_content(self):
         """Detecta evidencia de hacks en el portapapeles (Discord webhooks, hack names, etc.)."""
@@ -10557,6 +10675,9 @@ class ArgusApp:
             'browser_visited_hack':    'El historial del navegador registra visitas al sitio web oficial de un hack '
                                        'client conocido o una herramienta de DDoS/stresser. Confirma que el jugador '
                                        'buscó o accedió activamente a ese recurso.',
+            'ddos_application':        'Se detectó una herramienta de DDoS/DoS instalada o activa en el sistema. '
+                                       'Estas herramientas (LOIC, HOIC, stressers) se usan para saturar servidores '
+                                       'con tráfico malicioso y no tienen uso legítimo en Minecraft.',
             'clipboard_hack_evidence': 'El portapapeles del sistema contiene texto relacionado con un hack client. '
                                        'Puede indicar que el jugador estaba copiando la configuración de un hack '
                                        'o la URL de descarga para instalarlo.',
@@ -10884,6 +11005,7 @@ class ArgusApp:
             'browser_download_hack',  # historial de descargas del navegador
             'browser_visited_hack',   # visitas a sitios de hack/DDoS
             'ghost_client_config',    # carpeta .vape/.meteor/.rise confirmada
+            'ddos_application',       # herramienta DDoS encontrada o activa
         }
         n_forense = sum(1 for i in issues if i.get('tipo', '') in HIGH_CONF_FORENSE)
 
