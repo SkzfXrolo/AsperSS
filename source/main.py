@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.16"
+SCANNER_VERSION = "1.6.17"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -10078,6 +10078,58 @@ class ArgusApp:
 
         seen_domains = set()
 
+        def _relative_time(unix_ts):
+            """Convierte unix timestamp a 'hace X tiempo'."""
+            if not unix_ts or unix_ts <= 0:
+                return 'fecha desconocida'
+            diff = time.time() - unix_ts
+            if diff < 0:
+                return 'ahora mismo'
+            if diff < 60:
+                return f'hace {int(diff)}s'
+            if diff < 3600:
+                return f'hace {int(diff/60)} min'
+            if diff < 86400:
+                return f'hace {int(diff/3600)}h {int((diff%3600)/60)}min'
+            if diff < 604800:
+                return f'hace {int(diff/86400)} día(s)'
+            return f'hace {int(diff/604800)} semana(s)'
+
+        def _chrome_ts(ts):
+            """Chrome: microsegundos desde 1601-01-01 → Unix seconds."""
+            if not ts:
+                return 0
+            return (ts / 1_000_000) - 11644473600
+
+        def _check_downloads(cur, domain, db_type):
+            """Busca descargas desde el dominio en la misma DB. Devuelve lista de paths."""
+            found = []
+            try:
+                if db_type == 'chromium':
+                    cur.execute(
+                        "SELECT target_path, tab_url FROM downloads WHERE tab_url LIKE ? OR url LIKE ? LIMIT 5",
+                        (f'%{domain}%', f'%{domain}%')
+                    )
+                    for r in cur.fetchall():
+                        if r[0]:
+                            found.append(os.path.basename(r[0]))
+                elif db_type == 'firefox':
+                    # Firefox guarda descargas como anotaciones en moz_annos
+                    cur.execute("""
+                        SELECT a.content FROM moz_annos a
+                        JOIN moz_places p ON p.id = a.place_id
+                        WHERE p.url LIKE ? AND a.anno_attribute_id IN (
+                            SELECT id FROM moz_anno_attributes WHERE name='downloads/destinationFileURI'
+                        ) LIMIT 5
+                    """, (f'%{domain}%',))
+                    for r in cur.fetchall():
+                        if r[0]:
+                            fname = r[0].split('/')[-1].split('\\')[-1]
+                            found.append(fname)
+            except Exception:
+                pass
+            return found
+
         try:
             for browser_name, history_path, db_type in BROWSER_HISTORIES:
                 if not os.path.isfile(history_path):
@@ -10089,21 +10141,16 @@ class ArgusApp:
                     tmp_fd, tmp_path = _tempfile.mkstemp(suffix='.db')
                     os.close(tmp_fd)
                     _shutil.copy2(history_path, tmp_path)
-                    # Copiar WAL y SHM para capturar entradas recientes no volcadas al DB
                     for ext, attr in (('-wal', 'tmp_wal'), ('-shm', 'tmp_shm')):
                         src = history_path + ext
                         if os.path.isfile(src):
                             try:
-                                _, tmp_side = _tempfile.mkstemp(suffix=f'.db{ext}')
-                                os.close(tmp_side)
-                                # Los archivos WAL/SHM deben tener el mismo nombre base que el DB
                                 wal_dst = tmp_path + ext
                                 _shutil.copy2(src, wal_dst)
                                 if attr == 'tmp_wal':
                                     tmp_wal = wal_dst
                                 else:
                                     tmp_shm = wal_dst
-                                os.unlink(tmp_side)
                             except Exception:
                                 pass
 
@@ -10111,23 +10158,31 @@ class ArgusApp:
                     cur  = conn.cursor()
 
                     if db_type == 'chromium':
-                        cur.execute('SELECT url, title, visit_count FROM urls ORDER BY last_visit_time DESC LIMIT 10000')
+                        cur.execute('SELECT url, title, visit_count, last_visit_time FROM urls ORDER BY last_visit_time DESC LIMIT 10000')
                     else:
-                        # JOIN con moz_historyvisits para capturar visitas recientes incluso si moz_places.visit_count aún no se actualizó
                         try:
                             cur.execute('''
-                                SELECT DISTINCT p.url, p.title, p.visit_count
+                                SELECT DISTINCT p.url, p.title, p.visit_count, MAX(h.visit_date)
                                 FROM moz_places p
                                 JOIN moz_historyvisits h ON h.place_id = p.id
-                                ORDER BY h.visit_date DESC LIMIT 10000
+                                GROUP BY p.id
+                                ORDER BY MAX(h.visit_date) DESC LIMIT 10000
                             ''')
                         except Exception:
-                            cur.execute('SELECT url, title, visit_count FROM moz_places WHERE visit_count > 0 ORDER BY last_visit_date DESC LIMIT 10000')
+                            cur.execute('SELECT url, title, visit_count, last_visit_date FROM moz_places WHERE visit_count > 0 ORDER BY last_visit_date DESC LIMIT 10000')
 
                     for row in cur.fetchall():
-                        url   = (row[0] or '').lower()
-                        title = row[1] or ''
+                        url    = (row[0] or '').lower()
+                        title  = row[1] or ''
                         visits = row[2] or 1
+                        raw_ts = row[3] if len(row) > 3 else None
+
+                        # Convertir timestamp a unix según el tipo de DB
+                        if db_type == 'chromium':
+                            unix_ts = _chrome_ts(raw_ts)
+                        else:
+                            unix_ts = (raw_ts / 1_000_000) if raw_ts else 0
+                        visited_ago = _relative_time(unix_ts)
 
                         for safe in SAFE_DOMAINS:
                             if safe in url:
@@ -10140,21 +10195,24 @@ class ArgusApp:
                                     if key in seen_domains:
                                         break
                                     seen_domains.add(key)
-                                    print(f"🚨 VISITA HACK ({browser_name}): {domain} — {visits} visita(s)")
+                                    # Buscar descargas desde este dominio
+                                    dl_files = _check_downloads(cur, domain, db_type)
+                                    dl_txt = f' | Descargó: {", ".join(dl_files)}' if dl_files else ''
+                                    print(f"🚨 VISITA HACK ({browser_name}): {domain} — {visits} visita(s) {visited_ago}{dl_txt}")
                                     self.issues_found.append({
-                                        'nombre': f'Sitio de hack visitado en {browser_name}: {domain}',
+                                        'nombre': f'Sitio de hack visitado {visited_ago} en {browser_name}: {domain}{dl_txt}',
                                         'ruta':   url[:200],
                                         'archivo': domain,
                                         'tipo':   'browser_visited_hack',
                                         'categoria': 'FORENSE',
-                                        'alerta': severity,
-                                        'confidence': 0.90,
-                                        'detected_patterns': [f'visited:{domain}', f'browser:{browser_name}'],
+                                        'alerta': 'CRITICAL' if dl_files else severity,
+                                        'confidence': 0.97 if dl_files else 0.90,
+                                        'detected_patterns': [f'visited:{domain}', f'browser:{browser_name}'] + ([f'downloaded:{f}' for f in dl_files]),
                                         'explicacion': (
                                             f'{browser_name} registra {visits} visita(s) al sitio "{domain}" '
-                                            f'({client_name}). Este es un sitio oficial de descarga/información '
-                                            f'de un hack client conocido para Minecraft. '
-                                            f'El historial del navegador persiste aunque se borre el cliente.'
+                                            f'({client_name}). Última visita: {visited_ago}. '
+                                            + (f'⚠️ Se detectó descarga desde este sitio: {", ".join(dl_files)}. ' if dl_files else '')
+                                            + 'El historial del navegador persiste aunque se borre el cliente.'
                                         ),
                                     })
                                     break
@@ -10166,20 +10224,22 @@ class ArgusApp:
                                         if key in seen_domains:
                                             break
                                         seen_domains.add(key)
+                                        dl_files = _check_downloads(cur, kw, db_type)
+                                        dl_txt = f' | Descargó: {", ".join(dl_files)}' if dl_files else ''
                                         print(f"🚨 VISITA DDOS ({browser_name}): {url[:80]}")
                                         self.issues_found.append({
-                                            'nombre': f'Posible sitio stresser/DDoS visitado ({browser_name})',
+                                            'nombre': f'Sitio stresser/DDoS visitado {visited_ago} ({browser_name}){dl_txt}',
                                             'ruta':   url[:200],
                                             'archivo': url[:80],
                                             'tipo':   'browser_visited_hack',
                                             'categoria': 'FORENSE',
-                                            'alerta': 'SOSPECHOSO',
-                                            'confidence': 0.78,
+                                            'alerta': 'CRITICAL' if dl_files else 'SOSPECHOSO',
+                                            'confidence': 0.92 if dl_files else 0.78,
                                             'detected_patterns': [f'ddos:{kw}', f'browser:{browser_name}'],
                                             'explicacion': (
-                                                f'{browser_name} registra visitas a una URL que contiene '
-                                                f'"{kw}", un término asociado a herramientas de DDoS/stresser. '
-                                                f'URL: {url[:120]}'
+                                                f'{browser_name} registra visitas a "{kw}" ({visited_ago}). '
+                                                + (f'⚠️ Descarga detectada: {", ".join(dl_files)}. ' if dl_files else '')
+                                                + f'URL: {url[:120]}'
                                             ),
                                         })
                                         break
