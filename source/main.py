@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.12"
+SCANNER_VERSION = "1.6.13"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -10050,10 +10050,29 @@ class ArgusApp:
                 if not os.path.isfile(history_path):
                     continue
                 tmp_path = None
+                tmp_wal  = None
+                tmp_shm  = None
                 try:
                     tmp_fd, tmp_path = _tempfile.mkstemp(suffix='.db')
                     os.close(tmp_fd)
                     _shutil.copy2(history_path, tmp_path)
+                    # Copiar WAL y SHM para capturar entradas recientes no volcadas al DB
+                    for ext, attr in (('-wal', 'tmp_wal'), ('-shm', 'tmp_shm')):
+                        src = history_path + ext
+                        if os.path.isfile(src):
+                            try:
+                                _, tmp_side = _tempfile.mkstemp(suffix=f'.db{ext}')
+                                os.close(tmp_side)
+                                # Los archivos WAL/SHM deben tener el mismo nombre base que el DB
+                                wal_dst = tmp_path + ext
+                                _shutil.copy2(src, wal_dst)
+                                if attr == 'tmp_wal':
+                                    tmp_wal = wal_dst
+                                else:
+                                    tmp_shm = wal_dst
+                                os.unlink(tmp_side)
+                            except Exception:
+                                pass
 
                     conn = _sqlite3.connect(f'file:{tmp_path}?mode=ro', uri=True)
                     cur  = conn.cursor()
@@ -10127,11 +10146,12 @@ class ArgusApp:
                 except Exception:
                     pass
                 finally:
-                    if tmp_path and os.path.exists(tmp_path):
-                        try:
-                            os.unlink(tmp_path)
-                        except Exception:
-                            pass
+                    for tmp_f in (tmp_path, tmp_wal, tmp_shm):
+                        if tmp_f and os.path.exists(tmp_f):
+                            try:
+                                os.unlink(tmp_f)
+                            except Exception:
+                                pass
         except Exception as e:
             print(f"Error en scan_browser_history_sites: {e}")
 
