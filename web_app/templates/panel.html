@@ -669,14 +669,66 @@
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
                             <path d="M10 2L3 7L3 18L17 18L17 7L10 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <span>General</span>
+                        <span>Vista general</span>
                     </button>
-                    <button class="subnav-item" data-subpage="notas">
+                    <button class="subnav-item" data-subpage="cuentas" id="subnav-cuentas" style="display:none;">
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                            <path d="M4 4H16V14L12 18H4V4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                            <path d="M7 8H13M7 11H11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                            <circle cx="10" cy="7" r="3.5" stroke="currentColor" stroke-width="2"/>
+                            <path d="M3 18C3 14.686 6.134 12 10 12C13.866 12 17 14.686 17 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
-                        <span>Notas</span>
+                        <span>Cuentas</span>
+                        <span id="cuentas-badge" style="display:none;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:2px;"></span>
+                    </button>
+                    <button class="subnav-item" data-subpage="launcher-profiles" id="subnav-launcher-profiles" style="display:none;">
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                            <rect x="2" y="3" width="16" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M7 8L10 11L13 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Launcher Profiles</span>
+                        <span id="launcher-badge" style="display:none;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:2px;"></span>
+                    </button>
+                    <button class="subnav-item" data-subpage="texture-packs" id="subnav-texture-packs" style="display:none;">
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                            <rect x="3" y="3" width="6" height="6" rx="1" stroke="currentColor" stroke-width="2"/>
+                            <rect x="11" y="3" width="6" height="6" rx="1" stroke="currentColor" stroke-width="2"/>
+                            <rect x="3" y="11" width="6" height="6" rx="1" stroke="currentColor" stroke-width="2"/>
+                            <rect x="11" y="11" width="6" height="6" rx="1" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        <span>Resource Packs</span>
+                        <span id="tp-badge" style="display:none;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:2px;">!</span>
+                    </button>
+                    <button class="subnav-item" data-subpage="process-times" id="subnav-process-times" style="display:none;">
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                            <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="2"/>
+                            <path d="M10 6V10L13 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Process Times</span>
+                        <span id="process-times-badge" style="display:none;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:2px;"></span>
+                    </button>
+                    <button class="subnav-item" data-subpage="explore" id="subnav-explore" style="display:none;">
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                            <path d="M3 5H17M3 10H17M3 15H17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <rect x="3" y="3" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/>
+                        </svg>
+                        <span>Explore</span>
+                        <span id="explore-badge" style="display:none;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:2px;"></span>
+                    </button>
+                    <button class="subnav-item" data-subpage="utilities" id="subnav-utilities" style="display:none;">
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                            <path d="M4 8L10 2L16 8L16 18L4 18Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                            <path d="M8 18V13H12V18" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        <span>Utilities</span>
+                        <span id="utilities-badge" style="display:none;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:2px;"></span>
+                    </button>
+                    <button class="subnav-item" data-subpage="archivos-windows" id="subnav-archivos-windows" style="display:none;">
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                            <rect x="2" y="4" width="7" height="9" rx="1" stroke="currentColor" stroke-width="2"/>
+                            <rect x="11" y="4" width="7" height="9" rx="1" stroke="currentColor" stroke-width="2"/>
+                            <path d="M5 16H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <span>Archivos de Windows</span>
+                        <span id="archivos-windows-badge" style="display:none;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:2px;"></span>
                     </button>
                     <button class="subnav-item" data-subpage="captura-pantalla">
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
@@ -684,21 +736,36 @@
                             <circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="2"/>
                             <path d="M3 13L7 9L11 13L17 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
-                        <span>Captura</span>
+                        <span>Captura de pantalla</span>
                     </button>
                     <button class="subnav-item" data-subpage="detecciones-personalizadas" id="subnav-score-breakdown">
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
                             <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="2"/>
                             <path d="M7 10L9.5 12.5L13.5 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <span>Score</span>
+                        <span>Detecciones personalizadas</span>
                     </button>
                     <button class="subnav-item" data-subpage="escaneos-previos">
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
                             <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="2"/>
                             <path d="M10 6V10L13 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <span>Previos</span>
+                        <span>Escaneos previos</span>
+                    </button>
+                    <button class="subnav-item" data-subpage="settings" id="subnav-settings" style="display:none;">
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                            <circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/>
+                            <path d="M10 2V5M10 15V18M2 10H5M15 10H18M4.22 4.22L6.34 6.34M13.66 13.66L15.78 15.78M15.78 4.22L13.66 6.34M6.34 13.66L4.22 15.78" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                        <span>Settings</span>
+                        <span id="settings-badge" style="display:none;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:2px;"></span>
+                    </button>
+                    <button class="subnav-item" data-subpage="notas">
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                            <path d="M4 4H16V14L12 18H4V4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                            <path d="M7 8H13M7 11H11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                        </svg>
+                        <span>Notas</span>
                     </button>
                     <button class="subnav-item" data-subpage="mouse-forensics" id="subnav-mouse-forensics" style="display:none;">
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
@@ -708,16 +775,6 @@
                         </svg>
                         <span>Mouse</span>
                         <span id="mf-badge" style="display:none;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:2px;">!</span>
-                    </button>
-                    <button class="subnav-item" data-subpage="texture-packs" id="subnav-texture-packs" style="display:none;">
-                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-                            <rect x="3" y="3" width="6" height="6" rx="1" stroke="currentColor" stroke-width="2"/>
-                            <rect x="11" y="3" width="6" height="6" rx="1" stroke="currentColor" stroke-width="2"/>
-                            <rect x="3" y="11" width="6" height="6" rx="1" stroke="currentColor" stroke-width="2"/>
-                            <rect x="11" y="11" width="6" height="6" rx="1" stroke="currentColor" stroke-width="2"/>
-                        </svg>
-                        <span>TexturePacks</span>
-                        <span id="tp-badge" style="display:none;background:#dc2626;color:white;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:2px;">!</span>
                     </button>
                     <button class="subnav-item" data-subpage="ejecutados" id="subnav-ejecutados" style="display:none;">
                         <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
@@ -1052,6 +1109,104 @@
                         <p style="color:var(--text-m);font-size:12px;margin-bottom:16px;">Historial de comandos ejecutados via Win+R, CMD, búsquedas de carpeta (TypedPaths, WordWheelQuery) y más.</p>
                         <div id="comandos-list" style="display:flex;flex-direction:column;gap:8px;">
                             <p style="color:var(--text-m);font-size:13px;">Sin datos de comandos para este escaneo.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cuentas -->
+                <div class="subpage-content" id="subpage-cuentas">
+                    <div style="padding:8px 0 24px;">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+                            <span style="font-size:22px;">👤</span>
+                            <h3 style="font-size:16px;font-weight:700;color:var(--accent);">Cuentas</h3>
+                        </div>
+                        <p style="color:var(--text-m);font-size:12px;margin-bottom:16px;">Cuentas de Minecraft detectadas, posibles alts y hallazgos relacionados con identidad del jugador.</p>
+                        <div id="cuentas-list" style="display:flex;flex-direction:column;gap:8px;">
+                            <p style="color:var(--text-m);font-size:13px;">Sin datos de cuentas para este escaneo.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Launcher Profiles -->
+                <div class="subpage-content" id="subpage-launcher-profiles">
+                    <div style="padding:8px 0 24px;">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+                            <span style="font-size:22px;">🚀</span>
+                            <h3 style="font-size:16px;font-weight:700;color:#38bdf8;">Launcher Profiles</h3>
+                        </div>
+                        <p style="color:var(--text-m);font-size:12px;margin-bottom:16px;">Perfiles del launcher de Minecraft: versiones, JVM args, configuraciones sospechosas y JARs externos.</p>
+                        <div id="launcher-profiles-list" style="display:flex;flex-direction:column;gap:8px;">
+                            <p style="color:var(--text-m);font-size:13px;">Sin datos de launcher profiles para este escaneo.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Process Times -->
+                <div class="subpage-content" id="subpage-process-times">
+                    <div style="padding:8px 0 24px;">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+                            <span style="font-size:22px;">⏱️</span>
+                            <h3 style="font-size:16px;font-weight:700;color:#10b981;">Process Times</h3>
+                        </div>
+                        <p style="color:var(--text-m);font-size:12px;margin-bottom:16px;">Procesos activos y en background, tiempos de ejecución y programas detectados en Prefetch de Windows.</p>
+                        <div id="process-times-list" style="display:flex;flex-direction:column;gap:8px;">
+                            <p style="color:var(--text-m);font-size:13px;">Sin datos de procesos para este escaneo.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Explore -->
+                <div class="subpage-content" id="subpage-explore">
+                    <div style="padding:8px 0 24px;">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+                            <span style="font-size:22px;">📂</span>
+                            <h3 style="font-size:16px;font-weight:700;color:#f59e0b;">Explore</h3>
+                        </div>
+                        <p style="color:var(--text-m);font-size:12px;margin-bottom:16px;">Archivos recientes, archivos nuevos y archivos ocultos detectados durante el escaneo del sistema de archivos.</p>
+                        <div id="explore-list" style="display:flex;flex-direction:column;gap:8px;">
+                            <p style="color:var(--text-m);font-size:13px;">Sin datos de exploración de archivos para este escaneo.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Utilities -->
+                <div class="subpage-content" id="subpage-utilities">
+                    <div style="padding:8px 0 24px;">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+                            <span style="font-size:22px;">🔧</span>
+                            <h3 style="font-size:16px;font-weight:700;color:#ef4444;">Utilities</h3>
+                        </div>
+                        <p style="color:var(--text-m);font-size:12px;margin-bottom:16px;">Herramientas detectadas: autoclickers, periféricos con macros (Logitech/Razer), servicios y dispositivos USB.</p>
+                        <div id="utilities-list" style="display:flex;flex-direction:column;gap:8px;">
+                            <p style="color:var(--text-m);font-size:13px;">Sin datos de utilidades para este escaneo.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Archivos de Windows -->
+                <div class="subpage-content" id="subpage-archivos-windows">
+                    <div style="padding:8px 0 24px;">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+                            <span style="font-size:22px;">🪟</span>
+                            <h3 style="font-size:16px;font-weight:700;color:#6366f1;">Archivos de Windows</h3>
+                        </div>
+                        <p style="color:var(--text-m);font-size:12px;margin-bottom:16px;">Archivos temporales, historial forense del sistema y evidencia de evasión en el entorno Windows.</p>
+                        <div id="archivos-windows-list" style="display:flex;flex-direction:column;gap:8px;">
+                            <p style="color:var(--text-m);font-size:13px;">Sin datos de archivos de Windows para este escaneo.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings -->
+                <div class="subpage-content" id="subpage-settings">
+                    <div style="padding:8px 0 24px;">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+                            <span style="font-size:22px;">⚙️</span>
+                            <h3 style="font-size:16px;font-weight:700;color:var(--text-m);">Settings</h3>
+                        </div>
+                        <p style="color:var(--text-m);font-size:12px;margin-bottom:16px;">Configuraciones del sistema modificadas: cambios de fecha/hora, técnicas de evasión y persistencia detectadas.</p>
+                        <div id="settings-list" style="display:flex;flex-direction:column;gap:8px;">
+                            <p style="color:var(--text-m);font-size:13px;">Sin datos de configuración para este escaneo.</p>
                         </div>
                     </div>
                 </div>
@@ -1691,7 +1846,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=17"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=18"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────

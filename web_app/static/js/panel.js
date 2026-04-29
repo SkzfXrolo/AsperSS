@@ -2138,10 +2138,59 @@ async function viewScanDetails(scanId) {
             cmdList.innerHTML = '<p style="color:var(--text-m);font-size:13px;">Sin historial de comandos para este escaneo.</p>';
         }
 
+        // ── Echo-style tabs: Cuentas, Launcher Profiles, Process Times, Explore, Utilities, Archivos de Windows, Settings ──
+        _renderTabFindings('cuentas-list',         'subnav-cuentas',          'cuentas-badge',          allResults, ['MINECRAFT']);
+        _renderTabFindings('launcher-profiles-list','subnav-launcher-profiles','launcher-badge',          allResults, ['MINECRAFT_CONFIGS', 'JAR_FILES']);
+        _renderTabFindings('process-times-list',   'subnav-process-times',    'process-times-badge',     allResults, ['PROCESSES', 'BACKGROUND_PROCESSES', 'PREFETCH', 'EXECUTED_FILES', 'PROCESO']);
+        _renderTabFindings('explore-list',         'subnav-explore',          'explore-badge',           allResults, ['RECENT_FILES', 'NEW_FILES', 'HIDDEN_FILES']);
+        _renderTabFindings('utilities-list',       'subnav-utilities',        'utilities-badge',         allResults, ['AUTOCLICK', 'AUTOCLICK_TOOLS', 'HARDWARE', 'LOGITECH', 'RAZER', 'USB_DEVICES', 'SERVICES', 'MACRO']);
+        _renderTabFindings('archivos-windows-list','subnav-archivos-windows', 'archivos-windows-badge',  allResults, ['TEMP_FILES', 'FORENSE', 'INYECCION', 'JAVA_INJECTION', 'JNA', 'RED', 'NETWORK_CONNECTIONS']);
+        _renderTabFindings('settings-list',        'subnav-settings',         'settings-badge',          allResults, ['DATE_CHANGES', 'EVASION', 'PERSISTENCIA', 'DNS_CACHE', 'VPN']);
+
     } catch (error) {
         console.error('Error cargando detalles:', error);
         alert('Error al cargar detalles del escaneo: ' + error.message);
     }
+}
+
+function _renderTabFindings(listId, btnId, badgeId, results, categories) {
+    const cats = new Set(categories.map(c => c.toUpperCase()));
+    const items = results.filter(r => cats.has((r.issue_category || '').toUpperCase()));
+    const btn = document.getElementById(btnId);
+    if (btn) btn.style.display = items.length > 0 ? '' : 'none';
+    const badge = document.getElementById(badgeId);
+    if (badge) {
+        const hot = items.filter(r => r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO').length;
+        if (hot > 0) { badge.textContent = hot; badge.style.display = ''; }
+        else badge.style.display = 'none';
+    }
+    const list = document.getElementById(listId);
+    if (!list) return;
+    if (items.length === 0) {
+        list.innerHTML = '<p style="color:var(--text-m);font-size:13px;">Sin hallazgos en esta categoría.</p>';
+        return;
+    }
+    list.innerHTML = items.map(r => {
+        const isCrit  = r.alert_level === 'CRITICAL';
+        const isMid   = r.alert_level === 'SOSPECHOSO';
+        const accent  = isCrit ? '#ef4444' : isMid ? '#f59e0b' : '#6b7280';
+        const bg      = isCrit ? 'rgba(239,68,68,0.05)' : isMid ? 'rgba(245,158,11,0.04)' : 'rgba(107,114,128,0.03)';
+        const dot     = isCrit ? '🔴' : isMid ? '🟠' : '🔵';
+        const name    = (r.issue_name || 'Hallazgo').slice(0, 120);
+        const path    = r.issue_path || '';
+        const trunc   = path.length > 90 ? '…' + path.slice(-87) : path;
+        const cat     = _getCategoryLabel(r.issue_category || '');
+        return `<div style="background:${bg};border:1px solid ${accent}33;border-left:3px solid ${accent};border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:10px;overflow:hidden;">
+            <span style="font-size:14px;flex-shrink:0;margin-top:1px;">${dot}</span>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:600;color:var(--text-h);display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;overflow:hidden;">
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${name}</span>
+                    ${cat ? `<span style="font-size:10px;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;flex-shrink:0;white-space:nowrap;">${cat}</span>` : ''}
+                </div>
+                ${trunc ? `<div style="font-size:11px;color:var(--text-d);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${path}">${trunc}</div>` : ''}
+            </div>
+        </div>`;
+    }).join('');
 }
 
 // Manejo de subpáginas
