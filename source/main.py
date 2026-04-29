@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.11"
+SCANNER_VERSION = "1.6.12"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -1800,9 +1800,9 @@ class ArgusApp:
         return issues
     
     def scan_deleted_files(self):
-        """Escanea archivos eliminados en las últimas 24hs via Recycle Bin + Prefetch."""
-        print("🔍 ESCANEANDO ARCHIVOS BORRADOS (últimas 24hs)...")
-        cutoff = time.time() - 86400  # 24 horas
+        """Escanea archivos eliminados en las últimas 12hs via Recycle Bin + Prefetch."""
+        print("🔍 ESCANEANDO ARCHIVOS BORRADOS (últimas 12hs)...")
+        cutoff = time.time() - 43200  # 12 horas
         found_names = set()
 
         # ── 1. Recycle Bin — lee archivos $I* que contienen ruta y fecha de borrado ──
@@ -6842,96 +6842,89 @@ class ArgusApp:
             print(f"Error en scan_prefetch_all: {e}")
 
     def scan_deleted_recycle(self):
-        """Escanea la papelera de reciclaje con timestamps y nombres originales."""
-        print("🔍 Escaneando Recycle Bin con timestamps...")
+        """Escanea la papelera de reciclaje — solo archivos borrados en las últimas 12h."""
+        print("🔍 Escaneando Recycle Bin (últimas 12h)...")
         hack_terms = list(_DEFINITE_HACK_NAMES) + [
             'killaura', 'aimbot', 'autoclick', 'clicker',
             'dllinjector', 'extremeinjector', 'cheatengine', 'xenos',
             '.rise', '.meteor', '.drip', '.vertex', '.azura', '.jello', '.datura',
             '.mathias', '.rusherhack', '.salhack', '.inertia', 'weaveloader',
         ]
+        INTERESTING_EXTS = {'.exe', '.jar', '.dll', '.bat', '.ps1', '.vbs', '.ahk', '.py'}
+        CUTOFF_12H = time.time() - 43200
+        EPOCH_DIFF  = 116444736000000000
+
         try:
             import struct
             recycle_root = 'C:\\$RECYCLE.BIN'
             if not os.path.exists(recycle_root):
                 return
 
-            deleted_items = []
             for user_sid in os.listdir(recycle_root):
                 sid_path = os.path.join(recycle_root, user_sid)
                 if not os.path.isdir(sid_path):
                     continue
                 try:
                     for fname in os.listdir(sid_path):
-                        # $I files contain metadata (original path + deletion time)
                         if not fname.startswith('$I'):
                             continue
                         i_path = os.path.join(sid_path, fname)
                         try:
                             with open(i_path, 'rb') as f:
-                                data = f.read(544)
+                                data = f.read(576)
                             if len(data) < 28:
                                 continue
-                            # $I format: 8 bytes version, 8 bytes size, 8 bytes FILETIME, N bytes path
-                            ft_raw = struct.unpack_from('<Q', data, 16)[0]
-                            if ft_raw > 0:
-                                # Convert FILETIME to datetime
-                                EPOCH_DIFF = 116444736000000000
-                                unix_ts = (ft_raw - EPOCH_DIFF) / 10000000
-                                if 0 < unix_ts < 2000000000:
-                                    deleted_at = datetime.fromtimestamp(unix_ts).strftime('%Y-%m-%d %H:%M:%S')
-                                else:
-                                    deleted_at = 'Desconocida'
-                            else:
-                                deleted_at = 'Desconocida'
 
-                            # Original path starts at offset 28 (v2) as UTF-16LE
+                            # $I header: 8b version | 8b size | 8b FILETIME | path UTF-16LE
+                            ft_raw  = struct.unpack_from('<Q', data, 16)[0]
+                            unix_ts = (ft_raw - EPOCH_DIFF) / 10_000_000 if ft_raw > EPOCH_DIFF else 0
+
+                            # Ignorar si pasaron más de 12h
+                            if unix_ts == 0 or unix_ts < CUTOFF_12H:
+                                continue
+
                             try:
-                                orig_path = data[28:].decode('utf-16-le').rstrip('\x00')
+                                orig_path = data[28:].decode('utf-16-le').rstrip('\x00').split('\x00')[0]
                             except Exception:
-                                orig_path = fname
+                                orig_path = ''
+                            if not orig_path:
+                                continue
 
-                            deleted_items.append({'path': orig_path, 'deleted_at': deleted_at, 'i_file': i_path})
+                            base      = os.path.basename(orig_path)
+                            base_l    = base.lower()
+                            ext       = os.path.splitext(base_l)[1]
+                            is_exec   = ext in INTERESTING_EXTS
+                            is_hack   = any(h in base_l or h in orig_path.lower() for h in hack_terms)
+
+                            if not (is_exec or is_hack):
+                                continue
+
+                            deleted_dt  = datetime.fromtimestamp(unix_ts)
+                            now_dt      = datetime.now()
+                            diff_mins   = int((now_dt - deleted_dt).total_seconds() / 60)
+                            if diff_mins < 60:
+                                tiempo_rel = f'hace {diff_mins} min'
+                            else:
+                                tiempo_rel = f'hace {diff_mins // 60}h {diff_mins % 60:02d}min'
+                            deleted_str = deleted_dt.strftime('%d/%m %H:%M')
+
+                            alerta = 'CRITICAL' if is_hack else 'SOSPECHOSO'
+                            print(f"🗑️ ELIMINADO ({tiempo_rel}): {base}")
+                            self.issues_found.append({
+                                'tipo':     'deleted_recent',
+                                'nombre':   f'Borrado {tiempo_rel}: {base}',
+                                'ruta':     orig_path[:255],
+                                'archivo':  base,
+                                'categoria':'DELETED_FILES',
+                                'alerta':   alerta,
+                                'confidence': 80 if is_hack else 45,
+                                'detected_patterns': [f'deleted:{ext}'] + ([t for t in hack_terms if t in base_l][:3]),
+                                'extra':    {'deleted_at': deleted_str, 'deleted_ts': unix_ts},
+                            })
                         except Exception:
                             continue
                 except PermissionError:
                     continue
-
-            if not deleted_items:
-                return
-
-            # Report suspicious items
-            for item in deleted_items:
-                name_lower = item['path'].lower()
-                for term in hack_terms:
-                    if term in name_lower:
-                        self.issues_found.append({
-                            'tipo': 'deleted_suspicious',
-                            'nombre': f'Archivo sospechoso eliminado: {os.path.basename(item["path"])}',
-                            'ruta': item['path'],
-                            'archivo': item['path'][:255],
-                            'categoria': 'DELETED_FILES',
-                            'alerta': 'SOSPECHOSO',
-                            'confidence': 75,
-                            'detected_patterns': [term],
-                            'extra': {'deleted_at': item['deleted_at']},
-                        })
-                        print(f"⚠️ ELIMINADO SOSPECHOSO: {item['path']} @ {item['deleted_at']}")
-                        break
-
-            # Summary of all deleted items
-            summary = ' | '.join([f"{os.path.basename(d['path'])} @ {d['deleted_at']}"
-                                   for d in sorted(deleted_items, key=lambda x: x['deleted_at'], reverse=True)[:20]])
-            self.issues_found.append({
-                'tipo': 'deleted_history',
-                'nombre': f'Papelera: {len(deleted_items)} archivo(s) eliminado(s)',
-                'ruta': recycle_root,
-                'archivo': summary[:500],
-                'categoria': 'DELETED_FILES',
-                'alerta': 'NORMAL',
-                'confidence': 0,
-                'detected_patterns': [os.path.basename(d['path']) for d in deleted_items[:20]],
-            })
         except Exception as e:
             print(f"Error en scan_deleted_recycle: {e}")
 

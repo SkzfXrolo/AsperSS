@@ -2042,12 +2042,23 @@ async function viewScanDetails(scanId) {
         const elList = document.getElementById('eliminados-list');
         if (elList && eliminados.length > 0) {
             elList.innerHTML = eliminados.map(r => {
-                const isSusp = r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO';
-                const accent = isSusp ? '#ef4444' : '#f59e0b';
+                const isCrit = r.alert_level === 'CRITICAL';
+                const isSusp = isCrit || r.alert_level === 'SOSPECHOSO';
+                const accent = isCrit ? '#ef4444' : isSusp ? '#f59e0b' : '#94a3b8';
+                const bgRgb  = isCrit ? '239,68,68' : isSusp ? '245,158,11' : '148,163,184';
                 const nameStr = (r.issue_name || r.issue_path || '—').slice(0, 120);
-                return `<div style="background:rgba(${isSusp?'239,68,68':'245,158,11'},0.06);border:1px solid ${accent}33;border-radius:8px;padding:12px 14px;">
-                    <div style="font-size:12px;font-weight:600;color:${accent};">🗑️ ${nameStr}</div>
-                    ${r.issue_path?`<div style="font-size:11px;color:var(--text-d);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.issue_path}">${r.issue_path.length>100?'…'+r.issue_path.slice(-97):r.issue_path}</div>`:''}
+                // Extraer hora de borrado del nombre ("Borrado hace 2h: archivo.exe")
+                const timeMatch = nameStr.match(/^Borrado (hace .+?):/);
+                const timeTag   = timeMatch
+                    ? `<span style="font-size:10px;font-weight:700;color:${accent};background:${accent}22;border-radius:4px;padding:1px 6px;margin-left:6px;">${timeMatch[1]}</span>`
+                    : '';
+                const displayName = timeMatch ? nameStr.replace(/^Borrado .+?: /, '') : nameStr;
+                return `<div style="background:rgba(${bgRgb},0.06);border:1px solid ${accent}33;border-radius:8px;padding:12px 14px;">
+                    <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+                        <span style="font-size:12px;font-weight:600;color:${accent};">🗑️ ${displayName}</span>${timeTag}
+                    </div>
+                    ${r.issue_path?`<div style="font-size:11px;color:var(--text-d);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.issue_path}">${r.issue_path.length>100?'…'+r.issue_path.slice(-97):r.issue_path}</div>`:''}
+                    ${isCrit?`<div style="margin-top:4px;font-size:10px;font-weight:700;color:${accent};text-transform:uppercase;">CRÍTICO</div>`:''}
                 </div>`;
             }).join('');
         } else if (elList) {
