@@ -1006,12 +1006,12 @@ def list_users(company_id=None):
             with get_db_cursor() as cursor:
                 if company_id:
                     cursor.execute('''
-                        SELECT id, username, email, roles, is_active, created_at, last_login, company_id
+                        SELECT id, username, email, roles, is_active, created_at, last_login, company_id, avatar_url
                         FROM users WHERE company_id = %s ORDER BY created_at DESC
                     ''', (company_id,))
                 else:
                     cursor.execute('''
-                        SELECT id, username, email, roles, is_active, created_at, last_login, company_id
+                        SELECT id, username, email, roles, is_active, created_at, last_login, company_id, avatar_url
                         FROM users ORDER BY created_at DESC
                     ''')
                 rows = cursor.fetchall()
@@ -1030,7 +1030,8 @@ def list_users(company_id=None):
                     'is_active': bool(row['is_active']),
                     'created_at': str(row['created_at']),
                     'last_login': str(row['last_login']) if row['last_login'] else None,
-                    'company_id': row['company_id']
+                    'company_id': row['company_id'],
+                    'avatar_url': row.get('avatar_url') or '',
                 })
             return users
 
@@ -1039,12 +1040,12 @@ def list_users(company_id=None):
             cursor = conn.cursor()
             if company_id:
                 cursor.execute('''
-                    SELECT id, username, email, roles, is_active, created_at, last_login, company_id
+                    SELECT id, username, email, roles, is_active, created_at, last_login, company_id, avatar_url
                     FROM users WHERE company_id = ? ORDER BY created_at DESC
                 ''', (company_id,))
             else:
                 cursor.execute('''
-                    SELECT id, username, email, roles, is_active, created_at, last_login, company_id
+                    SELECT id, username, email, roles, is_active, created_at, last_login, company_id, avatar_url
                     FROM users ORDER BY created_at DESC
                 ''')
             rows = cursor.fetchall()
@@ -1059,7 +1060,8 @@ def list_users(company_id=None):
                 users.append({
                     'id': row[0], 'username': row[1], 'email': row[2],
                     'roles': roles, 'is_active': bool(row[4]),
-                    'created_at': row[5], 'last_login': row[6], 'company_id': row[7]
+                    'created_at': row[5], 'last_login': row[6], 'company_id': row[7],
+                    'avatar_url': row[8] if len(row) > 8 else '',
                 })
             return users
 
