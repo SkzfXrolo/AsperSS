@@ -10492,9 +10492,14 @@ class ArgusApp:
         import re as _re
 
         PATTERNS = [
-            'se recargaron los packs de recursos',
-            'reloaded resourcepacks',
-            'reloading resourcepacks',
+            'se recargaron los packs de recursos',   # español vanilla
+            'reloaded resourcepacks',                 # inglés vanilla 1.16+
+            'reloading resourcepacks',                # inglés vanilla
+            'reloading resource packs',               # con espacio (algunas versiones)
+            'resource packs reloaded',                # orden invertido
+            'reloading resourcemanager',              # 1.8.9 vanilla/badlion
+            'reloading resources',                    # forge/fabric
+            'reloading all resources',
         ]
 
         appdata      = os.environ.get('APPDATA', '')
@@ -10503,19 +10508,26 @@ class ArgusApp:
 
         # (dir_pattern, launcher_label)
         LOG_DIR_PATTERNS = [
-            (os.path.join(appdata,      '.minecraft',            'logs'),              'Vanilla/TLauncher/Badlion'),
+            (os.path.join(appdata,      '.minecraft',                    'logs'),      'Vanilla/TLauncher'),
+            # Badlion Client — usa .blclient como game dir propio
+            (os.path.join(appdata,      '.blclient',  'minecraft',       'logs'),      'Badlion Client'),
+            (os.path.join(appdata,      '.badlion',   'minecraft',       'logs'),      'Badlion Client'),
+            (os.path.join(appdata,      '.badlion',                      'logs'),      'Badlion Client'),
+            (os.path.join(localappdata, 'Programs', 'Badlion Client', 'game', 'logs'), 'Badlion Client'),
+            # Lunar Client
             (os.path.join(userprofile,  '.lunarclient',          'logs', 'game'),      'Lunar Client'),
             (os.path.join(appdata,      'lunarclient',           'logs', 'game'),      'Lunar Client'),
             (os.path.join(userprofile,  'AppData', 'Local', 'lunarclient', 'logs', 'game'), 'Lunar Client'),
+            # Launchers con instancias
             (os.path.join(appdata,      'PrismLauncher',  'instances', '*', 'minecraft', 'logs'), 'PrismLauncher'),
             (os.path.join(appdata,      'MultiMC',        'instances', '*', 'minecraft', 'logs'), 'MultiMC'),
             (os.path.join(appdata,      'PolyMC',         'instances', '*', 'minecraft', 'logs'), 'PolyMC'),
             (os.path.join(userprofile,  'curseforge',     'minecraft', 'Instances', '*', 'logs'), 'CurseForge'),
-            (os.path.join(appdata,      'gdlauncher_next','instances', '*', 'logs'),  'GDLauncher'),
-            (os.path.join(appdata,      'gdlauncher',     'instances', '*', 'logs'),  'GDLauncher'),
+            (os.path.join(appdata,      'gdlauncher_next','instances', '*', 'logs'),   'GDLauncher'),
+            (os.path.join(appdata,      'gdlauncher',     'instances', '*', 'logs'),   'GDLauncher'),
             (os.path.join(appdata,      'ATLauncher',     'instances', '*', 'minecraft', 'logs'), 'ATLauncher'),
             (os.path.join(localappdata, 'ftb-app',        'instances', '*', 'minecraft', 'logs'), 'FTB App'),
-            (os.path.join(appdata,      'feather-client', 'logs'),                    'Feather Client'),
+            (os.path.join(appdata,      'feather-client', 'logs'),                     'Feather Client'),
         ]
 
         now = time.time()
