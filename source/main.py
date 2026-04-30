@@ -11925,10 +11925,15 @@ class ArgusApp:
     @staticmethod
     def _read_usn_journal(max_lines=150_000, max_seconds=12):
         """Lee fsutil USN journal en streaming para evitar colgarse en discos grandes.
+        Usa un hilo lector para que el timeout aplique incluso antes de la primera línea.
         Devuelve lista de líneas (hasta max_lines) o [] si no está disponible."""
         import subprocess as _sp
         import time as _time
+        import queue as _q
+        import threading as _th
+
         lines = []
+        proc = None
         try:
             proc = _sp.Popen(
                 ['fsutil', 'usn', 'readjournal', 'C:', 'csv'],
@@ -11936,20 +11941,47 @@ class ArgusApp:
                 text=True, errors='ignore',
                 creationflags=0x08000000,
             )
+            buf = _q.Queue()
+
+            def _reader():
+                try:
+                    for ln in proc.stdout:
+                        buf.put(ln)
+                except Exception:
+                    pass
+                finally:
+                    buf.put(None)  # sentinel
+
+            _th.Thread(target=_reader, daemon=True).start()
+
             t0 = _time.time()
-            try:
-                for line in proc.stdout:
-                    lines.append(line)
-                    if len(lines) >= max_lines or (_time.time() - t0) > max_seconds:
-                        break
-            finally:
+            while True:
+                elapsed = _time.time() - t0
+                if elapsed >= max_seconds or len(lines) >= max_lines:
+                    break
+                try:
+                    ln = buf.get(timeout=min(max_seconds - elapsed, 0.5))
+                except _q.Empty:
+                    break
+                if ln is None:
+                    break
+                lines.append(ln)
+        except Exception:
+            pass
+        finally:
+            if proc is not None:
+                try:
+                    proc.stdout.close()
+                except Exception:
+                    pass
                 try:
                     proc.kill()
                 except Exception:
                     pass
-                proc.wait(timeout=3)
-        except Exception:
-            pass
+                try:
+                    proc.wait(timeout=3)
+                except Exception:
+                    pass
         return lines
 
     def scan_prescan_disk_activity(self):
