@@ -1387,12 +1387,9 @@ function renderIssuePage(container, scanId) {
         const path    = result.issue_path || '';
         const truncPath = path.length > 90 ? '…' + path.slice(-87) : path;
         const inInst  = _isInMinecraftInstance(path);
-        const inDl    = _isNonInstanceLocation(path);
         const instBadge = inInst
             ? `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);flex-shrink:0;white-space:nowrap;">En instancia</span>`
-            : inDl
-            ? `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(107,114,128,0.1);color:var(--text-d);border:1px solid var(--border-m);flex-shrink:0;white-space:nowrap;">No cargado</span>`
-            : '';
+            : `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);flex-shrink:0;white-space:nowrap;">Fuera de instancia</span>`;
 
         return `<div data-result-id="${result.id}" style="
             background:${bg};border:1px solid ${accent}33;border-left:3px solid ${accent};
