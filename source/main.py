@@ -10508,26 +10508,94 @@ class ArgusApp:
 
         # (dir_pattern, launcher_label)
         LOG_DIR_PATTERNS = [
-            (os.path.join(appdata,      '.minecraft',                    'logs'),      'Vanilla/TLauncher'),
-            # Badlion Client — usa .blclient como game dir propio
-            (os.path.join(appdata,      '.blclient',  'minecraft',       'logs'),      'Badlion Client'),
-            (os.path.join(appdata,      '.badlion',   'minecraft',       'logs'),      'Badlion Client'),
-            (os.path.join(appdata,      '.badlion',                      'logs'),      'Badlion Client'),
-            (os.path.join(localappdata, 'Programs', 'Badlion Client', 'game', 'logs'), 'Badlion Client'),
-            # Lunar Client
-            (os.path.join(userprofile,  '.lunarclient',          'logs', 'game'),      'Lunar Client'),
-            (os.path.join(appdata,      'lunarclient',           'logs', 'game'),      'Lunar Client'),
-            (os.path.join(userprofile,  'AppData', 'Local', 'lunarclient', 'logs', 'game'), 'Lunar Client'),
-            # Launchers con instancias
-            (os.path.join(appdata,      'PrismLauncher',  'instances', '*', 'minecraft', 'logs'), 'PrismLauncher'),
-            (os.path.join(appdata,      'MultiMC',        'instances', '*', 'minecraft', 'logs'), 'MultiMC'),
-            (os.path.join(appdata,      'PolyMC',         'instances', '*', 'minecraft', 'logs'), 'PolyMC'),
-            (os.path.join(userprofile,  'curseforge',     'minecraft', 'Instances', '*', 'logs'), 'CurseForge'),
-            (os.path.join(appdata,      'gdlauncher_next','instances', '*', 'logs'),   'GDLauncher'),
-            (os.path.join(appdata,      'gdlauncher',     'instances', '*', 'logs'),   'GDLauncher'),
-            (os.path.join(appdata,      'ATLauncher',     'instances', '*', 'minecraft', 'logs'), 'ATLauncher'),
-            (os.path.join(localappdata, 'ftb-app',        'instances', '*', 'minecraft', 'logs'), 'FTB App'),
-            (os.path.join(appdata,      'feather-client', 'logs'),                     'Feather Client'),
+            # ── Vanilla / Oficial / Mods sobre vanilla (Forge, Fabric, OptiFine) ──
+            (os.path.join(appdata,      '.minecraft',                           'logs'), 'Vanilla/Forge/Fabric'),
+
+            # ── Badlion Client ──
+            (os.path.join(appdata,      '.blclient',   'minecraft',             'logs'), 'Badlion Client'),
+            (os.path.join(appdata,      '.badlion',    'minecraft',             'logs'), 'Badlion Client'),
+            (os.path.join(appdata,      '.badlion',                             'logs'), 'Badlion Client'),
+            (os.path.join(localappdata, 'Programs',    'Badlion Client', 'game','logs'), 'Badlion Client'),
+
+            # ── Lunar Client ──
+            (os.path.join(userprofile,  '.lunarclient',              'logs', 'game'),    'Lunar Client'),
+            (os.path.join(appdata,      'lunarclient',               'logs', 'game'),    'Lunar Client'),
+            (os.path.join(localappdata, 'lunarclient',               'logs', 'game'),    'Lunar Client'),
+
+            # ── Feather Client ──
+            (os.path.join(appdata,      'feather-client',                       'logs'), 'Feather Client'),
+            (os.path.join(appdata,      'Feather',                              'logs'), 'Feather Client'),
+
+            # ── Cosmic Client ──
+            (os.path.join(appdata,      '.cosmicclient',  'game',               'logs'), 'Cosmic Client'),
+            (os.path.join(localappdata, 'Programs',    'Cosmic Client', 'game', 'logs'), 'Cosmic Client'),
+
+            # ── LabyMod Launcher 4.x ──
+            (os.path.join(appdata,      'LabyMod Launcher','instances','*','minecraft','logs'), 'LabyMod Launcher'),
+            (os.path.join(appdata,      '.labymod4',       'instances','*',            'logs'), 'LabyMod Launcher'),
+
+            # ── Salwyrr Client ──
+            (os.path.join(appdata,      '.salwyrr',                             'logs'), 'Salwyrr'),
+            (os.path.join(appdata,      '.salwyrr',        'game',              'logs'), 'Salwyrr'),
+
+            # ── Solar Tweaks (modifica Lunar, puede tener logs propios) ──
+            (os.path.join(appdata,      '.solartweaks',                         'logs'), 'Solar Tweaks'),
+            (os.path.join(userprofile,  '.solartweaks',                         'logs'), 'Solar Tweaks'),
+
+            # ── PrismLauncher y forks (Modrinth usa Prism internamente) ──
+            (os.path.join(appdata,      'PrismLauncher','instances','*','minecraft','logs'), 'PrismLauncher'),
+            (os.path.join(localappdata, 'PrismLauncher','instances','*','minecraft','logs'), 'PrismLauncher'),
+
+            # ── MultiMC y forks ──
+            (os.path.join(appdata,      'MultiMC',     'instances','*','minecraft','logs'), 'MultiMC'),
+            (os.path.join(appdata,      'UltimMC',     'instances','*','minecraft','logs'), 'UltimMC'),
+            (os.path.join(appdata,      'OfflineMultiMC','instances','*','minecraft','logs'), 'OfflineMultiMC'),
+
+            # ── PolyMC ──
+            (os.path.join(appdata,      'PolyMC',      'instances','*','minecraft','logs'), 'PolyMC'),
+
+            # ── Modrinth App ──
+            (os.path.join(appdata,      'com.modrinth.theseus','profiles','*',  'logs'), 'Modrinth App'),
+            (os.path.join(localappdata, 'com.modrinth.theseus','profiles','*',  'logs'), 'Modrinth App'),
+
+            # ── CurseForge ──
+            (os.path.join(userprofile,  'curseforge',  'minecraft','Instances','*','logs'), 'CurseForge'),
+            (os.path.join(userprofile,  'Documents',   'curseforge','minecraft','Instances','*','logs'), 'CurseForge'),
+
+            # ── GDLauncher / GDLauncher Carbon ──
+            (os.path.join(appdata,      'gdlauncher_next','instances','*',      'logs'), 'GDLauncher'),
+            (os.path.join(appdata,      'gdlauncher',     'instances','*',      'logs'), 'GDLauncher'),
+            (os.path.join(appdata,      'GDLauncher Carbon','instances','*',    'logs'), 'GDLauncher Carbon'),
+
+            # ── ATLauncher ──
+            (os.path.join(appdata,      'ATLauncher',  'instances','*','minecraft','logs'), 'ATLauncher'),
+
+            # ── FTB App ──
+            (os.path.join(localappdata, 'ftb-app',     'instances','*','minecraft','logs'), 'FTB App'),
+            (os.path.join(appdata,      'ftb-app',     'instances','*','minecraft','logs'), 'FTB App'),
+
+            # ── Technic Launcher ──
+            (os.path.join(appdata,      '.technic',    'modpacks','*',           'logs'), 'Technic Launcher'),
+            (os.path.join(appdata,      '.technic',    'modpacks','*','bin',     'logs'), 'Technic Launcher'),
+
+            # ── TLauncher Legacy / Legacy Launcher ──
+            (os.path.join(appdata,      '.tlauncher',  'legacy','Minecraft','game','logs'), 'TLauncher Legacy'),
+            (os.path.join(appdata,      '.legacylauncher','minecraft',           'logs'), 'Legacy Launcher'),
+
+            # ── SKLauncher ──
+            (os.path.join(appdata,      '.sklauncher', 'instances','*',          'logs'), 'SKLauncher'),
+
+            # ── Void Launcher ──
+            (os.path.join(appdata,      '.voidlauncher','instances','*',         'logs'), 'Void Launcher'),
+
+            # ── Nexus Client ──
+            (os.path.join(appdata,      '.nexusclient',                          'logs'), 'Nexus Client'),
+
+            # ── Rise Client ──
+            (os.path.join(appdata,      '.riseclient',                           'logs'), 'Rise Client'),
+
+            # ── Sigma Client ──
+            (os.path.join(appdata,      '.sigmaclient', 'logs'),                          'Sigma Client'),
         ]
 
         now = time.time()
