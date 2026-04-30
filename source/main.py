@@ -3369,6 +3369,10 @@ class ArgusApp:
         self.total_files_scanned = 0
         self.total_dirs_scanned = 0
 
+        # ── Snapshot USB al inicio + arrancar monitor de desconexiones ───────
+        self.initial_usb_devices = self.get_usb_devices()
+        self._start_usb_monitor()
+
         # ── Anti-detection: camuflar título de ventana durante el scan ──────
         self._camouflage_window()
 
@@ -3793,7 +3797,8 @@ class ArgusApp:
             traceback.print_exc()
             self._update_progress_safe(95, f"❌ Error: {str(e)}", "Error durante el escaneo")
         finally:
-            # Detener cronómetro
+            # Detener monitor USB y cronómetro
+            self._stop_usb_monitor()
             self.stop_scan_timer()
             self.scanning = False
             self._restore_window_title()
@@ -13120,20 +13125,103 @@ class ArgusApp:
             print(f"Error detectando AnyDesk: {e}")
     
     def get_usb_devices(self):
-        """Obtiene lista de dispositivos USB"""
+        """Obtiene set de letras de unidades removibles (USB/pendrives) actualmente conectadas."""
         try:
-            result = subprocess.run(['wmic', 'logicaldisk', 'get', 'size,freespace,caption'],
-                                  capture_output=True, text=True, creationflags=0x08000000)
-            devices = []
-            for line in result.stdout.split('\n'):
-                if ':' in line and 'Caption' not in line:
-                    parts = line.strip().split()
-                    if len(parts) >= 3:
-                        devices.append(parts[0])
-            return devices
+            result = subprocess.run(
+                ['wmic', 'logicaldisk', 'where', 'drivetype=2', 'get', 'caption,volumename,size'],
+                capture_output=True, text=True, timeout=6, creationflags=0x08000000
+            )
+            drives = {}
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if not line or 'Caption' in line:
+                    continue
+                parts = line.split()
+                if parts and ':' in parts[0]:
+                    letter = parts[0]
+                    label = parts[1] if len(parts) > 1 and not parts[1].isdigit() else ''
+                    size_bytes = int(parts[-1]) if parts[-1].isdigit() else 0
+                    size_gb = round(size_bytes / (1024**3), 1) if size_bytes > 0 else 0
+                    drives[letter] = {'label': label, 'size_gb': size_gb}
+            return drives
         except Exception as e:
             print(f"Error obteniendo dispositivos USB: {e}")
-            return []
+            return {}
+
+    def _start_usb_monitor(self):
+        """Arranca un thread que monitorea conexiones/desconexiones de USB durante el scan."""
+        import threading
+        self._usb_monitor_stop = threading.Event()
+        self._usb_monitor_thread = threading.Thread(
+            target=self._usb_monitor_loop, daemon=True, name='USB-Monitor'
+        )
+        self._usb_monitor_thread.start()
+        print(f"🔌 Monitor USB iniciado — {len(self.initial_usb_devices)} unidad(es) al inicio: "
+              f"{list(self.initial_usb_devices.keys()) or 'ninguna'}")
+
+    def _stop_usb_monitor(self):
+        """Detiene el thread de monitoreo USB."""
+        if hasattr(self, '_usb_monitor_stop'):
+            self._usb_monitor_stop.set()
+        if hasattr(self, '_usb_monitor_thread'):
+            self._usb_monitor_thread.join(timeout=3)
+
+    def _usb_monitor_loop(self):
+        """Loop de monitoreo USB — compara estado cada 2 segundos."""
+        known = dict(self.initial_usb_devices)
+        while not self._usb_monitor_stop.wait(2):
+            try:
+                current = self.get_usb_devices()
+
+                # Unidades que desaparecieron
+                for letter, info in known.items():
+                    if letter not in current:
+                        label = info.get('label') or 'Sin nombre'
+                        size  = info.get('size_gb', 0)
+                        desc  = f"{letter} — {label} ({size} GB)" if size else f"{letter} — {label}"
+                        print(f"🚨 USB DESCONECTADO DURANTE SS: {desc}")
+                        self.issues_found.append({
+                            'nombre':  f'USB desconectado durante la SS: {desc}',
+                            'ruta':    letter,
+                            'archivo': label or letter,
+                            'tipo':    'usb_removed',
+                            'categoria': 'EVASION',
+                            'alerta':  'CRITICAL',
+                            'confidence': 0.97,
+                            'detected_patterns': ['usb_removed_during_ss'],
+                            'explicacion': (
+                                f'La unidad removible {desc} fue desconectada MIENTRAS el scan '
+                                f'estaba en curso. Esto indica un intento de ocultar evidencia '
+                                f'(pendrive con hack, configs, etc.).'
+                            ),
+                        })
+
+                # Unidades nuevas que aparecieron
+                for letter, info in current.items():
+                    if letter not in known:
+                        label = info.get('label') or 'Sin nombre'
+                        size  = info.get('size_gb', 0)
+                        desc  = f"{letter} — {label} ({size} GB)" if size else f"{letter} — {label}"
+                        print(f"⚠️ USB CONECTADO DURANTE SS: {desc}")
+                        self.issues_found.append({
+                            'nombre':  f'USB conectado durante la SS: {desc}',
+                            'ruta':    letter,
+                            'archivo': label or letter,
+                            'tipo':    'usb_added',
+                            'categoria': 'EVASION',
+                            'alerta':  'SOSPECHOSO',
+                            'confidence': 0.75,
+                            'detected_patterns': ['usb_added_during_ss'],
+                            'explicacion': (
+                                f'La unidad removible {desc} fue conectada MIENTRAS el scan '
+                                f'estaba en curso. Puede ser un intento de introducir archivos '
+                                f'o transferir evidencia.'
+                            ),
+                        })
+
+                known = current
+            except Exception:
+                pass
 
 def main():
     """Función principal"""
