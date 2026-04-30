@@ -11979,17 +11979,26 @@ class ArgusApp:
                     if not h:
                         continue
                     try:
+                        import time as _time
                         addr    = 0
                         mbi     = MEMORY_BASIC_INFORMATION()
                         mbi_sz  = ctypes.sizeof(mbi)
                         rwx_count = 0
                         rwx_total_kb = 0
+                        _region_iter = 0
+                        _t0 = _time.time()
                         while k32.VirtualQueryEx(h, ctypes.c_void_p(addr), ctypes.byref(mbi), mbi_sz):
+                            _region_iter += 1
+                            # Cap: JVMs con heap grande pueden tener 100k+ regiones → timeout
+                            if _region_iter > 30_000 or (_time.time() - _t0) > 10:
+                                break
                             if (mbi.State == MEM_COMMIT
                                     and mbi.Type == MEM_PRIVATE
                                     and mbi.Protect in (PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY)):
                                 rwx_count    += 1
                                 rwx_total_kb += mbi.RegionSize // 1024
+                                if rwx_count >= 20:  # con 20 ya sabemos suficiente, salir antes
+                                    break
                             next_addr = mbi.BaseAddress + mbi.RegionSize
                             if next_addr <= addr:
                                 break
