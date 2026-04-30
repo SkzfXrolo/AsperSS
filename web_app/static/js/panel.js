@@ -1072,6 +1072,7 @@ async function loadScans() {
                                     style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;"
                                 >${scan.machine_name || 'N/A'}</div>
                                 <div class="scan-date-small">${formatDate(scan.started_at)}</div>
+                                ${scan.scanned_by ? `<div style="font-size:10px;color:var(--text-d);margin-top:1px;">por <strong style="color:var(--text-s);">${scan.scanned_by}</strong></div>` : ''}
                             </div>
                         </div>
                     </td>
@@ -1722,6 +1723,9 @@ async function viewScanDetails(scanId) {
         
         const minecraftUsernameEl = document.getElementById('detail-minecraft-username');
         if (minecraftUsernameEl) minecraftUsernameEl.textContent = data.minecraft_username || 'No detectado';
+
+        const scannedByEl = document.getElementById('detail-scanned-by');
+        if (scannedByEl) scannedByEl.textContent = data.scanned_by || '—';
         
         // Mostrar historial de bans si existe
         const banHistoryItem = document.getElementById('ban-history-item');

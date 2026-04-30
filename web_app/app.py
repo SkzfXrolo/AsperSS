@@ -2589,6 +2589,18 @@ def get_scan(scan_id):
                     except Exception:
                         pass
                 
+                # Staff que hizo el scan (via token)
+                try:
+                    cursor.execute(f'''
+                        SELECT st.created_by FROM scans s
+                        LEFT JOIN scan_tokens st ON s.token_id = st.id
+                        WHERE s.id = {_PH}
+                    ''', (scan_id,))
+                    srow = cursor.fetchone()
+                    scan['scanned_by'] = srow[0] if srow and srow[0] else None
+                except Exception:
+                    scan['scanned_by'] = None
+
                 # Obtener resultados (incluye feedback_status para mostrar veredicto del staff)
                 cursor.execute(f'''
                     SELECT id, issue_type, issue_name, issue_path, issue_category,
