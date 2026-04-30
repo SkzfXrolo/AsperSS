@@ -6103,7 +6103,7 @@ class ArgusApp:
                 'daturamc', 'jelloclient', 'weavemcr',
             ]
             result = subprocess.run(['ipconfig', '/displaydns'], capture_output=True, text=True,
-                                    creationflags=0x08000000)
+                                    creationflags=0x08000000, timeout=10)
             if result.returncode == 0:
                 dns_output = result.stdout.lower()
                 matched = [d for d in HACK_DOMAINS if d in dns_output]
@@ -6133,7 +6133,7 @@ class ArgusApp:
                 'killaura', 'aimbot', 'inject', 'dllinjector',
             ]
             result = subprocess.run(['tasklist'], capture_output=True, text=True,
-                                    creationflags=0x08000000)
+                                    creationflags=0x08000000, timeout=10)
             if result.returncode == 0:
                 tasklist_lower = result.stdout.lower()
                 matched = [p for p in HACK_PROCESS_NAMES if p in tasklist_lower]
@@ -10952,7 +10952,7 @@ class ArgusApp:
                                      r'SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\WordWheelQuery',
                                      0, winreg.KEY_READ)
                 idx = 0
-                while True:
+                while idx < 500:
                     try:
                         name, data, _ = winreg.EnumValue(key, idx)
                         idx += 1
@@ -10988,7 +10988,7 @@ class ArgusApp:
                                      r'SOFTWARE\Microsoft\Internet Explorer\TypedURLs',
                                      0, winreg.KEY_READ)
                 idx = 0
-                while True:
+                while idx < 500:
                     try:
                         name, data, _ = winreg.EnumValue(key, idx)
                         idx += 1
