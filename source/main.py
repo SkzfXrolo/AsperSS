@@ -7114,6 +7114,16 @@ class ArgusApp:
                         if ext not in EXTENSIONS:
                             continue
                         fpath = os.path.join(root, fname)
+                        fpath_lower = fpath.lower()
+                        # Excluir archivos de idioma de Minecraft (xx_xx.json)
+                        import re as _re2
+                        if _re2.match(r'^[a-z]{2}_[a-z]{2}\.json$', fname.lower()):
+                            continue
+                        # Excluir paths de assets/lang del juego
+                        if 'assets\\minecraft\\lang' in fpath_lower or \
+                           'assets/minecraft/lang' in fpath_lower or \
+                           '\\assets\\' in fpath_lower:
+                            continue
                         try:
                             fsize = os.path.getsize(fpath)
                             if fsize < 20 or fsize > 500 * 1024:  # 500KB max
@@ -7261,7 +7271,7 @@ class ArgusApp:
         """Lee UserAssist del registro para detectar ejecutables recientes con timestamps."""
         print("🔍 Escaneando UserAssist (ejecutables recientes)...")
         hack_terms = list(_DEFINITE_HACK_NAMES) + [
-            'killaura', 'aimbot', 'autoclick', 'dllinjector', 'cheatengine',
+            'killaura', 'aimbot', 'dllinjector', 'cheatengine',
         ]
         # Apps del sistema Windows que nunca son hacks aunque contengan palabras clave
         _UA_SYSTEM_WHITELIST = [
@@ -8510,6 +8520,13 @@ class ArgusApp:
             os.path.expanduser('~\\AppData\\Local'),
         ]
         MC_KW = ['minecraft', ' mc', 'lbutton', 'rbutton', 'mbutton', 'java.exe', 'javaw']
+        # Scripts de Roblox — no son cheats de Minecraft
+        ROBLOX_SKIP_NAMES = {
+            'gdip_imagesearch', 'natro_macro', 'nm_inventorysearch', 'nm_openmenu',
+            'heartbeat', 'plantertimers', 'statmonitor', 'nm_', 'natro',
+            'installer',  # Natro installer
+        }
+        ROBLOX_CONTENT_KW = ['roblox', 'natro', 'bee swarm', 'beeswarm', 'honeyfield']
         CLICK_RE = [
             r'click\s*,?\s*\d*',         # Click, / Click 3
             r'sleep\s*,\s*[1-9]\d{0,2}', # Sleep corto < 1000ms
@@ -8578,9 +8595,20 @@ class ArgusApp:
                         if not fname_lower.endswith('.ahk'):
                             continue
 
+                        # Excluir scripts de Roblox por nombre
+                        if any(rk in fname_lower for rk in ROBLOX_SKIP_NAMES):
+                            continue
+
                         try:
                             with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
                                 content = f.read(16384).lower()
+
+                            # Excluir scripts de Roblox por contenido
+                            if any(rk in content for rk in ROBLOX_CONTENT_KW):
+                                continue
+                            # Excluir si está en carpeta de Roblox
+                            if 'roblox' in fpath.lower():
+                                continue
 
                             has_click = any(_re.search(p, content, _re.IGNORECASE) for p in CLICK_RE)
                             is_obfusc = any(_re.search(p, content, _re.IGNORECASE | _re.DOTALL)
@@ -8591,32 +8619,29 @@ class ArgusApp:
                                 continue
 
                             has_mc = any(kw in content for kw in MC_KW)
-                            if is_obfusc and not has_mc:
-                                has_mc = True  # ofuscación sin MC keyword = sospechoso igual
 
-                            alert = 'CRITICAL' if has_mc else 'SOSPECHOSO'
-                            conf  = 0.91 if has_mc else 0.68
-                            patterns = ['ahk_click'] + (['ahk_minecraft'] if has_mc else [])
-                            if is_obfusc:
-                                patterns.append('ahk_obfuscated')
+                            # Solo reportar si tiene contexto Minecraft — AHK sin Minecraft no es relevante
+                            if not has_mc and not is_obfusc:
+                                continue
+
+                            patterns = ['ahk_click', 'ahk_minecraft'] + (['ahk_obfuscated'] if is_obfusc else [])
                             if name_match:
                                 patterns.append('ahk_autoclick_name')
 
-                            print(f"{'🚨' if has_mc else '⚠️'} AHK AUTOCLICK: {fpath}")
+                            print(f"🚨 AHK AUTOCLICK+MC: {fpath}")
                             self.issues_found.append({
-                                'nombre': f'Script AHK con autoclick{"+ Minecraft" if has_mc else ""}: {fname}',
+                                'nombre': f'Script AHK con autoclick + Minecraft: {fname}',
                                 'ruta': fpath,
                                 'archivo': fname,
                                 'tipo': 'ahk_autoclick',
                                 'categoria': 'AUTOCLICK',
-                                'alerta': alert,
-                                'confidence': conf,
+                                'alerta': 'CRITICAL',
+                                'confidence': 0.91,
                                 'detected_patterns': patterns,
                                 'explicacion': (
-                                    f'{fname} contiene patrones de autoclick{"con contexto Minecraft" if has_mc else ""}. '
-                                    + ('Script ofuscado — se está ocultando el código. ' if is_obfusc else '')
-                                    + 'Los scripts AHK de autoclick simulan clics de ratón automáticos para '
-                                    'obtener mayor CPS del que es humanamente posible.'
+                                    f'{fname} contiene patrones de autoclick con contexto Minecraft. '
+                                    + ('Script ofuscado. ' if is_obfusc else '')
+                                    + 'Los scripts AHK de autoclick simulan clics para obtener más CPS.'
                                 ),
                             })
                         except Exception:
@@ -9574,7 +9599,6 @@ class ArgusApp:
             'ghostclient', 'ghost-client',
             'hackclient',
             'aimbot', 'killaura',
-            'autoclicker', 'autoclick',
             'scaffold', 'baritone',
         ]
         if not os.path.isdir(prefetch_dir):
