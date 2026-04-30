@@ -9623,16 +9623,11 @@ class ArgusApp:
             'ghostclient', 'ghost_client', 'baritone', 'schematica',
             'hackclient', 'hackmod', 'weaveloader',
         ]
-        import subprocess as _sp
         try:
-            result = _sp.run(
-                ['fsutil', 'usn', 'readjournal', 'C:', 'csv'],
-                capture_output=True, text=True, timeout=15
-            )
-            if result.returncode != 0:
+            lines = self._read_usn_journal(max_lines=150_000, max_seconds=12)
+            if not lines:
                 return
             # Filtrar eliminaciones (0x80000200) de .jar y carpetas de ghost clients
-            lines = result.stdout.splitlines()
             for line in lines:
                 line_l = line.lower()
                 is_delete = '0x80000200' in line or '0x80000020' in line
@@ -11107,19 +11102,13 @@ class ArgusApp:
     def scan_kill_chain(self):
         """P3 #3 — Detecta secuencias temporales sospechosas en el USN Journal (kill chain)."""
         print("🔍 Analizando kill chain en USN Journal...")
-        import subprocess as _sp
         import datetime as _dt
         import re as _re
 
         try:
-            result = _sp.run(
-                ['fsutil', 'usn', 'readjournal', 'C:', 'csv'],
-                capture_output=True, text=True, timeout=15
-            )
-            if result.returncode != 0:
+            lines = self._read_usn_journal(max_lines=150_000, max_seconds=12)
+            if not lines:
                 return
-
-            lines = result.stdout.splitlines()
             events = []
             for line in lines:
                 ll = line.lower()
@@ -11848,6 +11837,36 @@ class ArgusApp:
         except Exception as e:
             print(f"Error en scan_process_tree: {e}")
 
+    @staticmethod
+    def _read_usn_journal(max_lines=150_000, max_seconds=12):
+        """Lee fsutil USN journal en streaming para evitar colgarse en discos grandes.
+        Devuelve lista de líneas (hasta max_lines) o [] si no está disponible."""
+        import subprocess as _sp
+        import time as _time
+        lines = []
+        try:
+            proc = _sp.Popen(
+                ['fsutil', 'usn', 'readjournal', 'C:', 'csv'],
+                stdout=_sp.PIPE, stderr=_sp.DEVNULL,
+                text=True, errors='ignore',
+                creationflags=0x08000000,
+            )
+            t0 = _time.time()
+            try:
+                for line in proc.stdout:
+                    lines.append(line)
+                    if len(lines) >= max_lines or (_time.time() - t0) > max_seconds:
+                        break
+            finally:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                proc.wait(timeout=3)
+        except Exception:
+            pass
+        return lines
+
     def scan_prescan_disk_activity(self):
         """P3 #17 — Anomalía de actividad de disco en los 10 minutos previos al inicio del scan.
         Si el jugador borró muchos archivos en .minecraft justo antes, es señal de limpieza activa."""
@@ -11856,15 +11875,10 @@ class ArgusApp:
         import datetime as _dt
 
         try:
-            result = subprocess.run(
-                ['fsutil', 'usn', 'readjournal', 'C:', 'csv'],
-                capture_output=True, text=True, timeout=20,
-                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
-            )
-            if result.returncode != 0 or not result.stdout:
+            lines = self._read_usn_journal(max_lines=150_000, max_seconds=12)
+            if not lines:
                 return
 
-            lines = result.stdout.splitlines()
             now = _dt.datetime.now()
             cutoff = now - _dt.timedelta(minutes=10)
 
