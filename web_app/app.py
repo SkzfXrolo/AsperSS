@@ -1989,6 +1989,13 @@ _SERVER_FP_FRAGMENTS = [
     '127.0.0.1', 'connection to addr(ip=\'127.0.0.1\'',
 ]
 
+# Tipos de issue que nunca deben guardarse (FP estructural, no por ruta)
+_ZERO_RISK_ISSUE_TYPES = {
+    'texture_pack', 'texture_pack_xray', 'texture_pack_analysis',
+    'resource_pack', 'resource_pack_xray',
+    'event_logs',   # cambios fecha/hora: los dispara Windows NTP automáticamente
+}
+
 
 _lp_cache: dict = {'paths': [], 'ts': 0.0}
 _LP_CACHE_TTL = 300  # 5 minutos
@@ -2030,6 +2037,11 @@ _BINARY_GARBAGE_RE = _re_fp.compile(
 
 def _is_server_false_positive(result: dict) -> bool:
     """Devuelve True si el resultado es un falso positivo conocido y debe descartarse."""
+    # Tipos que son FP estructural independientemente de la ruta
+    tipo = (result.get('tipo') or result.get('issue_type') or '').lower().replace(' ', '_')
+    if tipo in _ZERO_RISK_ISSUE_TYPES:
+        return True
+
     # Categorías de EXE antiguo con parsers buggeados
     categoria = (result.get('categoria') or result.get('issue_category') or '').upper()
     if categoria in _LEGACY_FP_CATEGORIES:
@@ -2093,11 +2105,26 @@ def _calculate_risk_score(results, return_breakdown=False):
         'POCO_SOSPECHOSO':  10,
     }
 
+    # Tipos/categorías que no aportan nada al risk score:
+    # - texture_pack: muy fácil de confundir, demasiados FPs
+    # - event_logs de fecha/hora: lo dispara Windows NTP automáticamente
+    ZERO_RISK_TYPES = {
+        'texture_pack', 'texture_pack_xray', 'texture_pack_analysis',
+        'resource_pack', 'resource_pack_xray',
+    }
+    ZERO_RISK_CATS = {'texture_packs', 'resource_packs'}
+
     for r in results:
-        tipo   = (r.get('tipo') or '').lower().replace(' ', '_')
-        cat    = (r.get('categoria') or '').lower().replace(' ', '_')
-        alerta = (r.get('alerta') or '').upper()
+        tipo   = (r.get('tipo') or r.get('issue_type') or '').lower().replace(' ', '_')
+        cat    = (r.get('categoria') or r.get('issue_category') or '').lower().replace(' ', '_')
+        alerta = (r.get('alerta') or r.get('alert_level') or '').upper()
         nombre = (r.get('issue_name') or r.get('nombre') or tipo)[:80]
+
+        # Texture packs y cambios de fecha/hora: 0 riesgo
+        if tipo in ZERO_RISK_TYPES or cat in ZERO_RISK_CATS:
+            continue
+        if tipo == 'event_logs' and 'fecha' in nombre.lower():
+            continue
 
         # Bonus por categoría/tipo (una sola vez por categoría)
         for key, pts in CATEGORY_SCORES.items():
