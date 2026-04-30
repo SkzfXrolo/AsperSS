@@ -1250,13 +1250,6 @@
                             <div class="stat-label">Hashes Aprendidos</div>
                         </div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">✅</div>
-                        <div class="stat-content">
-                            <div class="stat-value" id="total-feedbacks-count">0</div>
-                            <div class="stat-label">Feedbacks del Staff</div>
-                        </div>
-                    </div>
                 </div>
 
                 <div class="learned-patterns-container">
@@ -1703,84 +1696,6 @@
                         <div class="loading-cell">Cargando resultados...</div>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal de Feedback Mejorado -->
-    <div class="modal" id="feedback-modal">
-        <div class="modal-content feedback-modal-content">
-            <div class="modal-header">
-                <h3>🔍 Verificar Resultado del Escaneo</h3>
-                <button class="modal-close" id="close-feedback-modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="feedback-file-preview">
-                    <div class="file-icon">📄</div>
-                    <div class="file-info">
-                        <div class="file-name" id="feedback-file-name">-</div>
-                        <div class="file-path" id="feedback-file-path">-</div>
-                    </div>
-                </div>
-                
-                <form id="feedback-form">
-                    <input type="hidden" id="feedback-result-id" name="result_id">
-                    <input type="hidden" id="feedback-scan-id" name="scan_id">
-                    <div class="feedback-verification-section">
-                        <label class="section-label">¿Qué es este archivo?</label>
-                        <div class="verification-cards">
-                            <label class="verification-card verification-card-hack">
-                                <input type="radio" name="verification" value="hack" required>
-                                <div class="card-content">
-                                    <div class="card-icon">⚠️</div>
-                                    <div class="card-title">Hack Confirmado</div>
-                                    <div class="card-description">Este archivo es un hack o mod malicioso</div>
-                                </div>
-                                <div class="card-checkmark">✓</div>
-                            </label>
-                            
-                            <label class="verification-card verification-card-legitimate">
-                                <input type="radio" name="verification" value="legitimate" required>
-                                <div class="card-content">
-                                    <div class="card-icon">✅</div>
-                                    <div class="card-title">Archivo Legítimo</div>
-                                    <div class="card-description">Este archivo es seguro y legítimo</div>
-                                </div>
-                                <div class="card-checkmark">✓</div>
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="feedback-notes">
-                            <span>Notas adicionales</span>
-                            <small>(Opcional - Ayuda a mejorar el aprendizaje)</small>
-                        </label>
-                        <textarea 
-                            id="feedback-notes" 
-                            rows="4" 
-                            placeholder="Ej: Confirmado como Vape v4.2, es un hack de PvP muy conocido..."
-                        ></textarea>
-                    </div>
-                    
-                    <div class="feedback-impact">
-                        <div class="impact-icon">🧠</div>
-                        <div class="impact-text">
-                            <strong>Tu feedback mejora Argus Projects</strong>
-                            <p>Esta información ayudará a la IA a detectar mejor los hacks en el futuro</p>
-                        </div>
-                    </div>
-                    
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-secondary" id="cancel-feedback-btn">Cancelar</button>
-                        <button type="submit" class="btn btn-primary btn-feedback-submit">
-                            <span>Confirmar y Aprender</span>
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M16.667 5L7.5 14.167L3.333 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                        </button>
-                    </div>
-                </form>
             </div>
         </div>
     </div>

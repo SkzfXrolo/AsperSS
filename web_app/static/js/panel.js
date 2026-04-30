@@ -930,20 +930,6 @@ function setupEventListeners() {
         }
     });
 
-    // Modal de feedback
-    document.getElementById('close-feedback-modal')?.addEventListener('click', () => {
-        document.getElementById('feedback-modal').classList.remove('active');
-    });
-    
-    document.getElementById('cancel-feedback-btn')?.addEventListener('click', () => {
-        document.getElementById('feedback-modal').classList.remove('active');
-    });
-    
-    document.getElementById('feedback-form')?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        await submitFeedback();
-    });
-
     // Modal de detalles de escaneo
     document.getElementById('close-scan-details-modal')?.addEventListener('click', () => {
         document.getElementById('scan-details-modal').classList.remove('active');
@@ -1397,7 +1383,6 @@ function renderIssuePage(container, scanId) {
         const bg      = isCrit ? 'rgba(239,68,68,0.05)' : isMid ? 'rgba(245,158,11,0.04)' : 'rgba(107,114,128,0.03)';
         const dot     = isCrit ? '🔴' : isMid ? '🟠' : '🔵';
         const cat     = result.issue_category || '';
-        const hasFeedback = result.feedback_status;
         const name    = (result.issue_name || 'Hallazgo').slice(0, 100);
         const path    = result.issue_path || '';
         const truncPath = path.length > 90 ? '…' + path.slice(-87) : path;
@@ -1421,15 +1406,6 @@ function renderIssuePage(container, scanId) {
                     ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;flex-shrink:0;white-space:nowrap;">${_getCategoryLabel(cat)}</span>` : ''}
                 </div>
                 ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;" title="${path}">${truncPath}</div>` : ''}
-            </div>
-            <div style="display:flex;gap:6px;flex-shrink:0;align-items:center;margin-top:1px;">
-                ${hasFeedback === 'hack'
-                    ? `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">Hack</span>`
-                    : hasFeedback === 'legitimate'
-                    ? `<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);">Legítimo</span>`
-                    : ''}
-                ${hasFeedback ? `<button onclick="changeFeedback(${result.id},${scanId})"
-                    style="font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;" title="Cambiar veredicto">✎</button>` : ''}
             </div>
         </div>`;
     }).join('');
@@ -1530,22 +1506,7 @@ async function confirmVerdict() {
 }
 
 async function submitVerdictClean(reason) {
-    const unprocessed = currentIssuesList.filter(r => !r.feedback_status);
-    if (!unprocessed.length) { skipVerdict(); return; }
-    try {
-        const res = await fetch('/api/feedback/batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ result_ids: unprocessed.map(r => r.id), verification: 'legitimate', notes: reason || 'Usuario limpio confirmado por staff' })
-        });
-        if (!res.ok) throw new Error(await res.text());
-        unprocessed.forEach(r => r.feedback_status = 'legitimate');
-        document.getElementById('bulk-actions-bar').style.display = 'none';
-        const container = document.getElementById('issues-list-container');
-        if (container) renderIssuePage(container, currentScanId);
-    } catch (e) {
-        alert('Error al enviar veredicto: ' + e.message);
-    }
+    document.getElementById('bulk-actions-bar').style.display = 'none';
 }
 
 function refreshCurrentVerdictBanner(scanData) {
@@ -1588,9 +1549,8 @@ function openHackSelection() {
         const name = r.issue_name || 'Hallazgo';
         const path = r.issue_path || '';
         const truncPath = path.length > 70 ? '…' + path.slice(-67) : path;
-        const already = r.feedback_status;
         return `<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;border:1px solid var(--border-m);background:var(--bg-t);cursor:pointer;">
-            <input type="checkbox" data-result-id="${r.id}" ${already === 'hack' ? 'checked' : ''} ${already === 'legitimate' ? 'disabled' : ''} style="width:15px;height:15px;flex-shrink:0;cursor:pointer;">
+            <input type="checkbox" data-result-id="${r.id}" style="width:15px;height:15px;flex-shrink:0;cursor:pointer;">
             <span style="font-size:13px;flex-shrink:0;">${dot}</span>
             <div style="min-width:0;">
                 <div style="font-size:12px;font-weight:600;color:var(--text-h);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
@@ -1613,7 +1573,7 @@ async function confirmHackSelection() {
     checkboxes.forEach(cb => {
         const id = parseInt(cb.dataset.resultId);
         const result = currentIssuesList.find(r => r.id === id);
-        if (!result || result.feedback_status) return;
+        if (!result) return;
         if (cb.checked) hackIds.push(id);
         else cleanIds.push(id);
     });
@@ -1626,15 +1586,9 @@ async function confirmHackSelection() {
         if (cleanIds.length) requests.push(fetch('/api/feedback/batch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ result_ids: cleanIds, verification: 'legitimate', notes: 'Legítimo confirmado por staff' }) }));
         await Promise.all(requests);
 
-        hackIds.forEach(id => { const r = currentIssuesList.find(x => x.id === id); if (r) r.feedback_status = 'hack'; });
-        cleanIds.forEach(id => { const r = currentIssuesList.find(x => x.id === id); if (r) r.feedback_status = 'legitimate'; });
-
         skipHackSelection();
-        const container = document.getElementById('issues-list-container');
-        if (container) renderIssuePage(container, currentScanId);
-        const hasUnprocessed = currentIssuesList.some(r => !r.feedback_status);
-        document.getElementById('bulk-actions-bar').style.display = hasUnprocessed ? 'flex' : 'none';
-        alert(`Feedback enviado: ${hackIds.length} hack(s), ${cleanIds.length} legítimo(s).`);
+        document.getElementById('bulk-actions-bar').style.display = 'none';
+        alert(`Veredicto guardado: ${hackIds.length} hack(s), ${cleanIds.length} limpio(s).`);
     } catch (e) {
         alert('Error al enviar feedback: ' + e.message);
     }
@@ -1881,8 +1835,7 @@ async function viewScanDetails(scanId) {
             });
         renderIssuePage(issuesContainer, scanId);
 
-        const hasUnprocessed = currentIssuesList.some(r => !r.feedback_status);
-        document.getElementById('bulk-actions-bar').style.display = (currentIssuesList.length > 0 && hasUnprocessed) ? 'flex' : 'none';
+        document.getElementById('bulk-actions-bar').style.display = currentIssuesList.length > 0 ? 'flex' : 'none';
         updateBulkActions();
 
         // Mostrar veredicto actual si existe
@@ -2635,39 +2588,6 @@ document.getElementById('back-to-scans-btn')?.addEventListener('click', () => {
     loadScans();
 });
 
-// Función para marcar como hack (ahora abre el modal mejorado)
-async function markAsHack(resultId, scanId, issueName, issuePath) {
-    openFeedbackModal(resultId, issueName, issuePath, 'hack', scanId);
-}
-
-// Función para marcar como legítimo (ahora abre el modal mejorado)
-async function markAsLegitimate(resultId, scanId, issueName, issuePath) {
-    openFeedbackModal(resultId, issueName, issuePath, 'legitimate', scanId);
-}
-
-// Función para cambiar feedback (ahora abre el modal mejorado)
-async function changeFeedback(resultId, scanId) {
-    // Obtener información del resultado para mostrar en el modal
-    try {
-        const response = await fetch(`/api/scans/${scanId}/results`);
-        if (response.ok) {
-            const data = await response.json();
-            const result = data.results?.find(r => r.id === resultId);
-            if (result) {
-                // Pre-seleccionar el feedback actual si existe
-                const currentFeedback = result.feedback_status || null;
-                openFeedbackModal(resultId, result.issue_name, result.issue_path, currentFeedback, scanId);
-            } else {
-                openFeedbackModal(resultId, 'Archivo', 'Ruta desconocida', null, scanId);
-            }
-        } else {
-            openFeedbackModal(resultId, 'Archivo', 'Ruta desconocida', null, scanId);
-        }
-    } catch (error) {
-        openFeedbackModal(resultId, 'Archivo', 'Ruta desconocida', null, scanId);
-    }
-}
-
 // Función para descargar reporte HTML
 document.getElementById('download-report-btn')?.addEventListener('click', async () => {
     if (!currentScanId) {
@@ -2696,236 +2616,7 @@ document.getElementById('download-report-btn')?.addEventListener('click', async 
     }
 });
 
-function openFeedbackModal(resultId, fileName, filePath, verificationType, scanId) {
-    currentResultId = resultId;
-    
-    // Establecer valores en campos ocultos
-    const resultIdEl = document.getElementById('feedback-result-id');
-    const scanIdEl = document.getElementById('feedback-scan-id');
-    if (resultIdEl) resultIdEl.value = resultId;
-    if (scanIdEl && scanId) scanIdEl.value = scanId;
-    
-    // Actualizar preview del archivo mejorado
-    const fileNameEl = document.getElementById('feedback-file-name');
-    const filePathEl = document.getElementById('feedback-file-path');
-    
-    if (fileNameEl) fileNameEl.textContent = fileName || 'Nombre no disponible';
-    if (filePathEl) filePathEl.textContent = filePath || 'Ruta no disponible';
-    
-    // Resetear formulario
-    const form = document.getElementById('feedback-form');
-    const notesEl = document.getElementById('feedback-notes');
-    if (form) form.reset();
-    if (notesEl) notesEl.value = '';
-    
-    // Restablecer valores ocultos después del reset
-    if (resultIdEl) resultIdEl.value = resultId;
-    if (scanIdEl && scanId) scanIdEl.value = scanId;
-    
-    // Pre-seleccionar según el tipo de verificación
-    const hackRadio = document.querySelector('input[value="hack"]');
-    const legitRadio = document.querySelector('input[value="legitimate"]');
-    
-    if (verificationType === 'hack' && hackRadio) {
-        hackRadio.checked = true;
-    } else if (verificationType === 'legitimate' && legitRadio) {
-        legitRadio.checked = true;
-    } else {
-        // Deseleccionar todo si no hay tipo específico
-        if (hackRadio) hackRadio.checked = false;
-        if (legitRadio) legitRadio.checked = false;
-    }
-    
-    document.getElementById('scan-details-modal')?.classList.remove('active');
-    document.getElementById('feedback-modal').classList.add('active');
-}
-
-async function submitFeedback() {
-    const verificationRadio = document.querySelector('input[name="verification"]:checked');
-    if (!verificationRadio) {
-        alert('Por favor selecciona si es un hack o un archivo legítimo');
-        return;
-    }
-    
-    const verification = verificationRadio.value;
-    const notes = document.getElementById('feedback-notes').value;
-    const resultIdEl = document.getElementById('feedback-result-id');
-    const scanIdEl = document.getElementById('feedback-scan-id');
-
-    const resultId = currentResultId || (resultIdEl ? resultIdEl.value : null);
-    const scanId = scanIdEl ? scanIdEl.value : null;
-
-    if (!resultId) {
-        alert('Error: No hay resultado seleccionado');
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/feedback', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                result_id: parseInt(resultId),
-                scan_id: scanId ? parseInt(scanId) : null,
-                verification: verification,
-                notes: notes,
-                verified_by: 'staff'
-            })
-        });
-
-        const data = await response.json();
-        if (data.success) {
-            alert(`✅ Feedback enviado exitosamente.\n\nASPERS Projects ha aprendido de este resultado.\n${data.extracted_patterns && data.extracted_patterns.length > 0 ? `Patrones extraídos: ${data.extracted_patterns.join(', ')}` : ''}\n\n${data.should_update_model ? '⚠️ Se recomienda actualizar el modelo de IA.' : ''}`);
-            
-            document.getElementById('feedback-modal').classList.remove('active');
-            if (currentScanId) {
-                viewScanDetails(currentScanId);
-            }
-            loadLearningStats();
-        } else {
-            alert('Error al enviar feedback: ' + (data.error || 'Error desconocido'));
-        }
-    } catch (error) {
-        alert('Error al enviar feedback: ' + error.message);
-    }
-}
-
-// ============================================================
-// FEEDBACK MASIVO
-// ============================================================
-
-// Hacer funciones disponibles globalmente
-window.updateBulkActions = function() {
-    const checkboxes = document.querySelectorAll('.issue-checkbox:not(:disabled)');
-    const checked = document.querySelectorAll('.issue-checkbox:not(:disabled):checked');
-    const selectedCount = checked.length;
-    
-    const bulkBar = document.getElementById('bulk-actions-bar');
-    const selectedCountSpan = document.getElementById('selected-count');
-    const bulkHackBtn = document.getElementById('bulk-mark-hack-btn');
-    const bulkLegitimateBtn = document.getElementById('bulk-mark-legitimate-btn');
-    
-    if (selectedCountSpan) {
-        selectedCountSpan.textContent = selectedCount;
-    }
-    
-    if (bulkHackBtn && bulkLegitimateBtn) {
-        bulkHackBtn.disabled = selectedCount === 0;
-        bulkLegitimateBtn.disabled = selectedCount === 0;
-    }
-}
-
-window.selectAll = function() {
-    const checkboxes = document.querySelectorAll('.issue-checkbox:not(:disabled)');
-    checkboxes.forEach(cb => cb.checked = true);
-    updateBulkActions();
-}
-
-window.deselectAll = function() {
-    const checkboxes = document.querySelectorAll('.issue-checkbox:checked');
-    checkboxes.forEach(cb => cb.checked = false);
-    updateBulkActions();
-}
-
-async function submitBulkFeedback(verification) {
-    const checked = document.querySelectorAll('.issue-checkbox:not(:disabled):checked');
-    if (checked.length === 0) {
-        alert('Por favor selecciona al menos un archivo');
-        return;
-    }
-    
-    const resultIds = Array.from(checked).map(cb => parseInt(cb.dataset.resultId));
-    const count = resultIds.length;
-    
-    const confirmMessage = verification === 'hack' 
-        ? `¿Estás seguro de marcar ${count} archivo(s) como HACK?\n\nEsta acción mejorará el aprendizaje de ASPERS Projects.`
-        : `¿Estás seguro de marcar ${count} archivo(s) como LEGÍTIMO?\n\nEsta acción mejorará el aprendizaje de ASPERS Projects.`;
-    
-    if (!confirm(confirmMessage)) {
-        return;
-    }
-    
-    // Deshabilitar botones mientras se procesa
-    const bulkHackBtn = document.getElementById('bulk-mark-hack-btn');
-    const bulkLegitimateBtn = document.getElementById('bulk-mark-legitimate-btn');
-    const originalHackText = bulkHackBtn.innerHTML;
-    const originalLegitimateText = bulkLegitimateBtn.innerHTML;
-    
-    bulkHackBtn.disabled = true;
-    bulkLegitimateBtn.disabled = true;
-    bulkHackBtn.innerHTML = '⏳ Procesando...';
-    bulkLegitimateBtn.innerHTML = '⏳ Procesando...';
-    
-    try {
-        const response = await fetch('/api/feedback/batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                result_ids: resultIds,
-                verification: verification,
-                notes: `Feedback masivo: ${count} archivos marcados como ${verification}`,
-                verified_by: 'staff'
-            })
-        });
-
-        const data = await response.json();
-        if (data.success) {
-            const message = `✅ ${data.processed} de ${data.total} archivos procesados exitosamente.\n\n` +
-                          `ASPERS Projects ha aprendido de estos resultados.\n` +
-                          (data.extracted_patterns && data.extracted_patterns.length > 0 
-                            ? `Patrones extraídos: ${data.extracted_patterns.join(', ')}\n` 
-                            : '') +
-                          (data.errors && data.errors.length > 0 
-                            ? `\n⚠️ Errores: ${data.errors.join(', ')}` 
-                            : '') +
-                          (data.should_update_model ? '\n\n⚠️ Se recomienda actualizar el modelo de IA.' : '');
-            
-            alert(message);
-            
-            // Deseleccionar todos y recargar la vista
-            deselectAll();
-            if (currentScanId) {
-                viewScanDetails(currentScanId);
-            }
-            loadLearningStats();
-        } else {
-            alert('Error al enviar feedback masivo: ' + (data.error || 'Error desconocido'));
-        }
-    } catch (error) {
-        alert('Error al enviar feedback masivo: ' + error.message);
-    } finally {
-        // Restaurar botones
-        bulkHackBtn.disabled = false;
-        bulkLegitimateBtn.disabled = false;
-        bulkHackBtn.innerHTML = originalHackText;
-        bulkLegitimateBtn.innerHTML = originalLegitimateText;
-        updateBulkActions();
-    }
-}
-
-// Event listeners para acciones masivas y navegación de subpáginas
 document.addEventListener('DOMContentLoaded', () => {
-    const bulkHackBtn = document.getElementById('bulk-mark-hack-btn');
-    const bulkLegitimateBtn = document.getElementById('bulk-mark-legitimate-btn');
-    const bulkSelectAllBtn = document.getElementById('bulk-select-all-btn');
-    const bulkDeselectBtn = document.getElementById('bulk-deselect-all-btn');
-    
-    if (bulkHackBtn) {
-        bulkHackBtn.addEventListener('click', () => submitBulkFeedback('hack'));
-    }
-    
-    if (bulkLegitimateBtn) {
-        bulkLegitimateBtn.addEventListener('click', () => submitBulkFeedback('legitimate'));
-    }
-    
-    if (bulkSelectAllBtn) {
-        bulkSelectAllBtn.addEventListener('click', selectAll);
-    }
-    
-    if (bulkDeselectBtn) {
-        bulkDeselectBtn.addEventListener('click', deselectAll);
-    }
-    
     // Inicializar navegación de subpáginas
     setupSubpageNavigation();
 });
@@ -2940,7 +2631,6 @@ async function loadLearningStats() {
         const data = await response.json();
         document.getElementById('learned-patterns-count').textContent = data.patterns_count  ?? 0;
         document.getElementById('learned-hashes-count').textContent   = data.hashes_count   ?? 0;
-        document.getElementById('total-feedbacks-count').textContent  = data.feedbacks_count ?? 0;
     } catch (error) {
         console.error('Error cargando estadísticas de aprendizaje:', error);
     }
