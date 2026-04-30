@@ -1931,6 +1931,9 @@ _SERVER_FP_FRAGMENTS = [
     'appdata\\roaming\\opera software',
     'electronic arts\\ea desktop',
     'site-packages',                   # librerías Python instaladas
+    # Windows AppRepository — paquetes firmados del sistema, jamás hacks
+    'apprepository\\packages', 'microsoft\\windows\\apprepository',
+    'activationstore.dat', 'credentialstore', '.pckgdep',
     # Navegadores — rutas de datos del perfil
     'appdata\\local\\google\\chrome',
     'appdata\\local\\microsoft\\edge',
@@ -1942,6 +1945,15 @@ _SERVER_FP_FRAGMENTS = [
     'steam\\steamapps', 'epicgames', 'origin games',
     'tlauncher', 'prismlauncher', 'badlion client',
     'gdlauncher', 'multimc', 'atlauncher', 'curseforgeapp',
+    'feather launcher', 'feathermc',   # Feather — launcher legítimo
+    # Anti-cheats y herramientas de seguridad legítimas
+    'easyanticheat',                   # anti-cheat de juegos (EAC)
+    'battleye', 'vanguard', 'faceit',  # otros anti-cheats
+    # Herramientas del sistema Windows que aparecen en prefetch
+    'screenclippinghost',              # captura de pantalla nativa de Windows
+    'snippingtool', 'snipping tool',
+    # El propio scanner — no flaggear sus propias copias borradas
+    'argusscanner', 'minecraftsstool',
     # Dominios seguros en URLs de historial/descargas de navegador
     'github.com', 'modrinth.com', 'curseforge.com', 'files.minecraftforge.net',
     'spigotmc.org', 'papermc.io', 'fabricmc.net', 'quiltmc.org',
@@ -1950,13 +1962,16 @@ _SERVER_FP_FRAGMENTS = [
     'lifehacker.com', 'lifehack.org', 'medium.com',
     'stackoverflow.com', 'reddit.com', 'youtube.com',
     'google.com', 'bing.com', 'wikipedia.org',
-    # Mods legítimos conocidos (nombres de archivo)
+    # Mods / datapacks legítimos conocidos
     'optifine', 'fabricmc', 'quiltmc', 'sodium', 'lithium', 'phosphor',
     'iris', 'indium', 'ferritecore', 'lazydfu', 'starlight',
     'journeymap', 'just enough items', 'jei-', 'rei-',
+    'terralith', 'amplified_nether', 'william_wythers',  # datapacks populares
+    'create-', 'botania-', 'waystones-', 'appleskin-',   # mods comunes
+    # JNA — archivos temporales normales de Java/Minecraft
+    'jna', 'jna-',
     # Otros programas legítimos
     'voicemod',
-    'minecraftsstool',                 # el propio SS tool del servidor
     # Drivers y software de hardware
     'nvidia corporation', 'amd\\radeon', 'intel corporation',
     'discord\\app-', 'teamspeak 3 client',
@@ -2177,13 +2192,20 @@ def submit_scan_results(scan_id):
                 print(f"[DEBUG] FP filter: {before} → {len(results)} resultados ({before - len(results)} descartados)")
             print(f"[DEBUG] Insertando {len(results)} resultados en scan_results")
             if results:
+                def _norm_conf(v):
+                    """Normaliza confidence a rango 0-1 independientemente de si el exe lo mandó como 0-1 o 0-100."""
+                    try:
+                        f = float(v or 0)
+                        return f / 100.0 if f > 1.0 else f
+                    except (TypeError, ValueError):
+                        return 0.0
                 batch = [
                     (scan_id,
                      r.get('tipo', ''), r.get('nombre', '') or r.get('archivo', ''),
                      r.get('ruta', ''), r.get('categoria', ''), r.get('alerta', ''),
-                     r.get('confidence', 0), json.dumps(r.get('detected_patterns', [])),
+                     _norm_conf(r.get('confidence', 0)), json.dumps(r.get('detected_patterns', [])),
                      r.get('obfuscation', False), r.get('file_hash', ''),
-                     r.get('ai_analysis', ''), r.get('ai_confidence', 0))
+                     r.get('ai_analysis', ''), _norm_conf(r.get('ai_confidence', 0)))
                     for r in results
                 ]
                 if results:

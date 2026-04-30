@@ -11769,9 +11769,10 @@ class ArgusApp:
                 'lunarclient.exe', 'badlion.exe', 'prismlauncher.exe',
                 'multimc.exe', 'gdlauncher.exe', 'ftb_app.exe',
                 'curseforge.exe', 'atlauncher.exe', 'polymc.exe',
-                'tlauncher.exe', 'featherlauncher.exe',
+                'tlauncher.exe', 'featherlauncher.exe', 'feather launcher.exe', 'feather.exe',
+                'cosmic client.exe', 'cosmicclient.exe',
                 'explorer.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe',
-                'steam.exe',
+                'steam.exe', 'code.exe', 'idea64.exe',
             }
 
             INJECTOR_KEYWORDS = {
