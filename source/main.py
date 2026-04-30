@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.17"
+SCANNER_VERSION = "1.6.18"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -3631,6 +3631,16 @@ class ArgusApp:
                 _run_safe(self.scan_minecraft_safe_mode)
                 self._set_scan_phase("📋 Bug F3+T (recarga resource packs con click)...")
                 _run_safe(self.scan_f3t_log_exploit)
+                self._set_scan_phase("🛡️ Exclusiones sospechosas de Windows Defender...")
+                _run_safe(self.scan_defender_exclusions)
+                self._set_scan_phase("💥 Crash reports de Minecraft...")
+                _run_safe(self.scan_minecraft_crash_reports)
+                self._set_scan_phase("🗂️ Amcache — ejecución histórica de programas...")
+                _run_safe(self.scan_amcache)
+                self._set_scan_phase("🔍 Historial de búsquedas de Windows...")
+                _run_safe(self.scan_windows_search_history)
+                self._set_scan_phase("📎 Archivos recientes (.lnk) — accesos sospechosos...")
+                _run_safe(self.scan_recent_files_lnk)
                 self._set_scan_phase("🎯 Fingerprints compuestos de ghost clients...")
                 _run_safe(self.scan_hack_fingerprints)
                 self._set_scan_phase("⛓️ Kill chain temporal (USN Journal)...")
@@ -7692,53 +7702,6 @@ class ArgusApp:
         except Exception as e:
             print(f"Error en scan_recent_lnk: {e}")
 
-    def scan_powershell_history(self):
-        """Escanea el historial de PowerShell (PSReadLine) en busca de comandos sospechosos."""
-        print("🔍 Escaneando historial de PowerShell...")
-        hack_terms = [
-            'vape', 'vapelite', 'entropy', 'entropyclient',
-            'wurst', 'wurstclient', 'liquidbounce',
-            'killaura', 'aimbot', 'cheatengine',
-            'xray', 'triggerbot', 'dllinjector', 'bspoof',
-            'phobos', 'astolfo', 'novoline', 'processhollowing',
-            'ghostclient', 'silentclient', 'fluxclient',
-        ]
-        ps_history = os.path.join(
-            os.environ.get('APPDATA', ''),
-            'Microsoft', 'Windows', 'PowerShell', 'PSReadLine', 'ConsoleHost_history.txt'
-        )
-        if not os.path.exists(ps_history):
-            return
-        try:
-            with open(ps_history, 'r', encoding='utf-8', errors='ignore') as f:
-                lines = f.readlines()
-
-            suspicious_cmds = []
-            all_cmds = [l.strip() for l in lines if l.strip()]
-
-            for cmd in all_cmds:
-                cmd_lower = cmd.lower()
-                for term in hack_terms:
-                    if term in cmd_lower:
-                        suspicious_cmds.append(cmd)
-                        self.issues_found.append({
-                            'tipo': 'powershell_suspicious',
-                            'nombre': f'Comando PS sospechoso: {cmd[:80]}',
-                            'ruta': ps_history[:255],
-                            'archivo': cmd[:255],
-                            'categoria': 'CMD_HISTORY',
-                            'alerta': 'CRITICAL',
-                            'confidence': 78,
-                            'detected_patterns': [term],
-                        })
-                        print(f"🚨 PS SOSPECHOSO: {cmd[:80]}")
-                        break
-
-            if all_cmds:
-                print(f"✅ PS history: {len(all_cmds)} comandos, {len(suspicious_cmds)} sospechosos")
-        except Exception as e:
-            print(f"Error en scan_powershell_history: {e}")
-
     def scan_appcompat_shimcache(self):
         """Lee AppCompatCache (ShimCache) del registro — ejecuciones históricas de aplicaciones."""
         print("🔍 Escaneando AppCompatCache (ShimCache)...")
@@ -10658,6 +10621,384 @@ class ArgusApp:
         })
         print(f"⚠️ Bug F3+T: {total_hits} ocurrencia(s) en {len(hit_details)} archivo(s) — alerta: {alerta}")
 
+    def scan_defender_exclusions(self):
+        """Detecta exclusiones sospechosas en Windows Defender (técnica de evasión)."""
+        HACK_MARKERS = [
+            'vape', 'meteor', 'wurst', 'impact', 'liquidbounce', 'aristois', 'killaura',
+            'autoclicker', 'autoclick', 'macro', 'inject', 'cheat', 'hack', 'xray',
+            'freelook', 'aimbot', 'esp', 'blatant', 'ghost', 'rise', 'sigma',
+            'novoline', 'wolfram', 'astolfo', 'reflex', 'drip', 'flux', 'crit',
+            'forge\\mods', 'fabric\\mods', '\\mods\\', 'liteloader',
+        ]
+        try:
+            import winreg
+            base = r'SOFTWARE\Microsoft\Windows Defender\Exclusions'
+            subtypes = ['Paths', 'Processes', 'Extensions']
+            for sub in subtypes:
+                try:
+                    key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, f'{base}\\{sub}', 0,
+                                         winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+                    idx = 0
+                    while True:
+                        try:
+                            name, _, _ = winreg.EnumValue(key, idx)
+                            idx += 1
+                            name_l = name.lower().replace('/', '\\')
+                            if any(m in name_l for m in HACK_MARKERS):
+                                self.issues_found.append({
+                                    'nombre': f'Exclusión sospechosa en Defender ({sub}): {os.path.basename(name)}',
+                                    'ruta': os.path.dirname(name) if sub == 'Paths' else name,
+                                    'archivo': name,
+                                    'tipo': 'defender_exclusion_hack',
+                                    'categoria': 'EVASION',
+                                    'alerta': 'CRITICAL',
+                                    'confidence': 0.95,
+                                    'detected_patterns': ['defender_exclusion', sub.lower()],
+                                    'explicacion': (
+                                        f'Windows Defender tiene una exclusión de tipo {sub} para '
+                                        f'"{name}", que coincide con marcadores de hacks conocidos. '
+                                        f'Esta exclusión impide que el antivirus detecte el hack.'
+                                    ),
+                                })
+                        except OSError:
+                            break
+                    winreg.CloseKey(key)
+                except (FileNotFoundError, PermissionError, OSError):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_defender_exclusions: {e}")
+
+    def scan_powershell_history(self):
+        """Detecta comandos sospechosos en el historial de PowerShell (PSReadLine)."""
+        HACK_KEYWORDS = [
+            'invoke-webrequest', 'invoke-expression', 'iex ', 'downloadstring', 'downloadfile',
+            'bypass', 'unrestricted', 'hidden', 'encodedcommand', 'frombase64string',
+            'vape', 'meteor', 'inject', 'cheat', 'hack', 'autoclicker', 'macro',
+            'set-mppreference', 'add-mppreference', 'disablerealtimemonitoring',
+            'net.webclient', 'webclient', 'start-bitstransfer', 'certutil',
+            'reg add', 'reg delete', 'schtasks', 'sc create', 'sc start',
+        ]
+        SAFE_SKIP = ['update', 'upgrade', 'install', 'winget', 'choco', 'pip install']
+        hist_path = os.path.expandvars(
+            r'%APPDATA%\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt'
+        )
+        if not os.path.exists(hist_path):
+            return
+        try:
+            with open(hist_path, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+            for line in lines:
+                line_l = line.strip().lower()
+                if not line_l:
+                    continue
+                if any(s in line_l for s in SAFE_SKIP):
+                    continue
+                matched = [kw for kw in HACK_KEYWORDS if kw in line_l]
+                if matched:
+                    self.issues_found.append({
+                        'nombre': f'Comando sospechoso en historial PowerShell: {line.strip()[:80]}',
+                        'ruta': os.path.dirname(hist_path),
+                        'archivo': hist_path,
+                        'tipo': 'powershell_history_hack',
+                        'categoria': 'EVASION',
+                        'alerta': 'SOSPECHOSO',
+                        'confidence': 0.78,
+                        'detected_patterns': matched[:5],
+                        'explicacion': (
+                            f'El historial de PowerShell contiene el comando: "{line.strip()[:120]}", '
+                            f'que coincide con patrones sospechosos: {matched[:3]}.'
+                        ),
+                    })
+        except Exception as e:
+            print(f"Error en scan_powershell_history: {e}")
+
+    def scan_minecraft_crash_reports(self):
+        """Analiza crash reports de Minecraft en busca de hacks que causaron crashes."""
+        HACK_PATTERNS = [
+            'vape', 'meteor', 'wurst', 'impact', 'liquidbounce', 'aristois',
+            'killaura', 'autoclicker', 'autoclick', 'macro', 'inject', 'cheat',
+            'hack', 'xray', 'aimbot', 'esp', 'ghost', 'rise', 'sigma', 'novoline',
+            'wolfram', 'astolfo', 'reflex', 'drip', 'flux', 'freelook',
+            'mixin conflict', 'coremods', 'optifine conflict', 'forge conflict',
+        ]
+        now = datetime.now()
+        cutoff = now - timedelta(days=30)
+
+        crash_dirs = []
+        mc_root = os.path.expanduser(r'~\AppData\Roaming\.minecraft\crash-reports')
+        if os.path.isdir(mc_root):
+            crash_dirs.append(mc_root)
+
+        for launcher_root in [
+            os.path.expanduser(r'~\AppData\Roaming\PrismLauncher\instances'),
+            os.path.expanduser(r'~\AppData\Roaming\MultiMC\instances'),
+            os.path.expanduser(r'~\AppData\Roaming\PolyMC\instances'),
+        ]:
+            if os.path.isdir(launcher_root):
+                try:
+                    for instance in os.listdir(launcher_root):
+                        cr = os.path.join(launcher_root, instance, 'minecraft', 'crash-reports')
+                        if os.path.isdir(cr):
+                            crash_dirs.append(cr)
+                except OSError:
+                    pass
+
+        for crash_dir in crash_dirs:
+            try:
+                for fname in os.listdir(crash_dir):
+                    if not fname.lower().endswith('.txt'):
+                        continue
+                    fpath = os.path.join(crash_dir, fname)
+                    try:
+                        mtime = datetime.fromtimestamp(os.path.getmtime(fpath))
+                        if mtime < cutoff:
+                            continue
+                        with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read(20480)
+                        content_l = content.lower()
+                        matched = [p for p in HACK_PATTERNS if p in content_l]
+                        if matched:
+                            self.issues_found.append({
+                                'nombre': f'Crash report con indicios de hack: {fname}',
+                                'ruta': crash_dir,
+                                'archivo': fpath,
+                                'tipo': 'crash_report_hack',
+                                'categoria': 'FORENSE',
+                                'alerta': 'SOSPECHOSO',
+                                'confidence': 0.72,
+                                'detected_patterns': matched[:5],
+                                'explicacion': (
+                                    f'El crash report "{fname}" (modificado: {mtime.strftime("%d/%m/%Y")}) '
+                                    f'contiene referencias a: {matched[:3]}. Los hacks suelen aparecer '
+                                    f'en crashes por conflictos de cargadores o mixins.'
+                                ),
+                            })
+                    except OSError:
+                        continue
+            except OSError:
+                continue
+
+    def scan_amcache(self):
+        """Detecta ejecución histórica de hacks vía Amcache.hve."""
+        HACK_MARKERS = [
+            'vape', 'meteor', 'wurst', 'impact', 'liquidbounce', 'aristois',
+            'autoclicker', 'autoclick', 'macro', 'inject', 'cheat', 'hack',
+            'xray', 'aimbot', 'ghost', 'rise', 'sigma', 'wolfram', 'astolfo',
+            'reflex', 'drip', 'flux', 'freelook', 'killaura', 'novoline',
+        ]
+        hive_src = r'C:\Windows\AppCompat\Programs\Amcache.hve'
+        if not os.path.exists(hive_src):
+            return
+        pid = os.getpid()
+        tmp_hive = os.path.join(os.environ.get('TEMP', r'C:\Windows\Temp'), f'argus_amcache_{pid}.hve')
+        reg_key = f'HKLM\\ArgusAmcache_{pid}'
+        try:
+            import shutil
+            shutil.copy2(hive_src, tmp_hive)
+        except Exception:
+            return
+        try:
+            subprocess.run(['reg', 'load', reg_key, tmp_hive],
+                           capture_output=True, timeout=10, creationflags=0x08000000)
+            import winreg
+            try:
+                base = f'ArgusAmcache_{pid}\\Root\\InventoryApplicationFile'
+                root_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, base, 0,
+                                           winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+                num_subkeys = winreg.QueryInfoKey(root_key)[0]
+                for i in range(min(num_subkeys, 2000)):
+                    try:
+                        sub_name = winreg.EnumKey(root_key, i)
+                        sub_key = winreg.OpenKey(root_key, sub_name, 0,
+                                                  winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+                        try:
+                            path_val, _ = winreg.QueryValueEx(sub_key, 'LowerCaseLongPath')
+                        except OSError:
+                            try:
+                                path_val, _ = winreg.QueryValueEx(sub_key, 'Name')
+                            except OSError:
+                                path_val = sub_name
+                        winreg.CloseKey(sub_key)
+                        path_l = str(path_val).lower()
+                        matched = [m for m in HACK_MARKERS if m in path_l]
+                        if matched:
+                            self.issues_found.append({
+                                'nombre': f'Ejecución histórica de hack detectada: {os.path.basename(path_val)}',
+                                'ruta': os.path.dirname(path_val),
+                                'archivo': path_val,
+                                'tipo': 'amcache_hack_execution',
+                                'categoria': 'FORENSE',
+                                'alerta': 'CRITICAL',
+                                'confidence': 0.88,
+                                'detected_patterns': matched[:5],
+                                'explicacion': (
+                                    f'Amcache registra que este programa fue ejecutado: "{path_val}". '
+                                    f'Coincide con marcadores de hacks conocidos: {matched[:3]}. '
+                                    f'Este registro persiste aunque el archivo haya sido borrado.'
+                                ),
+                            })
+                    except OSError:
+                        continue
+                winreg.CloseKey(root_key)
+            except Exception:
+                pass
+        except Exception as e:
+            print(f"Error en scan_amcache: {e}")
+        finally:
+            try:
+                subprocess.run(['reg', 'unload', reg_key],
+                               capture_output=True, timeout=10, creationflags=0x08000000)
+            except Exception:
+                pass
+            try:
+                os.remove(tmp_hive)
+            except Exception:
+                pass
+
+    def scan_windows_search_history(self):
+        """Detecta búsquedas sospechosas en el historial de Windows Explorer."""
+        HACK_TERMS = [
+            'vape', 'meteor', 'wurst', 'impact', 'liquidbounce', 'aristois',
+            'autoclicker', 'autoclick', 'macro', 'cheat', 'hack', 'xray',
+            'ghost client', 'rise client', 'sigma', 'wolfram', 'astolfo',
+            'reflex', 'drip', 'killaura', 'aimbot', 'esp hack', 'freelook',
+            'cracked minecraft', 'tlauncher crack', 'free hack', 'descarga hack',
+        ]
+        try:
+            import winreg
+            # WordWheelQuery — historial de búsqueda del Explorador
+            try:
+                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                     r'SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\WordWheelQuery',
+                                     0, winreg.KEY_READ)
+                idx = 0
+                while True:
+                    try:
+                        name, data, _ = winreg.EnumValue(key, idx)
+                        idx += 1
+                        if name.lower() == 'mrulistex':
+                            continue
+                        term = data.decode('utf-16-le', errors='ignore').rstrip('\x00').lower() \
+                            if isinstance(data, bytes) else str(data).lower()
+                        matched = [t for t in HACK_TERMS if t in term]
+                        if matched:
+                            self.issues_found.append({
+                                'nombre': f'Búsqueda sospechosa en Explorador: "{term}"',
+                                'ruta': 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\WordWheelQuery',
+                                'archivo': term,
+                                'tipo': 'windows_search_hack',
+                                'categoria': 'FORENSE',
+                                'alerta': 'SOSPECHOSO',
+                                'confidence': 0.70,
+                                'detected_patterns': matched[:5],
+                                'explicacion': (
+                                    f'Windows registra que el usuario buscó "{term}" en el Explorador. '
+                                    f'Coincide con: {matched[:3]}.'
+                                ),
+                            })
+                    except OSError:
+                        break
+                winreg.CloseKey(key)
+            except (FileNotFoundError, PermissionError, OSError):
+                pass
+
+            # TypedURLs — URLs tipeadas manualmente en Edge/IE
+            try:
+                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                     r'SOFTWARE\Microsoft\Internet Explorer\TypedURLs',
+                                     0, winreg.KEY_READ)
+                idx = 0
+                while True:
+                    try:
+                        name, data, _ = winreg.EnumValue(key, idx)
+                        idx += 1
+                        url = str(data).lower()
+                        matched = [t for t in HACK_TERMS if t in url]
+                        if matched:
+                            self.issues_found.append({
+                                'nombre': f'URL tipeada manualmente sospechosa: {data}',
+                                'ruta': 'HKCU\\SOFTWARE\\Microsoft\\Internet Explorer\\TypedURLs',
+                                'archivo': str(data),
+                                'tipo': 'typed_url_hack',
+                                'categoria': 'FORENSE',
+                                'alerta': 'SOSPECHOSO',
+                                'confidence': 0.68,
+                                'detected_patterns': matched[:5],
+                                'explicacion': (
+                                    f'Windows registra que el usuario tipeó directamente "{data}" '
+                                    f'en el navegador. Coincide con: {matched[:3]}.'
+                                ),
+                            })
+                    except OSError:
+                        break
+                winreg.CloseKey(key)
+            except (FileNotFoundError, PermissionError, OSError):
+                pass
+        except Exception as e:
+            print(f"Error en scan_windows_search_history: {e}")
+
+    def scan_recent_files_lnk(self):
+        """Detecta accesos recientes a hacks vía archivos .lnk de Windows."""
+        HACK_MARKERS = [
+            'vape', 'meteor', 'wurst', 'impact', 'liquidbounce', 'aristois',
+            'autoclicker', 'autoclick', 'macro', 'inject', 'cheat', 'hack',
+            'xray', 'aimbot', 'ghost', 'rise', 'sigma', 'novoline', 'wolfram',
+            'astolfo', 'reflex', 'drip', 'flux', 'freelook', 'killaura',
+        ]
+        import re as _re
+        WIN_PATH_RE = _re.compile(
+            r'[A-Za-z]:\\[^\x00-\x1f"*<>?|][^\x00-\x1f"*<>?|]{2,180}',
+            _re.IGNORECASE
+        )
+        recent_dir = os.path.expandvars(r'%APPDATA%\Microsoft\Windows\Recent')
+        if not os.path.isdir(recent_dir):
+            return
+        now = datetime.now()
+        cutoff = now - timedelta(days=30)
+        try:
+            for fname in os.listdir(recent_dir):
+                if not fname.lower().endswith('.lnk'):
+                    continue
+                fpath = os.path.join(recent_dir, fname)
+                try:
+                    mtime = datetime.fromtimestamp(os.path.getmtime(fpath))
+                    if mtime < cutoff:
+                        continue
+                    with open(fpath, 'rb') as f:
+                        raw = f.read(8192)
+                    paths_found = set()
+                    for enc in ('utf-16-le', 'latin-1'):
+                        try:
+                            decoded = raw.decode(enc, errors='ignore')
+                            for m in WIN_PATH_RE.findall(decoded):
+                                paths_found.add(m.strip())
+                        except Exception:
+                            pass
+                    for target_path in paths_found:
+                        target_l = target_path.lower()
+                        matched = [mk for mk in HACK_MARKERS if mk in target_l]
+                        if matched:
+                            self.issues_found.append({
+                                'nombre': f'Acceso reciente a hack: {os.path.basename(target_path)}',
+                                'ruta': os.path.dirname(target_path),
+                                'archivo': target_path,
+                                'tipo': 'recent_lnk_hack',
+                                'categoria': 'FORENSE',
+                                'alerta': 'SOSPECHOSO',
+                                'confidence': 0.80,
+                                'detected_patterns': matched[:5],
+                                'explicacion': (
+                                    f'Windows registra un acceso reciente '
+                                    f'({mtime.strftime("%d/%m/%Y")}) al archivo "{target_path}". '
+                                    f'Coincide con marcadores de hacks: {matched[:3]}.'
+                                ),
+                            })
+                            break  # un reporte por .lnk es suficiente
+                except OSError:
+                    continue
+        except Exception as e:
+            print(f"Error en scan_recent_files_lnk: {e}")
+
     def scan_backup_sync_locations(self):
         """#28 — Marca archivos en rutas de backup/sync con score reducido."""
         SYNC_PATHS = ['onedrive', 'google drive', 'dropbox', 'icloudrive', 'box\\', 'mega\\']
@@ -11274,6 +11615,8 @@ class ArgusApp:
             'ghost_client_config',    # carpeta .vape/.meteor/.rise confirmada
             'ddos_application',       # herramienta DDoS encontrada o activa
             'f3t_resourcepack_exploit',  # bug F3+T en logs del cliente
+            'defender_exclusion_hack',   # exclusión sospechosa en Windows Defender
+            'amcache_hack_execution',    # ejecución histórica de hack en Amcache
         }
         n_forense = sum(1 for i in issues if i.get('tipo', '') in HIGH_CONF_FORENSE)
 
