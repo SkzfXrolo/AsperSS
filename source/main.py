@@ -2408,6 +2408,7 @@ class ArgusApp:
             'registry_userassist_hack',  # UserAssist: hack ejecutado
             'registry_appcompat_hack',   # AppCompat: loader ejecutado
             'ahk_autoclick',             # Script/exe AHK con autoclick
+            'f3t_resourcepack_exploit',  # Bug F3+T en logs — ruta contiene launcher, no filtrar
             # v1.6.0 — clipboard: pasa por filtro AI, no como trusted
             # browser_download_hack y clipboard_hack_evidence NO están en TRUSTED_TYPES
             # porque pueden generar falsos positivos — pasan por el scoring engine
@@ -10539,9 +10540,12 @@ class ArgusApp:
             'reloading resourcepacks',                # inglés vanilla
             'reloading resource packs',               # con espacio (algunas versiones)
             'resource packs reloaded',                # orden invertido
-            'reloading resourcemanager',              # 1.8.9 vanilla/badlion
+            'reloading resourcemanager',              # 1.8.9 vanilla/badlion (sin espacio)
+            'reloading resource manager',             # 1.12+ vanilla (con espacio)
             'reloading resources',                    # forge/fabric
             'reloading all resources',
+            'reloading!',                             # Lunar Client / moderno (mensaje corto)
+            'loaded pack',                            # algunos forks usan esto
         ]
 
         appdata      = os.environ.get('APPDATA', '')

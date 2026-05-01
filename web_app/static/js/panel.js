@@ -1396,6 +1396,8 @@ function changeIssuePage(delta, scanId) {
 
 // ── Verdict functions ──────────────────────────────────────────────────────
 
+function updateBulkActions() { /* resets any stale selection state on load */ }
+
 function skipVerdict() {
     document.getElementById('bulk-actions-bar').style.display = 'none';
 }
