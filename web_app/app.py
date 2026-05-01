@@ -37,6 +37,14 @@ def init_db_async():
     except Exception as e:
         print(f"⚠️ Error al inicializar base de datos: {e}")
         print("⚠️ La aplicación continuará, pero algunas funciones pueden no funcionar")
+    # Migración: columna short_code en scan_tokens (códigos de 6 chars)
+    try:
+        with get_api_db_cursor() as _cur:
+            _cur.execute("ALTER TABLE scan_tokens ADD COLUMN IF NOT EXISTS short_code VARCHAR(8) UNIQUE")
+            _cur.execute("CREATE INDEX IF NOT EXISTS idx_st_short_code ON scan_tokens(short_code)")
+        print("✅ Columna short_code en scan_tokens verificada/creada")
+    except Exception as _e:
+        print(f"⚠️ Error migrando short_code: {_e}")
     # Migración de seguridad: crear download_links en PostgreSQL si no existe
     try:
         with get_api_db_cursor() as _cur:
@@ -1504,13 +1512,13 @@ def list_tokens():
             if is_admin_user:
                 cursor.execute(
                     'SELECT id, token, created_at, expires_at, used_count, max_uses,'
-                    ' is_active, created_by, description FROM scan_tokens'
+                    ' is_active, created_by, description, short_code FROM scan_tokens'
                     ' ORDER BY created_at DESC LIMIT 100'
                 )
             else:
                 cursor.execute(
                     f'SELECT id, token, created_at, expires_at, used_count, max_uses,'
-                    f' is_active, created_by, description FROM scan_tokens'
+                    f' is_active, created_by, description, short_code FROM scan_tokens'
                     f' WHERE created_by = {_PH} ORDER BY created_at DESC LIMIT 100',
                     (username,)
                 )
@@ -1528,6 +1536,7 @@ def list_tokens():
                     'is_active':   bool(_row_get(row, 6, 'is_active')),
                     'created_by':  _row_get(row, 7, 'created_by') or '',
                     'description': _row_get(row, 8, 'description') or '',
+                    'short_code':  _row_get(row, 9, 'short_code') or '',
                     'type':        'scan_token',
                 })
 
@@ -1550,45 +1559,40 @@ def create_token():
             return jsonify({'success': False, 'error': 'No tienes permisos para crear tokens (se requiere Admin o superior)'}), 403
 
         created_by = user.get('username', 'web_app')
-        user_id = user.get('id')
 
-        # Token: 1 uso, 30 minutos
+        # Token: 1 uso, 30 minutos. Short code: 6 chars A-Z2-9 (sin O/0/I/1/L)
+        _CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
         scan_token = secrets.token_urlsafe(32)
         expires_at = (datetime.datetime.now() + datetime.timedelta(minutes=30)).isoformat()
         max_uses = 1
 
+        # Generar código único de 6 caracteres
+        for _ in range(20):
+            short_code = ''.join(secrets.choice(_CODE_CHARS) for _ in range(6))
+            with get_api_db_cursor() as cursor:
+                cursor.execute(f'SELECT 1 FROM scan_tokens WHERE short_code = {_PH}', (short_code,))
+                if not cursor.fetchone():
+                    break
+
         with get_api_db_cursor() as cursor:
             token_id = _insert_id(
                 cursor,
-                f'INSERT INTO scan_tokens (token, expires_at, max_uses, created_by)'
-                f' VALUES ({_PH},{_PH},{_PH},{_PH})',
-                (scan_token, expires_at, max_uses, created_by)
+                f'INSERT INTO scan_tokens (token, expires_at, max_uses, created_by, short_code)'
+                f' VALUES ({_PH},{_PH},{_PH},{_PH},{_PH})',
+                (scan_token, expires_at, max_uses, created_by, short_code)
             )
 
-        download_link = None
-        try:
-            dl_expires = (datetime.datetime.now() + datetime.timedelta(minutes=30)).isoformat()
-            download_token = secrets.token_urlsafe(32)
-            with get_api_db_cursor() as cursor:
-                cursor.execute(
-                    f'INSERT INTO download_links (token, filename, created_by, expires_at, max_downloads)'
-                    f' VALUES ({_PH},{_PH},{_PH},{_PH},{_PH})',
-                    (download_token, 'ArgusScanner.exe', user_id, dl_expires, 1)
-                )
-            base_url = os.environ.get('RENDER_EXTERNAL_URL', request.host_url).rstrip('/')
-            download_link = f"{base_url}/d/{download_token}?token={scan_token}"
-        except Exception as dl_err:
-            print(f"Error creando enlace de descarga: {dl_err}")
-
+        base_url = os.environ.get('RENDER_EXTERNAL_URL', request.host_url).rstrip('/')
         return jsonify({
             'success': True,
             'token': scan_token,
+            'short_code': short_code,
             'token_id': token_id,
             'expires_at': expires_at,
             'max_uses': max_uses,
             'created_by': created_by,
             'type': 'scan_token',
-            'download_url': download_link
+            'download_url': f"{base_url}/descargar",
         }), 201
 
     except Exception as e:
@@ -1629,16 +1633,19 @@ def delete_token(token_id):
 def _validate_scan_token_direct(token):
     """Valida un token de escaneo en la BD. Retorna (token_id, error_msg, created_by, allowed_mods)."""
     try:
+        # Códigos cortos (≤8 chars) se buscan en short_code; tokens largos en token
+        use_short = len(token) <= 8
         with get_api_db_cursor() as cursor:
+            col = 'short_code' if use_short else 'token'
             try:
                 cursor.execute(
-                    f'SELECT id, expires_at, used_count, max_uses, is_active, created_by, allowed_mods FROM scan_tokens WHERE token = {_PH}',
-                    (token,)
+                    f'SELECT id, expires_at, used_count, max_uses, is_active, created_by, allowed_mods FROM scan_tokens WHERE {col} = {_PH}',
+                    (token.upper() if use_short else token,)
                 )
             except Exception:
                 cursor.execute(
-                    f'SELECT id, expires_at, used_count, max_uses, is_active, created_by FROM scan_tokens WHERE token = {_PH}',
-                    (token,)
+                    f'SELECT id, expires_at, used_count, max_uses, is_active, created_by FROM scan_tokens WHERE {col} = {_PH}',
+                    (token.upper() if use_short else token,)
                 )
             row = cursor.fetchone()
 
@@ -3373,6 +3380,21 @@ def download_with_token(token):
         print(f"❌ Error en download_with_token: {e}")
         print(traceback.format_exc())
         return jsonify({'error': f'Error al procesar descarga: {str(e)}'}), 500
+
+@app.route('/descargar')
+def descargar_exe():
+    """Endpoint público permanente para descargar ArgusScanner.exe sin autenticación."""
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    possible_paths = [
+        os.path.join(project_root, 'downloads', 'ArgusScanner.exe'),
+        os.path.join(project_root, 'source', 'dist', 'ArgusScanner.exe'),
+        os.path.join(project_root, 'ArgusScanner.exe'),
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            return send_file(path, as_attachment=True, download_name='ArgusScanner.exe')
+    return jsonify({'error': 'Ejecutable no disponible aún. Contacta a un administrador.'}), 404
+
 
 @app.route('/api/scans/<int:scan_id>/report-html', methods=['GET'])
 @login_required

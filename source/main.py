@@ -746,7 +746,7 @@ class ArgusApp:
             scan_token = self.config.get('scan_token', '')
             
             if scan_token:
-                print(f"🔑 Token de escaneo encontrado en config: {scan_token[:20]}...")
+                print(f"🔑 Token de escaneo encontrado en config: {scan_token}")
             else:
                 print("⚠️ No hay token de escaneo en config.json")
             
@@ -3267,7 +3267,7 @@ class ArgusApp:
                         scan_token = self.config.get('scan_token', '')
                         if scan_token:
                             self.db_integration.scan_token = scan_token
-                            print(f"✅ Token de escaneo actualizado: {scan_token[:20]}...")
+                            print(f"✅ Token de escaneo actualizado: {scan_token}")
                         else:
                             print(f"⚠️ No hay token en config.json, recargando configuración...")
                             # Recargar configuración por si se guardó después de la inicialización
@@ -3275,7 +3275,7 @@ class ArgusApp:
                             scan_token = self.config.get('scan_token', '')
                             if scan_token:
                                 self.db_integration.scan_token = scan_token
-                                print(f"✅ Token de escaneo cargado desde config: {scan_token[:20]}...")
+                                print(f"✅ Token de escaneo cargado desde config: {scan_token}")
                             else:
                                 print(f"❌ No hay token de escaneo disponible. Por favor, autentícate primero.")
                     
@@ -3307,14 +3307,14 @@ class ArgusApp:
                         scan_token = self.config.get('scan_token', '')
                         if scan_token and not self.db_integration.scan_token:
                             self.db_integration.scan_token = scan_token
-                            print(f"✅ Token actualizado antes de enviar resultados: {scan_token[:20]}...")
+                            print(f"✅ Token actualizado antes de enviar resultados: {scan_token}")
                         elif not scan_token:
                             # Intentar recargar config
                             self.config = self.load_config()
                             scan_token = self.config.get('scan_token', '')
                             if scan_token:
                                 self.db_integration.scan_token = scan_token
-                                print(f"✅ Token cargado desde config antes de enviar: {scan_token[:20]}...")
+                                print(f"✅ Token cargado desde config antes de enviar: {scan_token}")
                     
                     if self.db_integration.scan_token:
                         try:
@@ -5580,7 +5580,7 @@ class ArgusApp:
                     if not web_url or any(web_url.startswith(p) for p in _bad):
                         self.config['web_url'] = 'https://asperss.onrender.com'
                     print(f"🔍 Validando token contra API: {api_url}")
-                    print(f"🔍 Token recibido (primeros 20 chars): {token[:20]}...")
+                    print(f"🔍 Código de acceso recibido: {token}")
                     
                     # Validar token contra la API con reintentos (Render puede estar "despertando")
                     import time
@@ -5765,12 +5765,12 @@ class ArgusApp:
                     auth_window.destroy()
                 else:
                     error_msg = (
-                        "Token inválido o expirado.\n\n"
+                        "Código inválido o expirado.\n\n"
                         "Verifica que:\n"
-                        "• El token fue copiado correctamente\n"
-                        "• El token no haya expirado\n"
-                        f"• El token esté activo en el panel: {self.config.get('web_url','https://asperss.onrender.com')}\n"
-                        "• Generaste el token desde tu cuenta de staff"
+                        "• El código de 6 caracteres fue copiado correctamente\n"
+                        "• El código no haya expirado (válido 30 min)\n"
+                        "• El código no fue usado ya (1 solo uso)\n"
+                        f"• El panel: {self.config.get('web_url','https://asperss.onrender.com')}"
                     )
                     messagebox.showerror("❌ Error", error_msg)
                     # No borrar el token para que el usuario pueda revisarlo
@@ -5838,7 +5838,7 @@ class ArgusApp:
             
             info_label = tk.Label(
                 card_content,
-                                text="Esta aplicación requiere autenticación para funcionar.\nIngresa el token generado por Discord o genera uno nuevo.",
+                text="Esta aplicación requiere un código de acceso de 6 caracteres.\nPídele a tu staff que genere uno desde el panel.",
                 font=("Segoe UI", 11),
                 fg=text_secondary,
                 bg=card_color,
@@ -5854,31 +5854,41 @@ class ArgusApp:
             # Label del token con estilo moderno
             token_label = tk.Label(
                 token_frame,
-                text="🔑 Token de Autenticación:",
+                text="🔑 Código de Acceso (6 caracteres):",
                 font=("Segoe UI", 12, "bold"),
                 fg=text_primary,
                 bg=card_color
             )
             token_label.pack(anchor="w", pady=(0, 8))
-            
+
             # Campo de entrada con estilo moderno
             entry_frame = tk.Frame(token_frame, bg=card_color)
             entry_frame.pack(fill=tk.X)
-            
+
+            code_var = tk.StringVar()
+            def _on_code_change(*_):
+                val = code_var.get().upper()
+                if len(val) > 6:
+                    val = val[:6]
+                code_var.set(val)
+            code_var.trace_add('write', _on_code_change)
+
             token_entry = tk.Entry(
                 entry_frame,
-                font=("Consolas", 13, "bold"),
-                width=35,
+                textvariable=code_var,
+                font=("Consolas", 22, "bold"),
+                width=8,
                 bg="#161b22",
-                fg=text_primary,
+                fg="#a78bfa",
                 insertbackground=text_primary,
                 relief=tk.FLAT,
                 bd=0,
                 highlightthickness=2,
                 highlightbackground=accent_blue,
-                highlightcolor=accent_blue
+                highlightcolor=accent_blue,
+                justify="center"
             )
-            token_entry.pack(fill=tk.X, ipady=10)
+            token_entry.pack(ipady=14)
             token_entry.focus_set()
             
             # Botones con estilo moderno ASPERS PROJECTS
@@ -13059,7 +13069,7 @@ class ArgusApp:
         import tkinter as tk
 
         web_url  = self.config.get('web_url', 'https://asperss.onrender.com').rstrip('/')
-        staff    = self.config.get('staff_name', self.config.get('scan_token', '')[:8] + '...')
+        staff    = self.config.get('staff_name', self.config.get('scan_token', ''))
 
         # Actualizar área de texto con estado mínimo
         try:

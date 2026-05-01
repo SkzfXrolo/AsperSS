@@ -421,7 +421,7 @@
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Token</th>
+                            <th>Código</th>
                             <th>Fecha Creación</th>
                             <th>Creado Por</th>
                             <th>Usos</th>
@@ -1615,42 +1615,43 @@
     <div class="modal" id="token-modal">
         <div class="modal-content" style="max-width:400px">
             <div class="modal-header">
-                <h3>Crear Token</h3>
+                <h3>Crear Código de Acceso</h3>
                 <button class="modal-close" id="close-token-modal">&times;</button>
             </div>
             <div class="modal-body">
                 <p style="margin-bottom:16px;color:var(--text-secondary)">
-                    Se generará un token de <strong>1 uso</strong> válido por <strong>30 minutos</strong>.
+                    Se generará un código de <strong>6 caracteres</strong>, válido por <strong>30 minutos</strong> y de <strong>1 solo uso</strong>.
                 </p>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" id="cancel-token-btn">Cancelar</button>
-                    <button type="button" class="btn btn-primary" id="confirm-create-token-btn">Crear Token</button>
+                    <button type="button" class="btn btn-primary" id="confirm-create-token-btn">Generar Código</button>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="modal" id="token-result-modal">
-        <div class="modal-content">
+        <div class="modal-content" style="max-width:420px">
             <div class="modal-header">
-                <h3>Token Creado</h3>
+                <h3>Código de Acceso Generado</h3>
                 <button class="modal-close" id="close-token-result-modal">&times;</button>
             </div>
-            <div class="modal-body">
-                <p>Token generado exitosamente. Copia este token y guárdalo en un lugar seguro:</p>
-                <div class="token-display">
-                    <code id="generated-token"></code>
-                    <button type="button" class="btn btn-secondary" id="copy-token-btn">Copiar Token</button>
+            <div class="modal-body" style="text-align:center">
+                <p style="color:var(--text-secondary);margin-bottom:20px;">Comparte este código con el jugador para que lo ingrese en el escáner.</p>
+                <div style="background:rgba(99,102,241,0.08);border:2px solid rgba(99,102,241,0.4);border-radius:16px;padding:28px 20px;margin-bottom:20px;">
+                    <div style="font-size:11px;color:var(--text-disabled);letter-spacing:2px;margin-bottom:10px;">CÓDIGO DE ACCESO</div>
+                    <div id="generated-token" style="font-family:'Consolas','Courier New',monospace;font-size:42px;font-weight:900;letter-spacing:10px;color:#a78bfa;line-height:1;">------</div>
+                    <div style="font-size:11px;color:var(--text-disabled);margin-top:10px;">1 uso · 30 minutos</div>
                 </div>
-                <div id="download-link-section" style="margin-top: 20px; display: none;">
-                    <p style="margin-bottom: 10px;"><strong>🔗 Enlace de descarga pública:</strong></p>
-                    <div class="token-display">
-                        <input type="text" id="generated-download-link-from-token" readonly style="width: 100%; padding: 8px; font-family: monospace; border: 1px solid #30363d; background: #0d1117; color: #c9d1d9; border-radius: 4px;">
-                        <button class="btn btn-secondary" id="copy-download-link-from-token-btn" style="margin-top: 10px;">📋 Copiar Enlace</button>
+                <button type="button" class="btn btn-primary" id="copy-token-btn" style="width:100%;margin-bottom:16px;font-size:15px;padding:12px;">Copiar Código</button>
+                <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.25);border-radius:10px;padding:12px 16px;text-align:left;">
+                    <div style="font-size:11px;color:#10b981;font-weight:600;margin-bottom:6px;">ENLACE DE DESCARGA (fijo, público)</div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <code id="token-result-download-url" style="font-size:12px;color:var(--text-secondary);flex:1;word-break:break-all;"></code>
+                        <button type="button" class="btn btn-secondary" id="copy-download-url-btn" style="font-size:11px;padding:5px 10px;white-space:nowrap;">Copiar</button>
                     </div>
-                    <p class="warning-text" style="margin-top: 10px;">✅ Este enlace permite descargar el ejecutable sin iniciar sesión. Compártelo junto con el token.</p>
                 </div>
-                <p class="warning-text">⚠️ Este token solo se mostrará una vez</p>
+                <p style="margin-top:14px;font-size:12px;color:var(--text-disabled);">El escáner se descarga siempre desde el mismo enlace, sin token.</p>
             </div>
         </div>
     </div>

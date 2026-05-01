@@ -794,15 +794,18 @@ async function loadTokens() {
                     statusBadge = 'badge-secondary';
                 }
                 
+                const codeDisplay = token.short_code
+                    ? `<span style="font-family:'Consolas',monospace;font-size:18px;font-weight:900;letter-spacing:4px;color:#a78bfa;">${token.short_code}</span>`
+                    : `<code style="font-size:11px;opacity:0.5;">${tokenStr.substring(0, 12)}…</code>`;
                 return `
                 <tr>
-                    <td><code>${tokenStr.substring(0, 20)}...</code></td>
+                    <td>${codeDisplay}</td>
                     <td>${token.created_at ? formatDate(token.created_at) : 'N/A'}</td>
                     <td>${token.created_by || 'N/A'}</td>
                     <td>${usedCount}${maxUses > 0 ? ` / ${maxUses}` : ' / ∞'}</td>
                     <td><span class="badge ${statusBadge}">${statusText}</span></td>
                     <td>
-                        ${window.CAN_TOKENS ? `<button class="btn btn-sm btn-danger" onclick="deleteToken(${token.id || token.token_id})" title="Eliminar permanentemente este token">🗑️ Eliminar</button>` : ''}
+                        ${window.CAN_TOKENS ? `<button class="btn btn-sm btn-danger" onclick="deleteToken(${token.id || token.token_id})" title="Eliminar este código">🗑️ Eliminar</button>` : ''}
                     </td>
                 </tr>
             `;
@@ -843,91 +846,19 @@ function setupEventListeners() {
         document.getElementById('token-result-modal').classList.remove('active');
     });
 
-    // Botón de copiar token
+    // Copiar código de acceso
     document.getElementById('copy-token-btn')?.addEventListener('click', async (e) => {
         e.preventDefault();
-        e.stopPropagation();
-        
-        const tokenElement = document.getElementById('generated-token');
-        const token = tokenElement?.textContent;
-        
-        if (!token) {
-            alert('No hay token para copiar');
-            return;
-        }
-        
-        try {
-            await navigator.clipboard.writeText(token);
-            const btn = document.getElementById('copy-token-btn');
-            const originalText = btn.textContent;
-            btn.textContent = '✓ Copiado!';
-            btn.style.background = '#22c55e';
-            setTimeout(() => {
-                btn.textContent = originalText;
-                btn.style.background = '';
-            }, 2000);
-        } catch (error) {
-            // Fallback para navegadores que no soportan clipboard API
-            const textArea = document.createElement('textarea');
-            textArea.value = token;
-            textArea.style.position = 'fixed';
-            textArea.style.opacity = '0';
-            document.body.appendChild(textArea);
-            textArea.select();
-            try {
-                document.execCommand('copy');
-                const btn = document.getElementById('copy-token-btn');
-                const originalText = btn.textContent;
-                btn.textContent = '✓ Copiado!';
-                btn.style.background = '#22c55e';
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                    btn.style.background = '';
-                }, 2000);
-            } catch (err) {
-                alert('Error al copiar. Por favor, copia manualmente: ' + token);
-            }
-            document.body.removeChild(textArea);
-        }
+        const code = document.getElementById('generated-token')?.textContent?.trim();
+        if (!code || code === '------') return;
+        await _copyToClipboard(code, document.getElementById('copy-token-btn'), 'Copiar Código', '✓ Copiado!');
     });
-    
-    // Botón de copiar enlace de descarga desde el modal de token
-    document.getElementById('copy-download-link-from-token-btn')?.addEventListener('click', async () => {
-        const linkInput = document.getElementById('generated-download-link-from-token');
-        const link = linkInput?.value;
-        
-        if (!link) {
-            alert('No hay enlace para copiar');
-            return;
-        }
-        
-        try {
-            await navigator.clipboard.writeText(link);
-            const btn = document.getElementById('copy-download-link-from-token-btn');
-            const originalText = btn.textContent;
-            btn.textContent = '✓ Copiado!';
-            btn.style.background = '#22c55e';
-            setTimeout(() => {
-                btn.textContent = originalText;
-                btn.style.background = '';
-            }, 2000);
-        } catch (err) {
-            // Fallback para navegadores que no soportan clipboard API
-            const textArea = document.createElement('textarea');
-            textArea.value = link;
-            textArea.style.position = 'fixed';
-            textArea.style.opacity = '0';
-            document.body.appendChild(textArea);
-            textArea.select();
-            try {
-                document.execCommand('copy');
-                document.body.removeChild(textArea);
-                alert('✓ Enlace copiado al portapapeles');
-            } catch (err2) {
-                document.body.removeChild(textArea);
-                alert('Error al copiar: ' + err2.message);
-            }
-        }
+
+    // Copiar URL de descarga fija
+    document.getElementById('copy-download-url-btn')?.addEventListener('click', async () => {
+        const url = document.getElementById('token-result-download-url')?.textContent?.trim();
+        if (!url) return;
+        await _copyToClipboard(url, document.getElementById('copy-download-url-btn'), 'Copiar', '✓ Copiado!');
     });
 
     // Modal de detalles de escaneo
@@ -951,9 +882,26 @@ function setupEventListeners() {
     });
 }
 
+async function _copyToClipboard(text, btn, defaultLabel, copiedLabel) {
+    try {
+        await navigator.clipboard.writeText(text);
+    } catch (_) {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch (_2) { /* ignore */ }
+        document.body.removeChild(ta);
+    }
+    if (btn) {
+        const orig = btn.textContent;
+        btn.textContent = copiedLabel; btn.style.background = '#22c55e';
+        setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 2000);
+    }
+}
+
 async function createToken() {
     const btn = document.getElementById('confirm-create-token-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Creando...'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Generando...'; }
 
     try {
         const response = await fetch('/api/tokens', {
@@ -974,27 +922,21 @@ async function createToken() {
 
         const data = await response.json();
 
-        if (data.success && data.token) {
-            document.getElementById('generated-token').textContent = data.token;
-            const downloadLinkSection = document.getElementById('download-link-section');
-            const downloadLinkInput = document.getElementById('generated-download-link-from-token');
-            if (data.download_url && downloadLinkSection && downloadLinkInput) {
-                downloadLinkInput.value = data.download_url;
-                downloadLinkSection.style.display = 'block';
-            } else if (downloadLinkSection) {
-                downloadLinkSection.style.display = 'none';
-            }
+        if (data.success && data.short_code) {
+            document.getElementById('generated-token').textContent = data.short_code;
+            const dlUrlEl = document.getElementById('token-result-download-url');
+            if (dlUrlEl) dlUrlEl.textContent = data.download_url || (window.location.origin + '/descargar');
             document.getElementById('token-modal').classList.remove('active');
             document.getElementById('token-result-modal').classList.add('active');
             setTimeout(() => loadTokens(), 500);
         } else {
-            alert('Error al crear token: ' + (data.error || 'Error desconocido'));
+            alert('Error al crear código: ' + (data.error || 'Error desconocido'));
         }
     } catch (error) {
-        console.error('Error creando token:', error);
-        alert('Error al crear token: ' + error.message);
+        console.error('Error creando código:', error);
+        alert('Error al crear código: ' + error.message);
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = 'Crear Token'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Generar Código'; }
     }
 }
 
@@ -1192,6 +1134,8 @@ async function loadStaffUsers() {
             tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Sin usuarios</td></tr>';
             return;
         }
+        const _roleOrder = { owner: 0, admin: 1, moderador: 2, helper: 3 };
+        data.users.sort((a, b) => (_roleOrder[a.staff_role] ?? 99) - (_roleOrder[b.staff_role] ?? 99) || a.username.localeCompare(b.username));
         tbody.innerHTML = data.users.map(u => {
             const roleOptions = STAFF_ROLES.map(r =>
                 `<option value="${r}" ${u.staff_role === r ? 'selected' : ''}>${STAFF_ROLE_LABELS[r]}</option>`
