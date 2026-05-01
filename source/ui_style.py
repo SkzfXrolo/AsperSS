@@ -74,13 +74,13 @@ class ModernUI:
         root.title("Argus Projects — Security Scanner Pro")
         sw = root.winfo_screenwidth()
         if sw <= 1366:
-            w, h = 860, 520
+            w, h = 740, 480
         elif sw <= 1920:
-            w, h = 1020, 600
+            w, h = 880, 540
         else:
-            w, h = 1160, 680
+            w, h = 980, 600
         root.geometry(f"{w}x{h}")
-        root.minsize(720, 460)
+        root.minsize(660, 420)
         root.configure(bg=ModernUI.COLORS['bg_primary'])
         try:
             ico = os.path.join(ModernUI._base_path(), 'assets', 'logo.ico')

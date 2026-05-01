@@ -673,14 +673,14 @@ class ArgusApp:
             # Detectar resolución para fallback
             screen_width = self.root.winfo_screenwidth()
             if screen_width <= 1366:
-                width, height = 1150, 650
-                min_width, min_height = 950, 550
+                width, height = 740, 480
+                min_width, min_height = 660, 420
             elif screen_width <= 1920:
-                width, height = 1350, 800
-                min_width, min_height = 1150, 650
+                width, height = 880, 540
+                min_width, min_height = 740, 460
             else:
-                width, height = 1550, 900
-                min_width, min_height = 1350, 800
+                width, height = 980, 600
+                min_width, min_height = 880, 540
             
             self.root.title("Argus Projects — Security Scanner Pro")
             self.root.geometry(f"{width}x{height}")
@@ -2905,7 +2905,7 @@ class ArgusApp:
     def _create_ui_fallback(self):
         """Fallback UI si ModernUI no está disponible"""
         self.root.title("Argus Projects — Security Scanner Pro")
-        self.root.geometry("1500x950")
+        self.root.geometry("880x540")
         self.root.configure(bg="#0a0e27")
         
         main_panel = tk.Frame(self.root, bg="#0a0e27")
@@ -11518,21 +11518,27 @@ class ArgusApp:
             rarity_map  = {}
             ban_map     = {}
 
-            try:
-                r = requests.get(f'{base_url}/api/rarity', timeout=8)
-                if r.ok:
-                    for entry in r.json().get('rarity', []):
-                        rarity_map[entry['issue_type']] = entry['hack_rate']
-            except Exception:
-                pass
-
-            try:
-                r = requests.get(f'{base_url}/api/ban_patterns', timeout=8)
-                if r.ok:
-                    for entry in r.json().get('ban_patterns', []):
-                        ban_map[entry['issue_type']] = entry['ban_rate']
-            except Exception:
-                pass
+            import threading as _th_cloud
+            def _fetch_rarity():
+                try:
+                    r = requests.get(f'{base_url}/api/rarity', timeout=4)
+                    if r.ok:
+                        for entry in r.json().get('rarity', []):
+                            rarity_map[entry['issue_type']] = entry['hack_rate']
+                except Exception:
+                    pass
+            def _fetch_ban():
+                try:
+                    r = requests.get(f'{base_url}/api/ban_patterns', timeout=4)
+                    if r.ok:
+                        for entry in r.json().get('ban_patterns', []):
+                            ban_map[entry['issue_type']] = entry['ban_rate']
+                except Exception:
+                    pass
+            t1 = _th_cloud.Thread(target=_fetch_rarity, daemon=True)
+            t2 = _th_cloud.Thread(target=_fetch_ban, daemon=True)
+            t1.start(); t2.start()
+            t1.join(timeout=5); t2.join(timeout=5)
 
             if not rarity_map and not ban_map:
                 return issues
@@ -11958,65 +11964,8 @@ class ArgusApp:
 
     @staticmethod
     def _read_usn_journal(max_lines=150_000, max_seconds=12):
-        """Lee fsutil USN journal en streaming para evitar colgarse en discos grandes.
-        Usa un hilo lector para que el timeout aplique incluso antes de la primera línea.
-        Devuelve lista de líneas (hasta max_lines) o [] si no está disponible."""
-        import subprocess as _sp
-        import time as _time
-        import queue as _q
-        import threading as _th
-
-        lines = []
-        proc = None
-        try:
-            proc = _sp.Popen(
-                ['fsutil', 'usn', 'readjournal', 'C:', 'csv'],
-                stdout=_sp.PIPE, stderr=_sp.DEVNULL,
-                text=True, errors='ignore',
-                creationflags=0x08000000,
-            )
-            buf = _q.Queue()
-
-            def _reader():
-                try:
-                    for ln in proc.stdout:
-                        buf.put(ln)
-                except Exception:
-                    pass
-                finally:
-                    buf.put(None)  # sentinel
-
-            _th.Thread(target=_reader, daemon=True).start()
-
-            t0 = _time.time()
-            while True:
-                elapsed = _time.time() - t0
-                if elapsed >= max_seconds or len(lines) >= max_lines:
-                    break
-                try:
-                    ln = buf.get(timeout=min(max_seconds - elapsed, 0.5))
-                except _q.Empty:
-                    break
-                if ln is None:
-                    break
-                lines.append(ln)
-        except Exception:
-            pass
-        finally:
-            if proc is not None:
-                try:
-                    proc.stdout.close()
-                except Exception:
-                    pass
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-                try:
-                    proc.wait(timeout=3)
-                except Exception:
-                    pass
-        return lines
+        """Deshabilitado — fsutil requiere admin, genera FPs y ralentiza el scan."""
+        return []
 
     def scan_prescan_disk_activity(self):
         """P3 #17 — Anomalía de actividad de disco en los 10 minutos previos al inicio del scan.
