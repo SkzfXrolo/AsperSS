@@ -214,131 +214,127 @@ class SilentScannerTechniques:
     
     @staticmethod
     def detect_string_obfuscation():
-        """Detecta ofuscación de strings en archivos"""
+        """Detecta ofuscación de strings en archivos — solo carpetas raíz, cap 150 archivos."""
         issues = []
         try:
-            # Buscar archivos con alto ratio de caracteres no ASCII
             suspicious_locations = [
                 os.path.expanduser("~\\AppData\\Roaming\\.minecraft"),
                 os.path.expanduser("~\\Downloads"),
                 os.path.expanduser("~\\Desktop")
             ]
-            
+            SKIP_DIRS = {'libraries', 'versions', 'assets', 'logs', 'crash-reports', 'shaderpacks', 'resourcepacks'}
+            checked = 0
             for location in suspicious_locations:
-                if os.path.exists(location):
-                    try:
-                        for root, dirs, files in os.walk(location):
-                            for file in files:
-                                if file.lower().endswith(('.jar', '.class', '.exe')):
-                                    file_path = os.path.join(root, file)
-                                    try:
-                                        with open(file_path, 'rb') as f:
-                                            content = f.read(10240)  # Leer primeros 10KB
-                                        
-                                        if len(content) > 100:
-                                            # Calcular ratio de caracteres no ASCII
-                                            non_ascii = sum(1 for b in content if b > 127)
-                                            ratio = non_ascii / len(content)
-                                            
-                                            # Si más del 40% es no ASCII, es muy sospechoso
-                                            if ratio > 0.4:
-                                                issues.append({
-                                                    'tipo': 'string_obfuscation',
-                                                    'nombre': f"Ofuscación detectada: {file}",
-                                                    'ruta': root,
-                                                    'archivo': file_path,
-                                                    'alerta': 'SOSPECHOSO',
-                                                    'categoria': 'OBFUSCATION',
-                                                    'obfuscation_ratio': round(ratio * 100, 2)
-                                                })
-                                    except:
-                                        continue
-                    except:
-                        continue
+                if not os.path.exists(location):
+                    continue
+                try:
+                    for root, dirs, files in os.walk(location):
+                        dirs[:] = [d for d in dirs if d.lower() not in SKIP_DIRS]
+                        for file in files:
+                            if checked >= 150:
+                                break
+                            if not file.lower().endswith(('.jar', '.class', '.exe')):
+                                continue
+                            file_path = os.path.join(root, file)
+                            try:
+                                with open(file_path, 'rb') as f:
+                                    content = f.read(4096)
+                                if len(content) > 100:
+                                    non_ascii = sum(1 for b in content if b > 127)
+                                    if non_ascii / len(content) > 0.4:
+                                        issues.append({
+                                            'tipo': 'string_obfuscation',
+                                            'nombre': f"Ofuscación detectada: {file}",
+                                            'ruta': root, 'archivo': file_path,
+                                            'alerta': 'SOSPECHOSO', 'categoria': 'OBFUSCATION',
+                                        })
+                                checked += 1
+                            except:
+                                continue
+                        if checked >= 150:
+                            break
+                except:
+                    continue
         except Exception as e:
             print(f"Error detectando ofuscación de strings: {e}")
-        
         return issues
-    
+
     @staticmethod
     def detect_packed_executables():
-        """Detecta ejecutables empaquetados/comprimidos"""
+        """Detecta ejecutables empaquetados — solo nivel raíz, cap 60 archivos."""
         issues = []
         try:
-            # Buscar ejecutables con características de empaquetado
             suspicious_locations = [
                 os.path.expanduser("~\\Downloads"),
                 os.path.expanduser("~\\Desktop"),
                 os.path.expanduser("~\\AppData\\Local\\Temp")
             ]
-            
+            checked = 0
             for location in suspicious_locations:
-                if os.path.exists(location):
-                    try:
-                        for root, dirs, files in os.walk(location):
-                            for file in files:
-                                if file.lower().endswith('.exe'):
-                                    file_path = os.path.join(root, file)
-                                    try:
-                                        with open(file_path, 'rb') as f:
-                                            header = f.read(1024)
-                                        
-                                        # Verificar características de empaquetado
-                                        # Ejecutables empaquetados suelen tener:
-                                        # - Poca entropía en el header
-                                        # - Secciones con nombres sospechosos
-                                        # - Tamaño pequeño del ejecutable pero gran uso de memoria
-                                        
-                                        # Verificar si es un PE válido
-                                        if header[:2] == b'MZ':
-                                            # Verificar entropía (simplificado)
-                                            unique_bytes = len(set(header))
-                                            if unique_bytes < 50:  # Baja diversidad = posible empaquetado
-                                                issues.append({
-                                                    'tipo': 'packed_executable',
-                                                    'nombre': f"Ejecutable posiblemente empaquetado: {file}",
-                                                    'ruta': root,
-                                                    'archivo': file_path,
-                                                    'alerta': 'SOSPECHOSO',
-                                                    'categoria': 'PACKING'
-                                                })
-                                    except:
-                                        continue
-                    except:
-                        continue
+                if not os.path.exists(location):
+                    continue
+                try:
+                    # Solo nivel raíz (no recursivo) para Temp y Downloads
+                    entries = os.scandir(location)
+                    for entry in entries:
+                        if checked >= 60:
+                            break
+                        if not entry.is_file() or not entry.name.lower().endswith('.exe'):
+                            continue
+                        try:
+                            with open(entry.path, 'rb') as f:
+                                header = f.read(1024)
+                            if header[:2] == b'MZ' and len(set(header)) < 50:
+                                issues.append({
+                                    'tipo': 'packed_executable',
+                                    'nombre': f"Ejecutable posiblemente empaquetado: {entry.name}",
+                                    'ruta': location, 'archivo': entry.path,
+                                    'alerta': 'SOSPECHOSO', 'categoria': 'PACKING',
+                                })
+                            checked += 1
+                        except:
+                            continue
+                except:
+                    continue
         except Exception as e:
             print(f"Error detectando ejecutables empaquetados: {e}")
-        
         return issues
     
     @staticmethod
     def scan_all_advanced_techniques():
-        """Ejecuta todas las técnicas avanzadas de detección"""
+        """Ejecuta todas las técnicas avanzadas en paralelo con timeout global de 15s."""
+        import threading
         all_issues = []
-        
+        lock = threading.Lock()
+
         print("🔍 Aplicando técnicas avanzadas de Silent-scanner...")
-        
-        # Ejecutar todas las técnicas
+
         techniques = [
-            ("Process Hollowing", SilentScannerTechniques.detect_process_hollowing),
-            ("DLL Hijacking", SilentScannerTechniques.detect_dll_hijacking),
+            ("Process Hollowing",   SilentScannerTechniques.detect_process_hollowing),
+            ("DLL Hijacking",       SilentScannerTechniques.detect_dll_hijacking),
             ("Code Cave Injection", SilentScannerTechniques.detect_code_cave_injection),
-            ("API Hooking", SilentScannerTechniques.detect_api_hooking),
-            ("Anti-Debugging", SilentScannerTechniques.detect_anti_debugging),
-            ("String Obfuscation", SilentScannerTechniques.detect_string_obfuscation),
-            ("Packed Executables", SilentScannerTechniques.detect_packed_executables)
+            ("API Hooking",         SilentScannerTechniques.detect_api_hooking),
+            ("Anti-Debugging",      SilentScannerTechniques.detect_anti_debugging),
+            ("String Obfuscation",  SilentScannerTechniques.detect_string_obfuscation),
+            ("Packed Executables",  SilentScannerTechniques.detect_packed_executables),
         ]
-        
-        for technique_name, technique_func in techniques:
+
+        def _run(name, fn):
             try:
-                print(f"  🔍 {technique_name}...")
-                issues = technique_func()
-                all_issues.extend(issues)
+                issues = fn()
                 if issues:
-                    print(f"    ✅ {len(issues)} detecciones")
+                    with lock:
+                        all_issues.extend(issues)
+                    print(f"  ✅ {name}: {len(issues)} detecciones")
             except Exception as e:
-                print(f"    ⚠️ Error en {technique_name}: {e}")
-        
+                print(f"  ⚠️ {name}: {e}")
+
+        threads = [threading.Thread(target=_run, args=(n, f), daemon=True) for n, f in techniques]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=15)
+
         print(f"✅ Técnicas avanzadas completadas - {len(all_issues)} detecciones totales")
         return all_issues
     
