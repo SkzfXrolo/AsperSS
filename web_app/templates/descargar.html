@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Descargar Argus Scanner — ASPERS Projects</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #080b14;
+            color: #e2e8f0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .card {
+            background: #0f1623;
+            border: 1px solid rgba(99,102,241,0.2);
+            border-radius: 20px;
+            padding: 48px 40px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,102,241,0.08);
+        }
+
+        .logo {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            font-size: 28px;
+        }
+
+        .brand {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            color: #6366f1;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        h1 {
+            font-size: 26px;
+            font-weight: 800;
+            color: #f1f5f9;
+            margin-bottom: 10px;
+            line-height: 1.2;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: #64748b;
+            margin-bottom: 36px;
+            line-height: 1.6;
+        }
+
+        .download-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+            padding: 16px 24px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: #fff;
+            font-size: 16px;
+            font-weight: 700;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: opacity 0.15s, transform 0.15s;
+            margin-bottom: 14px;
+        }
+        .download-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        .download-btn:active { transform: translateY(0); }
+
+        .download-btn svg { flex-shrink: 0; }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #475569;
+            margin-bottom: 36px;
+        }
+        .file-info span { color: #64748b; }
+
+        .steps {
+            background: rgba(99,102,241,0.06);
+            border: 1px solid rgba(99,102,241,0.15);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: left;
+            margin-bottom: 28px;
+        }
+        .steps-title {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: #6366f1;
+            text-transform: uppercase;
+            margin-bottom: 14px;
+        }
+        .step {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+        .step:last-child { margin-bottom: 0; }
+        .step-num {
+            width: 22px;
+            height: 22px;
+            background: rgba(99,102,241,0.15);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 800;
+            color: #818cf8;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .warning {
+            background: rgba(245,158,11,0.07);
+            border: 1px solid rgba(245,158,11,0.2);
+            border-radius: 10px;
+            padding: 12px 16px;
+            font-size: 12px;
+            color: #92400e;
+            color: #d97706;
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            text-align: left;
+        }
+
+        .footer {
+            margin-top: 32px;
+            font-size: 11px;
+            color: #334155;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">🛡️</div>
+        <div class="brand">ASPERS Projects</div>
+        <h1>Argus Scanner</h1>
+        <p class="subtitle">Herramienta de Screen Share para servidores de Minecraft.<br>Requiere código de acceso proporcionado por el staff.</p>
+
+        <a href="{{ exe_url }}" class="download-btn" id="dl-btn">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M10 3v10M10 13l-3.5-3.5M10 13l3.5-3.5M3 17h14" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Descargar ArgusScanner.exe
+        </a>
+
+        <div class="file-info">
+            <span>ArgusScanner.exe</span>
+            <span>·</span>
+            <span>Windows 10 / 11</span>
+            <span>·</span>
+            <span>64-bit</span>
+        </div>
+
+        <div class="steps">
+            <div class="steps-title">Cómo usarlo</div>
+            <div class="step">
+                <div class="step-num">1</div>
+                <div>Descarga y ejecuta <strong style="color:#e2e8f0;">ArgusScanner.exe</strong> como administrador.</div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div>Ingresa el <strong style="color:#e2e8f0;">código de 6 caracteres</strong> que el staff te proporcionó.</div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div>Haz clic en <strong style="color:#e2e8f0;">Autenticar</strong> y espera a que el escaneo finalice.</div>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <div>El staff revisará los resultados en el panel. Mantén el programa abierto hasta que te indiquen.</div>
+            </div>
+        </div>
+
+        <div class="warning">
+            <span>⚠️</span>
+            <span>El código de acceso es de <strong>1 solo uso</strong> y expira a los <strong>30 minutos</strong>. Si no tienes un código, pídele uno al staff antes de descargar.</span>
+        </div>
+    </div>
+
+    <div class="footer">ASPERS Projects · Argus Scanner · Uso exclusivo para staff autorizado</div>
+
+    <script>
+        document.getElementById('dl-btn').addEventListener('click', function() {
+            this.textContent = '✓ Descarga iniciada...';
+            this.style.background = 'linear-gradient(135deg,#10b981,#059669)';
+            setTimeout(() => {
+                this.innerHTML = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3v10M10 13l-3.5-3.5M10 13l3.5-3.5M3 17h14" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Descargar ArgusScanner.exe`;
+                this.style.background = '';
+            }, 3000);
+        });
+    </script>
+</body>
+</html>

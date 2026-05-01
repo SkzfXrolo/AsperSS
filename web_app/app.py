@@ -1560,6 +1560,14 @@ def create_token():
 
         created_by = user.get('username', 'web_app')
 
+        # Asegurar columna short_code existe (migración síncrona por si el background thread aún no corrió)
+        try:
+            with get_api_db_cursor() as cursor:
+                cursor.execute("ALTER TABLE scan_tokens ADD COLUMN IF NOT EXISTS short_code VARCHAR(8)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_st_short_code ON scan_tokens(short_code)")
+        except Exception:
+            pass
+
         # Token: 1 uso, 30 minutos. Short code: 6 chars A-Z2-9 (sin O/0/I/1/L)
         _CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
         scan_token = secrets.token_urlsafe(32)
@@ -1569,10 +1577,13 @@ def create_token():
         # Generar código único de 6 caracteres
         for _ in range(20):
             short_code = ''.join(secrets.choice(_CODE_CHARS) for _ in range(6))
-            with get_api_db_cursor() as cursor:
-                cursor.execute(f'SELECT 1 FROM scan_tokens WHERE short_code = {_PH}', (short_code,))
-                if not cursor.fetchone():
-                    break
+            try:
+                with get_api_db_cursor() as cursor:
+                    cursor.execute(f'SELECT 1 FROM scan_tokens WHERE short_code = {_PH}', (short_code,))
+                    if not cursor.fetchone():
+                        break
+            except Exception:
+                break
 
         with get_api_db_cursor() as cursor:
             token_id = _insert_id(
@@ -1592,7 +1603,7 @@ def create_token():
             'max_uses': max_uses,
             'created_by': created_by,
             'type': 'scan_token',
-            'download_url': f"{base_url}/descargar",
+            'download_url': f"{base_url}/descargar/exe",
         }), 201
 
     except Exception as e:
@@ -3382,6 +3393,14 @@ def download_with_token(token):
         return jsonify({'error': f'Error al procesar descarga: {str(e)}'}), 500
 
 @app.route('/descargar')
+def descargar_page():
+    """Página pública de descarga de ArgusScanner."""
+    base_url = os.environ.get('RENDER_EXTERNAL_URL', request.host_url).rstrip('/')
+    exe_url = f"{base_url}/descargar/exe"
+    return render_template('descargar.html', exe_url=exe_url)
+
+
+@app.route('/descargar/exe')
 def descargar_exe():
     """Endpoint público permanente para descargar ArgusScanner.exe sin autenticación."""
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
