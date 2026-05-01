@@ -11964,8 +11964,57 @@ class ArgusApp:
 
     @staticmethod
     def _read_usn_journal(max_lines=150_000, max_seconds=12):
-        """Deshabilitado — fsutil requiere admin, genera FPs y ralentiza el scan."""
-        return []
+        """Lee fsutil USN journal sin mostrar ventana negra al usuario."""
+        import subprocess as _sp, time as _time, queue as _q, threading as _th
+
+        lines = []
+        proc = None
+        try:
+            _si = _sp.STARTUPINFO()
+            _si.dwFlags |= _sp.STARTF_USESHOWWINDOW
+            _si.wShowWindow = 0  # SW_HIDE
+            proc = _sp.Popen(
+                ['fsutil', 'usn', 'readjournal', 'C:', 'csv'],
+                stdout=_sp.PIPE, stderr=_sp.DEVNULL,
+                text=True, errors='ignore',
+                creationflags=0x08000000,  # CREATE_NO_WINDOW
+                startupinfo=_si,
+            )
+            buf = _q.Queue()
+
+            def _reader():
+                try:
+                    for ln in proc.stdout:
+                        buf.put(ln)
+                except Exception:
+                    pass
+                finally:
+                    buf.put(None)
+
+            _th.Thread(target=_reader, daemon=True).start()
+            t0 = _time.time()
+            while True:
+                elapsed = _time.time() - t0
+                if elapsed >= max_seconds or len(lines) >= max_lines:
+                    break
+                try:
+                    ln = buf.get(timeout=min(max_seconds - elapsed, 0.5))
+                except _q.Empty:
+                    break
+                if ln is None:
+                    break
+                lines.append(ln)
+        except Exception:
+            pass
+        finally:
+            if proc is not None:
+                try: proc.stdout.close()
+                except Exception: pass
+                try: proc.kill()
+                except Exception: pass
+                try: proc.wait(timeout=3)
+                except Exception: pass
+        return lines
 
     def scan_prescan_disk_activity(self):
         """P3 #17 — Anomalía de actividad de disco en los 10 minutos previos al inicio del scan.
