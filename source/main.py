@@ -3175,21 +3175,27 @@ class ArgusApp:
             print(f"Error actualizando progreso: {e}")
 
     def _set_scan_phase(self, text):
-        """Actualiza solo el texto de detalle (sin cambiar %) — seguro desde cualquier hilo."""
+        """Avanza el contador de fase y actualiza progreso — seguro desde cualquier hilo."""
         try:
-            self.root.after(0, lambda t=text: self._apply_phase_text(t))
+            if not hasattr(self, '_phase_lock'):
+                self._phase_lock = threading.Lock()
+            with self._phase_lock:
+                self._phase_counter = getattr(self, '_phase_counter', 0) + 1
+                total = getattr(self, '_total_phases', 76)
+                pct = 80 + min(15, int(self._phase_counter / total * 15))
+            self.root.after(0, lambda t=text, p=pct: self._apply_phase_update(t, p))
         except Exception:
             pass
 
-    def _apply_phase_text(self, text):
+    def _apply_phase_update(self, text, pct):
         try:
             if hasattr(self, 'progress_detail_label') and self.progress_detail_label:
                 self.progress_detail_label.config(text=text)
-            if hasattr(self, 'progress_label') and self.progress_label:
-                cur = self.progress_label.cget('text')
-                # Solo actualizar si no está en animación hacia un nuevo porcentaje
-                if '→' not in cur:
-                    self.progress_label.config(text=text)
+            cur = getattr(self, 'progress_target_value', 0)
+            if pct > cur:
+                self.progress_target_value = pct
+                if not self.progress_animation_running:
+                    self._start_progress_animation(text)
         except Exception:
             pass
 
@@ -3450,6 +3456,10 @@ class ArgusApp:
             # ── FASES SECUNDARIAS COMPLETAMENTE PARALELAS ─────────────────
             # Todas las fases se ejecutan en paralelo para máxima velocidad.
             # list.append() es thread-safe en CPython (GIL protege operaciones C).
+            self._phase_counter = 0
+            self._total_phases = 76
+            if not hasattr(self, '_phase_lock'):
+                self._phase_lock = threading.Lock()
             self._update_progress_safe(80, "⚡ Fases paralelas iniciadas", "Procesos · DNS · Registro · Red · IA...")
 
             def _run_safe(fn, *a, **kw):
@@ -3466,7 +3476,6 @@ class ArgusApp:
 
             # Grupo A — Procesos y sistema (I/O bajo)
             def _group_processes():
-                self._update_progress_safe(81, "⚡ Procesos", "Analizando procesos activos...")
                 self._set_scan_phase("⚙️ Procesos secundarios...")
                 _run_safe(self.secondary_scan_parallel)
                 self._set_scan_phase("🎮 Procesos Java / Minecraft...")
@@ -3484,7 +3493,6 @@ class ArgusApp:
 
             # Grupo B — Archivos y fechas (I/O medio)
             def _group_files():
-                self._update_progress_safe(83, "⚡ Archivos", "Analizando archivos modificados...")
                 self._set_scan_phase("📄 Ejecutables (.exe)...")
                 _run_safe(self.scan_exe_files)
                 self._set_scan_phase("☕ Archivos JAR...")
@@ -3504,7 +3512,6 @@ class ArgusApp:
 
             # Grupo C — Registro y JNA (I/O bajo)
             def _group_registry():
-                self._update_progress_safe(85, "⚡ Registro y JNA", "Analizando entradas del registro...")
                 self._set_scan_phase("📂 Prefetch / JNA...")
                 _run_safe(self.scan_prefetch_jna)
                 _run_safe(self.scan_temp_jna)
@@ -3553,7 +3560,6 @@ class ArgusApp:
 
             # Grupo D — Hardware y red (I/O alto)
             def _group_hardware():
-                self._update_progress_safe(87, "⚡ Hardware y red", "Analizando dispositivos y conexiones...")
                 _run_safe(self.scan_logitech_macros)
                 _run_safe(self.scan_razer_macros)
                 self._set_scan_phase("🖱️ Bloody/A4Tech macros...")
@@ -3595,7 +3601,6 @@ class ArgusApp:
 
             # Grupo E — Ubicaciones de hacks (I/O alto)
             def _group_hack_locations():
-                self._update_progress_safe(89, "🎯 Ubicaciones de hacks", "Downloads, Desktop, Roaming...")
                 _run_safe(self.scan_common_hack_locations)
                 _run_safe(self.scan_suspicious_folders)
                 _run_safe(self.scan_exact_hack_names)
@@ -3652,7 +3657,6 @@ class ArgusApp:
 
             # Grupo F — Técnicas avanzadas
             def _group_advanced():
-                self._update_progress_safe(92, "🧠 Técnicas avanzadas", "Silent-scanner + AstroSS...")
                 try:
                     from silent_scanner_techniques import SilentScannerTechniques
                     adv = SilentScannerTechniques.scan_all_advanced_techniques()
@@ -3676,7 +3680,6 @@ class ArgusApp:
             def _group_forensics():
                 if not self.ss_forensics:
                     return
-                self._update_progress_safe(88, "🔬 Análisis forense SS", "USN Journal, BAM, UserAssist, AppCompat...")
                 try:
                     findings = self.ss_forensics.scan_all()
                     if findings:
