@@ -12193,8 +12193,7 @@ class ArgusApp:
             print(f"Error en scan_java_rwx_memory: {e}")
 
     def scan_temp_dlls(self):
-        """Detecta DLLs sospechosas en carpetas temporales (%TEMP%, C:\\Windows\\Temp).
-        Hacks basados en inyección nativa frecuentemente cargan DLLs desde rutas temporales."""
+        """Detecta DLLs sospechosas en carpetas temporales — solo nivel raíz, cap 200 archivos."""
         print("🔍 Buscando DLLs sospechosas en carpetas Temp...")
         temp_dirs = list({
             os.environ.get('TEMP', ''),
@@ -12204,45 +12203,44 @@ class ArgusApp:
         })
         SAFE_PATTERNS = ('jna', 'fontconfig', 'hsperfdata', 'msi', 'msedge', 'chrome', 'setup')
         cutoff_24h = time.time() - 86400
-        seen = set()
+        checked = 0
         try:
             for tdir in temp_dirs:
                 if not tdir or not os.path.isdir(tdir):
                     continue
-                for root, dirs, files in os.walk(tdir):
-                    dirs[:] = dirs[:6]  # cap depth
-                    for fname in files:
-                        if not fname.lower().endswith('.dll'):
+                try:
+                    for entry in os.scandir(tdir):
+                        if checked >= 200:
+                            break
+                        if not entry.is_file() or not entry.name.lower().endswith('.dll'):
                             continue
-                        fpath = os.path.join(root, fname)
-                        if fpath in seen:
-                            continue
-                        seen.add(fpath)
-                        fname_l = fname.lower()
+                        checked += 1
+                        fname_l = entry.name.lower()
                         if any(s in fname_l for s in SAFE_PATTERNS):
                             continue
                         try:
-                            mtime = os.path.getmtime(fpath)
-                            size  = os.path.getsize(fpath)
-                            if mtime >= cutoff_24h and size > 10240:  # >10KB y reciente
-                                conf = 0.75 if size > 524288 else 0.60  # >512KB más sospechoso
-                                print(f"⚠️ DLL SOSPECHOSA EN TEMP: {fpath}")
+                            st = entry.stat()
+                            if st.st_mtime >= cutoff_24h and st.st_size > 10240:
+                                conf = 0.75 if st.st_size > 524288 else 0.60
+                                print(f"⚠️ DLL SOSPECHOSA EN TEMP: {entry.path}")
                                 self.issues_found.append({
-                                    'nombre': f'DLL sospechosa en carpeta temporal: {fname}',
-                                    'ruta': fpath,
-                                    'archivo': fname,
+                                    'nombre': f'DLL sospechosa en carpeta temporal: {entry.name}',
+                                    'ruta': entry.path,
+                                    'archivo': entry.name,
                                     'tipo': 'dll_injection_java',
                                     'categoria': 'JAVA_INJECTION',
                                     'alerta': 'SOSPECHOSO',
                                     'confidence': conf,
-                                    'detected_patterns': ['dll_in_temp', f'size:{size}'],
-                                    'explicacion': f'DLL de {size//1024}KB encontrada en carpeta temporal '
+                                    'detected_patterns': ['dll_in_temp', f'size:{st.st_size}'],
+                                    'explicacion': f'DLL de {st.st_size//1024}KB encontrada en carpeta temporal '
                                                    f'en las últimas 24h. Los hacks basados en inyección '
                                                    f'nativa suelen cargar DLLs desde rutas temporales para '
                                                    f'no dejar rastro permanente en el sistema.',
                                 })
                         except Exception:
                             continue
+                except Exception:
+                    continue
         except Exception as e:
             print(f"Error en scan_temp_dlls: {e}")
 
