@@ -123,14 +123,16 @@ _DEFINITE_HACK_NAMES = {
     'cheatengine', 'cheat-engine',
     'processhollowing', 'dllhijacking',
     # ── Nombres de carpetas de hack ───────────────────────────────────────
-    'hackclient', 'hackmod', 'cracked-mc', 'crackedmc',
+    'hackclient', 'hackmod', 'cracked-mc', 'crackedmc', 'crack-mc', 'crackmc',
     'bypasser', 'bypassmc',
     # ── Baritone (bot de movimiento automático prohibido) ─────────────────
     'baritone',
 }
 
 # Palabras genéricas que sólo se marcan cuando son palabra completa
-_WORD_BOUNDARY_HACK_WORDS = ['hack', 'cheat', 'cracked', 'crack', 'bypass']
+# 'crack'/'cracked' eliminados — son demasiado genéricos y flagean software pirata
+# no relacionado con Minecraft. Las variantes MC-específicas están en _DEFINITE_HACK_NAMES.
+_WORD_BOUNDARY_HACK_WORDS = ['hack', 'cheat', 'bypass']
 
 # Rutas de software legítimo — si el root las contiene, ignorar la carpeta
 _SAFE_ROOT_FRAGMENTS = {
@@ -6814,7 +6816,7 @@ class ArgusApp:
             # Términos genéricos de evasión
             'bypass', 'undetected', 'ghost', 'stealth',
             # Malware genérico
-            'hack', 'cheat', 'crack', 'keylogger', 'rat.', 'trojan',
+            'hack', 'cheat', 'keylogger', 'rat.', 'trojan',
         ]
         legit_names = [
             'windows', 'microsoft', 'chrome', 'firefox', 'explorer', 'system',
@@ -7878,7 +7880,7 @@ class ArgusApp:
         print("🔍 Escaneando tareas programadas de Windows...")
         hack_terms = [
             'vape', 'entropy', 'hack', 'cheat', 'inject', 'wurst', 'liquidbounce',
-            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'crack', 'autoclick',
+            'sigma', 'flux', 'killaura', 'aimbot', 'bypass', 'autoclick',
             'clicker', 'phobos', 'astolfo', 'dllinjector', 'cheatengine',
             'xray', 'triggerbot', 'ghostclient',
         ]
