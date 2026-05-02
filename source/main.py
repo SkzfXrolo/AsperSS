@@ -168,6 +168,10 @@ _SAFE_ROOT_FRAGMENTS = {
     'roblox\\', 'innersloth', 'vseeface', 'vseefacex',
     # Overwolf
     'ow-electron', 'overwolf',
+    # Juegos de ritmo — sus carpetas de songs/skins contienen palabras
+    # como 'riot', 'rise', 'impact', 'extra', 'insane' que colisionan con hacks
+    'appdata\\local\\osu!', '\\osu!\\songs', '\\osu!\\skins',
+    'appdata\\roaming\\osu!',
 }
 
 _MINECRAFT_INSTANCE_FRAGMENTS = [
@@ -4779,11 +4783,12 @@ class ArgusApp:
                 'D:\\', 'E:\\', 'F:\\', 'G:\\', 'H:\\'
             ]
             
-            # Fragmentos de ruta de navegadores — se saltan COMPLETAMENTE durante el walk
+            # Fragmentos de ruta que se saltan COMPLETAMENTE durante el walk
             _BROWSER_SKIP = {
                 'google\\chrome', 'mozilla\\firefox', 'microsoft\\edge',
                 'brave-browser', 'vivaldi', 'opera software',
                 'appdata\\local\\google', 'appdata\\roaming\\mozilla',
+                'appdata\\local\\osu!', 'appdata\\roaming\\osu!',
             }
 
             for location in search_locations:
