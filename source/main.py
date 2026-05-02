@@ -2377,6 +2377,8 @@ class ArgusApp:
             'site-packages',                     # librerías Python instaladas
             'voicemod',                          # voice changer legítimo
             'minecraftsstool',                   # el propio SS tool del servidor
+            # Juegos de ritmo (Osu!, Beat Saber, etc.)
+            '\\osu!\\', 'appdata\\local\\osu!', 'appdata\\roaming\\osu!',
         ]
         
         # ============================================================
@@ -2454,6 +2456,10 @@ class ArgusApp:
             'program files\\microsoft',
             'program files (x86)\\microsoft',
             'minecraftsstool',            # el propio scanner
+            # Juegos de ritmo — sus carpetas de songs contienen palabras como
+            # "riot", "rise", "impact", "extra", "insane" que colisionan con hacks
+            'appdata\\local\\osu!', '\\osu!\\songs\\', '\\osu!\\skins\\',
+            'appdata\\roaming\\osu!',
         }
 
         for item in issues:
