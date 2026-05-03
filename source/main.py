@@ -3789,6 +3789,10 @@ class ArgusApp:
                     _fk.result()
                 self._set_scan_phase("📡 Discord webhooks en configs de hacks (C2)...")
                 _run_safe(self.scan_discord_webhooks)
+                self._set_scan_phase("💬 Discord settings locales (tokens/webhooks C2)...")
+                _run_safe(self.scan_discord_local_settings)
+                self._set_scan_phase("🔒 Archivos .lock huérfanos de hacks en .minecraft...")
+                _run_safe(self.scan_minecraft_lock_files)
                 self._set_scan_phase("🌐 Historial de descargas del navegador...")
                 _run_safe(self.scan_browser_downloads)
                 self._set_scan_phase("🌐 Historial de páginas visitadas (hack sites/DDoS)...")
@@ -10399,6 +10403,101 @@ class ArgusApp:
                             continue
         except Exception as e:
             print(f"Error en scan_discord_webhooks: {e}")
+
+    def scan_discord_local_settings(self):
+        """#34 — Busca webhooks de C2 y tokens de bot en Discord settings.json local."""
+        print("🔍 Revisando Discord settings.json por tokens/webhooks de C2...")
+        import re as _re
+        appdata = os.environ.get('APPDATA', '')
+        discord_dir = os.path.join(appdata, 'discord')
+        if not os.path.isdir(discord_dir):
+            return
+        WEBHOOK_RE = _re.compile(r'https://discord(?:app)?\.com/api/webhooks/\d+/[\w-]+')
+        BOT_TOKEN_RE = _re.compile(r'[MN][A-Za-z\d]{23}\.[\w-]{6}\.[\w-]{27}')  # Discord bot token
+        try:
+            for root, dirs, files in os.walk(discord_dir):
+                dirs[:] = [d for d in dirs if d not in {'Cache', 'GPUCache', 'Code Cache', 'Service Worker'}]
+                for fname in files:
+                    if not fname.endswith(('.json', '.log')):
+                        continue
+                    fpath = os.path.join(root, fname)
+                    try:
+                        fsize = os.path.getsize(fpath)
+                        if fsize > 512 * 1024:
+                            continue
+                        with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                        webhooks = WEBHOOK_RE.findall(content)
+                        tokens   = BOT_TOKEN_RE.findall(content)
+                        if not (webhooks or tokens):
+                            continue
+                        print(f"🚨 DISCORD C2 EN SETTINGS: {fpath} ({len(webhooks)} webhooks, {len(tokens)} tokens)")
+                        self.issues_found.append({
+                            'nombre': f'Discord C2 en settings locales: {fname} ({len(webhooks)} webhook(s))',
+                            'ruta': fpath,
+                            'archivo': fname,
+                            'tipo': 'discord_webhook_config',
+                            'categoria': 'C2_EXFIL',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.88,
+                            'detected_patterns': ([f'discord_webhook:{w[:60]}' for w in webhooks[:2]] +
+                                                   (['discord_bot_token'] if tokens else [])),
+                            'explicacion': (
+                                f'Se encontraron {len(webhooks)} webhook(s) Discord y {len(tokens)} token(s) '
+                                f'de bot en {fname} dentro de la carpeta de Discord. '
+                                'Los hack clients avanzados inyectan código en Discord para usar su webhook '
+                                'como canal de C2 o para robar tokens de sesión.'
+                            ),
+                        })
+                    except Exception:
+                        continue
+        except Exception as e:
+            print(f"Error en scan_discord_local_settings: {e}")
+
+    def scan_minecraft_lock_files(self):
+        """#35 — Detecta archivos .lck/.lock en .minecraft de procesos ya terminados."""
+        print("🔍 Buscando archivos .lock huérfanos en .minecraft...")
+        appdata = os.environ.get('APPDATA', '')
+        mc_dir = os.path.join(appdata, '.minecraft')
+        if not os.path.isdir(mc_dir):
+            return
+        LOCK_DIRS = [
+            os.path.join(mc_dir, 'config'),
+            os.path.join(mc_dir, 'logs'),
+        ]
+        # Añadir directorios de ghost clients conocidos
+        for gcd in ['.meteor', '.sigma', '.rise', '.liquidbounce', '.weave']:
+            LOCK_DIRS.append(os.path.join(appdata, gcd))
+        try:
+            for lock_dir in LOCK_DIRS:
+                if not os.path.isdir(lock_dir):
+                    continue
+                for fname in os.listdir(lock_dir):
+                    if not (fname.endswith('.lck') or fname.endswith('.lock')):
+                        continue
+                    fpath = os.path.join(lock_dir, fname)
+                    stem = os.path.splitext(fname)[0].lower()
+                    matched = any(h in stem for h in _DEFINITE_HACK_NAMES)
+                    if not matched:
+                        continue
+                    print(f"⚠️ LOCK HUÉRFANO DE HACK: {fpath}")
+                    self.issues_found.append({
+                        'nombre': f'Archivo lock huérfano de hack: {fname}',
+                        'ruta': fpath,
+                        'archivo': fname,
+                        'tipo': 'ghost_client_config',
+                        'categoria': 'FORENSE',
+                        'alerta': 'SOSPECHOSO',
+                        'confidence': 0.72,
+                        'detected_patterns': [f'lock_file:{stem}'],
+                        'explicacion': (
+                            f'{fname} es un archivo lock dejado por un proceso de hack que terminó '
+                            'forzosamente (o fue cerrado durante el scan). Los locks huérfanos '
+                            'indican que el hack estaba activo recientemente.'
+                        ),
+                    })
+        except Exception as e:
+            print(f"Error en scan_minecraft_lock_files: {e}")
 
     def scan_browser_downloads(self):
         """Detecta descargas de hack clients en el historial de Chrome, Edge y Firefox."""
