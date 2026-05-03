@@ -2729,7 +2729,21 @@ class ArgusApp:
             
             if is_false_positive:
                 continue
-            
+
+            # P2 #26 — Antigüedad de archivo >1 año → bajar severidad si no es confirmed hack
+            if item.get('alerta') == 'SOSPECHOSO':
+                _fp = item.get('archivo') or item.get('ruta') or ''
+                if _fp and os.path.isfile(str(_fp)):
+                    try:
+                        import time as _time_age
+                        _age_days = (_time_age.time() - os.path.getmtime(str(_fp))) / 86400
+                        if _age_days > 365 and 'cloud_hash_match' not in item.get('tipo', ''):
+                            item['alerta'] = 'POCO_SOSPECHOSO'
+                            item['confidence'] = max(0.15, float(item.get('confidence', 0.5)) * 0.55)
+                            item.setdefault('detected_patterns', []).append(f'file_age_{int(_age_days)}d')
+                    except Exception:
+                        pass
+
             # 2. ANÁLISIS AVANZADO DE CONTENIDO (si es un archivo)
             content_confidence = 0
             if tipo in ['file', 'jar_file', 'minecraft_file'] and 'archivo' in item:
@@ -4660,6 +4674,14 @@ class ArgusApp:
                         if has_legit_marker and result['confidence'] < 75:
                             result['confidence'] = max(0, result['confidence'] - 20)
                             result['detected_patterns'].append('has_legit_mod_marker')
+
+                        # P2 #14 — Verificar firma de código JAR (.SF + .RSA en META-INF)
+                        _sf_files = [n for n in zf.namelist()
+                                     if n.upper().startswith('META-INF/') and n.upper().endswith('.SF')]
+                        if _sf_files:
+                            result['detected_patterns'].append('jar_signed')
+                            if result['confidence'] < 70:
+                                result['confidence'] = max(0, result['confidence'] - 15)
 
                         # Check MANIFEST.MF for suspicious main class
                         if 'meta-inf/manifest.mf' in names_lower:

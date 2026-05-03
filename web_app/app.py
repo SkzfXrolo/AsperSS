@@ -4807,6 +4807,212 @@ def ml_status():
         return jsonify({'available': False, 'error': str(e)}), 200
 
 
+@app.route('/api/ml/drift', methods=['GET'])
+@login_required
+def ml_drift_check():
+    """P3 #9 — Detección de concept drift: compara concordancia del modelo con veredictos recientes.
+    Si concordancia <70% en los últimos 30 scans con veredicto → alerta de reentrenamiento.
+    """
+    try:
+        from ml_classifier import get_classifier
+        clf = get_classifier()
+        if not clf.is_available:
+            return jsonify({'drift': False, 'reason': 'Modelo no disponible', 'concordance': None}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(f"""
+                SELECT sr.alert_level, sr.issue_category, sr.confidence,
+                       sr.obfuscation_detected, s.verdict
+                FROM scan_results sr
+                JOIN scans s ON sr.scan_id = s.id
+                WHERE s.verdict IN ('hack','clean')
+                ORDER BY s.id DESC LIMIT 500
+            """)
+            rows = cur.fetchall() or []
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    if len(rows) < 30:
+        return jsonify({'drift': False, 'reason': 'Insuficientes datos recientes (<30)', 'concordance': None}), 200
+
+    correct = 0
+    total   = 0
+    for r in rows[:300]:
+        verdict  = str(r[4] if not hasattr(r, 'keys') else r.get('verdict', ''))
+        features = {'alert_level': r[0] if not hasattr(r,'keys') else r.get('alert_level'),
+                    'issue_category': r[1] if not hasattr(r,'keys') else r.get('issue_category'),
+                    'confidence': r[2] if not hasattr(r,'keys') else r.get('confidence'),
+                    'obfuscation_detected': r[3] if not hasattr(r,'keys') else r.get('obfuscation_detected')}
+        pred = clf.predict(features)
+        if pred.get('label') == verdict:
+            correct += 1
+        total += 1
+
+    concordance = round(correct / total, 4) if total else 0
+    drift = concordance < 0.70
+
+    return jsonify({
+        'drift':         drift,
+        'concordance':   concordance,
+        'samples_used':  total,
+        'reason': ('Concordancia del modelo con veredictos recientes por debajo del 70% — reentrenamiento recomendado'
+                   if drift else 'Concordancia aceptable'),
+        'retrain_recommended': drift,
+    }), 200
+
+
+@app.route('/api/ml/anomaly/<int:scan_id>', methods=['GET'])
+@login_required
+def ml_anomaly_detect(scan_id):
+    """P3 #3 — Isolation Forest para detectar si un scan es anómalo respecto al baseline.
+    Compara los hallazgos del scan actual contra el perfil histórico de scans limpios.
+    Devuelve: {anomaly_score: float, is_anomaly: bool, reason: str}
+    """
+    try:
+        from sklearn.ensemble import IsolationForest
+        from sklearn.preprocessing import StandardScaler
+        import numpy as np
+    except ImportError:
+        return jsonify({'error': 'scikit-learn no instalado'}), 500
+
+    try:
+        with get_api_db_cursor() as cur:
+            # Perfil del scan actual
+            cur.execute(
+                f'SELECT issues_found, risk_score, scan_duration, total_files_scanned '
+                f'FROM scans WHERE id={_PH}', (scan_id,)
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify({'error': 'Scan no encontrado'}), 404
+            current = [
+                int(_row_get(row, 0, 'issues_found') or 0),
+                int(_row_get(row, 1, 'risk_score') or 0),
+                float(_row_get(row, 2, 'scan_duration') or 0),
+                int(_row_get(row, 3, 'total_files_scanned') or 0),
+            ]
+            # Baseline: últimos 200 scans con veredicto limpio
+            cur.execute(
+                f"SELECT issues_found, risk_score, scan_duration, total_files_scanned "
+                f"FROM scans WHERE verdict='clean' ORDER BY id DESC LIMIT 200"
+            )
+            baseline_rows = cur.fetchall() or []
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    if len(baseline_rows) < 20:
+        return jsonify({'anomaly_score': 0.0, 'is_anomaly': False,
+                        'reason': 'Insuficientes scans limpios para baseline (mín 20)'}), 200
+
+    baseline = [
+        [int(_row_get(r, 0, 'issues_found') or 0),
+         int(_row_get(r, 1, 'risk_score') or 0),
+         float(_row_get(r, 2, 'scan_duration') or 0),
+         int(_row_get(r, 3, 'total_files_scanned') or 0)]
+        for r in baseline_rows
+    ]
+    X_base = np.array(baseline, dtype=float)
+    X_curr = np.array([current], dtype=float)
+
+    scaler = StandardScaler().fit(X_base)
+    X_base_s = scaler.transform(X_base)
+    X_curr_s = scaler.transform(X_curr)
+
+    iso = IsolationForest(contamination=0.1, random_state=42)
+    iso.fit(X_base_s)
+    score     = float(iso.decision_function(X_curr_s)[0])  # negative = more anomalous
+    is_anomaly = bool(iso.predict(X_curr_s)[0] == -1)
+
+    reason = ''
+    if is_anomaly:
+        if current[0] > float(np.percentile(X_base[:, 0], 90)):
+            reason += f'Hallazgos ({current[0]}) por encima del percentil 90 del baseline. '
+        if current[1] > float(np.percentile(X_base[:, 1], 90)):
+            reason += f'Risk score ({current[1]}) anormalmente alto. '
+        if current[3] < float(np.percentile(X_base[:, 3], 10)) and current[3] > 0:
+            reason += f'Muy pocos archivos escaneados ({current[3]}), posible evasión. '
+        if not reason:
+            reason = 'Perfil del scan estadísticamente inusual.'
+
+    return jsonify({
+        'anomaly_score': round(-score, 4),  # positive = more anomalous
+        'is_anomaly':    is_anomaly,
+        'reason':        reason.strip(),
+        'baseline_size': len(baseline_rows),
+    }), 200
+
+
+@app.route('/api/predict', methods=['POST'])
+def api_predict():
+    """P3 #35 — Predicción de riesgo pre-scan.
+    El scanner envía features básicas del sistema antes de escanear.
+    Devuelve risk_level y si el staff quiere scan completo o rápido.
+    Body: { token, machine_id, prev_verdicts (list), mc_versions (int),
+            suspicious_dirs (list of found dirs), os_version }
+    """
+    data       = request.json or {}
+    token      = (data.get('token') or '').strip()
+    machine_id = (data.get('machine_id') or '').strip()
+    if not token:
+        return jsonify({'error': 'token requerido'}), 400
+
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(f'SELECT id FROM scan_tokens WHERE token={_PH} AND (expires_at IS NULL OR expires_at > NOW())', (token,))
+            if not cur.fetchone():
+                return jsonify({'error': 'token inválido o expirado'}), 403
+
+            # Historial de veredictos previos del mismo machine_id
+            prev_hack  = 0
+            prev_total = 0
+            if machine_id:
+                cur.execute(
+                    f"SELECT COUNT(*) FROM scans WHERE machine_id={_PH} AND verdict='hack'",
+                    (machine_id,)
+                )
+                row = cur.fetchone()
+                prev_hack = int((row[0] if isinstance(row, (list, tuple)) else row.get('count', 0)) or 0)
+                cur.execute(f"SELECT COUNT(*) FROM scans WHERE machine_id={_PH}", (machine_id,))
+                row = cur.fetchone()
+                prev_total = int((row[0] if isinstance(row, (list, tuple)) else row.get('count', 0)) or 0)
+
+        # Calcular risk_level pre-scan basado en señales simples
+        risk = 0
+        reasons = []
+
+        if prev_hack > 0:
+            risk += min(60, prev_hack * 20)
+            reasons.append(f'{prev_hack} veredicto(s) previo(s) como hack')
+
+        mc_versions = int(data.get('mc_versions') or 0)
+        if mc_versions >= 7:
+            risk += 25; reasons.append(f'{mc_versions} versiones MC instaladas')
+        elif mc_versions >= 4:
+            risk += 10; reasons.append(f'{mc_versions} versiones MC instaladas')
+
+        suspicious_dirs = data.get('suspicious_dirs') or []
+        if isinstance(suspicious_dirs, list) and suspicious_dirs:
+            risk += min(40, len(suspicious_dirs) * 15)
+            reasons.append(f'Directorios sospechosos: {", ".join(str(d) for d in suspicious_dirs[:3])}')
+
+        risk = min(100, risk)
+        risk_level = 'ALTO' if risk >= 70 else 'MEDIO' if risk >= 30 else 'BAJO'
+
+        return jsonify({
+            'risk_level':  risk_level,
+            'risk_score':  risk,
+            'reasons':     reasons,
+            'recommend_full_scan': risk >= 30,
+            'prev_hacks':  prev_hack,
+            'prev_scans':  prev_total,
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ── P2 #1 — Whitelist dinámica de mods legítimos ─────────────────────────────
 
 @app.route('/api/mod_whitelist', methods=['GET'])
