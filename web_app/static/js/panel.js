@@ -3928,3 +3928,35 @@ async function aiScanSummary(scanId, btn) {
     }
     if (btn) { btn.textContent = '📝 Resumen IA'; btn.disabled = false; }
 }
+
+// ─── Inconsistencias IA (P3 #23) ─────────────────────────────────────────────
+
+async function aiShowInconsistencies(scanId, btn) {
+    const container = document.getElementById('ai-inconsistencies-container');
+    if (!container) return;
+
+    if (container.style.display !== 'none') {
+        container.style.display = 'none';
+        if (btn) btn.textContent = '⚠️ Inconsistencias';
+        return;
+    }
+
+    if (btn) { btn.textContent = '⋯'; btn.disabled = true; }
+    container.innerHTML = 'Analizando inconsistencias...';
+    container.style.display = 'block';
+
+    try {
+        const res  = await fetch(`/api/staff/ai/inconsistencies/${scanId}`);
+        const data = await res.json();
+        const items = data.inconsistencies || [];
+        if (items.length === 0) {
+            container.innerHTML = '✅ No se detectaron inconsistencias significativas.';
+        } else {
+            container.innerHTML = '<strong style="color:#f59e0b">Inconsistencias detectadas:</strong><ul style="margin:4px 0 0 16px;padding:0;">' +
+                items.map(i => `<li style="margin-bottom:3px;">${i}</li>`).join('') + '</ul>';
+        }
+    } catch(e) {
+        container.innerHTML = 'Error al analizar inconsistencias.';
+    }
+    if (btn) { btn.textContent = '⚠️ Inconsistencias'; btn.disabled = false; }
+}

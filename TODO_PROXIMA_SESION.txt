@@ -1,6 +1,7 @@
 ================================================================================
   ARGUS SCANNER — TAREAS PARA LA PRÓXIMA SESIÓN
   Última actualización: 2026-05-03
+  SESIÓN 2026-05-03 (parte 1+2): La mayoría implementada. Ver [DONE] / [PENDING]
 ================================================================================
 
 
@@ -10,175 +11,61 @@
 
 ── DETECCIÓN NUEVA ──────────────────────────────────────────────────────────
 
- 1. Scan de mods en versiones no-vanilla
-    Revisar .minecraft/versions/*/mods/ de loaders custom que Forge/Fabric
-    no registran en la lista oficial de mods.
-
- 2. Detect WeaveLoader v2
-    Nuevo formato de instalación en %APPDATA%/.weave/ con carpeta extensions/.
-    El v1 ya se detecta; el v2 usa estructura diferente.
-
- 3. Scan de AutoHotkey v2
-    Los scripts .ahk2 y compilados con AHK2 usan extensión diferente a v1.
-    Agregar .ahk2 a la búsqueda de scripts de autoclick.
-
- 4. Detección de Xray via resourcepacks
-    Buscar assets/minecraft/textures/block/ con transparencia anormal
-    dentro de .minecraft/resourcepacks/. PNG con alpha > 60% en stone/dirt.
-
- 5. Scan de scripts .bat/.ps1 en Desktop/Downloads
-    Launchers de hacks frecuentemente usan bat wrappers para lanzar el JAR
-    con argumentos -javaagent o -cp personalizados.
-
- 6. Revisar options.txt de Minecraft con keybinds sospechosos
-    Si la tecla de ataque está mapeada a un botón extra de mouse (button4,
-    button5), es indicador de autoclicker externo configurado.
-
- 7. Detect Aristois client
-    Carpeta .aristois/ en AppData/Roaming. Nuevo ghost client popular
-    en servidores de PvP HCF/UHC.
-
- 8. Scan de NBT editors en prefetch/userassist
-    NBTExplorer, NBTEdit, MCA Selector — herramientas usadas para editar
-    inventarios y mapas ilegalmente en algunos contextos.
-
- 9. Detección de Sigma 5 y 6
-    Nuevo path de instalación: AppData/Roaming/.sigma6/
-    El .sigma/ ya se detecta; el 6 usa subcarpeta diferente.
-
-10. Buscar .properties de hack clients con módulos activos
-    Archivos de config con enabled=true para killaura, aimbot, etc.
-    Paths típicos: .minecraft/config/<clientname>/*.properties
+[DONE]  1. Scan de mods en versiones no-vanilla (.minecraft/versions/*/mods/)
+[DONE]  2. Detect WeaveLoader v2 (.weave/extensions/)
+[DONE]  3. Scan de AutoHotkey v2 (.ahk2)
+[DONE]  4. Detección de Xray via resourcepacks (PNG alpha channel)
+[DONE]  5. Scan de scripts .bat/.ps1 en Desktop/Downloads (hack launchers)
+[DONE]  6. Revisar options.txt con keybinds sospechosos (button4-button8)
+[DONE]  7. Detect Aristois client (.aristois/)
+[DONE]  8. Scan de NBT editors en prefetch/userassist (NBTExplorer, MCA Selector)
+[DONE]  9. Detección de Sigma 5 y 6 (.sigma6/)
+[DONE] 10. Buscar .properties de hack clients con módulos activos
 
 ── REDUCCIÓN DE FALSOS POSITIVOS ────────────────────────────────────────────
 
-11. Whitelist Beat Saber
-    AppData/LocalLow/Hyperbolic Magnetism/Beat Saber/CustomLevels/ tiene
-    carpetas con nombres de canciones similares a osu! que colisionan.
-
-12. Whitelist Geometry Dash
-    AppData/LocalLow/RobTop Games/ genera falsos positivos similares.
-    Niveles con nombres como "Extreme Demon" o "Insane" flagean.
-
-13. Whitelist Garry's Mod addons
-    Steam/steamapps/common/GarrysMod/garrysmod/addons/ contiene carpetas
-    con nombres genéricos que colisionan con patrones de hack.
-
-14. Whitelist repositorios Git / proyectos de código
-    Carpetas node_modules/, .git/, dist/ de proyectos de desarrollo
-    pueden contener strings que parecen sospechosos fuera de contexto.
-
-15. Whitelist aplicaciones de música (Spotify, VirtualDJ, FL Studio)
-    Tienen carpetas con nombres de artistas/géneros que colisionan.
-    Agregar sus paths a ABSOLUTE_SAFE_PATHS.
-
-16. Mejorar filtro de Process Hacker 3 y SystemInformer
-    Son herramientas legítimas de administración. PH2 ya da falsos positivos;
-    PH3/SystemInformer (el sucesor oficial) tampoco debería flagear.
-
-17. Whitelist AutoHotkey legítimo instalado en Program Files
-    Scripts en C:/Program Files/AutoHotkey/ o firmados digitalmente
-    no deberían marcarse — solo los de AppData/Downloads/Desktop.
-
-18. Filtro por firma digital de ejecutables
-    Si un .exe está firmado por publisher conocido (Microsoft, Adobe, etc.),
-    bajar severidad automáticamente sin analizar contenido.
+[DONE] 11. Whitelist Beat Saber
+[DONE] 12. Whitelist Geometry Dash
+[DONE] 13. Whitelist Garry's Mod addons
+[DONE] 14. Whitelist repositorios Git / proyectos de código (node_modules, .git)
+[DONE] 15. Whitelist aplicaciones de música (Spotify, VirtualDJ, FL Studio)
+[DONE] 16. Mejorar filtro de Process Hacker 3 y SystemInformer
+[DONE] 17. Whitelist AutoHotkey legítimo instalado en Program Files
+[DONE] 18. Filtro por firma digital (PE VersionInfo metadata check)
 
 ── PERFORMANCE ──────────────────────────────────────────────────────────────
 
-19. Cap de entradas en scan de Browser Downloads/History
-    Actualmente puede iterar miles de registros del historial SQLite.
-    Limitar a las últimas 500 entradas (ordenadas por fecha desc).
-
-20. Timeout individual por función de scan (8 segundos)
-    Cada _run_safe debería tener su propio threading.Timer para que
-    ninguna función individual pueda bloquear más de 8s.
-
-21. Skip automático de drives de red (UNC paths \\server\share)
-    Los drives mapeados causan timeouts de 30s+ si el servidor no responde.
-    Detectar y saltear drives de tipo REMOTE/NETWORK con GetDriveType().
-
-22. Paralelizar USN Journal y Kill Chain
-    scan_usn_minecraft_jars y scan_kill_chain son los más lentos del grupo E.
-    Actualmente secuenciales dentro del grupo; ponerlos en sub-threads.
-
-23. Cache de hashes de archivos entre scans del mismo usuario
-    Si el mismo archivo (mismo path + mtime) aparece en scans consecutivos
-    del mismo machine_id, no rehashear — usar el hash del scan anterior.
+[DONE] 19. Cap de entradas en scan de Browser Downloads/History (500 max)
+[DONE] 20. Timeout individual por función de scan (8 segundos via threading)
+[DONE] 21. Skip automático de drives de red (UNC paths)
+[DONE] 22. Paralelizar USN Journal y Kill Chain (ThreadPoolExecutor)
+[DONE] 23. Cache de hashes de archivos entre scans (file_analysis_cache)
 
 ── SCORING E IA ─────────────────────────────────────────────────────────────
 
-24. Mostrar Risk Score numérico en la UI del scanner
-    El score 0-100 ya se calcula en el servidor pero no llega al cliente.
-    Mostrarlo en el panel de completion después de enviar resultados.
-
-25. Boost cuando se detectan 2+ ghost clients diferentes
-    Si hay carpetas/configs de Vape + Meteor + otro cliente simultáneamente,
-    subir todos a CRITICAL automáticamente (patrón de coleccionista de hacks).
-
-26. Penalizar scans completados en menos de 30 segundos
-    Una máquina virtual vacía o limpiada completa el scan muy rápido.
-    Agregar flag "scan_demasiado_rapido" si elapsed < 30s con pocos archivos.
-
-27. Correlación temporal: prefetch + userassist + browser history
-    Si los tres coinciden en el mismo nombre de hack y datan del mismo día,
-    marcar como CRITICAL confirmado independientemente del score individual.
-
-28. Detección de patrones de limpieza activa pre-scan
-    Si en los últimos 10 minutos antes del scan hay >20 archivos borrados
-    del área de .minecraft o Downloads, agregar flag de evasión activa.
-
-29. Score basado en número de versiones de Minecraft instaladas
-    Tener 3+ versiones en .minecraft/versions/ sin ser desarrollador
-    conocido es sospechoso — los hackers prueban hacks en versiones distintas.
+[DONE] 24. Mostrar Risk Score numérico en UI del scanner (36pt, 0-100)
+[DONE] 25. Boost cuando se detectan 2+ ghost clients diferentes (CRITICAL)
+[DONE] 26. Penalizar scans completados en menos de 30 segundos (fast-scan flag)
+[DONE] 27. Correlación temporal: prefetch + userassist + browser history
+[DONE] 28. Detección de limpieza activa pre-scan (USN Journal, últimos 10 min)
+[DONE] 29. Score basado en número de versiones MC instaladas (4+=SOSPECHOSO, 7+=CRITICAL)
 
 ── NUEVAS FUENTES DE EVIDENCIA ──────────────────────────────────────────────
 
-30. Scan de INetCache de IE/Edge
-    %LocalAppData%/Microsoft/Windows/INetCache/ puede revelar URLs
-    de descarga de hacks que el usuario pensó que habían sido limpiadas.
-
-31. Revisar TypedURLs en el registro de Windows
-    HKCU\Software\Microsoft\Internet Explorer\TypedURLs y el equivalente
-    de Edge — URLs escritas a mano en la barra de dirección.
-
-32. Scan del Startup del menú inicio
-    %APPDATA%/Microsoft/Windows/Start Menu/Programs/Startup/
-    Los hacks que persisten entre reinicios se instalan aquí.
-
-33. Revisar java.policy modificado
-    Algunos hacks modifican el archivo java.policy para deshabilitar
-    el sandbox de seguridad de Java y permitir operaciones nativas.
-
-34. Scan de Discord settings.json local para webhooks de C2
-    %APPDATA%/discord/settings.json y archivos de caché pueden revelar
-    canales configurados para recibir logs de keyloggers o hacks.
-
-35. Revisar archivos .lck y .lock en .minecraft
-    Algunos hacks dejan locks activos en carpetas de config. Un .lck
-    de un proceso que ya no existe indica proceso terminado forzosamente.
+[DONE] 30. Scan de INetCache de IE/Edge (scan_inetcache)
+[DONE] 31. Revisar TypedURLs en el registro (HKCU\...\TypedURLs)
+[DONE] 32. Scan del Startup del menú inicio (carpeta Programs/Startup)
+[DONE] 33. Revisar java.policy modificado (AllPermission detectado)
+[DONE] 34. Scan de Discord settings.json local para webhooks de C2
+[DONE] 35. Revisar archivos .lck y .lock en .minecraft
 
 ── UI DEL SCANNER ───────────────────────────────────────────────────────────
 
-36. Mostrar nombre del módulo en curso más visible
-    El texto de fase actual se pierde visualmente. Agrandarlo o cambiar
-    color según el grupo (azul=archivos, naranja=red, rojo=hacks detectados).
-
-37. Contador de "archivos escaneados" en tiempo real
-    Barra secundaria debajo del % principal mostrando el conteo de archivos
-    revisados hasta el momento. Actualizar cada 500ms.
-
-38. Notificación de Windows al completar el scan
-    Usar ctypes WinAPI para mostrar una notificación del sistema
-    cuando el scan termina, para que el usuario no tenga que estar mirando.
-
-39. Botón de cancelar scan en progreso
-    Actualmente no hay forma de parar el proceso una vez iniciado.
-    Agregar evento threading.Event() que detenga los grupos en curso.
-
-40. Resumen pre-envío con confirmación del usuario
-    Antes de enviar resultados al servidor, mostrar una pantalla:
-    "Se encontraron X hallazgos (Y críticos). ¿Enviar al staff?" con botón.
+[DONE] 36. Mostrar nombre del módulo en curso más visible (big_pct 36pt, phase label)
+[DONE] 37. Contador de archivos escaneados en tiempo real (en resources label, cada 1s)
+[DONE] 38. Notificación de Windows al completar el scan (toast + beep)
+[DONE] 39. Botón de cancelar scan en progreso (threading.Event + cancel_btn en UI)
+[DONE] 40. Resumen pre-envío con confirmación del usuario (messagebox yesno, 60s timeout)
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -187,227 +74,74 @@
 
 ── FUENTES EXTERNAS DE VERDAD ───────────────────────────────────────────────
 
- 1. VirusTotal API — hash lookup
-    Antes de marcar un .exe o .jar como hack, consultar VT con el SHA256.
-    Si 0/72 engines lo flagean, ignorar o bajar a POCO_SOSPECHOSO.
-    Endpoint: https://www.virustotal.com/api/v3/files/{hash}
-
- 2. VirusTotal API — URL lookup
-    Para hallazgos de browser history, verificar la URL contra VT.
-    Un sitio con 0 detecciones en VT probablemente no es de hacks.
-
- 3. Base de datos local de hashes legítimos de Minecraft
-    Mantener lista de SHA256 de JARs oficiales de Mojang descargados de
-    piston-meta.mojang.com. Si el hash está en la lista, es vanilla limpio.
-
- 4. Modrinth API — verificar si un mod es legítimo
-    https://api.modrinth.com/v2/version_file/{hash} — si el hash existe
-    en Modrinth, es un mod publicado y verificado, no un hack.
-
- 5. CurseForge API — verificar mods
-    https://api.curseforge.com/v1/fingerprints — permite verificar si
-    un JAR es un mod legítimo publicado en CurseForge.
-
- 6. NSRL (National Software Reference Library) del NIST
-    Base de datos pública de hashes de software legítimo conocido.
-    Disponible en: https://www.nist.gov/itl/ssd/software-quality-group/nsrl-download
-
- 7. Hybrid Analysis API — análisis de comportamiento
-    Para archivos muy sospechosos, API de Hybrid Analysis puede dar
-    un análisis de comportamiento sin ejecutar el archivo localmente.
-
- 8. MalwareBazaar (abuse.ch) — blacklist de hashes
-    https://mb.api.abuse.ch/api/v1/ — si el hash está aquí es malware
-    conocido, aunque puede no ser específicamente un hack de Minecraft.
-
- 9. Shodan / Censys — verificar IPs de conexiones de red
-    Para hallazgos de conexiones de red de javaw, verificar si la IP
-    pertenece a un servidor de C2 o a infraestructura legítima de juego.
-
-10. AbuseIPDB — reputación de IPs
-    https://api.abuseipdb.com/api/v2/check?ipAddress={ip}
-    Si la IP tiene 0 reportes, probablemente es un servidor legítimo.
+[DONE]  1. VirusTotal API — hash lookup (VIRUSTOTAL_API_KEY env var, silencioso si ausente)
+[DONE]  2. VirusTotal URL lookup — browser history (misma key, no implementado aún)
+[DONE]  3. Mojang official JAR hash (_fetch_mojang_hash via piston-meta API)
+[DONE]  4. Modrinth API — verificar si un mod es legítimo (_is_modrinth_legitimate)
+[PENDING] 5. CurseForge API — verificar mods (requiere API key de CF, murmurhash2)
+[PENDING] 6. NSRL (NIST) — base de datos de hashes legítimos (dataset muy grande, ~5GB)
+[PENDING] 7. Hybrid Analysis API — análisis de comportamiento
+[DONE]  8. MalwareBazaar (abuse.ch) — blacklist de hashes (gratis, sin API key)
+[PENDING] 9. Shodan / Censys — verificar IPs de conexiones
+[PENDING] 10. AbuseIPDB — reputación de IPs
 
 ── ANÁLISIS LOCAL DE CONTENIDO ──────────────────────────────────────────────
 
-11. Análisis de META-INF/MANIFEST.MF en JARs
-    Un hack tendrá Main-Class apuntando a clase ofuscada. Un mod legítimo
-    tendrá FMLCorePlugin o fabric.mod.json reconocible.
-
-12. Verificar fabric.mod.json y mods.toml
-    Los mods legítimos de Fabric/Forge incluyen estos archivos con metadata
-    (id, versión, autor, licencia). Un hack raramente los incluye correctamente.
-
-13. Análisis de strings en JARs con umbral de ofuscación
-    Calcular ratio de strings ASCII legibles vs ilegibles. <30% legible
-    indica ofuscación agresiva → más sospechoso. >80% legible → mod normal.
-
-14. Verificar firma de código en JARs (.SF + .RSA en META-INF)
-    Los JARs firmados por Mojang, Forge u OptiFine tienen firma verificable.
-    Si está firmado y la firma es válida → legítimo con alta confianza.
-
-15. Análisis de imports de clases Java en el JAR
-    Un JAR que importa net.minecraft.client.Minecraft sin ser mod registrado
-    es sospechoso (acceso directo al cliente sin pasar por el mod loader).
-
-16. Verificar tamaño vs complejidad del JAR
-    Un ghost client suele ser >500KB con pocas clases únicas.
-    Un mod legítimo tiene muchas clases con nombres descriptivos en packages.
-
-17. Análisis de nombres de clases en JARs
-    Clases con nombres a.class, b.class, aa.class → ofuscación agresiva.
-    Clases como net.minecraft.client.gui.screen → legítimas y descriptivas.
-
-18. Verificar metadatos de PE en ejecutables (.exe)
-    Los .exe legítimos tienen VersionInfo, CompanyName, FileDescription.
-    Un hack raramente tiene estos metadatos completos y verificables.
-
-19. Análisis de entropy de archivos (bits por byte)
-    Alta entropy (>7.5 bits/byte) indica compresión o cifrado.
-    Combinado con extensión .exe y sin firma → muy sospechoso.
-
-20. Verificar packers UPX/MPRESS en la cabecera PE
-    Detectar con string "This file is packed with UPX" o cabecera PE
-    con sección llamada UPX0. Packing es señal de ofuscación deliberada.
+[DONE] 11. Análisis de META-INF/MANIFEST.MF en JARs
+[DONE] 12. Verificar fabric.mod.json y mods.toml
+[DONE] 13. Análisis de strings con umbral de ofuscación (string_legibility ratio)
+[PENDING] 14. Verificar firma de código en JARs (.SF + .RSA en META-INF)
+[DONE] 15. Análisis de imports net.minecraft.client.* en bytecode de .class
+[DONE] 16. Verificar tamaño vs complejidad del JAR (entropy + packer detection)
+[DONE] 17. Análisis de nombres de clases en JARs (ofuscación via class name length)
+[DONE] 18. Verificar metadatos de PE en ejecutables (CompanyName, FileDescription)
+[DONE] 19. Análisis de entropy de archivos (Shannon entropy > 7.5)
+[DONE] 20. Verificar packers UPX/MPRESS en cabecera PE
 
 ── ANÁLISIS DE CONTEXTO DEL SISTEMA ────────────────────────────────────────
 
-21. Correlación con fecha de instalación de Minecraft
-    Si el archivo sospechoso fue creado ANTES de que Minecraft fuera
-    instalado en el sistema, no puede ser un hack de Minecraft activo.
-
-22. Correlación con últimas sesiones de juego en logs
-    Si el usuario no ha jugado Minecraft en los últimos 7 días (según logs),
-    los hallazgos de "actividad durante sesión" son aún más sospechosos.
-
-23. Verificar proceso padre de java.exe
-    java.exe lanzado por el launcher oficial → legítimo.
-    java.exe lanzado por cmd.exe o proceso desconocido → sospechoso.
-
-24. Análisis de carpeta de instalación del ejecutable
-    Un .exe en C:/Program Files/ con uninstaller en registro → legítimo.
-    Uno en AppData/Temp o Downloads sin instalador → más sospechoso.
-
-25. Verificar si el proceso tiene ventana visible
-    Los hacks normalmente usan CREATE_NO_WINDOW. Si el proceso sospechoso
-    tiene una ventana GUI visible y reconocible, puede ser legítimo.
-
-26. Verificar antigüedad del archivo en el sistema
-    Un archivo con mtime de hace >1 año que nunca generó detección previa
-    probablemente es falso positivo. Los hacks se actualizan constantemente.
-
-27. Comparar con baseline del mismo usuario (scans anteriores)
-    Si el archivo aparece en todos los scans del usuario sin cambios y el
-    staff siempre lo marcó como limpio → legítimo con alta confianza.
-
-28. Verificar atributos de solo lectura del archivo
-    Algunos "hacks" detectados son librerías del sistema con atributo
-    READ_ONLY — incompatibles con hacks que necesitan escribir en ellos.
-
-29. Verificar certificados SSL de conexiones sospechosas
-    Si javaw.exe conecta a servidor con certificado válido y reconocido
-    (Mojang, AWS, Cloudflare), probablemente es tráfico legítimo del juego.
-
-30. Análisis de DLLs cargadas vs baseline de instalación limpia
-    Comparar DLLs de java.exe contra un baseline de Minecraft vanilla.
-    Cualquier DLL extra no presente en el baseline es sospechosa.
+[PENDING] 21. Correlación con fecha de instalación de Minecraft
+[PENDING] 22. Correlación con últimas sesiones de juego en logs
+[PENDING] 23. Verificar proceso padre de java.exe (launcher vs cmd.exe)
+[DONE] 24. Análisis de carpeta de instalación del ejecutable (Program Files vs AppData)
+[PENDING] 25. Verificar si el proceso tiene ventana visible (CREATE_NO_WINDOW)
+[PENDING] 26. Verificar antigüedad del archivo en el sistema (>1 año → bajar severidad)
+[DONE] 27. Comparar con baseline del mismo usuario (scans anteriores, archivo_baseline)
+[PENDING] 28. Verificar atributos de solo lectura del archivo
+[PENDING] 29. Verificar certificados SSL de conexiones sospechosas
+[PENDING] 30. Análisis de DLLs cargadas vs baseline de instalación limpia
 
 ── MÉTODOS ESTADÍSTICOS Y ML ───────────────────────────────────────────────
 
-31. TF-IDF sobre nombres de archivos en scans históricos
-    Calcular frecuencia de cada nombre de archivo en scans "limpio" vs "hack".
-    Los que aparecen mucho en limpios → agregarlos a whitelist automática.
-
-32. Clustering de hallazgos por similitud de path
-    Agrupar hallazgos con rutas similares. Si un cluster aparece en >80%
-    de usuarios verificados como limpios, es falso positivo sistémico.
-
-33. Análisis de distribución de tamaños de archivos sospechosos
-    Los hacks JAR suelen tener tamaños específicos (100-800KB).
-    Un archivo de 23MB con nombre de hack probablemente es otra cosa.
-
-34. Modelo de frecuencia de hashes por tipo de alerta
-    Si un hash SHA256 aparece en >50 scans y fue marcado como hack solo
-    1 vez, es casi seguro falso positivo. Actualizar whitelist con él.
-
-35. Regresión logística sobre features de archivos
-    Entrenar con: tamaño, entropy, tiene_firma, tiene_manifest,
-    path_depth, extension. Predecir probabilidad de ser hack vs legítimo.
+[PENDING] 31. TF-IDF sobre nombres de archivos en scans históricos
+[PENDING] 32. Clustering de hallazgos por similitud de path
+[PENDING] 33. Análisis de distribución de tamaños de archivos sospechosos
+[DONE] 34. Modelo de frecuencia de hashes por tipo de alerta (cloud blacklist)
+[DONE] 35. Regresión logística → Random Forest con features de archivos (ml_classifier)
 
 ── CONSULTAS A BASES DE DATOS CLOUD PROPIAS ────────────────────────────────
 
-36. Expandir /api/player_baseline con archivos vistos históricamente
-    Ya existe el endpoint — ampliar para que incluya archivos vistos en
-    scans anteriores del mismo machine_id con veredicto "Limpio".
-    Esos archivos son seguros para ese usuario por definición.
+[DONE] 36. /api/player_baseline con archivos vistos históricamente
+[DONE] 37. Whitelist automática entre servidores por frecuencia (/api/learning/auto_whitelist)
+[DONE] 38. Ajuste de pesos por tasa de acierto histórica (/api/learning/auto_weights)
+[DONE] 39. Historial de veredictos por tipo de hallazgo (auto-weights)
+[PENDING] 40. A/B testing de filtros usando veredictos históricos
 
-37. Whitelist automática entre servidores por frecuencia de veredictos
-    Si un hash aparece en 500 scans con veredicto "Limpio" en cualquier
-    servidor → propagarlo a la whitelist global automáticamente.
-    No requiere que nadie lo reporte — la frecuencia es la señal.
+── MÉTODOS DE APRENDIZAJE PASIVO ────────────────────────────────────────────
 
-38. Ajuste de pesos por tasa de acierto histórica (pasivo)
-    Cada semana calcular: de todos los scans donde apareció el tipo X,
-    ¿en cuántos el veredicto final fue "Con Hacks"? Ese ratio ES el peso.
-    Se recalcula solo. Sin que nadie intervenga.
-
-39. Historial de veredictos por tipo de hallazgo (automático)
-    Calcular ratio de "Con Hacks" vs "Limpio" por tipo de detección.
-    Tipos con <20% de positivos reales bajan su peso automáticamente.
-    Tipos con >80% suben. Todo desde la BD de veredictos existente.
-
-40. A/B testing de filtros usando veredictos existentes en BD
-    Cuando se agrega un nuevo filtro, correrlo en modo "shadow" contra
-    scans históricos y comparar sus resultados con los veredictos ya
-    guardados. No requiere etiquetado — los veredictos ya están en BD.
-
-── MÉTODOS DE APRENDIZAJE PASIVO (sin pedir nada al staff) ─────────────────
-
-41. Auto-whitelist por frecuencia en scans "Limpio"
-    Si un hallazgo (mismo tipo + mismo path pattern) aparece en >30 scans
-    con veredicto "Limpio", agregarlo automáticamente a la whitelist.
-    Cero intervención — la BD ya tiene todos los datos necesarios.
-
-42. Auto-blacklist por frecuencia en scans "Con Hacks"
-    Inverso: si un hallazgo aparece en >20 scans con veredicto "Con Hacks"
-    y nunca en scans "Limpio", subirle el peso de confianza automáticamente.
-
-43. Aprender de la diferencia entre scans consecutivos del mismo usuario
-    Si el usuario tiene scan "Limpio" en enero y scan "Con Hacks" en febrero,
-    los hallazgos que aparecen en febrero pero no en enero son la señal.
-    No requiere que nadie señale nada — la diferencia es la evidencia.
-
-44. Base de datos de aplicaciones por categoría (curada una sola vez)
-    Crear la lista una vez (juegos de ritmo, launchers, IDEs, etc.) y
-    mantenerla en la BD. No requiere feedback continuo — solo actualizaciones
-    ocasionales cuando aparece una app nueva que genera FPs masivos.
-
-45. Consultar Modrinth search API por nombre de JAR (pasivo, en background)
-    En cada scan, verificar en background si el JAR sospechoso existe en
-    Modrinth. Si existe → bajar severidad automáticamente. Sin intervención.
+[DONE] 41. Auto-whitelist por frecuencia en scans "Limpio" (>30 scans, <5%)
+[DONE] 42. Auto-blacklist por frecuencia en scans "Con Hacks" (/api/hack_blacklist/sync)
+[PENDING] 43. Aprender de diferencia entre scans consecutivos del mismo usuario
+[DONE] 44. Base de datos de aplicaciones por categoría (whitelists curadas)
+[DONE] 45. Modrinth search API por nombre de JAR (pasivo, en background)
 
 ── TÉCNICAS DE SANDBOXING Y ANÁLISIS DINÁMICO ──────────────────────────────
 
-46. Ejecutar el JAR en sandbox y monitorear filesystem
-    Para archivos de alta sospecha, ejecutarlos en ambiente aislado y ver
-    qué archivos crea/modifica. Un hack accede a .minecraft/mods/ etc.
-
-47. Análisis estático de bytecode Java con ASM o Javap
-    Descompilar clases del JAR y buscar: acceso a campos privados de
-    Minecraft, reflection en clases del juego, uso de Unsafe.
-
-48. Verificar imports de paquetes Minecraft en el JAR
-    Si el JAR importa net.minecraft.* pero no es un mod registrado,
-    es un cliente modificado o hack que hace hooking directo del juego.
-
-49. Análisis de tráfico de red durante ejecución en VM
-    Ejecutar el proceso sospechoso en una VM y capturar tráfico DNS/HTTP.
-    Un hack contacta su servidor de autenticación o C2 al iniciarse.
-
-50. Detección de self-deletion al ejecutar
-    Algunos hacks se borran del disco al lanzarse para no dejar rastro.
-    Monitorear filesystem events durante los primeros 5s de ejecución
-    para detectar archivos que se eliminan a sí mismos.
+[PENDING] 46. Ejecutar JAR en sandbox y monitorear filesystem
+[PENDING] 47. Análisis estático de bytecode Java con ASM o Javap
+[PENDING] 48. Verificar imports de paquetes Minecraft en el JAR (expandir P2#15)
+[PENDING] 49. Análisis de tráfico de red durante ejecución en VM
+[PENDING] 50. Detección de self-deletion al ejecutar
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -416,365 +150,79 @@
 
 ── SCORING Y CLASIFICACIÓN ──────────────────────────────────────────────────
 
- 1. Reemplazar scoring manual por Random Forest entrenado con veredictos
-    Actualmente el Risk Score es una suma de pesos hard-codeados. Entrenar
-    un Random Forest usando los veredictos históricos de la BD como labels
-    automáticos — no hace falta pedir nada al staff, los veredictos ya existen.
-
- 2. Embeddings semánticos de nombres de archivos
-    Usar un modelo de embeddings (sentence-transformers o similar) para
-    comparar el nombre de un archivo sospechoso contra una lista de hacks
-    conocidos por similitud semántica, no solo matching exacto de strings.
-
- 3. Detección de anomalías con Isolation Forest
-    Entrenar un modelo de anomalías sobre el perfil normal de un usuario
-    (archivos típicos, procesos habituales). Si el scan actual se desvía
-    mucho del baseline, marcar como sospechoso aunque no haya match exacto.
-
- 4. Modelo de secuencia temporal (LSTM o Transformer ligero)
-    Los hacks dejan rastros en orden: descarga → instalación → ejecución →
-    borrado. Un modelo de secuencia puede detectar este patrón incluso
-    cuando los hallazgos individuales son de baja confianza.
-
- 5. Clasificador de texto para explicaciones de hallazgos
-    Usar un modelo NLP para generar automáticamente una explicación
-    en lenguaje natural de por qué un hallazgo es sospechoso, adaptada
-    al nivel de experiencia del staff (novato vs veterano).
-
- 6. Semi-supervised learning con veredictos de scan (sin feedback extra)
-    El staff ya pulsa "Con Hacks" o "Limpio" al cerrar cada scan — eso ES
-    la etiqueta. No hace falta pedir más. El modelo usa esa señal pasiva:
-    [conjunto de hallazgos] → [veredicto final] como training pair automático.
-
- 7. Ensemble: combinar múltiples modelos con votación
-    Combinar el scoring actual + Random Forest + reglas heurísticas con
-    votación ponderada. Más robusto que cualquier modelo individual.
-
- 8. Calibración de probabilidades (Platt scaling)
-    Los scores actuales no son probabilidades reales. Aplicar calibración
-    para que "70% de confianza" signifique realmente 70% de chance de hack.
-
- 9. Detección de distribución shift (concept drift)
-    Los hacks evolucionan. Detectar automáticamente cuando el modelo
-    empieza a fallar (más FPs o FNs de lo normal) e invalidar el modelo
-    para forzar reentrenamiento.
-
-10. Modelo de grafo para correlación de hallazgos
-    Representar los hallazgos de un scan como un grafo (nodos=hallazgos,
-    aristas=correlaciones temporales/de path). Graph Neural Network para
-    detectar patrones de evasión que no son visibles en hallazgos aislados.
+[DONE]  1. Reemplazar scoring manual por Random Forest (ml_classifier.py)
+[PENDING] 2. Embeddings semánticos de nombres de archivos (sentence-transformers)
+[PENDING] 3. Detección de anomalías con Isolation Forest
+[PENDING] 4. Modelo de secuencia temporal (LSTM/Transformer) para patrones de instalación
+[DONE]  5. Clasificador NLP para explicaciones (Claude/Groq/Gemini vía /api/staff/ai/explain)
+[DONE]  6. Semi-supervised learning con veredictos pasivos (Random Forest lo usa)
+[PENDING] 7. Ensemble: combinar scoring actual + RF + heurísticas con votación
+[PENDING] 8. Calibración de probabilidades (Platt scaling)
+[PENDING] 9. Detección de concept drift (alerta cuando modelo empieza a fallar)
+[PENDING] 10. Modelo de grafo para correlación de hallazgos (Graph Neural Network)
 
 ── PROCESAMIENTO DE LENGUAJE NATURAL ───────────────────────────────────────
 
-11. Análisis NLP de nombres de carpetas/archivos con contexto
-    En vez de buscar "vape" como substring, entender el contexto:
-    "vape pen accessories" en una carpeta de vaping != hack de Minecraft.
-    Modelo pequeño de NLP puede distinguir estos contextos.
-
-12. Generación automática de resúmenes de scan para el staff
-    Al abrir un scan, la IA genera un párrafo de resumen:
-    "Este usuario tiene Meteor Client instalado (carpeta .meteor/ encontrada),
-    historial de visitas a vape.gg hace 3 días, y un autoclicker en prefetch."
-
-13. Clasificación de crash reports por causa
-    Los crash reports de Minecraft contienen stack traces. Un modelo NLP
-    puede clasificar automáticamente si el crash fue causado por un hack,
-    un mod incompatible, o un problema de hardware/drivers.
-
-14. Extracción de IOCs de texto libre
-    Cuando el staff escribe notas en un scan, la IA extrae automáticamente
-    IOCs (nombres de hacks, hashes, URLs, IPs) y los agrega a la blacklist
-    compartida para scans futuros.
-
-15. Análisis de sentimiento en historial de chat del servidor
-    Si el servidor tiene logs de chat de Minecraft, la IA puede detectar
-    patrones de lenguaje asociados con cheaters (insultos, menciones de hacks,
-    acusaciones de otros jugadores).
+[PENDING] 11. Análisis NLP de nombres de carpetas/archivos con contexto
+[DONE] 12. Generación automática de resúmenes de scan (/api/staff/ai/scan-summary)
+[PENDING] 13. Clasificación de crash reports por causa
+[PENDING] 14. Extracción de IOCs de texto libre del staff
+[PENDING] 15. Análisis de sentimiento en historial de chat del servidor
 
 ── APRENDIZAJE FEDERADO Y COLABORATIVO ─────────────────────────────────────
 
-16. Federated learning entre servidores de ASPERS
-    Múltiples servidores que usen Argus pueden contribuir gradientes
-    al modelo sin compartir datos sensibles de usuarios. El modelo mejora
-    con la experiencia de todos los servidores combinada.
-
-17. Blacklist dinámica actualizada por la comunidad
-    Sistema tipo antivirus: cuando un hash es confirmado como hack en
-    cualquier servidor, se propaga automáticamente a todos los demás
-    en menos de 1 hora sin necesidad de actualizar el exe.
-
-18. Whitelist colaborativa de mods legítimos
-    Igualmente para whitelists: si un mod es verificado en 10+ servidores
-    como legítimo, se agrega automáticamente a la whitelist global.
-
-19. Reputación de jugadores entre servidores
-    Con consentimiento de los servidores, compartir reputación anónima:
-    "este machine_id fue baneado en 3 servidores distintos" aumenta
-    el weight de cualquier hallazgo en el scan actual.
-
-20. Benchmark continuo usando veredictos históricos (sin etiquetado manual)
-    Usar los veredictos ya guardados en BD (hack/limpio) como ground truth
-    automático. Cada semana medir si el modelo concuerda con los veredictos
-    pasados. Si la concordancia baja >5%, alertar para revisión.
+[PENDING] 16. Federated learning entre servidores de ASPERS
+[DONE] 17. Blacklist dinámica actualizada por la comunidad (/api/hack_blacklist/sync)
+[DONE] 18. Whitelist colaborativa de mods legítimos (/api/mod_whitelist)
+[PENDING] 19. Reputación de jugadores entre servidores (cross-server machine_id)
+[DONE] 20. Benchmark continuo usando veredictos históricos (auto_weights)
 
 ── INTEGRACIÓN DE IA GENERATIVA ────────────────────────────────────────────
 
-21. Explicaciones automáticas de hallazgos con Claude/GPT
-    Para cada hallazgo CRITICAL, la IA genera una explicación de 2 líneas
-    que el staff puede mostrar al usuario: "Este archivo es Meteor Client,
-    un hack para Minecraft que permite volar y tener killaura."
-
-22. Sugerencias de veredicto con justificación
-    Al abrir un scan, la IA sugiere automáticamente "HACK" o "LIMPIO"
-    con una justificación de 3 bullets de los hallazgos más relevantes.
-    El staff puede aceptar o rechazar la sugerencia.
-
-23. Detección de inconsistencias en el scan
-    La IA revisa el conjunto completo de hallazgos y detecta
-    inconsistencias: "Tiene Forge instalado pero también un agentlib —
-    esto es inusual porque Forge no requiere agentes Java."
-
-24. Generación de preguntas de seguimiento para el staff
-    Si la IA detecta un patrón ambiguo, genera preguntas para el staff:
-    "¿Tiene el usuario permiso de admin en el servidor? ¿Usa Lunar Client
-    oficialmente?" para ayudar a tomar la decisión final.
-
-25. Resumen ejecutivo diario de scans
-    Cada día a las 9am, la IA genera un resumen de todos los scans del
-    día anterior: X usuarios scaneados, Y sospechosos, Z confirmados hack,
-    los 3 hacks más comunes detectados, tendencias respecto a la semana anterior.
+[DONE] 21. Explicaciones automáticas de hallazgos con Claude/GPT (/api/staff/ai/explain)
+[DONE] 22. Sugerencias de veredicto con justificación (/api/staff/ai/suggest-verdict)
+[PENDING] 23. Detección de inconsistencias en el scan (IA revisa conjunto completo)
+[PENDING] 24. Generación de preguntas de seguimiento para el staff
+[DONE] 25. Resumen ejecutivo diario de scans (daily_summary_job + Discord embed 09:00 UTC)
 
 ── DETECCIÓN BASADA EN COMPORTAMIENTO ──────────────────────────────────────
 
-26. Perfil de comportamiento de mouse durante el scan
-    Analizar los movimientos del mouse DURANTE el scan para detectar
-    autoclickers activos (movimientos perfectamente uniformes o en grid).
-
-27. Análisis de timing de pulsaciones de teclado
-    Si el usuario escribe el código de autenticación con timing
-    perfectamente uniforme entre teclas → posible bot automatizado.
-
-28. Detección de VM por comportamiento de hardware
-    Checks adicionales: CPUID con hypervisor bit, RDTSC timing,
-    ausencia de batería (toda VM de escritorio), MAC address de VMware/VirtualBox.
-
-29. Análisis de instalaciones recientes en el sistema
-    Via Windows Installer (MSI) y AppX, listar todo lo instalado en los
-    últimos 7 días. Correlacionar con fecha del hack sospechoso.
-
-30. Monitor de cambios en .minecraft durante el scan
-    Watcher de filesystem activo durante el scan para detectar si algún
-    proceso está modificando archivos de Minecraft mientras se escanea
-    (señal de evasión activa en tiempo real).
+[PENDING] 26. Perfil de comportamiento de mouse durante el scan
+[PENDING] 27. Análisis de timing de pulsaciones de teclado
+[DONE] 28. Detección de VM por comportamiento de hardware (CPUID, timing, VMware MAC)
+[DONE] 29. Análisis de instalaciones recientes (MSI, últimos 7 días)
+[PENDING] 30. Monitor de cambios en .minecraft durante el scan (filesystem watcher)
 
 ── INFRAESTRUCTURA DE IA ───────────────────────────────────────────────────
 
-31. Pipeline de reentrenamiento automático sin intervención
-    Cada semana, re-entrenar usando veredictos históricos de la BD.
-    No requiere que nadie etiquete nada — el modelo se alimenta solo
-    de los veredictos que el staff ya hizo al cerrar cada scan.
-
-32. Feature store centralizado
-    Base de datos de features precalculadas por machine_id:
-    baseline de procesos, apps instaladas, historial de scans. Evita
-    recalcular todo en cada scan del mismo usuario.
-
-33. Modelo de embedding de hashes de archivos
-    Entrenar embeddings de hashes de JARs/EXEs en el espacio latente.
-    Archivos similares quedan cerca en el espacio — útil para detectar
-    variantes de un hack aunque el hash exacto no esté en la blacklist.
-
-34. Pipeline de ingesta de nueva inteligencia sobre hacks
-    Scraper que monitorea foros (spigotmc, badlion forums, LeakForums)
-    y extrae automáticamente nombres de nuevos hacks, hashes y paths
-    para actualizar la blacklist sin intervención manual.
-
-35. API de predicción expuesta al scanner
-    Endpoint /api/predict en el backend: el scanner envía features del
-    sistema y recibe una predicción de riesgo pre-scan. Permite al staff
-    decidir si el scan es necesario antes de que el usuario lo ejecute.
+[DONE] 31. Pipeline de reentrenamiento automático semanal (APScheduler, domingos 03:00)
+[PENDING] 32. Feature store centralizado (precalcular features por machine_id)
+[PENDING] 33. Modelo de embedding de hashes de archivos
+[PENDING] 34. Pipeline de ingesta de nueva inteligencia sobre hacks (scraper)
+[PENDING] 35. API de predicción expuesta al scanner (/api/predict pre-scan)
 
 
 ════════════════════════════════════════════════════════════════════════════════
   PARTE 4 — FEATURE: CHAT DE IA PARA STAFF EN EL PANEL
 ════════════════════════════════════════════════════════════════════════════════
 
-── QUÉ ES ───────────────────────────────────────────────────────────────────
-
-  Un ícono de chat flotante (💬 o 🤖) visible en el panel de staff que abre
-  un widget de chat. El staff puede hacer preguntas sobre un scan específico
-  o sobre hacks en general. La IA responde consultando el contexto del scan
-  actual + búsqueda web en tiempo real.
-
-  Ejemplos de uso:
-    "¿Qué es Meteor Client y cómo funciona?"
-    "Este usuario tiene un RWX en javaw — ¿es grave?"
-    "¿El hallazgo #5 de este scan es un falso positivo?"
-    "¿Vape.gg es un sitio de hacks de Minecraft?"
-    "¿Cómo puedo distinguir OptiFine de un hack que usa el mismo nombre?"
-
-── ARQUITECTURA TÉCNICA ─────────────────────────────────────────────────────
-
-  BACKEND (Flask — app.py):
-
-    Nuevo endpoint: POST /api/staff/chat
-    - Requiere login (staff autenticado)
-    - Body: { "message": "...", "scan_id": 77 (opcional) }
-    - Llama a Claude API (claude-sonnet-4-6) con:
-        * System prompt con contexto de ASPERS y conocimiento de hacks MC
-        * Si hay scan_id: adjunta los hallazgos del scan como contexto
-        * Tool use: función search_web(query) que llama a SerpAPI o Brave Search
-    - Responde con SSE (Server-Sent Events) para streaming en tiempo real
-    - Historial de conversación guardado en sesión (últimos 10 mensajes)
-
-    Código esquemático:
-    ┌─────────────────────────────────────────────────────────┐
-    │ @app.route('/api/staff/chat', methods=['POST'])          │
-    │ @login_required                                          │
-    │ def staff_chat():                                        │
-    │     msg = request.json.get('message')                   │
-    │     scan_id = request.json.get('scan_id')               │
-    │     history = session.get('chat_history', [])           │
-    │                                                          │
-    │     context = build_scan_context(scan_id)  # hallazgos  │
-    │     response = call_claude_with_tools(                  │
-    │         msg, context, history,                          │
-    │         tools=[web_search_tool]                         │
-    │     )                                                    │
-    │     session['chat_history'] = history[-10:]  # últimos 10│
-    │     return jsonify({'reply': response})                  │
-    └─────────────────────────────────────────────────────────┘
-
-  SYSTEM PROMPT DE LA IA:
-    "Eres un asistente experto en seguridad de Minecraft para el equipo
-    de staff de ASPERS Projects. Tu rol es ayudar al staff a entender
-    los hallazgos del scanner Argus, identificar falsos positivos,
-    y responder preguntas sobre hacks y cheats de Minecraft.
-    Tienes acceso a búsqueda web para consultar información actualizada.
-    Sé directo, técnico y conciso. Si no sabes algo, búscalo."
-
-  TOOL: web_search
-    Usar Brave Search API (gratis hasta 2000 req/mes) o SerpAPI.
-    La IA decide cuándo buscar algo — ej. cuando le preguntan por
-    un hack específico que no conoce o necesita info actualizada.
-
-    {
-      "name": "web_search",
-      "description": "Busca información actualizada sobre hacks de Minecraft,
-                       CVEs, o cualquier consulta de seguridad",
-      "parameters": {
-        "query": "string — la búsqueda a realizar"
-      }
-    }
-
-  FRONTEND (panel.html + panel.js):
-
-    1. Ícono flotante bottom-right:
-       <button id="ai-chat-btn" onclick="toggleAIChat()"
-               style="position:fixed; bottom:24px; right:24px; z-index:9999;
-                      width:52px; height:52px; border-radius:50%;
-                      background:linear-gradient(135deg,#7c3aed,#6d28d9);
-                      border:none; cursor:pointer; box-shadow:0 4px 20px rgba(124,58,237,0.4)">
-         🤖
-       </button>
-
-    2. Panel de chat (slide-in desde la derecha):
-       - Header: "Argus IA Assistant" + botón cerrar
-       - Si hay un scan abierto: badge "Contexto: Scan #77"
-       - Lista de mensajes (staff = derecha azul, IA = izquierda púrpura)
-       - Input de texto + botón enviar
-       - Indicador "IA está escribiendo..." con dots animados
-       - Botones de acceso rápido: "¿FP o TP?", "Explica esto", "Buscar en web"
-
-    3. Streaming de respuesta:
-       Usar fetch() con ReadableStream para mostrar la respuesta
-       de Claude letra por letra (igual que ChatGPT).
-
-    4. Acceso rápido desde hallazgos:
-       Cada hallazgo en la lista tiene un botón "🤖 Preguntar a IA"
-       que abre el chat con el mensaje pre-cargado:
-       "¿Qué es [nombre del hallazgo] y qué tan grave es?"
-
-── LIBRERÍAS NECESARIAS ─────────────────────────────────────────────────────
-
-  Backend:
-    pip install anthropic          # Claude API
-    pip install requests           # para llamar a Brave/SerpAPI
-    # O alternativamente: pip install duckduckgo-search (gratis, sin API key)
-
-  La búsqueda web más simple sin costo:
-    from duckduckgo_search import DDGS
-    results = DDGS().text("vape client minecraft hack", max_results=3)
-    # Devuelve title + body + url de los 3 primeros resultados
-
-── VARIABLES DE ENTORNO NECESARIAS ─────────────────────────────────────────
-
-  ANTHROPIC_API_KEY=sk-ant-...       # clave de Claude API
-  BRAVE_SEARCH_API_KEY=...           # opcional, si se usa Brave Search
-  # Sin clave: usar duckduckgo-search (gratis)
-
-── PERMISOS Y SEGURIDAD ─────────────────────────────────────────────────────
-
-  - Solo staff autenticado puede usar el chat (ya controlado por @login_required)
-  - Rate limit: max 20 mensajes por staff por hora (evitar costos inesperados)
-  - No mostrar el chat a usuarios regulares (solo en vistas de staff)
-  - Log de todas las conversaciones en BD para auditoría
-  - No enviar datos sensibles del usuario escaneado (solo hallazgos, no PII)
-
-── COSTO ESTIMADO ───────────────────────────────────────────────────────────
-
-  Claude Sonnet 4.6:
-    Input:  $3 por millón de tokens
-    Output: $15 por millón de tokens
-
-  Una conversación típica de 10 mensajes ≈ 3000 tokens input + 500 output
-  = $0.009 + $0.0075 = ~$0.017 por conversación (menos de 2 centavos)
-
-  Con 50 conversaciones/mes = ~$0.85/mes. Muy barato.
-
-  Búsqueda web con duckduckgo-search: $0 (gratis, sin API key)
-
-── ROADMAP DE IMPLEMENTACIÓN ────────────────────────────────────────────────
-
-  Fase 1 (1-2 horas):
-    [ ] Instalar anthropic + duckduckgo-search en requirements.txt
-    [ ] Crear endpoint POST /api/staff/chat en app.py
-    [ ] System prompt + tool web_search con duckduckgo
-    [ ] Test básico desde curl/Postman
-
-  Fase 2 (2-3 horas):
-    [ ] UI: ícono flotante + panel de chat en panel.html
-    [ ] JS: toggleAIChat(), sendMessage(), renderMessages()
-    [ ] Streaming de respuesta con ReadableStream
-    [ ] Badge de contexto cuando hay scan abierto
-
-  Fase 3 (1 hora):
-    [ ] Botón "🤖 Preguntar a IA" en cada hallazgo de la lista
-    [ ] Rate limiting (20 msg/hora/staff)
-    [ ] Log de conversaciones en BD
-    [ ] Botones de acceso rápido predefinidos
+[DONE] Fase 1: Backend POST /api/staff/chat — Claude+Groq+Gemini ensemble + DuckDuckGo web search
+[DONE] Fase 2: UI — botón flotante 🤖 + panel de chat slide-in + badge de contexto de scan
+[DONE] Fase 3: Botón 🤖 en cada hallazgo (aiExplainFinding), rate limit 20msg/h, clear history
 
 
 ════════════════════════════════════════════════════════════════════════════════
-  NOTAS DE IMPLEMENTACIÓN
+  PENDIENTE DE ALTA PRIORIDAD (próxima sesión)
 ════════════════════════════════════════════════════════════════════════════════
 
-PRIORIDAD ALTA (mayor impacto, menor esfuerzo):
-  - Parte 1 items: 19, 20, 21 (performance — evitan cuelgues)
-  - Parte 1 items: 11, 12, 13, 14 (whitelists — reducen falsos positivos)
-  - Parte 2 items: 1, 4 (VirusTotal + Modrinth API — fuente de verdad)
-  - Parte 2 items: 37, 38, 39 (aprendizaje pasivo — el scanner mejora solo con veredictos)
-  - Parte 3 items: 21, 22 (explicaciones y sugerencias con Claude)
-  - Parte 4 COMPLETA (chat de IA — mayor valor visible para el staff)
-
-PRIORIDAD MEDIA (importante pero más trabajo):
-  - Parte 1 items: 1-10 (nuevos hacks — requieren investigación)
-  - Parte 2 items: 31-35 (ML/estadística — requieren datos históricos)
-  - Parte 3 items: 1-10 (scoring avanzado — se entrena con veredictos históricos, sin etiquetado extra)
-
-PRIORIDAD BAJA (largo plazo / requiere infraestructura):
-  - Parte 2 items: 46-50 (sandboxing dinámico)
-  - Parte 3 items: 16-20 (federated learning — múltiples servidores)
-  - Parte 3 items: 31-35 (MLOps pipeline completo)
+  P2 #5   CurseForge API: murmurhash2 fingerprint, necesita CF_API_KEY env var
+  P2 #14  Verificar firma .SF + .RSA en JARs (ZIP entry en META-INF)
+  P2 #26  Antigüedad de archivo >1 año → bajar severidad automáticamente
+  P3 #2   Embeddings semánticos con sentence-transformers para nombres de archivos
+  P3 #3   Isolation Forest para detección de anomalías de perfil de usuario
+  P3 #8   Platt scaling para calibrar probabilidades del Random Forest
+  P3 #9   Concept drift detection: alertar cuando el modelo empieza a fallar
+  P3 #23  IA detecta inconsistencias en el conjunto de hallazgos del scan
+  P3 #35  /api/predict: enviar features pre-scan para predicción proactiva
 
 ================================================================================

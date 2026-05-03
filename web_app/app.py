@@ -5928,6 +5928,63 @@ def ai_scan_summary(scan_id):
     return jsonify({'summary': summary or 'No se pudo generar el resumen.'})
 
 
+@app.route('/api/staff/ai/inconsistencies/<int:scan_id>', methods=['GET'])
+@login_required
+def ai_detect_inconsistencies(scan_id):
+    """P3 #23 — IA detecta inconsistencias en el conjunto de hallazgos de un scan."""
+    k_groq   = os.environ.get('GROQ_API_KEY')
+    k_gemini = os.environ.get('GEMINI_API_KEY')
+    k_claude = os.environ.get('ANTHROPIC_API_KEY')
+    if not any([k_groq, k_gemini, k_claude]):
+        return jsonify({'inconsistencies': []}), 200
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f'SELECT issue_name, issue_category, alert_level, confidence, issue_type '
+                f'FROM scan_results WHERE scan_id={_PH} ORDER BY confidence DESC LIMIT 30',
+                (scan_id,)
+            )
+            rows = cur.fetchall() or []
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    if len(rows) < 3:
+        return jsonify({'inconsistencies': []}), 200
+
+    findings_text = '\n'.join(
+        f'  [{_row_get(r, 2, "alert_level")}] {_row_get(r, 0, "issue_name")} ({_row_get(r, 1, "issue_category")})'
+        for r in rows
+    )
+    prompt = (
+        f'Analiza estos hallazgos del scanner Argus (scan #{scan_id}):\n{findings_text}\n\n'
+        'Identifica SOLO inconsistencias reales, contradicciones o patrones inusuales entre los hallazgos. '
+        'Ejemplos: "Tiene Forge instalado pero también agentlib (inusual)", '
+        '"Detectado Vape pero no hay historial de visitas a vape.gg", '
+        '"Múltiples ghost clients instalados simultáneamente". '
+        'Responde SOLO con JSON: {"inconsistencies": ["descripción 1", "descripción 2"]} '
+        'Si no hay inconsistencias, devuelve {"inconsistencies": []}. '
+        'Máximo 3 inconsistencias. Sin texto extra fuera del JSON.'
+    )
+    system   = 'Eres un experto en análisis forense de hacks de Minecraft. Responde solo con JSON.'
+    messages = [{'role': 'user', 'content': prompt}]
+    raw = None
+    if k_groq:
+        raw = _ai_call_groq(k_groq, system, messages)
+    if not raw and k_gemini:
+        raw = _ai_call_gemini(k_gemini, system, [], prompt)
+    if not raw and k_claude:
+        raw = _ai_call_claude(k_claude, system, messages)
+    if not raw:
+        return jsonify({'inconsistencies': []}), 200
+    try:
+        import re as _re
+        m = _re.search(r'\{[^{}]+\}', raw, _re.DOTALL)
+        parsed = json.loads(m.group(0) if m else raw)
+        return jsonify({'inconsistencies': list(parsed.get('inconsistencies', []))[:3]}), 200
+    except Exception:
+        return jsonify({'inconsistencies': []}), 200
+
+
 _REVIEW_SECRET = 'aspers-claude-review-2026'
 
 @app.route('/internal/scan-review/<int:scan_id>')

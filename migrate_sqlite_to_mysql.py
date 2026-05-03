@@ -111,7 +111,7 @@ def main():
         sqlite_conn.close()
         return 1
     
-    # Lista de tablas a migrar (en orden de dependencias)
+
     tables = [
         ('companies', ['id']),
         ('users', ['id']),
@@ -137,7 +137,7 @@ def main():
     total_migrated = 0
     for table_name, id_column in tables:
         try:
-            # Verificar que la tabla existe en SQLite
+            
             sqlite_cursor = sqlite_conn.cursor()
             sqlite_cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
             if not sqlite_cursor.fetchone():
