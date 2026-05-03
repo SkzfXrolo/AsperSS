@@ -457,6 +457,40 @@ def notify_verdict_change(scan_id: int, machine_name: str, username: str,
         asyncio.run_coroutine_threadsafe(_send(), _bot_loop)
 
 
+def notify_deploy(commit: str, branch: str, service: str, version: str):
+    """Envía notificación de deploy exitoso al canal de Discord.
+    Llamado desde app.py al detectar un commit nuevo en RENDER_GIT_COMMIT.
+    """
+    if not DISCORD_AVAILABLE or not _bot_instance or not DISCORD_CHANNEL:
+        return
+    if not DISCORD_CHANNEL.isdigit():
+        return
+
+    short = commit[:7] if len(commit) >= 7 else commit
+    now   = datetime.datetime.utcnow().strftime('%d/%m/%Y %H:%M UTC')
+
+    async def _send():
+        embed = discord.Embed(
+            title='🚀 ArgusScanner actualizado',
+            color=0x7C3AED,
+            description=(
+                f'El sistema de detección de hacks ha sido desplegado exitosamente '
+                f'en el entorno de producción.'
+            ),
+        )
+        embed.add_field(name='📦 Versión',  value=f'`{version}`',        inline=True)
+        embed.add_field(name='🔖 Commit',   value=f'`{short}`',           inline=True)
+        embed.add_field(name='🌿 Rama',     value=f'`{branch}`',          inline=True)
+        embed.add_field(name='🖥️ Servicio', value=f'`{service}`',         inline=True)
+        embed.add_field(name='🕐 Hora',     value=now,                    inline=True)
+        embed.add_field(name='✅ Estado',   value='Operativo',            inline=True)
+        embed.set_footer(text='ASPERS Projects — Sistema Argus')
+        await _send_to_channel(_bot_instance, int(DISCORD_CHANNEL), embed)
+
+    if _bot_loop and not _bot_loop.is_closed():
+        asyncio.run_coroutine_threadsafe(_send(), _bot_loop)
+
+
 # ── Launcher ──────────────────────────────────────────────────────────────────
 
 def start_bot_thread():

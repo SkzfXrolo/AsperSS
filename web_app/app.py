@@ -29,6 +29,67 @@ app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-produ
 CORS(app)
 
 # Inicializar base de datos de autenticación al iniciar (en background para no bloquear)
+_ARGUS_VERSION = '1.6.18'  # sincronizar con SCANNER_VERSION en main.py
+
+
+def _notify_new_deploy():
+    """Detecta si es un deploy nuevo comparando RENDER_GIT_COMMIT con el último
+    commit almacenado en BD. Si es nuevo, envía embed al canal de Discord.
+    Solo se ejecuta en Render (RENDER_GIT_COMMIT presente).
+    """
+    commit  = os.environ.get('RENDER_GIT_COMMIT', '').strip()
+    branch  = os.environ.get('RENDER_GIT_BRANCH', 'main').strip()
+    service = os.environ.get('RENDER_SERVICE_NAME', 'argus-web').strip()
+
+    if not commit:
+        return  # entorno local — no notificar
+
+    try:
+        with get_api_db_cursor() as cur:
+            # Crear tabla de meta si no existe
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS app_meta (
+                    key   VARCHAR(100) PRIMARY KEY,
+                    value TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cur.execute('SELECT value FROM app_meta WHERE key = %s', ('last_deploy_commit',))
+            row = cur.fetchone()
+            last_commit = (row[0] if isinstance(row, (list, tuple)) else row.get('value', '')) if row else ''
+
+            if last_commit == commit:
+                return  # mismo commit — restart normal, no nuevo deploy
+
+            # Nuevo commit → actualizar BD
+            cur.execute('''
+                INSERT INTO app_meta (key, value, updated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+            ''', ('last_deploy_commit', commit))
+
+        # Esperar un poco a que el bot de Discord esté listo antes de enviar
+        def _delayed_notify():
+            import time as _t
+            _t.sleep(15)
+            try:
+                from discord_bot import notify_deploy
+                notify_deploy(
+                    commit=commit,
+                    branch=branch,
+                    service=service,
+                    version=_ARGUS_VERSION,
+                )
+                print(f'✅ [Deploy] Notificación Discord enviada — commit {commit[:7]}')
+            except Exception as e:
+                print(f'⚠️ [Deploy] Error enviando notificación Discord: {e}')
+
+        threading.Thread(target=_delayed_notify, daemon=True).start()
+
+    except Exception as e:
+        print(f'⚠️ [Deploy] Error en _notify_new_deploy: {e}')
+
+
 def init_db_async():
     """Inicializa la BD de forma asíncrona para no bloquear el inicio"""
     try:
@@ -66,6 +127,8 @@ def init_db_async():
         print("✅ Tabla download_links verificada/creada en PostgreSQL")
     except Exception as _e:
         print(f"⚠️ Error verificando download_links: {_e}")
+    # Notificación de deploy nuevo — se dispara una sola vez por commit
+    _notify_new_deploy()
 
 # Inicializar en un thread separado para no bloquear el inicio
 import threading
