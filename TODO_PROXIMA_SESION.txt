@@ -336,47 +336,55 @@
 
 ── CONSULTAS A BASES DE DATOS CLOUD PROPIAS ────────────────────────────────
 
-36. Expandir /api/player_baseline con lista de archivos vistos
-    Ya existe el endpoint — ampliar para que incluya archivos históricamente
-    vistos y siempre marcados como limpios para ese machine_id.
+36. Expandir /api/player_baseline con archivos vistos históricamente
+    Ya existe el endpoint — ampliar para que incluya archivos vistos en
+    scans anteriores del mismo machine_id con veredicto "Limpio".
+    Esos archivos son seguros para ese usuario por definición.
 
-37. Endpoint de whitelist compartida entre servidores
-    API que permita a múltiples servidores contribuir a una whitelist común:
-    "este hash aparece en 500 scans limpios en 10 servidores → legítimo".
+37. Whitelist automática entre servidores por frecuencia de veredictos
+    Si un hash aparece en 500 scans con veredicto "Limpio" en cualquier
+    servidor → propagarlo a la whitelist global automáticamente.
+    No requiere que nadie lo reporte — la frecuencia es la señal.
 
-38. Endpoint de reporte de falsos positivos por staff
-    Cuando el staff marca un hallazgo como "falso positivo", registrarlo
-    en BD y usarlo para mejorar el filtro automáticamente en scans futuros.
+38. Ajuste de pesos por tasa de acierto histórica (pasivo)
+    Cada semana calcular: de todos los scans donde apareció el tipo X,
+    ¿en cuántos el veredicto final fue "Con Hacks"? Ese ratio ES el peso.
+    Se recalcula solo. Sin que nadie intervenga.
 
-39. Historial de veredictos por tipo de hallazgo
-    Calcular ratio de "hack confirmado" vs "limpio" por tipo de detección.
-    Tipos con <20% de positivos reales deberían tener peso reducido.
+39. Historial de veredictos por tipo de hallazgo (automático)
+    Calcular ratio de "Con Hacks" vs "Limpio" por tipo de detección.
+    Tipos con <20% de positivos reales bajan su peso automáticamente.
+    Tipos con >80% suben. Todo desde la BD de veredictos existente.
 
-40. A/B testing de filtros nuevos antes de deploy
-    Cuando se agrega un nuevo filtro, compararlo contra scans históricos
-    ya etiquetados para medir precision y recall antes de activarlo.
+40. A/B testing de filtros usando veredictos existentes en BD
+    Cuando se agrega un nuevo filtro, correrlo en modo "shadow" contra
+    scans históricos y comparar sus resultados con los veredictos ya
+    guardados. No requiere etiquetado — los veredictos ya están en BD.
 
-── MÉTODOS DE VALIDACIÓN MANUAL Y CROWDSOURCING ────────────────────────────
+── MÉTODOS DE APRENDIZAJE PASIVO (sin pedir nada al staff) ─────────────────
 
-41. Panel de "falsos positivos reportados" en el admin
-    Sección en el panel donde el staff pueda marcar hallazgos específicos
-    como falsos positivos y agregar notas explicativas.
+41. Auto-whitelist por frecuencia en scans "Limpio"
+    Si un hallazgo (mismo tipo + mismo path pattern) aparece en >30 scans
+    con veredicto "Limpio", agregarlo automáticamente a la whitelist.
+    Cero intervención — la BD ya tiene todos los datos necesarios.
 
-42. Cola de revisión para hallazgos con confidence < 0.60
-    Los hallazgos de baja confianza entran en una cola de revisión
-    donde el staff los valida manualmente antes de mostrarlos.
+42. Auto-blacklist por frecuencia en scans "Con Hacks"
+    Inverso: si un hallazgo aparece en >20 scans con veredicto "Con Hacks"
+    y nunca en scans "Limpio", subirle el peso de confianza automáticamente.
 
-43. Feedback loop: "¿Fue correcto este hallazgo?"
-    Al cerrar un scan, preguntar al staff si cada CRITICAL fue correcto.
-    Usar respuestas para ajustar pesos del scoring engine.
+43. Aprender de la diferencia entre scans consecutivos del mismo usuario
+    Si el usuario tiene scan "Limpio" en enero y scan "Con Hacks" en febrero,
+    los hallazgos que aparecen en febrero pero no en enero son la señal.
+    No requiere que nadie señale nada — la diferencia es la evidencia.
 
-44. Base de datos de aplicaciones conocidas por categoría
-    Mantener listas curadas de: juegos de ritmo, launchers alternativos,
-    herramientas de desarrollo, etc. con sus paths típicos de instalación.
+44. Base de datos de aplicaciones por categoría (curada una sola vez)
+    Crear la lista una vez (juegos de ritmo, launchers, IDEs, etc.) y
+    mantenerla en la BD. No requiere feedback continuo — solo actualizaciones
+    ocasionales cuando aparece una app nueva que genera FPs masivos.
 
-45. Consultar Modrinth search API por nombre de archivo JAR
-    Si el nombre del JAR aparece en una búsqueda de Modrinth con resultados,
-    probablemente es un mod publicado, no un hack.
+45. Consultar Modrinth search API por nombre de JAR (pasivo, en background)
+    En cada scan, verificar en background si el JAR sospechoso existe en
+    Modrinth. Si existe → bajar severidad automáticamente. Sin intervención.
 
 ── TÉCNICAS DE SANDBOXING Y ANÁLISIS DINÁMICO ──────────────────────────────
 
@@ -408,10 +416,10 @@
 
 ── SCORING Y CLASIFICACIÓN ──────────────────────────────────────────────────
 
- 1. Reemplazar scoring manual por modelo de Random Forest entrenado
+ 1. Reemplazar scoring manual por Random Forest entrenado con veredictos
     Actualmente el Risk Score es una suma de pesos hard-codeados. Entrenar
-    un Random Forest con los scans históricos etiquetados (hack/limpio)
-    para que el modelo aprenda solo qué combinaciones importan.
+    un Random Forest usando los veredictos históricos de la BD como labels
+    automáticos — no hace falta pedir nada al staff, los veredictos ya existen.
 
  2. Embeddings semánticos de nombres de archivos
     Usar un modelo de embeddings (sentence-transformers o similar) para
@@ -433,10 +441,10 @@
     en lenguaje natural de por qué un hallazgo es sospechoso, adaptada
     al nivel de experiencia del staff (novato vs veterano).
 
- 6. Active learning — el staff etiqueta y el modelo mejora
-    Cuando el staff marca un hallazgo como FP o TP, el sistema actualiza
-    el modelo con ese dato. Con 200-300 etiquetas manuales el modelo
-    supera al scoring manual actual.
+ 6. Semi-supervised learning con veredictos de scan (sin feedback extra)
+    El staff ya pulsa "Con Hacks" o "Limpio" al cerrar cada scan — eso ES
+    la etiqueta. No hace falta pedir más. El modelo usa esa señal pasiva:
+    [conjunto de hallazgos] → [veredicto final] como training pair automático.
 
  7. Ensemble: combinar múltiples modelos con votación
     Combinar el scoring actual + Random Forest + reglas heurísticas con
@@ -504,10 +512,10 @@
     "este machine_id fue baneado en 3 servidores distintos" aumenta
     el weight de cualquier hallazgo en el scan actual.
 
-20. Benchmark continuo de detecciones
-    Mantener un dataset de "golden truth" (scans etiquetados manualmente)
-    y correr automáticamente cada semana para medir si el modelo mejoró
-    o empeoró. Alertar si la precisión baja más de 5%.
+20. Benchmark continuo usando veredictos históricos (sin etiquetado manual)
+    Usar los veredictos ya guardados en BD (hack/limpio) como ground truth
+    automático. Cada semana medir si el modelo concuerda con los veredictos
+    pasados. Si la concordancia baja >5%, alertar para revisión.
 
 ── INTEGRACIÓN DE IA GENERATIVA ────────────────────────────────────────────
 
@@ -561,10 +569,10 @@
 
 ── INFRAESTRUCTURA DE IA ───────────────────────────────────────────────────
 
-31. Pipeline de reentrenamiento automático
-    Cada semana, re-entrenar el modelo con los nuevos scans etiquetados
-    por el staff. Si el nuevo modelo supera al anterior en el benchmark,
-    desplegarlo automáticamente. Si no, alertar para revisión manual.
+31. Pipeline de reentrenamiento automático sin intervención
+    Cada semana, re-entrenar usando veredictos históricos de la BD.
+    No requiere que nadie etiquete nada — el modelo se alimenta solo
+    de los veredictos que el staff ya hizo al cerrar cada scan.
 
 32. Feature store centralizado
     Base de datos de features precalculadas por machine_id:
@@ -755,14 +763,14 @@ PRIORIDAD ALTA (mayor impacto, menor esfuerzo):
   - Parte 1 items: 19, 20, 21 (performance — evitan cuelgues)
   - Parte 1 items: 11, 12, 13, 14 (whitelists — reducen falsos positivos)
   - Parte 2 items: 1, 4 (VirusTotal + Modrinth API — fuente de verdad)
-  - Parte 2 items: 37, 38, 39 (feedback loop — el scanner mejora solo)
+  - Parte 2 items: 37, 38, 39 (aprendizaje pasivo — el scanner mejora solo con veredictos)
   - Parte 3 items: 21, 22 (explicaciones y sugerencias con Claude)
   - Parte 4 COMPLETA (chat de IA — mayor valor visible para el staff)
 
 PRIORIDAD MEDIA (importante pero más trabajo):
   - Parte 1 items: 1-10 (nuevos hacks — requieren investigación)
   - Parte 2 items: 31-35 (ML/estadística — requieren datos históricos)
-  - Parte 3 items: 1-10 (scoring avanzado — requiere dataset etiquetado)
+  - Parte 3 items: 1-10 (scoring avanzado — se entrena con veredictos históricos, sin etiquetado extra)
 
 PRIORIDAD BAJA (largo plazo / requiere infraestructura):
   - Parte 2 items: 46-50 (sandboxing dinámico)
