@@ -163,13 +163,72 @@ def _weekly_ml_retrain():
     except Exception as e:
         print(f"[ML Weekly] Error: {e}")
 
+def _daily_summary_job():
+    """P3 #25 — Resumen diario de scans del día anterior, enviado a Discord a las 9:00 UTC."""
+    try:
+        import datetime as _dts
+        yesterday = (_dts.datetime.utcnow() - _dts.timedelta(days=1)).strftime('%Y-%m-%d')
+        with get_api_db_cursor() as cur:
+            if _USE_PG:
+                cur.execute('''
+                    SELECT COUNT(*) AS total,
+                           SUM(CASE WHEN verdict='hack' THEN 1 ELSE 0 END) AS hacks,
+                           SUM(CASE WHEN verdict='clean' THEN 1 ELSE 0 END) AS clean,
+                           SUM(CASE WHEN verdict IS NULL OR verdict='pending' THEN 1 ELSE 0 END) AS pending,
+                           AVG(risk_score) AS avg_risk
+                    FROM scans
+                    WHERE DATE(started_at) = %s
+                ''', (yesterday,))
+            else:
+                cur.execute('''
+                    SELECT COUNT(*), SUM(verdict='hack'), SUM(verdict='clean'),
+                           SUM(verdict IS NULL OR verdict='pending'), AVG(risk_score)
+                    FROM scans WHERE DATE(started_at) = ?
+                ''', (yesterday,))
+            row = cur.fetchone()
+        if not row or (row[0] or 0) == 0:
+            return  # No scans yesterday
+        total   = int(row[0] or 0)
+        hacks   = int(row[1] or 0)
+        clean   = int(row[2] or 0)
+        pending = int(row[3] or 0)
+        avg_risk = round(float(row[4] or 0), 1)
+
+        # Top hack types
+        with get_api_db_cursor() as cur:
+            if _USE_PG:
+                cur.execute('''
+                    SELECT issue_type, COUNT(*) AS n FROM scan_results sr
+                    JOIN scans s ON sr.scan_id = s.id
+                    WHERE s.verdict = 'hack' AND DATE(s.started_at) = %s
+                    GROUP BY issue_type ORDER BY n DESC LIMIT 3
+                ''', (yesterday,))
+            else:
+                cur.execute('''
+                    SELECT issue_type, COUNT(*) AS n FROM scan_results sr
+                    JOIN scans s ON sr.scan_id = s.id
+                    WHERE s.verdict = 'hack' AND DATE(s.started_at) = ?
+                    GROUP BY issue_type ORDER BY n DESC LIMIT 3
+                ''', (yesterday,))
+            top_types = [f"{_row_get(r, 0, 'issue_type')} ×{int(_row_get(r, 1, 'n') or 0)}" for r in (cur.fetchall() or [])]
+
+        from web_app.discord_bot import notify_daily_summary
+        notify_daily_summary(
+            date=yesterday, total=total, hacks=hacks, clean=clean,
+            pending=pending, avg_risk=avg_risk, top_types=top_types,
+        )
+    except Exception as e:
+        print(f'[Daily Summary] Error: {e}')
+
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
     _scheduler = BackgroundScheduler(daemon=True)
     _scheduler.add_job(_weekly_ml_retrain, 'cron', day_of_week='sun', hour=3, minute=0,
                        id='weekly_ml_retrain', replace_existing=True)
+    _scheduler.add_job(_daily_summary_job, 'cron', hour=9, minute=0,
+                       id='daily_summary', replace_existing=True)
     _scheduler.start()
-    print('[Scheduler] Reentrenamiento semanal ML activado (domingos 03:00 UTC)')
+    print('[Scheduler] ML semanal + resumen diario (09:00 UTC) activados')
 except Exception as _sch_err:
     print(f'[Scheduler] APScheduler no disponible: {_sch_err}')
 

@@ -491,6 +491,36 @@ def notify_deploy(commit: str, branch: str, service: str, version: str):
         asyncio.run_coroutine_threadsafe(_send(), _bot_loop)
 
 
+def notify_daily_summary(date: str, total: int, hacks: int, clean: int,
+                         pending: int, avg_risk: float = 0.0, top_types: list = None):
+    """P3 #25 — Resumen diario de scans, enviado al canal Discord a las 09:00 UTC."""
+    if not DISCORD_AVAILABLE or not _bot_instance or not DISCORD_CHANNEL:
+        return
+    if not DISCORD_CHANNEL.isdigit():
+        return
+
+    hack_rate = f'{hacks/total*100:.1f}%' if total else '0%'
+    top_lines = '\n'.join(
+        f'  {i+1}. `{t}`' for i, t in enumerate((top_types or [])[:3])
+    ) or '  Sin datos'
+
+    async def _send():
+        embed = discord.Embed(
+            title=f'📋 Resumen diario — {date}',
+            color=0x6366F1,
+            description=(
+                f'**Scans:** {total}  |  **Hacks:** {hacks}  |  **Limpios:** {clean}  |  **Pendientes:** {pending}\n'
+                f'**Tasa de detección:** {hack_rate}  |  **Risk score medio:** {avg_risk}/100\n\n'
+                f'**Top tipos detectados:**\n{top_lines}'
+            ),
+        )
+        embed.set_footer(text='ASPERS Projects — Argus')
+        await _send_to_channel(_bot_instance, int(DISCORD_CHANNEL), embed)
+
+    if _bot_loop and not _bot_loop.is_closed():
+        asyncio.run_coroutine_threadsafe(_send(), _bot_loop)
+
+
 # ── Launcher ──────────────────────────────────────────────────────────────────
 
 def start_bot_thread():
