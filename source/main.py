@@ -3755,6 +3755,10 @@ class ArgusApp:
                 _run_safe(self.scan_active_injectors)
                 self._set_scan_phase("🔑 Hash de minecraft.jar vs Mojang...")
                 _run_safe(self.scan_minecraft_jar_hash)
+                self._set_scan_phase("📦 Múltiples versiones de Minecraft...")
+                _run_safe(self.scan_minecraft_version_count)
+                self._set_scan_phase("🔬 Entropy y packing de ejecutables sospechosos...")
+                _run_safe(self.scan_exe_entropy_and_packing)
                 self._set_scan_phase("🪝 -javaagent en JVM args...")
                 _run_safe(self.scan_javaagent_args)
                 self._set_scan_phase("🕸️ Weave Loader artifacts...")
@@ -9717,6 +9721,133 @@ class ArgusApp:
                     continue
         except Exception as e:
             print(f"Error en scan_process_hashes_cloud: {e}")
+
+    def scan_minecraft_version_count(self):
+        """#29 — Tener 3+ versiones de Minecraft sin ser desarrollador conocido es sospechoso."""
+        print("🔍 Contando versiones de Minecraft instaladas...")
+        appdata = os.environ.get('APPDATA', '')
+        versions_dir = os.path.join(appdata, '.minecraft', 'versions')
+        if not os.path.isdir(versions_dir):
+            return
+        try:
+            versions = [
+                d for d in os.listdir(versions_dir)
+                if os.path.isdir(os.path.join(versions_dir, d))
+                and not d.startswith('.')
+            ]
+            VANILLA_RE = r'^\d+\.\d+(\.\d+)?$'
+            import re as _re2
+            vanilla = [v for v in versions if _re2.match(VANILLA_RE, v)]
+            non_vanilla = [v for v in versions if not _re2.match(VANILLA_RE, v)]
+            if len(versions) >= 4:
+                level = 'SOSPECHOSO' if len(versions) < 7 else 'CRITICAL'
+                conf = 0.60 if len(versions) < 7 else 0.75
+                print(f"⚠️ MÚLTIPLES VERSIONES MC: {len(versions)} ({len(non_vanilla)} no-vanilla)")
+                self.issues_found.append({
+                    'nombre': f'{len(versions)} versiones de Minecraft instaladas ({len(non_vanilla)} no-vanilla)',
+                    'ruta': versions_dir,
+                    'archivo': '',
+                    'tipo': 'ghost_client_config',
+                    'categoria': 'MULTI_VERSION',
+                    'alerta': level,
+                    'confidence': conf,
+                    'detected_patterns': [f'mc_versions:{len(versions)}', f'non_vanilla:{len(non_vanilla)}'],
+                    'explicacion': (
+                        f'Se encontraron {len(versions)} versiones de Minecraft en .minecraft/versions/. '
+                        f'Las versiones no-vanilla son: {", ".join(non_vanilla[:6])}. '
+                        'Los hackers instalan múltiples versiones para probar sus hacks en distintas '
+                        'versiones del juego y encontrar la que no está protegida por el anti-cheat del servidor.'
+                    ),
+                })
+        except Exception as e:
+            print(f"Error en scan_minecraft_version_count: {e}")
+
+    def scan_exe_entropy_and_packing(self):
+        """#19/#20 — Detecta .exe sospechosos con alta entropy (cifrado) o packed con UPX/MPRESS."""
+        print("🔍 Analizando entropy y packing de ejecutables sospechosos...")
+        import math as _math
+        HACK_DIRS = [
+            os.path.expanduser('~\\Desktop'),
+            os.path.expanduser('~\\Downloads'),
+            os.path.join(os.environ.get('APPDATA', ''), '.minecraft'),
+            os.path.join(os.environ.get('APPDATA', ''), '.weave'),
+        ]
+        SAFE_PUBLISHERS = [b'Microsoft', b'NVIDIA', b'Adobe', b'Google', b'Intel']
+
+        def _shannon_entropy(data: bytes) -> float:
+            if not data:
+                return 0.0
+            freq = [0] * 256
+            for b in data:
+                freq[b] += 1
+            total = len(data)
+            return -sum((c / total) * _math.log2(c / total) for c in freq if c > 0)
+
+        def _is_upx_packed(data: bytes) -> bool:
+            return (b'UPX!' in data[:4096] or
+                    b'This file is packed with the UPX' in data[:4096] or
+                    b'UPX0' in data[:512] or b'UPX1' in data[:512])
+
+        try:
+            for base in HACK_DIRS:
+                if not os.path.isdir(base):
+                    continue
+                for fname in os.listdir(base):
+                    if not fname.lower().endswith('.exe'):
+                        continue
+                    fpath = os.path.join(base, fname)
+                    try:
+                        fsize = os.path.getsize(fpath)
+                        if fsize < 4096 or fsize > 50 * 1024 * 1024:
+                            continue
+                        with open(fpath, 'rb') as f:
+                            header = f.read(min(65536, fsize))
+
+                        # Skip executables signed by known publishers
+                        if any(pub in header for pub in SAFE_PUBLISHERS):
+                            continue
+
+                        entropy = _shannon_entropy(header)
+                        upx = _is_upx_packed(header)
+
+                        if upx:
+                            print(f"🚨 UPX PACKED EXE: {fpath}")
+                            self.issues_found.append({
+                                'nombre': f'Ejecutable packed con UPX: {fname}',
+                                'ruta': fpath,
+                                'archivo': fname,
+                                'tipo': 'ghost_client_config',
+                                'categoria': 'PACKED_EXE',
+                                'alerta': 'SOSPECHOSO',
+                                'confidence': 0.78,
+                                'detected_patterns': ['upx_packed'],
+                                'explicacion': (
+                                    f'{fname} fue comprimido con UPX, una técnica usada para ocultar '
+                                    'el contenido de los ejecutables de los escáneres antivirus. '
+                                    'Los hack clients frecuentemente usan UPX para evadir detección.'
+                                ),
+                            })
+                        elif entropy > 7.4:
+                            print(f"⚠️ ALTA ENTROPY ({entropy:.2f}): {fpath}")
+                            self.issues_found.append({
+                                'nombre': f'Ejecutable con entropy alta ({entropy:.2f} bits/byte): {fname}',
+                                'ruta': fpath,
+                                'archivo': fname,
+                                'tipo': 'ghost_client_config',
+                                'categoria': 'OBFUSCATED_EXE',
+                                'alerta': 'POCO_SOSPECHOSO',
+                                'confidence': 0.62,
+                                'detected_patterns': [f'high_entropy:{entropy:.2f}'],
+                                'explicacion': (
+                                    f'{fname} tiene una entropy de {entropy:.2f} bits/byte (máximo: 8.0). '
+                                    'Valores >7.4 indican que el archivo está cifrado o comprimido, '
+                                    'lo que es una señal de ofuscación deliberada para evitar análisis.'
+                                ),
+                            })
+                    except Exception:
+                        continue
+        except Exception as e:
+            print(f"Error en scan_exe_entropy_and_packing: {e}")
 
     def scan_javaagent_args(self):
         """#1 — Detecta -javaagent en cmdline de javaw.exe (inyección directa en JVM)."""
