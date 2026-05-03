@@ -9870,8 +9870,8 @@ class ArgusApp:
             print(f"Error en scan_minecraft_version_count: {e}")
 
     def scan_exe_entropy_and_packing(self):
-        """#19/#20 — Detecta .exe sospechosos con alta entropy (cifrado) o packed con UPX/MPRESS."""
-        print("🔍 Analizando entropy y packing de ejecutables sospechosos...")
+        """#18/#19/#20 — .exe sospechosos: sin metadata PE, alta entropy, packed con UPX/MPRESS."""
+        print("🔍 Analizando metadata PE, entropy y packing de ejecutables sospechosos...")
         import math as _math
         HACK_DIRS = [
             os.path.expanduser('~\\Desktop'),
@@ -9917,6 +9917,15 @@ class ArgusApp:
                         entropy = _shannon_entropy(header)
                         upx = _is_upx_packed(header)
 
+                        # P2 #18 — PE VersionInfo metadata check
+                        # Legítimos tienen CompanyName/FileDescription; hacks raramente los tienen
+                        has_version_info = (
+                            b'CompanyName' in header or
+                            b'FileDescription' in header or
+                            b'ProductName' in header or
+                            b'LegalCopyright' in header
+                        )
+
                         if upx:
                             print(f"🚨 UPX PACKED EXE: {fpath}")
                             self.issues_found.append({
@@ -9949,6 +9958,24 @@ class ArgusApp:
                                     f'{fname} tiene una entropy de {entropy:.2f} bits/byte (máximo: 8.0). '
                                     'Valores >7.4 indican que el archivo está cifrado o comprimido, '
                                     'lo que es una señal de ofuscación deliberada para evitar análisis.'
+                                ),
+                            })
+                        elif not has_version_info and not upx and fsize > 100 * 1024:
+                            # Sin metadata PE y sin packing conocido — sospechoso si es >100KB
+                            print(f"⚠️ SIN METADATA PE: {fpath}")
+                            self.issues_found.append({
+                                'nombre': f'Ejecutable sin metadata PE (sin CompanyName/FileDescription): {fname}',
+                                'ruta': fpath,
+                                'archivo': fname,
+                                'tipo': 'ghost_client_config',
+                                'categoria': 'NO_PE_METADATA',
+                                'alerta': 'POCO_SOSPECHOSO',
+                                'confidence': 0.55,
+                                'detected_patterns': ['no_version_info'],
+                                'explicacion': (
+                                    f'{fname} no tiene metadata PE (CompanyName, FileDescription, ProductName). '
+                                    'Los ejecutables legítimos firmados siempre incluyen esta información. '
+                                    'Los hack clients compilados caseros raramente la incluyen.'
                                 ),
                             })
                     except Exception:
