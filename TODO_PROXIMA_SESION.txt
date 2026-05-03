@@ -403,21 +403,370 @@
 
 
 ════════════════════════════════════════════════════════════════════════════════
+  PARTE 3 — MEJORAS DE IA PARA EL SISTEMA
+════════════════════════════════════════════════════════════════════════════════
+
+── SCORING Y CLASIFICACIÓN ──────────────────────────────────────────────────
+
+ 1. Reemplazar scoring manual por modelo de Random Forest entrenado
+    Actualmente el Risk Score es una suma de pesos hard-codeados. Entrenar
+    un Random Forest con los scans históricos etiquetados (hack/limpio)
+    para que el modelo aprenda solo qué combinaciones importan.
+
+ 2. Embeddings semánticos de nombres de archivos
+    Usar un modelo de embeddings (sentence-transformers o similar) para
+    comparar el nombre de un archivo sospechoso contra una lista de hacks
+    conocidos por similitud semántica, no solo matching exacto de strings.
+
+ 3. Detección de anomalías con Isolation Forest
+    Entrenar un modelo de anomalías sobre el perfil normal de un usuario
+    (archivos típicos, procesos habituales). Si el scan actual se desvía
+    mucho del baseline, marcar como sospechoso aunque no haya match exacto.
+
+ 4. Modelo de secuencia temporal (LSTM o Transformer ligero)
+    Los hacks dejan rastros en orden: descarga → instalación → ejecución →
+    borrado. Un modelo de secuencia puede detectar este patrón incluso
+    cuando los hallazgos individuales son de baja confianza.
+
+ 5. Clasificador de texto para explicaciones de hallazgos
+    Usar un modelo NLP para generar automáticamente una explicación
+    en lenguaje natural de por qué un hallazgo es sospechoso, adaptada
+    al nivel de experiencia del staff (novato vs veterano).
+
+ 6. Active learning — el staff etiqueta y el modelo mejora
+    Cuando el staff marca un hallazgo como FP o TP, el sistema actualiza
+    el modelo con ese dato. Con 200-300 etiquetas manuales el modelo
+    supera al scoring manual actual.
+
+ 7. Ensemble: combinar múltiples modelos con votación
+    Combinar el scoring actual + Random Forest + reglas heurísticas con
+    votación ponderada. Más robusto que cualquier modelo individual.
+
+ 8. Calibración de probabilidades (Platt scaling)
+    Los scores actuales no son probabilidades reales. Aplicar calibración
+    para que "70% de confianza" signifique realmente 70% de chance de hack.
+
+ 9. Detección de distribución shift (concept drift)
+    Los hacks evolucionan. Detectar automáticamente cuando el modelo
+    empieza a fallar (más FPs o FNs de lo normal) e invalidar el modelo
+    para forzar reentrenamiento.
+
+10. Modelo de grafo para correlación de hallazgos
+    Representar los hallazgos de un scan como un grafo (nodos=hallazgos,
+    aristas=correlaciones temporales/de path). Graph Neural Network para
+    detectar patrones de evasión que no son visibles en hallazgos aislados.
+
+── PROCESAMIENTO DE LENGUAJE NATURAL ───────────────────────────────────────
+
+11. Análisis NLP de nombres de carpetas/archivos con contexto
+    En vez de buscar "vape" como substring, entender el contexto:
+    "vape pen accessories" en una carpeta de vaping != hack de Minecraft.
+    Modelo pequeño de NLP puede distinguir estos contextos.
+
+12. Generación automática de resúmenes de scan para el staff
+    Al abrir un scan, la IA genera un párrafo de resumen:
+    "Este usuario tiene Meteor Client instalado (carpeta .meteor/ encontrada),
+    historial de visitas a vape.gg hace 3 días, y un autoclicker en prefetch."
+
+13. Clasificación de crash reports por causa
+    Los crash reports de Minecraft contienen stack traces. Un modelo NLP
+    puede clasificar automáticamente si el crash fue causado por un hack,
+    un mod incompatible, o un problema de hardware/drivers.
+
+14. Extracción de IOCs de texto libre
+    Cuando el staff escribe notas en un scan, la IA extrae automáticamente
+    IOCs (nombres de hacks, hashes, URLs, IPs) y los agrega a la blacklist
+    compartida para scans futuros.
+
+15. Análisis de sentimiento en historial de chat del servidor
+    Si el servidor tiene logs de chat de Minecraft, la IA puede detectar
+    patrones de lenguaje asociados con cheaters (insultos, menciones de hacks,
+    acusaciones de otros jugadores).
+
+── APRENDIZAJE FEDERADO Y COLABORATIVO ─────────────────────────────────────
+
+16. Federated learning entre servidores de ASPERS
+    Múltiples servidores que usen Argus pueden contribuir gradientes
+    al modelo sin compartir datos sensibles de usuarios. El modelo mejora
+    con la experiencia de todos los servidores combinada.
+
+17. Blacklist dinámica actualizada por la comunidad
+    Sistema tipo antivirus: cuando un hash es confirmado como hack en
+    cualquier servidor, se propaga automáticamente a todos los demás
+    en menos de 1 hora sin necesidad de actualizar el exe.
+
+18. Whitelist colaborativa de mods legítimos
+    Igualmente para whitelists: si un mod es verificado en 10+ servidores
+    como legítimo, se agrega automáticamente a la whitelist global.
+
+19. Reputación de jugadores entre servidores
+    Con consentimiento de los servidores, compartir reputación anónima:
+    "este machine_id fue baneado en 3 servidores distintos" aumenta
+    el weight de cualquier hallazgo en el scan actual.
+
+20. Benchmark continuo de detecciones
+    Mantener un dataset de "golden truth" (scans etiquetados manualmente)
+    y correr automáticamente cada semana para medir si el modelo mejoró
+    o empeoró. Alertar si la precisión baja más de 5%.
+
+── INTEGRACIÓN DE IA GENERATIVA ────────────────────────────────────────────
+
+21. Explicaciones automáticas de hallazgos con Claude/GPT
+    Para cada hallazgo CRITICAL, la IA genera una explicación de 2 líneas
+    que el staff puede mostrar al usuario: "Este archivo es Meteor Client,
+    un hack para Minecraft que permite volar y tener killaura."
+
+22. Sugerencias de veredicto con justificación
+    Al abrir un scan, la IA sugiere automáticamente "HACK" o "LIMPIO"
+    con una justificación de 3 bullets de los hallazgos más relevantes.
+    El staff puede aceptar o rechazar la sugerencia.
+
+23. Detección de inconsistencias en el scan
+    La IA revisa el conjunto completo de hallazgos y detecta
+    inconsistencias: "Tiene Forge instalado pero también un agentlib —
+    esto es inusual porque Forge no requiere agentes Java."
+
+24. Generación de preguntas de seguimiento para el staff
+    Si la IA detecta un patrón ambiguo, genera preguntas para el staff:
+    "¿Tiene el usuario permiso de admin en el servidor? ¿Usa Lunar Client
+    oficialmente?" para ayudar a tomar la decisión final.
+
+25. Resumen ejecutivo diario de scans
+    Cada día a las 9am, la IA genera un resumen de todos los scans del
+    día anterior: X usuarios scaneados, Y sospechosos, Z confirmados hack,
+    los 3 hacks más comunes detectados, tendencias respecto a la semana anterior.
+
+── DETECCIÓN BASADA EN COMPORTAMIENTO ──────────────────────────────────────
+
+26. Perfil de comportamiento de mouse durante el scan
+    Analizar los movimientos del mouse DURANTE el scan para detectar
+    autoclickers activos (movimientos perfectamente uniformes o en grid).
+
+27. Análisis de timing de pulsaciones de teclado
+    Si el usuario escribe el código de autenticación con timing
+    perfectamente uniforme entre teclas → posible bot automatizado.
+
+28. Detección de VM por comportamiento de hardware
+    Checks adicionales: CPUID con hypervisor bit, RDTSC timing,
+    ausencia de batería (toda VM de escritorio), MAC address de VMware/VirtualBox.
+
+29. Análisis de instalaciones recientes en el sistema
+    Via Windows Installer (MSI) y AppX, listar todo lo instalado en los
+    últimos 7 días. Correlacionar con fecha del hack sospechoso.
+
+30. Monitor de cambios en .minecraft durante el scan
+    Watcher de filesystem activo durante el scan para detectar si algún
+    proceso está modificando archivos de Minecraft mientras se escanea
+    (señal de evasión activa en tiempo real).
+
+── INFRAESTRUCTURA DE IA ───────────────────────────────────────────────────
+
+31. Pipeline de reentrenamiento automático
+    Cada semana, re-entrenar el modelo con los nuevos scans etiquetados
+    por el staff. Si el nuevo modelo supera al anterior en el benchmark,
+    desplegarlo automáticamente. Si no, alertar para revisión manual.
+
+32. Feature store centralizado
+    Base de datos de features precalculadas por machine_id:
+    baseline de procesos, apps instaladas, historial de scans. Evita
+    recalcular todo en cada scan del mismo usuario.
+
+33. Modelo de embedding de hashes de archivos
+    Entrenar embeddings de hashes de JARs/EXEs en el espacio latente.
+    Archivos similares quedan cerca en el espacio — útil para detectar
+    variantes de un hack aunque el hash exacto no esté en la blacklist.
+
+34. Pipeline de ingesta de nueva inteligencia sobre hacks
+    Scraper que monitorea foros (spigotmc, badlion forums, LeakForums)
+    y extrae automáticamente nombres de nuevos hacks, hashes y paths
+    para actualizar la blacklist sin intervención manual.
+
+35. API de predicción expuesta al scanner
+    Endpoint /api/predict en el backend: el scanner envía features del
+    sistema y recibe una predicción de riesgo pre-scan. Permite al staff
+    decidir si el scan es necesario antes de que el usuario lo ejecute.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  PARTE 4 — FEATURE: CHAT DE IA PARA STAFF EN EL PANEL
+════════════════════════════════════════════════════════════════════════════════
+
+── QUÉ ES ───────────────────────────────────────────────────────────────────
+
+  Un ícono de chat flotante (💬 o 🤖) visible en el panel de staff que abre
+  un widget de chat. El staff puede hacer preguntas sobre un scan específico
+  o sobre hacks en general. La IA responde consultando el contexto del scan
+  actual + búsqueda web en tiempo real.
+
+  Ejemplos de uso:
+    "¿Qué es Meteor Client y cómo funciona?"
+    "Este usuario tiene un RWX en javaw — ¿es grave?"
+    "¿El hallazgo #5 de este scan es un falso positivo?"
+    "¿Vape.gg es un sitio de hacks de Minecraft?"
+    "¿Cómo puedo distinguir OptiFine de un hack que usa el mismo nombre?"
+
+── ARQUITECTURA TÉCNICA ─────────────────────────────────────────────────────
+
+  BACKEND (Flask — app.py):
+
+    Nuevo endpoint: POST /api/staff/chat
+    - Requiere login (staff autenticado)
+    - Body: { "message": "...", "scan_id": 77 (opcional) }
+    - Llama a Claude API (claude-sonnet-4-6) con:
+        * System prompt con contexto de ASPERS y conocimiento de hacks MC
+        * Si hay scan_id: adjunta los hallazgos del scan como contexto
+        * Tool use: función search_web(query) que llama a SerpAPI o Brave Search
+    - Responde con SSE (Server-Sent Events) para streaming en tiempo real
+    - Historial de conversación guardado en sesión (últimos 10 mensajes)
+
+    Código esquemático:
+    ┌─────────────────────────────────────────────────────────┐
+    │ @app.route('/api/staff/chat', methods=['POST'])          │
+    │ @login_required                                          │
+    │ def staff_chat():                                        │
+    │     msg = request.json.get('message')                   │
+    │     scan_id = request.json.get('scan_id')               │
+    │     history = session.get('chat_history', [])           │
+    │                                                          │
+    │     context = build_scan_context(scan_id)  # hallazgos  │
+    │     response = call_claude_with_tools(                  │
+    │         msg, context, history,                          │
+    │         tools=[web_search_tool]                         │
+    │     )                                                    │
+    │     session['chat_history'] = history[-10:]  # últimos 10│
+    │     return jsonify({'reply': response})                  │
+    └─────────────────────────────────────────────────────────┘
+
+  SYSTEM PROMPT DE LA IA:
+    "Eres un asistente experto en seguridad de Minecraft para el equipo
+    de staff de ASPERS Projects. Tu rol es ayudar al staff a entender
+    los hallazgos del scanner Argus, identificar falsos positivos,
+    y responder preguntas sobre hacks y cheats de Minecraft.
+    Tienes acceso a búsqueda web para consultar información actualizada.
+    Sé directo, técnico y conciso. Si no sabes algo, búscalo."
+
+  TOOL: web_search
+    Usar Brave Search API (gratis hasta 2000 req/mes) o SerpAPI.
+    La IA decide cuándo buscar algo — ej. cuando le preguntan por
+    un hack específico que no conoce o necesita info actualizada.
+
+    {
+      "name": "web_search",
+      "description": "Busca información actualizada sobre hacks de Minecraft,
+                       CVEs, o cualquier consulta de seguridad",
+      "parameters": {
+        "query": "string — la búsqueda a realizar"
+      }
+    }
+
+  FRONTEND (panel.html + panel.js):
+
+    1. Ícono flotante bottom-right:
+       <button id="ai-chat-btn" onclick="toggleAIChat()"
+               style="position:fixed; bottom:24px; right:24px; z-index:9999;
+                      width:52px; height:52px; border-radius:50%;
+                      background:linear-gradient(135deg,#7c3aed,#6d28d9);
+                      border:none; cursor:pointer; box-shadow:0 4px 20px rgba(124,58,237,0.4)">
+         🤖
+       </button>
+
+    2. Panel de chat (slide-in desde la derecha):
+       - Header: "Argus IA Assistant" + botón cerrar
+       - Si hay un scan abierto: badge "Contexto: Scan #77"
+       - Lista de mensajes (staff = derecha azul, IA = izquierda púrpura)
+       - Input de texto + botón enviar
+       - Indicador "IA está escribiendo..." con dots animados
+       - Botones de acceso rápido: "¿FP o TP?", "Explica esto", "Buscar en web"
+
+    3. Streaming de respuesta:
+       Usar fetch() con ReadableStream para mostrar la respuesta
+       de Claude letra por letra (igual que ChatGPT).
+
+    4. Acceso rápido desde hallazgos:
+       Cada hallazgo en la lista tiene un botón "🤖 Preguntar a IA"
+       que abre el chat con el mensaje pre-cargado:
+       "¿Qué es [nombre del hallazgo] y qué tan grave es?"
+
+── LIBRERÍAS NECESARIAS ─────────────────────────────────────────────────────
+
+  Backend:
+    pip install anthropic          # Claude API
+    pip install requests           # para llamar a Brave/SerpAPI
+    # O alternativamente: pip install duckduckgo-search (gratis, sin API key)
+
+  La búsqueda web más simple sin costo:
+    from duckduckgo_search import DDGS
+    results = DDGS().text("vape client minecraft hack", max_results=3)
+    # Devuelve title + body + url de los 3 primeros resultados
+
+── VARIABLES DE ENTORNO NECESARIAS ─────────────────────────────────────────
+
+  ANTHROPIC_API_KEY=sk-ant-...       # clave de Claude API
+  BRAVE_SEARCH_API_KEY=...           # opcional, si se usa Brave Search
+  # Sin clave: usar duckduckgo-search (gratis)
+
+── PERMISOS Y SEGURIDAD ─────────────────────────────────────────────────────
+
+  - Solo staff autenticado puede usar el chat (ya controlado por @login_required)
+  - Rate limit: max 20 mensajes por staff por hora (evitar costos inesperados)
+  - No mostrar el chat a usuarios regulares (solo en vistas de staff)
+  - Log de todas las conversaciones en BD para auditoría
+  - No enviar datos sensibles del usuario escaneado (solo hallazgos, no PII)
+
+── COSTO ESTIMADO ───────────────────────────────────────────────────────────
+
+  Claude Sonnet 4.6:
+    Input:  $3 por millón de tokens
+    Output: $15 por millón de tokens
+
+  Una conversación típica de 10 mensajes ≈ 3000 tokens input + 500 output
+  = $0.009 + $0.0075 = ~$0.017 por conversación (menos de 2 centavos)
+
+  Con 50 conversaciones/mes = ~$0.85/mes. Muy barato.
+
+  Búsqueda web con duckduckgo-search: $0 (gratis, sin API key)
+
+── ROADMAP DE IMPLEMENTACIÓN ────────────────────────────────────────────────
+
+  Fase 1 (1-2 horas):
+    [ ] Instalar anthropic + duckduckgo-search en requirements.txt
+    [ ] Crear endpoint POST /api/staff/chat en app.py
+    [ ] System prompt + tool web_search con duckduckgo
+    [ ] Test básico desde curl/Postman
+
+  Fase 2 (2-3 horas):
+    [ ] UI: ícono flotante + panel de chat en panel.html
+    [ ] JS: toggleAIChat(), sendMessage(), renderMessages()
+    [ ] Streaming de respuesta con ReadableStream
+    [ ] Badge de contexto cuando hay scan abierto
+
+  Fase 3 (1 hora):
+    [ ] Botón "🤖 Preguntar a IA" en cada hallazgo de la lista
+    [ ] Rate limiting (20 msg/hora/staff)
+    [ ] Log de conversaciones en BD
+    [ ] Botones de acceso rápido predefinidos
+
+
+════════════════════════════════════════════════════════════════════════════════
   NOTAS DE IMPLEMENTACIÓN
 ════════════════════════════════════════════════════════════════════════════════
 
 PRIORIDAD ALTA (mayor impacto, menor esfuerzo):
-  - Items parte 1: 19, 20, 21 (performance — evitan cuelgues)
-  - Items parte 1: 11, 12, 13, 14 (whitelists — reducen falsos positivos)
-  - Items parte 2: 1, 4 (VirusTotal + Modrinth API — fuente de verdad)
-  - Items parte 2: 37, 38, 39 (feedback loop — el scanner mejora solo)
+  - Parte 1 items: 19, 20, 21 (performance — evitan cuelgues)
+  - Parte 1 items: 11, 12, 13, 14 (whitelists — reducen falsos positivos)
+  - Parte 2 items: 1, 4 (VirusTotal + Modrinth API — fuente de verdad)
+  - Parte 2 items: 37, 38, 39 (feedback loop — el scanner mejora solo)
+  - Parte 3 items: 21, 22 (explicaciones y sugerencias con Claude)
+  - Parte 4 COMPLETA (chat de IA — mayor valor visible para el staff)
 
 PRIORIDAD MEDIA (importante pero más trabajo):
-  - Items parte 1: 1-10 (nuevos hacks — requieren investigación de cada uno)
-  - Items parte 2: 31-35 (ML/estadística — requieren datos históricos)
+  - Parte 1 items: 1-10 (nuevos hacks — requieren investigación)
+  - Parte 2 items: 31-35 (ML/estadística — requieren datos históricos)
+  - Parte 3 items: 1-10 (scoring avanzado — requiere dataset etiquetado)
 
-PRIORIDAD BAJA (largo plazo):
-  - Items parte 2: 46-50 (sandboxing — requiere infraestructura separada)
-  - Items parte 1: 36-40 (UI — cosmético, no afecta detección)
+PRIORIDAD BAJA (largo plazo / requiere infraestructura):
+  - Parte 2 items: 46-50 (sandboxing dinámico)
+  - Parte 3 items: 16-20 (federated learning — múltiples servidores)
+  - Parte 3 items: 31-35 (MLOps pipeline completo)
 
 ================================================================================
