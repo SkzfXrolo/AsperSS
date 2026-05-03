@@ -5156,6 +5156,170 @@ def update_user_avatar(user_id):
         return jsonify({'error': str(e)}), 500
 
 
+# ── Staff AI Chat ─────────────────────────────────────────────────────────────
+
+_CHAT_SYSTEM_PROMPT = (
+    'Eres Argus AI, asistente experto en seguridad de Minecraft para el equipo de staff de ASPERS Projects. '
+    'Ayudas al staff a entender hallazgos del scanner Argus, identificar falsos positivos y responder '
+    'preguntas sobre hacks y cheats de Minecraft. '
+    'Tienes acceso a búsqueda web para información actualizada. '
+    'Responde en español, de forma directa y técnica. Usa bullet points cuando sea útil. '
+    'Si no estás seguro de algo, búscalo antes de responder.'
+)
+
+_CHAT_TOOLS = [
+    {
+        'name': 'web_search',
+        'description': (
+            'Busca información actualizada sobre hacks de Minecraft, herramientas de cheat, '
+            'CVEs o cualquier consulta de seguridad. Úsalo cuando necesites confirmar si algo '
+            'es un hack conocido o buscar información reciente.'
+        ),
+        'input_schema': {
+            'type': 'object',
+            'properties': {
+                'query': {'type': 'string', 'description': 'La búsqueda a realizar'}
+            },
+            'required': ['query']
+        }
+    }
+]
+
+
+@app.route('/api/staff/chat', methods=['POST'])
+@login_required
+def staff_chat():
+    """Chat de IA para staff — Claude Sonnet + DuckDuckGo web search."""
+    # Rate limit: 20 mensajes por hora por sesión
+    now_ts = datetime.datetime.utcnow().timestamp()
+    rate_log = session.get('chat_rate_log', [])
+    rate_log = [ts for ts in rate_log if now_ts - ts < 3600]
+    if len(rate_log) >= 20:
+        return jsonify({'error': 'Límite de 20 mensajes por hora alcanzado. Espera un momento.'}), 429
+    rate_log.append(now_ts)
+    session['chat_rate_log'] = rate_log
+
+    data = request.json or {}
+    user_msg = (data.get('message') or '').strip()
+    scan_id  = data.get('scan_id')
+
+    if not user_msg:
+        return jsonify({'error': 'Mensaje vacío'}), 400
+
+    api_key = os.environ.get('ANTHROPIC_API_KEY')
+    if not api_key:
+        return jsonify({'error': 'ANTHROPIC_API_KEY no configurada en el servidor.'}), 503
+
+    # Contexto del scan (si se proporcionó scan_id)
+    scan_context = ''
+    if scan_id:
+        try:
+            with get_api_db_cursor() as cur:
+                cur.execute(
+                    f'SELECT machine_name, minecraft_username, verdict, issues_found FROM scans WHERE id = {_PH}',
+                    (scan_id,)
+                )
+                row = cur.fetchone()
+                if row:
+                    machine  = _row_get(row, 0, 'machine_name') or '?'
+                    mc_user  = _row_get(row, 1, 'minecraft_username') or '?'
+                    verdict  = _row_get(row, 2, 'verdict') or 'pendiente'
+                    n_issues = _row_get(row, 3, 'issues_found') or 0
+                    scan_context = (
+                        f'\n\n[CONTEXTO SCAN #{scan_id}] '
+                        f'Jugador: {mc_user} | Máquina: {machine} | '
+                        f'Veredicto: {verdict} | Hallazgos: {n_issues}\n'
+                    )
+                    cur.execute(
+                        f'SELECT issue_name, issue_category, alert_level, confidence '
+                        f'FROM scan_results WHERE scan_id = {_PH} '
+                        f'ORDER BY confidence DESC LIMIT 20',
+                        (scan_id,)
+                    )
+                    for r in (cur.fetchall() or []):
+                        name = _row_get(r, 0, 'issue_name') or ''
+                        cat  = _row_get(r, 1, 'issue_category') or ''
+                        lvl  = _row_get(r, 2, 'alert_level') or ''
+                        conf = _row_get(r, 3, 'confidence') or 0
+                        try:
+                            conf_pct = f'{float(conf):.0%}'
+                        except Exception:
+                            conf_pct = str(conf)
+                        scan_context += f'  [{lvl}] {name} ({cat}) {conf_pct}\n'
+        except Exception as e:
+            print(f'[staff_chat] Error obteniendo contexto scan: {e}')
+
+    history = list(session.get('chat_history', []))
+    history.append({'role': 'user', 'content': user_msg})
+
+    system = _CHAT_SYSTEM_PROMPT + scan_context
+
+    try:
+        import anthropic as _ant
+        client = _ant.Anthropic(api_key=api_key)
+
+        search_queries = []
+        messages = list(history)
+
+        for _attempt in range(4):  # máx 3 tool calls + 1 respuesta final
+            resp = client.messages.create(
+                model='claude-sonnet-4-6',
+                max_tokens=1024,
+                system=system,
+                tools=_CHAT_TOOLS,
+                messages=messages
+            )
+
+            if resp.stop_reason == 'tool_use':
+                tool_results = []
+                for block in resp.content:
+                    if block.type == 'tool_use' and block.name == 'web_search':
+                        query = block.input.get('query', '')
+                        search_queries.append(query)
+                        raw = ''
+                        try:
+                            from duckduckgo_search import DDGS
+                            hits = DDGS().text(query, max_results=3)
+                            if hits:
+                                raw = '\n\n'.join(
+                                    f"{h.get('title','')}\n{h.get('body','')}\n{h.get('href','')}"
+                                    for h in hits
+                                )
+                            else:
+                                raw = 'Sin resultados.'
+                        except Exception as se:
+                            raw = f'Error en búsqueda: {se}'
+                        tool_results.append({
+                            'type': 'tool_result',
+                            'tool_use_id': block.id,
+                            'content': raw
+                        })
+                messages.append({'role': 'assistant', 'content': resp.content})
+                messages.append({'role': 'user', 'content': tool_results})
+            else:
+                reply = ''.join(b.text for b in resp.content if hasattr(b, 'text'))
+                history.append({'role': 'assistant', 'content': reply})
+                session['chat_history'] = history[-20:]
+                return jsonify({'reply': reply, 'search_queries': search_queries, 'scan_id': scan_id})
+
+        return jsonify({'reply': 'No se pudo generar respuesta (demasiados pasos).', 'search_queries': search_queries})
+
+    except ImportError:
+        return jsonify({'error': 'La librería anthropic no está instalada en el servidor.'}), 503
+    except Exception as e:
+        print(f'[staff_chat] Error: {e}')
+        return jsonify({'error': f'Error del servidor: {str(e)}'}), 500
+
+
+@app.route('/api/staff/chat/clear', methods=['POST'])
+@login_required
+def staff_chat_clear():
+    """Borra el historial del chat de IA para la sesión actual."""
+    session.pop('chat_history', None)
+    session.pop('chat_rate_log', None)
+    return jsonify({'success': True})
+
+
 _REVIEW_SECRET = 'aspers-claude-review-2026'
 
 @app.route('/internal/scan-review/<int:scan_id>')

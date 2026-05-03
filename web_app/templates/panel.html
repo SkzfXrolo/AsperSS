@@ -1763,7 +1763,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=19"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=20"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────
@@ -1785,6 +1785,80 @@
         }
     })();
     </script>
+    <!-- ═══════════════════════════════════════════════════════════════════
+         ARGUS AI CHAT — botón flotante + panel de chat para el staff
+         ═══════════════════════════════════════════════════════════════════ -->
+    <button id="ai-chat-btn" onclick="toggleAIChat()" title="Argus IA — Asistente de seguridad"
+            style="position:fixed;bottom:24px;right:24px;z-index:9998;
+                   width:52px;height:52px;border-radius:50%;
+                   background:linear-gradient(135deg,#7c3aed,#4f46e5);
+                   border:2px solid rgba(255,255,255,.15);cursor:pointer;
+                   box-shadow:0 4px 20px rgba(124,58,237,.45);
+                   font-size:22px;display:flex;align-items:center;justify-content:center;
+                   transition:transform .2s,box-shadow .2s">🤖</button>
+
+    <div id="ai-chat-panel"
+         style="display:none;position:fixed;bottom:86px;right:24px;z-index:9999;
+                width:380px;max-height:560px;border-radius:16px;
+                background:#1a1a2e;border:1px solid rgba(124,58,237,.4);
+                box-shadow:0 8px 40px rgba(0,0,0,.6);
+                display:none;flex-direction:column;overflow:hidden">
+
+        <!-- Header -->
+        <div style="padding:14px 16px;background:linear-gradient(135deg,#7c3aed22,#4f46e522);
+                    border-bottom:1px solid rgba(124,58,237,.3);
+                    display:flex;align-items:center;justify-content:space-between">
+            <div style="display:flex;align-items:center;gap:10px">
+                <span style="font-size:20px">🤖</span>
+                <div>
+                    <div style="font-weight:600;font-size:14px;color:#e2e8f0">Argus IA</div>
+                    <div id="ai-chat-scan-badge" style="font-size:11px;color:#a78bfa;display:none"></div>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px">
+                <button onclick="clearAIChat()" title="Borrar conversación"
+                        style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:15px;padding:4px">🗑️</button>
+                <button onclick="toggleAIChat()" title="Cerrar"
+                        style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:18px;padding:4px">✕</button>
+            </div>
+        </div>
+
+        <!-- Mensajes -->
+        <div id="ai-chat-messages"
+             style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;min-height:200px;max-height:360px">
+            <div class="ai-msg-bot" style="background:rgba(124,58,237,.15);border-radius:12px 12px 12px 4px;
+                         padding:10px 13px;font-size:13px;color:#e2e8f0;max-width:90%">
+                Hola, soy Argus IA 👋 Puedo ayudarte a analizar hallazgos, identificar falsos positivos y responder preguntas sobre hacks de Minecraft. ¿En qué te ayudo?
+            </div>
+        </div>
+
+        <!-- Accesos rápidos -->
+        <div id="ai-quick-btns" style="padding:6px 14px;display:flex;gap:6px;flex-wrap:wrap">
+            <button onclick="aiQuick('¿Es este hallazgo un falso positivo?')"
+                    style="font-size:11px;padding:4px 9px;border-radius:20px;border:1px solid rgba(124,58,237,.4);
+                           background:rgba(124,58,237,.1);color:#a78bfa;cursor:pointer">FP o TP?</button>
+            <button onclick="aiQuick('Resume los hallazgos más importantes de este scan')"
+                    style="font-size:11px;padding:4px 9px;border-radius:20px;border:1px solid rgba(124,58,237,.4);
+                           background:rgba(124,58,237,.1);color:#a78bfa;cursor:pointer">Resumir scan</button>
+            <button onclick="aiQuick('Busca en internet información sobre el hack más grave detectado')"
+                    style="font-size:11px;padding:4px 9px;border-radius:20px;border:1px solid rgba(124,58,237,.4);
+                           background:rgba(124,58,237,.1);color:#a78bfa;cursor:pointer">🔍 Buscar en web</button>
+        </div>
+
+        <!-- Input -->
+        <div style="padding:10px 14px 14px;display:flex;gap:8px;border-top:1px solid rgba(255,255,255,.07)">
+            <textarea id="ai-chat-input" rows="1" placeholder="Pregunta algo sobre este scan..."
+                      onkeydown="aiChatKeyDown(event)"
+                      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px'"
+                      style="flex:1;background:rgba(255,255,255,.06);border:1px solid rgba(124,58,237,.3);
+                             border-radius:10px;padding:8px 12px;color:#e2e8f0;font-size:13px;
+                             resize:none;outline:none;font-family:inherit;line-height:1.4"></textarea>
+            <button onclick="sendAIChatMessage()"
+                    style="background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;
+                           border-radius:10px;padding:0 14px;cursor:pointer;color:#fff;font-size:16px">➤</button>
+        </div>
+    </div>
+
     <script>
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js', { scope: '/' })

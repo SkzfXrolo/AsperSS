@@ -3672,3 +3672,140 @@ async function submitEquipoRegToken(event) {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ARGUS IA CHAT
+// ═══════════════════════════════════════════════════════════════════════════
+
+let _aiChatOpen = false;
+
+function toggleAIChat() {
+    const panel = document.getElementById('ai-chat-panel');
+    const btn   = document.getElementById('ai-chat-btn');
+    if (!panel) return;
+    _aiChatOpen = !_aiChatOpen;
+    panel.style.display = _aiChatOpen ? 'flex' : 'none';
+    btn.style.transform = _aiChatOpen ? 'scale(1.1)' : 'scale(1)';
+    btn.style.boxShadow = _aiChatOpen
+        ? '0 4px 28px rgba(124,58,237,.7)'
+        : '0 4px 20px rgba(124,58,237,.45)';
+    if (_aiChatOpen) {
+        _updateAIChatScanBadge();
+        document.getElementById('ai-chat-input').focus();
+    }
+}
+
+function _updateAIChatScanBadge() {
+    const badge = document.getElementById('ai-chat-scan-badge');
+    if (!badge) return;
+    if (currentScanId) {
+        badge.textContent = `Contexto: Scan #${currentScanId}`;
+        badge.style.display = 'block';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function aiQuick(msg) {
+    const inp = document.getElementById('ai-chat-input');
+    if (inp) { inp.value = msg; inp.style.height = 'auto'; }
+    sendAIChatMessage();
+}
+
+function aiChatKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendAIChatMessage();
+    }
+}
+
+async function sendAIChatMessage() {
+    const inp  = document.getElementById('ai-chat-input');
+    const msgs = document.getElementById('ai-chat-messages');
+    if (!inp || !msgs) return;
+
+    const msg = inp.value.trim();
+    if (!msg) return;
+
+    inp.value = '';
+    inp.style.height = 'auto';
+
+    // Mensaje del staff (derecha)
+    _appendChatMsg(msgs, msg, 'user');
+
+    // Typing indicator
+    const typing = _appendChatMsg(msgs, '&nbsp;⋯', 'bot', true);
+
+    try {
+        const body = { message: msg };
+        if (currentScanId) body.scan_id = currentScanId;
+
+        const res  = await fetch('/api/staff/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+
+        typing.remove();
+
+        if (data.error) {
+            _appendChatMsg(msgs, `⚠️ ${data.error}`, 'bot');
+        } else {
+            let reply = data.reply || '';
+            // Si hubo búsquedas web, mostrar badge
+            if (data.search_queries && data.search_queries.length) {
+                reply += `\n\n🔍 *Buscado: ${data.search_queries.join(', ')}*`;
+            }
+            _appendChatMsg(msgs, _formatAIReply(reply), 'bot');
+        }
+    } catch (e) {
+        typing.remove();
+        _appendChatMsg(msgs, `⚠️ Error de conexión: ${e.message}`, 'bot');
+    }
+
+    msgs.scrollTop = msgs.scrollHeight;
+}
+
+function _appendChatMsg(container, text, role, isTyping) {
+    const el = document.createElement('div');
+    const isUser = role === 'user';
+    el.style.cssText = [
+        'border-radius:' + (isUser ? '12px 12px 4px 12px' : '12px 12px 12px 4px'),
+        'padding:10px 13px',
+        'font-size:13px',
+        'color:#e2e8f0',
+        'max-width:88%',
+        'line-height:1.5',
+        'white-space:pre-wrap',
+        'align-self:' + (isUser ? 'flex-end' : 'flex-start'),
+        'background:' + (isUser ? 'rgba(79,70,229,.35)' : 'rgba(124,58,237,.15)'),
+    ].join(';');
+    el.innerHTML = isTyping ? '<span class="ai-typing-dots">● ● ●</span>' : text;
+    container.appendChild(el);
+    container.scrollTop = container.scrollHeight;
+    return el;
+}
+
+function _formatAIReply(text) {
+    return text
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/^- (.+)$/gm, '• $1')
+        .replace(/\n/g, '<br>');
+}
+
+async function clearAIChat() {
+    const msgs = document.getElementById('ai-chat-messages');
+    if (!msgs) return;
+    // Limpiar en servidor
+    await fetch('/api/staff/chat/clear', { method: 'POST' }).catch(() => {});
+    // Limpiar UI — dejar solo el mensaje de bienvenida
+    msgs.innerHTML = `<div style="background:rgba(124,58,237,.15);border-radius:12px 12px 12px 4px;
+        padding:10px 13px;font-size:13px;color:#e2e8f0;max-width:90%">
+        Conversación borrada. ¿En qué te ayudo?</div>`;
+}
+
+// Actualizar badge cuando cambia el scan activo
+const _origOpenScanDetail = typeof openScanDetail === 'function' ? openScanDetail : null;
+// Hook pasivo: _updateAIChatScanBadge se llama desde toggleAIChat al abrir
+
