@@ -2299,6 +2299,53 @@ class ArgusApp:
         
         threading.Thread(target=scan_thread, daemon=True).start()
     
+    _vt_cache: dict   = {}  # sha256 → (positives, total) or None
+    _mbaz_cache: dict = {}  # sha256 → True (known malware) or False
+
+    @staticmethod
+    def _vt_check_hash(sha256: str) -> tuple:
+        """P2 #1 — Consulta VirusTotal API v3 por hash SHA256.
+        Devuelve (positives, total) o None si no hay API key o hay error.
+        Respeta rate-limit: 4 req/min en tier gratuito.
+        """
+        vt_key = os.environ.get('VIRUSTOTAL_API_KEY', '')
+        if not vt_key or not sha256:
+            return None
+        try:
+            resp = requests.get(
+                f'https://www.virustotal.com/api/v3/files/{sha256}',
+                headers={'x-apikey': vt_key},
+                timeout=6,
+            )
+            if resp.status_code == 404:
+                return (0, 0)  # desconocido → no concluyente
+            if resp.status_code == 200:
+                stats = resp.json().get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+                pos   = int(stats.get('malicious', 0)) + int(stats.get('suspicious', 0))
+                total = sum(stats.values()) or 1
+                return (pos, total)
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def _mbaz_check_hash(sha256: str) -> bool:
+        """P2 #8 — Consulta MalwareBazaar (abuse.ch) por hash SHA256. Gratis, sin API key.
+        Devuelve True si el hash está en MalwareBazaar como malware conocido.
+        """
+        if not sha256:
+            return False
+        try:
+            resp = requests.post(
+                'https://mb.api.abuse.ch/api/v1/',
+                data={'query': 'get_info', 'hash': sha256},
+                timeout=5,
+            )
+            data = resp.json()
+            return data.get('query_status') == 'hash_found'
+        except Exception:
+            return False
+
     @staticmethod
     def _is_modrinth_legitimate(jar_path: str) -> bool:
         """Devuelve True si el JAR tiene hash SHA1 registrado en Modrinth (mod legítimo).
@@ -2604,6 +2651,42 @@ class ArgusApp:
                     if self._is_modrinth_legitimate(str(_jar_path)):
                         print(f"✅ [Modrinth] Mod legítimo verificado: {os.path.basename(str(_jar_path))}")
                         continue
+
+            # P2 #1+8 — VirusTotal + MalwareBazaar para .exe/.jar sospechosos
+            _vt_path = item.get('archivo') or item.get('ruta') or ''
+            _alerta  = item.get('alerta', 'NORMAL')
+            if (_alerta in ('SOSPECHOSO', 'CRITICAL') and _vt_path and
+                    os.path.isfile(str(_vt_path)) and
+                    any(str(_vt_path).lower().endswith(e) for e in ('.exe', '.jar', '.dll'))):
+                try:
+                    import hashlib as _hl_vt
+                    _sha256_vt = _hl_vt.sha256(open(str(_vt_path), 'rb').read()).hexdigest()
+                    # MalwareBazaar (gratis, sin API key)
+                    if _sha256_vt not in ArgusApp._mbaz_cache:
+                        ArgusApp._mbaz_cache[_sha256_vt] = self._mbaz_check_hash(_sha256_vt)
+                    if ArgusApp._mbaz_cache.get(_sha256_vt):
+                        print(f"🚨 [MalwareBazaar] Hash en BD de malware: {os.path.basename(str(_vt_path))}")
+                        item['alerta'] = 'CRITICAL'
+                        item['confidence'] = min(0.99, float(item.get('confidence', 0.5)) + 0.35)
+                        item['detected_patterns'] = list(item.get('detected_patterns', [])) + ['malwarebazaar']
+                    # VirusTotal (requiere VIRUSTOTAL_API_KEY)
+                    if _sha256_vt not in ArgusApp._vt_cache:
+                        ArgusApp._vt_cache[_sha256_vt] = self._vt_check_hash(_sha256_vt)
+                    _vt_result = ArgusApp._vt_cache.get(_sha256_vt)
+                    if _vt_result is not None:
+                        _pos, _tot = _vt_result
+                        if _pos == 0 and _tot > 10:
+                            print(f"✅ [VT] 0/{_tot} detecciones — posible FP: {os.path.basename(str(_vt_path))}")
+                            item['alerta'] = 'POCO_SOSPECHOSO'
+                            item['confidence'] = max(0.2, float(item.get('confidence', 0.5)) * 0.4)
+                            item['detected_patterns'] = list(item.get('detected_patterns', [])) + ['vt_clean']
+                        elif _pos >= 5:
+                            print(f"🚨 [VT] {_pos}/{_tot} detecciones: {os.path.basename(str(_vt_path))}")
+                            item['alerta'] = 'CRITICAL'
+                            item['confidence'] = min(0.99, float(item.get('confidence', 0.5)) + 0.25)
+                            item['detected_patterns'] = list(item.get('detected_patterns', [])) + [f'vt_{_pos}']
+                except Exception:
+                    pass
 
             # Tipos de scanners especializados — confiar en ellos sin filtrar
             if tipo in TRUSTED_TYPES:
@@ -4590,6 +4673,47 @@ class ArgusApp:
                                         break
                             except Exception:
                                 pass
+
+                        # P2 #15 — Direct net.minecraft.client.* access (hooking sin mod loader)
+                        if not has_legit_marker:
+                            try:
+                                _mc_hook_found = False
+                                _class_files   = [n for n in zf.namelist() if n.endswith('.class')][:80]
+                                for _cf in _class_files:
+                                    try:
+                                        _bc = zf.read(_cf)
+                                        if b'net/minecraft/client/Minecraft' in _bc or b'net/minecraft/client/MinecraftClient' in _bc:
+                                            _mc_hook_found = True
+                                            break
+                                    except Exception:
+                                        pass
+                                if _mc_hook_found:
+                                    result['detected_patterns'].append('direct_mc_client_access')
+                                    result['confidence'] = min(100, result['confidence'] + 20)
+                                    result['is_hack'] = True
+                            except Exception:
+                                pass
+
+                        # P2 #13 — String legibility ratio (<30% legible = ofuscación agresiva)
+                        try:
+                            _class_files_s = [n for n in zf.namelist() if n.endswith('.class')][:20]
+                            _total_bytes = 0
+                            _readable_bytes = 0
+                            for _cf in _class_files_s:
+                                try:
+                                    _bc = zf.read(_cf)
+                                    _total_bytes += len(_bc)
+                                    _readable_bytes += sum(1 for b in _bc if 32 <= b < 127)
+                                except Exception:
+                                    pass
+                            if _total_bytes > 1000:
+                                _legib = _readable_bytes / _total_bytes
+                                if _legib < 0.30:
+                                    result['obfuscation_detected'] = True
+                                    result['confidence'] = min(100, result['confidence'] + 12)
+                                    result['detected_patterns'].append(f'string_legibility:{_legib:.0%}')
+                        except Exception:
+                            pass
 
                         # P2 #20 — Compilation date vs file date
                         # If the newest .class inside the jar is much newer than the jar file
