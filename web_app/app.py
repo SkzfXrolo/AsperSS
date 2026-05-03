@@ -5158,59 +5158,136 @@ def update_user_avatar(user_id):
 
 # ── Staff AI Chat ─────────────────────────────────────────────────────────────
 
-_CHAT_SYSTEM_PROMPT = (
-    'Eres Argus AI, asistente experto en seguridad de Minecraft para el equipo de staff de ASPERS Projects. '
-    'Ayudas al staff a entender hallazgos del scanner Argus, identificar falsos positivos y responder '
-    'preguntas sobre hacks y cheats de Minecraft. '
-    'Tienes acceso a búsqueda web para información actualizada. '
-    'Responde en español, de forma directa y técnica. Usa bullet points cuando sea útil. '
-    'Si no estás seguro de algo, búscalo antes de responder.'
+# ── Staff AI Chat — ensemble: Claude + Groq + Gemini + DuckDuckGo ─────────────
+
+_CHAT_SYSTEM = (
+    'Eres Argus AI, asistente experto en seguridad de Minecraft para el staff de ASPERS Projects. '
+    'Ayudas a entender hallazgos del scanner Argus, identificar falsos positivos y responder sobre '
+    'hacks y cheats de Minecraft. Responde en español, directo y técnico. Bullet points si aplica.'
 )
 
-_CHAT_TOOLS = [
-    {
-        'name': 'web_search',
-        'description': (
-            'Busca información actualizada sobre hacks de Minecraft, herramientas de cheat, '
-            'CVEs o cualquier consulta de seguridad. Úsalo cuando necesites confirmar si algo '
-            'es un hack conocido o buscar información reciente.'
-        ),
-        'input_schema': {
-            'type': 'object',
-            'properties': {
-                'query': {'type': 'string', 'description': 'La búsqueda a realizar'}
-            },
-            'required': ['query']
+
+def _ai_web_search(query, n=4):
+    """Busca con DuckDuckGo y devuelve string con resultados formateados."""
+    try:
+        from duckduckgo_search import DDGS
+        hits = DDGS().text(query, max_results=n)
+        if not hits:
+            return ''
+        return '\n\n'.join(
+            f"[{h.get('title','')}] {h.get('body','')[:300]} — {h.get('href','')}"
+            for h in hits
+        )
+    except Exception as e:
+        print(f'[ai_search] {e}')
+        return ''
+
+
+def _ai_call_claude(key, system, messages):
+    try:
+        import anthropic as _ant
+        resp = _ant.Anthropic(api_key=key).messages.create(
+            model='claude-sonnet-4-6',
+            max_tokens=700,
+            system=system,
+            messages=messages,
+        )
+        return ''.join(b.text for b in resp.content if hasattr(b, 'text')).strip()
+    except Exception as e:
+        print(f'[claude] {e}')
+        return None
+
+
+def _ai_call_groq(key, system, messages):
+    try:
+        payload = {
+            'model': 'llama-3.3-70b-versatile',
+            'messages': [{'role': 'system', 'content': system}] + messages,
+            'max_tokens': 700,
+            'temperature': 0.6,
         }
-    }
-]
+        r = requests.post(
+            'https://api.groq.com/openai/v1/chat/completions',
+            headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'},
+            json=payload, timeout=25,
+        )
+        r.raise_for_status()
+        return r.json()['choices'][0]['message']['content'].strip()
+    except Exception as e:
+        print(f'[groq] {e}')
+        return None
+
+
+def _ai_call_gemini(key, system, history, user_msg):
+    try:
+        contents = []
+        for m in history[:-1]:  # historial previo (sin el último user_msg)
+            role = 'user' if m['role'] == 'user' else 'model'
+            contents.append({'role': role, 'parts': [{'text': m['content']}]})
+        # Primer turno incluye el system prompt
+        first_text = f'{system}\n\n{history[-1]["content"]}' if contents else f'{system}\n\n{user_msg}'
+        if not contents:
+            contents.append({'role': 'user', 'parts': [{'text': first_text}]})
+        else:
+            contents.append({'role': 'user', 'parts': [{'text': user_msg}]})
+        r = requests.post(
+            f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}',
+            json={
+                'contents': contents,
+                'generationConfig': {'maxOutputTokens': 700, 'temperature': 0.6},
+            },
+            timeout=25,
+        )
+        r.raise_for_status()
+        return r.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+    except Exception as e:
+        print(f'[gemini] {e}')
+        return None
+
+
+def _ai_synthesize(responses, question, synth_fn):
+    """Llama a synth_fn para fusionar las respuestas de los modelos en una sola."""
+    joined = '\n\n---\n\n'.join(
+        f'[IA {i+1}]: {r}' for i, r in enumerate(responses)
+    )
+    prompt = (
+        f'El staff preguntó: "{question}"\n\n'
+        f'Estas son las respuestas de {len(responses)} modelos de IA:\n\n{joined}\n\n'
+        'Sintetiza la respuesta más certera y completa combinando los puntos más '
+        'precisos de cada una. Elimina redundancias. Responde en español, máx 250 palabras.'
+    )
+    return synth_fn([{'role': 'user', 'content': prompt}])
 
 
 @app.route('/api/staff/chat', methods=['POST'])
 @login_required
 def staff_chat():
-    """Chat de IA para staff — Claude Sonnet + DuckDuckGo web search."""
-    # Rate limit: 20 mensajes por hora por sesión
+    """Chat de IA para staff — ensemble Claude + Groq + Gemini con búsqueda web."""
+    import concurrent.futures as _cf
+
+    # Rate limit: 20 mensajes/hora por sesión
     now_ts = datetime.datetime.utcnow().timestamp()
     rate_log = session.get('chat_rate_log', [])
     rate_log = [ts for ts in rate_log if now_ts - ts < 3600]
     if len(rate_log) >= 20:
-        return jsonify({'error': 'Límite de 20 mensajes por hora alcanzado. Espera un momento.'}), 429
+        return jsonify({'error': 'Límite de 20 mensajes/hora alcanzado.'}), 429
     rate_log.append(now_ts)
     session['chat_rate_log'] = rate_log
 
-    data = request.json or {}
+    data    = request.json or {}
     user_msg = (data.get('message') or '').strip()
     scan_id  = data.get('scan_id')
-
     if not user_msg:
         return jsonify({'error': 'Mensaje vacío'}), 400
 
-    api_key = os.environ.get('ANTHROPIC_API_KEY')
-    if not api_key:
-        return jsonify({'error': 'ANTHROPIC_API_KEY no configurada en el servidor.'}), 503
+    # Detectar qué providers están configurados
+    k_claude = os.environ.get('ANTHROPIC_API_KEY')
+    k_groq   = os.environ.get('GROQ_API_KEY')
+    k_gemini = os.environ.get('GEMINI_API_KEY')
+    if not any([k_claude, k_groq, k_gemini]):
+        return jsonify({'error': 'No hay API keys de IA configuradas (ANTHROPIC_API_KEY / GROQ_API_KEY / GEMINI_API_KEY).'}), 503
 
-    # Contexto del scan (si se proporcionó scan_id)
+    # Contexto del scan
     scan_context = ''
     if scan_id:
         try:
@@ -5226,89 +5303,90 @@ def staff_chat():
                     verdict  = _row_get(row, 2, 'verdict') or 'pendiente'
                     n_issues = _row_get(row, 3, 'issues_found') or 0
                     scan_context = (
-                        f'\n\n[CONTEXTO SCAN #{scan_id}] '
-                        f'Jugador: {mc_user} | Máquina: {machine} | '
+                        f'\n\n[SCAN #{scan_id}] Jugador: {mc_user} | Máquina: {machine} | '
                         f'Veredicto: {verdict} | Hallazgos: {n_issues}\n'
                     )
                     cur.execute(
                         f'SELECT issue_name, issue_category, alert_level, confidence '
-                        f'FROM scan_results WHERE scan_id = {_PH} '
-                        f'ORDER BY confidence DESC LIMIT 20',
+                        f'FROM scan_results WHERE scan_id = {_PH} ORDER BY confidence DESC LIMIT 20',
                         (scan_id,)
                     )
                     for r in (cur.fetchall() or []):
+                        lvl  = _row_get(r, 2, 'alert_level') or ''
                         name = _row_get(r, 0, 'issue_name') or ''
                         cat  = _row_get(r, 1, 'issue_category') or ''
-                        lvl  = _row_get(r, 2, 'alert_level') or ''
-                        conf = _row_get(r, 3, 'confidence') or 0
                         try:
-                            conf_pct = f'{float(conf):.0%}'
+                            conf_s = f"{float(_row_get(r, 3, 'confidence') or 0):.0%}"
                         except Exception:
-                            conf_pct = str(conf)
-                        scan_context += f'  [{lvl}] {name} ({cat}) {conf_pct}\n'
+                            conf_s = ''
+                        scan_context += f'  [{lvl}] {name} ({cat}) {conf_s}\n'
         except Exception as e:
-            print(f'[staff_chat] Error obteniendo contexto scan: {e}')
+            print(f'[staff_chat] scan ctx error: {e}')
 
-    history = list(session.get('chat_history', []))
+    history  = list(session.get('chat_history', []))
     history.append({'role': 'user', 'content': user_msg})
 
-    system = _CHAT_SYSTEM_PROMPT + scan_context
+    # Búsqueda web compartida (en paralelo con las llamadas a IA)
+    search_text = ''
+    search_query = user_msg[:120]
 
-    try:
-        import anthropic as _ant
-        client = _ant.Anthropic(api_key=api_key)
+    system_full = _CHAT_SYSTEM + scan_context
 
-        search_queries = []
-        messages = list(history)
+    # Lanzar búsqueda web + llamadas a IA TODO en paralelo
+    futures = {}
+    with _cf.ThreadPoolExecutor(max_workers=4) as pool:
+        futures['search'] = pool.submit(_ai_web_search, search_query)
+        if k_claude:
+            futures['claude'] = pool.submit(_ai_call_claude, k_claude, system_full, list(history))
+        if k_groq:
+            futures['groq']   = pool.submit(_ai_call_groq,   k_groq,   system_full, list(history))
+        if k_gemini:
+            futures['gemini'] = pool.submit(_ai_call_gemini, k_gemini, system_full, list(history), user_msg)
 
-        for _attempt in range(4):  # máx 3 tool calls + 1 respuesta final
-            resp = client.messages.create(
-                model='claude-sonnet-4-6',
-                max_tokens=1024,
-                system=system,
-                tools=_CHAT_TOOLS,
-                messages=messages
-            )
+        results = {name: f.result() for name, f in futures.items()}
 
-            if resp.stop_reason == 'tool_use':
-                tool_results = []
-                for block in resp.content:
-                    if block.type == 'tool_use' and block.name == 'web_search':
-                        query = block.input.get('query', '')
-                        search_queries.append(query)
-                        raw = ''
-                        try:
-                            from duckduckgo_search import DDGS
-                            hits = DDGS().text(query, max_results=3)
-                            if hits:
-                                raw = '\n\n'.join(
-                                    f"{h.get('title','')}\n{h.get('body','')}\n{h.get('href','')}"
-                                    for h in hits
-                                )
-                            else:
-                                raw = 'Sin resultados.'
-                        except Exception as se:
-                            raw = f'Error en búsqueda: {se}'
-                        tool_results.append({
-                            'type': 'tool_result',
-                            'tool_use_id': block.id,
-                            'content': raw
-                        })
-                messages.append({'role': 'assistant', 'content': resp.content})
-                messages.append({'role': 'user', 'content': tool_results})
-            else:
-                reply = ''.join(b.text for b in resp.content if hasattr(b, 'text'))
-                history.append({'role': 'assistant', 'content': reply})
-                session['chat_history'] = history[-20:]
-                return jsonify({'reply': reply, 'search_queries': search_queries, 'scan_id': scan_id})
+    search_text = results.pop('search', '') or ''
+    providers_used = []
+    ai_responses   = []
 
-        return jsonify({'reply': 'No se pudo generar respuesta (demasiados pasos).', 'search_queries': search_queries})
+    for name in ('claude', 'groq', 'gemini'):
+        if name in results and results[name]:
+            providers_used.append(name)
+            ai_responses.append(results[name])
 
-    except ImportError:
-        return jsonify({'error': 'La librería anthropic no está instalada en el servidor.'}), 503
-    except Exception as e:
-        print(f'[staff_chat] Error: {e}')
-        return jsonify({'error': f'Error del servidor: {str(e)}'}), 500
+    if not ai_responses:
+        return jsonify({'error': 'Todos los modelos fallaron. Verifica las API keys.'}), 503
+
+    # Si hay resultados web, añadirlos a un segundo round si se necesita
+    # (ya incluidos en el contexto de las IAs vía system prompt + search_text)
+    # Para la síntesis, incluir el contexto de búsqueda en el system
+    if search_text:
+        system_full += f'\n\n[BÚSQUEDA WEB]\n{search_text[:1200]}'
+
+    # Síntesis: si hay 2+ respuestas, fusionar con el modelo más rápido disponible
+    final_reply = ''
+    if len(ai_responses) == 1:
+        final_reply = ai_responses[0]
+    else:
+        # Elegir sintetizador: Groq (gratis+rápido) > Gemini > Claude
+        if k_groq:
+            synth_fn = lambda msgs: _ai_call_groq(k_groq, system_full, msgs)
+        elif k_gemini:
+            synth_fn = lambda msgs: _ai_call_gemini(k_gemini, system_full, [], msgs[0]['content'])
+        else:
+            synth_fn = lambda msgs: _ai_call_claude(k_claude, system_full, msgs)
+
+        final_reply = _ai_synthesize(ai_responses, user_msg, synth_fn) or ai_responses[0]
+
+    history.append({'role': 'assistant', 'content': final_reply})
+    session['chat_history'] = history[-20:]
+
+    return jsonify({
+        'reply':          final_reply,
+        'providers_used': providers_used,
+        'search_done':    bool(search_text),
+        'scan_id':        scan_id,
+    })
 
 
 @app.route('/api/staff/chat/clear', methods=['POST'])

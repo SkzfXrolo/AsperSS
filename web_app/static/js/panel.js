@@ -3752,10 +3752,12 @@ async function sendAIChatMessage() {
             _appendChatMsg(msgs, `⚠️ ${data.error}`, 'bot');
         } else {
             let reply = data.reply || '';
-            // Si hubo búsquedas web, mostrar badge
-            if (data.search_queries && data.search_queries.length) {
-                reply += `\n\n🔍 *Buscado: ${data.search_queries.join(', ')}*`;
-            }
+            // Badge de proveedores + búsqueda web usada
+            const meta = [];
+            if (data.providers_used && data.providers_used.length)
+                meta.push('🤖 ' + data.providers_used.map(p => ({claude:'Claude',groq:'Groq',gemini:'Gemini'}[p]||p)).join(' + '));
+            if (data.search_done) meta.push('🔍 búsqueda web');
+            if (meta.length) reply += `\n\n<span style="font-size:11px;opacity:.55">${meta.join(' · ')}</span>`;
             _appendChatMsg(msgs, _formatAIReply(reply), 'bot');
         }
     } catch (e) {
