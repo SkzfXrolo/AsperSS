@@ -5125,6 +5125,126 @@ def get_ban_patterns():
         return jsonify({'error': str(e)}), 500
 
 
+# ── Items 37/38/39 — Auto-whitelist / auto-blacklist from verdict history ─────
+
+@app.route('/api/learning/auto_weights', methods=['GET'])
+def get_auto_weights():
+    """#38/#39 — Returns dynamically computed confidence weights per issue_type
+    based on historical verdict ratios (no manual input needed).
+    hack_rate = count_in_hack_scans / total_scans_with_this_type
+    Response: {weights: [{issue_type, hack_rate, weight_multiplier}]}
+    """
+    try:
+        with get_api_db_cursor() as cursor:
+            if _USE_PG:
+                cursor.execute('''
+                    SELECT
+                        sr.issue_type,
+                        COUNT(*) FILTER (WHERE s.verdict = 'hack')   AS hack_n,
+                        COUNT(*) FILTER (WHERE s.verdict = 'clean')  AS clean_n,
+                        COUNT(*) AS total
+                    FROM scan_results sr
+                    JOIN scans s ON sr.scan_id = s.id
+                    WHERE s.verdict IN ('hack', 'clean')
+                      AND sr.issue_type IS NOT NULL AND sr.issue_type != ''
+                    GROUP BY sr.issue_type
+                    HAVING COUNT(*) >= 10
+                    ORDER BY total DESC
+                    LIMIT 200
+                ''')
+            else:
+                cursor.execute('''
+                    SELECT sr.issue_type,
+                        SUM(CASE WHEN s.verdict='hack'  THEN 1 ELSE 0 END) AS hack_n,
+                        SUM(CASE WHEN s.verdict='clean' THEN 1 ELSE 0 END) AS clean_n,
+                        COUNT(*) AS total
+                    FROM scan_results sr JOIN scans s ON sr.scan_id = s.id
+                    WHERE s.verdict IN ('hack','clean')
+                      AND sr.issue_type IS NOT NULL AND sr.issue_type != ''
+                    GROUP BY sr.issue_type HAVING COUNT(*) >= 10
+                    ORDER BY total DESC LIMIT 200
+                ''')
+            rows = cursor.fetchall() or []
+        result = []
+        for r in rows:
+            issue_type  = _row_get(r, 0, 'issue_type') or ''
+            hack_n      = int(_row_get(r, 1, 'hack_n') or 0)
+            clean_n     = int(_row_get(r, 2, 'clean_n') or 0)
+            total       = int(_row_get(r, 3, 'total') or 1)
+            hack_rate   = round(hack_n / total, 4) if total > 0 else 0.5
+            # weight_multiplier: 0.3 for near-0 hack_rate, 1.5 for near-1.0
+            multiplier  = round(0.3 + 1.2 * hack_rate, 3)
+            result.append({
+                'issue_type':         issue_type,
+                'hack_rate':          hack_rate,
+                'weight_multiplier':  multiplier,
+                'hack_count':         hack_n,
+                'clean_count':        clean_n,
+                'total':              total,
+            })
+        return jsonify({'weights': result, 'count': len(result)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/learning/auto_whitelist', methods=['GET'])
+def get_auto_whitelist():
+    """#37 — Returns issue_type + path patterns that appear in >=30 clean scans
+    and never (or rarely, <5%) in hack scans — these are systematic FPs.
+    The scanner can fetch this on startup to extend its whitelist dynamically.
+    """
+    try:
+        min_clean = int(request.args.get('min_clean', 30))
+        max_hack_rate = float(request.args.get('max_hack_rate', 0.05))
+        with get_api_db_cursor() as cursor:
+            if _USE_PG:
+                cursor.execute('''
+                    SELECT
+                        sr.issue_type,
+                        sr.nombre,
+                        COUNT(*) FILTER (WHERE s.verdict = 'clean') AS clean_n,
+                        COUNT(*) FILTER (WHERE s.verdict = 'hack')  AS hack_n,
+                        COUNT(*) AS total
+                    FROM scan_results sr
+                    JOIN scans s ON sr.scan_id = s.id
+                    WHERE s.verdict IN ('hack', 'clean')
+                      AND sr.issue_type IS NOT NULL AND sr.issue_type != ''
+                    GROUP BY sr.issue_type, sr.nombre
+                    HAVING COUNT(*) FILTER (WHERE s.verdict = 'clean') >= %s
+                       AND (COUNT(*) FILTER (WHERE s.verdict = 'hack')::float / NULLIF(COUNT(*), 0)) <= %s
+                    ORDER BY clean_n DESC
+                    LIMIT 500
+                ''', (min_clean, max_hack_rate))
+            else:
+                cursor.execute('''
+                    SELECT sr.issue_type, sr.nombre,
+                        SUM(CASE WHEN s.verdict='clean' THEN 1 ELSE 0 END) AS clean_n,
+                        SUM(CASE WHEN s.verdict='hack'  THEN 1 ELSE 0 END) AS hack_n,
+                        COUNT(*) AS total
+                    FROM scan_results sr JOIN scans s ON sr.scan_id = s.id
+                    WHERE s.verdict IN ('hack','clean')
+                      AND sr.issue_type IS NOT NULL AND sr.issue_type != ''
+                    GROUP BY sr.issue_type, sr.nombre
+                    HAVING SUM(CASE WHEN s.verdict='clean' THEN 1 ELSE 0 END) >= ?
+                       AND CAST(SUM(CASE WHEN s.verdict='hack' THEN 1 ELSE 0 END) AS FLOAT)
+                           / MAX(1, COUNT(*)) <= ?
+                    ORDER BY clean_n DESC LIMIT 500
+                ''', (min_clean, max_hack_rate))
+            rows = cursor.fetchall() or []
+        result = [
+            {
+                'issue_type':  _row_get(r, 0, 'issue_type') or '',
+                'nombre':      _row_get(r, 1, 'nombre') or '',
+                'clean_count': int(_row_get(r, 2, 'clean_n') or 0),
+                'hack_count':  int(_row_get(r, 3, 'hack_n') or 0),
+            }
+            for r in rows
+        ]
+        return jsonify({'whitelist': result, 'count': len(result)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ============================================================
 # GESTIÓN DE STAFF / ROLES
 # ============================================================
