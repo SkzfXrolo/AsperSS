@@ -8605,6 +8605,34 @@ class ArgusApp:
         except Exception as e:
             print(f"Error en scan_ghost_client_registry: {e}")
 
+    def _get_cloud_hack_blacklist(self) -> set:
+        """P3 #17 — Descarga blacklist de hashes de hacks confirmados (caché 1h)."""
+        import json as _json, datetime as _dt
+        cache_path = os.path.join(os.environ.get('APPDATA', ''), 'ASPERSProjectsSS', 'hack_blacklist.json')
+        try:
+            if os.path.isfile(cache_path):
+                age = (_dt.datetime.now() - _dt.datetime.fromtimestamp(os.path.getmtime(cache_path))).total_seconds()
+                if age < 3600:
+                    with open(cache_path, 'r') as f:
+                        data = _json.load(f)
+                    return {h['sha256'] for h in data.get('hashes', [])}
+        except Exception:
+            pass
+        try:
+            base_url = self.config.get('api_url', '').rstrip('/')
+            if not base_url:
+                return set()
+            r = requests.get(f'{base_url}/api/hack_blacklist', timeout=8)
+            if r.ok:
+                data = r.json()
+                os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+                with open(cache_path, 'w') as f:
+                    _json.dump(data, f)
+                return {h['sha256'] for h in data.get('hashes', [])}
+        except Exception:
+            pass
+        return set()
+
     def _get_cloud_mod_whitelist(self):
         """P2 #1 — Descarga whitelist de mods legítimos desde la cloud (caché 1h en APPDATA)."""
         import json as _json, hashlib as _hl, datetime as _dt
@@ -8655,6 +8683,8 @@ class ArgusApp:
             return
         # P2 #1 — Whitelist dinámica de mods legítimos
         cloud_whitelist = self._get_cloud_mod_whitelist()
+        # P3 #17 — Blacklist dinámica de hashes de hacks confirmados
+        cloud_blacklist = self._get_cloud_hack_blacklist()
         # P2 #2 — Whitelist por servidor (mods permitidos explícitamente en este token)
         server_allowed  = set(str(m).lower() for m in self.config.get('server_allowed_mods', []))
         BLACKLISTED = [
@@ -8675,17 +8705,39 @@ class ArgusApp:
                 # P2 #2 — Verificar contra whitelist por servidor (nombre)
                 if server_allowed and fname_lower in server_allowed:
                     continue
+                # Calcular hash SHA256 una sola vez (usado por whitelist + blacklist)
+                _sha256 = None
+                try:
+                    h = hashlib.sha256()
+                    with open(fpath, 'rb') as f:
+                        for chunk in iter(lambda: f.read(65536), b''):
+                            h.update(chunk)
+                    _sha256 = h.hexdigest().lower()
+                except Exception:
+                    pass
                 # P2 #1 — Verificar contra whitelist dinámica de mods legítimos (hash)
-                if cloud_whitelist:
-                    try:
-                        h = hashlib.sha256()
-                        with open(fpath, 'rb') as f:
-                            for chunk in iter(lambda: f.read(65536), b''):
-                                h.update(chunk)
-                        if h.hexdigest().lower() in cloud_whitelist:
-                            continue  # mod legítimo confirmado
-                    except Exception:
-                        pass
+                if cloud_whitelist and _sha256 and _sha256 in cloud_whitelist:
+                    continue  # mod legítimo confirmado
+                # P3 #17 — Verificar contra blacklist dinámica de hacks confirmados
+                if cloud_blacklist and _sha256 and _sha256 in cloud_blacklist:
+                    print(f"🚨 HASH EN BLACKLIST DINÁMICA: {fname} ({_sha256[:12]}...)")
+                    self.issues_found.append({
+                        'nombre': f'Hash confirmado como hack en blacklist dinámica: {fname}',
+                        'ruta': fpath,
+                        'archivo': fname,
+                        'tipo': 'cloud_hash_match',
+                        'categoria': 'GHOST_CLIENT',
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.98,
+                        'detected_patterns': [f'cloud_blacklist:{_sha256[:16]}'],
+                        'file_hash': _sha256,
+                        'explicacion': (
+                            f'El hash SHA256 de "{fname}" está en la blacklist dinámica — '
+                            'confirmado como hack en 3 o más scans previos. '
+                            'Detección 100% confiable por hash.'
+                        ),
+                    })
+                    continue
                 matched_bl = next((bl for bl in BLACKLISTED if bl in fname_lower), None)
                 if matched_bl:
                     print(f"🚨 MOD PROHIBIDO: {fname}")

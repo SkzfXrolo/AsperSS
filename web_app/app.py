@@ -127,6 +127,20 @@ def init_db_async():
         print("✅ Tabla download_links verificada/creada en PostgreSQL")
     except Exception as _e:
         print(f"⚠️ Error verificando download_links: {_e}")
+    # Tabla hack_blacklist — hashes confirmados como hacks en 3+ scans
+    try:
+        with get_api_db_cursor() as _cur:
+            _cur.execute('''
+                CREATE TABLE IF NOT EXISTS hack_blacklist (
+                    sha256 VARCHAR(128) PRIMARY KEY,
+                    hack_name VARCHAR(255),
+                    first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    times_confirmed INTEGER DEFAULT 1
+                )
+            ''')
+        print("✅ Tabla hack_blacklist verificada/creada")
+    except Exception as _e:
+        print(f"⚠️ Error creando hack_blacklist: {_e}")
     # Notificación de deploy nuevo — se dispara una sola vez por commit
     _notify_new_deploy()
 
@@ -4792,6 +4806,92 @@ def delete_mod_whitelist(sha256):
         with get_api_db_cursor() as cursor:
             cursor.execute(f'DELETE FROM mod_whitelist WHERE sha256 = {_PH}', (sha256,))
         return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── P3 #17 — Dynamic hash blacklist (auto-propagated from verdict history) ────
+
+@app.route('/api/hack_blacklist', methods=['GET'])
+def get_hack_blacklist():
+    """Returns SHA256 hashes confirmed as hacks across all servers.
+    Auto-populated by /api/hack_blacklist/sync — scanner fetches on startup.
+    """
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute('SELECT sha256, hack_name, first_seen, times_confirmed FROM hack_blacklist ORDER BY times_confirmed DESC LIMIT 5000')
+            rows = cursor.fetchall() or []
+        return jsonify({
+            'hashes': [
+                {
+                    'sha256':           _row_get(r, 0, 'sha256'),
+                    'hack_name':        _row_get(r, 1, 'hack_name'),
+                    'first_seen':       str(_row_get(r, 2, 'first_seen') or ''),
+                    'times_confirmed':  int(_row_get(r, 3, 'times_confirmed') or 1),
+                }
+                for r in rows
+            ]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/hack_blacklist/sync', methods=['POST'])
+@login_required
+def sync_hack_blacklist():
+    """Scans scan_results for file_hash values in scans with verdict='hack',
+    and adds them to hack_blacklist if seen in 3+ hack scans.
+    Run after bulk verdict processing or on a schedule.
+    """
+    try:
+        with get_api_db_cursor() as cursor:
+            if _USE_PG:
+                cursor.execute('''
+                    SELECT sr.file_hash, sr.issue_name,
+                           COUNT(DISTINCT s.id) AS times_confirmed
+                    FROM scan_results sr
+                    JOIN scans s ON sr.scan_id = s.id
+                    WHERE s.verdict = 'hack'
+                      AND sr.file_hash IS NOT NULL AND sr.file_hash != ''
+                      AND LENGTH(sr.file_hash) IN (64, 40)
+                    GROUP BY sr.file_hash, sr.issue_name
+                    HAVING COUNT(DISTINCT s.id) >= 3
+                ''')
+            else:
+                cursor.execute('''
+                    SELECT sr.file_hash, sr.issue_name,
+                           COUNT(DISTINCT s.id) AS times_confirmed
+                    FROM scan_results sr JOIN scans s ON sr.scan_id = s.id
+                    WHERE s.verdict = 'hack'
+                      AND sr.file_hash IS NOT NULL AND sr.file_hash != ''
+                      AND (LENGTH(sr.file_hash) = 64 OR LENGTH(sr.file_hash) = 40)
+                    GROUP BY sr.file_hash, sr.issue_name
+                    HAVING COUNT(DISTINCT s.id) >= 3
+                ''')
+            rows = cursor.fetchall() or []
+            inserted = 0
+            for r in rows:
+                sha256 = _row_get(r, 0, 'file_hash') or ''
+                hack_name = (_row_get(r, 1, 'issue_name') or 'unknown')[:120]
+                times = int(_row_get(r, 2, 'times_confirmed') or 3)
+                try:
+                    if _USE_PG:
+                        cursor.execute('''
+                            INSERT INTO hack_blacklist (sha256, hack_name, times_confirmed)
+                            VALUES (%s, %s, %s)
+                            ON CONFLICT (sha256) DO UPDATE SET
+                              times_confirmed = EXCLUDED.times_confirmed,
+                              hack_name = EXCLUDED.hack_name
+                        ''', (sha256, hack_name, times))
+                    else:
+                        cursor.execute(
+                            'INSERT OR REPLACE INTO hack_blacklist (sha256, hack_name, times_confirmed) VALUES (?,?,?)',
+                            (sha256, hack_name, times)
+                        )
+                    inserted += 1
+                except Exception:
+                    pass
+        return jsonify({'synced': inserted}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
