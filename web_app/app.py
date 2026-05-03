@@ -2278,6 +2278,44 @@ def _calculate_risk_score(results, return_breakdown=False):
     return final_score
 
 
+def _ensemble_risk_score(results):
+    """P3 #7 — Ensemble: combina scoring heurístico + Random Forest con votación ponderada.
+    Peso 60% heurístico (reglas explícitas, interpretable) + 40% RF (aprendido de datos).
+    Si el RF no está disponible o no está entrenado, cae a 100% heurístico.
+    """
+    heuristic = _calculate_risk_score(results)
+
+    try:
+        clf = get_classifier()
+        if not clf.is_available:
+            return heuristic
+
+        hack_probs = []
+        for r in results:
+            features = {
+                'alert_level':          r.get('alerta') or r.get('alert_level') or 'NORMAL',
+                'issue_category':       r.get('categoria') or r.get('issue_category') or 'OTHER',
+                'confidence':           float(r.get('confidence') or 0.5),
+                'obfuscation_detected': int(bool(r.get('obfuscation_detected') or 0)),
+            }
+            pred = clf.predict(features)
+            if pred.get('available'):
+                hack_probs.append(pred.get('hack_prob', 0.0))
+
+        if not hack_probs:
+            return heuristic
+
+        # RF scan-level score: mean of per-finding hack probability, scaled to 0–100
+        rf_score = round(sum(hack_probs) / len(hack_probs) * 100)
+
+        # Weighted ensemble: 60% heuristic + 40% RF
+        ensemble = round(heuristic * 0.6 + rf_score * 0.4)
+        return min(100, ensemble)
+
+    except Exception:
+        return heuristic
+
+
 @app.route('/api/scans/<int:scan_id>/results', methods=['POST'])
 def submit_scan_results(scan_id):
     """Recibe y almacena resultados de escaneo (usado por el cliente .exe) — sin login requerido"""
@@ -2378,10 +2416,10 @@ def submit_scan_results(scan_id):
                 )
                 print(f"[DEBUG] executemany completado")
 
-            # Calcular y guardar risk_score
+            # Calcular y guardar risk_score (P3 #7 ensemble: heurístico + RF)
             try:
                 cursor.execute('SAVEPOINT risk_score_save')
-                risk_score = _calculate_risk_score(results)
+                risk_score = _ensemble_risk_score(results)
                 cursor.execute(
                     f'UPDATE scans SET risk_score = {_PH} WHERE id = {_PH}',
                     (risk_score, scan_id)

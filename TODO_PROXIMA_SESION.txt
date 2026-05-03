@@ -1,7 +1,7 @@
 ================================================================================
   ARGUS SCANNER — TAREAS PARA LA PRÓXIMA SESIÓN
   Última actualización: 2026-05-03
-  SESIÓN 2026-05-03 (parte 1+2): La mayoría implementada. Ver [DONE] / [PENDING]
+  SESIÓN 2026-05-03 (parte 3): P2#5 CurseForge, P2#14 JAR firma cripto, P3#7 ensemble, P3#35 pre-scan predict integrado
 ================================================================================
 
 
@@ -78,7 +78,7 @@
 [DONE]  2. VirusTotal URL lookup — browser history (misma key, no implementado aún)
 [DONE]  3. Mojang official JAR hash (_fetch_mojang_hash via piston-meta API)
 [DONE]  4. Modrinth API — verificar si un mod es legítimo (_is_modrinth_legitimate)
-[PENDING] 5. CurseForge API — verificar mods (requiere API key de CF, murmurhash2)
+[DONE]  5. CurseForge API — verificar mods (requiere API key de CF, murmurhash2)
 [PENDING] 6. NSRL (NIST) — base de datos de hashes legítimos (dataset muy grande, ~5GB)
 [PENDING] 7. Hybrid Analysis API — análisis de comportamiento
 [DONE]  8. MalwareBazaar (abuse.ch) — blacklist de hashes (gratis, sin API key)
@@ -90,7 +90,7 @@
 [DONE] 11. Análisis de META-INF/MANIFEST.MF en JARs
 [DONE] 12. Verificar fabric.mod.json y mods.toml
 [DONE] 13. Análisis de strings con umbral de ofuscación (string_legibility ratio)
-[PENDING] 14. Verificar firma de código en JARs (.SF + .RSA en META-INF)
+[DONE] 14. Verificar firma de código en JARs (.SF + .RSA en META-INF + digest válido)
 [DONE] 15. Análisis de imports net.minecraft.client.* en bytecode de .class
 [DONE] 16. Verificar tamaño vs complejidad del JAR (entropy + packer detection)
 [DONE] 17. Análisis de nombres de clases en JARs (ofuscación via class name length)
@@ -152,13 +152,13 @@
 
 [DONE]  1. Reemplazar scoring manual por Random Forest (ml_classifier.py)
 [PENDING] 2. Embeddings semánticos de nombres de archivos (sentence-transformers)
-[PENDING] 3. Detección de anomalías con Isolation Forest
+[DONE]  3. Detección de anomalías con Isolation Forest (/api/ml/anomaly/<scan_id>)
 [PENDING] 4. Modelo de secuencia temporal (LSTM/Transformer) para patrones de instalación
 [DONE]  5. Clasificador NLP para explicaciones (Claude/Groq/Gemini vía /api/staff/ai/explain)
 [DONE]  6. Semi-supervised learning con veredictos pasivos (Random Forest lo usa)
-[PENDING] 7. Ensemble: combinar scoring actual + RF + heurísticas con votación
-[PENDING] 8. Calibración de probabilidades (Platt scaling)
-[PENDING] 9. Detección de concept drift (alerta cuando modelo empieza a fallar)
+[DONE]  7. Ensemble: combinar scoring actual + RF + heurísticas con votación
+[DONE]  8. Calibración de probabilidades (Platt scaling — CalibratedClassifierCV en ml_classifier.py)
+[DONE]  9. Detección de concept drift (/api/ml/drift — concordance <70% → alerta)
 [PENDING] 10. Modelo de grafo para correlación de hallazgos (Graph Neural Network)
 
 ── PROCESAMIENTO DE LENGUAJE NATURAL ───────────────────────────────────────
@@ -181,7 +181,7 @@
 
 [DONE] 21. Explicaciones automáticas de hallazgos con Claude/GPT (/api/staff/ai/explain)
 [DONE] 22. Sugerencias de veredicto con justificación (/api/staff/ai/suggest-verdict)
-[PENDING] 23. Detección de inconsistencias en el scan (IA revisa conjunto completo)
+[DONE] 23. Detección de inconsistencias en el scan (/api/staff/ai/inconsistencies/<scan_id>)
 [PENDING] 24. Generación de preguntas de seguimiento para el staff
 [DONE] 25. Resumen ejecutivo diario de scans (daily_summary_job + Discord embed 09:00 UTC)
 
@@ -199,7 +199,7 @@
 [PENDING] 32. Feature store centralizado (precalcular features por machine_id)
 [PENDING] 33. Modelo de embedding de hashes de archivos
 [PENDING] 34. Pipeline de ingesta de nueva inteligencia sobre hacks (scraper)
-[PENDING] 35. API de predicción expuesta al scanner (/api/predict pre-scan)
+[DONE] 35. API de predicción expuesta al scanner (/api/predict pre-scan)
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -215,14 +215,12 @@
   PENDIENTE DE ALTA PRIORIDAD (próxima sesión)
 ════════════════════════════════════════════════════════════════════════════════
 
-  P2 #5   CurseForge API: murmurhash2 fingerprint, necesita CF_API_KEY env var
-  P2 #14  Verificar firma .SF + .RSA en JARs (ZIP entry en META-INF)
-  P2 #26  Antigüedad de archivo >1 año → bajar severidad automáticamente
   P3 #2   Embeddings semánticos con sentence-transformers para nombres de archivos
-  P3 #3   Isolation Forest para detección de anomalías de perfil de usuario
-  P3 #8   Platt scaling para calibrar probabilidades del Random Forest
-  P3 #9   Concept drift detection: alertar cuando el modelo empieza a fallar
-  P3 #23  IA detecta inconsistencias en el conjunto de hallazgos del scan
-  P3 #35  /api/predict: enviar features pre-scan para predicción proactiva
+  P3 #4   Modelo de secuencia temporal (LSTM/Transformer) para patrones de instalación
+  P3 #19  Reputación de jugadores entre servidores (cross-server machine_id)
+  P2 #21  Correlación con fecha de instalación de Minecraft
+  P2 #22  Correlación con últimas sesiones de juego en logs
+  P2 #43  Aprender de diferencia entre scans consecutivos del mismo usuario
+  P3 #32  Feature store centralizado (precalcular features por machine_id)
 
 ================================================================================

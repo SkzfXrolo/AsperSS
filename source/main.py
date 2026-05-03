@@ -2365,6 +2365,77 @@ class ArgusApp:
         except Exception:
             return False
 
+    # P2 #5 — CurseForge fingerprint cache (sha1 → bool)
+    _cf_cache: dict = {}
+
+    @staticmethod
+    def _murmurhash2(data: bytes) -> int:
+        """MurmurHash2 (32-bit) requerido por CurseForge fingerprint API."""
+        seed = 1
+        m = 0x5bd1e995
+        r = 24
+        length = len(data)
+        h = seed ^ length
+        i = 0
+        while i + 4 <= length:
+            k = int.from_bytes(data[i:i+4], 'little')
+            k = (k * m) & 0xFFFFFFFF
+            k ^= k >> r
+            k = (k * m) & 0xFFFFFFFF
+            h = (h * m) & 0xFFFFFFFF
+            h ^= k
+            i += 4
+        remaining = length - i
+        if remaining == 3:
+            h ^= data[i+2] << 16
+        if remaining >= 2:
+            h ^= data[i+1] << 8
+        if remaining >= 1:
+            h ^= data[i]
+            h = (h * m) & 0xFFFFFFFF
+        h ^= h >> 13
+        h = (h * m) & 0xFFFFFFFF
+        h ^= h >> 15
+        return h
+
+    @staticmethod
+    def _is_curseforge_legitimate(jar_path: str) -> bool:
+        """P2 #5 — Devuelve True si el JAR está en la base de datos de CurseForge.
+        Usa murmurhash2 fingerprint (requiere CF_API_KEY env var).
+        Solo whitespace-stripped bytes del JAR para el fingerprint (CurseForge spec).
+        """
+        cf_key = os.environ.get('CF_API_KEY', '')
+        if not cf_key:
+            return False
+        try:
+            with open(jar_path, 'rb') as f:
+                raw = f.read()
+            # CurseForge fingerprint: filtra bytes 9 y 10 (whitespace strip)
+            stripped = bytes(b for b in raw if b not in (9, 10, 13, 32))
+            fingerprint = ArgusApp._murmurhash2(stripped)
+            sha1_key = str(fingerprint)
+            if sha1_key in ArgusApp._cf_cache:
+                return ArgusApp._cf_cache[sha1_key]
+            resp = requests.post(
+                'https://api.curseforge.com/v1/fingerprints',
+                json={'fingerprints': [fingerprint]},
+                headers={
+                    'x-api-key': cf_key,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+                timeout=5,
+            )
+            if resp.status_code == 200:
+                exact_matches = resp.json().get('data', {}).get('exactMatches', [])
+                result = len(exact_matches) > 0
+                ArgusApp._cf_cache[sha1_key] = result
+                return result
+            ArgusApp._cf_cache[sha1_key] = False
+            return False
+        except Exception:
+            return False
+
     @staticmethod
     def _is_legitimate_mod_jar(jar_path: str) -> bool:
         """Devuelve True si el JAR tiene indicadores de ser un mod legítimo de Minecraft.
@@ -2650,6 +2721,9 @@ class ArgusApp:
                         continue
                     if self._is_modrinth_legitimate(str(_jar_path)):
                         print(f"✅ [Modrinth] Mod legítimo verificado: {os.path.basename(str(_jar_path))}")
+                        continue
+                    if self._is_curseforge_legitimate(str(_jar_path)):
+                        print(f"✅ [CurseForge] Mod legítimo verificado: {os.path.basename(str(_jar_path))}")
                         continue
 
             # P2 #1+8 — VirusTotal + MalwareBazaar para .exe/.jar sospechosos
@@ -3548,6 +3622,9 @@ class ArgusApp:
                     else:
                         print(f"⚠️ No se puede iniciar escaneo en BD: no hay token configurado")
                 
+                # P3 #35 — Predicción pre-scan: avisa al staff antes de escanear
+                self._run_pre_scan_predict()
+
                 # Ejecutar escaneo completo directamente (sin messagebox)
                 self.execute_full_scan_silent()
                 
@@ -3661,6 +3738,75 @@ class ArgusApp:
         # Ejecutar todo en un hilo separado
         threading.Thread(target=scan_and_report, daemon=True).start()
     
+    def _run_pre_scan_predict(self):
+        """P3 #35 — Llama a /api/predict con señales rápidas antes de escanear.
+        No bloquea el scan si falla; solo loguea el resultado pre-scan."""
+        try:
+            api_url = self.config.get('api_url', '').rstrip('/')
+            token   = self.config.get('scan_token', '') or (
+                self.db_integration.scan_token if self.db_integration else '')
+            if not api_url or not token:
+                return
+
+            appdata  = os.environ.get('APPDATA', '')
+            mc_dir   = os.path.join(appdata, '.minecraft')
+
+            # Count MC version dirs quickly
+            mc_versions = 0
+            versions_dir = os.path.join(mc_dir, 'versions')
+            if os.path.isdir(versions_dir):
+                try:
+                    mc_versions = sum(
+                        1 for e in os.scandir(versions_dir) if e.is_dir()
+                    )
+                except OSError:
+                    pass
+
+            # Quick presence check for known hack client dirs
+            _hack_dir_names = [
+                '.aristois', '.sigma', '.sigma6', '.weave', '.rise',
+                '.meteor', '.liquidbounce', '.wurst', '.nodus',
+                '.vape', '.drip', '.entropy',
+            ]
+            suspicious_dirs = [
+                d for d in _hack_dir_names
+                if os.path.isdir(os.path.join(appdata, d))
+                or os.path.isdir(os.path.join(mc_dir, d))
+            ]
+
+            machine_id = self.config.get('machine_id', '')
+
+            resp = requests.post(
+                f'{api_url}/api/predict',
+                json={
+                    'token':          token,
+                    'machine_id':     machine_id,
+                    'mc_versions':    mc_versions,
+                    'suspicious_dirs': suspicious_dirs,
+                    'os_version':     os.environ.get('OS', 'Windows'),
+                },
+                timeout=6,
+            )
+            if resp.status_code == 200:
+                data       = resp.json()
+                risk_level = data.get('risk_level', 'BAJO')
+                risk_score = data.get('risk_score', 0)
+                reasons    = data.get('reasons') or []
+                prev_hacks = data.get('prev_hacks', 0)
+                print(
+                    f"🔮 Pre-scan predict: {risk_level} ({risk_score}/100)"
+                    + (f" — {', '.join(reasons)}" if reasons else "")
+                    + (f" — {prev_hacks} hack(s) previo(s)" if prev_hacks else "")
+                )
+                if risk_level == 'ALTO':
+                    self._update_progress_safe(
+                        2,
+                        f"⚠️ Riesgo previo ALTO ({risk_score}/100) — scan en curso",
+                        "Historial del jugador indica riesgo elevado",
+                    )
+        except Exception as ex:
+            print(f"⚠️ Pre-scan predict falló (no crítico): {ex}")
+
     def execute_full_scan_silent(self):
         """Ejecuta escaneo ULTRA RÁPIDO sin limitaciones de recursos"""
         if self.scanning:
@@ -4675,13 +4821,38 @@ class ArgusApp:
                             result['confidence'] = max(0, result['confidence'] - 20)
                             result['detected_patterns'].append('has_legit_mod_marker')
 
-                        # P2 #14 — Verificar firma de código JAR (.SF + .RSA en META-INF)
+                        # P2 #14 — Verificar firma criptográfica JAR (.SF + bloque .RSA/.DSA/.EC)
                         _sf_files = [n for n in zf.namelist()
                                      if n.upper().startswith('META-INF/') and n.upper().endswith('.SF')]
                         if _sf_files:
-                            result['detected_patterns'].append('jar_signed')
-                            if result['confidence'] < 70:
-                                result['confidence'] = max(0, result['confidence'] - 15)
+                            # Comprobar que hay un bloque de firma (.RSA, .DSA o .EC) para cada .SF
+                            _sig_blocks = {
+                                n.upper().rsplit('.', 1)[0]
+                                for n in zf.namelist()
+                                if n.upper().startswith('META-INF/') and
+                                   n.upper().rsplit('.', 1)[-1] in ('RSA', 'DSA', 'EC')
+                            }
+                            _sf_bases = {n.upper().rsplit('.', 1)[0] for n in _sf_files}
+                            _valid_sig = bool(_sf_bases & _sig_blocks)  # at least one pair
+
+                            if _valid_sig:
+                                # Verify .SF has Digest lines (a well-formed jarsigner output)
+                                try:
+                                    _sf_content = zf.read(_sf_files[0]).decode('utf-8', errors='ignore')
+                                    _has_digests = '-Digest:' in _sf_content
+                                except Exception:
+                                    _has_digests = False
+
+                                if _has_digests:
+                                    result['detected_patterns'].append('jar_signed_valid')
+                                    if result['confidence'] < 70:
+                                        result['confidence'] = max(0, result['confidence'] - 20)
+                                else:
+                                    result['detected_patterns'].append('jar_signed_malformed')
+                            else:
+                                # .SF without signature block → unsigned/tampered JAR structure
+                                result['detected_patterns'].append('jar_signed_incomplete')
+                                result['confidence'] = min(0.99, float(result['confidence']) + 5)
 
                         # Check MANIFEST.MF for suspicious main class
                         if 'meta-inf/manifest.mf' in names_lower:
