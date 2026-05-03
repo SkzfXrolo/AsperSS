@@ -936,6 +936,7 @@
                                 <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
                                     <button id="ai-summary-btn" onclick="aiScanSummary(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(124,58,237,.4);background:rgba(124,58,237,.1);color:#a78bfa;cursor:pointer;">📝 Resumen IA</button>
                                     <button id="ai-inconsist-btn" onclick="aiShowInconsistencies(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(245,158,11,.35);background:rgba(245,158,11,.08);color:#fbbf24;cursor:pointer;">⚠️ Inconsistencias</button>
+                                    <button id="ai-anomaly-btn" onclick="aiCheckAnomaly(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.06);color:#f87171;cursor:pointer;">🔬 Anomalía</button>
                                 </div>
                                 <div id="ai-inconsistencies-container" style="display:none;margin-top:8px;font-size:11px;color:#fbbf24;padding:6px 10px;background:rgba(245,158,11,.07);border-radius:6px;border-left:2px solid #f59e0b;"></div>
                             </div>
@@ -1778,7 +1779,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=24"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=25"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────

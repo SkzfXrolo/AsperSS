@@ -3960,3 +3960,46 @@ async function aiShowInconsistencies(scanId, btn) {
     }
     if (btn) { btn.textContent = '⚠️ Inconsistencias'; btn.disabled = false; }
 }
+
+// ─── Anomalía Isolation Forest (P3 #3) ────────────────────────────────────────
+
+async function aiCheckAnomaly(scanId, btn) {
+    const containerId = 'ai-anomaly-result-' + scanId;
+    let el = document.getElementById(containerId);
+
+    if (el && el.style.display !== 'none') {
+        el.style.display = 'none';
+        if (btn) btn.textContent = '🔬 Anomalía';
+        return;
+    }
+
+    if (!el) {
+        el = document.createElement('div');
+        el.id = containerId;
+        el.style.cssText = 'margin-top:8px;font-size:11px;padding:6px 10px;border-radius:6px;border-left:2px solid #ef4444;background:rgba(239,68,68,.07);color:#f87171;';
+        const container = document.getElementById('ai-inconsistencies-container');
+        if (container && container.parentNode) container.parentNode.insertBefore(el, container.nextSibling);
+    }
+
+    if (btn) { btn.textContent = '⋯'; btn.disabled = true; }
+    el.textContent = 'Analizando perfil de anomalía...';
+    el.style.display = 'block';
+
+    try {
+        const res  = await fetch(`/api/ml/anomaly/${scanId}`);
+        const data = await res.json();
+        if (data.error) {
+            el.textContent = '⚠️ ' + data.error;
+        } else if (!data.is_anomaly) {
+            el.style.borderLeftColor = '#10b981';
+            el.style.background = 'rgba(16,185,129,.06)';
+            el.style.color = '#6ee7b7';
+            el.textContent = `✅ Scan dentro del rango normal (score: ${data.anomaly_score}, baseline: ${data.baseline_size} scans limpios)`;
+        } else {
+            el.textContent = `🚨 Scan ANÓMALO (score: ${data.anomaly_score}): ${data.reason}`;
+        }
+    } catch(e) {
+        el.textContent = 'Error al verificar anomalía.';
+    }
+    if (btn) { btn.textContent = '🔬 Anomalía'; btn.disabled = false; }
+}
