@@ -178,6 +178,15 @@ _SAFE_ROOT_FRAGMENTS = {
     'appdata\\locallow\\robtop games',
     # Git repos y proyectos de desarrollo — node_modules, .git, dist
     '\\.git\\', '\\node_modules\\', '\\dist\\', '\\.github\\',
+    # Garry's Mod addons
+    'steam\\steamapps\\common\\garrysmod\\garrysmod\\addons',
+    # Música
+    'spotify\\', 'appdata\\roaming\\image-line', 'virtualdj\\', '\\fl studio\\',
+    'appdata\\local\\spotify',
+    # Process Hacker 3 / System Informer (sucesor legítimo de PH2)
+    'systeminformer', 'processhacker3',
+    # AHK instalado oficialmente en Program Files (no sospechoso)
+    'program files\\autohotkey', 'program files (x86)\\autohotkey',
 }
 
 _MINECRAFT_INSTANCE_FRAGMENTS = [
@@ -2414,8 +2423,16 @@ class ArgusApp:
             'appdata\\locallow\\robtop games',          # Geometry Dash
             # Proyectos de desarrollo
             '\\.git\\', '\\node_modules\\', '\\dist\\',
+            # Garry's Mod addons
+            'garrysmod\\garrysmod\\addons',
+            # Música
+            'spotify\\', 'virtualdj\\', '\\fl studio\\', 'appdata\\roaming\\image-line',
+            # Process Hacker 3 / System Informer
+            'systeminformer', 'processhacker3', 'process hacker 3',
+            # AHK instalado oficialmente
+            'program files\\autohotkey', 'program files (x86)\\autohotkey',
         ]
-        
+
         # ============================================================
         # FILTRADO MEJORADO
         # ============================================================
@@ -2500,6 +2517,19 @@ class ArgusApp:
             'appdata\\locallow\\robtop games',
             # Proyectos de desarrollo
             '\\.git\\', '\\node_modules\\', '\\dist\\',
+            # Garry's Mod addons (nombres genéricos que colisionan con patrones de hack)
+            'steam\\steamapps\\common\\garrysmod\\garrysmod\\addons',
+            'garrysmod\\garrysmod\\addons',
+            # Música (artistas y géneros con nombres que colisionan)
+            'spotify\\', '\\spotify\\storage\\',
+            'virtualdj\\', '\\fl studio\\',
+            'appdata\\roaming\\image-line',   # FL Studio
+            'appdata\\local\\spotify',
+            # Process Hacker 3 / System Informer (sucesor oficial de PH2 — herramienta legítima)
+            'systeminformer', 'processhacker3', 'process hacker 3',
+            'winsystems\\systeminformer',
+            # AHK instalado en Program Files (instalación oficial — no sospechosa)
+            'program files\\autohotkey', 'program files (x86)\\autohotkey',
         }
 
         for item in issues:
@@ -3684,6 +3714,12 @@ class ArgusApp:
                 _run_safe(self.scan_javaagent_args)
                 self._set_scan_phase("🕸️ Weave Loader artifacts...")
                 _run_safe(self.scan_weave_loader)
+                self._set_scan_phase("📜 Scripts .bat/.ps1 launchers de hacks...")
+                _run_safe(self.scan_bat_ps1_launchers)
+                self._set_scan_phase("🖱️ Keybinds sospechosos en options.txt...")
+                _run_safe(self.scan_options_txt_keybinds)
+                self._set_scan_phase("⚙️ Configs .properties de hack clients...")
+                _run_safe(self.scan_hack_properties_configs)
                 self._set_scan_phase("📋 Prefetch de hacks ejecutados...")
                 _run_safe(self.scan_prefetch_hacks)
                 self._set_scan_phase("📝 USN Journal — JARs/carpetas borrados...")
@@ -4845,6 +4881,11 @@ class ArgusApp:
                 'appdata\\locallow\\robtop games',
                 # Dev repos — .git y node_modules son enormes y no contienen hacks
                 '\\.git\\', '\\node_modules\\', '\\dist\\',
+                # Garry's Mod, música, herramientas legítimas
+                'garrysmod\\garrysmod\\addons',
+                'appdata\\roaming\\image-line', 'appdata\\local\\spotify',
+                'systeminformer', 'processhacker3',
+                'program files\\autohotkey', 'program files (x86)\\autohotkey',
             }
 
             def _is_network_drive(path):
@@ -9696,6 +9737,176 @@ class ArgusApp:
                 })
         except Exception as e:
             print(f"Error en scan_weave_loader: {e}")
+
+    def scan_bat_ps1_launchers(self):
+        """#5 — Detecta scripts .bat/.ps1 que lanzan JARs con -javaagent o argumentos sospechosos."""
+        print("🔍 Buscando launchers .bat/.ps1 de hack clients en Desktop/Downloads...")
+        search_dirs = [
+            os.path.expanduser('~\\Desktop'),
+            os.path.expanduser('~\\Downloads'),
+            os.path.expanduser('~\\Documents'),
+            os.path.join(os.environ.get('APPDATA', ''), '.minecraft'),
+        ]
+        HACK_ARGS = [
+            '-javaagent', '-xbootclasspath', '-agentpath',
+            'killaura', 'aimbot', 'autoclicker', 'liquidbounce',
+            'vape', 'sigma', 'wurst', 'meteor', 'ghostclient',
+            'weaveloader', 'weave-loader',
+        ]
+        SAFE_NAMES = {'install', 'setup', 'update', 'uninstall', 'launcher', 'run', 'start', 'forge-installer'}
+        try:
+            for base in search_dirs:
+                if not os.path.isdir(base):
+                    continue
+                for fname in os.listdir(base):
+                    fname_lower = fname.lower()
+                    if not (fname_lower.endswith('.bat') or fname_lower.endswith('.cmd') or fname_lower.endswith('.ps1')):
+                        continue
+                    stem = os.path.splitext(fname_lower)[0]
+                    if any(s in stem for s in SAFE_NAMES):
+                        continue
+                    fpath = os.path.join(base, fname)
+                    try:
+                        with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read(4096).lower()
+                    except Exception:
+                        continue
+                    matched = [kw for kw in HACK_ARGS if kw in content]
+                    if not matched:
+                        continue
+                    print(f"🚨 BAT/PS1 LAUNCHER: {fpath}")
+                    self.issues_found.append({
+                        'nombre': f'Script launcher de hack: {fname}',
+                        'ruta': fpath,
+                        'archivo': fname,
+                        'tipo': 'ghost_client_config',
+                        'categoria': 'LANZADOR',
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.88,
+                        'detected_patterns': [f'bat_launcher:{kw}' for kw in matched[:4]],
+                        'explicacion': (
+                            f'{fname} es un script {fname_lower.rsplit(".", 1)[-1].upper()} que contiene argumentos '
+                            f'sospechosos ({", ".join(matched[:3])}). Los hack clients frecuentemente usan '
+                            'scripts wrapper para pasarle -javaagent o classpath custom a la JVM de Minecraft.'
+                        ),
+                    })
+        except Exception as e:
+            print(f"Error en scan_bat_ps1_launchers: {e}")
+
+    def scan_options_txt_keybinds(self):
+        """#6 — Detecta teclas de ataque mapeadas a botones extra de mouse (indicador de autoclicker)."""
+        print("🔍 Revisando options.txt de Minecraft por keybinds sospechosos...")
+        appdata = os.environ.get('APPDATA', '')
+        mc_dir = os.path.join(appdata, '.minecraft')
+        SUSPICIOUS_BINDS = {
+            'key_key.attack': {'button4', 'button5', 'button6', 'button7', 'button8'},
+            'key_key.use':    {'button4', 'button5', 'button6', 'button7', 'button8'},
+        }
+        try:
+            # Escanear options.txt del .minecraft raíz y de perfiles de versiones
+            options_files = []
+            root_opts = os.path.join(mc_dir, 'options.txt')
+            if os.path.isfile(root_opts):
+                options_files.append(root_opts)
+            profiles_dir = os.path.join(mc_dir, 'versions')
+            if os.path.isdir(profiles_dir):
+                for ver in os.listdir(profiles_dir):
+                    ver_opts = os.path.join(profiles_dir, ver, 'options.txt')
+                    if os.path.isfile(ver_opts):
+                        options_files.append(ver_opts)
+
+            for opts_path in options_files:
+                try:
+                    with open(opts_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        lines = f.readlines()
+                    for line in lines:
+                        line = line.strip().lower()
+                        for bind_key, bad_values in SUSPICIOUS_BINDS.items():
+                            if line.startswith(bind_key + ':'):
+                                value = line.split(':', 1)[-1].strip()
+                                if value in bad_values:
+                                    print(f"🚨 KEYBIND SOSPECHOSO: {bind_key}={value} en {opts_path}")
+                                    self.issues_found.append({
+                                        'nombre': f'Keybind de ataque en botón extra: {bind_key}={value}',
+                                        'ruta': opts_path,
+                                        'archivo': 'options.txt',
+                                        'tipo': 'ghost_client_config',
+                                        'categoria': 'AUTOCLICK',
+                                        'alerta': 'SOSPECHOSO',
+                                        'confidence': 0.75,
+                                        'detected_patterns': [f'keybind:{bind_key}:{value}'],
+                                        'explicacion': (
+                                            f'La acción "{bind_key.replace("key_key.", "")}" está mapeada a {value} '
+                                            '(botón lateral del mouse). Esto indica que el jugador usa un botón '
+                                            'dedicado del mouse para atacar, lo que es un indicador frecuente '
+                                            'de autoclicker configurado en software de mouse gaming.'
+                                        ),
+                                    })
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"Error en scan_options_txt_keybinds: {e}")
+
+    def scan_hack_properties_configs(self):
+        """#10 — Detecta archivos .properties de hack clients con módulos activados."""
+        print("🔍 Buscando .properties de hack clients con módulos activos...")
+        appdata = os.environ.get('APPDATA', '')
+        mc_dir = os.path.join(appdata, '.minecraft')
+        config_dir = os.path.join(mc_dir, 'config')
+        HACK_MODULE_KEYS = [
+            'killaura', 'aimbot', 'reach', 'velocity', 'nofall', 'scaffold',
+            'speed', 'fly', 'bhop', 'bunnyhop', 'triggerbot', 'antikb',
+            'antiknockback', 'timer', 'esp', 'xray', 'fullbright', 'criticals',
+            'fastplace', 'autoeat', 'autototem', 'baritone', 'aura',
+        ]
+        try:
+            if not os.path.isdir(config_dir):
+                return
+            for root, dirs, files in os.walk(config_dir):
+                dirs[:] = [d for d in dirs if d.lower() not in {'optifine', 'forge', 'fml', 'journeymap', 'rei'}]
+                for fname in files:
+                    if not fname.lower().endswith('.properties'):
+                        continue
+                    fpath = os.path.join(root, fname)
+                    try:
+                        with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read(8192).lower()
+                    except Exception:
+                        continue
+                    enabled_modules = []
+                    for line in content.splitlines():
+                        line = line.strip()
+                        if '=' not in line or line.startswith('#'):
+                            continue
+                        key, _, val = line.partition('=')
+                        key = key.strip()
+                        val = val.strip()
+                        if val not in ('true', '1', 'on', 'enabled', 'yes'):
+                            continue
+                        for mod in HACK_MODULE_KEYS:
+                            if mod in key:
+                                enabled_modules.append(f'{mod}=true')
+                                break
+                    if len(enabled_modules) >= 2:
+                        print(f"🚨 HACK .PROPERTIES: {fpath} ({len(enabled_modules)} módulos activos)")
+                        self.issues_found.append({
+                            'nombre': f'Config de hack con módulos activos: {fname}',
+                            'ruta': fpath,
+                            'archivo': fname,
+                            'tipo': 'ghost_client_config',
+                            'categoria': 'CONFIG_HACK',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.87,
+                            'detected_patterns': [f'prop_module:{m}' for m in enabled_modules[:6]],
+                            'explicacion': (
+                                f'{fname} contiene {len(enabled_modules)} módulos de hack activos '
+                                f'({", ".join(enabled_modules[:4])}{"..." if len(enabled_modules)>4 else ""}). '
+                                'Los archivos .properties son el formato de configuración usado por varios '
+                                'ghost clients para persistir qué módulos están habilitados entre sesiones.'
+                            ),
+                        })
+        except Exception as e:
+            print(f"Error en scan_hack_properties_configs: {e}")
 
     def scan_prefetch_hacks(self):
         """#21 — Detecta archivos Prefetch de hacks ejecutados (aunque el exe esté borrado)."""
