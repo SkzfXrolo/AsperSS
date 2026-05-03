@@ -3895,3 +3895,36 @@ async function aiExplainFinding(name, level, btn) {
     btn.disabled = false;
 }
 
+// ─── Resumen ejecutivo del scan (P3 #12) ─────────────────────────────────────
+
+async function aiScanSummary(scanId, btn) {
+    const containerId = 'ai-scan-summary-' + scanId;
+    let el = document.getElementById(containerId);
+
+    if (el && el.style.display !== 'none') {
+        el.style.display = 'none';
+        if (btn) btn.textContent = '📝 Resumen IA';
+        return;
+    }
+
+    if (btn) { btn.textContent = '⋯'; btn.disabled = true; }
+
+    try {
+        const res  = await fetch(`/api/staff/ai/scan-summary/${scanId}`);
+        const data = await res.json();
+        const text = data.summary || 'No se pudo generar el resumen.';
+
+        if (!el) {
+            el = document.createElement('div');
+            el.id = containerId;
+            el.style.cssText = 'margin-top:10px;padding:10px 14px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.25);border-radius:8px;font-size:12px;line-height:1.6;color:var(--text-m);';
+            const card = document.getElementById('ai-verdict-card');
+            if (card) card.appendChild(el);
+        }
+        el.innerHTML = '<span style="color:#a78bfa;font-weight:600">📝 Resumen IA:</span><br>' + text;
+        el.style.display = 'block';
+    } catch(e) {
+        console.error('aiScanSummary error', e);
+    }
+    if (btn) { btn.textContent = '📝 Resumen IA'; btn.disabled = false; }
+}

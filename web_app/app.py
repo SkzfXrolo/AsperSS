@@ -5698,6 +5698,77 @@ def ai_explain_finding():
     return jsonify({'explanation': expl or 'No se pudo generar explicación.'})
 
 
+@app.route('/api/staff/ai/scan-summary/<int:scan_id>', methods=['GET'])
+@login_required
+def ai_scan_summary(scan_id):
+    """P3 #12 — Genera un resumen en lenguaje natural del scan para el staff.
+    Returns: {summary: str}  — párrafo de 3-5 oraciones en español.
+    """
+    k_groq   = os.environ.get('GROQ_API_KEY')
+    k_gemini = os.environ.get('GEMINI_API_KEY')
+    k_claude = os.environ.get('ANTHROPIC_API_KEY')
+    if not any([k_groq, k_gemini, k_claude]):
+        return jsonify({'summary': 'Sin API keys configuradas para IA.'}), 200
+
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f'SELECT minecraft_username, risk_score, verdict, started_at FROM scans WHERE id={_PH}',
+                (scan_id,)
+            )
+            scan_row = cursor.fetchone()
+            if not scan_row:
+                return jsonify({'error': 'Scan no encontrado'}), 404
+            mc_user   = _row_get(scan_row, 0, 'minecraft_username') or 'unknown'
+            risk      = int(_row_get(scan_row, 1, 'risk_score') or 0)
+            verdict   = _row_get(scan_row, 2, 'verdict') or 'pending'
+
+            cursor.execute(
+                f'''SELECT issue_name, issue_category, alert_level, confidence, issue_type
+                    FROM scan_results WHERE scan_id={_PH}
+                    ORDER BY (CASE alert_level WHEN 'CRITICAL' THEN 0 WHEN 'SOSPECHOSO' THEN 1
+                              WHEN 'POCO_SOSPECHOSO' THEN 2 ELSE 3 END), confidence DESC
+                    LIMIT 20''',
+                (scan_id,)
+            )
+            findings_rows = cursor.fetchall() or []
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    if not findings_rows:
+        return jsonify({'summary': f'El scan del jugador {mc_user} no arrojó hallazgos relevantes.'}), 200
+
+    findings_lines = '\n'.join(
+        f'  [{_row_get(r, 2, "alert_level")}] {_row_get(r, 0, "issue_name")} '
+        f'({_row_get(r, 1, "issue_category")}, {_row_get(r, 4, "issue_type")}) '
+        f'conf:{float(_row_get(r, 3, "confidence") or 0):.0%}'
+        for r in findings_rows
+    )
+
+    prompt = (
+        f'Soy staff de un servidor de Minecraft revisando el scan del jugador "{mc_user}". '
+        f'Risk score: {risk}/100. Veredicto actual: {verdict}.\n\n'
+        f'Hallazgos principales:\n{findings_lines}\n\n'
+        'Escribe un resumen ejecutivo de 3-5 oraciones en español que explique claramente:\n'
+        '1. Qué evidencia concreta existe de hacks\n'
+        '2. Cuáles son los hallazgos más importantes\n'
+        '3. Tu conclusión sobre si el jugador es sospechoso o no\n'
+        'Sé directo y técnico. No uses bullet points.'
+    )
+    system   = 'Eres un experto en análisis forense de hacks en Minecraft. Responde en español.'
+    messages = [{'role': 'user', 'content': prompt}]
+
+    summary = None
+    if k_groq:
+        summary = _ai_call_groq(k_groq, system, messages)
+    if not summary and k_gemini:
+        summary = _ai_call_gemini(k_gemini, system, [], prompt)
+    if not summary and k_claude:
+        summary = _ai_call_claude(k_claude, system, messages)
+
+    return jsonify({'summary': summary or 'No se pudo generar el resumen.'})
+
+
 _REVIEW_SECRET = 'aspers-claude-review-2026'
 
 @app.route('/internal/scan-review/<int:scan_id>')

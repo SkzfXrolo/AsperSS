@@ -3809,6 +3809,8 @@ class ArgusApp:
                 _run_safe(self.scan_minecraft_crash_reports)
                 self._set_scan_phase("🗂️ Amcache — ejecución histórica de programas...")
                 _run_safe(self.scan_amcache)
+                self._set_scan_phase("📦 Instalaciones MSI recientes (últimos 7 días)...")
+                _run_safe(self.scan_recent_msi_installs)
                 self._set_scan_phase("🔍 Historial de búsquedas de Windows...")
                 _run_safe(self.scan_windows_search_history)
                 self._set_scan_phase("📎 Archivos recientes (.lnk) — accesos sospechosos...")
@@ -11588,6 +11590,79 @@ class ArgusApp:
                 os.remove(tmp_hive)
             except Exception:
                 pass
+
+    def scan_recent_msi_installs(self):
+        """P3 #29 — Lista programas instalados via MSI en los últimos 7 días y cruza con _DEFINITE_HACK_NAMES."""
+        print("🔍 Revisando instalaciones MSI recientes (últimos 7 días)...")
+        import winreg as _wr
+        import datetime as _dt
+        import re as _re2
+
+        UNINSTALL_KEYS = [
+            (r'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall', _wr.HKEY_LOCAL_MACHINE),
+            (r'SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall', _wr.HKEY_LOCAL_MACHINE),
+            (r'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall', _wr.HKEY_CURRENT_USER),
+        ]
+        cutoff = _dt.datetime.now() - _dt.timedelta(days=7)
+        DATE_RE = _re2.compile(r'(\d{8})')
+
+        def _parse_install_date(s):
+            m = DATE_RE.match(str(s or ''))
+            if m:
+                try:
+                    return _dt.datetime.strptime(m.group(1), '%Y%m%d')
+                except Exception:
+                    pass
+            return None
+
+        try:
+            for reg_path, hive in UNINSTALL_KEYS:
+                try:
+                    root = _wr.OpenKey(hive, reg_path, 0, _wr.KEY_READ)
+                except Exception:
+                    continue
+                n = _wr.QueryInfoKey(root)[0]
+                for i in range(n):
+                    try:
+                        subkey_name = _wr.EnumKey(root, i)
+                        subkey = _wr.OpenKey(root, subkey_name)
+                        try:
+                            display_name = _wr.QueryValueEx(subkey, 'DisplayName')[0]
+                        except Exception:
+                            continue
+                        try:
+                            install_date_raw = _wr.QueryValueEx(subkey, 'InstallDate')[0]
+                        except Exception:
+                            continue
+                        install_dt = _parse_install_date(install_date_raw)
+                        if not install_dt or install_dt < cutoff:
+                            continue
+                        name_lower = display_name.lower()
+                        matched_hack = next((h for h in _DEFINITE_HACK_NAMES if h in name_lower), None)
+                        if matched_hack:
+                            date_str = install_dt.strftime('%d/%m/%Y')
+                            print(f"🚨 INSTALACION MSI RECIENTE: {display_name} ({date_str})")
+                            self.issues_found.append({
+                                'nombre': f'Instalación reciente de hack detectada: {display_name} ({date_str})',
+                                'ruta': '',
+                                'archivo': display_name,
+                                'tipo': 'registry_appcompat_hack',
+                                'categoria': 'INSTALACION',
+                                'alerta': 'CRITICAL',
+                                'confidence': 0.91,
+                                'detected_patterns': [f'msi_install:{matched_hack}', f'date:{date_str}'],
+                                'explicacion': (
+                                    f'"{display_name}" fue instalado via MSI el {date_str}. '
+                                    'La presencia de este programa en el registro de desinstalación '
+                                    'confirma que fue instalado formalmente en el sistema, '
+                                    'no solo copiado como archivo suelto.'
+                                ),
+                            })
+                    except Exception:
+                        continue
+                _wr.CloseKey(root)
+        except Exception as e:
+            print(f"Error en scan_recent_msi_installs: {e}")
 
     def scan_windows_search_history(self):
         """Detecta búsquedas sospechosas en el historial de Windows Explorer."""
