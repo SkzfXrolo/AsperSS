@@ -172,6 +172,12 @@ _SAFE_ROOT_FRAGMENTS = {
     # como 'riot', 'rise', 'impact', 'extra', 'insane' que colisionan con hacks
     'appdata\\local\\osu!', '\\osu!\\songs', '\\osu!\\skins',
     'appdata\\roaming\\osu!',
+    # Beat Saber — carpetas de niveles custom con títulos de canciones
+    'appdata\\locallow\\hyperbolic magnetism',
+    # Geometry Dash — niveles descargados con nombres genéricos
+    'appdata\\locallow\\robtop games',
+    # Git repos y proyectos de desarrollo — node_modules, .git, dist
+    '\\.git\\', '\\node_modules\\', '\\dist\\', '\\.github\\',
 }
 
 _MINECRAFT_INSTANCE_FRAGMENTS = [
@@ -2383,8 +2389,12 @@ class ArgusApp:
             'site-packages',                     # librerías Python instaladas
             'voicemod',                          # voice changer legítimo
             'minecraftsstool',                   # el propio SS tool del servidor
-            # Juegos de ritmo (Osu!, Beat Saber, etc.)
+            # Juegos de ritmo (Osu!, Beat Saber, Geometry Dash)
             '\\osu!\\', 'appdata\\local\\osu!', 'appdata\\roaming\\osu!',
+            'appdata\\locallow\\hyperbolic magnetism',  # Beat Saber
+            'appdata\\locallow\\robtop games',          # Geometry Dash
+            # Proyectos de desarrollo
+            '\\.git\\', '\\node_modules\\', '\\dist\\',
         ]
         
         # ============================================================
@@ -2466,6 +2476,11 @@ class ArgusApp:
             # "riot", "rise", "impact", "extra", "insane" que colisionan con hacks
             'appdata\\local\\osu!', '\\osu!\\songs\\', '\\osu!\\skins\\',
             'appdata\\roaming\\osu!',
+            # Beat Saber / Geometry Dash
+            'appdata\\locallow\\hyperbolic magnetism',
+            'appdata\\locallow\\robtop games',
+            # Proyectos de desarrollo
+            '\\.git\\', '\\node_modules\\', '\\dist\\',
         }
 
         for item in issues:
@@ -3476,12 +3491,21 @@ class ArgusApp:
             self._update_progress_safe(80, "⚡ Fases paralelas iniciadas", "Procesos · DNS · Registro · Red · IA...")
 
             def _run_safe(fn, *a, **kw):
-                """Ejecuta una función de escaneo sin propagación de excepciones."""
-                try:
-                    return fn(*a, **kw)
-                except Exception as ex:
-                    print(f"⚠️ Error en {fn.__name__}: {ex}")
-                    return []
+                """Ejecuta fn con timeout de 8s; si se excede, continúa sin esperar.
+                Las funciones que aún corren en background siguen añadiendo a issues_found.
+                """
+                _result = [None]
+                def _wrapper():
+                    try:
+                        _result[0] = fn(*a, **kw)
+                    except Exception as ex:
+                        print(f"⚠️ Error en {fn.__name__}: {ex}")
+                t = threading.Thread(target=_wrapper, daemon=True)
+                t.start()
+                t.join(timeout=8)
+                if t.is_alive():
+                    print(f"⏱️ Timeout en {fn.__name__} (8s) — continuando")
+                return _result[0]
 
             def _extend_safe(result):
                 if result:
@@ -4789,9 +4813,26 @@ class ArgusApp:
                 'brave-browser', 'vivaldi', 'opera software',
                 'appdata\\local\\google', 'appdata\\roaming\\mozilla',
                 'appdata\\local\\osu!', 'appdata\\roaming\\osu!',
+                # Beat Saber, Geometry Dash
+                'appdata\\locallow\\hyperbolic magnetism',
+                'appdata\\locallow\\robtop games',
+                # Dev repos — .git y node_modules son enormes y no contienen hacks
+                '\\.git\\', '\\node_modules\\', '\\dist\\',
             }
 
+            def _is_network_drive(path):
+                """Devuelve True si el path está en un drive de red (evitar timeouts de 30s+)."""
+                try:
+                    drive = os.path.splitdrive(path)[0] + '\\'
+                    DRIVE_REMOTE = 4
+                    return ctypes.windll.kernel32.GetDriveTypeW(drive) == DRIVE_REMOTE
+                except Exception:
+                    return False
+
             for location in search_locations:
+                if _is_network_drive(location):
+                    print(f"⏭️ Skipping drive de red: {location}")
+                    continue
                 if os.path.exists(location):
                     print(f"📁 ESCANEANDO CARPETAS EN: {location}")
                     try:
@@ -10172,7 +10213,7 @@ class ArgusApp:
                     cur  = conn.cursor()
 
                     if db_type == 'chromium':
-                        cur.execute('SELECT url, title, visit_count, last_visit_time FROM urls ORDER BY last_visit_time DESC LIMIT 10000')
+                        cur.execute('SELECT url, title, visit_count, last_visit_time FROM urls ORDER BY last_visit_time DESC LIMIT 500')
                     else:
                         try:
                             cur.execute('''
@@ -10180,10 +10221,10 @@ class ArgusApp:
                                 FROM moz_places p
                                 JOIN moz_historyvisits h ON h.place_id = p.id
                                 GROUP BY p.id
-                                ORDER BY MAX(h.visit_date) DESC LIMIT 10000
+                                ORDER BY MAX(h.visit_date) DESC LIMIT 500
                             ''')
                         except Exception:
-                            cur.execute('SELECT url, title, visit_count, last_visit_date FROM moz_places WHERE visit_count > 0 ORDER BY last_visit_date DESC LIMIT 10000')
+                            cur.execute('SELECT url, title, visit_count, last_visit_date FROM moz_places WHERE visit_count > 0 ORDER BY last_visit_date DESC LIMIT 500')
 
                     for row in cur.fetchall():
                         url    = (row[0] or '').lower()
