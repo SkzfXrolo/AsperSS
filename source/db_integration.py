@@ -203,6 +203,18 @@ class DatabaseIntegration:
                     'ai_confidence': issue.get('ai_confidence', 0)
                 })
 
+            # Calcular risk_score 0-100 agregando scores por severidad
+            _risk = 0
+            _ALERTA_WEIGHTS = {'CRITICAL': 25, 'SOSPECHOSO': 12, 'POCO_SOSPECHOSO': 4, 'NORMAL': 1}
+            for _iss in issues_found:
+                _alerta = _iss.get('alerta', 'NORMAL')
+                _conf = float(_iss.get('confidence') or 0)
+                if _conf <= 1:
+                    _conf = _conf * 100
+                _item_score = _ALERTA_WEIGHTS.get(_alerta, 1) * min(_conf / 100, 1)
+                _risk += _item_score
+            risk_score = min(100, int(_risk))
+
             screenshot_b64 = self.take_screenshot()
             payload = {
                 'status': 'completed',
@@ -212,6 +224,7 @@ class DatabaseIntegration:
                 'scan_duration': scan_duration,
                 'results': results,
                 'screenshot': screenshot_b64,
+                'risk_score': risk_score,
             }
 
             url = f"{self.api_url}/api/scans/{self.scan_id}/results"

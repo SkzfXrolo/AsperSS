@@ -3468,7 +3468,12 @@ class ArgusApp:
                                 getattr(self, 'total_dirs_scanned', 0)
                             )
                             if success:
-                                self._update_progress_safe(100, "✅ Escaneo completado", f"{len(self.issues_found)} hallazgos enviados")
+                                _risk_w = {'CRITICAL': 25, 'SOSPECHOSO': 12, 'POCO_SOSPECHOSO': 4, 'NORMAL': 1}
+                                _rs = min(100, int(sum(
+                                    _risk_w.get(i.get('alerta', 'NORMAL'), 1) * min(float(i.get('confidence') or 0) * (1 if float(i.get('confidence') or 0) > 1 else 100) / 100, 1)
+                                    for i in self.issues_found
+                                )))
+                                self._update_progress_safe(100, "✅ Escaneo completado", f"{len(self.issues_found)} hallazgos · Risk Score: {_rs}/100")
                                 print("✅ Resultados enviados a Web/BD")
                             else:
                                 self._update_progress_safe(100, "⚠️ Error al enviar", "Revisa conexión y token")
