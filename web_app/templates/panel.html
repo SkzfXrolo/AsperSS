@@ -925,6 +925,16 @@
                             <!-- Veredicto actual -->
                             <div id="current-verdict-banner" style="display:none;border-radius:10px;padding:12px 16px;margin-bottom:4px;font-size:13px;"></div>
 
+                            <!-- Sugerencia de veredicto por IA (Parte 3 item 22) -->
+                            <div id="ai-verdict-card" style="display:none;border-radius:10px;padding:12px 14px;margin-bottom:6px;border:1px solid rgba(124,58,237,.3);background:rgba(124,58,237,.07);font-size:12px;">
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                                    <span style="font-weight:700;color:#a78bfa;font-size:12px;">🤖 Sugerencia IA</span>
+                                    <span id="ai-verdict-badge" style="font-size:11px;font-weight:800;padding:2px 10px;border-radius:20px;"></span>
+                                </div>
+                                <ul id="ai-verdict-reasons" style="margin:0 0 0 14px;padding:0;color:var(--text-m);line-height:1.6;"></ul>
+                                <div id="ai-verdict-confidence" style="margin-top:6px;font-size:11px;color:var(--text-d);"></div>
+                            </div>
+
                             <div id="bulk-actions-bar" style="display:none;background:var(--bg-s);border:1px solid var(--border-m);border-radius:10px;padding:14px 16px;flex-direction:column;gap:10px;">
                                 <div style="font-size:13px;font-weight:600;color:var(--text-h);">Veredicto del escaneo</div>
                                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -1763,7 +1773,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=21"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=22"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────

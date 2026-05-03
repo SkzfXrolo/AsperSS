@@ -5461,6 +5461,123 @@ def staff_chat_clear():
     return jsonify({'success': True})
 
 
+@app.route('/api/staff/ai/suggest-verdict/<int:scan_id>', methods=['GET'])
+@login_required
+def ai_suggest_verdict(scan_id):
+    """Analiza los hallazgos de un scan y sugiere veredicto con justificación."""
+    k_groq   = os.environ.get('GROQ_API_KEY')
+    k_gemini = os.environ.get('GEMINI_API_KEY')
+    k_claude = os.environ.get('ANTHROPIC_API_KEY')
+    if not any([k_groq, k_gemini, k_claude]):
+        return jsonify({'error': 'Sin API keys configuradas'}), 503
+
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f'SELECT machine_name, minecraft_username, issues_found, risk_score '
+                f'FROM scans WHERE id = {_PH}', (scan_id,)
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify({'error': 'Scan no encontrado'}), 404
+            mc_user  = _row_get(row, 1, 'minecraft_username') or '?'
+            n_issues = _row_get(row, 2, 'issues_found') or 0
+            risk     = _row_get(row, 3, 'risk_score') or 0
+
+            cur.execute(
+                f'SELECT issue_name, issue_category, alert_level, confidence '
+                f'FROM scan_results WHERE scan_id = {_PH} ORDER BY confidence DESC LIMIT 25',
+                (scan_id,)
+            )
+            findings_rows = cur.fetchall() or []
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    if not findings_rows:
+        return jsonify({'verdict': 'LIMPIO', 'confidence': 90,
+                        'reasons': ['No se encontraron hallazgos en el scan.',
+                                    'Sin evidencia de hacks instalados o ejecutados.',
+                                    'Risk score bajo — comportamiento esperado de un usuario limpio.']})
+
+    findings_text = '\n'.join(
+        f"  [{_row_get(r, 2, 'alert_level')}] {_row_get(r, 0, 'issue_name')} "
+        f"({_row_get(r, 1, 'issue_category')}) "
+        f"conf:{float(_row_get(r, 3, 'confidence') or 0):.0%}"
+        for r in findings_rows
+    )
+
+    prompt = (
+        f'Analiza los siguientes hallazgos del scanner Argus para el jugador "{mc_user}" '
+        f'(scan #{scan_id}, risk score: {risk}/100, total hallazgos: {n_issues}):\n\n'
+        f'{findings_text}\n\n'
+        'Determina si el jugador tiene hacks o está limpio. '
+        'Responde ÚNICAMENTE con este JSON válido (sin texto extra):\n'
+        '{"verdict":"HACK","confidence":85,"reasons":["razón 1","razón 2","razón 3"]}\n'
+        'verdict = "HACK" o "LIMPIO", confidence = 0-100, reasons = 3 strings cortos en español.'
+    )
+
+    system = 'Eres un experto en detección de hacks de Minecraft. Responde solo con JSON válido.'
+    messages = [{'role': 'user', 'content': prompt}]
+
+    raw = None
+    if k_groq:
+        raw = _ai_call_groq(k_groq, system, messages)
+    if not raw and k_gemini:
+        raw = _ai_call_gemini(k_gemini, system, [], prompt)
+    if not raw and k_claude:
+        raw = _ai_call_claude(k_claude, system, messages)
+
+    if not raw:
+        return jsonify({'error': 'Todos los modelos fallaron'}), 503
+
+    try:
+        import re as _re
+        match = _re.search(r'\{[^{}]+\}', raw, _re.DOTALL)
+        parsed = json.loads(match.group(0) if match else raw)
+        return jsonify({
+            'verdict':    str(parsed.get('verdict', 'LIMPIO')).upper(),
+            'confidence': int(parsed.get('confidence', 50)),
+            'reasons':    list(parsed.get('reasons', []))[:3],
+        })
+    except Exception:
+        return jsonify({'raw': raw, 'verdict': 'LIMPIO', 'confidence': 50,
+                        'reasons': ['No se pudo parsear la respuesta de la IA.']})
+
+
+@app.route('/api/staff/ai/explain', methods=['GET'])
+@login_required
+def ai_explain_finding():
+    """Devuelve una explicación de 1-2 líneas de un hallazgo específico."""
+    name  = (request.args.get('name')  or '').strip()[:120]
+    level = (request.args.get('level') or 'SOSPECHOSO').strip()
+    if not name:
+        return jsonify({'error': 'Parámetro name requerido'}), 400
+
+    k_groq   = os.environ.get('GROQ_API_KEY')
+    k_gemini = os.environ.get('GEMINI_API_KEY')
+    k_claude = os.environ.get('ANTHROPIC_API_KEY')
+    if not any([k_groq, k_gemini, k_claude]):
+        return jsonify({'explanation': 'Sin API keys configuradas.'}), 200
+
+    prompt = (
+        f'En máximo 2 oraciones cortas, explica qué es "{name}" '
+        f'(nivel de alerta: {level}) en el contexto de trampas en Minecraft '
+        f'y por qué es sospechoso. Sé técnico y directo. Solo el texto, sin bullet points.'
+    )
+    system   = 'Eres un experto en seguridad de Minecraft. Responde en español, máx 2 oraciones.'
+    messages = [{'role': 'user', 'content': prompt}]
+
+    expl = None
+    if k_groq:
+        expl = _ai_call_groq(k_groq, system, messages)
+    if not expl and k_gemini:
+        expl = _ai_call_gemini(k_gemini, system, [], prompt)
+    if not expl and k_claude:
+        expl = _ai_call_claude(k_claude, system, messages)
+
+    return jsonify({'explanation': expl or 'No se pudo generar explicación.'})
+
+
 _REVIEW_SECRET = 'aspers-claude-review-2026'
 
 @app.route('/internal/scan-review/<int:scan_id>')

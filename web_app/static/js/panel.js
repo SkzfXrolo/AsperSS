@@ -1336,6 +1336,8 @@ function renderIssuePage(container, scanId) {
             ? `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);flex-shrink:0;white-space:nowrap;">En instancia</span>`
             : `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);flex-shrink:0;white-space:nowrap;">Fuera de instancia</span>`;
 
+        const safeLevel = (result.alert_level || 'SOSPECHOSO').replace(/'/g,"");
+        const safeName  = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
         return `<div data-result-id="${result.id}" style="
             background:${bg};border:1px solid ${accent}33;border-left:3px solid ${accent};
             border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:10px;
@@ -1346,6 +1348,9 @@ function renderIssuePage(container, scanId) {
                     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;word-break:break-all;min-width:0;flex:1;">${name}</span>
                     ${instBadge}
                     ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;flex-shrink:0;white-space:nowrap;">${_getCategoryLabel(cat)}</span>` : ''}
+                    <button onclick="aiExplainFinding('${safeName}','${safeLevel}',this)" title="Explicar con IA"
+                            style="font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid rgba(124,58,237,.35);
+                                   background:rgba(124,58,237,.1);color:#a78bfa;cursor:pointer;flex-shrink:0;">🤖</button>
                 </div>
                 ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;" title="${path}">${truncPath}</div>` : ''}
             </div>
@@ -1750,6 +1755,13 @@ async function viewScanDetails(scanId) {
         
         // Cargar escaneos previos si existe la subpágina
         loadPreviousScans(data.machine_name || data.machine_id);
+
+        // Sugerencia de veredicto por IA (solo si el scan está completo y sin veredicto)
+        const aiCard = document.getElementById('ai-verdict-card');
+        if (aiCard) aiCard.style.display = 'none';
+        if (data.status === 'completed' && !data.verdict) {
+            _loadAIVerdictSuggestion(scanId);
+        }
         
         // Inicializar navegación de subpáginas si no está inicializada
         if (typeof setupSubpageNavigation === 'function') {
@@ -3810,4 +3822,76 @@ async function clearAIChat() {
 // Actualizar badge cuando cambia el scan activo
 const _origOpenScanDetail = typeof openScanDetail === 'function' ? openScanDetail : null;
 // Hook pasivo: _updateAIChatScanBadge se llama desde toggleAIChat al abrir
+
+// ─── Sugerencia automática de veredicto (Parte 3 item 22) ───────────────────
+
+async function _loadAIVerdictSuggestion(scanId) {
+    const card       = document.getElementById('ai-verdict-card');
+    const badge      = document.getElementById('ai-verdict-badge');
+    const reasonsEl  = document.getElementById('ai-verdict-reasons');
+    const confEl     = document.getElementById('ai-verdict-confidence');
+    if (!card) return;
+
+    // Mostrar estado cargando
+    card.style.display = 'block';
+    badge.textContent  = '⋯';
+    badge.style.background = 'rgba(124,58,237,.2)';
+    badge.style.color  = '#a78bfa';
+    reasonsEl.innerHTML = '<li style="list-style:none;color:var(--text-d)">Analizando hallazgos...</li>';
+    confEl.textContent  = '';
+
+    try {
+        const res  = await fetch(`/api/staff/ai/suggest-verdict/${scanId}`);
+        const data = await res.json();
+        if (data.error) { card.style.display = 'none'; return; }
+
+        const isHack = data.verdict === 'HACK';
+        badge.textContent  = isHack ? '⚠️ HACK' : '✅ LIMPIO';
+        badge.style.background = isHack ? 'rgba(239,68,68,.2)' : 'rgba(16,185,129,.15)';
+        badge.style.color      = isHack ? '#ef4444' : '#10b981';
+        card.style.borderColor = isHack ? 'rgba(239,68,68,.35)' : 'rgba(16,185,129,.3)';
+        card.style.background  = isHack ? 'rgba(239,68,68,.06)' : 'rgba(16,185,129,.05)';
+
+        const reasons = data.reasons || [];
+        reasonsEl.innerHTML = reasons.map(r => `<li style="margin-bottom:2px">${r}</li>`).join('');
+        confEl.textContent  = `Confianza IA: ${data.confidence}%`;
+    } catch(e) {
+        card.style.display = 'none';
+    }
+}
+
+// ─── Explicación individual de hallazgos (Parte 3 item 21) ──────────────────
+
+async function aiExplainFinding(name, level, btn) {
+    const row = btn.closest('[data-result-id]');
+    let expEl = row ? row.querySelector('.ai-explain-text') : null;
+
+    if (expEl && expEl.style.display !== 'none') {
+        expEl.style.display = 'none';
+        btn.textContent = '🤖';
+        return;
+    }
+
+    btn.textContent = '⋯';
+    btn.disabled = true;
+
+    try {
+        const res  = await fetch(`/api/staff/ai/explain?name=${encodeURIComponent(name)}&level=${encodeURIComponent(level)}`);
+        const data = await res.json();
+        const text = data.explanation || 'Sin explicación disponible.';
+
+        if (!expEl) {
+            expEl = document.createElement('div');
+            expEl.className = 'ai-explain-text';
+            expEl.style.cssText = 'font-size:11px;color:#c4b5fd;margin-top:5px;padding:5px 8px;background:rgba(124,58,237,.1);border-radius:6px;border-left:2px solid #7c3aed;line-height:1.5;';
+            if (row) row.querySelector('div[style*="flex:1"]')?.appendChild(expEl);
+        }
+        expEl.textContent = '🤖 ' + text;
+        expEl.style.display = 'block';
+        btn.textContent = '🤖';
+    } catch(e) {
+        btn.textContent = '🤖';
+    }
+    btn.disabled = false;
+}
 
