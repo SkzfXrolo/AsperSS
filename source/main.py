@@ -76,7 +76,7 @@ _DEFINITE_HACK_NAMES = {
     'liquidbounce', 'liquidbounce+',
     'wurst', 'wurstclient',
     'impactclient',
-    'sigmaclient', 'sigma5',
+    'sigmaclient', 'sigma5', 'sigma6', 'sigma-6',
     'fluxclient', 'flux1.8', 'flux1',
     'futureclient',
     'astolfo', 'astolfoclient',
@@ -2284,6 +2284,25 @@ class ArgusApp:
         
         threading.Thread(target=scan_thread, daemon=True).start()
     
+    @staticmethod
+    def _is_modrinth_legitimate(jar_path: str) -> bool:
+        """Devuelve True si el JAR tiene hash SHA1 registrado en Modrinth (mod legítimo).
+        Timeout agresivo de 4s para no demorar el scan.
+        """
+        try:
+            import hashlib as _hl
+            with open(jar_path, 'rb') as f:
+                sha1 = _hl.sha1(f.read()).hexdigest()
+            resp = requests.get(
+                f'https://api.modrinth.com/v2/version_file/{sha1}',
+                params={'algorithm': 'sha1'},
+                timeout=4,
+                headers={'User-Agent': 'ArgusScanner/1.6 (aspers-projects)'},
+            )
+            return resp.status_code == 200
+        except Exception:
+            return False
+
     def filter_false_positives(self, issues):
         """Filtrado MEJORADO - Detecta hacks reales pero menos estricto"""
         filtered = []
@@ -2496,6 +2515,14 @@ class ArgusApp:
             if _is_absolute_safe:
                 print(f"✅ [SAFE_PATH] Excluido por ruta segura: {nombre} @ {ruta[:80]}")
                 continue
+
+            # Modrinth: verificar JARs contra la base de datos oficial antes de acusarlos
+            if tipo in ('blacklisted_mod', 'jar_file') or archivo.endswith('.jar') or ruta.endswith('.jar'):
+                _jar_path = item.get('archivo') or item.get('ruta') or ''
+                if _jar_path and os.path.isfile(str(_jar_path)):
+                    if self._is_modrinth_legitimate(str(_jar_path)):
+                        print(f"✅ [Modrinth] Mod legítimo verificado: {os.path.basename(str(_jar_path))}")
+                        continue
 
             # Tipos de scanners especializados — confiar en ellos sin filtrar
             if tipo in TRUSTED_TYPES:
@@ -7600,6 +7627,45 @@ class ArgusApp:
             except Exception as e:
                 print(f"Error leyendo startup key {path}: {e}")
 
+        # Carpeta Startup del menú inicio — hacks que persisten entre reinicios
+        startup_dirs = [
+            os.path.join(os.environ.get('APPDATA', ''),
+                         'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup'),
+            os.path.join(os.environ.get('PROGRAMDATA', 'C:\\ProgramData'),
+                         'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup'),
+        ]
+        STARTUP_EXTS = {'.exe', '.bat', '.cmd', '.ps1', '.vbs', '.js', '.lnk', '.jar'}
+        for sdir in startup_dirs:
+            if not os.path.isdir(sdir):
+                continue
+            try:
+                for fname in os.listdir(sdir):
+                    fname_lower = fname.lower()
+                    if not any(fname_lower.endswith(e) for e in STARTUP_EXTS):
+                        continue
+                    for term in hack_terms:
+                        if term in fname_lower:
+                            fpath = os.path.join(sdir, fname)
+                            self.issues_found.append({
+                                'tipo': 'startup_folder_hack',
+                                'nombre': f'Archivo de inicio sospechoso: {fname}',
+                                'ruta': sdir,
+                                'archivo': fpath,
+                                'categoria': 'PERSISTENCIA',
+                                'alerta': 'CRITICAL',
+                                'confidence': 0.93,
+                                'detected_patterns': [term, 'startup_folder'],
+                                'explicacion': (
+                                    f'"{fname}" está en la carpeta Startup de Windows: se ejecuta '
+                                    f'automáticamente cada vez que el usuario inicia sesión. '
+                                    f'Su nombre contiene "{term}", asociado con hack clients.'
+                                ),
+                            })
+                            print(f"🚨 STARTUP FOLDER: {fpath}")
+                            break
+            except Exception as e:
+                print(f"Error escaneando startup folder {sdir}: {e}")
+
     def scan_installed_programs(self):
         """Escanea programas instalados en el registro en busca de CheatEngine u otras herramientas de trampa."""
         print("🔍 Escaneando programas instalados...")
@@ -8660,7 +8726,7 @@ class ArgusApp:
                                     pass
                             continue  # No analizar otros .exe como scripts AHK
 
-                        if not fname_lower.endswith('.ahk'):
+                        if not (fname_lower.endswith('.ahk') or fname_lower.endswith('.ahk2')):
                             continue
 
                         # Excluir scripts de Roblox por nombre
@@ -9562,12 +9628,14 @@ class ArgusApp:
         local    = os.environ.get('LOCALAPPDATA', '')
         mc_dir   = os.path.join(appdata, '.minecraft')
         WEAVE_PATHS = [
-            (os.path.join(appdata,  '.weave'),               'Directorio de Weave Loader'),
-            (os.path.join(appdata,  '.weave', 'weave.json'), 'Configuración de Weave'),
-            (os.path.join(appdata,  'WeaveLoader'),          'WeaveLoader AppData'),
-            (os.path.join(local,    'WeaveLoader'),          'WeaveLoader LocalAppData'),
-            (os.path.join(mc_dir,   '.weave'),               'Weave en .minecraft'),
-            (os.path.join(mc_dir,   'weave'),                'Weave folder en .minecraft'),
+            (os.path.join(appdata,  '.weave'),                          'Directorio de Weave Loader v1'),
+            (os.path.join(appdata,  '.weave', 'weave.json'),            'Configuración de Weave v1'),
+            (os.path.join(appdata,  '.weave', 'extensions'),            'Weave Loader v2 extensions/'),
+            (os.path.join(appdata,  'WeaveLoader'),                     'WeaveLoader AppData'),
+            (os.path.join(local,    'WeaveLoader'),                     'WeaveLoader LocalAppData'),
+            (os.path.join(appdata,  '.weave2'),                         'Weave Loader v2 dir'),
+            (os.path.join(mc_dir,   '.weave'),                          'Weave en .minecraft'),
+            (os.path.join(mc_dir,   'weave'),                           'Weave folder en .minecraft'),
         ]
         # Módulos de Weave que son hacks conocidos
         WEAVE_HACK_MODULES = {
