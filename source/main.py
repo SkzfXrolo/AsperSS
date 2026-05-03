@@ -3767,8 +3767,16 @@ class ArgusApp:
                 _run_safe(self.scan_hack_properties_configs)
                 self._set_scan_phase("📋 Prefetch de hacks ejecutados...")
                 _run_safe(self.scan_prefetch_hacks)
-                self._set_scan_phase("📝 USN Journal — JARs/carpetas borrados...")
-                _run_safe(self.scan_usn_minecraft_jars)
+                # USN Journal y Kill Chain comparten la misma llamada a fsutil
+                # (cacheada en self._usn_cache). Correrlos en paralelo evita ejecutar
+                # fsutil dos veces y reduce el tiempo total al máximo de los dos.
+                self._set_scan_phase("📝 USN Journal + Kill Chain (paralelo)...")
+                import concurrent.futures as _cf_usn
+                with _cf_usn.ThreadPoolExecutor(max_workers=2) as _ex_usn:
+                    _fu = _ex_usn.submit(_run_safe, self.scan_usn_minecraft_jars)
+                    _fk = _ex_usn.submit(_run_safe, self.scan_kill_chain)
+                    _fu.result()
+                    _fk.result()
                 self._set_scan_phase("📡 Discord webhooks en configs de hacks (C2)...")
                 _run_safe(self.scan_discord_webhooks)
                 self._set_scan_phase("🌐 Historial de descargas del navegador...")
@@ -3797,9 +3805,6 @@ class ArgusApp:
                 _run_safe(self.scan_recent_files_lnk)
                 self._set_scan_phase("🎯 Fingerprints compuestos de ghost clients...")
                 _run_safe(self.scan_hack_fingerprints)
-                self._set_scan_phase("⛓️ Kill chain temporal (USN Journal)...")
-                _run_safe(self.scan_kill_chain)
-
             # Grupo F — Técnicas avanzadas
             def _group_advanced():
                 try:
@@ -3909,6 +3914,67 @@ class ArgusApp:
                 except Exception as e:
                     print(f"⚠️ Error aplicando scoring: {e}")
             
+            # ── Boost multi-cliente (#25) ────────────────────────────────
+            # Si hay 2+ ghost clients distintos detectados → todos suben a CRITICAL.
+            _ghost_clients_detected = set()
+            _GHOST_CLIENT_NAMES = {
+                'vape', 'vapelite', 'sigma', 'sigma6', 'liquidbounce', 'wurst', 'rise',
+                'flux', 'future', 'astolfo', 'novoline', 'drip', 'entropy', 'whiteout',
+                'exhibition', 'meteor', 'rusherhack', 'aristois', 'tenacity', 'vertex',
+                'inertia', 'salhack', 'jello', 'remix', 'pandora', 'azura', 'kamiblue',
+                'konas', 'weepcraft', 'nyx', 'lucid', 'impact', 'ghostclient',
+                'weaveloader', 'labymod-hacks', 'breezeclient', 'datura',
+            }
+            for _iss in self.issues_found:
+                _combined = (_iss.get('nombre', '') + _iss.get('ruta', '') + _iss.get('archivo', '')).lower()
+                for _gc in _GHOST_CLIENT_NAMES:
+                    if _gc in _combined:
+                        _ghost_clients_detected.add(_gc)
+                        break
+            if len(_ghost_clients_detected) >= 2:
+                print(f"⚡ MULTI-CLIENTE detectado ({len(_ghost_clients_detected)} clientes): {_ghost_clients_detected} → todos suben a CRITICAL")
+                for _iss in self.issues_found:
+                    _iss['alerta'] = 'CRITICAL'
+                self.issues_found.append({
+                    'nombre': f'Multi-cliente: {len(_ghost_clients_detected)} hack clients distintos detectados',
+                    'ruta': '',
+                    'archivo': '',
+                    'tipo': 'evasion_indicators',
+                    'categoria': 'MULTI_CLIENTE',
+                    'alerta': 'CRITICAL',
+                    'confidence': 0.97,
+                    'detected_patterns': [f'multi_client:{c}' for c in sorted(_ghost_clients_detected)],
+                    'explicacion': (
+                        f'Se detectaron {len(_ghost_clients_detected)} hack clients diferentes: '
+                        f'{", ".join(sorted(_ghost_clients_detected))}. Tener múltiples clientes '
+                        'indica un coleccionista de hacks o alguien que prueba activamente '
+                        'diferentes herramientas para evadir detección.'
+                    ),
+                })
+
+            # ── Flag de scan demasiado rápido (#26) ──────────────────────
+            if hasattr(self, 'scan_start_time'):
+                _elapsed = time.time() - self.scan_start_time
+                _total_files = getattr(self, 'total_files_scanned', 0)
+                if _elapsed < 30 and _total_files < 500:
+                    print(f"⚠️ Scan completado en {_elapsed:.1f}s con solo {_total_files} archivos — posible VM o evasión")
+                    self.issues_found.append({
+                        'nombre': f'Scan completado en {_elapsed:.0f}s con {_total_files} archivos (posible VM o limpieza previa)',
+                        'ruta': '',
+                        'archivo': '',
+                        'tipo': 'evasion_indicators',
+                        'categoria': 'EVASION',
+                        'alerta': 'SOSPECHOSO',
+                        'confidence': 0.70,
+                        'detected_patterns': [f'fast_scan:{_elapsed:.0f}s', f'low_file_count:{_total_files}'],
+                        'explicacion': (
+                            f'El scan terminó en {_elapsed:.0f} segundos escaneando solo {_total_files} archivos. '
+                            'Una máquina limpia normalmente tarda 2+ minutos. Esto puede indicar '
+                            'una máquina virtual vacía, un equipo con el sistema recién formateado, '
+                            'o limpieza activa de evidencia antes de la sesión de SS.'
+                        ),
+                    })
+
             # Actualizar contadores en la UI
             if UI_STYLE_AVAILABLE:
                 counts = {'critical': 0, 'suspicious': 0, 'low': 0, 'clean': 0}
@@ -12348,8 +12414,14 @@ class ArgusApp:
             print(f"Error en scan_process_tree: {e}")
 
     @staticmethod
-    def _read_usn_journal(max_lines=150_000, max_seconds=12):
-        """Lee fsutil USN journal sin mostrar ventana negra al usuario."""
+    def _read_usn_journal(self, max_lines=150_000, max_seconds=12):
+        """Lee fsutil USN journal sin mostrar ventana negra al usuario.
+        El resultado se cachea en self._usn_cache para que USN + kill_chain
+        no ejecuten fsutil dos veces.
+        """
+        if hasattr(self, '_usn_cache') and self._usn_cache is not None:
+            return self._usn_cache
+
         import subprocess as _sp, time as _time, queue as _q, threading as _th
 
         lines = []
@@ -12399,6 +12471,7 @@ class ArgusApp:
                 except Exception: pass
                 try: proc.wait(timeout=3)
                 except Exception: pass
+        self._usn_cache = lines
         return lines
 
     def scan_prescan_disk_activity(self):
