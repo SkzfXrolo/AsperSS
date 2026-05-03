@@ -8634,11 +8634,22 @@ class ArgusApp:
         return set()
 
     def scan_minecraft_mods_blacklist(self):
-        """Detecta mods prohibidos en .minecraft/mods/ por nombre."""
+        """Detecta mods prohibidos en .minecraft/mods/ y .minecraft/versions/*/mods/."""
         print("🔍 Escaneando mods de Minecraft contra lista negra...")
         appdata = os.environ.get('APPDATA', '')
-        mods_dir = os.path.join(appdata, '.minecraft', 'mods')
-        if not os.path.isdir(mods_dir):
+        mc_dir = os.path.join(appdata, '.minecraft')
+        # Carpeta raíz + carpetas de versiones personalizadas (#1)
+        mods_dirs_to_scan = []
+        mods_dir = os.path.join(mc_dir, 'mods')
+        if os.path.isdir(mods_dir):
+            mods_dirs_to_scan.append(mods_dir)
+        versions_dir = os.path.join(mc_dir, 'versions')
+        if os.path.isdir(versions_dir):
+            for ver in os.listdir(versions_dir):
+                ver_mods = os.path.join(versions_dir, ver, 'mods')
+                if os.path.isdir(ver_mods):
+                    mods_dirs_to_scan.append(ver_mods)
+        if not mods_dirs_to_scan:
             return
         # P2 #1 — Whitelist dinámica de mods legítimos
         cloud_whitelist = self._get_cloud_mod_whitelist()
@@ -8653,7 +8664,8 @@ class ArgusApp:
             'scaffold', 'autoclick', 'clickgui', 'hacked', 'cheat', 'inject',
         ]
         try:
-            for fname in os.listdir(mods_dir):
+            for mods_dir in mods_dirs_to_scan:
+             for fname in os.listdir(mods_dir):
                 if not fname.lower().endswith('.jar'):
                     continue
                 fpath = os.path.join(mods_dir, fname)
