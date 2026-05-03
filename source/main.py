@@ -3769,6 +3769,8 @@ class ArgusApp:
                 _run_safe(self.scan_javaagent_args)
                 self._set_scan_phase("🕸️ Weave Loader artifacts...")
                 _run_safe(self.scan_weave_loader)
+                self._set_scan_phase("🔍 Resourcepacks Xray (texturas transparentes)...")
+                _run_safe(self.scan_xray_resourcepacks)
                 self._set_scan_phase("📜 Scripts .bat/.ps1 launchers de hacks...")
                 _run_safe(self.scan_bat_ps1_launchers)
                 self._set_scan_phase("🖱️ Keybinds sospechosos en options.txt...")
@@ -10035,6 +10037,130 @@ class ArgusApp:
                 })
         except Exception as e:
             print(f"Error en scan_weave_loader: {e}")
+
+    def scan_xray_resourcepacks(self):
+        """#4 — Detecta resourcepacks de Xray con texturas transparentes para stone/dirt/ores."""
+        print("🔍 Buscando resourcepacks Xray en .minecraft/resourcepacks/...")
+        import zipfile as _zf
+        import struct as _struct
+        appdata = os.environ.get('APPDATA', '')
+        rp_dir = os.path.join(appdata, '.minecraft', 'resourcepacks')
+        if not os.path.isdir(rp_dir):
+            return
+        # Texturas que no deberían ser transparentes en un pack legítimo
+        XRAY_TARGETS = {
+            'stone', 'deepslate', 'dirt', 'gravel', 'sand', 'netherrack',
+            'cobblestone', 'end_stone', 'soul_sand', 'soul_soil',
+        }
+        # ORE textures should NEVER be transparent (they're inside stone)
+        ORE_NAMES = {'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'emerald_ore',
+                     'lapis_ore', 'redstone_ore', 'copper_ore', 'ancient_debris',
+                     'nether_gold_ore', 'nether_quartz_ore', 'deepslate_coal_ore',
+                     'deepslate_iron_ore', 'deepslate_gold_ore', 'deepslate_diamond_ore',
+                     'deepslate_emerald_ore', 'deepslate_lapis_ore'}
+
+        def _png_has_alpha(data: bytes) -> bool:
+            """Quick check: PNG color type 4 (grayscale+alpha) or 6 (RGBA)."""
+            if data[:8] != b'\x89PNG\r\n\x1a\n':
+                return False
+            color_type = data[25]  # byte 25 of PNG header
+            return color_type in (4, 6)
+
+        def _png_avg_alpha(data: bytes) -> float:
+            """Estimate average alpha from IDAT by sampling first row of pixels (heuristic)."""
+            try:
+                import zlib as _zl, io as _io
+                idat_start = data.find(b'IDAT')
+                if idat_start < 0:
+                    return 255.0
+                # width/height in IHDR
+                width  = _struct.unpack('>I', data[16:20])[0]
+                height = _struct.unpack('>I', data[20:24])[0]
+                color_type = data[25]
+                if color_type not in (4, 6):
+                    return 255.0
+                channels = 4 if color_type == 6 else 2
+                # Collect all IDAT chunks
+                raw = b''
+                pos = 8
+                while pos + 12 <= len(data):
+                    length = _struct.unpack('>I', data[pos:pos+4])[0]
+                    ctype  = data[pos+4:pos+8]
+                    chunk  = data[pos+8:pos+8+length]
+                    pos   += 12 + length
+                    if ctype == b'IDAT':
+                        raw += chunk
+                    elif ctype == b'IEND':
+                        break
+                decompressed = _zl.decompress(raw)
+                stride = 1 + width * channels
+                alphas = []
+                for row in range(min(height, 16)):  # sample first 16 rows only
+                    row_start = row * stride + 1  # skip filter byte
+                    for col in range(width):
+                        pix_start = row_start + col * channels
+                        alpha_byte = decompressed[pix_start + channels - 1]
+                        alphas.append(alpha_byte)
+                return sum(alphas) / len(alphas) if alphas else 255.0
+            except Exception:
+                return 255.0  # can't determine → assume opaque
+
+        try:
+            for rp_name in os.listdir(rp_dir):
+                rp_path = os.path.join(rp_dir, rp_name)
+                # Support both .zip packs and folder packs
+                if rp_name.lower().endswith('.zip'):
+                    try:
+                        zf = _zf.ZipFile(rp_path, 'r')
+                        entries = {n.lower(): n for n in zf.namelist()}
+                    except Exception:
+                        continue
+                else:
+                    continue  # folder packs: skip (too complex without os.walk time budget)
+
+                xray_textures = []
+                try:
+                    for target in XRAY_TARGETS | ORE_NAMES:
+                        candidate_paths = [
+                            f'assets/minecraft/textures/block/{target}.png',
+                            f'assets/minecraft/textures/blocks/{target}.png',  # older format
+                        ]
+                        for cp in candidate_paths:
+                            if cp in entries:
+                                try:
+                                    png_data = zf.read(entries[cp])
+                                    if not _png_has_alpha(png_data):
+                                        break
+                                    avg_alpha = _png_avg_alpha(png_data)
+                                    # Threshold: avg alpha < 200/255 = ~78% opaque → transparent
+                                    if avg_alpha < 200:
+                                        xray_textures.append(f'{target} (alpha={avg_alpha:.0f}/255)')
+                                except Exception:
+                                    pass
+                                break
+                finally:
+                    zf.close()
+
+                if xray_textures:
+                    print(f"🚨 RESOURCEPACK XRAY: {rp_name} ({len(xray_textures)} texturas transparentes)")
+                    self.issues_found.append({
+                        'nombre': f'Resourcepack Xray detectado: {rp_name}',
+                        'ruta': rp_path,
+                        'archivo': rp_name,
+                        'tipo': 'ghost_client_config',
+                        'categoria': 'XRAY',
+                        'alerta': 'CRITICAL' if any('ore' in t for t in xray_textures) else 'SOSPECHOSO',
+                        'confidence': 0.85,
+                        'detected_patterns': [f'xray_texture:{t}' for t in xray_textures[:6]],
+                        'explicacion': (
+                            f'El resourcepack "{rp_name}" tiene {len(xray_textures)} textura(s) con '
+                            f'transparencia anormal: {", ".join(xray_textures[:3])}. '
+                            'Los packs Xray hacen transparentes las texturas de roca/tierra para '
+                            'que los minerales sean visibles a través de las paredes.'
+                        ),
+                    })
+        except Exception as e:
+            print(f"Error en scan_xray_resourcepacks: {e}")
 
     def scan_bat_ps1_launchers(self):
         """#5 — Detecta scripts .bat/.ps1 que lanzan JARs con -javaagent o argumentos sospechosos."""
