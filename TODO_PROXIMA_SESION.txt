@@ -1,231 +1,423 @@
-================================================================
-  ASPERS PROJECTS — PENDIENTES PARA PRÓXIMA SESIÓN
-  Última actualización: 22/04/2026
-================================================================
-
-── TAREAS PEDIDAS ────────────────────────────────────────────
-
-[x] Crear Vistas móvil
-      → Hamburger menu con sidebar deslizante (left: -260px → 0)
-      → Overlay para cerrar sidebar al tocar fuera
-      → Stats grid apilado en 1 columna en < 540px
-      → Subnav colapsado a solo íconos en móvil
-      → Sidebar se cierra automáticamente al navegar
-
-[x] Crear aplicación web móvil
-      → PWA (Progressive Web App) con manifest.json y service worker
-      → Instalable desde el navegador en Android/iOS
-      → Notificaciones push cuando llega un scan nuevo
-      → Modo offline básico con caché de último scan
-
-[x] Arreglar descargas por link generado por token
-      → Fix: nombre MinecraftSSTool.exe → ArgusScanner.exe en BD + possible_paths
-      → Fix: condición y nombre del ZIP actualizado
-      → Fix: dropdown en panel.html y mensajes de error en panel.js
-
-── MEJORAS DE PANEL WEB ──────────────────────────────────────
-
-[x] Sistema de notificaciones en tiempo real
-      → Polling cada 30s detecta scans nuevos
-      → Badge rojo en el nav "Escaneos" con conteo de nuevos
-      → Toast animado (slide-in) al llegar scan nuevo, clickeable para abrirlo
-      → Sonido sutil via Web Audio API (toggle persistido en localStorage)
-      → Auto-refresca el dashboard si está activo al detectar scan nuevo
-
-[x] Dashboard con estadísticas globales
-      → Gráfico de scans por día (últimos 30 días) ya existente — mejorado
-      → Doughnut chart de veredictos: Limpio / Con Hacks / Pendiente con %
-      → Top 5 hacks del mes con barras de progreso proporcionales
-      → Tiempo promedio de escaneo en el footer
-      → Endpoint /api/dashboard/extended con caché de 60s
-
-[x] Perfil de jugador (historial)
-      → Click en nombre de máquina (tabla o detalle) abre historial
-      → Escaneos Previos muestra stats: total scans, con hacks, limpios
-      → Cada scan previo muestra veredicto y diferencia de issues vs anterior
-      → viewPlayerProfile() carga el scan más reciente y abre la pestaña
-
-[x] Sistema de notas por scan
-      → Tabla scan_notes (PostgreSQL + MySQL, auto-migrada)
-      → API GET/POST /api/scans/<id>/notes y DELETE /api/scans/<id>/notes/<note_id>
-      → Pestaña "Notas" en la vista de detalle del scan
-      → Solo el autor o admin puede eliminar notas
-
-[x] Exportar resultados
-      → Exportar a CSV con BOM para Excel (metadatos + todos los hallazgos)
-      → Endpoint GET /api/scans/<id>/export/csv
-      → Botón "CSV" en la cabecera de la vista de detalle
-      → PENDIENTE: exportar a PDF con logo
-
-[x] Gestión de veredictos mejorada
-      → Modal con razón obligatoria al marcar "Con Hacks" o "Limpio"
-      → Tabla verdict_history registra cada cambio (quién, cuándo, razón)
-      → Banner en el detalle muestra el veredicto actual con su razón
-      → Botón "Historial" muestra todos los cambios inline
-      → API POST /api/scans/<id>/verdict y GET /api/scans/<id>/verdict/history
-
-[x] Filtros y búsqueda avanzada
-      → Búsqueda por máquina, username, IP (ILIKE server-side)
-      → Filtrar por veredicto: pendiente / limpio / con hacks
-      → Filtrar por rango de fecha (desde / hasta)
-      → Guardar filtros como presets (localStorage)
-      → PENDIENTE: filtrar por país, OS, staff que escaneó
-
-[x] Sistema de permisos de staff
-      → Roles: Owner / Admin / Moderador / Helper (jerarquía en auth.py)
-      → Helper solo puede ver scans, no cambiar veredictos (403 en backend + oculto en UI)
-      → Admin puede crear tokens, Moderador no (403 en backend + botón oculto)
-      → Sección "Staff" en sidebar (solo Admin/Owner) con tabla de usuarios y selector de rol
-      → API GET /api/staff/users y PUT /api/staff/users/<id>/role
-      → STAFF_ROLE inyectado como JS global desde Flask template
-
-── MEJORAS DEL SCANNER .EXE ──────────────────────────────────
-
-[x] Auto-actualización del scanner
-      → Al abrir, verificar si hay versión nueva en el servidor (/api/scanner/version)
-      → Descargar y reemplazarse automáticamente si hay update (bat script)
-      → Mostrar changelog de la nueva versión
-
-[x] Protección anti-detección del scanner
-      → Título de ventana cambiado a "Windows Security Health" etc. durante el scan
-      → PENDIENTE: ofuscación del binario (PyInstaller + UPX) — requiere build step
-      → El jugador no sabe qué está escaneando (ventana tiene nombre genérico)
-
-[x] Captura de pantalla durante el scan
-      → Scanner toma screenshot al enviar resultados (PIL.ImageGrab o mss)
-      → Envía como base64 JPEG (calidad 50) en el payload de resultados
-      → api_server.py almacena en columna screenshot TEXT de la tabla scans
-      → Panel muestra la imagen en la pestaña "Captura" del detalle del scan
-
-[x] Mejor detección de Minecraft activo
-      → get_minecraft_active_info() en user_info_collector.py: detecta versión, launcher, mods, agentes Java
-      → Versión extraída de --version en cmdline de javaw.exe
-      → Launcher: Lunar, Badlion, Feather, Forge, Fabric, Quilt, OptiFine, Oficial
-      → Mods: lista .jar desde carpeta mods del --gameDir
-      → Agentes Java (-javaagent) detectados en cmdline
-      → mc_info almacenado como JSON en columna mc_info de scans table
-      → Panel muestra versión, launcher, mods y agentes en la sección de detalles del scan
-
-[x] Base de datos de hashes de hacks en la nube
-      → Tabla hack_hashes en PostgreSQL (sha256, hack_name, confirmed_count)
-      → GET /api/hashes — scanner descarga al iniciar + caché offline en APPDATA
-      → POST /api/hashes — admin añade/confirma hashes (upsert)
-      → DELETE /api/hashes/<sha256> — admin elimina
-      → Detección 100% confiable por hash aunque el archivo esté renombrado
-
-[x] Módulo de detección de macros de mouse/teclado
-      → Detectar AutoHotKey procesos activos, scripts .ahk, registro instalación
-      → Logitech LGHUB settings.json: keywords click/macro/interval
-      → Razer Synapse3/Profiles: JSON/XML con keywords de macro
-      → DNS cache: ipconfig /displaydns cruzado con dominios de hacks conocidos
-      → Event Log EventID 4616: cambio de fecha del sistema
-      → JNA artifacts en %APPDATA%/%TEMP%
-
-[x] Escaneo de memoria de procesos Java
-      → _scan_java_process_memory() en ss_forensics.py
-      → Detecta -javaagent flags en javaw.exe cruzado con lista de hacks
-      → Mapea DLLs cargadas via psutil.memory_maps() buscando keywords sospechosas
-
-[x] Mejorar tiempo total del scan
-      → Timeout por unidad reducido a 55-80s (según cores) — antes 300-600s
-      → max_depth reducido de 8 a 4 (suficiente para rutas Minecraft relevantes)
-      → Fases secundarias: timeout 80s (antes 300s)
-      → Executor principal: timeout 85s (antes 600s)
-      → Fases A-G ya corren en paralelo (7 workers)
-
-── INFRAESTRUCTURA / BACKEND ─────────────────────────────────
-[x] Bot de Discord oficial
-      → discord_bot.py: slash commands /scan, /veredicto, /stats
-      → Notificación automática embed cuando llega scan nuevo (notify_new_scan)
-      → El staff puede marcar veredicto directamente desde Discord
-      → Arranca en daemon thread si DISCORD_TOKEN está en env vars
-      → Variables: DISCORD_TOKEN, DISCORD_GUILD, DISCORD_CHANNEL
-
-================================================================
-  BUGS CONOCIDOS A REVISAR
-================================================================
-
-[x] La barra de progreso a veces salta de golpe en vez de animar suave
-      → Fix: closure bug — update_ui(v=next_value) captura por valor
-      → Fix: callbacks acumulados en root.after() ahora usan el valor correcto
-[x] El username del jugador aparece como "No detectado" a veces
-      → Fix: soporte minecraftProfile.name (cuentas Microsoft modernas)
-      → Fix: cuenta activa prioritizada con activeAccountLocalId
-      → Fix: usercache.json ordenado por expiresOn desc
-      → Fix: machine_name con fallback HOSTNAME / socket.gethostname()
-[x] En scans muy rápidos (< 30s) el panel no recibe los datos a tiempo
-      → Poll reducido a 15s (antes 30s)
-      → _checkPendingRunning() en intervalo separado de 5s para running scans
-[x] El panel no refresca automáticamente cuando llega un scan nuevo
-      → Fix: polling cada 30s + badge + toast + auto-refresh del dashboard
-[x] En resoluciones < 1200px la subnav puede hacer wrap en algunos browsers
-      → overflow:hidden + min-width:0 en .scan-subnav y .subnav-row
-      → @media (max-width: 1200px): padding/gap reducidos en subnav-item
-[x] REGRESIÓN: detalle de scan no cargaba ningún dato (Archivos: 0, Fecha: N/A, todo vacío)
-      → Causa raíz real: query opcional de verdict/screenshot/mc_info fallaba en psycopg2,
-        poniendo la conexión en "transaction aborted" — el SELECT de scan_results también fallaba
-      → Fix: SAVEPOINT alrededor de query opcional en get_scan() para no abortar la transacción
-      → Fix: ALTER TABLE en web_app/db_postgresql.py para verdict, screenshot, mc_info, scan_notes, verdict_history
-      → Fix: banner "Detectado" con display:flex !important → display:flex (ya no override JS)
-[x] Resultados llegan antes de que el scanner termine (scans con status='running' disparaban notificación)
-      → Fix: poll solo notifica badge/toast para scans 'completed'; running van a _pendingRunning
-      → Fix: viewScanDetails muestra "Scan en progreso..." si status='running'
-      → Fix: _resultBadge muestra badge "⏳ Escaneando" para running scans
-
-================================================================
-[x] Reediseñar lista de hallazgos del scan (se veía infinita)
-      → Chips de categoría encima (Todos / Hacks / Macros / Java / Red / Sistema...)
-      → Filtro por categoría con contador por tipo
-      → "Cargar más" en lugar de paginación numérica
-      → Incluye MUY_SOSPECHOSO y POCO_SOSPECHOSO, ordenados por severidad
-
-[x] Técnicas CMD/PowerShell implementadas en scanner:
-      → _scan_rar_files(): archivos .rar/.zip/.7z con nombres de hacks
-      → _scan_recent_exe_forfiles(): .exe modificados en últimos 30 días
-      → _scan_mmagent(): Get-MMAgent via PowerShell
-      → _scan_tray_icons(): iconos del system tray con keywords sospechosas
+================================================================================
+  ARGUS SCANNER — TAREAS PARA LA PRÓXIMA SESIÓN
+  Última actualización: 2026-05-03
+================================================================================
 
 
+════════════════════════════════════════════════════════════════════════════════
+  PARTE 1 — 40 MEJORAS DE SCANNEO
+════════════════════════════════════════════════════════════════════════════════
 
-Si es posible hacer que el scanner haga todo esto además de lo que ya hace
+── DETECCIÓN NUEVA ──────────────────────────────────────────────────────────
 
-CMD:
--sc query dps (Si En El Estado Aparece como STOPPED Esta Usando Un GhostClient o ha deshabilitado un proceso de windows)
--ipconfig/displaydns (Muestra las paginas abiertas)
--tasklist (Muestra los .exe Ejecutados)
--dir /b/s *.exe (muestra todos los .exe que tiene el user)
--dir /b/s *.jar (cumple la misma funcion que el comando de arriba pero con .jar)Â¨
-- archivos newnames (cd c:\users%username%): FORFILES /M *.exe /S /D +04/08/2021 /C "cmd /C echo @fdate @file @path" (define la fecha a la que quieras buscar el archivo)
-- archivos borrados (cd c:\windows\system32): fsutil usn readjournal c: csv | findstr /i /c:.exe | findstr /i /c:0x80000200 >> deletedfiles.txt
-- archivos  creados (cd c:\windows\system32): fsutil usn readjournal c: csv | findstr /i /c:.exe | findstr /i /c:0x00000100 >> createdfiles.txt
-- archivos oldnames (cd c:\windows\system32): fsutil usn readjournal c: csv | findstr /i /c:.exe | findstr /i /c:0x00001000 >> oldnamefiles.txt
-- archivos newnames (cd c:\windows\system32): fsutil usn readjournal c: csv | findstr /i /c:.exe | findstr /i /c:0x00002000 >> newnamefiles.txt
-- ver ruta de archivo(los numeros mas largos, el segundo): fsutil file queryFileNameById C:\ 0x(numeros)
-PROCCES HACKER: 
--vamos al explorer.exe , le damos a propeties , quitamos el "hide free regions" , le damos a "strings" , quitamos el "10" y pones "4" , activas las 3 casillas, le das a "ok" , cuando cargue le das a "filter" "contains case-insensitive" y buscas "pcaclient", ahi clicas en el primer resultado y le das a "save search results", ahora vamos a elementos recientes y abrimos los "search results" y vemos si hay algun hack .
--vamos al explorer.exe , le damos a propeties ,  quitamos el "hide free regions" , le damos a "strings" , quitamos el "10" y pones "4" , activas las 3 casillas, le das a "Ok", cuando cargue le das a "filter" y pones "file://" , cuando cargue le das a filter ""contains case-insensitive" ,y pones en el buscador ".dll" para ver cuales tiene.
-WINDOWS + R:
--eventvwr.msc (sirve para ver si cambio la fecha del equipo)
--%appdata%
--entras al "prefetch" buscas "jna" + revisar 
--entras al "%temp%" y miras todas las carpetas , despues buscas "jna" + revisar
--apretas la tecla "windows + r" y en el buscador pones "explorer.exe shell:::{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}"
+ 1. Scan de mods en versiones no-vanilla
+    Revisar .minecraft/versions/*/mods/ de loaders custom que Forge/Fabric
+    no registran en la lista oficial de mods.
 
-REGEDIT:
-regedit : current user : software : microsoft : windows nt : current versions : Compatibility asistant : store
-Equipo\HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\OpenSavePidlMRU\txt          
-Equipo\HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store
+ 2. Detect WeaveLoader v2
+    Nuevo formato de instalación en %APPDATA%/.weave/ con carpeta extensions/.
+    El v1 ya se detecta; el v2 usa estructura diferente.
 
-POWERSELL:
-EL POWERSELL ES PARACIDO AL CMD PERO NOS PUEDE DAR OTROS RESULTADOS 
--entramos al buscador y pones "gci -recurse -filter *.exe"
--entramos al buscador y pones "gci -recurse -filter *.rar"
--entramos al buscador y pones "gci -recurse -filter *.dll"
--ejecutamos el powersell como "administrador" y buscas  "mmagent" [COMO ADMINISTRADOR]
+ 3. Scan de AutoHotkey v2
+    Los scripts .ahk2 y compilados con AHK2 usan extensión diferente a v1.
+    Agregar .ahk2 a la búsqueda de scripts de autoclick.
 
-MACROS LOGITECH (LGHUB):
--windows+r : appdata : Local : LGHUB : Settings.json 
-MACROS RAZER:
--C:\ProgramData : Razer : Synapse Accounts
+ 4. Detección de Xray via resourcepacks
+    Buscar assets/minecraft/textures/block/ con transparencia anormal
+    dentro de .minecraft/resourcepacks/. PNG con alpha > 60% en stone/dirt.
 
-(Si encuentras alguna mejora dale con fe)
+ 5. Scan de scripts .bat/.ps1 en Desktop/Downloads
+    Launchers de hacks frecuentemente usan bat wrappers para lanzar el JAR
+    con argumentos -javaagent o -cp personalizados.
+
+ 6. Revisar options.txt de Minecraft con keybinds sospechosos
+    Si la tecla de ataque está mapeada a un botón extra de mouse (button4,
+    button5), es indicador de autoclicker externo configurado.
+
+ 7. Detect Aristois client
+    Carpeta .aristois/ en AppData/Roaming. Nuevo ghost client popular
+    en servidores de PvP HCF/UHC.
+
+ 8. Scan de NBT editors en prefetch/userassist
+    NBTExplorer, NBTEdit, MCA Selector — herramientas usadas para editar
+    inventarios y mapas ilegalmente en algunos contextos.
+
+ 9. Detección de Sigma 5 y 6
+    Nuevo path de instalación: AppData/Roaming/.sigma6/
+    El .sigma/ ya se detecta; el 6 usa subcarpeta diferente.
+
+10. Buscar .properties de hack clients con módulos activos
+    Archivos de config con enabled=true para killaura, aimbot, etc.
+    Paths típicos: .minecraft/config/<clientname>/*.properties
+
+── REDUCCIÓN DE FALSOS POSITIVOS ────────────────────────────────────────────
+
+11. Whitelist Beat Saber
+    AppData/LocalLow/Hyperbolic Magnetism/Beat Saber/CustomLevels/ tiene
+    carpetas con nombres de canciones similares a osu! que colisionan.
+
+12. Whitelist Geometry Dash
+    AppData/LocalLow/RobTop Games/ genera falsos positivos similares.
+    Niveles con nombres como "Extreme Demon" o "Insane" flagean.
+
+13. Whitelist Garry's Mod addons
+    Steam/steamapps/common/GarrysMod/garrysmod/addons/ contiene carpetas
+    con nombres genéricos que colisionan con patrones de hack.
+
+14. Whitelist repositorios Git / proyectos de código
+    Carpetas node_modules/, .git/, dist/ de proyectos de desarrollo
+    pueden contener strings que parecen sospechosos fuera de contexto.
+
+15. Whitelist aplicaciones de música (Spotify, VirtualDJ, FL Studio)
+    Tienen carpetas con nombres de artistas/géneros que colisionan.
+    Agregar sus paths a ABSOLUTE_SAFE_PATHS.
+
+16. Mejorar filtro de Process Hacker 3 y SystemInformer
+    Son herramientas legítimas de administración. PH2 ya da falsos positivos;
+    PH3/SystemInformer (el sucesor oficial) tampoco debería flagear.
+
+17. Whitelist AutoHotkey legítimo instalado en Program Files
+    Scripts en C:/Program Files/AutoHotkey/ o firmados digitalmente
+    no deberían marcarse — solo los de AppData/Downloads/Desktop.
+
+18. Filtro por firma digital de ejecutables
+    Si un .exe está firmado por publisher conocido (Microsoft, Adobe, etc.),
+    bajar severidad automáticamente sin analizar contenido.
+
+── PERFORMANCE ──────────────────────────────────────────────────────────────
+
+19. Cap de entradas en scan de Browser Downloads/History
+    Actualmente puede iterar miles de registros del historial SQLite.
+    Limitar a las últimas 500 entradas (ordenadas por fecha desc).
+
+20. Timeout individual por función de scan (8 segundos)
+    Cada _run_safe debería tener su propio threading.Timer para que
+    ninguna función individual pueda bloquear más de 8s.
+
+21. Skip automático de drives de red (UNC paths \\server\share)
+    Los drives mapeados causan timeouts de 30s+ si el servidor no responde.
+    Detectar y saltear drives de tipo REMOTE/NETWORK con GetDriveType().
+
+22. Paralelizar USN Journal y Kill Chain
+    scan_usn_minecraft_jars y scan_kill_chain son los más lentos del grupo E.
+    Actualmente secuenciales dentro del grupo; ponerlos en sub-threads.
+
+23. Cache de hashes de archivos entre scans del mismo usuario
+    Si el mismo archivo (mismo path + mtime) aparece en scans consecutivos
+    del mismo machine_id, no rehashear — usar el hash del scan anterior.
+
+── SCORING E IA ─────────────────────────────────────────────────────────────
+
+24. Mostrar Risk Score numérico en la UI del scanner
+    El score 0-100 ya se calcula en el servidor pero no llega al cliente.
+    Mostrarlo en el panel de completion después de enviar resultados.
+
+25. Boost cuando se detectan 2+ ghost clients diferentes
+    Si hay carpetas/configs de Vape + Meteor + otro cliente simultáneamente,
+    subir todos a CRITICAL automáticamente (patrón de coleccionista de hacks).
+
+26. Penalizar scans completados en menos de 30 segundos
+    Una máquina virtual vacía o limpiada completa el scan muy rápido.
+    Agregar flag "scan_demasiado_rapido" si elapsed < 30s con pocos archivos.
+
+27. Correlación temporal: prefetch + userassist + browser history
+    Si los tres coinciden en el mismo nombre de hack y datan del mismo día,
+    marcar como CRITICAL confirmado independientemente del score individual.
+
+28. Detección de patrones de limpieza activa pre-scan
+    Si en los últimos 10 minutos antes del scan hay >20 archivos borrados
+    del área de .minecraft o Downloads, agregar flag de evasión activa.
+
+29. Score basado en número de versiones de Minecraft instaladas
+    Tener 3+ versiones en .minecraft/versions/ sin ser desarrollador
+    conocido es sospechoso — los hackers prueban hacks en versiones distintas.
+
+── NUEVAS FUENTES DE EVIDENCIA ──────────────────────────────────────────────
+
+30. Scan de INetCache de IE/Edge
+    %LocalAppData%/Microsoft/Windows/INetCache/ puede revelar URLs
+    de descarga de hacks que el usuario pensó que habían sido limpiadas.
+
+31. Revisar TypedURLs en el registro de Windows
+    HKCU\Software\Microsoft\Internet Explorer\TypedURLs y el equivalente
+    de Edge — URLs escritas a mano en la barra de dirección.
+
+32. Scan del Startup del menú inicio
+    %APPDATA%/Microsoft/Windows/Start Menu/Programs/Startup/
+    Los hacks que persisten entre reinicios se instalan aquí.
+
+33. Revisar java.policy modificado
+    Algunos hacks modifican el archivo java.policy para deshabilitar
+    el sandbox de seguridad de Java y permitir operaciones nativas.
+
+34. Scan de Discord settings.json local para webhooks de C2
+    %APPDATA%/discord/settings.json y archivos de caché pueden revelar
+    canales configurados para recibir logs de keyloggers o hacks.
+
+35. Revisar archivos .lck y .lock en .minecraft
+    Algunos hacks dejan locks activos en carpetas de config. Un .lck
+    de un proceso que ya no existe indica proceso terminado forzosamente.
+
+── UI DEL SCANNER ───────────────────────────────────────────────────────────
+
+36. Mostrar nombre del módulo en curso más visible
+    El texto de fase actual se pierde visualmente. Agrandarlo o cambiar
+    color según el grupo (azul=archivos, naranja=red, rojo=hacks detectados).
+
+37. Contador de "archivos escaneados" en tiempo real
+    Barra secundaria debajo del % principal mostrando el conteo de archivos
+    revisados hasta el momento. Actualizar cada 500ms.
+
+38. Notificación de Windows al completar el scan
+    Usar ctypes WinAPI para mostrar una notificación del sistema
+    cuando el scan termina, para que el usuario no tenga que estar mirando.
+
+39. Botón de cancelar scan en progreso
+    Actualmente no hay forma de parar el proceso una vez iniciado.
+    Agregar evento threading.Event() que detenga los grupos en curso.
+
+40. Resumen pre-envío con confirmación del usuario
+    Antes de enviar resultados al servidor, mostrar una pantalla:
+    "Se encontraron X hallazgos (Y críticos). ¿Enviar al staff?" con botón.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  PARTE 2 — 50 MÉTODOS DE ANÁLISIS DE FALSOS POSITIVOS
+════════════════════════════════════════════════════════════════════════════════
+
+── FUENTES EXTERNAS DE VERDAD ───────────────────────────────────────────────
+
+ 1. VirusTotal API — hash lookup
+    Antes de marcar un .exe o .jar como hack, consultar VT con el SHA256.
+    Si 0/72 engines lo flagean, ignorar o bajar a POCO_SOSPECHOSO.
+    Endpoint: https://www.virustotal.com/api/v3/files/{hash}
+
+ 2. VirusTotal API — URL lookup
+    Para hallazgos de browser history, verificar la URL contra VT.
+    Un sitio con 0 detecciones en VT probablemente no es de hacks.
+
+ 3. Base de datos local de hashes legítimos de Minecraft
+    Mantener lista de SHA256 de JARs oficiales de Mojang descargados de
+    piston-meta.mojang.com. Si el hash está en la lista, es vanilla limpio.
+
+ 4. Modrinth API — verificar si un mod es legítimo
+    https://api.modrinth.com/v2/version_file/{hash} — si el hash existe
+    en Modrinth, es un mod publicado y verificado, no un hack.
+
+ 5. CurseForge API — verificar mods
+    https://api.curseforge.com/v1/fingerprints — permite verificar si
+    un JAR es un mod legítimo publicado en CurseForge.
+
+ 6. NSRL (National Software Reference Library) del NIST
+    Base de datos pública de hashes de software legítimo conocido.
+    Disponible en: https://www.nist.gov/itl/ssd/software-quality-group/nsrl-download
+
+ 7. Hybrid Analysis API — análisis de comportamiento
+    Para archivos muy sospechosos, API de Hybrid Analysis puede dar
+    un análisis de comportamiento sin ejecutar el archivo localmente.
+
+ 8. MalwareBazaar (abuse.ch) — blacklist de hashes
+    https://mb.api.abuse.ch/api/v1/ — si el hash está aquí es malware
+    conocido, aunque puede no ser específicamente un hack de Minecraft.
+
+ 9. Shodan / Censys — verificar IPs de conexiones de red
+    Para hallazgos de conexiones de red de javaw, verificar si la IP
+    pertenece a un servidor de C2 o a infraestructura legítima de juego.
+
+10. AbuseIPDB — reputación de IPs
+    https://api.abuseipdb.com/api/v2/check?ipAddress={ip}
+    Si la IP tiene 0 reportes, probablemente es un servidor legítimo.
+
+── ANÁLISIS LOCAL DE CONTENIDO ──────────────────────────────────────────────
+
+11. Análisis de META-INF/MANIFEST.MF en JARs
+    Un hack tendrá Main-Class apuntando a clase ofuscada. Un mod legítimo
+    tendrá FMLCorePlugin o fabric.mod.json reconocible.
+
+12. Verificar fabric.mod.json y mods.toml
+    Los mods legítimos de Fabric/Forge incluyen estos archivos con metadata
+    (id, versión, autor, licencia). Un hack raramente los incluye correctamente.
+
+13. Análisis de strings en JARs con umbral de ofuscación
+    Calcular ratio de strings ASCII legibles vs ilegibles. <30% legible
+    indica ofuscación agresiva → más sospechoso. >80% legible → mod normal.
+
+14. Verificar firma de código en JARs (.SF + .RSA en META-INF)
+    Los JARs firmados por Mojang, Forge u OptiFine tienen firma verificable.
+    Si está firmado y la firma es válida → legítimo con alta confianza.
+
+15. Análisis de imports de clases Java en el JAR
+    Un JAR que importa net.minecraft.client.Minecraft sin ser mod registrado
+    es sospechoso (acceso directo al cliente sin pasar por el mod loader).
+
+16. Verificar tamaño vs complejidad del JAR
+    Un ghost client suele ser >500KB con pocas clases únicas.
+    Un mod legítimo tiene muchas clases con nombres descriptivos en packages.
+
+17. Análisis de nombres de clases en JARs
+    Clases con nombres a.class, b.class, aa.class → ofuscación agresiva.
+    Clases como net.minecraft.client.gui.screen → legítimas y descriptivas.
+
+18. Verificar metadatos de PE en ejecutables (.exe)
+    Los .exe legítimos tienen VersionInfo, CompanyName, FileDescription.
+    Un hack raramente tiene estos metadatos completos y verificables.
+
+19. Análisis de entropy de archivos (bits por byte)
+    Alta entropy (>7.5 bits/byte) indica compresión o cifrado.
+    Combinado con extensión .exe y sin firma → muy sospechoso.
+
+20. Verificar packers UPX/MPRESS en la cabecera PE
+    Detectar con string "This file is packed with UPX" o cabecera PE
+    con sección llamada UPX0. Packing es señal de ofuscación deliberada.
+
+── ANÁLISIS DE CONTEXTO DEL SISTEMA ────────────────────────────────────────
+
+21. Correlación con fecha de instalación de Minecraft
+    Si el archivo sospechoso fue creado ANTES de que Minecraft fuera
+    instalado en el sistema, no puede ser un hack de Minecraft activo.
+
+22. Correlación con últimas sesiones de juego en logs
+    Si el usuario no ha jugado Minecraft en los últimos 7 días (según logs),
+    los hallazgos de "actividad durante sesión" son aún más sospechosos.
+
+23. Verificar proceso padre de java.exe
+    java.exe lanzado por el launcher oficial → legítimo.
+    java.exe lanzado por cmd.exe o proceso desconocido → sospechoso.
+
+24. Análisis de carpeta de instalación del ejecutable
+    Un .exe en C:/Program Files/ con uninstaller en registro → legítimo.
+    Uno en AppData/Temp o Downloads sin instalador → más sospechoso.
+
+25. Verificar si el proceso tiene ventana visible
+    Los hacks normalmente usan CREATE_NO_WINDOW. Si el proceso sospechoso
+    tiene una ventana GUI visible y reconocible, puede ser legítimo.
+
+26. Verificar antigüedad del archivo en el sistema
+    Un archivo con mtime de hace >1 año que nunca generó detección previa
+    probablemente es falso positivo. Los hacks se actualizan constantemente.
+
+27. Comparar con baseline del mismo usuario (scans anteriores)
+    Si el archivo aparece en todos los scans del usuario sin cambios y el
+    staff siempre lo marcó como limpio → legítimo con alta confianza.
+
+28. Verificar atributos de solo lectura del archivo
+    Algunos "hacks" detectados son librerías del sistema con atributo
+    READ_ONLY — incompatibles con hacks que necesitan escribir en ellos.
+
+29. Verificar certificados SSL de conexiones sospechosas
+    Si javaw.exe conecta a servidor con certificado válido y reconocido
+    (Mojang, AWS, Cloudflare), probablemente es tráfico legítimo del juego.
+
+30. Análisis de DLLs cargadas vs baseline de instalación limpia
+    Comparar DLLs de java.exe contra un baseline de Minecraft vanilla.
+    Cualquier DLL extra no presente en el baseline es sospechosa.
+
+── MÉTODOS ESTADÍSTICOS Y ML ───────────────────────────────────────────────
+
+31. TF-IDF sobre nombres de archivos en scans históricos
+    Calcular frecuencia de cada nombre de archivo en scans "limpio" vs "hack".
+    Los que aparecen mucho en limpios → agregarlos a whitelist automática.
+
+32. Clustering de hallazgos por similitud de path
+    Agrupar hallazgos con rutas similares. Si un cluster aparece en >80%
+    de usuarios verificados como limpios, es falso positivo sistémico.
+
+33. Análisis de distribución de tamaños de archivos sospechosos
+    Los hacks JAR suelen tener tamaños específicos (100-800KB).
+    Un archivo de 23MB con nombre de hack probablemente es otra cosa.
+
+34. Modelo de frecuencia de hashes por tipo de alerta
+    Si un hash SHA256 aparece en >50 scans y fue marcado como hack solo
+    1 vez, es casi seguro falso positivo. Actualizar whitelist con él.
+
+35. Regresión logística sobre features de archivos
+    Entrenar con: tamaño, entropy, tiene_firma, tiene_manifest,
+    path_depth, extension. Predecir probabilidad de ser hack vs legítimo.
+
+── CONSULTAS A BASES DE DATOS CLOUD PROPIAS ────────────────────────────────
+
+36. Expandir /api/player_baseline con lista de archivos vistos
+    Ya existe el endpoint — ampliar para que incluya archivos históricamente
+    vistos y siempre marcados como limpios para ese machine_id.
+
+37. Endpoint de whitelist compartida entre servidores
+    API que permita a múltiples servidores contribuir a una whitelist común:
+    "este hash aparece en 500 scans limpios en 10 servidores → legítimo".
+
+38. Endpoint de reporte de falsos positivos por staff
+    Cuando el staff marca un hallazgo como "falso positivo", registrarlo
+    en BD y usarlo para mejorar el filtro automáticamente en scans futuros.
+
+39. Historial de veredictos por tipo de hallazgo
+    Calcular ratio de "hack confirmado" vs "limpio" por tipo de detección.
+    Tipos con <20% de positivos reales deberían tener peso reducido.
+
+40. A/B testing de filtros nuevos antes de deploy
+    Cuando se agrega un nuevo filtro, compararlo contra scans históricos
+    ya etiquetados para medir precision y recall antes de activarlo.
+
+── MÉTODOS DE VALIDACIÓN MANUAL Y CROWDSOURCING ────────────────────────────
+
+41. Panel de "falsos positivos reportados" en el admin
+    Sección en el panel donde el staff pueda marcar hallazgos específicos
+    como falsos positivos y agregar notas explicativas.
+
+42. Cola de revisión para hallazgos con confidence < 0.60
+    Los hallazgos de baja confianza entran en una cola de revisión
+    donde el staff los valida manualmente antes de mostrarlos.
+
+43. Feedback loop: "¿Fue correcto este hallazgo?"
+    Al cerrar un scan, preguntar al staff si cada CRITICAL fue correcto.
+    Usar respuestas para ajustar pesos del scoring engine.
+
+44. Base de datos de aplicaciones conocidas por categoría
+    Mantener listas curadas de: juegos de ritmo, launchers alternativos,
+    herramientas de desarrollo, etc. con sus paths típicos de instalación.
+
+45. Consultar Modrinth search API por nombre de archivo JAR
+    Si el nombre del JAR aparece en una búsqueda de Modrinth con resultados,
+    probablemente es un mod publicado, no un hack.
+
+── TÉCNICAS DE SANDBOXING Y ANÁLISIS DINÁMICO ──────────────────────────────
+
+46. Ejecutar el JAR en sandbox y monitorear filesystem
+    Para archivos de alta sospecha, ejecutarlos en ambiente aislado y ver
+    qué archivos crea/modifica. Un hack accede a .minecraft/mods/ etc.
+
+47. Análisis estático de bytecode Java con ASM o Javap
+    Descompilar clases del JAR y buscar: acceso a campos privados de
+    Minecraft, reflection en clases del juego, uso de Unsafe.
+
+48. Verificar imports de paquetes Minecraft en el JAR
+    Si el JAR importa net.minecraft.* pero no es un mod registrado,
+    es un cliente modificado o hack que hace hooking directo del juego.
+
+49. Análisis de tráfico de red durante ejecución en VM
+    Ejecutar el proceso sospechoso en una VM y capturar tráfico DNS/HTTP.
+    Un hack contacta su servidor de autenticación o C2 al iniciarse.
+
+50. Detección de self-deletion al ejecutar
+    Algunos hacks se borran del disco al lanzarse para no dejar rastro.
+    Monitorear filesystem events durante los primeros 5s de ejecución
+    para detectar archivos que se eliminan a sí mismos.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  NOTAS DE IMPLEMENTACIÓN
+════════════════════════════════════════════════════════════════════════════════
+
+PRIORIDAD ALTA (mayor impacto, menor esfuerzo):
+  - Items parte 1: 19, 20, 21 (performance — evitan cuelgues)
+  - Items parte 1: 11, 12, 13, 14 (whitelists — reducen falsos positivos)
+  - Items parte 2: 1, 4 (VirusTotal + Modrinth API — fuente de verdad)
+  - Items parte 2: 37, 38, 39 (feedback loop — el scanner mejora solo)
+
+PRIORIDAD MEDIA (importante pero más trabajo):
+  - Items parte 1: 1-10 (nuevos hacks — requieren investigación de cada uno)
+  - Items parte 2: 31-35 (ML/estadística — requieren datos históricos)
+
+PRIORIDAD BAJA (largo plazo):
+  - Items parte 2: 46-50 (sandboxing — requiere infraestructura separada)
+  - Items parte 1: 36-40 (UI — cosmético, no afecta detección)
+
+================================================================================
