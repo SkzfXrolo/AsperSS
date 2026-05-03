@@ -3891,6 +3891,9 @@ class ArgusApp:
             pre_secondary = len(self.issues_found)
             self.issues_found = self.secondary_filter(self.issues_found)
             print(f"[FILTRO] Después de secondary_filter: {len(self.issues_found)} (eliminados: {pre_secondary - len(self.issues_found)})")
+
+            # Correlación temporal: prefetch + userassist + browser → CRITICAL confirmado
+            self.issues_found = self._apply_temporal_correlation(self.issues_found)
             
             # Segunda pasada de análisis sobre archivos sospechosos
             self._update_progress_safe(96, "🔬 Segunda pasada", "Analizando archivos sospechosos en profundidad...")
@@ -11739,6 +11742,78 @@ class ArgusApp:
                 })
         except Exception as e:
             print(f"Error en scan_kill_chain: {e}")
+
+    def _apply_temporal_correlation(self, issues: list) -> list:
+        """#27 — Marca CRITICAL si prefetch + userassist + browser coinciden en mismo hack y día."""
+        import re as _re
+        import datetime as _dt
+
+        CORRELATED_TYPES = {
+            'prefetch': 'prefetch_hack',
+            'userassist': 'registry_userassist_hack',
+            'browser': 'browser_download_hack',
+        }
+        HACK_NAMES_TEMPORAL = list(_DEFINITE_HACK_NAMES) + [
+            'vape', 'sigma', 'liquidbounce', 'wurst', 'meteor', 'rusherhack',
+            'aristois', 'rise', 'flux', 'future', 'entropy', 'whiteout', 'exhibition',
+        ]
+
+        # Extraer (hack_name, date_str, source_type) por issue
+        def _extract_date(text: str):
+            m = _re.search(r'(\d{2}/\d{2}/\d{4})', text)
+            if m:
+                try:
+                    return _dt.datetime.strptime(m.group(1), '%d/%m/%Y').date()
+                except Exception:
+                    pass
+            return None
+
+        # Agrupar por (hack_name, date)
+        corr_map: dict = {}  # (hack, date) → set of source_type
+        for iss in issues:
+            tipo = iss.get('tipo', '')
+            if tipo not in CORRELATED_TYPES.values():
+                continue
+            combined = (iss.get('nombre', '') + ' ' + iss.get('ruta', '') + ' ' + iss.get('explicacion', '')).lower()
+            matched_hack = next((h for h in HACK_NAMES_TEMPORAL if h in combined), None)
+            if not matched_hack:
+                continue
+            date = _extract_date(iss.get('nombre', '') + ' ' + iss.get('explicacion', ''))
+            key = (matched_hack, date)
+            src_type = next(k for k, v in CORRELATED_TYPES.items() if v == tipo)
+            corr_map.setdefault(key, set()).add(src_type)
+
+        correlated = {key for key, srcs in corr_map.items() if len(srcs) >= 3}
+        if not correlated:
+            return issues
+
+        # Elevar todos los issues relacionados a CRITICAL y agregar un hallazgo resumen
+        for key in correlated:
+            hack, date = key
+            date_str = date.strftime('%d/%m/%Y') if date else 'fecha desconocida'
+            srcs = corr_map[key]
+            print(f"🎯 CORRELACIÓN TEMPORAL: {hack} confirmado por prefetch+userassist+browser ({date_str})")
+            for iss in issues:
+                combined = (iss.get('nombre', '') + iss.get('ruta', '')).lower()
+                if hack in combined:
+                    iss['alerta'] = 'CRITICAL'
+            issues.append({
+                'nombre': f'Correlación temporal confirmada: {hack} (prefetch + userassist + historial)',
+                'ruta': '',
+                'archivo': '',
+                'tipo': 'kill_chain',
+                'categoria': 'CORRELACION',
+                'alerta': 'CRITICAL',
+                'confidence': 0.97,
+                'detected_patterns': [f'temporal_correlation:{hack}', f'sources:{",".join(sorted(srcs))}'],
+                'explicacion': (
+                    f'El hack "{hack}" aparece en {len(srcs)} fuentes independientes: '
+                    f'{", ".join(sorted(srcs))} con fecha {date_str}. '
+                    'La coincidencia de tres fuentes forenses distintas en el mismo día '
+                    'confirma la ejecución del hack más allá de toda duda razonable.'
+                ),
+            })
+        return issues
 
     def _filter_by_file_size(self, issues):
         """P2 #8 — Descarta JARs demasiado pequeños para ser un hack real (< 3KB)."""
