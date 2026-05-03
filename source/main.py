@@ -127,6 +127,12 @@ _DEFINITE_HACK_NAMES = {
     'bypasser', 'bypassmc',
     # ── Baritone (bot de movimiento automático prohibido) ─────────────────
     'baritone',
+    # ── NBT editors (edición ilegal de inventarios/mundo) ────────────────
+    # Nota: herramientas legítimas para uso en single-player, sospechosas en SS
+    'nbtexplorer', 'nbt-explorer',
+    'nbtedit', 'nbt-edit',
+    'mcaselector', 'mca-selector',
+    'nbteditor',
 }
 
 # Palabras genéricas que sólo se marcan cuando son palabra completa
@@ -4011,7 +4017,36 @@ class ArgusApp:
                 print(f"   💾 Memoria disponible: {psutil.virtual_memory().available / (1024**3):.1f} GB")
             
             print("✅ ESCANEO COMPLETADO")
-            
+
+            # Notificación de Windows al completar (#38)
+            try:
+                _n_issues = len(self.issues_found)
+                _n_critical = sum(1 for i in self.issues_found if i.get('alerta') == 'CRITICAL')
+                _msg = (
+                    f'{_n_critical} hallazgos CRÍTICOS de {_n_issues} totales'
+                    if _n_critical else f'{_n_issues} hallazgos (ninguno crítico)'
+                )
+                ctypes.windll.user32.MessageBeep(0x00000040)  # MB_ICONINFORMATION sound
+                # Toast notification via PowerShell (no requiere COM ni extras)
+                import subprocess as _sp_notif
+                _ps_cmd = (
+                    f"[void][Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, "
+                    f"ContentType = WindowsRuntime]; "
+                    f"$t = [Windows.UI.Notifications.ToastTemplateType]::ToastText02; "
+                    f"$xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent($t); "
+                    f"$xml.GetElementsByTagName('text')[0].AppendChild($xml.CreateTextNode('ArgusScanner — Escaneo completado')) | Out-Null; "
+                    f"$xml.GetElementsByTagName('text')[1].AppendChild($xml.CreateTextNode('{_msg}')) | Out-Null; "
+                    f"$toast = [Windows.UI.Notifications.ToastNotification]::new($xml); "
+                    f"[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('ArgusScanner').Show($toast)"
+                )
+                _sp_notif.Popen(
+                    ['powershell', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', _ps_cmd],
+                    stdout=_sp_notif.DEVNULL, stderr=_sp_notif.DEVNULL,
+                    creationflags=0x08000000,
+                )
+            except Exception:
+                pass
+
         except Exception as e:
             print(f"Error durante escaneo exhaustivo: {str(e)}")
             import traceback
