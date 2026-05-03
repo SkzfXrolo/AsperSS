@@ -2312,6 +2312,48 @@ class ArgusApp:
         except Exception:
             return False
 
+    @staticmethod
+    def _is_legitimate_mod_jar(jar_path: str) -> bool:
+        """Devuelve True si el JAR tiene indicadores de ser un mod legítimo de Minecraft.
+        Revisa META-INF/MANIFEST.MF, fabric.mod.json y mods.toml.
+        No hace requests de red — análisis puramente local.
+        """
+        try:
+            import zipfile as _zf
+            if not _zf.is_zipfile(jar_path):
+                return False
+            with _zf.ZipFile(jar_path, 'r') as zf:
+                names_lower = {n.lower() for n in zf.namelist()}
+
+                # fabric.mod.json: mods de Fabric siempre lo incluyen
+                if 'fabric.mod.json' in names_lower:
+                    return True
+
+                # mods.toml: mods de Forge 1.13+ lo incluyen
+                if 'meta-inf/mods.toml' in names_lower:
+                    return True
+
+                # quilt.mod.json: Quilt mod loader
+                if 'quilt.mod.json' in names_lower:
+                    return True
+
+                # META-INF/MANIFEST.MF: revisar si tiene FMLCorePlugin o Fabric-Mod-Id
+                manifest_key = next((n for n in zf.namelist() if n.upper() == 'META-INF/MANIFEST.MF'), None)
+                if manifest_key:
+                    try:
+                        manifest = zf.read(manifest_key).decode('utf-8', errors='ignore').lower()
+                        legitimate_markers = [
+                            'fmlcoremodcontainsfmlmod', 'fmlcoremod', 'fabric-mod-id',
+                            'modside:', 'tweakclass: optifine', 'tweakclass: cpw.mods',
+                        ]
+                        if any(m in manifest for m in legitimate_markers):
+                            return True
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return False
+
     def filter_false_positives(self, issues):
         """Filtrado MEJORADO - Detecta hacks reales pero menos estricto"""
         filtered = []
@@ -2546,10 +2588,13 @@ class ArgusApp:
                 print(f"✅ [SAFE_PATH] Excluido por ruta segura: {nombre} @ {ruta[:80]}")
                 continue
 
-            # Modrinth: verificar JARs contra la base de datos oficial antes de acusarlos
+            # Verificar JARs contra indicadores locales y Modrinth antes de acusarlos
             if tipo in ('blacklisted_mod', 'jar_file') or archivo.endswith('.jar') or ruta.endswith('.jar'):
                 _jar_path = item.get('archivo') or item.get('ruta') or ''
                 if _jar_path and os.path.isfile(str(_jar_path)):
+                    if self._is_legitimate_mod_jar(str(_jar_path)):
+                        print(f"✅ [ManifestCheck] Mod legítimo (fabric/forge/quilt): {os.path.basename(str(_jar_path))}")
+                        continue
                     if self._is_modrinth_legitimate(str(_jar_path)):
                         print(f"✅ [Modrinth] Mod legítimo verificado: {os.path.basename(str(_jar_path))}")
                         continue
