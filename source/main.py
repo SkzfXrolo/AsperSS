@@ -3006,7 +3006,27 @@ class ArgusApp:
             self.resources_label = progress_widgets['resources']
             self.progress_percent_label = progress_widgets.get('percent', None)
             self._progress_canvas = progress_widgets.get('_canvas', None)
+            self._cancel_row = progress_widgets.get('cancel_row', None)
+            self._cancel_btn_widget = progress_widgets.get('cancel_btn', None)
             self.progress_value = 0
+            self._scan_cancel_event = threading.Event()
+
+            # Wire up cancel button
+            if self._cancel_btn_widget:
+                def _on_cancel_scan():
+                    self._scan_cancel_event.set()
+                    if self._cancel_btn_widget:
+                        self._cancel_btn_widget.config(
+                            text="✕  Cancelando...",
+                            state='disabled',
+                            fg=ModernUI.COLORS['red']
+                        )
+                    self._update_progress_safe(
+                        getattr(self, 'progress_value', 0),
+                        "⛔ Cancelando escaneo...",
+                        "Esperando que finalicen los módulos actuales"
+                    )
+                self._cancel_btn_widget.config(command=_on_cancel_scan)
 
             # Scan button (hidden — escaneo arranca automáticamente)
             btn_container = tk.Frame(main_panel, bg=ModernUI.COLORS['bg_primary'], height=0)
@@ -3371,7 +3391,9 @@ class ArgusApp:
                     ram_percent = memory.percent
                     ram_used_gb = memory.used / (1024**3)
                     ram_total_gb = memory.total / (1024**3)
-                    resources_str = f"💻 CPU: {cpu_percent:.1f}% | 🧠 RAM: {ram_percent:.1f}% ({ram_used_gb:.1f}GB/{ram_total_gb:.1f}GB)"
+                    _files = getattr(self, 'total_files_scanned', 0)
+                    _files_s = f" | 📁 {_files:,}" if _files else ""
+                    resources_str = f"💻 CPU: {cpu_percent:.1f}% | 🧠 RAM: {ram_percent:.1f}% ({ram_used_gb:.1f}GB/{ram_total_gb:.1f}GB){_files_s}"
                 except:
                     resources_str = ""
                 
@@ -3439,6 +3461,17 @@ class ArgusApp:
                 # Calcular duración del escaneo
                 scan_duration = time.time() - scan_start_time
 
+                # Ocultar botón cancel al terminar el scan
+                if hasattr(self, '_cancel_row') and self._cancel_row:
+                    self.root.after(0, self._cancel_row.pack_forget)
+
+                # Si el usuario canceló, cerrar sin enviar
+                if getattr(self, '_scan_cancel_event', None) and self._scan_cancel_event.is_set():
+                    self._update_progress_safe(0, "⛔ Escaneo cancelado", "El escaneo fue interrumpido por el usuario")
+                    self.scanning_mode = False
+                    self.root.after(3000, self.root.destroy)
+                    return
+
                 # Envío a Web (filtrado + IA ya se aplicaron dentro de execute_full_scan_silent)
                 print("📤 Enviando resultados a Web...")
                 
@@ -3460,6 +3493,36 @@ class ArgusApp:
                     
                     if self.db_integration.scan_token:
                         try:
+                            # Item #40 — confirmación pre-envío
+                            _n_issues = len(self.issues_found)
+                            _n_crit   = sum(1 for i in self.issues_found if i.get('alerta') == 'CRITICAL')
+                            _confirm  = [True]
+                            _confirm_evt = threading.Event()
+
+                            def _show_confirm():
+                                _msg = (
+                                    f"El escaneo encontró {_n_issues} hallazgo(s)"
+                                    + (f", {_n_crit} CRÍTICO(s)" if _n_crit else "")
+                                    + ".\n\n¿Enviar resultados al staff?"
+                                )
+                                from tkinter import messagebox as _mb
+                                _confirm[0] = _mb.askyesno(
+                                    "Enviar resultados",
+                                    _msg,
+                                    icon='question'
+                                )
+                                _confirm_evt.set()
+
+                            self.root.after(0, _show_confirm)
+                            _confirm_evt.wait(timeout=60)  # 60s timeout → auto-enviar
+
+                            if not _confirm[0]:
+                                self._update_progress_safe(100, "⚠️ Envío cancelado por el usuario", "")
+                                print("⚠️ Usuario canceló el envío de resultados")
+                                self.scanning_mode = False
+                                self.root.after(3000, self.root.destroy)
+                                return
+
                             self._update_progress_safe(99, "📤 Enviando resultados...", "Subiendo a servidor...")
                             success = self.db_integration.submit_results(
                                 self.issues_found,
@@ -3515,6 +3578,17 @@ class ArgusApp:
         self.forensic_findings = []
         self.total_files_scanned = 0
         self.total_dirs_scanned = 0
+
+        # Resetear evento de cancelación y mostrar botón cancel
+        if hasattr(self, '_scan_cancel_event'):
+            self._scan_cancel_event.clear()
+        if hasattr(self, '_cancel_row') and self._cancel_row:
+            self.root.after(0, lambda: self._cancel_row.pack(fill=tk.X, pady=(4, 0)))
+        if hasattr(self, '_cancel_btn_widget') and self._cancel_btn_widget:
+            self.root.after(0, lambda: self._cancel_btn_widget.config(
+                text="✕  Cancelar escaneo", state='normal',
+                fg=ModernUI.COLORS.get('text_secondary', '#545880') if UI_STYLE_AVAILABLE else '#545880'
+            ))
 
         # ── Snapshot USB al inicio + arrancar monitor de desconexiones ───────
         self.initial_usb_devices = self.get_usb_devices()
@@ -3604,11 +3678,13 @@ class ArgusApp:
             self._update_progress_safe(80, "⚡ Fases paralelas iniciadas", "Procesos · DNS · Registro · Red · IA...")
 
             def _run_safe(fn, *a, **kw):
-                """Ejecuta fn con timeout de 8s; si se excede, continúa sin esperar.
-                Las funciones que aún corren en background siguen añadiendo a issues_found.
-                """
+                """Ejecuta fn con timeout de 8s; si se excede, continúa sin esperar."""
+                if getattr(self, '_scan_cancel_event', None) and self._scan_cancel_event.is_set():
+                    return None
                 _result = [None]
                 def _wrapper():
+                    if getattr(self, '_scan_cancel_event', None) and self._scan_cancel_event.is_set():
+                        return
                     try:
                         _result[0] = fn(*a, **kw)
                     except Exception as ex:
@@ -3707,6 +3783,10 @@ class ArgusApp:
                 _run_safe(self.scan_schematica_litematica)
                 self._set_scan_phase("🔍 OptiFine zoom key binding...")
                 _run_safe(self.scan_optifine_zoom)
+                self._set_scan_phase("🌐 Caché INetCache (IE/Edge)...")
+                _run_safe(self.scan_inetcache)
+                self._set_scan_phase("☕ java.policy modificado...")
+                _run_safe(self.scan_java_policy)
 
             # Grupo D — Hardware y red (I/O alto)
             def _group_hardware():
@@ -7872,6 +7952,90 @@ class ArgusApp:
                             break
             except Exception as e:
                 print(f"Error escaneando startup folder {sdir}: {e}")
+
+    def scan_inetcache(self):
+        """P1 #30 — Escanea INetCache de IE/Edge para URLs de descarga de hacks."""
+        appdata_local = os.environ.get('LOCALAPPDATA', '')
+        cache_dirs = [
+            os.path.join(appdata_local, 'Microsoft', 'Windows', 'INetCache', 'IE'),
+            os.path.join(appdata_local, 'Microsoft', 'Windows', 'INetCache'),
+        ]
+        hack_terms = [
+            'vape', 'meteor', 'wurst', 'liquidbounce', 'hack', 'cheat', 'killaura',
+            'aimbot', 'triggerbot', 'sigma', 'aristois', 'tenacity', 'rusherhack',
+        ]
+        checked = 0
+        for cdir in cache_dirs:
+            if not os.path.isdir(cdir):
+                continue
+            try:
+                for root_d, dirs, files in os.walk(cdir):
+                    if checked > 2000:
+                        break
+                    for fname in files:
+                        checked += 1
+                        fname_lower = fname.lower()
+                        for term in hack_terms:
+                            if term in fname_lower:
+                                fpath = os.path.join(root_d, fname)
+                                self.issues_found.append({
+                                    'tipo': 'inetcache_hack_url',
+                                    'nombre': f'Caché de descarga sospechosa: {fname}',
+                                    'ruta': root_d,
+                                    'archivo': fpath,
+                                    'categoria': 'HISTORIAL_WEB',
+                                    'alerta': 'SOSPECHOSO',
+                                    'confidence': 0.65,
+                                    'detected_patterns': [term, 'inetcache'],
+                                })
+                                print(f"[INetCache] Hallazgo: {fname}")
+                                break
+            except (PermissionError, OSError):
+                pass
+            except Exception as e:
+                print(f"Error en scan_inetcache: {e}")
+
+    def scan_java_policy(self):
+        """P1 #33 — Detecta java.policy modificado para deshabilitar sandbox de Java."""
+        java_home = os.environ.get('JAVA_HOME', '')
+        candidates = []
+        if java_home:
+            candidates.append(os.path.join(java_home, 'lib', 'security', 'java.policy'))
+        appdata = os.environ.get('APPDATA', '')
+        candidates.append(os.path.join(appdata, '.java', 'deployment', 'security', 'java.policy'))
+        # Buscar java.home de la JVM de Minecraft
+        mc_jre_root = os.path.join(appdata, '.minecraft', 'runtime')
+        if os.path.isdir(mc_jre_root):
+            for jre_name in os.listdir(mc_jre_root)[:3]:
+                jre_path = os.path.join(mc_jre_root, jre_name)
+                if os.path.isdir(jre_path):
+                    for sub in os.listdir(jre_path)[:3]:
+                        candidates.append(os.path.join(jre_path, sub, 'lib', 'security', 'java.policy'))
+
+        SUSPICIOUS_GRANTS = [b'permission java.security.AllPermission', b'grant {', b'AllPermission']
+        for pol_path in candidates:
+            if not os.path.isfile(pol_path):
+                continue
+            try:
+                with open(pol_path, 'rb') as f:
+                    content = f.read(4096)
+                # AllPermission grant is suspicious — disables Java security sandbox
+                if (b'AllPermission' in content and b'grant' in content):
+                    self.issues_found.append({
+                        'tipo': 'java_policy_modified',
+                        'nombre': f'java.policy con AllPermission: {os.path.basename(pol_path)}',
+                        'ruta': os.path.dirname(pol_path),
+                        'archivo': pol_path,
+                        'categoria': 'ESCALADA_PRIVILEGIOS',
+                        'alerta': 'SOSPECHOSO',
+                        'confidence': 0.70,
+                        'detected_patterns': ['AllPermission', 'java_policy'],
+                    })
+                    print(f"[java.policy] AllPermission encontrado: {pol_path}")
+            except (PermissionError, OSError):
+                pass
+            except Exception as e:
+                print(f"Error en scan_java_policy {pol_path}: {e}")
 
     def scan_installed_programs(self):
         """Escanea programas instalados en el registro en busca de CheatEngine u otras herramientas de trampa."""
