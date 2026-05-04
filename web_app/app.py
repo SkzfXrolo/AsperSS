@@ -84,68 +84,130 @@ def _notify_new_deploy():
         print(f'[Deploy] ❌ Error leyendo/escribiendo BD: {e}')
         return
 
-    print(f'[Deploy] Lanzando thread para enviar webhook en 3s...')
+    # Guardar webhook pendiente en BD — el scheduler lo reintentará cada 10 min
+    # hasta que el ban de Cloudflare expire (error 1015 puede durar horas).
+    try:
+        import json as _json_d
+        pending_val = _json_d.dumps({
+            'webhook': webhook,
+            'commit':  commit,
+            'branch':  branch,
+            'service': service,
+            'version': _ARGUS_VERSION,
+            'queued_at': __import__('datetime').datetime.utcnow().isoformat(),
+            'attempts': 0,
+        })
+        with get_api_db_cursor() as cur:
+            cur.execute('''
+                INSERT INTO app_meta (key, value, updated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+            ''', ('pending_deploy_webhook', pending_val))
+        print('[Deploy] Notificación guardada en BD — el scheduler reintentará cada 10 min')
+    except Exception as e:
+        print(f'[Deploy] ❌ No se pudo guardar notificación pendiente: {e}')
 
-    def _send_webhook():
-        import time as _t
-        import datetime as _dt
-        _t.sleep(3)
-        short = commit[:7]
-        now   = _dt.datetime.utcnow().strftime('%d/%m/%Y %H:%M UTC')
-        print(f'[Deploy] Enviando webhook a {webhook[:40]}...')
-        payload = {
-            'embeds': [{
-                'title': '🚀 ArgusScanner desplegado',
-                'description': (
-                    'El sistema de detección de hacks ha sido desplegado '
-                    'exitosamente en producción.'
-                ),
-                'color': 0x7C3AED,
-                'fields': [
-                    {'name': '📦 Versión',   'value': f'`{_ARGUS_VERSION}`', 'inline': True},
-                    {'name': '🔖 Commit',    'value': f'`{short}`',           'inline': True},
-                    {'name': '🌿 Rama',      'value': f'`{branch}`',          'inline': True},
-                    {'name': '🖥️ Servicio', 'value': f'`{service}`',          'inline': True},
-                    {'name': '✅ Estado',    'value': 'Operativo',             'inline': True},
-                    {'name': '🕐 Hora',      'value': now,                    'inline': True},
-                ],
-                'footer': {'text': 'ASPERS Projects — Sistema Argus'},
-            }]
-        }
-        import json as _json
-        import urllib.request as _urlreq
-        import urllib.error  as _urlerr
+    # Primer intento inmediato en background (puede fallar por 429 de CF)
+    threading.Thread(target=_try_send_deploy_webhook, daemon=True).start()
 
-        headers = {
-            'Content-Type': 'application/json',
-            # Discord/Cloudflare bloquea 'python-requests'; DiscordBot UA pasa el WAF
-            'User-Agent': 'DiscordBot (https://aspers.gg, 1.0)',
-        }
-        body = _json.dumps(payload).encode('utf-8')
 
-        for attempt in range(1, 4):   # hasta 3 intentos
-            try:
-                req = _urlreq.Request(webhook, data=body, headers=headers, method='POST')
-                with _urlreq.urlopen(req, timeout=12) as resp:
-                    status = resp.status
-                    print(f'✅ [Deploy] Webhook Discord enviado (intento {attempt}) — HTTP {status} — commit {short}')
-                    break
-            except _urlerr.HTTPError as e:
-                body_preview = e.read(300).decode('utf-8', errors='replace')
-                print(f'⚠️ [Deploy] Intento {attempt} — HTTP {e.code}: {body_preview}')
-                if e.code == 429:
-                    retry_after = float(e.headers.get('Retry-After', 5))
-                    print(f'[Deploy] Rate-limited — esperando {retry_after}s antes de reintentar')
-                    _t.sleep(retry_after + 1)
-                elif e.code >= 500:
-                    _t.sleep(3)
-                else:
-                    break   # 4xx no recuperable (401, 404…) — no reintentar
-            except Exception as e:
-                print(f'⚠️ [Deploy] Error de red intento {attempt}: {e}')
-                _t.sleep(3)
+def _try_send_deploy_webhook():
+    """Intenta enviar el webhook de deploy pendiente guardado en BD.
+    Llamado al startup y por el scheduler cada 10 min.
+    """
+    import json as _json
+    import urllib.request as _urlreq
+    import urllib.error  as _urlerr
+    import datetime as _dt
 
-    threading.Thread(target=_send_webhook, daemon=True).start()
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute('SELECT value FROM app_meta WHERE key = %s', ('pending_deploy_webhook',))
+            row = cur.fetchone()
+    except Exception as e:
+        print(f'[Deploy] Error leyendo pending webhook: {e}')
+        return
+
+    if not row:
+        return  # nada pendiente
+
+    raw = row[0] if isinstance(row, (list, tuple)) else row.get('value', '')
+    try:
+        meta = _json.loads(raw)
+    except Exception:
+        return
+
+    webhook  = meta.get('webhook', '')
+    attempts = meta.get('attempts', 0)
+    max_att  = 15  # ~2.5h a 10 min/intento
+
+    if not webhook or attempts >= max_att:
+        # Darse por vencido
+        try:
+            with get_api_db_cursor() as cur:
+                cur.execute('DELETE FROM app_meta WHERE key = %s', ('pending_deploy_webhook',))
+        except Exception:
+            pass
+        if attempts >= max_att:
+            print(f'[Deploy] ❌ Webhook fallido tras {max_att} intentos — abandonando')
+        return
+
+    short   = meta.get('commit', '')[:7]
+    now     = _dt.datetime.utcnow().strftime('%d/%m/%Y %H:%M UTC')
+    version = meta.get('version', _ARGUS_VERSION)
+    branch  = meta.get('branch', 'main')
+    service = meta.get('service', 'argus-web')
+
+    payload = {
+        'embeds': [{
+            'title': '🚀 ArgusScanner desplegado',
+            'description': 'El sistema de detección de hacks ha sido desplegado exitosamente en producción.',
+            'color': 0x7C3AED,
+            'fields': [
+                {'name': '📦 Versión',   'value': f'`{version}`', 'inline': True},
+                {'name': '🔖 Commit',    'value': f'`{short}`',   'inline': True},
+                {'name': '🌿 Rama',      'value': f'`{branch}`',  'inline': True},
+                {'name': '🖥️ Servicio', 'value': f'`{service}`', 'inline': True},
+                {'name': '✅ Estado',    'value': 'Operativo',    'inline': True},
+                {'name': '🕐 Hora',      'value': now,            'inline': True},
+            ],
+            'footer': {'text': 'ASPERS Projects — Sistema Argus'},
+        }]
+    }
+
+    headers = {
+        'Content-Type': 'application/json',
+        'User-Agent': 'DiscordBot (https://aspers.gg, 1.0)',
+    }
+    body = _json.dumps(payload).encode('utf-8')
+
+    print(f'[Deploy] Intentando webhook (intento {attempts + 1}/{max_att}) commit={short}')
+    try:
+        req = _urlreq.Request(webhook, data=body, headers=headers, method='POST')
+        with _urlreq.urlopen(req, timeout=12) as resp:
+            print(f'✅ [Deploy] Webhook enviado — HTTP {resp.status} — commit {short}')
+            # Éxito: borrar de BD
+            with get_api_db_cursor() as cur:
+                cur.execute('DELETE FROM app_meta WHERE key = %s', ('pending_deploy_webhook',))
+            return
+    except _urlerr.HTTPError as e:
+        body_preview = e.read(200).decode('utf-8', errors='replace').strip()
+        retry_after  = e.headers.get('Retry-After', '?')
+        print(f'⚠️ [Deploy] HTTP {e.code} (Retry-After: {retry_after}s) — {body_preview[:120]}')
+    except Exception as e:
+        print(f'⚠️ [Deploy] Error de red: {e}')
+
+    # Fracasó — incrementar contador en BD para el próximo intento del scheduler
+    meta['attempts'] = attempts + 1
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute('''
+                INSERT INTO app_meta (key, value, updated_at) VALUES (%s, %s, NOW())
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+            ''', ('pending_deploy_webhook', _json.dumps(meta)))
+        print(f'[Deploy] Reintento programado en ~10 min (intento {attempts + 1}/{max_att})')
+    except Exception as e:
+        print(f'[Deploy] Error actualizando contador: {e}')
 
 
 def init_db_async():
@@ -285,8 +347,10 @@ try:
                        id='weekly_ml_retrain', replace_existing=True)
     _scheduler.add_job(_daily_summary_job, 'cron', hour=9, minute=0,
                        id='daily_summary', replace_existing=True)
+    _scheduler.add_job(_try_send_deploy_webhook, 'interval', minutes=10,
+                       id='deploy_webhook_retry', replace_existing=True)
     _scheduler.start()
-    print('[Scheduler] ML semanal + resumen diario (09:00 UTC) activados')
+    print('[Scheduler] ML semanal + resumen diario + deploy webhook retry (10 min) activados')
 except Exception as _sch_err:
     print(f'[Scheduler] APScheduler no disponible: {_sch_err}')
 
