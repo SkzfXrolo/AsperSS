@@ -45,10 +45,14 @@ def _notify_new_deploy():
     service = os.environ.get('RENDER_SERVICE_NAME', 'argus-web').strip()
     webhook = os.environ.get('DISCORD_DEPLOY_WEBHOOK', '').strip()
 
+    print(f'[Deploy] DEBUG commit={commit[:7] if commit else "VACÍO"} branch={branch} service={service}')
+    print(f'[Deploy] DEBUG webhook={"SET ("+webhook[:30]+"...)" if webhook else "NO CONFIGURADO"}')
+
     if not commit:
-        return  # entorno local — no notificar
+        print('[Deploy] Sin RENDER_GIT_COMMIT — entorno local, saliendo')
+        return
     if not webhook:
-        print('[Deploy] DISCORD_DEPLOY_WEBHOOK no configurado — notificación omitida')
+        print('[Deploy] ❌ DISCORD_DEPLOY_WEBHOOK no está configurado como variable de entorno en Render')
         return
 
     try:
@@ -63,26 +67,32 @@ def _notify_new_deploy():
             cur.execute('SELECT value FROM app_meta WHERE key = %s', ('last_deploy_commit',))
             row = cur.fetchone()
             last_commit = (row[0] if isinstance(row, (list, tuple)) else row.get('value', '')) if row else ''
+            print(f'[Deploy] DEBUG last_commit_en_bd={last_commit[:7] if last_commit else "NINGUNO"}')
 
             if last_commit == commit:
-                return  # mismo commit — restart normal, no nuevo deploy
+                print(f'[Deploy] Mismo commit ({commit[:7]}) — restart sin deploy nuevo, no se notifica')
+                return
 
             cur.execute('''
                 INSERT INTO app_meta (key, value, updated_at)
                 VALUES (%s, %s, NOW())
                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
             ''', ('last_deploy_commit', commit))
+            print(f'[Deploy] BD actualizada con nuevo commit {commit[:7]}')
 
     except Exception as e:
-        print(f'⚠️ [Deploy] Error leyendo BD en _notify_new_deploy: {e}')
+        print(f'[Deploy] ❌ Error leyendo/escribiendo BD: {e}')
         return
+
+    print(f'[Deploy] Lanzando thread para enviar webhook en 3s...')
 
     def _send_webhook():
         import time as _t
         import datetime as _dt
-        _t.sleep(3)  # espera mínima para que Gunicorn esté completamente levantado
+        _t.sleep(3)
         short = commit[:7]
         now   = _dt.datetime.utcnow().strftime('%d/%m/%Y %H:%M UTC')
+        print(f'[Deploy] Enviando webhook a {webhook[:40]}...')
         payload = {
             'embeds': [{
                 'title': '🚀 ArgusScanner desplegado',
@@ -105,6 +115,7 @@ def _notify_new_deploy():
         try:
             import requests as _req
             r = _req.post(webhook, json=payload, timeout=10)
+            print(f'[Deploy] Webhook respuesta HTTP {r.status_code}: {r.text[:200]}')
             if r.status_code in (200, 204):
                 print(f'✅ [Deploy] Webhook Discord enviado — commit {short}')
             else:
