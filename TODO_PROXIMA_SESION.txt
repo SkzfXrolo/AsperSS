@@ -1,7 +1,7 @@
 ================================================================================
   ARGUS SCANNER — TAREAS PARA LA PRÓXIMA SESIÓN
-  Última actualización: 2026-05-04
-  SESIÓN 2026-05-04: P2#10+30+14 IOC extractor, P2#47+50+29+9 bytecode/TLS/simhash, webhook retry scheduler
+  Última actualización: 2026-05-04 (sesión 5)
+  SESIÓN 2026-05-04-D: P3#26 DONE — click test pre-scan detecta botón autoclicker hardware (CV<0.04, CPS>8 → CRITICAL), v1.6.22
 ================================================================================
 
 
@@ -187,7 +187,7 @@
 
 ── DETECCIÓN BASADA EN COMPORTAMIENTO ──────────────────────────────────────
 
-[PENDING] 26. Perfil de comportamiento de mouse durante el scan
+[DONE]  26. Perfil de comportamiento de mouse durante el scan
 [PENDING] 27. Análisis de timing de pulsaciones de teclado
 [DONE] 28. Detección de VM por comportamiento de hardware (CPUID, timing, VMware MAC)
 [DONE] 29. Análisis de instalaciones recientes (MSI, últimos 7 días)
@@ -217,69 +217,141 @@
 
 ── FILTRADO Y REDUCCIÓN DE FALSOS POSITIVOS (PRIORIDAD ALTA) ────────────────
 
-[PENDING] F1. Acotar _MINECRAFT_INSTANCE_FRAGMENTS: sacar versions/, resourcepacks/, shaderpacks/,
-              saves/, config/ — solo dejar mods/, coremods/ y launchers alternativos. El problema:
-              vanilla 1.19.4.jar está en versions/ y se clasifica como "en instancia".
-[PENDING] F2. Añadir _VANILLA_MC_PATHS: lista de rutas vanilla que NUNCA son hacks
-              (.minecraft\versions\, \libraries\, \assets\, \logs\, \crash-reports\,
-              \screenshots\, \natives\) — filtro absoluto previo al scoring.
-[PENDING] F3. Añadir factor de scoring en_instancia vs no_en_instancia en filter_false_positives:
-              archivo en .minecraft\mods\ → bonus +15; archivo en versions\ o libraries\ → penalty
-              para evitar que JARs de Fabric/Forge/vanilla escalen a SOSPECHOSO.
-[PENDING] F4. Completar _NON_INSTANCE_FRAGMENTS con más rutas: \onedrive\, \dropbox\,
-              \google drive\, \appdata\local\ (fuera de .minecraft) — reducir falsos positivos
-              de archivos que no están activos.
-[PENDING] F5. Diferenciar "instancia activa" de "mods descargados no activos": si el JAR está en
-              \mods\ pero Minecraft NO está corriendo actualmente → SOSPECHOSO en vez de CRITICAL.
-[PENDING] F6. Revisión completa de TRUSTED_TYPES: auditar qué tipos saltaban el filtro de
-              ABSOLUTE_SAFE_PATHS y estaban causando false positives en rutas de launcher legítimo.
+── Instancia activa vs no activa ──
+[DONE]  F1.  Acotar _MINECRAFT_INSTANCE_FRAGMENTS: sacar versions/, resourcepacks/, shaderpacks/,
+               saves/, config/ — solo mods/, coremods/ y launchers alternativos.
+               Problema actual: vanilla 1.19.4.jar en versions/ se clasifica como "en instancia".
+[DONE]  F2.  Añadir _VANILLA_MC_PATHS — filtro absoluto previo al scoring para rutas que NUNCA
+               contienen hacks: \versions\, \libraries\, \assets\, \logs\, \crash-reports\,
+               \screenshots\, \natives\, \backups\.
+[DONE]  F3.  Factor de scoring en_instancia: archivo en \mods\ → +15; en \versions\ o
+               \libraries\ → penalización — evitar que JARs de Fabric/vanilla suban a SOSPECHOSO.
+[DONE]  F4.  Completar _NON_INSTANCE_FRAGMENTS: añadir \onedrive\, \dropbox\, \google drive\,
+               \icloud\, \nextcloud\ — archivos en cloud sync raramente son hacks activos.
+[DONE]  F5.  Diferenciar instancia activa de mods en disco inactivos: si el JAR está en \mods\
+               pero Minecraft NO corre actualmente → bajar de CRITICAL a SOSPECHOSO.
+[DONE]  F6.  Detectar instancias "antiguas/abandonadas" en launchers alternativos: si la instancia
+               de Prism/MultiMC no ha sido lanzada en >60 días → reducir severidad de sus hallazgos.
+[DONE]  F7.  Skip de .minecraft/versions/<version>/<version>.jar si el hash coincide con Mojang
+               (supersedido por F2: _VANILLA_MC_PATHS ya filtra \versions\ completamente — no hace falta).
+[DONE]  F8.  Skip de archivos en \minecraft\versions\<ver>\<ver>-natives\ (DLLs nativas del juego:
+               lwjgl, openal, jinput — se flagean como DLL no estándar pero son parte del juego).
+[DONE]  F9.  Distinguir instancia seleccionada como activa en el launcher vs instancias inactivas:
+               leer profiles.json de cada launcher para saber cuál es el perfil por defecto.
+
+── Mods legítimos y loaders ──
+[DONE]  F10. Whitelist de fabric.mod.json con campo "environment": "client" y sin mixins a
+               paquetes de hack — mods de cliente legítimos (Sodium, Iris, EMI, etc.).
+[DONE]  F11. Whitelist de JARs cuyo MANIFEST.MF tiene Implementation-Vendor: "FabricMC",
+               "MinecraftForge", "QuiltMC", "NeoForged" — loaders oficiales, nunca hacks.
+[DONE]  F12. Skip de JARs en carpetas .fabric/, .quilt/, .forge/ dentro de .minecraft —
+               son archivos internos de los loaders, no mods de usuario.
+[DONE]  F13. Whitelist de modpacks populares por carpeta/nombre: ATM9, All the Mods, RLCraft,
+               Sky Factory, FTB — sus mods son legítimos aunque tengan nombres genéricos.
+[DONE]  F14. Reducir FP de mods de performance que parchean el render pipeline con Mixins:
+               Sodium, Iris, Distant Horizons, Bobby, FerriteCore usan Mixins como Wurst.
+[DONE]  F15. Whitelist extendida de nombres de mods legítimos comunes que coinciden con
+               patrones de hack: "impact" en ImpactAPI, "rise" en RiseOfEmpires mod, etc.
+[DONE]  F16. Skip de JARs firmados con certificados de CurseForge/Modrinth CDN aunque el
+               contenido tenga Minecraft imports — todos los mods legítimos los tienen.
+
+── Rutas y ubicaciones ──
+[DONE]  F17. Añadir a ABSOLUTE_SAFE_PATHS: %PROGRAMDATA%, %PUBLIC%, \ProgramData\Microsoft\,
+               \Windows\Fonts\ — generan FP en scan de archivos por fecha.
+[DONE]  F18. Skip automático de toda la carpeta \AppData\Local\Microsoft\ — instalaciones
+               de Office, Edge, Teams tienen JARs y DLLs que no son Minecraft.
+[DONE]  F19. Skip de \AppData\Roaming\<launcher>\ cuando el launcher está en ABSOLUTE_SAFE_PATHS
+               pero solo se filtraba el exe, no toda su carpeta de datos.
+[DONE]  F20. Detectar y excluir correctamente rutas de servidores Minecraft locales: si el path
+               contiene \server\ o \bukkit\ o \spigot\ → plugins, no hacks de cliente.
+[DONE]  F21. Skip de archivos con extensión .disabled o .bak en la carpeta mods — el jugador
+               los desactivó a propósito, no están siendo cargados por el juego.
+
+── Scoring y confianza ──
+[DONE]  F22. Penalizar menos archivos con mtime entre 90 y 365 días (ahora solo penaliza >365d):
+               un hack que lleva 4 meses inactivo es menos urgente que uno de ayer.
+[DONE]  F23. Boost de confianza si el mismo hash aparece flagueado en ≥3 scans distintos de la
+               BD cloud — evidencia comunitaria de hack conocido.
+[DONE]  F24. Reducir confianza si el archivo lleva >30 días en el mismo path sin modificarse
+               Y Minecraft se ha lanzado en ese tiempo sin incidentes — uso crónico normal.
+[DONE]  F25. Correlación inversa: si el jugador tiene ≥15 mods legítimos verificados (Modrinth/CF),
+               subir el umbral mínimo para SOSPECHOSO — perfil de modder, no de cheater.
+[DONE]  F26. Revisar y ajustar los pesos del factor D (confidence original) en el ai_score:
+               algunos scanners especializados emiten confidence=0.5 por defecto → no debería
+               sumar 10 puntos al score sin evidencia real.
+
+── Procesos y DLLs ──
+[DONE]  F27. Whitelist de DLLs cargadas por mods gráficos legítimos: Iris Shaders carga DLLs
+               de LWJGL, Distant Horizons carga DLLs de render — no son inyecciones.
+[DONE]  F28. Reducir FP de múltiples instancias de javaw si TODAS provienen del mismo launcher
+               (MultiMC abre una javaw por instancia — no es sospechoso).
+[DONE]  F29. Skip de conexiones de red Java a IPs de servidores de Minecraft conocidos:
+               añadir lista de IPs/hostnames de servidores grandes (Hypixel, Mineplex, etc.)
+               para no flagearlas como C2.
+
+── Registro y eventos ──
+[DONE]  F30. Reducir FP de UserAssist/prefetch del launcher oficial de Mojang
+               (MinecraftLauncher.exe llama a java.exe → se detecta como "proceso padre inusual").
+[DONE]  F31. Skip de entradas de RunMRU/TypedPaths que correspondan a rutas de launchers
+               instalados (el jugador tecleó la ruta para abrir Prism → no es sospechoso).
+[DONE]  F32. Filtrar eventos de AppCompatCache/ShimCache de JARs que estén en \versions\ o
+               \libraries\ — el sistema registra toda ejecución, no solo de hacks.
+
+── Mejoras de logging del filtro ──
+[DONE]  F33. Añadir campo "filter_reason" a cada hallazgo que sea descartado: loguear POR QUÉ
+               se descartó (safe_path / vanilla_path / low_score / legit_mod / etc.) para
+               facilitar el debugging de falsos negativos.
+[DONE]  F34. Estadísticas de filtrado por categoría al final del scan: cuántos se descartaron
+               por cada motivo — ayuda a identificar qué filtros son demasiado agresivos.
+[DONE]  F35. Modo de diagnóstico opcional: flag --debug-filter que muestra en la UI del scanner
+               los hallazgos descartados y el motivo, para que el staff pueda revisar.
 
 ── DETECCIÓN NUEVA EN SCANNER ───────────────────────────────────────────────
 
-[PENDING]  1. Detectar Cheat Engine activo (cheatengine*.exe, CE.exe en procesos/prefetch)
-[PENDING]  2. Detectar packet sniffers activos: Wireshark, Fiddler, mitmproxy, Charles
-[PENDING]  3. Scan de extensiones de Chrome/Firefox sospechosas (manifest.json, permisos all_urls)
-[PENDING]  4. Detectar JDK completo instalado (inusual en jugador normal — señal de desarrollo de hacks)
-[PENDING]  5. Scan de scripts Python en Desktop/Downloads (bots de macro/autoclicker)
-[PENDING]  6. Detectar modificación del minecraft:client.jar oficial (hash distinto al de Mojang)
-[PENDING]  7. Scan de NBT exploits en saves (.minecraft/saves — libros con comandos, baúles trampa)
-[PENDING]  8. Detectar Lunar Client con módulos no oficiales (carpeta .lunarclient/offline/multiver)
-[PENDING]  9. Scan de drivers sospechosos instalados (kmdf, minifilter — usados por algunos hacks de kernel)
-[PENDING] 10. Detectar virtual audio cable / VB-Audio (usado para ocultar comunicaciones de equipo)
-[PENDING] 11. Scan de historial de Git local en Desktop/Documents (repos de hack clients propios)
-[PENDING] 12. Detectar IP forwarding habilitado (registro Windows — señal de proxy/MITM)
+[DONE]   1. Detectar Cheat Engine activo (cheatengine*.exe, CE.exe en procesos/prefetch)
+[DONE]   2. Detectar packet sniffers activos: Wireshark, Fiddler, mitmproxy, Charles
+[DONE]   3. Scan de extensiones de Chrome/Firefox sospechosas (manifest.json, permisos all_urls)
+[DONE]   4. Detectar JDK completo instalado (inusual en jugador normal — señal de desarrollo de hacks)
+[DONE]   5. Scan de scripts Python en Desktop/Downloads (bots de macro/autoclicker)
+[DONE]   6. Detectar modificación del minecraft:client.jar oficial (hash distinto al de Mojang)
+[DONE]   7. Scan de NBT exploits en saves (.minecraft/saves — libros con comandos, baúles trampa)
+[DONE]   8. Detectar Lunar Client con módulos no oficiales (carpeta .lunarclient/offline/multiver)
+[DONE]   9. Scan de drivers sospechosos instalados (kmdf, minifilter — usados por algunos hacks de kernel)
+[DONE]  10. Detectar virtual audio cable / VB-Audio (usado para ocultar comunicaciones de equipo)
+[DONE]  11. Scan de historial de Git local en Desktop/Documents (repos de hack clients propios)
+[DONE]  12. Detectar IP forwarding habilitado (registro Windows — señal de proxy/MITM)
 
 ── MEJORAS DEL PANEL WEB ────────────────────────────────────────────────────
 
-[PENDING] 13. Vista diff de dos scans del mismo jugador — mostrar hallazgos nuevos vs desaparecidos
-[PENDING] 14. Gráfico de evolución del risk score a lo largo del tiempo por jugador (sparkline)
-[PENDING] 15. Exportación de scan a PDF con evidencias formateadas para reporte de ban
-[PENDING] 16. Notificación push al staff cuando llega un nuevo scan (Web Push API / Service Worker)
-[PENDING] 17. Log de actividad del staff: quién revisó qué scan y cuándo (tabla staff_audit_log)
-[PENDING] 18. Heatmap de horarios: días/horas con más scans y más detecciones positivas
-[PENDING] 19. Auto-generar mensaje de ban con las evidencias más relevantes del scan (Claude)
-[PENDING] 20. Búsqueda de jugadores por username cruzando con la API de Mojang (UUID → nick)
-[PENDING] 21. Panel de reputación del jugador: historial de scans, trend, badges (reincidente, limpio)
-[PENDING] 22. Filtro de hallazgos por categoría en el panel (GHOST_CLIENT / FORENSE / RED / etc.)
+[DONE]  13. Vista diff de dos scans del mismo jugador — mostrar hallazgos nuevos vs desaparecidos
+[DONE]  14. Gráfico de evolución del risk score a lo largo del tiempo por jugador (sparkline)
+[DONE]  15. Exportación de scan a PDF con evidencias formateadas para reporte de ban
+[DONE]  16. Notificación push al staff cuando llega un nuevo scan (Web Push API / Service Worker)
+[DONE]  17. Log de actividad del staff: quién revisó qué scan y cuándo (tabla staff_audit_log)
+[DONE]  18. Heatmap de horarios: días/horas con más scans y más detecciones positivas
+[DONE]  19. Auto-generar mensaje de ban con las evidencias más relevantes del scan (Claude)
+[DONE]  20. Búsqueda de jugadores por username cruzando con la API de Mojang (UUID → nick)
+[DONE]  21. Panel de reputación del jugador: historial de scans, trend, badges (reincidente, limpio)
+[DONE]  22. Filtro de hallazgos por categoría en el panel (GHOST_CLIENT / FORENSE / RED / etc.) + chips con colores
 
 ── MEJORAS DE SERVIDOR / ML ─────────────────────────────────────────────────
 
-[PENDING] 23. /api/scan/diff/<id_a>/<id_b> — endpoint para comparar dos scans y ver el delta
-[PENDING] 24. Webhook de Telegram como alternativa a Discord (env TELEGRAM_BOT_TOKEN + CHAT_ID)
-[PENDING] 25. Detección de cheating coordinado: múltiples jugadores del mismo equipo con hacks similares
-[PENDING] 26. Rate limiting por IP en endpoints públicos de la API (/api/submit, /api/predict)
-[PENDING] 27. Clustering de jugadores por perfil de hallazgos con DBSCAN (sklearn, sin deps nuevas)
-[PENDING] 28. /api/player/timeline/<machine_id> — serie temporal de risk scores con tendencia lineal
-[PENDING] 29. Soporte multi-servidor en el panel: selector de servidor activo, aislamiento de datos
-[PENDING] 30. Dashboard de salud del sistema: latencia de BD, cola de scans, uptime, errores recientes
+[DONE]  23. /api/scan/diff/<id_a>/<id_b> — endpoint para comparar dos scans y ver el delta
+[DONE]  24. Webhook de Telegram como alternativa a Discord (env TELEGRAM_BOT_TOKEN + CHAT_ID)
+[DONE]  25. Detección de cheating coordinado: múltiples jugadores del mismo equipo con hacks similares
+[DONE]  26. Rate limiting por IP en endpoints públicos de la API (/api/submit, /api/predict)
+[DONE]  27. Clustering de jugadores por perfil de hallazgos con DBSCAN (sklearn, sin deps nuevas)
+[DONE]  28. /api/player/timeline/<machine_id> — serie temporal de risk scores con tendencia lineal
+[DONE]  29. Soporte multi-servidor en el panel: selector de servidor activo, aislamiento de datos
+[DONE]  30. Dashboard de salud del sistema: latencia de BD, cola de scans, uptime, errores recientes
 
 ── MEJORAS DE INFRAESTRUCTURA DEL SCANNER ───────────────────────────────────
 
-[PENDING] 31. Mecanismo de auto-actualización del scanner: descarga nueva versión si /api/scanner/version lo indica
-[PENDING] 32. Modo silencioso (headless) para el scanner: ejecutar sin UI desde línea de comandos
+[DONE]  31. Mecanismo de auto-actualización del scanner: descarga nueva versión si /api/scanner/version lo indica
+[DONE]  32. Modo silencioso (headless) para el scanner: ejecutar sin UI desde línea de comandos
 [PENDING] 33. Firma digital del EXE con certificado autofirmado para reducir alertas de Windows Defender
-[PENDING] 34. Logging estructurado del scan a un archivo .log local (rotación automática)
-[PENDING] 35. Soporte para múltiples perfiles de configuración (distintos servidores guardados)
+[DONE]  34. Logging estructurado del scan a un archivo .log local (rotación automática)
+[DONE]  35. Soporte para múltiples perfiles de configuración (distintos servidores guardados)
 
 
 ════════════════════════════════════════════════════════════════════════════════

@@ -164,6 +164,26 @@
                 " onmouseover="this.style.background='var(--border-m)'" onmouseout="this.style.background='var(--accent-bg)'">
                     <span id="theme-icon">☀️</span>
                 </button>
+                <!-- P5 #29 — Selector de servidor activo -->
+                <div id="server-selector-wrap" style="display:none;position:relative;">
+                    <button onclick="toggleServerSelector(event)" title="Servidor activo" style="
+                        background:var(--accent-bg);border:1px solid var(--border-m);border-radius:var(--radius-sm);
+                        color:var(--accent);height:36px;padding:0 10px;display:flex;align-items:center;gap:5px;
+                        cursor:pointer;font-size:12px;font-weight:600;">
+                        <span>🖥</span><span id="active-server-name">Servidor</span>
+                    </button>
+                    <div id="server-dropdown" style="display:none;position:absolute;top:42px;right:0;z-index:300;
+                        background:var(--bg-s);border:1px solid var(--border-m);border-radius:var(--radius);
+                        padding:6px 0;box-shadow:0 8px 24px rgba(0,0,0,0.35);min-width:180px;">
+                        <div id="server-list" style="font-size:12px;"></div>
+                    </div>
+                </div>
+                <!-- P5 #16 — Notificaciones push -->
+                <button id="push-notif-btn" onclick="togglePushSubscription(this)" title="Activar notificaciones push" style="
+                    background:var(--accent-bg);border:1px solid var(--border-m);border-radius:var(--radius-sm);
+                    color:var(--text-d);width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+                    cursor:pointer;transition:var(--trans);font-size:16px;" aria-label="Notificaciones">🔔</button>
+
                 <!-- Palette picker -->
                 <div style="position:relative;">
                     <button id="palette-toggle" onclick="togglePalettePanel(event)" title="Paleta de colores" style="
@@ -338,6 +358,39 @@
                     </div>
                     <div class="dashboard-card-body" id="issue-types-list" style="padding:8px 12px;max-height:200px;overflow-y:auto;">
                         <div style="color:var(--text-d);font-size:13px;padding:8px 0;">Cargando...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- P5 #18 — Heatmap de actividad de scans + P5 #20 Mojang search -->
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:16px;">
+                <div class="dashboard-card">
+                    <div class="dashboard-card-header">
+                        <span class="dashboard-card-title">Heatmap de actividad (30 días)</span>
+                        <span class="dashboard-card-sub">Scans por día de semana y hora</span>
+                    </div>
+                    <div class="dashboard-card-body" style="padding:14px 16px;">
+                        <div id="scan-heatmap-wrap" style="overflow-x:auto;">
+                            <div style="color:var(--text-d);font-size:13px;">Cargando...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="dashboard-card">
+                    <div class="dashboard-card-header">
+                        <span class="dashboard-card-title">Buscar jugador Mojang</span>
+                        <span class="dashboard-card-sub">UUID o username → perfil</span>
+                    </div>
+                    <div class="dashboard-card-body" style="padding:14px 16px;">
+                        <div style="display:flex;gap:6px;margin-bottom:10px;">
+                            <input id="mojang-search-input" type="text" placeholder="UUID o username..."
+                                style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text);font-size:12px;"
+                                onkeydown="if(event.key==='Enter')searchMojangProfile()">
+                            <button onclick="searchMojangProfile()"
+                                style="padding:6px 12px;border-radius:7px;border:1px solid var(--accent);background:rgba(139,92,246,.12);color:var(--accent);font-size:12px;cursor:pointer;">
+                                🔍
+                            </button>
+                        </div>
+                        <div id="mojang-search-result" style="font-size:12px;color:var(--text-m);"></div>
                     </div>
                 </div>
             </div>
@@ -939,7 +992,9 @@
                                     <button id="ai-anomaly-btn" onclick="aiCheckAnomaly(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.06);color:#f87171;cursor:pointer;">🔬 Anomalía</button>
                                     <button id="ai-followup-btn" onclick="aiFollowupQuestions(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(16,185,129,.35);background:rgba(16,185,129,.06);color:#34d399;cursor:pointer;">❓ Preguntas</button>
                                     <button onclick="openIocExtractor()" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(96,165,250,.35);background:rgba(96,165,250,.06);color:#60a5fa;cursor:pointer;">🔎 IOCs</button>
+                                    <button onclick="generateBanMessage(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.06);color:#f87171;cursor:pointer;">🔨 Msg Ban</button>
                                 </div>
+                                <div id="ban-message-container" style="display:none;margin-top:8px;font-size:11px;color:#f87171;padding:8px 12px;background:rgba(239,68,68,.07);border-radius:6px;border-left:2px solid #ef4444;white-space:pre-wrap;font-family:monospace;word-break:break-word;"></div>
                                 <div id="ai-inconsistencies-container" style="display:none;margin-top:8px;font-size:11px;color:#fbbf24;padding:6px 10px;background:rgba(245,158,11,.07);border-radius:6px;border-left:2px solid #f59e0b;"></div>
                                 <div id="ai-followup-container" style="display:none;margin-top:8px;font-size:11px;color:#34d399;padding:6px 10px;background:rgba(16,185,129,.06);border-radius:6px;border-left:2px solid #10b981;"></div>
                             </div>
@@ -1028,8 +1083,37 @@
                 <!-- Escaneos Previos -->
                 <div class="subpage-content" id="subpage-escaneos-previos">
                     <div class="subpage-placeholder">
-                        <h3>Escaneos Previos</h3>
-                        <p>Historial de escaneos anteriores de esta máquina.</p>
+                        <!-- P5 #21 — Reputación del jugador -->
+                        <div id="player-reputation-card" style="display:none;margin-bottom:16px;background:var(--bg-s);border:1px solid var(--border);border-radius:12px;padding:14px 16px;">
+                            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                                <span style="font-size:16px;">👤</span>
+                                <span style="font-size:13px;font-weight:700;color:var(--text-h);" id="player-rep-name">—</span>
+                                <div id="player-rep-badges" style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;"></div>
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
+                                <div style="text-align:center;background:var(--bg-t);border-radius:8px;padding:8px 4px;">
+                                    <div style="font-size:18px;font-weight:800;color:var(--accent);" id="player-rep-total">0</div>
+                                    <div style="font-size:10px;color:var(--text-d);">Scans</div>
+                                </div>
+                                <div style="text-align:center;background:var(--bg-t);border-radius:8px;padding:8px 4px;">
+                                    <div style="font-size:18px;font-weight:800;color:#ef4444;" id="player-rep-hacks">0</div>
+                                    <div style="font-size:10px;color:var(--text-d);">Con hacks</div>
+                                </div>
+                                <div style="text-align:center;background:var(--bg-t);border-radius:8px;padding:8px 4px;">
+                                    <div style="font-size:18px;font-weight:800;color:#10b981;" id="player-rep-clean">0</div>
+                                    <div style="font-size:10px;color:var(--text-d);">Limpios</div>
+                                </div>
+                                <div style="text-align:center;background:var(--bg-t);border-radius:8px;padding:8px 4px;">
+                                    <div style="font-size:18px;font-weight:800;" id="player-rep-risk" style="color:#f59e0b;">—</div>
+                                    <div style="font-size:10px;color:var(--text-d);">Risk prom.</div>
+                                </div>
+                            </div>
+                            <!-- P5 #14 — Sparkline de risk score -->
+                            <div id="player-sparkline-wrap" style="display:none;">
+                                <div style="font-size:10px;font-weight:700;color:var(--text-d);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Evolución Risk Score</div>
+                                <canvas id="player-sparkline-chart" height="60"></canvas>
+                            </div>
+                        </div>
                         <!-- Risk trend chart -->
                         <div id="risk-trend-wrap" style="display:none;margin-bottom:20px;background:var(--bg-s);border:1px solid var(--border);border-radius:10px;padding:14px;">
                             <div style="font-size:12px;font-weight:700;color:var(--text-d);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em;">Tendencia Risk Score</div>
@@ -1304,6 +1388,25 @@
                         <button class="btn btn-primary btn-sm" onclick="mlCluster()">Analizar</button>
                     </div>
                     <div id="ml-cluster-result" style="display:none;margin-top:8px;font-size:12px;"></div>
+                </div>
+
+                <!-- P5 #25 — Detección de cheating coordinado -->
+                <div style="margin-top:16px;padding:20px;background:var(--bg-card);border:1px solid rgba(239,68,68,0.2);border-radius:12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                        <div>
+                            <h3 style="font-size:14px;font-weight:700;color:#f87171;margin:0 0 4px;">👥 Cheating Coordinado</h3>
+                            <p style="font-size:12px;color:var(--text-muted);margin:0;">Detecta grupos de jugadores con los mismos hacks en un rango de 24h.</p>
+                        </div>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <select id="coord-days-select" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-t);color:var(--text);">
+                                <option value="7">7 días</option>
+                                <option value="14">14 días</option>
+                                <option value="30" selected>30 días</option>
+                            </select>
+                            <button class="btn btn-primary btn-sm" onclick="loadCoordinatedCheating()" style="background:rgba(239,68,68,0.12);color:#f87171;border-color:rgba(239,68,68,0.4);">Analizar</button>
+                        </div>
+                    </div>
+                    <div id="coord-cheating-result" style="font-size:12px;color:var(--text-d);">Haz clic en Analizar para buscar patrones coordinados.</div>
                 </div>
             </div>
         </section>
@@ -1782,7 +1885,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=27"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=30"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────

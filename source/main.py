@@ -54,11 +54,12 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.19"
+SCANNER_VERSION = "1.6.22"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
 import unicodedata as _unicodedata
+import functools
 
 def _normalize(text: str) -> str:
     """Normaliza texto a ASCII para detectar homoglyphs cirílicos/unicode.
@@ -196,12 +197,9 @@ _SAFE_ROOT_FRAGMENTS = {
 }
 
 _MINECRAFT_INSTANCE_FRAGMENTS = [
+    # Únicamente carpetas donde se cargan mods/coremods activos
     '.minecraft\\mods', '.minecraft/mods',
-    '.minecraft\\versions', '.minecraft/versions',
-    '.minecraft\\resourcepacks', '.minecraft/resourcepacks',
-    '.minecraft\\shaderpacks', '.minecraft/shaderpacks',
-    '.minecraft\\saves', '.minecraft/saves',
-    '.minecraft\\config', '.minecraft/config',
+    '.minecraft\\coremods', '.minecraft/coremods',
     # Launchers alternativos con instancias
     'multimc\\instances', 'multimc/instances',
     'prismlauncher\\instances', 'prismlauncher/instances',
@@ -209,6 +207,20 @@ _MINECRAFT_INSTANCE_FRAGMENTS = [
     'gdlauncher\\instances', 'gdlauncher/instances',
     'atlauncher\\instances', 'atlauncher/instances',
     'ftbapp\\instances', 'ftbapp/instances',
+]
+
+# F2 — Rutas de Minecraft vanilla que NUNCA contienen hacks activos.
+# Se aplican como filtro PREVIO al scoring — archivos aquí son del propio juego.
+_VANILLA_MC_PATHS = [
+    '.minecraft\\versions\\',    '.minecraft/versions/',
+    '.minecraft\\libraries\\',   '.minecraft/libraries/',
+    '.minecraft\\assets\\',      '.minecraft/assets/',
+    '.minecraft\\logs\\',        '.minecraft/logs/',
+    '.minecraft\\crash-reports\\', '.minecraft/crash-reports/',
+    '.minecraft\\screenshots\\', '.minecraft/screenshots/',
+    '.minecraft\\backups\\',     '.minecraft/backups/',
+    '-natives\\',                '-natives/',   # DLLs nativas de LWJGL/OpenAL dentro de versions
+    '\\natives\\',               '/natives/',
 ]
 
 # Rutas que NO son instancias activas (archivos descargados pero no cargados)
@@ -219,6 +231,13 @@ _NON_INSTANCE_FRAGMENTS = [
     '\\temp\\', '/temp/',
     '\\tmp\\', '/tmp/',
     '\\appdata\\local\\temp', '/appdata/local/temp',
+    # F4 — Cloud sync: raramente contienen hacks activos cargados
+    '\\onedrive\\', '/onedrive/',
+    '\\dropbox\\', '/dropbox/',
+    '\\google drive\\', '/google drive/',
+    '\\icloud drive\\', '/icloud drive/',
+    '\\nextcloud\\', '/nextcloud/',
+    '\\box\\', '/box/',
 ]
 
 def _is_minecraft_instance(path: str) -> bool:
@@ -765,7 +784,9 @@ class ArgusApp:
         
         # Cargar configuración PRIMERO para verificar si hay token
         self.config = self.load_config()
-        
+        # P5 #35 — apply --profile override if requested
+        self._apply_profile_env(self.config)
+
         # Verificar autenticación después de cargar config
         try:
             auth_result = self.check_authentication()
@@ -857,8 +878,9 @@ class ArgusApp:
         # Crear interfaz mejorada con estilo moderno
         self.create_ui()
 
-        # Auto-ejecutar escaneo al arrancar (sin que el usuario presione nada)
-        self.root.after(800, self.full_scan_with_discord)
+        # Auto-ejecutar escaneo al arrancar — pasa primero por el test de clicks
+        self._click_test_result = None
+        self.root.after(800, self._show_click_test)
 
         # Inicializar variables de cronómetro
         self.scan_start_time = None
@@ -1027,10 +1049,14 @@ class ArgusApp:
                 if response.status_code == 200:
                     data = response.json()
                     cloud_hashes = data.get('hashes', [])
+                    _hash_freq_map = {}  # F23: sha256 → confirmed_count
                     for h in cloud_hashes:
                         v = h.get('sha256', '')
                         if v and v not in known_hashes:
                             known_hashes.append(v)
+                        if v:
+                            _hash_freq_map[v.lower()] = int(h.get('confirmed_count') or 1)
+                    self._cloud_hash_frequency = _hash_freq_map
                     print(f"✅ {len(cloud_hashes)} hashes de hack cloud cargados desde /api/hashes")
                     # Guardar caché offline
                     _cache_dir = os.path.join(os.environ.get('APPDATA', ''), 'ASPERSProjectsSS')
@@ -1085,7 +1111,9 @@ class ArgusApp:
                     pass
 
         self.known_hack_hashes = set(known_hashes)
-    
+        if not hasattr(self, '_cloud_hash_frequency'):
+            self._cloud_hash_frequency = {}  # F23: sha256 → confirmed_count
+
     def load_whitelist(self):
         """Carga lista blanca EXPANDIDA al 200% - Rutas legítimas para evitar falsos positivos"""
         return {
@@ -2480,6 +2508,115 @@ class ArgusApp:
             return False
 
     @staticmethod
+    @functools.lru_cache(maxsize=1)
+    def _get_active_launcher_instance_paths() -> frozenset:
+        """F9 — Lee profiles.json / launcher_profiles.json de launchers conocidos
+        y devuelve las rutas de instancias marcadas como activas/seleccionadas.
+        Hallazgos en instancias activas deben tener más peso que en inactivas.
+        """
+        active = []
+        appdata   = os.environ.get('APPDATA', '')
+        userprofile = os.environ.get('USERPROFILE', '')
+
+        # ── Vanilla launcher (.minecraft/launcher_profiles.json) ──
+        vanilla_profiles = os.path.join(appdata, '.minecraft', 'launcher_profiles.json')
+        if os.path.isfile(vanilla_profiles):
+            try:
+                with open(vanilla_profiles, 'r', encoding='utf-8', errors='ignore') as f:
+                    lp = json.load(f)
+                selected = lp.get('selectedProfile') or lp.get('selectedUser', {}).get('profile')
+                profiles = lp.get('profiles', {})
+                if selected and selected in profiles:
+                    game_dir = profiles[selected].get('gameDir')
+                    if game_dir and os.path.isdir(game_dir):
+                        active.append(game_dir.lower())
+                # Also consider the default .minecraft as active
+                active.append(os.path.join(appdata, '.minecraft').lower())
+            except Exception:
+                pass
+
+        # ── Prism / MultiMC — selectedInstance in prismlauncher.cfg ──
+        for launcher_cfg_dir in (
+            os.path.join(appdata, 'PrismLauncher'),
+            os.path.join(appdata, '.prismlauncher'),
+            os.path.join(appdata, 'MultiMC'),
+            os.path.join(appdata, '.multimc'),
+        ):
+            cfg_file = os.path.join(launcher_cfg_dir, 'prismlauncher.cfg') or \
+                       os.path.join(launcher_cfg_dir, 'multimc.cfg')
+            for cfg_name in ('prismlauncher.cfg', 'multimc.cfg'):
+                cfg_path = os.path.join(launcher_cfg_dir, cfg_name)
+                if not os.path.isfile(cfg_path):
+                    continue
+                try:
+                    with open(cfg_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        for line in f:
+                            if line.startswith('SelectedInstance='):
+                                inst_name = line.split('=', 1)[1].strip()
+                                inst_path = os.path.join(launcher_cfg_dir, 'instances', inst_name)
+                                if os.path.isdir(inst_path):
+                                    active.append(inst_path.lower())
+                                break
+                except Exception:
+                    pass
+
+        return frozenset(active)
+
+    @staticmethod
+    @functools.lru_cache(maxsize=1)
+    def _get_abandoned_instance_paths() -> frozenset:
+        """F6 — Devuelve set de prefijos de ruta para instancias de launchers alternativos
+        que no han sido lanzadas en >60 días. Sus hallazgos son menos urgentes.
+        """
+        abandoned = []
+        appdata = os.environ.get('APPDATA', '')
+        now_ts = time.time()
+        cutoff = 60 * 86400  # 60 días en segundos
+
+        launcher_instance_roots = [
+            os.path.join(appdata, 'PrismLauncher', 'instances'),
+            os.path.join(appdata, 'MultiMC', 'instances'),
+            os.path.join(appdata, '.prismlauncher', 'instances'),
+            os.path.join(appdata, '.multimc', 'instances'),
+            os.path.join(appdata, 'PolyMC', 'instances'),
+            os.path.join(appdata, 'ATLauncher', 'instances'),
+            os.path.join(appdata, 'GDLauncher', 'instances'),
+        ]
+
+        for root in launcher_instance_roots:
+            if not os.path.isdir(root):
+                continue
+            try:
+                for inst_name in os.listdir(root):
+                    inst_path = os.path.join(root, inst_name)
+                    if not os.path.isdir(inst_path):
+                        continue
+                    # Prism/MultiMC store lastLaunchTime in instance.cfg
+                    cfg_path = os.path.join(inst_path, 'instance.cfg')
+                    last_launch = None
+                    if os.path.isfile(cfg_path):
+                        try:
+                            with open(cfg_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                for line in f:
+                                    if line.startswith('lastLaunchTime='):
+                                        val = line.split('=', 1)[1].strip()
+                                        # Value is Unix timestamp in milliseconds or seconds
+                                        ts = int(val)
+                                        last_launch = ts / 1000 if ts > 1e10 else ts
+                                        break
+                        except Exception:
+                            pass
+                    if last_launch is None:
+                        # Fallback: use instance folder mtime
+                        last_launch = os.path.getmtime(inst_path)
+                    if now_ts - last_launch > cutoff:
+                        abandoned.append(inst_path.lower())
+            except OSError:
+                continue
+
+        return frozenset(abandoned)
+
+    @staticmethod
     def _is_legitimate_mod_jar(jar_path: str) -> bool:
         """Devuelve True si el JAR tiene indicadores de ser un mod legítimo de Minecraft.
         Revisa META-INF/MANIFEST.MF, fabric.mod.json y mods.toml.
@@ -2508,15 +2645,48 @@ class ArgusApp:
                 manifest_key = next((n for n in zf.namelist() if n.upper() == 'META-INF/MANIFEST.MF'), None)
                 if manifest_key:
                     try:
-                        manifest = zf.read(manifest_key).decode('utf-8', errors='ignore').lower()
+                        manifest_raw = zf.read(manifest_key).decode('utf-8', errors='ignore')
+                        manifest = manifest_raw.lower()
                         legitimate_markers = [
                             'fmlcoremodcontainsfmlmod', 'fmlcoremod', 'fabric-mod-id',
                             'modside:', 'tweakclass: optifine', 'tweakclass: cpw.mods',
                         ]
                         if any(m in manifest for m in legitimate_markers):
                             return True
+                        # F11 — Loaders oficiales en Implementation-Vendor
+                        for line in manifest_raw.splitlines():
+                            if line.lower().startswith('implementation-vendor:'):
+                                vendor = line.split(':', 1)[1].strip().lower()
+                                if any(v in vendor for v in ('fabricmc', 'minecraftforge', 'quiltmc',
+                                                              'neoforged', 'quilt', 'neo forged')):
+                                    return True
+                                break
                     except Exception:
                         pass
+
+                # F12 — Carpetas internas de loaders dentro de .minecraft (no son mods de usuario)
+                _loader_internal_dirs = ('.fabric/', '.quilt/', '.forge/', '.neoforge/', '.ornithe/')
+                if any(jar_path.lower().replace('\\', '/').find(d) != -1 for d in _loader_internal_dirs):
+                    return True
+
+                # F16 — JARs firmados con certificados de CurseForge/Modrinth CDN
+                # Todos los mods legítimos descargados de esas plataformas llevan firma digital
+                for entry in zf.namelist():
+                    entry_l = entry.lower()
+                    if entry_l.startswith('meta-inf/') and (
+                        entry_l.endswith('.sf') or entry_l.endswith('.rsa') or entry_l.endswith('.dsa')
+                    ):
+                        try:
+                            sig_data = zf.read(entry).decode('utf-8', errors='ignore').lower()
+                            if any(cdn in sig_data for cdn in (
+                                'curseforge', 'overwolf', 'modrinth', 'cfwidget',
+                                'creeperhost', 'multimc.org', 'prismlauncher',
+                            )):
+                                return True
+                        except Exception:
+                            pass
+                        break  # only check first signature file
+
         except Exception:
             pass
         return False
@@ -2739,7 +2909,43 @@ class ArgusApp:
             'winsystems\\systeminformer',
             # AHK instalado en Program Files (instalación oficial — no sospechosa)
             'program files\\autohotkey', 'program files (x86)\\autohotkey',
+            # F17 — ProgramData y carpetas del sistema que generan FP por fecha
+            'programdata\\microsoft', '\\windows\\fonts\\',
+            'programdata\\packages', 'programdata\\windowsholographic',
+            # F18 — AppData\Local\Microsoft (Office, Edge, Teams, Visual C++ runtimes)
+            'appdata\\local\\microsoft\\',
+            # F19 — Carpetas de datos de launchers (se filtraba el exe pero no sus datos)
+            'appdata\\roaming\\prismlauncher\\',
+            'appdata\\roaming\\multimc\\',
+            'appdata\\local\\gdlauncher_next\\',
+            'appdata\\local\\atlauncher\\',
+            'appdata\\roaming\\lunarclient\\',
+            'appdata\\local\\curseforge\\',
+            'appdata\\local\\packages\\microsoft.',  # Windows Store sandboxed
         }
+
+        # F33/F34 — Estadísticas de filtrado por motivo (para diagnóstico)
+        _filter_stats = {}
+        _debug_filter = os.environ.get('ARGUS_DEBUG_FILTER') == '1'
+        _discarded_items = [] if _debug_filter else None  # F35: collect if debug mode
+        _legit_mod_count = 0  # F25: cuenta mods legítimos verificados
+        def _discard(reason_key, item_nombre, item_ruta=''):
+            _filter_stats[reason_key] = _filter_stats.get(reason_key, 0) + 1
+            if _debug_filter:
+                _discarded_items.append({'reason': reason_key, 'nombre': item_nombre, 'ruta': item_ruta})
+            print(f"✅ [{reason_key}] Descartado: {item_nombre[:60]} @ {item_ruta[:60]}")
+
+        # F5 — ¿Está Minecraft corriendo ahora mismo? (cached para el loop)
+        _mc_running = any(
+            'java' in (p.info.get('name') or '').lower() and
+            'minecraft' in ' '.join(p.info.get('cmdline') or []).lower()
+            for p in psutil.process_iter(['name', 'cmdline'])
+            if True
+        )
+        try:
+            _mc_running  # cache computed above
+        except Exception:
+            _mc_running = False
 
         for item in issues:
             nombre = item.get('nombre', '').lower()
@@ -2752,8 +2958,57 @@ class ArgusApp:
             _combined_path = ruta + '|' + archivo
             _is_absolute_safe = any(safe in _combined_path for safe in ABSOLUTE_SAFE_PATHS)
             if _is_absolute_safe:
-                print(f"✅ [SAFE_PATH] Excluido por ruta segura: {nombre} @ {ruta[:80]}")
+                _discard('SAFE_PATH', nombre, ruta)
                 continue
+
+            # F2 — Rutas vanilla de Minecraft: NUNCA contienen hacks activos.
+            # versions/, libraries/, assets/, logs/, crash-reports/, screenshots/, natives/
+            _combined_mc = ruta + '|' + archivo
+            if any(vp in _combined_mc for vp in _VANILLA_MC_PATHS):
+                # Excepción: tipos de confianza absoluta (bytecode analysis, self-deletion, etc.)
+                if tipo not in ('modified_minecraft_jar', 'self_deletion_hack', 'cp_string_hack'):
+                    _discard('VANILLA_MC_PATH', nombre, ruta)
+                    continue
+
+            # F20 — Paths de servidor Minecraft (plugins, no hacks de cliente)
+            _server_fragments = ('\\server\\', '/server/', '\\plugins\\', '/plugins/',
+                                 '\\bukkit\\', '/bukkit/', '\\spigot\\', '/spigot/',
+                                 '\\papermc\\', '/papermc/', '\\purpur\\', '/purpur/')
+            if any(sf in _combined_mc for sf in _server_fragments):
+                _discard('SERVER_PATH', nombre, ruta)
+                continue
+
+            # F21 — Mods desactivados (.disabled, .bak) — el jugador los desactivó a propósito
+            _archivo_raw = item.get('archivo', '') or item.get('ruta', '')
+            if str(_archivo_raw).lower().endswith(('.disabled', '.bak', '.off', '.old')):
+                _discard('MOD_DISABLED', nombre, ruta)
+                continue
+
+            # F9 — Instancia activa según profiles.json del launcher → no degradar
+            _item_path_lower = (item.get('ruta') or item.get('archivo') or '').lower()
+            _in_active_instance = False
+            try:
+                _active_paths = self._get_active_launcher_instance_paths()
+                if _active_paths and any(_item_path_lower.startswith(ap) for ap in _active_paths):
+                    _in_active_instance = True
+            except Exception:
+                pass
+
+            # F6 — Instancias antiguas/abandonadas (>60 días sin lanzar) → bajar severidad
+            # No aplicar si la instancia está marcada como activa en profiles.json (F9)
+            if not _in_active_instance:
+                try:
+                    _abandoned_paths = self._get_abandoned_instance_paths()
+                    if _abandoned_paths and any(_item_path_lower.startswith(ap) for ap in _abandoned_paths):
+                        if item.get('alerta') == 'CRITICAL':
+                            item['alerta'] = 'SOSPECHOSO'
+                            item.setdefault('detected_patterns', []).append('abandoned_instance_60d')
+                        elif item.get('alerta') == 'SOSPECHOSO':
+                            item['alerta'] = 'POCO_SOSPECHOSO'
+                            item.setdefault('detected_patterns', []).append('abandoned_instance_60d')
+                        item['confidence'] = max(0.15, float(item.get('confidence', 0.5)) * 0.6)
+                except Exception:
+                    pass
 
             # Verificar JARs contra indicadores locales y Modrinth antes de acusarlos
             if tipo in ('blacklisted_mod', 'jar_file') or archivo.endswith('.jar') or ruta.endswith('.jar'):
@@ -2761,12 +3016,15 @@ class ArgusApp:
                 if _jar_path and os.path.isfile(str(_jar_path)):
                     if self._is_legitimate_mod_jar(str(_jar_path)):
                         print(f"✅ [ManifestCheck] Mod legítimo (fabric/forge/quilt): {os.path.basename(str(_jar_path))}")
+                        _legit_mod_count += 1
                         continue
                     if self._is_modrinth_legitimate(str(_jar_path)):
                         print(f"✅ [Modrinth] Mod legítimo verificado: {os.path.basename(str(_jar_path))}")
+                        _legit_mod_count += 1
                         continue
                     if self._is_curseforge_legitimate(str(_jar_path)):
                         print(f"✅ [CurseForge] Mod legítimo verificado: {os.path.basename(str(_jar_path))}")
+                        _legit_mod_count += 1
                         continue
 
             # P2 #1+8 — VirusTotal + MalwareBazaar para .exe/.jar sospechosos
@@ -2804,6 +3062,23 @@ class ArgusApp:
                             item['detected_patterns'] = list(item.get('detected_patterns', [])) + [f'vt_{_pos}']
                 except Exception:
                     pass
+
+            # F23 — Boost confidence si el mismo hash está confirmado en ≥3 scans en la BD cloud
+            try:
+                _f23_path = item.get('archivo') or item.get('ruta') or ''
+                if _f23_path and os.path.isfile(str(_f23_path)):
+                    import hashlib as _hl_f23
+                    _sha256_f23 = _hl_f23.sha256(open(str(_f23_path), 'rb').read(8 * 1024 * 1024)).hexdigest()
+                    _freq = self._cloud_hash_frequency.get(_sha256_f23.lower(), 0)
+                    if _freq >= 3:
+                        _boost = min(0.30, _freq * 0.05)
+                        item['confidence'] = min(0.99, float(item.get('confidence', 0.5)) + _boost)
+                        item.setdefault('detected_patterns', []).append(f'cloud_freq_{_freq}')
+                        if _freq >= 5 and item.get('alerta') not in ('CRITICAL', 'MUY_SOSPECHOSO'):
+                            item['alerta'] = 'SOSPECHOSO'
+                        print(f"📊 [F23] Hash visto {_freq}x en BD cloud → boost confianza: {os.path.basename(str(_f23_path))}")
+            except Exception:
+                pass
 
             # Tipos de scanners especializados — confiar en ellos sin filtrar
             if tipo in TRUSTED_TYPES:
@@ -2847,19 +3122,37 @@ class ArgusApp:
             if is_false_positive:
                 continue
 
-            # P2 #26 — Antigüedad de archivo >1 año → bajar severidad si no es confirmed hack
-            if item.get('alerta') == 'SOSPECHOSO':
-                _fp = item.get('archivo') or item.get('ruta') or ''
-                if _fp and os.path.isfile(str(_fp)):
-                    try:
-                        import time as _time_age
-                        _age_days = (_time_age.time() - os.path.getmtime(str(_fp))) / 86400
-                        if _age_days > 365 and 'cloud_hash_match' not in item.get('tipo', ''):
-                            item['alerta'] = 'POCO_SOSPECHOSO'
+            # P2 #26 / F22 — Antigüedad de archivo → bajar severidad progresivamente
+            _fp_age = item.get('archivo') or item.get('ruta') or ''
+            if _fp_age and os.path.isfile(str(_fp_age)):
+                try:
+                    import time as _time_age
+                    _age_days = (_time_age.time() - os.path.getmtime(str(_fp_age))) / 86400
+                    _tipo_age = item.get('tipo', '')
+                    _is_confirmed = 'cloud_hash_match' in _tipo_age or 'malwarebazaar' in str(item.get('detected_patterns', []))
+                    if not _is_confirmed:
+                        if _age_days > 365:
+                            # Más de 1 año — muy probablemente inactivo
+                            if item.get('alerta') in ('SOSPECHOSO', 'CRITICAL'):
+                                item['alerta'] = 'POCO_SOSPECHOSO'
                             item['confidence'] = max(0.15, float(item.get('confidence', 0.5)) * 0.55)
                             item.setdefault('detected_patterns', []).append(f'file_age_{int(_age_days)}d')
-                    except Exception:
-                        pass
+                        elif _age_days > 90:
+                            # F22: Entre 90 y 365 días — reducción moderada
+                            item['confidence'] = max(0.25, float(item.get('confidence', 0.5)) * 0.80)
+                            item.setdefault('detected_patterns', []).append(f'file_age_{int(_age_days)}d')
+                        # F24 — Archivo sin modificar en >30 días → indicador de uso crónico normal (no hack activo)
+                        # Aplicar solo si no está confirmado por cloud hash (en cuyo caso la antigüedad no importa)
+                        elif _age_days > 30:
+                            _is_confirmed_f24 = any(
+                                p in str(item.get('detected_patterns', []))
+                                for p in ('cloud_hash_match', 'malwarebazaar', 'vt_')
+                            )
+                            if not _is_confirmed_f24 and item.get('alerta') not in ('CRITICAL',):
+                                item['confidence'] = max(0.25, float(item.get('confidence', 0.5)) * 0.90)
+                                item.setdefault('detected_patterns', []).append(f'file_age_{int(_age_days)}d_unchanged')
+                except Exception:
+                    pass
 
             # 2. ANÁLISIS AVANZADO DE CONTENIDO (si es un archivo)
             content_confidence = 0
@@ -2905,7 +3198,6 @@ class ArgusApp:
 
             # Factor A: Nombre del archivo/hallazgo contiene patrón definitivo
             if is_potential_hack:
-                # Si el pattern es de _DEFINITE_HACK_NAMES (nombre exclusivo), score alto
                 matched_definite = next(
                     (p for p in real_hack_patterns if p in archivo or p in nombre),
                     None
@@ -2928,21 +3220,39 @@ class ArgusApp:
                 ai_score += 20
 
             # Factor D: Confidence original del scanner especializado
+            # F26: ignorar confidence=0.5 exacto (valor por defecto de muchos scanners — no es evidencia real)
             orig_conf = item.get('confidence', 0)
             if isinstance(orig_conf, float) and orig_conf <= 1.0:
                 orig_conf *= 100
-            if orig_conf >= 90:
-                ai_score += 30
-            elif orig_conf >= 75:
-                ai_score += 20
-            elif orig_conf >= 60:
-                ai_score += 10
+            _is_default_conf = abs(orig_conf - 50.0) < 1.0  # exactamente 50%
+            if not _is_default_conf:
+                if orig_conf >= 90:
+                    ai_score += 30
+                elif orig_conf >= 75:
+                    ai_score += 20
+                elif orig_conf >= 60:
+                    ai_score += 10
+
+            # F3 — Penalizar JARs en \versions\ o \libraries\ que pasaron los filtros anteriores
+            # (pueden llegar aquí si son tipo TRUSTED — no borrarlos, solo bajar score)
+            _combined_vanilla = ruta + '|' + archivo
+            if any(vp in _combined_vanilla for vp in _VANILLA_MC_PATHS):
+                ai_score = max(0, ai_score - 25)
+                item.setdefault('detected_patterns', []).append('vanilla_path_penalty')
 
             # Solo mostrar si hay evidencia real (ai_score mínimo)
             if ai_score < 25 and not is_potential_hack and not is_in_suspicious_folder:
-                # Ruido sin evidencia concreta — descartar
-                print(f"🗑️ [AI-FILTER] Descartado por score bajo ({ai_score}): {nombre[:60]}")
+                _discard('LOW_SCORE', nombre, ruta)
                 continue
+
+            # F5 — Si el JAR está en \mods\ pero Minecraft NO está corriendo → bajar CRITICAL
+            if not _mc_running and item.get('alerta') == 'CRITICAL':
+                _in_mods = '\\mods\\' in ruta or '/mods/' in ruta
+                _is_jar_type = tipo in ('blacklisted_mod', 'jar_file', 'minecraft_file') or archivo.endswith('.jar')
+                if _in_mods and _is_jar_type:
+                    item['alerta'] = 'SOSPECHOSO'
+                    item.setdefault('detected_patterns', []).append('mc_not_running_at_scan')
+                    ai_score = min(ai_score, 65)
 
             # Clasificar por score acumulado
             if not item.get('categoria'):
@@ -2985,7 +3295,7 @@ class ArgusApp:
                         item['detected_patterns'] = list(set(item.get('detected_patterns', []) + ['multi_evidence_correlation']))
                 print(f"🔗 Correlación de evidencias: {len(matching)} hallazgos → CRITICAL")
 
-        # Mostrar estadísticas de filtrado
+        # F34 — Estadísticas de filtrado por motivo
         print(f"\n📊 ESTADÍSTICAS DE FILTRADO MEJORADO:")
         print(f"🔴 HACKS CRÍTICOS: {len(hacks_critical)}")
         print(f"🟠 SOSPECHOSOS: {len(hacks_sospechoso)}")
@@ -2993,22 +3303,57 @@ class ArgusApp:
         print(f"🟢 NORMALES: {len(hacks_normal)}")
         print(f"📋 TOTAL FILTRADO: {len(filtered)}")
         print(f"🗑️ ELEMENTOS DESCARTADOS: {len(issues) - len(filtered)}")
-        
-        # Mostrar ejemplos de cada categoría
+        if _filter_stats:
+            print(f"📂 MOTIVOS DE DESCARTE:")
+            for reason, count in sorted(_filter_stats.items(), key=lambda x: -x[1]):
+                print(f"   {reason}: {count}")
+
+        # F35 — Debug filter mode: show all discarded items in UI
+        if _debug_filter and _discarded_items:
+            print(f"\n🔬 [DEBUG-FILTER] {len(_discarded_items)} hallazgos descartados:")
+            for di in _discarded_items:
+                print(f"   [{di['reason']}] {di['nombre'][:70]} @ {di['ruta'][:50]}")
+            # Inject discarded items as low-priority notes so they appear in UI
+            for di in _discarded_items[:30]:
+                filtered.append({
+                    'nombre': f"[FILTRADO:{di['reason']}] {di['nombre']}",
+                    'ruta': di['ruta'],
+                    'tipo': 'debug_filter_discarded',
+                    'categoria': 'DEBUG',
+                    'alerta': 'NORMAL',
+                    'confidence': 0.0,
+                    'detected_patterns': [f'filter_reason:{di["reason"]}'],
+                    'explicacion': f'Hallazgo descartado por filtro ({di["reason"]}). Visible solo en modo --debug-filter.',
+                })
+
         if hacks_critical:
             print(f"\n🔴 HACKS CRÍTICOS ENCONTRADOS:")
-            for item in hacks_critical[:5]:  # Mostrar solo los primeros 5
+            for item in hacks_critical[:5]:
                 print(f"  - {item.get('archivo', 'N/A')} en {item.get('ruta', 'N/A')}")
-        
+
         if hacks_sospechoso:
             print(f"\n🟠 HACKS SOSPECHOSOS ENCONTRADOS:")
-            for item in hacks_sospechoso[:5]:  # Mostrar solo los primeros 5
+            for item in hacks_sospechoso[:5]:
                 print(f"  - {item.get('archivo', 'N/A')} en {item.get('ruta', 'N/A')}")
-        
+
         if hacks_poco_sospechoso:
             print(f"\n🟡 HACKS POCO SOSPECHOSOS ENCONTRADOS:")
             for item in hacks_poco_sospechoso[:5]:
                 print(f"  - {item.get('archivo', 'N/A')} en {item.get('ruta', 'N/A')}")
+
+        # F25 — Si el jugador tiene ≥15 mods legítimos verificados → perfil de modder
+        # → bajar confianza de hallazgos no confirmados para reducir FP en modders
+        if _legit_mod_count >= 15:
+            print(f"🎮 [F25] Perfil de modder detectado: {_legit_mod_count} mods legítimos → umbral reducido")
+            _modder_unconfirmed_types = {
+                'blacklisted_mod', 'jar_file', 'mixin_hack', 'dll_nonstandard', 'hack_string_in_loaded_jar'
+            }
+            for _item in filtered:
+                if _item.get('tipo') in _modder_unconfirmed_types:
+                    if 'cloud_hash_match' not in str(_item.get('detected_patterns', [])) and \
+                       'malwarebazaar' not in str(_item.get('detected_patterns', [])):
+                        _item['confidence'] = max(0.15, float(_item.get('confidence', 0.5)) * 0.75)
+                        _item.setdefault('detected_patterns', []).append(f'modder_profile_{_legit_mod_count}mods')
 
         # P2 #8 — Descartar JARs demasiado pequeños (< 3KB)
         filtered = self._filter_by_file_size(filtered)
@@ -3046,6 +3391,22 @@ class ArgusApp:
         print(f"📋 TOTAL FINAL (tras decay + agrupación): {len(filtered)}")
         return filtered
         
+    @staticmethod
+    def _apply_profile_env(config):
+        """P5 #35 — If ARGUS_PROFILE env var is set, overlay token/api_url from profiles.json."""
+        profile_name = os.environ.get('ARGUS_PROFILE', '').strip()
+        if not profile_name:
+            return config
+        data = ArgusApp._load_scanner_profiles()
+        prof = data.get('profiles', {}).get(profile_name)
+        if prof:
+            config['scan_token'] = prof.get('token', config.get('scan_token', ''))
+            config['api_url']    = prof.get('api_url', config.get('api_url', ''))
+            print(f"🖥 Perfil cargado: {profile_name!r} → {config['api_url']}")
+        else:
+            print(f"⚠️ Perfil '{profile_name}' no encontrado en profiles.json")
+        return config
+
     def load_config(self):
         """Carga la configuración desde ubicación persistente"""
         try:
@@ -3201,6 +3562,347 @@ class ArgusApp:
             traceback.print_exc()
             return {}
 
+    # ── P5 #35 — Multi-profile scanner config ────────────────────────────────
+    @staticmethod
+    def _profiles_path():
+        return os.path.join(os.environ.get('APPDATA', ''), 'ASPERSProjectsSS', 'profiles.json')
+
+    @staticmethod
+    def _load_scanner_profiles():
+        """Returns {'active': 'name', 'profiles': {'name': {'token':..,'api_url':..}}}"""
+        path = ArgusApp._profiles_path()
+        if not os.path.isfile(path):
+            return {'active': '', 'profiles': {}}
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {'active': '', 'profiles': {}}
+        except Exception:
+            return {'active': '', 'profiles': {}}
+
+    @staticmethod
+    def _save_scanner_profiles(data):
+        path = ArgusApp._profiles_path()
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"⚠️ Error guardando profiles.json: {e}")
+
+    def _save_current_profile(self, name=None):
+        """Persist current token+api_url as a named profile."""
+        token   = self.config.get('scan_token', '')
+        api_url = self.config.get('api_url', 'https://asperss.onrender.com')
+        if not token:
+            return
+        if not name:
+            name = self.config.get('staff_name') or 'Servidor principal'
+        data = self._load_scanner_profiles()
+        data['profiles'][name] = {'token': token, 'api_url': api_url}
+        data['active'] = name
+        self._save_scanner_profiles(data)
+        print(f"✅ Perfil guardado: {name!r}")
+
+    def show_profile_selector(self):
+        """Toplevel dialog listing saved profiles; loads selected one."""
+        import tkinter as tk
+        from tkinter import simpledialog
+        data = self._load_scanner_profiles()
+        profiles = data.get('profiles', {})
+        if not profiles:
+            try:
+                from tkinter import messagebox
+                messagebox.showinfo("Perfiles", "No hay perfiles guardados todavía.\n\nEl perfil actual se guarda automáticamente al autenticarse.")
+            except Exception:
+                pass
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title("Cambiar servidor")
+        win.geometry("340x280")
+        win.configure(bg="#0d1117")
+        win.grab_set()
+        win.resizable(False, False)
+
+        tk.Label(win, text="Seleccionar servidor", font=("Segoe UI", 12, "bold"),
+                 bg="#0d1117", fg="#e2e8f0").pack(pady=(16, 4))
+        tk.Label(win, text="Elige el perfil de servidor a usar:", font=("Segoe UI", 9),
+                 bg="#0d1117", fg="#8b9ab0").pack()
+
+        listbox = tk.Listbox(win, font=("Segoe UI", 10), bg="#161b22", fg="#e2e8f0",
+                             selectbackground="#5865f2", relief=tk.FLAT, bd=0,
+                             highlightthickness=0, activestyle='none', height=6)
+        listbox.pack(fill=tk.BOTH, expand=True, padx=16, pady=10)
+
+        active = data.get('active', '')
+        for i, name in enumerate(profiles):
+            listbox.insert(tk.END, f"  {'★ ' if name == active else '  '}{name}")
+            if name == active:
+                listbox.selection_set(i)
+                listbox.see(i)
+
+        def _on_select():
+            idx = listbox.curselection()
+            if not idx:
+                return
+            chosen = list(profiles.keys())[idx[0]]
+            prof = profiles[chosen]
+            self.config['scan_token']  = prof.get('token', '')
+            self.config['api_url']     = prof.get('api_url', 'https://asperss.onrender.com')
+            data['active'] = chosen
+            self._save_scanner_profiles(data)
+            win.destroy()
+            try:
+                from tkinter import messagebox
+                messagebox.showinfo("Perfil cambiado",
+                    f"Ahora usando: {chosen}\n\nEl próximo escaneo usará este servidor.")
+            except Exception:
+                pass
+
+        def _on_delete():
+            idx = listbox.curselection()
+            if not idx:
+                return
+            chosen = list(profiles.keys())[idx[0]]
+            try:
+                from tkinter import messagebox
+                if not messagebox.askyesno("Eliminar perfil", f"¿Eliminar el perfil '{chosen}'?"):
+                    return
+            except Exception:
+                pass
+            del data['profiles'][chosen]
+            if data.get('active') == chosen:
+                data['active'] = next(iter(data['profiles']), '')
+            self._save_scanner_profiles(data)
+            win.destroy()
+            self.show_profile_selector()
+
+        btn_frame = tk.Frame(win, bg="#0d1117")
+        btn_frame.pack(fill=tk.X, padx=16, pady=(0, 14))
+        tk.Button(btn_frame, text="Usar este perfil", command=_on_select,
+                  bg="#5865f2", fg="white", font=("Segoe UI", 9, "bold"),
+                  relief=tk.FLAT, padx=14, pady=7, cursor="hand2").pack(side=tk.LEFT, padx=(0, 6))
+        tk.Button(btn_frame, text="Eliminar", command=_on_delete,
+                  bg="#2d1b1b", fg="#ef4444", font=("Segoe UI", 9),
+                  relief=tk.FLAT, padx=10, pady=7, cursor="hand2").pack(side=tk.LEFT)
+        tk.Button(btn_frame, text="Cancelar", command=win.destroy,
+                  bg="#161b22", fg="#8b9ab0", font=("Segoe UI", 9),
+                  relief=tk.FLAT, padx=10, pady=7, cursor="hand2").pack(side=tk.RIGHT)
+
+    # ── Click-speed test (P3 #26 — hardware autoclicker button detection) ────
+    def _show_click_test(self):
+        """
+        Muestra un test de velocidad de clicks antes del scan.
+        Pide al jugador hacer clic 15 veces para analizar el patrón.
+        - CV < 0.04 y CPS > 8  → botón de autoclicker hardware (CRITICAL)
+        - CV < 0.10 y CPS > 8  → software autoclicker activo (SOSPECHOSO)
+        - CPS > 20              → imposible humano (CRITICAL)
+        """
+        import tkinter as tk
+        import time
+
+        CLICKS_NEEDED  = 15
+        TIMEOUT_S      = 40
+        BG             = '#0d1117'
+        ACCENT         = '#5865f2'
+        RED            = '#ef4444'
+        GREEN          = '#10b981'
+        AMBER          = '#f59e0b'
+        TEXT           = '#e2e8f0'
+        TEXT_D         = '#8b9ab0'
+        CIRCLE_IDLE    = '#1e2433'
+        CIRCLE_HOVER   = '#2a3050'
+
+        click_times    = []
+        done_event     = threading.Event()
+
+        win = tk.Toplevel(self.root)
+        win.title("Verificación de mouse")
+        win.geometry("420x460")
+        win.configure(bg=BG)
+        win.resizable(False, False)
+        win.grab_set()
+        win.protocol('WM_DELETE_WINDOW', lambda: None)  # no cerrar
+
+        # Centrar
+        win.update_idletasks()
+        x = (win.winfo_screenwidth()  // 2) - 210
+        y = (win.winfo_screenheight() // 2) - 230
+        win.geometry(f"420x460+{x}+{y}")
+
+        # Título
+        tk.Label(win, text="Verificación de velocidad",
+                 font=("Segoe UI", 13, "bold"), bg=BG, fg=TEXT).pack(pady=(22, 2))
+        tk.Label(win, text=f"Haz clic en el círculo {CLICKS_NEEDED} veces",
+                 font=("Segoe UI", 10), bg=BG, fg=TEXT_D).pack()
+
+        # Contador
+        count_var = tk.StringVar(value=f"0 / {CLICKS_NEEDED}")
+        count_lbl = tk.Label(win, textvariable=count_var,
+                             font=("Segoe UI", 22, "bold"), bg=BG, fg=ACCENT)
+        count_lbl.pack(pady=(10, 4))
+
+        # Barra de progreso (canvas)
+        bar_bg = tk.Frame(win, bg='#1e2433', height=6)
+        bar_bg.pack(fill=tk.X, padx=40, pady=(0, 16))
+        bar_bg.pack_propagate(False)
+        bar_canvas = tk.Canvas(bar_bg, height=6, bg='#1e2433',
+                               highlightthickness=0, bd=0)
+        bar_canvas.pack(fill=tk.BOTH, expand=True)
+
+        def _draw_bar(n):
+            bar_canvas.delete('all')
+            w = bar_canvas.winfo_width()
+            if w < 2:
+                return
+            frac  = n / CLICKS_NEEDED
+            color = ACCENT if frac < 1.0 else GREEN
+            bar_canvas.create_rectangle(0, 0, int(w * frac), 6,
+                                        fill=color, outline='')
+        bar_canvas.bind('<Configure>', lambda e: _draw_bar(len(click_times)))
+
+        # Círculo clickeable
+        canvas = tk.Canvas(win, width=160, height=160, bg=BG,
+                           highlightthickness=0, bd=0)
+        canvas.pack(pady=4)
+
+        def _draw_circle(color=CIRCLE_IDLE):
+            canvas.delete('all')
+            canvas.create_oval(10, 10, 150, 150, fill=color,
+                               outline=ACCENT, width=2)
+            remaining = max(0, CLICKS_NEEDED - len(click_times))
+            canvas.create_text(80, 80, text=str(remaining) if remaining > 0 else "✓",
+                               font=("Segoe UI", 38, "bold"),
+                               fill=TEXT if remaining > 0 else GREEN)
+
+        _draw_circle()
+
+        # Feedback
+        fb_var = tk.StringVar(value="¡Comienza a hacer clic!")
+        fb_lbl = tk.Label(win, textvariable=fb_var,
+                          font=("Segoe UI", 10), bg=BG, fg=TEXT_D)
+        fb_lbl.pack(pady=(4, 2))
+
+        # Countdown label
+        cd_var = tk.StringVar(value=f"Tiempo restante: {TIMEOUT_S}s")
+        cd_lbl = tk.Label(win, textvariable=cd_var,
+                          font=("Segoe UI", 9), bg=BG, fg=TEXT_D)
+        cd_lbl.pack()
+
+        def _on_click(event=None):
+            if done_event.is_set():
+                return
+            t = time.perf_counter()
+            click_times.append(t)
+            n = len(click_times)
+            count_var.set(f"{n} / {CLICKS_NEEDED}")
+            _draw_circle(CIRCLE_HOVER)
+            win.after(80, lambda: _draw_circle(CIRCLE_IDLE))
+            _draw_bar(n)
+            if n >= CLICKS_NEEDED:
+                _finish()
+
+        canvas.bind('<Button-1>', _on_click)
+        canvas.bind('<Enter>', lambda e: _draw_circle(CIRCLE_HOVER) if not done_event.is_set() else None)
+        canvas.bind('<Leave>', lambda e: _draw_circle(CIRCLE_IDLE) if not done_event.is_set() else None)
+        canvas.config(cursor='hand2')
+
+        def _finish():
+            if done_event.is_set():
+                return
+            done_event.set()
+            self._click_test_result = _analyze(click_times)
+            verdict = self._click_test_result
+            if verdict:
+                color = RED if verdict['alerta'] in ('CRITICAL',) else \
+                        AMBER if verdict['alerta'] == 'SOSPECHOSO' else GREEN
+                fb_var.set(verdict['nombre'])
+                fb_lbl.config(fg=color)
+                cd_var.set("")
+                _draw_circle(RED if color == RED else (AMBER if color == AMBER else GREEN))
+            else:
+                fb_var.set("✓ Patrón humano normal")
+                fb_lbl.config(fg=GREEN)
+                _draw_circle(GREEN)
+            win.after(1800, lambda: (win.grab_release(), win.destroy(),
+                                     self.full_scan_with_discord()))
+
+        def _countdown(remaining):
+            if done_event.is_set():
+                return
+            cd_var.set(f"Tiempo restante: {remaining}s")
+            if remaining <= 0:
+                _finish()
+            else:
+                win.after(1000, lambda: _countdown(remaining - 1))
+
+        win.after(100, lambda: _countdown(TIMEOUT_S))
+
+        def _analyze(times):
+            if len(times) < 6:
+                return None
+            intervals = [times[k+1] - times[k] for k in range(len(times) - 1)]
+            mean_iv  = sum(intervals) / len(intervals)
+            variance = sum((x - mean_iv)**2 for x in intervals) / len(intervals)
+            std_iv   = variance ** 0.5
+            cps      = 1.0 / mean_iv if mean_iv > 0 else 0
+            cv       = std_iv / mean_iv if mean_iv > 0 else 1.0
+
+            # Imposible humano: >20 CPS con muy baja varianza
+            if cps > 20 and cv < 0.06:
+                return {
+                    'tipo':        'MOUSE_HARDWARE_AUTOCLICKER_BTN',
+                    'nombre':      f'Botón autoclicker hardware detectado: {cps:.1f} CPS, σ={std_iv*1000:.1f}ms',
+                    'ruta':        '',
+                    'detalle':     (f'Clicks: {len(times)}  |  CPS: {cps:.1f}  |  '
+                                   f'Intervalo medio: {mean_iv*1000:.1f}ms  |  '
+                                   f'Desv. estándar: {std_iv*1000:.2f}ms  |  CV: {cv:.3f}'),
+                    'alerta':      'CRITICAL',
+                    'categoria':   'MOUSE_WEIGHT',
+                    'descripcion': (
+                        f'El test de clicks detectó {cps:.1f} CPS con varianza σ={std_iv*1000:.1f}ms '
+                        f'(CV={cv:.3f}). Velocidad imposible para un humano sin asistencia. '
+                        'Indica botón de autoclicker hardware del mouse activo (tipo Bloody, Redragon, etc.).'
+                    ),
+                }
+            # Hardware autoclicker: muy regular
+            if cps > 8 and cv < 0.04:
+                return {
+                    'tipo':        'MOUSE_HARDWARE_AUTOCLICKER_BTN',
+                    'nombre':      f'Botón autoclicker hardware: {cps:.1f} CPS, σ={std_iv*1000:.1f}ms',
+                    'ruta':        '',
+                    'detalle':     (f'Clicks: {len(times)}  |  CPS: {cps:.1f}  |  '
+                                   f'Intervalo medio: {mean_iv*1000:.1f}ms  |  '
+                                   f'Desv. estándar: {std_iv*1000:.2f}ms  |  CV: {cv:.3f}'),
+                    'alerta':      'CRITICAL',
+                    'categoria':   'MOUSE_WEIGHT',
+                    'descripcion': (
+                        f'El test de clicks muestra regularidad inhumana: {cps:.1f} CPS con '
+                        f'desviación de solo {std_iv*1000:.1f}ms (CV={cv:.3f}). '
+                        'Un humano tiene varianza >50ms. Esta precisión es característica del '
+                        'botón de autoclicker firmaware del mouse (Bloody, Redragon, Attack Shark, etc.).'
+                    ),
+                }
+            # Software autoclicker: regular pero con algo de jitter del OS
+            if cps > 8 and cv < 0.12:
+                return {
+                    'tipo':        'MOUSE_SOFTWARE_AUTOCLICKER',
+                    'nombre':      f'Posible autoclicker software: {cps:.1f} CPS, σ={std_iv*1000:.1f}ms',
+                    'ruta':        '',
+                    'detalle':     (f'Clicks: {len(times)}  |  CPS: {cps:.1f}  |  '
+                                   f'Intervalo medio: {mean_iv*1000:.1f}ms  |  '
+                                   f'Desv. estándar: {std_iv*1000:.2f}ms  |  CV: {cv:.3f}'),
+                    'alerta':      'SOSPECHOSO',
+                    'categoria':   'MOUSE_WEIGHT',
+                    'descripcion': (
+                        f'El test detectó {cps:.1f} CPS con varianza moderada (CV={cv:.3f}). '
+                        'Podría ser autoclicker de software (AutoHotkey, OP AutoClicker) '
+                        'o un click-jitter entrenado. Investigar en conjunto con otros hallazgos.'
+                    ),
+                }
+            return None
+
     def create_ui(self):
         """Crea la interfaz de usuario con estilo moderno ASPERS PROJECTS"""
         if UI_STYLE_AVAILABLE:
@@ -3269,6 +3971,9 @@ class ArgusApp:
             self.results_frame = results_widgets['container']
             self.results_text = results_widgets['text']
             self.results_label = results_widgets['title']
+
+            # P5 #35 — Ctrl+Shift+P → profile selector
+            self.root.bind('<Control-Shift-P>', lambda e: self.show_profile_selector())
         else:
             self._create_ui_fallback()
     
@@ -4112,6 +4817,10 @@ class ArgusApp:
                 _run_safe(self.scan_self_deletion_hacks)
                 self._set_scan_phase("🔒 Conexiones TLS sospechosas de Java...")
                 _run_safe(self.scan_java_suspicious_tls)
+                self._set_scan_phase("🎛️ Packet sniffers activos...")
+                _run_safe(self.scan_packet_sniffers)
+                self._set_scan_phase("🌐 IP Forwarding...")
+                _run_safe(self.scan_ip_forwarding)
                 self._set_scan_phase("🔬 Strings de hack en JARs cargados por Java...")
                 _run_safe(self.scan_process_memory_strings)
                 self._set_scan_phase("📍 Correlación de ruta de proceso sospechoso...")
@@ -4214,6 +4923,26 @@ class ArgusApp:
                 _run_safe(self.scan_recent_files_lnk)
                 self._set_scan_phase("🎯 Fingerprints compuestos de ghost clients...")
                 _run_safe(self.scan_hack_fingerprints)
+                self._set_scan_phase("💀 Cheat Engine activo/instalado...")
+                _run_safe(self.scan_cheat_engine)
+                self._set_scan_phase("🐍 Scripts Python de bots/macros...")
+                _run_safe(self.scan_python_hack_scripts)
+                self._set_scan_phase("☕ JDK completo instalado...")
+                _run_safe(self.scan_jdk_installed)
+                self._set_scan_phase("🌙 Módulos no oficiales de Lunar Client...")
+                _run_safe(self.scan_lunar_unofficial_modules)
+                self._set_scan_phase("🎙️ Virtual Audio Cable...")
+                _run_safe(self.scan_virtual_audio_cable)
+                self._set_scan_phase("📁 Repos Git sospechosos en Desktop/Documents...")
+                _run_safe(self.scan_git_repos_desktop)
+                self._set_scan_phase("🧩 Extensiones de navegador sospechosas...")
+                _run_safe(self.scan_browser_extensions_suspicious)
+                self._set_scan_phase("🔑 Integridad de minecraft client.jar vs Mojang...")
+                _run_safe(self.scan_modified_minecraft_jar)
+                self._set_scan_phase("📦 NBT exploits en saves de Minecraft...")
+                _run_safe(self.scan_nbt_exploits_saves)
+                self._set_scan_phase("🔧 Drivers kernel sospechosos (KMDF/minifilter)...")
+                _run_safe(self.scan_suspicious_kernel_drivers)
             # Grupo F — Técnicas avanzadas
             def _group_advanced():
                 try:
@@ -4363,6 +5092,12 @@ class ArgusApp:
                         'diferentes herramientas para evadir detección.'
                     ),
                 })
+
+            # ── P3 #26 — Resultado del test de clicks (botón autoclicker) ──────
+            _ctr = getattr(self, '_click_test_result', None)
+            if _ctr:
+                self.issues_found.append(_ctr)
+                print(f"🖱️ Click test: {_ctr['alerta']} — {_ctr['nombre']}")
 
             # ── Flag de scan demasiado rápido (#26) ──────────────────────
             if hasattr(self, 'scan_start_time'):
@@ -6311,6 +7046,8 @@ class ArgusApp:
                                 self.config['server_allowed_mods'] = data['allowed_mods']
                             if hasattr(self, 'db_integration') and self.db_integration:
                                 self.db_integration.scan_token = scan_token
+                            # P5 #35 — persist profile
+                            threading.Thread(target=self._save_current_profile, daemon=True).start()
                             return True
                         else:
                             print(f"⚠️ Token en config no es válido, solicitando nuevo token")
@@ -6465,14 +7202,16 @@ class ArgusApp:
                                         with open(config_path, 'w', encoding='utf-8') as f:
                                             json.dump(self.config, f, indent=2, ensure_ascii=False)
                                         print(f"💾 Token guardado en {config_path}")
-                                        
+
                                         # También actualizar self.config_path para futuras lecturas
                                         self.config_path = config_path
                                     except Exception as save_error:
                                         import traceback
                                         print(f"⚠️ No se pudo guardar token en archivo: {str(save_error)}")
                                         print(f"   Traceback: {traceback.format_exc()}")
-                                    
+
+                                    # P5 #35 — persist profile
+                                    threading.Thread(target=self._save_current_profile, daemon=True).start()
                                     return True  # Token válido
                                 else:
                                     # Token inválido, no reintentar
@@ -8098,6 +8837,11 @@ class ArgusApp:
             'shellexperiencehost', 'startmenuexperiencehost', 'searchhost',
             'runtimebroker', 'applicationframehost', 'systemsettings',
             'textinputhost', 'cortana', 'lockapp', 'microsoft.ui.',
+            # F30 — Launcher oficial Mojang llama a java.exe → no es sospechoso
+            'minecraftlauncher', 'minecraft launcher', 'minecraft.exe',
+            'javaw.exe', 'java.exe',  # el propio JRE
+            'prismlauncher', 'multimc', 'lunarclient', 'badlionclient',
+            'tlauncher', 'gdlauncher', 'atlauncher', 'curseforge', 'ftb',
         ]
         import codecs
         import struct
@@ -8229,6 +8973,15 @@ class ArgusApp:
         hack_terms = list(_DEFINITE_HACK_NAMES) + [
             'killaura', 'aimbot', 'triggerbot', 'dllinjector', 'cheatengine',
         ]
+        # F31 — Rutas de launchers instalados: el usuario las tecleó para abrir el launcher,
+        # no son evidencia de hacks. Excluir antes de evaluar hack_terms.
+        _typed_path_safe = (
+            'prismlauncher', 'multimc', 'gdlauncher', 'atlauncher', 'ftb app', 'ftbapp',
+            'curseforge', 'tlauncher', 'lunarclient', 'lunar client',
+            'program files\\java', 'program files (x86)\\java',
+            'program files\\eclipse', 'program files\\jdk',
+            '\\minecraft launcher', '\\minecraftlauncher',
+        )
         key_path = r'Software\Microsoft\Windows\CurrentVersion\Explorer\TypedPaths'
         try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as k:
@@ -8240,6 +8993,9 @@ class ArgusApp:
                         if not isinstance(data, str):
                             continue
                         path_lower = data.lower()
+                        # F31: skip known launcher/safe paths
+                        if any(sf in path_lower for sf in _typed_path_safe):
+                            continue
                         for term in hack_terms:
                             if term in path_lower:
                                 self.issues_found.append({
@@ -9090,9 +9846,17 @@ class ArgusApp:
             if not entries:
                 return
 
+            # F32 — Ignorar entradas de rutas vanilla de Minecraft (el juego los ejecuta todo el tiempo)
+            _shim_vanilla_skip = (
+                '\\versions\\', '/versions/', '\\libraries\\', '/libraries/',
+                '\\assets\\', '/assets/', '\\natives\\', '/natives/',
+            )
             suspicious = []
             for path in entries:
                 path_lower = path.lower()
+                # F32: skip vanilla MC paths in shimcache
+                if any(vp in path_lower for vp in _shim_vanilla_skip):
+                    continue
                 for term in hack_terms:
                     if term in path_lower:
                         suspicious.append(path)
@@ -9675,10 +10439,37 @@ class ArgusApp:
             'datura', 'mathias', 'weave', 'xray', 'killaura', 'aimbot',
             'scaffold', 'autoclick', 'clickgui', 'hacked', 'cheat', 'inject',
         ]
+        # F13 — Modpacks populares: sus mods son legítimos aunque tengan nombres genéricos
+        MODPACK_WHITELIST_DIRS = {
+            'all the mods', 'atm', 'allthemods', 'rlcraft', 'sky factory',
+            'skyfactory', 'ftb', 'all of fabric', 'aof', 'better mc', 'bettermc',
+            'create above and beyond', 'create: above', 'stoneblock',
+            'enigmatica', 'mc eternal', 'mceternal', 'crucial 2', 'crucial2',
+            'prominence', 'vault hunters', 'vaulthunters',
+        }
+        # F15 — Whitelist extendida de nombres de mods legítimos que colisionan con hack patterns
+        LEGIT_MOD_NAME_FRAGMENTS = {
+            'impactapi', 'impact-api',       # ImpactAPI (Fabric library)
+            'riseofempires',                  # mod de civilizaciones
+            'wurst-', 'wurst_',              # WURST keyboard (hardware)
+            'sodium-extra',                   # Sodium addon
+            'iris-mc', 'irisshaders',         # Iris Shaders
+            'meteor-client-',                 # solo si tiene `-` (release tag)
+            'axolotl', 'axolotlclient',       # AxolotlClient — mod legítimo de cosmetics
+            'continuity',                     # Continuity mod (connected textures)
+            'bobby',                          # Bobby mod (render distance)
+            'ferritecore',                    # memory optimization
+            'distanthorizons',               # Distant Horizons
+            'moreculling',                    # MoreCulling
+            'noxesium',                       # Noxesium (Hypixel mods)
+        }
         try:
             for mods_dir in mods_dirs_to_scan:
              for fname in os.listdir(mods_dir):
                 if not fname.lower().endswith('.jar'):
+                    continue
+                # F21 already handled in filter, but also skip here at source
+                if fname.lower().endswith(('.disabled', '.bak', '.off', '.old')):
                     continue
                 fpath = os.path.join(mods_dir, fname)
                 fname_lower = fname.lower()
@@ -9718,6 +10509,14 @@ class ArgusApp:
                         ),
                     })
                     continue
+                # F13 — Si el mod está en la carpeta de un modpack popular, skip
+                fpath_lower = fpath.lower()
+                if any(mp in fpath_lower for mp in MODPACK_WHITELIST_DIRS):
+                    continue
+                # F15 — Whitelist de nombres de mods legítimos que colisionan con hack patterns
+                if any(lm in fname_lower for lm in LEGIT_MOD_NAME_FRAGMENTS):
+                    continue
+
                 matched_bl = next((bl for bl in BLACKLISTED if bl in fname_lower), None)
                 if matched_bl:
                     print(f"🚨 MOD PROHIBIDO: {fname}")
@@ -9918,7 +10717,20 @@ class ArgusApp:
             'atioglxx.dll', 'atig6pxx.dll', 'ig75icd64.dll', 'ig4icd64.dll',
             'mswsock.dll', 'wldap32.dll', 'msimg32.dll', 'imm32.dll', 'uxtheme.dll',
             'cryptbase.dll', 'cryptsp.dll', 'propsys.dll', 'profapi.dll', 'clbcatq.dll',
+            # F27 — DLLs de mods gráficos legítimos (Iris LWJGL fork, Distant Horizons)
+            'lwjgl_opengl.dll', 'lwjgl_stb.dll', 'lwjgl_tinyfd.dll', 'lwjgl_vulkan.dll',
+            'lwjgl_openvr.dll', 'lwjgl_xxhash.dll', 'lwjgl_remotery.dll',
+            'lwjgl_nfd.dll', 'lwjgl_opus.dll', 'lwjgl_lz4.dll', 'lwjgl_zstd.dll',
+            'vma.dll', 'shaderc.dll', 'spirvcross.dll', 'glfw.dll',
+            # DXVK/MoltenVK para mods de renderizado con Vulkan
+            'd3d9.dll', 'dxvk.dll', 'vk-layer.dll', 'vulkan-1.dll', 'igvulkan64.dll',
         }
+        # F27 — Fragmentos de rutas de mods gráficos — DLLs en estas carpetas son seguras
+        SAFE_GRAPHICAL_MOD_PATHS = (
+            '\\iris\\', '\\irisshaders\\', '\\distanthorizons\\', '\\sodium\\',
+            '\\iris-data\\', '\\dh-data\\', '\\shaderpacks\\', '\\shaders\\',
+            '\\lwjgl\\', '\\lwjgl3\\', '\\natives\\', '-natives\\',
+        )
         found = []
         try:
             for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
@@ -9938,6 +10750,9 @@ class ArgusApp:
                             if dll_name in SAFE_DLL_NAMES:
                                 continue
                             if any(path.startswith(p) for p in SAFE_PATH_PREFIXES):
+                                continue
+                            # F27 — Rutas de mods gráficos son seguras
+                            if any(frag in path for frag in SAFE_GRAPHICAL_MOD_PATHS):
                                 continue
                             found.append((dll_name, mmap.path, proc.pid))
                     except (psutil.AccessDenied, psutil.NoSuchProcess, AttributeError):
@@ -10018,6 +10833,10 @@ class ArgusApp:
             '.cloudfront.net', '.amazonaws.com', '.fastly.net', '.akamai.net',
             '.modrinth.com', '.curseforge.com', '.twitch.tv', '.cdn.net',
             '.discordapp.com', '.discord.com', '.googleapis.com', '.gstatic.com',
+            # F29 — Servidores de Minecraft conocidos: sus IPs NO son C2
+            'hypixel.net', 'mineplex.com', 'cubecraft.net', 'hivemc.com',
+            'wynncraft.com', '2b2t.org', 'mccentral.org', 'minehut.com',
+            'aternos.me', 'aternos.org', 'falixnodes.net',
         )
         SAFE_TLS_PORTS = {443, 8443}
         SUSPICIOUS_TLS_PORTS = {4433, 8444, 9000, 9001, 9090, 1443, 2083, 2087, 2096}
@@ -10078,6 +10897,782 @@ class ArgusApp:
                     f'servicios de launchers. Podría ser un servidor C2 de un hack client.'
                 ),
             })
+
+    # ── P5 NUEVAS DETECCIONES ────────────────────────────────────────────────
+
+    def scan_cheat_engine(self):
+        """P5 #1 — Detecta Cheat Engine activo o instalado (herramienta de memory hacking)."""
+        print("🔍 Buscando Cheat Engine...")
+        CE_PROC_NAMES = {'cheatengine-x86_64.exe', 'cheatengine-x86_64-avx2.exe', 'cheatengine.exe',
+                         'ce.exe', 'ce_x64.exe', 'cheat engine.exe'}
+        CE_REGISTRY_PATHS = [
+            r'SOFTWARE\Cheat Engine',
+            r'SOFTWARE\WOW6432Node\Cheat Engine',
+            r'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Cheat Engine',
+        ]
+        CE_FILE_PATHS = [
+            os.path.join(os.environ.get('PROGRAMFILES', r'C:\Program Files'), 'Cheat Engine'),
+            os.path.join(os.environ.get('PROGRAMFILES(X86)', r'C:\Program Files (x86)'), 'Cheat Engine'),
+            os.path.expanduser(r'~\Desktop\cheatengine-x86_64.exe'),
+            os.path.expanduser(r'~\Downloads\cheatengine-x86_64.exe'),
+        ]
+        found_active = False
+        found_installed = False
+        try:
+            for proc in psutil.process_iter(['name', 'exe']):
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                    pexe  = os.path.basename(proc.info.get('exe') or '').lower()
+                    if pname in CE_PROC_NAMES or pexe in CE_PROC_NAMES:
+                        found_active = True
+                        self.issues_found.append({
+                            'nombre': f'Cheat Engine activo en proceso: {proc.info.get("name")}',
+                            'ruta': proc.info.get('exe') or 'Proceso activo',
+                            'archivo': proc.info.get('name') or '',
+                            'tipo': 'cheat_engine_active',
+                            'categoria': 'PROCESO',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.95,
+                            'detected_patterns': ['cheat_engine_process'],
+                            'explicacion': (
+                                'Cheat Engine está corriendo actualmente. Es la herramienta de '
+                                'memory hacking más usada para cheats en Minecraft (modifica '
+                                'valores de memoria del juego en tiempo real).'
+                            ),
+                        })
+                        print(f"🚨 CHEAT ENGINE ACTIVO: {proc.info.get('name')}")
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except Exception:
+            pass
+
+        if not found_active:
+            # Buscar en registro
+            for reg_path in CE_REGISTRY_PATHS:
+                try:
+                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path):
+                        found_installed = True
+                        break
+                except (FileNotFoundError, PermissionError):
+                    pass
+            # Buscar archivos
+            if not found_installed:
+                for ce_path in CE_FILE_PATHS:
+                    if os.path.exists(ce_path):
+                        found_installed = True
+                        break
+            if found_installed:
+                self.issues_found.append({
+                    'nombre': 'Cheat Engine instalado en el sistema',
+                    'ruta': 'Program Files / Registro',
+                    'archivo': 'cheatengine',
+                    'tipo': 'cheat_engine_installed',
+                    'categoria': 'FORENSE',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.72,
+                    'detected_patterns': ['cheat_engine_installed'],
+                    'explicacion': (
+                        'Cheat Engine está instalado. Aunque puede tener usos legítimos, '
+                        'es frecuentemente usado para cheats en Minecraft mediante '
+                        'modificación de memoria de procesos.'
+                    ),
+                })
+                print("⚠️ Cheat Engine instalado (no activo actualmente)")
+
+    def scan_packet_sniffers(self):
+        """P5 #2 — Detecta packet sniffers activos: Wireshark, Fiddler, mitmproxy, Charles."""
+        print("🔍 Buscando packet sniffers activos...")
+        SNIFFER_PROCS = {
+            'wireshark.exe': ('Wireshark', 0.70),
+            'dumpcap.exe':   ('Wireshark/dumpcap', 0.65),
+            'tshark.exe':    ('TShark (Wireshark CLI)', 0.65),
+            'fiddler.exe':   ('Fiddler', 0.60),
+            'fiddler4.exe':  ('Fiddler4', 0.60),
+            'fiddlercap.exe': ('FiddlerCap', 0.60),
+            'mitmdump.exe':  ('mitmproxy', 0.68),
+            'mitmweb.exe':   ('mitmproxy web', 0.68),
+            'mitmproxy.exe': ('mitmproxy', 0.68),
+            'charles.exe':   ('Charles Proxy', 0.60),
+            'proxyman.exe':  ('Proxyman', 0.55),
+            'httpanalyzer.exe': ('HTTP Analyzer', 0.55),
+            'burpsuite.exe': ('Burp Suite', 0.70),
+            'netmon.exe':    ('Network Monitor', 0.50),
+        }
+        try:
+            for proc in psutil.process_iter(['name', 'exe', 'pid']):
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                    if pname in SNIFFER_PROCS:
+                        label, conf = SNIFFER_PROCS[pname]
+                        self.issues_found.append({
+                            'nombre': f'Packet sniffer activo: {label} (PID {proc.info.get("pid")})',
+                            'ruta': proc.info.get('exe') or pname,
+                            'archivo': pname,
+                            'tipo': 'packet_sniffer_active',
+                            'categoria': 'RED',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': conf,
+                            'detected_patterns': [f'sniffer:{pname}'],
+                            'explicacion': (
+                                f'{label} está activo durante el scan. Un packet sniffer '
+                                f'puede usarse para capturar el tráfico de red de Minecraft '
+                                f'(tokens de sesión, servidor objetivo, etc.).'
+                            ),
+                        })
+                        print(f"⚠️ PACKET SNIFFER ACTIVO: {label}")
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except Exception as e:
+            print(f"Error en scan_packet_sniffers: {e}")
+
+    def scan_jdk_installed(self):
+        """P5 #4 — Detecta JDK completo instalado (señal de desarrollo de hacks)."""
+        print("🔍 Buscando JDK completo instalado...")
+        JDK_INDICATORS = [
+            os.path.join(os.environ.get('PROGRAMFILES', ''), 'Eclipse Adoptium'),
+            os.path.join(os.environ.get('PROGRAMFILES', ''), 'Java'),
+            os.path.join(os.environ.get('PROGRAMFILES(X86)', ''), 'Java'),
+            os.path.join(os.environ.get('PROGRAMFILES', ''), 'Microsoft'),  # MS Build JDK
+        ]
+        JDK_REG_PATHS = [
+            r'SOFTWARE\JavaSoft\Java Development Kit',
+            r'SOFTWARE\WOW6432Node\JavaSoft\Java Development Kit',
+            r'SOFTWARE\Eclipse Adoptium',
+            r'SOFTWARE\Eclipse Foundation',
+        ]
+        # JRE-only entries son normales (Minecraft lo necesita). Solo flagear JDK completo.
+        jdk_found = []
+        for reg_path in JDK_REG_PATHS:
+            try:
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path) as k:
+                    i = 0
+                    while True:
+                        try:
+                            subkey = winreg.EnumKey(k, i)
+                            i += 1
+                            with winreg.OpenKey(k, subkey) as sk:
+                                try:
+                                    home, _ = winreg.QueryValueEx(sk, 'JavaHome')
+                                    # Si existe javac.exe → es JDK (compilador)
+                                    javac = os.path.join(str(home), 'bin', 'javac.exe')
+                                    if os.path.isfile(javac):
+                                        jdk_found.append(str(home))
+                                except (FileNotFoundError, OSError):
+                                    pass
+                        except OSError:
+                            break
+            except (FileNotFoundError, PermissionError):
+                pass
+
+        for jdk_path in jdk_found[:3]:
+            self.issues_found.append({
+                'nombre': f'JDK completo instalado: {os.path.basename(jdk_path)}',
+                'ruta': jdk_path,
+                'archivo': 'javac.exe',
+                'tipo': 'jdk_installed',
+                'categoria': 'FORENSE',
+                'alerta': 'POCO_SOSPECHOSO',
+                'confidence': 0.45,
+                'detected_patterns': ['jdk_with_compiler'],
+                'explicacion': (
+                    f'Se encontró un JDK completo ({jdk_path}). Un jugador normal solo '
+                    f'necesita el JRE para ejecutar Minecraft. El JDK incluye javac (compilador) '
+                    f'y puede usarse para desarrollar o compilar hack clients personalizados.'
+                ),
+            })
+            print(f"⚠️ JDK instalado: {jdk_path}")
+
+    def scan_python_hack_scripts(self):
+        """P5 #5 — Detecta scripts Python en Desktop/Downloads con patrones de bots/macros."""
+        print("🔍 Buscando scripts Python de bots/macros en Desktop/Downloads...")
+        import re as _re
+        SEARCH_DIRS = [
+            os.path.expanduser('~\\Desktop'),
+            os.path.expanduser('~\\Downloads'),
+            os.path.expanduser('~\\Documents'),
+        ]
+        # Patrones de contenido sospechoso
+        HACK_CONTENT_RE = [
+            r'import\s+pyautogui',          # automation GUI
+            r'import\s+pynput',             # keyboard/mouse hooks
+            r'import\s+win32api',           # Windows API
+            r'pyperclip|clipboard',         # portapapeles
+            r'minecraft.*socket|socket.*minecraft',  # socket C2
+            r'autoclicker|auto.?click',     # autoclicker
+            r'triggerbot|trigger.?bot',
+            r'aimbot|aim.?bot',
+            r'macro.*minecraft|minecraft.*macro',
+            r'send.*packet|inject.*packet',
+            r'\bxray\b.*minecraft|minecraft.*\bxray\b',
+        ]
+        HACK_FILENAME_KW = ['hack', 'cheat', 'macro', 'autoclicker', 'autoclick',
+                            'triggerbot', 'aimbot', 'bot', 'inject']
+        found = 0
+        for base_dir in SEARCH_DIRS:
+            if not os.path.isdir(base_dir):
+                continue
+            try:
+                for fname in os.listdir(base_dir):
+                    if not fname.lower().endswith('.py'):
+                        continue
+                    fpath = os.path.join(base_dir, fname)
+                    fname_lower = fname.lower()
+                    # Por nombre
+                    if any(kw in fname_lower for kw in HACK_FILENAME_KW):
+                        self.issues_found.append({
+                            'nombre': f'Script Python sospechoso: {fname}',
+                            'ruta': base_dir,
+                            'archivo': fpath,
+                            'tipo': 'python_hack_script',
+                            'categoria': 'GHOST_CLIENT',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.65,
+                            'detected_patterns': ['python_suspicious_name'],
+                        })
+                        found += 1
+                        print(f"⚠️ Script Python sospechoso (nombre): {fname}")
+                        continue
+                    # Por contenido (primeros 8KB)
+                    try:
+                        with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read(8192).lower()
+                        matched_patterns = []
+                        for pattern in HACK_CONTENT_RE:
+                            if _re.search(pattern, content, _re.IGNORECASE):
+                                matched_patterns.append(pattern[:30])
+                        if len(matched_patterns) >= 2:
+                            self.issues_found.append({
+                                'nombre': f'Script Python con patrones de hack: {fname}',
+                                'ruta': base_dir,
+                                'archivo': fpath,
+                                'tipo': 'python_hack_script',
+                                'categoria': 'GHOST_CLIENT',
+                                'alerta': 'SOSPECHOSO',
+                                'confidence': 0.62,
+                                'detected_patterns': matched_patterns[:5],
+                                'explicacion': (
+                                    f'Script Python "{fname}" contiene patrones de automatización '
+                                    f'sospechosa para Minecraft: {", ".join(matched_patterns[:3])}.'
+                                ),
+                            })
+                            found += 1
+                            print(f"⚠️ Script Python con patrones de hack (contenido): {fname}")
+                    except (IOError, OSError):
+                        pass
+            except PermissionError:
+                pass
+        if found == 0:
+            print("✅ No se encontraron scripts Python sospechosos")
+
+    def scan_lunar_unofficial_modules(self):
+        """P5 #8 — Detecta módulos no oficiales en Lunar Client (.lunarclient/offline/multiver)."""
+        print("🔍 Buscando módulos no oficiales de Lunar Client...")
+        LUNAR_BASE = os.path.expanduser(r'~\.lunarclient')
+        if not os.path.isdir(LUNAR_BASE):
+            print("✅ Lunar Client no instalado")
+            return
+
+        # Módulos oficiales de Lunar Client (sus propias features)
+        LUNAR_OFFICIAL_MODS = {
+            'optifine', 'sodium', 'iris', 'lunar', 'sk1er', 'labymod',
+            'essential', 'feather',
+        }
+        # Rutas de módulos de terceros dentro de Lunar
+        MODULE_DIRS = [
+            os.path.join(LUNAR_BASE, 'offline', 'multiver'),
+            os.path.join(LUNAR_BASE, 'textures'),
+            os.path.join(LUNAR_BASE, 'mods'),
+        ]
+        found = 0
+        for mod_dir in MODULE_DIRS:
+            if not os.path.isdir(mod_dir):
+                continue
+            try:
+                for fname in os.listdir(mod_dir):
+                    fname_lower = fname.lower()
+                    if not fname_lower.endswith('.jar'):
+                        continue
+                    # Si el nombre coincide con hack clients conocidos
+                    for hack_name in _DEFINITE_HACK_NAMES:
+                        if hack_name in fname_lower:
+                            self.issues_found.append({
+                                'nombre': f'Módulo no oficial de Lunar Client: {fname}',
+                                'ruta': mod_dir,
+                                'archivo': os.path.join(mod_dir, fname),
+                                'tipo': 'lunar_unofficial_module',
+                                'categoria': 'GHOST_CLIENT',
+                                'alerta': 'CRITICAL',
+                                'confidence': 0.88,
+                                'detected_patterns': [f'lunar_mod:{hack_name}'],
+                                'explicacion': (
+                                    f'Módulo "{fname}" encontrado en la carpeta de módulos de '
+                                    f'Lunar Client. Coincide con hack client conocido "{hack_name}". '
+                                    f'Lunar Client carga estos módulos durante el juego.'
+                                ),
+                            })
+                            found += 1
+                            print(f"🚨 LUNAR MOD SOSPECHOSO: {fname}")
+                            break
+            except (PermissionError, OSError):
+                pass
+        if found == 0:
+            print("✅ No se encontraron módulos no oficiales de Lunar Client")
+
+    def scan_virtual_audio_cable(self):
+        """P5 #10 — Detecta Virtual Audio Cable / VB-Audio (usado para ocultar comunicaciones de equipo)."""
+        print("🔍 Buscando virtual audio cable / VB-Audio...")
+        VAC_INDICATORS = {
+            # Nombre de driver en registro
+            'reg': [
+                r'SYSTEM\CurrentControlSet\Services\VBAudioVACWDM',
+                r'SYSTEM\CurrentControlSet\Services\VBAudioVoicemeeter',
+                r'SYSTEM\CurrentControlSet\Services\vac',
+                r'SOFTWARE\Virtual Audio Cable',
+                r'SOFTWARE\VB-Audio',
+            ],
+            # Procesos
+            'procs': {
+                'vbcable.exe', 'voicemeeter.exe', 'voicemeeterpro.exe',
+                'vbvmtray.exe', 'vbvmservice.exe', 'audiorepeater.exe',
+            },
+        }
+        found = False
+        try:
+            for proc in psutil.process_iter(['name']):
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                    if pname in VAC_INDICATORS['procs']:
+                        found = True
+                        self.issues_found.append({
+                            'nombre': f'Virtual Audio Cable activo: {proc.info.get("name")}',
+                            'ruta': 'Proceso activo',
+                            'archivo': pname,
+                            'tipo': 'virtual_audio_cable',
+                            'categoria': 'PROCESO',
+                            'alerta': 'POCO_SOSPECHOSO',
+                            'confidence': 0.42,
+                            'detected_patterns': ['vac_process'],
+                            'explicacion': (
+                                'Virtual Audio Cable o VB-Audio está activo. Estas herramientas '
+                                'pueden usarse para redirigir audio de comunicaciones de equipo '
+                                '(Discord, TeamSpeak) y evitar que el escáner detecte el micrófono.'
+                            ),
+                        })
+                        print(f"⚠️ VAC activo: {proc.info.get('name')}")
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except Exception:
+            pass
+
+        if not found:
+            for reg_path in VAC_INDICATORS['reg']:
+                try:
+                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path):
+                        self.issues_found.append({
+                            'nombre': 'Virtual Audio Cable / VB-Audio instalado',
+                            'ruta': reg_path,
+                            'archivo': 'vbcable_driver',
+                            'tipo': 'virtual_audio_cable',
+                            'categoria': 'FORENSE',
+                            'alerta': 'POCO_SOSPECHOSO',
+                            'confidence': 0.38,
+                            'detected_patterns': ['vac_driver_installed'],
+                        })
+                        print(f"⚠️ VAC driver instalado: {reg_path}")
+                        break
+                except (FileNotFoundError, PermissionError):
+                    pass
+
+    def scan_git_repos_desktop(self):
+        """P5 #11 — Detecta repositorios Git en Desktop/Documents con nombres sospechosos."""
+        print("🔍 Buscando repos Git sospechosos en Desktop/Documents...")
+        SEARCH_DIRS = [
+            os.path.expanduser('~\\Desktop'),
+            os.path.expanduser('~\\Documents'),
+        ]
+        HACK_REPO_KW = list(_DEFINITE_HACK_NAMES) + [
+            'hack', 'cheat', 'inject', 'macro', 'autoclicker', 'aimbot',
+            'triggerbot', 'killaura', 'xray', 'esp', 'wallhack',
+        ]
+        found = 0
+        for base_dir in SEARCH_DIRS:
+            if not os.path.isdir(base_dir):
+                continue
+            try:
+                for dname in os.listdir(base_dir):
+                    repo_path = os.path.join(base_dir, dname)
+                    git_dir = os.path.join(repo_path, '.git')
+                    if not os.path.isdir(git_dir):
+                        continue
+                    dname_lower = dname.lower()
+                    # Nombre del repo coincide con hack
+                    matched = [kw for kw in HACK_REPO_KW if kw in dname_lower]
+                    if not matched:
+                        # Revisar remote origin URL en config
+                        git_config = os.path.join(git_dir, 'config')
+                        try:
+                            with open(git_config, 'r', encoding='utf-8', errors='ignore') as f:
+                                cfg_content = f.read(2048).lower()
+                            matched = [kw for kw in HACK_REPO_KW if kw in cfg_content]
+                        except (IOError, OSError):
+                            pass
+                    if matched:
+                        self.issues_found.append({
+                            'nombre': f'Repo Git sospechoso: {dname}',
+                            'ruta': repo_path,
+                            'archivo': git_dir,
+                            'tipo': 'git_repo_hack',
+                            'categoria': 'FORENSE',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.60,
+                            'detected_patterns': [f'git_repo:{m}' for m in matched[:3]],
+                            'explicacion': (
+                                f'Repositorio Git "{dname}" en {base_dir} coincide con '
+                                f'nombres de hack clients o herramientas de cheat: {matched[:3]}.'
+                            ),
+                        })
+                        found += 1
+                        print(f"⚠️ Repo Git sospechoso: {dname}")
+            except (PermissionError, OSError):
+                pass
+        if found == 0:
+            print("✅ No se encontraron repos Git sospechosos")
+
+    def scan_ip_forwarding(self):
+        """P5 #12 — Detecta IP forwarding habilitado (señal de proxy/MITM)."""
+        print("🔍 Verificando IP forwarding...")
+        REG_PATH = r'SYSTEM\CurrentControlSet\Services\Tcpip\Parameters'
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, REG_PATH) as k:
+                try:
+                    val, _ = winreg.QueryValueEx(k, 'IPEnableRouter')
+                    if val == 1:
+                        self.issues_found.append({
+                            'nombre': 'IP Forwarding (IPEnableRouter) habilitado',
+                            'ruta': f'HKLM\\{REG_PATH}',
+                            'archivo': 'IPEnableRouter=1',
+                            'tipo': 'ip_forwarding_enabled',
+                            'categoria': 'RED',
+                            'alerta': 'POCO_SOSPECHOSO',
+                            'confidence': 0.48,
+                            'detected_patterns': ['ip_forwarding'],
+                            'explicacion': (
+                                'El IP forwarding está habilitado en Windows. En un PC de gaming '
+                                'normal esto es inusual. Puede indicar un proxy MITM configurado '
+                                'para interceptar o redirigir tráfico de red de Minecraft.'
+                            ),
+                        })
+                        print("⚠️ IP Forwarding HABILITADO")
+                    else:
+                        print("✅ IP Forwarding deshabilitado (normal)")
+                except FileNotFoundError:
+                    print("✅ IP Forwarding key no encontrada (deshabilitado)")
+        except (PermissionError, OSError) as e:
+            print(f"IP Forwarding check: {e}")
+
+    def scan_nbt_exploits_saves(self):
+        """P5 #7 — Detecta archivos de mundo con NBT inusualmente grandes (posibles exploits)."""
+        print("🔍 Escaneando saves de Minecraft por NBT exploits...")
+        SAVES_DIR = os.path.join(os.environ.get('APPDATA', ''), '.minecraft', 'saves')
+        if not os.path.isdir(SAVES_DIR):
+            print("✅ No hay saves de Minecraft")
+            return
+        # Archivos DAT/NBT inusualmente grandes son sospechosos (libros con comandos, etc.)
+        LARGE_DAT_KB = 512  # > 512KB para un .dat individual es muy inusual
+        found = 0
+        try:
+            for world in os.listdir(SAVES_DIR):
+                world_path = os.path.join(SAVES_DIR, world)
+                if not os.path.isdir(world_path):
+                    continue
+                # Buscar archivos .dat en playerdata, stats, advancements
+                for subdir in ('playerdata', 'stats', 'advancements', 'data'):
+                    sdir = os.path.join(world_path, subdir)
+                    if not os.path.isdir(sdir):
+                        continue
+                    try:
+                        for fname in os.listdir(sdir):
+                            fpath = os.path.join(sdir, fname)
+                            if not fname.endswith('.dat'):
+                                continue
+                            try:
+                                size_kb = os.path.getsize(fpath) / 1024
+                                if size_kb > LARGE_DAT_KB:
+                                    self.issues_found.append({
+                                        'nombre': f'NBT .dat inusualmente grande: {world}/{subdir}/{fname} ({size_kb:.0f}KB)',
+                                        'ruta': sdir,
+                                        'archivo': fpath,
+                                        'tipo': 'nbt_large_dat',
+                                        'categoria': 'FORENSE',
+                                        'alerta': 'POCO_SOSPECHOSO',
+                                        'confidence': 0.40,
+                                        'detected_patterns': [f'dat_size:{size_kb:.0f}kb'],
+                                        'explicacion': (
+                                            f'Archivo NBT "{fname}" de {size_kb:.0f}KB en '
+                                            f'{world}/{subdir}/. Un .dat tan grande puede contener '
+                                            f'libros con comandos masivos o datos de exploits NBT.'
+                                        ),
+                                    })
+                                    found += 1
+                                    print(f"⚠️ NBT grande: {world}/{subdir}/{fname} ({size_kb:.0f}KB)")
+                            except OSError:
+                                pass
+                    except (PermissionError, OSError):
+                        pass
+        except (PermissionError, OSError):
+            pass
+        if found == 0:
+            print("✅ No se encontraron NBTs sospechosos en saves")
+
+    def scan_suspicious_kernel_drivers(self):
+        """P5 #9 — Detecta drivers de kernel no estándar que pueden ser usados por hacks."""
+        print("🔍 Escaneando drivers de kernel sospechosos...")
+        HACK_DRIVER_KW = [
+            'cheatengine', 'cheat_engine', 'procmon', 'kernelexplorer',
+            'ringzero', 'r0', 'kmdf_hack', 'bypass', 'anticheat_bypass',
+            'eac_bypass', 'vac_bypass', 'be_bypass',  # anti-cheat bypasses
+        ]
+        # Drivers legítimos conocidos — no flagear aunque contengan palabras genéricas
+        LEGIT_DRIVER_VENDORS = {
+            'microsoft', 'nvidia', 'amd', 'intel', 'realtek', 'qualcomm',
+            'broadcom', 'logitech', 'razer', 'corsair', 'steelseries',
+        }
+        found = []
+        try:
+            driver_key = r'SYSTEM\CurrentControlSet\Services'
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, driver_key) as k:
+                i = 0
+                while True:
+                    try:
+                        svc_name = winreg.EnumKey(k, i)
+                        i += 1
+                        with winreg.OpenKey(k, svc_name) as sk:
+                            try:
+                                svc_type, _ = winreg.QueryValueEx(sk, 'Type')
+                                # Type 1 = kernel driver, Type 2 = file system driver
+                                if svc_type not in (1, 2):
+                                    continue
+                                svc_lower = svc_name.lower()
+                                if any(kw in svc_lower for kw in HACK_DRIVER_KW):
+                                    try:
+                                        img_path, _ = winreg.QueryValueEx(sk, 'ImagePath')
+                                    except FileNotFoundError:
+                                        img_path = svc_name
+                                    found.append((svc_name, str(img_path)))
+                            except FileNotFoundError:
+                                pass
+                    except OSError:
+                        break
+        except (PermissionError, OSError) as e:
+            print(f"scan_suspicious_kernel_drivers: {e}")
+            return
+
+        for svc_name, img_path in found[:5]:
+            self.issues_found.append({
+                'nombre': f'Driver de kernel sospechoso: {svc_name}',
+                'ruta': img_path,
+                'archivo': svc_name,
+                'tipo': 'suspicious_kernel_driver',
+                'categoria': 'PROCESO',
+                'alerta': 'CRITICAL',
+                'confidence': 0.80,
+                'detected_patterns': [f'kernel_driver:{svc_name[:30]}'],
+                'explicacion': (
+                    f'Driver de kernel "{svc_name}" detectado. Los hacks de nivel kernel '
+                    f'(aimbot en ring-0, bypass de EAC/VAC/BE) requieren drivers propios. '
+                    f'Este driver coincide con patrones de bypass o herramientas de hacking.'
+                ),
+            })
+            print(f"🚨 DRIVER KERNEL SOSPECHOSO: {svc_name}")
+
+        if not found:
+            print("✅ No se encontraron drivers de kernel sospechosos")
+
+    def scan_browser_extensions_suspicious(self):
+        """P5 #3 — Detecta extensiones de Chrome/Firefox con permisos all_urls o nombres sospechosos."""
+        print("🔍 Escaneando extensiones de navegador sospechosas...")
+        import json as _json_ext
+        HACK_EXT_KW = ['minecraft', 'hack', 'cheat', 'aimbot', 'triggerbot', 'macro',
+                        'inject', 'ghost', 'autoclicker', 'autoclick', 'xray', 'esp']
+        DANGEROUS_PERMS = {'<all_urls>', 'webRequest', 'webRequestBlocking',
+                           'nativeMessaging', 'debugger', 'proxy'}
+
+        # Chrome/Chromium extensions
+        chrome_ext_dirs = [
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Google', 'Chrome', 'User Data', 'Default', 'Extensions'),
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'Edge', 'User Data', 'Default', 'Extensions'),
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'BraveSoftware', 'Brave-Browser', 'User Data', 'Default', 'Extensions'),
+        ]
+        found = 0
+        for ext_base in chrome_ext_dirs:
+            if not os.path.isdir(ext_base):
+                continue
+            try:
+                for ext_id in os.listdir(ext_base):
+                    ext_path = os.path.join(ext_base, ext_id)
+                    if not os.path.isdir(ext_path):
+                        continue
+                    # Buscar manifest.json en la versión más reciente
+                    manifest_path = None
+                    try:
+                        versions = [v for v in os.listdir(ext_path) if os.path.isdir(os.path.join(ext_path, v))]
+                        if versions:
+                            latest = sorted(versions)[-1]
+                            manifest_path = os.path.join(ext_path, latest, 'manifest.json')
+                    except OSError:
+                        continue
+                    if not manifest_path or not os.path.isfile(manifest_path):
+                        continue
+                    try:
+                        with open(manifest_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            manifest = _json_ext.load(f)
+                    except Exception:
+                        continue
+                    name = manifest.get('name', ext_id).lower()
+                    perms = set(manifest.get('permissions', []))
+                    host_perms = set(manifest.get('host_permissions', []))
+                    all_perms = perms | host_perms
+                    dangerous = DANGEROUS_PERMS & all_perms
+                    name_hit = any(kw in name for kw in HACK_EXT_KW)
+                    if name_hit or dangerous:
+                        confidence = 0.55 if name_hit else 0.40
+                        self.issues_found.append({
+                            'nombre': f'Extensión de navegador sospechosa: {manifest.get("name", ext_id)[:60]}',
+                            'ruta': ext_path,
+                            'archivo': manifest_path,
+                            'tipo': 'browser_extension_suspicious',
+                            'categoria': 'FORENSE',
+                            'alerta': 'POCO_SOSPECHOSO',
+                            'confidence': confidence,
+                            'detected_patterns': [*(f'perm:{p}' for p in list(dangerous)[:3]),
+                                                  *(['suspicious_name'] if name_hit else [])],
+                            'explicacion': (
+                                f'Extensión "{manifest.get("name", ext_id)}" '
+                                f'{"con nombre sospechoso" if name_hit else ""}'
+                                f'{" y" if name_hit and dangerous else ""}'
+                                f'{f" con permisos sensibles: {list(dangerous)[:3]}" if dangerous else ""}. '
+                                f'Puede interceptar tráfico web o comunicarse con procesos locales.'
+                            ),
+                        })
+                        found += 1
+                        print(f"⚠️ Extensión sospechosa: {manifest.get('name', ext_id)[:60]}")
+            except (PermissionError, OSError):
+                pass
+
+        # Firefox extensions (profiles)
+        ff_profiles = os.path.join(os.environ.get('APPDATA', ''), 'Mozilla', 'Firefox', 'Profiles')
+        if os.path.isdir(ff_profiles):
+            try:
+                for profile in os.listdir(ff_profiles):
+                    ext_json = os.path.join(ff_profiles, profile, 'extensions.json')
+                    if not os.path.isfile(ext_json):
+                        continue
+                    try:
+                        with open(ext_json, 'r', encoding='utf-8', errors='ignore') as f:
+                            data = _json_ext.load(f)
+                        for addon in data.get('addons', []):
+                            aname = addon.get('defaultLocale', {}).get('name', '').lower()
+                            if any(kw in aname for kw in HACK_EXT_KW):
+                                self.issues_found.append({
+                                    'nombre': f'Extensión Firefox sospechosa: {aname[:60]}',
+                                    'ruta': ff_profiles,
+                                    'archivo': ext_json,
+                                    'tipo': 'browser_extension_suspicious',
+                                    'categoria': 'FORENSE',
+                                    'alerta': 'POCO_SOSPECHOSO',
+                                    'confidence': 0.52,
+                                    'detected_patterns': ['firefox_suspicious_ext'],
+                                })
+                                found += 1
+                                print(f"⚠️ Extensión Firefox sospechosa: {aname[:60]}")
+                    except Exception:
+                        pass
+            except (PermissionError, OSError):
+                pass
+
+        if found == 0:
+            print("✅ No se encontraron extensiones de navegador sospechosas")
+
+    def scan_modified_minecraft_jar(self):
+        """P5 #6 — Detecta modificación del minecraft client JAR oficial comparando hash vs Mojang."""
+        print("🔍 Verificando integridad de minecraft client JARs...")
+        import json as _json_mc
+        # Buscar versiones instaladas
+        mc_versions_dir = os.path.join(os.environ.get('APPDATA', ''), '.minecraft', 'versions')
+        if not os.path.isdir(mc_versions_dir):
+            print("✅ No hay versiones de Minecraft instaladas")
+            return
+
+        checked = 0
+        modified = 0
+        try:
+            for version_name in os.listdir(mc_versions_dir):
+                ver_path = os.path.join(mc_versions_dir, version_name)
+                if not os.path.isdir(ver_path):
+                    continue
+                client_jar = os.path.join(ver_path, f'{version_name}.jar')
+                if not os.path.isfile(client_jar):
+                    continue
+                # Obtener hash oficial de Mojang vía piston-meta
+                try:
+                    import urllib.request as _ur_mc
+                    url = f'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json'
+                    with _ur_mc.urlopen(url, timeout=8) as resp:
+                        manifest = _json_mc.loads(resp.read())
+                    ver_info = next((v for v in manifest.get('versions', []) if v['id'] == version_name), None)
+                    if not ver_info:
+                        continue
+                    with _ur_mc.urlopen(ver_info['url'], timeout=8) as resp:
+                        ver_data = _json_mc.loads(resp.read())
+                    mojang_sha1 = ver_data.get('downloads', {}).get('client', {}).get('sha1', '')
+                    if not mojang_sha1:
+                        continue
+                except Exception:
+                    continue  # Sin conexión o versión no encontrada en Mojang
+
+                # Hash local
+                try:
+                    import hashlib as _hl_mc
+                    sha1 = _hl_mc.sha1()
+                    with open(client_jar, 'rb') as f:
+                        while chunk := f.read(65536):
+                            sha1.update(chunk)
+                    local_sha1 = sha1.hexdigest()
+                    checked += 1
+                    if local_sha1 != mojang_sha1:
+                        modified += 1
+                        self.issues_found.append({
+                            'nombre': f'minecraft {version_name}.jar MODIFICADO (hash distinto al oficial)',
+                            'ruta': ver_path,
+                            'archivo': client_jar,
+                            'tipo': 'modified_minecraft_jar',
+                            'categoria': 'GHOST_CLIENT',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.93,
+                            'detected_patterns': [
+                                f'local_sha1:{local_sha1[:12]}',
+                                f'mojang_sha1:{mojang_sha1[:12]}',
+                                'client_jar_tampered',
+                            ],
+                            'explicacion': (
+                                f'El archivo {version_name}.jar tiene un hash SHA-1 distinto al '
+                                f'oficial de Mojang. Hash local: {local_sha1[:16]}... '
+                                f'Hash oficial: {mojang_sha1[:16]}... '
+                                f'El JAR del cliente fue modificado — puede contener código de hack inyectado.'
+                            ),
+                        })
+                        print(f"🚨 minecraft {version_name}.jar MODIFICADO — hash no coincide con Mojang")
+                    else:
+                        print(f"✅ {version_name}.jar: hash OK")
+                except (IOError, OSError):
+                    pass
+        except (PermissionError, OSError):
+            pass
+
+        if checked == 0:
+            print("✅ No se pudieron verificar JARs (sin conexión o no encontrados en Mojang)")
+        elif modified == 0:
+            print(f"✅ {checked} JAR(s) verificado(s) — todos íntegros")
 
     def scan_ahk_scripts(self):
         """Busca scripts AutoHotkey con patrones de autoclick y contexto Minecraft.
@@ -10638,6 +12233,11 @@ class ArgusApp:
             b'org/lwjgl/', b'org/apache/', b'com/google/', b'org/slf4j/',
             b'io/netty/', b'com/github/steveice10/', b'net/fabricmc/',
             b'org/objectweb/asm/', b'com/llamalad7/',
+            # F14 — Mixin library usada por todos los mods legítimos (Sodium, Iris, etc.)
+            b'org/spongepowered/asm/', b'org/spongepowered/mixin/',
+            # Loaders y librerías de mods legítimos
+            b'net/neoforged/', b'org/quiltmc/', b'net/coderbot/iris/',
+            b'me/jellysquid3/', b'com/lodborg/', b'net/irisshaders/',
         )
         # #11 — Regex de paquetes Java sospechosos (com.client.*, net.hack.*, etc.)
         HACK_PACKAGE_RE = _re.compile(
@@ -10662,9 +12262,15 @@ class ArgusApp:
 
                     for jar_path in loaded_jars:
                         jar_l = jar_path.lower()
-                        # Ignorar JDK/JRE y mods legítimos conocidos
-                        if any(s in jar_l for s in ('jdk', 'jre', 'optifine_', 'sodium-',
-                                                      'fabricloader', 'forge-', 'authlib')):
+                        # F14 — Ignorar JDK/JRE y mods legítimos de performance/loaders
+                        if any(s in jar_l for s in (
+                            'jdk', 'jre', 'optifine_', 'sodium-', 'sodium_',
+                            'fabricloader', 'forge-', 'authlib',
+                            'iris-', 'irisshaders', 'ferritecore', 'distanthorizons',
+                            'bobby-', 'moreculling', 'lazydfu', 'lithium-',
+                            'phosphor-', 'rubidium-', 'embeddium-', 'neoforge-',
+                            'quiltloader', 'ornithe', 'mixinextras',
+                        )):
                             continue
                         try:
                             with _zf.ZipFile(jar_path, 'r') as zf:
@@ -14533,18 +16139,33 @@ class ArgusApp:
             if len(mc_procs) > 1:
                 pids = ', '.join(str(p['pid']) for p in mc_procs)
                 print(f"🚨 MÚLTIPLES INSTANCIAS MINECRAFT: {len(mc_procs)} ({pids})")
+                # F28 — Verificar si TODAS las instancias vienen del mismo launcher
+                # (MultiMC/Prism abre una javaw por instancia — no es sospechoso)
+                _MULTI_INSTANCE_LAUNCHERS = ('multimc', 'prismlauncher', 'gdlauncher',
+                                              'atlauncher', 'ftb', 'curseforge')
+                _all_from_same_launcher = all(
+                    any(l in p['cmdline'] for l in _MULTI_INSTANCE_LAUNCHERS)
+                    for p in mc_procs
+                )
+                _confidence_multi = 0.45 if _all_from_same_launcher else 0.70
+                _alerta_multi     = 'POCO_SOSPECHOSO' if _all_from_same_launcher else 'SOSPECHOSO'
                 self.issues_found.append({
                     'nombre': f'Múltiples instancias de Minecraft simultáneas: {len(mc_procs)}',
                     'ruta': f'PIDs: {pids}',
                     'archivo': 'javaw.exe',
                     'tipo': 'suspicious_process_location',
                     'categoria': 'PROCESO',
-                    'alerta': 'SOSPECHOSO',
-                    'confidence': 0.70,
-                    'detected_patterns': [f'multiple_javaw:{len(mc_procs)}'],
-                    'explicacion': f'Se detectaron {len(mc_procs)} instancias de javaw.exe con '
-                                   f'contexto de Minecraft. Esto puede indicar un proceso de inyección '
-                                   f'separado haciéndose pasar por una instancia legítima del juego.',
+                    'alerta': _alerta_multi,
+                    'confidence': _confidence_multi,
+                    'detected_patterns': [f'multiple_javaw:{len(mc_procs)}',
+                                          *(['same_launcher_ok'] if _all_from_same_launcher else [])],
+                    'explicacion': (
+                        f'Se detectaron {len(mc_procs)} instancias de javaw.exe con contexto de Minecraft. '
+                        + ('MultiMC/Prism puede abrir una javaw por instancia — bajo riesgo.'
+                           if _all_from_same_launcher else
+                           'Esto puede indicar un proceso de inyección separado haciéndose pasar '
+                           'por una instancia legítima del juego.')
+                    ),
                 })
             if non_mc and mc_procs:
                 pids_non = ', '.join(str(p['pid']) for p in non_mc[:3])
@@ -15550,39 +17171,152 @@ class ArgusApp:
             except Exception:
                 pass
 
+def _setup_logging(log_path: str | None = None):
+    """P5 #34 — Structured logging to a rotating .log file alongside the exe."""
+    import logging
+    from logging.handlers import RotatingFileHandler
+    if log_path is None:
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__))
+        log_path = os.path.join(exe_dir, 'argus_scanner.log')
+    handler = RotatingFileHandler(log_path, maxBytes=2 * 1024 * 1024, backupCount=3, encoding='utf-8')
+    handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(handler)
+    # Also redirect print() to the log via a small shim
+    class _PrintToLog:
+        def __init__(self, orig): self._orig = orig
+        def write(self, msg):
+            stripped = msg.rstrip()
+            if stripped:
+                logging.info(stripped)
+            self._orig.write(msg)
+        def flush(self): self._orig.flush()
+        def isatty(self): return False
+    sys.stdout = _PrintToLog(sys.stdout)
+
+
+def _run_headless(token: str, api_url: str | None, output_json: str | None):
+    """P5 #32 — Modo headless: ejecutar scan sin UI y guardar resultado en JSON."""
+    import json as _json
+    print(f"[HEADLESS] Argus Scanner v{SCANNER_VERSION} — modo sin interfaz")
+    print(f"[HEADLESS] Token: {token[:8]}...")
+
+    # Create a minimal fake root so ArgusApp doesn't crash on Tk calls
+    import tkinter as _tk
+    root = _tk.Tk()
+    root.withdraw()
+
+    app = ArgusApp(root)
+    # Override token
+    app.scan_token = token
+    if api_url:
+        app.api_url = api_url
+
+    # Run the scan in blocking mode
+    import threading
+    done_event = threading.Event()
+    result_holder = {}
+
+    def _on_complete(result):
+        result_holder['result'] = result
+        done_event.set()
+
+    app._headless_callback = _on_complete
+    app._headless_mode = True
+
+    scan_thread = threading.Thread(target=app.run_scan, daemon=True)
+    scan_thread.start()
+    # Poll Tk event loop until scan is done (up to 10 minutes)
+    for _ in range(600):
+        root.update()
+        if done_event.wait(timeout=1):
+            break
+
+    root.destroy()
+
+    result = result_holder.get('result', {})
+    if output_json:
+        with open(output_json, 'w', encoding='utf-8') as f:
+            _json.dump(result, f, ensure_ascii=False, indent=2)
+        print(f"[HEADLESS] Resultado guardado en {output_json}")
+    else:
+        print(_json.dumps(result, ensure_ascii=False, indent=2))
+
+
 def main():
-    """Función principal"""
+    """Función principal — soporta modo GUI y headless (--headless)."""
+    import argparse
+    parser = argparse.ArgumentParser(description=f'Argus Scanner v{SCANNER_VERSION}', add_help=False)
+    parser.add_argument('--headless', action='store_true', help='Ejecutar sin interfaz gráfica')
+    parser.add_argument('--token', default='', help='Token de escaneo (requerido en --headless)')
+    parser.add_argument('--api-url', default='', help='URL base de la API (opcional)')
+    parser.add_argument('--output', default='', help='Ruta de archivo JSON para el resultado (--headless)')
+    parser.add_argument('--log', default='', help='Ruta de archivo de log (opcional)')
+    parser.add_argument('--debug-filter', action='store_true', help='Mostrar hallazgos descartados en el filtro')
+    parser.add_argument('--profile', default='', help='Nombre del perfil de servidor a usar (profiles.json)')
+    args, _ = parser.parse_known_args()
+
+    # P5 #34 — Enable structured logging if --log provided
+    if args.log:
+        _setup_logging(args.log)
+
+    # P5 #35 — F35 debug-filter flag
+    if args.debug_filter:
+        os.environ['ARGUS_DEBUG_FILTER'] = '1'
+
+    # P5 #35 — --profile selects saved server profile (overrides config.json token/api_url)
+    if args.profile:
+        os.environ['ARGUS_PROFILE'] = args.profile
+
+    if args.headless:
+        # P5 #32 — Headless mode
+        # P5 #35 — --profile can substitute for --token in headless mode
+        token_to_use = args.token
+        api_to_use   = args.api_url or None
+        if not token_to_use and args.profile:
+            _prof_data = ArgusApp._load_scanner_profiles()
+            _prof = _prof_data.get('profiles', {}).get(args.profile)
+            if _prof:
+                token_to_use = _prof.get('token', '')
+                api_to_use   = api_to_use or _prof.get('api_url')
+                print(f"🖥 Perfil headless: {args.profile!r}")
+            else:
+                print(f"ERROR: Perfil '{args.profile}' no encontrado en profiles.json")
+                sys.exit(1)
+        if not token_to_use:
+            print("ERROR: --token o --profile requerido en modo --headless")
+            sys.exit(1)
+        _run_headless(token_to_use, api_to_use, args.output or None)
+        return
+
     try:
-        # Importar tkinter
         import tkinter as tk
         import tkinter.messagebox as messagebox
-        
+
         root = tk.Tk()
         app = ArgusApp(root)
         root.mainloop()
     except KeyboardInterrupt:
         print("\n⚠️ Aplicación interrumpida por el usuario")
     except Exception as e:
-        # Mostrar error en ventana de consola si está disponible
         import traceback
         error_msg = f"Error al iniciar la aplicación:\n{str(e)}\n\n{traceback.format_exc()}"
         print(error_msg)
-        
-        # Intentar mostrar ventana de error
         try:
             import tkinter as tk
             import tkinter.messagebox as messagebox
             root = tk.Tk()
-            root.withdraw()  # Ocultar ventana principal
-            messagebox.showerror("Error Crítico", 
+            root.withdraw()
+            messagebox.showerror("Error Crítico",
                 f"Error al iniciar la aplicación:\n\n{str(e)}\n\nRevisa la consola para más detalles.")
             root.destroy()
-        except:
-            # Si no se puede mostrar ventana, al menos imprimir en consola
+        except Exception:
             print("\n" + "="*50)
             print("ERROR CRÍTICO - La aplicación no pudo iniciarse")
             print("="*50)
             input("\nPresiona Enter para salir...")
+
 
 if __name__ == "__main__":
     main()

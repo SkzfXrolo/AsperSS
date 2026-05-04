@@ -69,9 +69,149 @@ function togglePalettePanel(e) {
     if (!isOpen) _buildPaletteSwatches();
 }
 
+// P5 #16 — Web Push subscription toggle
+let _pushSubscription = null;
+async function togglePushSubscription(btn) {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        showToast('Tu navegador no soporta notificaciones push', 'error');
+        return;
+    }
+    try {
+        if (_pushSubscription) {
+            // Unsubscribe
+            await _pushSubscription.unsubscribe();
+            await fetch('/api/push/unsubscribe', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({endpoint: _pushSubscription.endpoint})
+            });
+            _pushSubscription = null;
+            btn.style.color = 'var(--text-d)';
+            btn.title = 'Activar notificaciones push';
+            showToast('Notificaciones desactivadas', 'info');
+            return;
+        }
+        // Get VAPID key
+        const keyRes = await fetch('/api/push/vapid-public-key');
+        if (!keyRes.ok) { showToast('Notificaciones push no configuradas en el servidor', 'info'); return; }
+        const {public_key} = await keyRes.json();
+
+        // Request permission
+        const perm = await Notification.requestPermission();
+        if (perm !== 'granted') { showToast('Permiso de notificaciones denegado', 'error'); return; }
+
+        // Subscribe
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: _urlBase64ToUint8Array(public_key)
+        });
+        await fetch('/api/push/subscribe', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(sub.toJSON())
+        });
+        _pushSubscription = sub;
+        btn.style.color = '#10b981';
+        btn.title = 'Desactivar notificaciones push';
+        showToast('✅ Notificaciones activadas', 'success');
+    } catch(e) {
+        showToast(`Error: ${e.message}`, 'error');
+    }
+}
+function _urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function _initPushState() {
+    const btn = document.getElementById('push-notif-btn');
+    if (!btn || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+            _pushSubscription = sub;
+            btn.style.color = '#10b981';
+            btn.title = 'Desactivar notificaciones push';
+        }
+    } catch(_) {}
+}
+
 function _loadSavedPalette() {
     const saved = localStorage.getItem('argus_palette');
     if (saved && ARGUS_PALETTES[saved]) applyPalette(saved);
+}
+
+// ── P5 #29 — Multi-server selector ────────────────────────────────────────
+let _serverListLoaded = false;
+
+async function _initServerSelector() {
+    try {
+        const res = await fetch('/api/servers');
+        if (!res.ok) return;
+        const data = await res.json();
+        const servers = data.servers || [];
+        if (servers.length <= 1) return; // hide for single-server setups
+        const wrap = document.getElementById('server-selector-wrap');
+        const nameEl = document.getElementById('active-server-name');
+        if (!wrap) return;
+        wrap.style.display = 'flex';
+        const active = servers.find(s => s.id === data.active_server_id);
+        if (active && nameEl) nameEl.textContent = active.name;
+    } catch(_) {}
+}
+
+function toggleServerSelector(e) {
+    if (e) e.stopPropagation();
+    const dropdown = document.getElementById('server-dropdown');
+    if (!dropdown) return;
+    const isOpen = dropdown.style.display !== 'none';
+    dropdown.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen && !_serverListLoaded) _loadServerList();
+}
+
+async function _loadServerList() {
+    const listEl = document.getElementById('server-list');
+    if (!listEl) return;
+    try {
+        const res = await fetch('/api/servers');
+        if (!res.ok) return;
+        const data = await res.json();
+        const servers = data.servers || [];
+        _serverListLoaded = true;
+        listEl.innerHTML = servers.map(s => `
+            <div onclick="selectServer(${s.id}, ${JSON.stringify(s.name)})"
+                 style="padding:8px 12px;cursor:pointer;border-radius:6px;
+                        ${s.id === data.active_server_id ? 'background:var(--accent-bg);color:var(--accent);font-weight:600;' : 'color:var(--text);'}
+                        transition:background 0.15s;"
+                 onmouseover="this.style.background='var(--accent-bg)'"
+                 onmouseout="this.style.background='${s.id === data.active_server_id ? 'var(--accent-bg)' : 'transparent'}'">
+                🖥 ${s.name}
+            </div>`).join('');
+    } catch(_) {
+        if (listEl) listEl.innerHTML = '<div style="padding:8px;color:var(--text-d)">Error cargando servidores</div>';
+    }
+}
+
+async function selectServer(serverId, serverName) {
+    try {
+        const res = await fetch('/api/servers/select', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({server_id: serverId})
+        });
+        if (!res.ok) { showToast('Error al cambiar de servidor', 'error'); return; }
+        const nameEl = document.getElementById('active-server-name');
+        if (nameEl) nameEl.textContent = serverName;
+        document.getElementById('server-dropdown').style.display = 'none';
+        _serverListLoaded = false;
+        showToast(`Servidor: ${serverName}`, 'success');
+        // Reload data for new server context
+        loadDashboard();
+        loadScans();
+    } catch(e) {
+        showToast('Error al cambiar de servidor', 'error');
+    }
 }
 
 // Inicialización - OPTIMIZADO: Cargar datos críticos primero, el resto en background
@@ -81,17 +221,23 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
     setupAdminListeners();
     setupCompanyListeners();
-    // Cerrar palette panel al hacer click fuera
+    // Cerrar palette panel y server dropdown al hacer click fuera
     document.addEventListener('click', e => {
         const panel = document.getElementById('palette-panel');
         const btn   = document.getElementById('palette-toggle');
         if (panel && btn && !panel.contains(e.target) && !btn.contains(e.target)) {
             panel.style.display = 'none';
         }
+        const sWrap = document.getElementById('server-selector-wrap');
+        const sDrop = document.getElementById('server-dropdown');
+        if (sWrap && sDrop && !sWrap.contains(e.target)) {
+            sDrop.style.display = 'none';
+        }
     });
 
     // Cargar datos críticos primero
     loadDashboard();
+    _initServerSelector();
 
     // Cargar el resto en background (no bloquea la UI)
     setTimeout(() => {
@@ -112,6 +258,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Auto-refresh: arrancar polling 3 segundos después de la carga
     setTimeout(startScanPolling, 3000);
+
+    // P5 #16 — Restore push subscription state on page load
+    setTimeout(_initPushState, 800);
 });
 
 // ============================================================
@@ -680,9 +829,10 @@ async function loadExtendedDashboard() {
         }
     } catch(e) { /* silent */ }
 
-    // Load recidivism and issue type stats in parallel
+    // Load recidivism, issue type stats, and heatmap in parallel
     _loadRecidivism();
     _loadIssueTypeStats();
+    _loadScanHeatmap();
 }
 
 async function _loadRecidivism() {
@@ -752,6 +902,99 @@ function loadScansForMachine(machineName) {
         searchInput.value = machineName;
         loadScans();
     }
+}
+
+// P5 #18 — Heatmap de actividad de scans
+async function _loadScanHeatmap() {
+    const wrap = document.getElementById('scan-heatmap-wrap');
+    if (!wrap) return;
+    try {
+        const res  = await fetch('/api/admin/scan-heatmap?days=30');
+        if (!res.ok) { wrap.innerHTML = ''; return; }
+        const data = await res.json();
+        const matrix = data.matrix || [];
+        const detMx  = data.detections_matrix || [];
+        const days   = data.day_names || ['L','M','X','J','V','S','D'];
+        const hours  = Array.from({length: 24}, (_, i) => `${i}h`);
+        const maxVal = Math.max(1, ...matrix.flat());
+
+        let html = '<table style="border-collapse:collapse;font-size:9px;width:100%;">';
+        // Header row
+        html += '<tr><td style="width:22px;"></td>' +
+                hours.map((h, i) => `<td style="text-align:center;color:var(--text-d);padding:1px;width:${100/26}%;">${i%4===0?h:''}</td>`).join('') +
+                '</tr>';
+        days.forEach((day, d) => {
+            html += `<tr><td style="color:var(--text-d);padding-right:4px;white-space:nowrap;">${day}</td>`;
+            for (let h = 0; h < 24; h++) {
+                const v   = matrix[d]?.[h] || 0;
+                const dv  = detMx[d]?.[h] || 0;
+                const pct = Math.round((v / maxVal) * 100);
+                const bg  = dv > 0
+                    ? `rgba(239,68,68,${0.15 + (pct/100)*0.65})`
+                    : v > 0
+                        ? `rgba(139,92,246,${0.12 + (pct/100)*0.55})`
+                        : 'rgba(255,255,255,0.03)';
+                const title = v > 0 ? `${day} ${h}h: ${v} scan(s)${dv>0?', '+dv+' con hacks':''}` : '';
+                html += `<td title="${title}" style="padding:1px;">
+                    <div style="background:${bg};border-radius:2px;height:14px;width:100%;"></div>
+                </td>`;
+            }
+            html += '</tr>';
+        });
+        html += '</table>';
+        html += `<div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--text-d);">
+            <span><span style="display:inline-block;width:10px;height:10px;background:rgba(139,92,246,0.5);border-radius:2px;margin-right:3px;vertical-align:middle;"></span>Scan</span>
+            <span><span style="display:inline-block;width:10px;height:10px;background:rgba(239,68,68,0.5);border-radius:2px;margin-right:3px;vertical-align:middle;"></span>Con hack</span>
+            <span style="margin-left:auto;">Total: ${data.total_scans} scans en 30d</span>
+        </div>`;
+        wrap.innerHTML = html;
+    } catch(e) {
+        if (wrap) wrap.innerHTML = '<div style="color:var(--text-d);font-size:12px;">No disponible</div>';
+    }
+}
+
+// P5 #20 — Búsqueda de jugador por UUID o username en Mojang
+async function searchMojangProfile() {
+    const input = document.getElementById('mojang-search-input');
+    const result = document.getElementById('mojang-search-result');
+    if (!input || !result) return;
+    const q = input.value.trim();
+    if (!q) return;
+    result.innerHTML = '<span style="color:var(--text-d);">Buscando...</span>';
+    try {
+        const res = await fetch(`/api/player/mojang-profile?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        if (data.error) {
+            result.innerHTML = `<span style="color:#ef4444">${data.error}</span>`;
+            return;
+        }
+        const uuid = data.uuid || '—';
+        const fmtUuid = uuid.length === 32
+            ? `${uuid.slice(0,8)}-${uuid.slice(8,12)}-${uuid.slice(12,16)}-${uuid.slice(16,20)}-${uuid.slice(20)}`
+            : uuid;
+        result.innerHTML = `
+            <div style="padding:10px;background:var(--bg-t);border-radius:8px;border:1px solid var(--border);">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <img src="https://crafatar.com/avatars/${uuid}?size=32&overlay" width="32" height="32"
+                         style="border-radius:4px;image-rendering:pixelated;" onerror="this.style.display='none'">
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:var(--text-h);">${data.username || '—'}</div>
+                        <div style="font-size:10px;font-family:monospace;color:var(--text-d);word-break:break-all;">${fmtUuid}</div>
+                    </div>
+                </div>
+                <button onclick="searchScansForMojang('${data.username}')"
+                    style="margin-top:8px;width:100%;padding:5px;border-radius:6px;border:1px solid rgba(139,92,246,.4);background:rgba(139,92,246,.1);color:var(--accent);font-size:11px;cursor:pointer;">
+                    Ver scans de ${data.username}
+                </button>
+            </div>`;
+    } catch(e) {
+        result.innerHTML = '<span style="color:#ef4444">Error de red</span>';
+    }
+}
+
+function searchScansForMojang(username) {
+    if (!username) return;
+    loadScansForMachine(username);
 }
 
 // ============================================================
@@ -1218,14 +1461,34 @@ let severityChart = null;
 
 function _getCategoryLabel(cat) {
     const map = {
-        'HACKS': '⚔️ Hacks', 'HACK_FILES': '📦 Archivos', 'MACRO_DETECTION': '🖱️ Macros',
-        'JAVA_MEMORY': '☕ Java', 'JAVA_AGENT': '🔌 Agentes', 'NETWORK_FORENSICS': '🌐 Red',
-        'SYSTEM_TAMPERING': '⚙️ Sistema', 'RECENT_FILES': '📅 Recientes',
-        'REGISTRY': '📋 Registro', 'PROCESS': '⚙️ Procesos',
-        'VPN': '🔒 VPN', 'EVASION': '🛡️ Evasión', 'EXECUTED_FILES': '▶️ Ejecutados',
-        'FORENSE': '🔬 Forense', 'TEXTURE_PACKS': '🎨 Texturas', 'OBFUSCATION': '🔀 Ofuscación',
-        'JAR_FILES': '📦 JARs', 'MINECRAFT': '⛏️ Minecraft',
-        'DELETED_FILES': '🗑️ Borrados', 'PROCESSES': '⚙️ Procesos', 'DNS_CACHE': '🌐 DNS',
+        'HACKS':             '⚔️ Hacks',
+        'HACK_FILES':        '📦 Archivos',
+        'GHOST_CLIENT':      '👻 Ghost Client',
+        'MACRO_DETECTION':   '🖱️ Macros',
+        'JAVA_MEMORY':       '☕ Java Mem',
+        'JAVA_AGENT':        '🔌 Agentes',
+        'NETWORK_FORENSICS': '🌐 Red',
+        'RED':               '🌐 Red',
+        'SYSTEM_TAMPERING':  '⚙️ Sistema',
+        'RECENT_FILES':      '📅 Recientes',
+        'REGISTRY':          '📋 Registro',
+        'PROCESS':           '⚙️ Proceso',
+        'PROCESO':           '⚙️ Proceso',
+        'PROCESSES':         '⚙️ Procesos',
+        'VPN':               '🔒 VPN',
+        'EVASION':           '🛡️ Evasión',
+        'EXECUTED_FILES':    '▶️ Ejecutados',
+        'FORENSE':           '🔬 Forense',
+        'TEXTURE_PACKS':     '🎨 Texturas',
+        'OBFUSCATION':       '🔀 Ofuscación',
+        'JAR_FILES':         '📦 JARs',
+        'MINECRAFT':         '⛏️ Minecraft',
+        'DELETED_FILES':     '🗑️ Borrados',
+        'DNS_CACHE':         '🌐 DNS',
+        'CMD_HISTORY':       '💻 Historial CMD',
+        'HARDWARE':          '🖥️ Hardware',
+        'USB':               '🔌 USB',
+        'CLIPBOARD':         '📋 Portapapeles',
     };
     return map[cat] || cat || 'Otro';
 }
@@ -1302,14 +1565,21 @@ function renderIssuePage(container, scanId) {
     const onlyInst = !!window._issuesOnlyInstance;
     const instCount = all.filter(r => _isInMinecraftInstance(r.issue_path)).length;
 
+    const _catColors = {
+        'GHOST_CLIENT':'#ef4444','HACKS':'#ef4444','FORENSE':'#8b5cf6',
+        'RED':'#3b82f6','NETWORK_FORENSICS':'#3b82f6','PROCESO':'#f59e0b','PROCESSES':'#f59e0b',
+        'MACRO_DETECTION':'#f59e0b','EXECUTED_FILES':'#10b981','CMD_HISTORY':'#10b981',
+        'JAVA_MEMORY':'#06b6d4','JAVA_AGENT':'#06b6d4','REGISTRY':'#a78bfa',
+    };
     const chips = cats.map(c => {
         const count = c === 'all' ? all.length : all.filter(r => (r.issue_category || 'Otro') === c).length;
         const active = _issuesFilter === c;
+        const accent = _catColors[c] || '#8B5CF6';
         return `<button onclick="_setIssueFilter('${c}',${scanId})" style="
             font-size:11px;padding:4px 10px;border-radius:20px;cursor:pointer;font-weight:600;
-            border:1px solid ${active ? '#8B5CF6' : 'var(--border-m)'};
-            background:${active ? 'rgba(139,92,246,0.15)' : 'var(--bg-t)'};
-            color:${active ? '#8B5CF6' : 'var(--text-m)'};white-space:nowrap;">
+            border:1px solid ${active ? accent : 'var(--border-m)'};
+            background:${active ? accent + '22' : 'var(--bg-t)'};
+            color:${active ? accent : 'var(--text-m)'};white-space:nowrap;">
             ${c === 'all' ? '🔍 Todos' : _getCategoryLabel(c)} <span style="opacity:.7">${count}</span>
         </button>`;
     }).join('') + `<button onclick="_toggleOnlyInstance(${scanId})" style="
@@ -2270,15 +2540,18 @@ async function viewPlayerProfile(machineName) {
 
 async function loadPreviousScans(machineName) {
     try {
-        const response = await fetch(`/api/scans?machine_name=${encodeURIComponent(machineName)}&limit=10`);
+        const response = await fetch(`/api/scans?machine_name=${encodeURIComponent(machineName)}&limit=20`);
         const data = await response.json();
-        
+
         const container = document.getElementById('previous-scans-list');
         if (!container) return;
-        
+
         const allScans  = data.scans || [];
         const prevScans = allScans.filter(s => s.id !== currentScanId);
         const current   = allScans.find(s => s.id === currentScanId);
+
+        // P5 #21 — Reputación del jugador
+        _renderPlayerReputation(machineName, allScans);
 
         if (prevScans.length > 0) {
             // ── Risk score trend chart ───────────────────────────────
@@ -2642,6 +2915,44 @@ async function mlCluster() {
     } catch (e) {
         res.style.color = '#ef4444';
         res.textContent = `Error: ${e.message}`;
+    }
+}
+
+async function loadCoordinatedCheating() {
+    const res = document.getElementById('coord-cheating-result');
+    const daysEl = document.getElementById('coord-days-select');
+    if (!res) return;
+    const days = daysEl ? parseInt(daysEl.value) : 30;
+    res.innerHTML = '<span style="color:var(--text-d);">Analizando...</span>';
+    try {
+        const r = await fetch(`/api/ml/coordinated-cheating?days=${days}&min_players=2`);
+        const d = await r.json();
+        if (d.error) { res.innerHTML = `<span style="color:#ef4444">${d.error}</span>`; return; }
+        const clusters = d.clusters || [];
+        if (clusters.length === 0) {
+            res.innerHTML = '<span style="color:#10b981;">✅ No se detectaron patrones de cheating coordinado.</span>';
+            return;
+        }
+        let html = `<div style="color:#f87171;font-weight:700;margin-bottom:10px;">⚠️ ${clusters.length} grupo(s) detectado(s)</div>`;
+        clusters.forEach(c => {
+            const players = c.players || [];
+            const uniquePlayers = [...new Map(players.map(p => [p.machine_name, p])).values()];
+            html += `<div style="padding:10px 12px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:8px;margin-bottom:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+                    <span style="font-weight:700;color:#f87171;">${c.issue_type}</span>
+                    <span style="font-size:11px;color:var(--text-d);">${c.date}</span>
+                </div>
+                <div style="font-size:11px;color:var(--text-m);margin-bottom:6px;">${c.player_count} jugador(es) con este hack el mismo día</div>
+                <div style="display:flex;flex-wrap:wrap;gap:4px;">
+                    ${uniquePlayers.map(p =>
+                        `<span onclick="viewScanDetails(${p.scan_id})" style="cursor:pointer;font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(239,68,68,0.1);color:#fca5a5;border:1px solid rgba(239,68,68,0.25);">${p.machine_name}</span>`
+                    ).join('')}
+                </div>
+            </div>`;
+        });
+        res.innerHTML = html;
+    } catch(e) {
+        res.innerHTML = `<span style="color:#ef4444">Error: ${e.message}</span>`;
     }
 }
 
@@ -4039,6 +4350,50 @@ async function aiFollowupQuestions(scanId, btn) {
     if (btn) { btn.textContent = '❓ Preguntas'; btn.disabled = false; }
 }
 
+// ── Generate Ban Message (P5 #19) ─────────────────────────────────────────────
+
+async function generateBanMessage(scanId, btn) {
+    if (!scanId) return;
+    const container = document.getElementById('ban-message-container');
+    const orig = btn ? btn.textContent : '';
+    if (btn) { btn.textContent = '⏳ Generando...'; btn.disabled = true; }
+    if (container) { container.style.display = 'none'; container.textContent = ''; }
+    try {
+        const res  = await fetch('/api/staff/ai/generate-ban-message', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({scan_id: scanId}),
+        });
+        const data = await res.json();
+        if (data.error) {
+            if (container) { container.style.display = 'block'; container.textContent = '❌ ' + data.error; }
+        } else if (data.ban_message) {
+            if (container) {
+                container.style.display = 'block';
+                container.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="font-weight:600;font-size:10px;color:#94a3b8;letter-spacing:.05em;">MENSAJE GENERADO — COPIAR Y EDITAR SEGÚN CONTEXTO</span>
+                    <button onclick="navigator.clipboard.writeText(this.closest('[data-msg]')?.dataset.msg||'').then(()=>{this.textContent='✅ Copiado';setTimeout(()=>this.textContent='📋 Copiar',1500)})"
+                        style="font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.1);color:#f87171;cursor:pointer;">📋 Copiar</button>
+                </div>
+                <div data-msg="${data.ban_message.replace(/"/g,'&quot;')}" style="white-space:pre-wrap;font-family:monospace;">${data.ban_message.replace(/</g,'&lt;')}</div>`;
+                // fix copy button reference
+                const copyBtn = container.querySelector('button');
+                const msgDiv  = container.querySelector('[data-msg]');
+                if (copyBtn && msgDiv) {
+                    copyBtn.onclick = () => {
+                        navigator.clipboard.writeText(msgDiv.dataset.msg || data.ban_message)
+                            .then(() => { copyBtn.textContent = '✅ Copiado'; setTimeout(() => copyBtn.textContent = '📋 Copiar', 1500); });
+                    };
+                }
+            }
+        }
+    } catch(e) {
+        if (container) { container.style.display = 'block'; container.textContent = '❌ Error de red: ' + e.message; }
+    } finally {
+        if (btn) { btn.textContent = orig || '🔨 Msg Ban'; btn.disabled = false; }
+    }
+}
+
 // ── IOC Extractor ─────────────────────────────────────────────────────────────
 
 function openIocExtractor() {
@@ -4092,5 +4447,149 @@ async function runIocExtract() {
         }
     } catch(e) {
         out.innerHTML = '<span style="color:#ef4444">Error de red.</span>';
+    }
+}
+
+// P5 #21 + P5 #14 — Reputación del jugador y sparkline de risk score
+async function _renderPlayerReputation(machineName, allScans) {
+    const card = document.getElementById('player-reputation-card');
+    if (!card) return;
+
+    const total  = allScans.length;
+    const hacks  = allScans.filter(s => s.verdict === 'hack').length;
+    const clean  = allScans.filter(s => s.verdict === 'clean').length;
+    const scores = allScans.map(s => s.risk_score).filter(v => v != null);
+    const avgRisk = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+
+    // Badges de reputación
+    const badges = [];
+    if (total === 1) {
+        badges.push(['Primera vez', '#6366f1']);
+    } else if (hacks >= 3) {
+        badges.push(['Reincidente', '#dc2626']);
+    } else if (hacks >= 1) {
+        badges.push(['Sospechoso', '#f59e0b']);
+    } else if (clean > 0 && hacks === 0) {
+        badges.push(['Historial limpio', '#10b981']);
+    }
+    if (total >= 10) badges.push(['Veterano', '#8b5cf6']);
+    const lastScan = allScans[0];
+    if (lastScan && lastScan.risk_score >= 80) badges.push(['Alto riesgo', '#ef4444']);
+
+    const badgeEl = document.getElementById('player-rep-badges');
+    if (badgeEl) {
+        badgeEl.innerHTML = badges.map(([label, color]) =>
+            `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${color}22;color:${color};border:1px solid ${color}44;">${label}</span>`
+        ).join('');
+    }
+
+    const nameEl = document.getElementById('player-rep-name');
+    if (nameEl) nameEl.textContent = machineName || 'Jugador';
+
+    const setEl = (id, val, color) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = val ?? '—';
+        if (color) el.style.color = color;
+    };
+    setEl('player-rep-total', total);
+    setEl('player-rep-hacks', hacks, hacks > 0 ? '#ef4444' : '#10b981');
+    setEl('player-rep-clean', clean, clean > 0 ? '#10b981' : 'var(--text-m)');
+    const riskColor = avgRisk == null ? 'var(--text-m)' : avgRisk >= 70 ? '#ef4444' : avgRisk >= 30 ? '#f59e0b' : '#10b981';
+    setEl('player-rep-risk', avgRisk, riskColor);
+
+    card.style.display = 'block';
+
+    // P5 #14 — Sparkline: intentar usar /api/player/timeline si hay machine_id en el scan actual
+    const machineId = _currentScanData && _currentScanData.machine_id;
+    if (machineId) {
+        try {
+            const res = await fetch(`/api/player/timeline/${encodeURIComponent(machineId)}`);
+            if (res.ok) {
+                const tl = await res.json();
+                const entries = tl.timeline || [];
+                if (entries.length >= 2) {
+                    const sparkWrap   = document.getElementById('player-sparkline-wrap');
+                    const sparkCanvas = document.getElementById('player-sparkline-chart');
+                    if (sparkWrap && sparkCanvas) {
+                        sparkWrap.style.display = 'block';
+                        const labels = entries.map(e => (e.date || '').slice(5, 10));
+                        const scores = entries.map(e => e.risk_score);
+                        const ptColors = scores.map(v => v >= 70 ? '#ef4444' : v >= 30 ? '#f59e0b' : '#10b981');
+                        // Draw trend line if provided
+                        const trendData = tl.trend_line || null;
+                        const datasets = [{
+                            label: 'Risk Score',
+                            data: scores,
+                            borderColor: '#8b5cf6',
+                            backgroundColor: 'rgba(139,92,246,0.08)',
+                            pointBackgroundColor: ptColors,
+                            pointRadius: 4,
+                            tension: 0.3,
+                            fill: true,
+                        }];
+                        if (trendData && trendData.length === entries.length) {
+                            datasets.push({
+                                label: 'Tendencia',
+                                data: trendData,
+                                borderColor: 'rgba(251,191,36,0.6)',
+                                borderDash: [4, 4],
+                                pointRadius: 0,
+                                fill: false,
+                                tension: 0,
+                            });
+                        }
+                        if (window._playerSparklineChart) window._playerSparklineChart.destroy();
+                        window._playerSparklineChart = new Chart(sparkCanvas, {
+                            type: 'line',
+                            data: { labels, datasets },
+                            options: {
+                                responsive: true,
+                                animation: false,
+                                plugins: { legend: { display: false }, tooltip: {
+                                    callbacks: { label: ctx => ` Risk: ${ctx.parsed.y}` }
+                                }},
+                                scales: {
+                                    y: { min: 0, max: 100, grid: { color: 'rgba(255,255,255,0.04)' },
+                                         ticks: { color: '#6b7280', font: { size: 9 } } },
+                                    x: { grid: { display: false }, ticks: { color: '#6b7280', font: { size: 9 } } }
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        } catch(_) {}
+    } else if (allScans.length >= 2) {
+        // Fallback: sparkline from scan history data
+        const sparkWrap   = document.getElementById('player-sparkline-wrap');
+        const sparkCanvas = document.getElementById('player-sparkline-chart');
+        if (sparkWrap && sparkCanvas) {
+            const sorted = [...allScans].sort((a, b) => new Date(a.started_at) - new Date(b.started_at));
+            const sLabels = sorted.map(s => s.started_at ? s.started_at.toString().slice(5,10) : '?');
+            const sScores = sorted.map(s => s.risk_score || 0);
+            const sColors = sScores.map(v => v >= 70 ? '#ef4444' : v >= 30 ? '#f59e0b' : '#10b981');
+            sparkWrap.style.display = 'block';
+            if (window._playerSparklineChart) window._playerSparklineChart.destroy();
+            window._playerSparklineChart = new Chart(sparkCanvas, {
+                type: 'line',
+                data: {
+                    labels: sLabels,
+                    datasets: [{ data: sScores, borderColor: '#8b5cf6',
+                        backgroundColor: 'rgba(139,92,246,0.08)',
+                        pointBackgroundColor: sColors, pointRadius: 4,
+                        tension: 0.3, fill: true }]
+                },
+                options: {
+                    responsive: true, animation: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { min: 0, max: 100, grid: { color: 'rgba(255,255,255,0.04)' },
+                             ticks: { color: '#6b7280', font: { size: 9 } } },
+                        x: { grid: { display: false }, ticks: { color: '#6b7280', font: { size: 9 } } }
+                    }
+                }
+            });
+        }
     }
 }

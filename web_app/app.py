@@ -29,7 +29,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-produ
 CORS(app)
 
 # Inicializar base de datos de autenticación al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.19'  # sincronizar con SCANNER_VERSION en main.py
+_ARGUS_VERSION = '1.6.22'  # sincronizar con SCANNER_VERSION en main.py
 
 
 def _notify_new_deploy():
@@ -109,6 +109,13 @@ def _notify_new_deploy():
 
     # Primer intento inmediato en background (puede fallar por 429 de CF)
     threading.Thread(target=_try_send_deploy_webhook, daemon=True).start()
+    # Telegram — backup instantáneo (no tiene el problema de IP ban de Cloudflare)
+    _tg_msg = (
+        f'🚀 <b>Nuevo Deploy</b> — Argus {_ARGUS_VERSION}\n'
+        f'Servicio: {service} | Rama: {branch}\n'
+        f'Commit: <code>{commit[:7]}</code>'
+    )
+    threading.Thread(target=lambda: _notify_telegram(_tg_msg), daemon=True).start()
 
 
 def _try_send_deploy_webhook():
@@ -1234,6 +1241,48 @@ def api_list_users():
 # API DE GESTIÓN DE EMPRESAS
 # ============================================================
 
+@app.route('/api/servers', methods=['GET'])
+@login_required
+def list_servers():
+    """P5 #29 — Lista servidores a los que el usuario tiene acceso.
+    Admin ve todos; empresa-admin ve solo el suyo.
+    Un 'servidor' corresponde a una company en la BD.
+    """
+    user = get_user_by_id(session.get('user_id'))
+    is_admin = user and 'admin' in (user.get('roles') or [])
+    try:
+        if is_admin:
+            companies = list_companies() or []
+        else:
+            cid = user.get('company_id') if user else None
+            companies = [get_company_by_id(cid)] if cid else []
+        servers = [
+            {'id': c.get('id') or c.get('company_id'),
+             'name': c.get('name') or c.get('company_name', 'Servidor')}
+            for c in companies if c
+        ]
+        active_id = session.get('active_server_id')
+        return jsonify({'servers': servers, 'active_server_id': active_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/servers/select', methods=['POST'])
+@login_required
+def select_server():
+    """P5 #29 — Selecciona el servidor activo para filtrar vistas del panel."""
+    data = request.json or {}
+    server_id = data.get('server_id')
+    user = get_user_by_id(session.get('user_id'))
+    is_admin = user and 'admin' in (user.get('roles') or [])
+    if server_id and not is_admin:
+        if str(user.get('company_id', '')) != str(server_id):
+            return jsonify({'error': 'Sin acceso a ese servidor'}), 403
+    session['active_server_id'] = server_id
+    session.modified = True
+    return jsonify({'ok': True, 'active_server_id': server_id})
+
+
 @app.route('/api/admin/companies', methods=['GET'])
 @admin_required
 def api_list_companies():
@@ -2082,7 +2131,7 @@ def debug_last_scan():
 
 
 # Current released scanner version — update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.6.19"
+CURRENT_SCANNER_VERSION = "1.6.22"
 
 @app.route('/sw.js')
 def service_worker():
@@ -2092,6 +2141,167 @@ def service_worker():
     resp.headers['Service-Worker-Allowed'] = '/'
     resp.headers['Cache-Control'] = 'no-cache'
     return resp
+
+
+# ── P5 #16 — Web Push Notifications ──────────────────────────────────────────
+
+def _get_vapid_keys():
+    """Returns (private_key_b64, public_key_b64) from env or generates them."""
+    priv = os.environ.get('VAPID_PRIVATE_KEY', '')
+    pub  = os.environ.get('VAPID_PUBLIC_KEY', '')
+    if priv and pub:
+        return priv, pub
+    # Try to load from DB
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cur.execute("SELECT value FROM app_settings WHERE key = 'vapid_private_key'")
+        row_priv = cur.fetchone()
+        cur.execute("SELECT value FROM app_settings WHERE key = 'vapid_public_key'")
+        row_pub  = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row_priv and row_pub:
+            pv = row_priv[0] if isinstance(row_priv, (list, tuple)) else row_priv.get('value', '')
+            pk = row_pub[0] if isinstance(row_pub, (list, tuple)) else row_pub.get('value', '')
+            if pv and pk:
+                return pv, pk
+    except Exception:
+        pass
+    # Generate new keys using py_vapid if available
+    try:
+        from py_vapid import Vapid
+        v = Vapid()
+        v.generate_keys()
+        priv_b64 = v.private_key_urlsafe_base64()
+        pub_b64  = v.public_key_urlsafe_base64()
+        # Persist to DB
+        try:
+            conn = get_db_connection()
+            cur  = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)
+            """)
+            cur.execute("INSERT INTO app_settings (key, value) VALUES ('vapid_private_key', %s) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", (priv_b64,))
+            cur.execute("INSERT INTO app_settings (key, value) VALUES ('vapid_public_key', %s) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", (pub_b64,))
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception:
+            pass
+        return priv_b64, pub_b64
+    except ImportError:
+        return '', ''
+
+
+def _send_push_to_all(title: str, body: str, url: str = '/panel'):
+    """Sends a Web Push notification to all stored subscriptions. Fire-and-forget."""
+    try:
+        from pywebpush import webpush, WebPushException
+        priv_key, pub_key = _get_vapid_keys()
+        if not priv_key:
+            return
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cur.execute("SELECT endpoint, p256dh, auth FROM push_subscriptions")
+        subs = cur.fetchall()
+        cur.close()
+        conn.close()
+        payload = json.dumps({'title': title, 'body': body, 'url': url})
+        vapid_claims = {'sub': f'mailto:{os.environ.get("VAPID_EMAIL","argus@aspers.gg")}'}
+        for sub in subs:
+            ep   = sub[0] if isinstance(sub, (list, tuple)) else sub.get('endpoint', '')
+            p256 = sub[1] if isinstance(sub, (list, tuple)) else sub.get('p256dh', '')
+            auth = sub[2] if isinstance(sub, (list, tuple)) else sub.get('auth', '')
+            try:
+                webpush(
+                    subscription_info={'endpoint': ep, 'keys': {'p256dh': p256, 'auth': auth}},
+                    data=payload,
+                    vapid_private_key=priv_key,
+                    vapid_claims=vapid_claims,
+                )
+            except WebPushException as e:
+                if '410' in str(e) or '404' in str(e):
+                    # Remove expired subscription
+                    try:
+                        conn2 = get_db_connection(); cur2 = conn2.cursor()
+                        cur2.execute("DELETE FROM push_subscriptions WHERE endpoint = %s", (ep,))
+                        conn2.commit(); cur2.close(); conn2.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+
+@app.route('/api/push/vapid-public-key', methods=['GET'])
+@login_required
+def push_vapid_public_key():
+    """Returns the VAPID public key for browser push subscription."""
+    _, pub = _get_vapid_keys()
+    if not pub:
+        return jsonify({'error': 'Web Push no configurado en este servidor'}), 501
+    return jsonify({'public_key': pub})
+
+
+@app.route('/api/push/subscribe', methods=['POST'])
+@login_required
+def push_subscribe():
+    """Saves a push subscription from the browser."""
+    data = request.json or {}
+    endpoint = data.get('endpoint', '')
+    keys     = data.get('keys', {})
+    p256dh   = keys.get('p256dh', '')
+    auth     = keys.get('auth', '')
+    if not endpoint or not p256dh or not auth:
+        return jsonify({'error': 'Subscription incompleta'}), 400
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id SERIAL PRIMARY KEY,
+                endpoint TEXT UNIQUE NOT NULL,
+                p256dh TEXT NOT NULL,
+                auth TEXT NOT NULL,
+                user_id INTEGER,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        cur.execute("""
+            INSERT INTO push_subscriptions (endpoint, p256dh, auth, user_id)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth
+        """, (endpoint, p256dh, auth, session.get('user_id')))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/push/unsubscribe', methods=['POST'])
+@login_required
+def push_unsubscribe():
+    """Removes a push subscription."""
+    data = request.json or {}
+    endpoint = data.get('endpoint', '')
+    if not endpoint:
+        return jsonify({'error': 'endpoint requerido'}), 400
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cur.execute("DELETE FROM push_subscriptions WHERE endpoint = %s", (endpoint,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/scanner/version', methods=['GET'])
@@ -2646,6 +2856,14 @@ def submit_scan_results(scan_id):
             )
         except Exception:
             pass
+
+        # P5 #16 — Web Push a todos los staff suscritos
+        _rs = locals().get('risk_score', 0)
+        _mn = data.get('machine_name', 'Jugador')
+        _push_title = '🔴 Argus — Nuevo scan con hacks' if _rs >= 70 else '🟡 Argus — Nuevo scan' if _rs >= 30 else '✅ Argus — Scan limpio'
+        _push_body  = f'{_mn} · Risk {_rs} · {len(results)} hallazgos'
+        import threading as _pt
+        _pt.Thread(target=_send_push_to_all, args=(_push_title, _push_body, f'/panel?scan={scan_id}'), daemon=True).start()
 
         return jsonify({'success': True, 'message': 'Resultados almacenados'})
     except Exception as e:
@@ -7198,6 +7416,620 @@ def simhash_similarity():
         })
 
     return jsonify({'results': results, 'known_hack_hashes': len(known_hack_bits)}), 200
+
+
+# ── P5 #30 — System health dashboard ─────────────────────────────────────────
+
+@app.route('/api/admin/health', methods=['GET'])
+@login_required
+def system_health():
+    """Dashboard de salud del sistema: BD, cola de scans, uptime, errores recientes."""
+    import time as _t
+    health = {}
+    # BD latency
+    t0 = _t.time()
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute('SELECT 1')
+        health['db_latency_ms'] = round((_t.time() - t0) * 1000, 1)
+        health['db_ok'] = True
+    except Exception as e:
+        health['db_ok'] = False
+        health['db_error'] = str(e)
+        health['db_latency_ms'] = None
+    # Scans en cola/recientes
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM scans WHERE scan_timestamp > NOW() - INTERVAL '1 hour'")
+            health['scans_last_hour'] = (cur.fetchone() or [0])[0]
+            cur.execute("SELECT COUNT(*) FROM scans WHERE scan_timestamp > NOW() - INTERVAL '24 hours'")
+            health['scans_last_24h'] = (cur.fetchone() or [0])[0]
+            cur.execute('SELECT COUNT(*) FROM scans')
+            health['scans_total'] = (cur.fetchone() or [0])[0]
+    except Exception:
+        health['scans_last_hour'] = None
+    # Errores recientes (tabla app_meta si la tenemos)
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute("SELECT value FROM app_meta WHERE key = 'last_error' LIMIT 1")
+            row = cur.fetchone()
+            health['last_error'] = (row[0] if isinstance(row, (list,tuple)) else row.get('value')) if row else None
+    except Exception:
+        health['last_error'] = None
+    # Versión
+    health['argus_version'] = _ARGUS_VERSION
+    health['timestamp'] = datetime.datetime.utcnow().isoformat() + 'Z'
+    return jsonify(health), 200
+
+
+# ── P5 #17 — Staff Audit Log ─────────────────────────────────────────────────
+
+def _log_staff_action(action: str, target_scan_id=None, detail: str = '', user_id=None):
+    """Registra una acción del staff en la tabla staff_audit_log."""
+    uid = user_id or session.get('user_id')
+    if not uid:
+        return
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS staff_audit_log (
+                    id          SERIAL PRIMARY KEY,
+                    user_id     INTEGER NOT NULL,
+                    action      VARCHAR(100) NOT NULL,
+                    scan_id     INTEGER,
+                    detail      TEXT,
+                    ip_address  VARCHAR(45),
+                    created_at  TIMESTAMP DEFAULT NOW()
+                )
+            ''')
+            cur.execute(
+                'INSERT INTO staff_audit_log (user_id, action, scan_id, detail, ip_address) '
+                'VALUES (%s, %s, %s, %s, %s)',
+                (uid, action[:100], target_scan_id, detail[:500] if detail else None,
+                 request.remote_addr if request else None)
+            )
+    except Exception as e:
+        print(f'[AuditLog] Error: {e}')
+
+
+@app.route('/api/staff/audit-log', methods=['GET'])
+@login_required
+def get_staff_audit_log():
+    """Devuelve el historial de acciones del staff (paginado)."""
+    if not (is_admin(session.get('user_id')) or is_company_admin(session.get('user_id'), session.get('company_id'))):
+        return jsonify({'error': 'Acceso denegado'}), 403
+    page     = max(1, int(request.args.get('page', 1)))
+    per_page = min(100, int(request.args.get('per_page', 50)))
+    offset   = (page - 1) * per_page
+    scan_id  = request.args.get('scan_id')
+    user_flt = request.args.get('user_id')
+    try:
+        with get_api_db_cursor() as cur:
+            base_q = '''
+                SELECT sal.id, sal.user_id, u.username, sal.action, sal.scan_id,
+                       sal.detail, sal.ip_address, sal.created_at
+                FROM staff_audit_log sal
+                LEFT JOIN users u ON u.id = sal.user_id
+            '''
+            conditions, params = [], []
+            if scan_id:
+                conditions.append('sal.scan_id = %s'); params.append(int(scan_id))
+            if user_flt:
+                conditions.append('sal.user_id = %s'); params.append(int(user_flt))
+            where = ('WHERE ' + ' AND '.join(conditions)) if conditions else ''
+            cur.execute(f'{base_q} {where} ORDER BY sal.created_at DESC LIMIT %s OFFSET %s',
+                        params + [per_page, offset])
+            rows = cur.fetchall() or []
+            cur.execute(f'SELECT COUNT(*) FROM staff_audit_log sal {where}', params)
+            total = (cur.fetchone() or [0])[0]
+        entries = []
+        for r in rows:
+            if isinstance(r, dict):
+                entries.append(r)
+            else:
+                entries.append({
+                    'id': r[0], 'user_id': r[1], 'username': r[2],
+                    'action': r[3], 'scan_id': r[4], 'detail': r[5],
+                    'ip': r[6], 'created_at': str(r[7]) if r[7] else None,
+                })
+        return jsonify({'entries': entries, 'total': total, 'page': page, 'per_page': per_page}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── P5 #19 — Auto-generate ban message ────────────────────────────────────────
+
+@app.route('/api/staff/ai/generate-ban-message', methods=['POST'])
+@login_required
+def generate_ban_message():
+    """Genera un mensaje de ban con las evidencias más relevantes del scan."""
+    data    = request.get_json(silent=True) or {}
+    scan_id = data.get('scan_id')
+    if not scan_id:
+        return jsonify({'error': 'scan_id requerido'}), 400
+
+    k_groq   = os.environ.get('GROQ_API_KEY')
+    k_gemini = os.environ.get('GEMINI_API_KEY')
+    k_claude = os.environ.get('ANTHROPIC_API_KEY')
+    if not any([k_groq, k_gemini, k_claude]):
+        return jsonify({'error': 'Sin API keys de IA configuradas'}), 503
+
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                'SELECT sr.issue_name, sr.issue_path, sr.alert_level, sr.confidence, sr.issue_category '
+                'FROM scan_results sr '
+                'JOIN scans s ON s.id = sr.scan_id '
+                'WHERE sr.scan_id = %s AND sr.alert_level IN (\'CRITICAL\',\'SOSPECHOSO\') '
+                'ORDER BY sr.confidence DESC LIMIT 10',
+                (scan_id,)
+            )
+            rows = cur.fetchall() or []
+            cur.execute(
+                'SELECT player_name, machine_id, scan_timestamp FROM scans WHERE id = %s',
+                (scan_id,)
+            )
+            scan_row = cur.fetchone()
+    except Exception as e:
+        return jsonify({'error': f'Error de BD: {e}'}), 500
+
+    if not rows:
+        return jsonify({'error': 'Sin hallazgos críticos en este scan'}), 404
+
+    player = ''
+    if scan_row:
+        player = (scan_row[0] if isinstance(scan_row, (list, tuple)) else scan_row.get('player_name', '')) or ''
+
+    findings_text = '\n'.join(
+        f'- [{r[2] if isinstance(r,(list,tuple)) else r.get("alert_level","")}] '
+        f'{r[0] if isinstance(r,(list,tuple)) else r.get("issue_name","")} '
+        f'(conf: {round(float(r[3] if isinstance(r,(list,tuple)) else r.get("confidence",0))*100)}%)'
+        for r in rows
+    )
+
+    prompt = (
+        f'Genera un mensaje de ban formal para un jugador de Minecraft en un servidor de Roleplay/SMP. '
+        f'Jugador: {player or "desconocido"}. '
+        f'Evidencias encontradas por el scanner anti-hack:\n{findings_text}\n\n'
+        f'El mensaje debe:\n'
+        f'1. Ser profesional y en español\n'
+        f'2. Mencionar las 3 evidencias más fuertes\n'
+        f'3. Indicar que el ban es permanente si hay múltiples indicadores CRITICAL\n'
+        f'4. No exceder 5 líneas\n'
+        f'5. Incluir el nombre del escáner (Argus Scanner)\n'
+        f'Solo el texto del mensaje, sin explicaciones adicionales.'
+    )
+
+    ai_response = ''
+    try:
+        if k_groq:
+            import urllib.request as _ur, json as _j
+            req = _ur.Request('https://api.groq.com/openai/v1/chat/completions',
+                data=_j.dumps({'model': 'llama-3.3-70b-versatile',
+                               'messages': [{'role': 'user', 'content': prompt}],
+                               'max_tokens': 200}).encode(),
+                headers={'Authorization': f'Bearer {k_groq}', 'Content-Type': 'application/json'},
+                method='POST')
+            with _ur.urlopen(req, timeout=15) as resp:
+                rd = _j.loads(resp.read())
+                ai_response = rd['choices'][0]['message']['content'].strip()
+        elif k_gemini:
+            import urllib.request as _ur, json as _j
+            url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={k_gemini}'
+            body = _j.dumps({'contents': [{'parts': [{'text': prompt}]}]}).encode()
+            req = _ur.Request(url, data=body, headers={'Content-Type': 'application/json'}, method='POST')
+            with _ur.urlopen(req, timeout=15) as resp:
+                rd = _j.loads(resp.read())
+                ai_response = rd['candidates'][0]['content']['parts'][0]['text'].strip()
+    except Exception as e:
+        return jsonify({'error': f'Error de IA: {e}'}), 502
+
+    _log_staff_action('generate_ban_message', scan_id, f'player={player}')
+    return jsonify({'ban_message': ai_response, 'scan_id': scan_id, 'player': player}), 200
+
+
+# ── P5 #27 — Player clustering with DBSCAN ───────────────────────────────────
+
+@app.route('/api/ml/player-clusters', methods=['GET'])
+@login_required
+def player_clusters():
+    """Agrupa jugadores por similitud de hallazgos usando DBSCAN."""
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute('''
+                SELECT s.machine_id, s.player_name,
+                       array_agg(DISTINCT sr.issue_type ORDER BY sr.issue_type) AS issue_types,
+                       MAX(s.risk_score) AS max_risk,
+                       COUNT(sr.id) AS total_findings
+                FROM scans s
+                JOIN scan_results sr ON sr.scan_id = s.id
+                WHERE s.scan_timestamp > NOW() - INTERVAL '30 days'
+                GROUP BY s.machine_id, s.player_name
+                HAVING COUNT(sr.id) > 0
+                LIMIT 500
+            ''')
+            rows = cur.fetchall() or []
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    if len(rows) < 3:
+        return jsonify({'clusters': [], 'message': 'Insuficientes datos'}), 200
+
+    try:
+        from sklearn.preprocessing import MultiLabelBinarizer
+        from sklearn.cluster import DBSCAN
+        import numpy as np
+
+        all_types = []
+        for r in rows:
+            types = r[2] if isinstance(r, (list,tuple)) else r.get('issue_types', [])
+            all_types.append(types or [])
+
+        mlb = MultiLabelBinarizer()
+        X = mlb.fit_transform(all_types)
+        db = DBSCAN(eps=0.5, min_samples=2, metric='cosine').fit(X)
+        labels = db.labels_
+
+        clusters = {}
+        for idx, label in enumerate(labels):
+            if label == -1:
+                continue
+            if label not in clusters:
+                clusters[label] = []
+            r = rows[idx]
+            if isinstance(r, dict):
+                clusters[label].append({'machine_id': r.get('machine_id'), 'player': r.get('player_name'),
+                                        'risk': r.get('max_risk'), 'findings': r.get('total_findings')})
+            else:
+                clusters[label].append({'machine_id': r[0], 'player': r[1],
+                                        'risk': r[3], 'findings': r[4]})
+
+        result = [{'cluster_id': k, 'size': len(v), 'players': v}
+                  for k, v in sorted(clusters.items(), key=lambda x: -len(x[1]))]
+        return jsonify({'clusters': result, 'total_players': len(rows),
+                        'noise_players': int((labels == -1).sum())}), 200
+    except ImportError:
+        return jsonify({'error': 'sklearn no disponible'}), 503
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── P5 #28 — Player timeline ──────────────────────────────────────────────────
+
+@app.route('/api/player/timeline/<machine_id>', methods=['GET'])
+@login_required
+def player_timeline(machine_id):
+    """Devuelve la serie temporal de risk scores de un jugador con tendencia lineal."""
+    if not machine_id:
+        return jsonify({'error': 'machine_id requerido'}), 400
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute('''
+                SELECT scan_timestamp, risk_score, verdict, player_name
+                FROM scans
+                WHERE machine_id = %s AND risk_score IS NOT NULL
+                ORDER BY scan_timestamp ASC
+                LIMIT 100
+            ''', (machine_id,))
+            rows = cur.fetchall() or []
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    if not rows:
+        return jsonify({'points': [], 'trend': None, 'player': machine_id}), 200
+
+    points = []
+    for r in rows:
+        if isinstance(r, dict):
+            points.append({'ts': str(r.get('scan_timestamp','')), 'score': r.get('risk_score',0),
+                           'verdict': r.get('verdict',''), 'player': r.get('player_name','')})
+        else:
+            points.append({'ts': str(r[0]), 'score': r[1], 'verdict': r[2], 'player': r[3]})
+
+    # Tendencia lineal simple (regresión mínimos cuadrados)
+    n = len(points)
+    trend = None
+    if n >= 2:
+        try:
+            import numpy as np
+            scores = [p['score'] for p in points]
+            x = np.arange(n)
+            slope, _ = np.polyfit(x, scores, 1)
+            trend = round(float(slope), 2)
+        except Exception:
+            pass
+
+    player_name = points[-1].get('player') if points else machine_id
+    return jsonify({'points': points, 'trend': trend, 'player': player_name,
+                    'machine_id': machine_id, 'total_scans': n}), 200
+
+
+# ── P5 #23 — Scan diff endpoint ───────────────────────────────────────────────
+
+@app.route('/api/scan/diff/<int:id_a>/<int:id_b>', methods=['GET'])
+@login_required
+def scan_diff(id_a, id_b):
+    """Compara dos scans del mismo jugador y devuelve hallazgos nuevos vs desaparecidos."""
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                'SELECT issue_name, issue_path, alert_level, issue_type, issue_category '
+                'FROM scan_results WHERE scan_id = %s',
+                (id_a,)
+            )
+            rows_a = cur.fetchall() or []
+            cur.execute(
+                'SELECT issue_name, issue_path, alert_level, issue_type, issue_category '
+                'FROM scan_results WHERE scan_id = %s',
+                (id_b,)
+            )
+            rows_b = cur.fetchall() or []
+            cur.execute(
+                'SELECT player_name, scan_timestamp, machine_id FROM scans WHERE id IN (%s, %s)',
+                (id_a, id_b)
+            )
+            meta_rows = cur.fetchall() or []
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    def _row_key(r):
+        if isinstance(r, dict):
+            return (r.get('issue_name',''), r.get('issue_path',''), r.get('issue_type',''))
+        return (r[0], r[1], r[3])
+
+    set_a = {_row_key(r): r for r in rows_a}
+    set_b = {_row_key(r): r for r in rows_b}
+
+    def _fmt(r):
+        if isinstance(r, dict):
+            return {'name': r.get('issue_name',''), 'path': r.get('issue_path',''),
+                    'level': r.get('alert_level',''), 'type': r.get('issue_type',''),
+                    'category': r.get('issue_category','')}
+        return {'name': r[0], 'path': r[1], 'level': r[2], 'type': r[3], 'category': r[4]}
+
+    new_in_b     = [_fmt(set_b[k]) for k in set_b if k not in set_a]
+    gone_from_a  = [_fmt(set_a[k]) for k in set_a if k not in set_b]
+    persisted    = [_fmt(set_b[k]) for k in set_b if k in set_a]
+
+    return jsonify({
+        'scan_a': id_a, 'scan_b': id_b,
+        'new': new_in_b,
+        'removed': gone_from_a,
+        'persisted': persisted,
+        'summary': {
+            'total_a': len(set_a), 'total_b': len(set_b),
+            'new_count': len(new_in_b), 'removed_count': len(gone_from_a),
+            'persisted_count': len(persisted),
+        }
+    }), 200
+
+
+# ── P5 #24 — Telegram webhook alternative ────────────────────────────────────
+
+def _notify_telegram(message: str):
+    """Envía notificación al canal de Telegram si TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID
+    están configurados. No bloquea — se ejecuta en background thread."""
+    token   = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
+    chat_id = os.environ.get('TELEGRAM_CHAT_ID', '').strip()
+    if not token or not chat_id:
+        return
+
+    def _send():
+        import urllib.request as _ur, json as _j, urllib.parse as _up
+        url  = f'https://api.telegram.org/bot{token}/sendMessage'
+        body = _j.dumps({'chat_id': chat_id, 'text': message, 'parse_mode': 'HTML'}).encode()
+        req  = _ur.Request(url, data=body,
+                           headers={'Content-Type': 'application/json', 'User-Agent': 'ArgusBot/1.0'},
+                           method='POST')
+        try:
+            with _ur.urlopen(req, timeout=10) as resp:
+                rd = _j.loads(resp.read())
+                if rd.get('ok'):
+                    print(f'[Telegram] Mensaje enviado a chat {chat_id}')
+                else:
+                    print(f'[Telegram] Error: {rd}')
+        except Exception as e:
+            print(f'[Telegram] Error de envío: {e}')
+
+    import threading
+    threading.Thread(target=_send, daemon=True).start()
+
+
+# ── P5 #26 — Rate limiting on public API endpoints ───────────────────────────
+
+import time as _time_rl
+_rate_limit_store = {}  # ip -> list of timestamps
+
+def _check_rate_limit(ip: str, max_requests: int = 10, window_seconds: int = 60) -> bool:
+    """Devuelve True si la IP está dentro del límite, False si lo excedió."""
+    now = _time_rl.time()
+    window_start = now - window_seconds
+    hits = _rate_limit_store.get(ip, [])
+    hits = [t for t in hits if t > window_start]  # limpiar entradas viejas
+    if len(hits) >= max_requests:
+        _rate_limit_store[ip] = hits
+        return False
+    hits.append(now)
+    _rate_limit_store[ip] = hits
+    return True
+
+
+@app.before_request
+def _apply_rate_limit():
+    """Rate limit en endpoints públicos sensibles."""
+    PUBLIC_LIMITED = {'/api/submit', '/api/predict', '/api/scan/submit'}
+    path = request.path
+    if path in PUBLIC_LIMITED:
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
+        if not _check_rate_limit(ip, max_requests=20, window_seconds=60):
+            return jsonify({'error': 'Rate limit excedido. Máximo 20 requests/minuto por IP.'}), 429
+
+
+@app.route('/api/admin/scan-heatmap', methods=['GET'])
+@login_required
+def scan_heatmap():
+    """P5 #18 — Heatmap de actividad de scans por día de semana y hora del día.
+    Retorna una matriz 7×24 con el conteo de scans iniciados en cada celda.
+    """
+    days_back = int(request.args.get('days', 30))
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cutoff = (datetime.utcnow() - timedelta(days=days_back)).isoformat()
+        cur.execute("""
+            SELECT started_at FROM scans
+            WHERE started_at >= %s AND status = 'completed'
+        """, (cutoff,))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        # Build 7×24 matrix (day_of_week × hour)
+        matrix = [[0]*24 for _ in range(7)]
+        detections_matrix = [[0]*24 for _ in range(7)]
+
+        conn2 = get_db_connection()
+        cur2  = conn2.cursor()
+        cur2.execute("""
+            SELECT started_at, verdict FROM scans
+            WHERE started_at >= %s AND status = 'completed'
+        """, (cutoff,))
+        scan_rows = cur2.fetchall()
+        cur2.close()
+        conn2.close()
+
+        for row in scan_rows:
+            try:
+                dt_str = str(row[0] if isinstance(row, (list, tuple)) else row['started_at'])
+                dt = datetime.fromisoformat(dt_str[:19])
+                dow = dt.weekday()   # 0=Mon … 6=Sun
+                hour = dt.hour
+                matrix[dow][hour] += 1
+                verdict = (row[1] if isinstance(row, (list, tuple)) else row.get('verdict', ''))
+                if verdict == 'hack':
+                    detections_matrix[dow][hour] += 1
+            except Exception:
+                continue
+
+        day_names = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+        return jsonify({
+            'matrix': matrix,
+            'detections_matrix': detections_matrix,
+            'day_names': day_names,
+            'days_back': days_back,
+            'total_scans': sum(sum(row) for row in matrix),
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/player/mojang-profile', methods=['GET'])
+@login_required
+def mojang_profile():
+    """P5 #20 — Buscar perfil de Mojang por UUID o nickname.
+    Proxy seguro para evitar CORS: el frontend llama a este endpoint.
+    """
+    identifier = request.args.get('q', '').strip()
+    if not identifier:
+        return jsonify({'error': 'Parámetro q requerido'}), 400
+    import urllib.request as _ur
+    import json as _json
+    try:
+        # Determine if it's a UUID (contains hyphens or is 32 hex chars) or a username
+        is_uuid = len(identifier.replace('-', '')) == 32 and all(c in '0123456789abcdefABCDEF-' for c in identifier)
+        if is_uuid:
+            uuid_clean = identifier.replace('-', '')
+            # UUID → profile
+            url = f'https://sessionserver.mojang.com/session/minecraft/profile/{uuid_clean}'
+            with _ur.urlopen(url, timeout=5) as r:
+                profile = _json.loads(r.read())
+            return jsonify({
+                'uuid': profile.get('id'),
+                'username': profile.get('name'),
+                'source': 'mojang_session',
+            })
+        else:
+            # Username → UUID
+            url = f'https://api.mojang.com/users/profiles/minecraft/{identifier}'
+            with _ur.urlopen(url, timeout=5) as r:
+                data = _json.loads(r.read())
+            return jsonify({
+                'uuid': data.get('id'),
+                'username': data.get('name'),
+                'source': 'mojang_api',
+            })
+    except Exception as e:
+        return jsonify({'error': f'No se pudo consultar Mojang: {str(e)}'}), 404
+
+
+@app.route('/api/ml/coordinated-cheating', methods=['GET'])
+@login_required
+def coordinated_cheating():
+    """P5 #25 — Detectar cheating coordinado: múltiples jugadores del mismo equipo
+    que tienen hallazgos del mismo tipo en un rango de tiempo cercano.
+    Busca clusters de máquinas con hacks similares enviados en la misma ventana de 24h.
+    """
+    days_back = int(request.args.get('days', 7))
+    min_cluster = int(request.args.get('min_players', 2))
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cutoff = (datetime.utcnow() - timedelta(days=days_back)).isoformat()
+        cur.execute("""
+            SELECT s.id, s.machine_name, s.machine_id, s.started_at, s.verdict,
+                   i.issue_type
+            FROM scans s
+            JOIN issues i ON i.scan_id = s.id
+            WHERE s.started_at >= %s
+              AND s.verdict = 'hack'
+              AND i.alert_level IN ('CRITICAL', 'SOSPECHOSO')
+            ORDER BY s.started_at
+        """, (cutoff,))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        if not rows:
+            return jsonify({'clusters': [], 'total_groups': 0})
+
+        # Group by (issue_type, date bucket of 24h)
+        from collections import defaultdict
+        import hashlib as _hl
+
+        buckets = defaultdict(list)
+        for row in rows:
+            row_d = dict(zip(['id','machine_name','machine_id','started_at','verdict','issue_type'], row)) \
+                if isinstance(row, (list, tuple)) else dict(row)
+            try:
+                dt = datetime.fromisoformat(str(row_d['started_at'])[:19])
+                day_bucket = dt.strftime('%Y-%m-%d')
+                key = f"{row_d['issue_type']}|{day_bucket}"
+                buckets[key].append(row_d)
+            except Exception:
+                continue
+
+        clusters = []
+        seen_scan_ids = set()
+        for key, entries in buckets.items():
+            machines = {e['machine_id'] or e['machine_name'] for e in entries}
+            if len(machines) < min_cluster:
+                continue
+            issue_type, day = key.split('|', 1)
+            cluster_id = _hl.md5(key.encode()).hexdigest()[:8]
+            clusters.append({
+                'cluster_id': cluster_id,
+                'issue_type': issue_type,
+                'date': day,
+                'player_count': len(machines),
+                'players': [{'machine_name': e['machine_name'], 'scan_id': e['id']}
+                            for e in entries if (e['machine_id'] or e['machine_name']) in machines],
+                'scan_ids': list({e['id'] for e in entries}),
+            })
+
+        clusters.sort(key=lambda c: -c['player_count'])
+        return jsonify({'clusters': clusters[:20], 'total_groups': len(clusters)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':
