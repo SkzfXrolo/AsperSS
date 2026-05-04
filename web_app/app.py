@@ -112,16 +112,38 @@ def _notify_new_deploy():
                 'footer': {'text': 'ASPERS Projects — Sistema Argus'},
             }]
         }
-        try:
-            import requests as _req
-            r = _req.post(webhook, json=payload, timeout=10)
-            print(f'[Deploy] Webhook respuesta HTTP {r.status_code}: {r.text[:200]}')
-            if r.status_code in (200, 204):
-                print(f'✅ [Deploy] Webhook Discord enviado — commit {short}')
-            else:
-                print(f'⚠️ [Deploy] Webhook respondió HTTP {r.status_code}: {r.text[:200]}')
-        except Exception as e:
-            print(f'⚠️ [Deploy] Error enviando webhook Discord: {e}')
+        import json as _json
+        import urllib.request as _urlreq
+        import urllib.error  as _urlerr
+
+        headers = {
+            'Content-Type': 'application/json',
+            # Discord/Cloudflare bloquea 'python-requests'; DiscordBot UA pasa el WAF
+            'User-Agent': 'DiscordBot (https://aspers.gg, 1.0)',
+        }
+        body = _json.dumps(payload).encode('utf-8')
+
+        for attempt in range(1, 4):   # hasta 3 intentos
+            try:
+                req = _urlreq.Request(webhook, data=body, headers=headers, method='POST')
+                with _urlreq.urlopen(req, timeout=12) as resp:
+                    status = resp.status
+                    print(f'✅ [Deploy] Webhook Discord enviado (intento {attempt}) — HTTP {status} — commit {short}')
+                    break
+            except _urlerr.HTTPError as e:
+                body_preview = e.read(300).decode('utf-8', errors='replace')
+                print(f'⚠️ [Deploy] Intento {attempt} — HTTP {e.code}: {body_preview}')
+                if e.code == 429:
+                    retry_after = float(e.headers.get('Retry-After', 5))
+                    print(f'[Deploy] Rate-limited — esperando {retry_after}s antes de reintentar')
+                    _t.sleep(retry_after + 1)
+                elif e.code >= 500:
+                    _t.sleep(3)
+                else:
+                    break   # 4xx no recuperable (401, 404…) — no reintentar
+            except Exception as e:
+                print(f'⚠️ [Deploy] Error de red intento {attempt}: {e}')
+                _t.sleep(3)
 
     threading.Thread(target=_send_webhook, daemon=True).start()
 
