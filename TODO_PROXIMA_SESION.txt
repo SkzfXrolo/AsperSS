@@ -83,7 +83,7 @@
 [PENDING] 7. Hybrid Analysis API — análisis de comportamiento
 [DONE]  8. MalwareBazaar (abuse.ch) — blacklist de hashes (gratis, sin API key)
 [PENDING] 9. Shodan / Censys — verificar IPs de conexiones
-[PENDING] 10. AbuseIPDB — reputación de IPs
+[DONE] 10. AbuseIPDB — reputación de IPs (/api/ml/check-ip-reputation, env ABUSEIPDB_API_KEY)
 
 ── ANÁLISIS LOCAL DE CONTENIDO ──────────────────────────────────────────────
 
@@ -109,7 +109,7 @@
 [DONE] 27. Comparar con baseline del mismo usuario (scans anteriores, archivo_baseline)
 [DONE] 28. Verificar atributos de solo lectura del archivo
 [PENDING] 29. Verificar certificados SSL de conexiones sospechosas
-[PENDING] 30. Análisis de DLLs cargadas vs baseline de instalación limpia
+[DONE] 30. Análisis de DLLs cargadas vs baseline de instalación limpia (scan_java_dll_nonstandard)
 
 ── MÉTODOS ESTADÍSTICOS Y ML ───────────────────────────────────────────────
 
@@ -166,7 +166,7 @@
 [DONE] 11. Análisis NLP de nombres de carpetas/archivos con contexto
 [DONE] 12. Generación automática de resúmenes de scan (/api/staff/ai/scan-summary)
 [DONE] 13. Clasificación de crash reports por causa
-[PENDING] 14. Extracción de IOCs de texto libre del staff
+[DONE] 14. Extracción de IOCs de texto libre del staff (/api/staff/extract-iocs + modal panel v27)
 [PENDING] 15. Análisis de sentimiento en historial de chat del servidor
 
 ── APRENDIZAJE FEDERADO Y COLABORATIVO ─────────────────────────────────────
@@ -218,9 +218,9 @@
   P2 #6   NSRL (NIST) — dataset ~5GB, no viable en Render
   P2 #7   Hybrid Analysis API — requiere suscripción de pago
   P2 #9   Shodan/Censys — requiere API key de pago
-  P2 #10  AbuseIPDB — requiere API key
+  P2 #10  AbuseIPDB — IMPLEMENTADO (free tier, env ABUSEIPDB_API_KEY)
   P2 #29  Verificar certificados SSL de conexiones activas
-  P2 #30  Baseline de DLLs vs instalación limpia
+  P2 #30  Baseline de DLLs — IMPLEMENTADO (scan_java_dll_nonstandard, whitelist ~50 DLLs)
   P2 #46  Sandbox JAR (ejecutar y monitorear)
   P2 #47  Análisis estático bytecode con ASM/Javap
   P2 #49  Análisis de tráfico en VM

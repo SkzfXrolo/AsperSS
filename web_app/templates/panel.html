@@ -938,6 +938,7 @@
                                     <button id="ai-inconsist-btn" onclick="aiShowInconsistencies(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(245,158,11,.35);background:rgba(245,158,11,.08);color:#fbbf24;cursor:pointer;">⚠️ Inconsistencias</button>
                                     <button id="ai-anomaly-btn" onclick="aiCheckAnomaly(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.06);color:#f87171;cursor:pointer;">🔬 Anomalía</button>
                                     <button id="ai-followup-btn" onclick="aiFollowupQuestions(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(16,185,129,.35);background:rgba(16,185,129,.06);color:#34d399;cursor:pointer;">❓ Preguntas</button>
+                                    <button onclick="openIocExtractor()" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(96,165,250,.35);background:rgba(96,165,250,.06);color:#60a5fa;cursor:pointer;">🔎 IOCs</button>
                                 </div>
                                 <div id="ai-inconsistencies-container" style="display:none;margin-top:8px;font-size:11px;color:#fbbf24;padding:6px 10px;background:rgba(245,158,11,.07);border-radius:6px;border-left:2px solid #f59e0b;"></div>
                                 <div id="ai-followup-container" style="display:none;margin-top:8px;font-size:11px;color:#34d399;padding:6px 10px;background:rgba(16,185,129,.06);border-radius:6px;border-left:2px solid #10b981;"></div>
@@ -1781,7 +1782,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=26"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=27"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────
@@ -1890,6 +1891,22 @@
             .catch(err => console.warn('[PWA] SW error:', err));
     }
     </script>
+
+<!-- Modal: Extractor de IOCs -->
+<div id="ioc-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.65);align-items:center;justify-content:center;">
+  <div style="background:#1e1e2e;border:1px solid #334155;border-radius:14px;padding:24px;width:min(640px,94vw);max-height:88vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.7);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <span style="font-weight:700;font-size:15px;color:#60a5fa;">🔎 Extractor de IOCs</span>
+      <button onclick="closeIocExtractor()" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>
+    </div>
+    <textarea id="ioc-input" placeholder="Pega texto libre aquí — IPs, hashes, dominios, rutas, JARs..." style="width:100%;height:130px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:12px;padding:10px;resize:vertical;box-sizing:border-box;font-family:monospace;"></textarea>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button onclick="runIocExtract()" style="padding:7px 18px;border-radius:7px;border:none;background:#2563eb;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">Extraer</button>
+      <button onclick="document.getElementById('ioc-input').value='';document.getElementById('ioc-results').innerHTML=''" style="padding:7px 14px;border-radius:7px;border:1px solid #334155;background:transparent;color:#94a3b8;font-size:12px;cursor:pointer;">Limpiar</button>
+    </div>
+    <div id="ioc-results" style="margin-top:14px;font-size:12px;font-family:monospace;"></div>
+  </div>
+</div>
 </body>
 </html>
 

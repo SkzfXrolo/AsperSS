@@ -4063,6 +4063,8 @@ class ArgusApp:
                 _run_safe(self.scan_jdwp_port)
                 self._set_scan_phase("💉 DLLs en proceso Java...")
                 _run_safe(self.scan_dll_injection_java)
+                self._set_scan_phase("📋 DLLs fuera de baseline en Java...")
+                _run_safe(self.scan_java_dll_nonstandard)
                 self._set_scan_phase("🔬 Strings de hack en JARs cargados por Java...")
                 _run_safe(self.scan_process_memory_strings)
                 self._set_scan_phase("📍 Correlación de ruta de proceso sospechoso...")
@@ -9803,6 +9805,85 @@ class ArgusApp:
                     continue
         except Exception as e:
             print(f"Error en scan_dll_injection_java: {e}")
+
+    def scan_java_dll_nonstandard(self):
+        """P2 #30 approx — DLLs en procesos Java desde rutas fuera del baseline estándar.
+        Complementa scan_dll_injection_java (que busca por nombre); éste busca por ubicación.
+        """
+        SAFE_PATH_PREFIXES = (
+            'c:\\windows\\',
+            'c:\\program files\\java', 'c:\\program files (x86)\\java',
+            'c:\\program files\\eclipse', 'c:\\program files (x86)\\eclipse',
+            'c:\\program files\\microsoft', 'c:\\program files (x86)\\microsoft',
+            'c:\\program files\\lunarclient', 'c:\\program files\\badlionclient',
+            '\\jdk', '\\jre', '\\runtime\\jre',
+            '\\lunarclient\\', '\\badlionclient\\', '\\tlauncher\\',
+            '\\prismlauncher\\', '\\multimc\\', '\\atlauncher\\', '\\polymc\\',
+            '\\modrinth\\', '\\curseforge\\',
+        )
+        SAFE_DLL_NAMES = {
+            'jvm.dll', 'jawt.dll', 'verify.dll', 'java.dll', 'net.dll', 'nio.dll',
+            'zip.dll', 'fontmanager.dll', 'freetype.dll', 'glass.dll', 'prism_sw.dll',
+            'ntdll.dll', 'kernel32.dll', 'kernelbase.dll', 'user32.dll', 'gdi32.dll',
+            'gdi32full.dll', 'win32u.dll', 'advapi32.dll', 'shell32.dll', 'shlwapi.dll',
+            'ole32.dll', 'oleaut32.dll', 'comctl32.dll', 'comdlg32.dll', 'msvcrt.dll',
+            'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'ucrtbase.dll',
+            'ws2_32.dll', 'wininet.dll', 'urlmon.dll', 'secur32.dll', 'crypt32.dll',
+            'bcrypt.dll', 'bcryptprimitives.dll', 'rpcrt4.dll', 'psapi.dll',
+            'iphlpapi.dll', 'dnsapi.dll', 'dbghelp.dll', 'version.dll', 'wintrust.dll',
+            'opengl32.dll', 'glu32.dll', 'd3d9.dll', 'd3d11.dll', 'd3d12.dll', 'dxgi.dll',
+            'lwjgl.dll', 'lwjgl64.dll', 'openal.dll', 'openal64.dll',
+            'jinput-dx8.dll', 'jinput-dx8_64.dll', 'jinput-raw.dll', 'jinput-raw_64.dll',
+            'nvspcap64.dll', 'nvspcap.dll', 'nvoglv64.dll', 'nvoglv32.dll',
+            'atioglxx.dll', 'atig6pxx.dll', 'ig75icd64.dll', 'ig4icd64.dll',
+            'mswsock.dll', 'wldap32.dll', 'msimg32.dll', 'imm32.dll', 'uxtheme.dll',
+            'cryptbase.dll', 'cryptsp.dll', 'propsys.dll', 'profapi.dll', 'clbcatq.dll',
+        }
+        found = []
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                    if 'java' not in pname:
+                        continue
+                    cmdline = ' '.join(proc.info.get('cmdline') or []).lower()
+                    if 'minecraft' not in cmdline and 'net.minecraft' not in cmdline:
+                        continue
+                    try:
+                        for mmap in proc.memory_maps():
+                            path = (mmap.path or '').lower()
+                            if not path.endswith('.dll'):
+                                continue
+                            dll_name = os.path.basename(path)
+                            if dll_name in SAFE_DLL_NAMES:
+                                continue
+                            if any(path.startswith(p) for p in SAFE_PATH_PREFIXES):
+                                continue
+                            found.append((dll_name, mmap.path, proc.pid))
+                    except (psutil.AccessDenied, psutil.NoSuchProcess, AttributeError):
+                        pass
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_java_dll_nonstandard: {e}")
+
+        for dll_name, full_path, pid in found[:10]:
+            self.issues_found.append({
+                'nombre':   f'DLL fuera de baseline en Minecraft: {dll_name}',
+                'ruta':     os.path.dirname(full_path),
+                'archivo':  full_path,
+                'tipo':     'dll_nonstandard',
+                'categoria': 'JAVA_INJECTION',
+                'alerta':   'SOSPECHOSO',
+                'confidence': 0.58,
+                'detected_patterns': [f'dll_ruta_no_estandar:{os.path.dirname(full_path)[:80]}'],
+                'explicacion': (
+                    f'La DLL "{dll_name}" está cargada en Minecraft (PID {pid}) '
+                    f'desde una ruta no estándar: {full_path[:120]}. '
+                    f'Las DLLs de hack suelen residir fuera de Windows\\, Program Files\\ '
+                    f'o las carpetas del launcher.'
+                ),
+            })
 
     def scan_ahk_scripts(self):
         """Busca scripts AutoHotkey con patrones de autoclick y contexto Minecraft.

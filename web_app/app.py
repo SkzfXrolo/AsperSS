@@ -6864,6 +6864,111 @@ def ingest_hack_intel():
         return jsonify({'error': str(e)}), 500
 
 
+# ── P3 #14 — Extracción de IOCs de texto libre ────────────────────────────────
+
+@app.route('/api/staff/extract-iocs', methods=['POST'])
+def extract_iocs():
+    """Extrae IPs, hashes, dominios y rutas de un texto libre del staff."""
+    import re as _re
+    if not _is_staff_authenticated():
+        return jsonify({'error': 'unauthorized'}), 403
+    data = request.get_json(silent=True) or {}
+    text = data.get('text', '')
+    if not text:
+        return jsonify({'error': 'text required'}), 400
+    if len(text) > 100_000:
+        return jsonify({'error': 'text too long (max 100000 chars)'}), 400
+
+    # IPv4
+    raw_ips = _re.findall(
+        r'\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b', text)
+    def _is_public(ip):
+        try:
+            a, b = int(ip.split('.')[0]), int(ip.split('.')[1])
+            return not (a == 10 or a == 127 or
+                        (a == 172 and 16 <= b <= 31) or
+                        (a == 192 and b == 168))
+        except Exception:
+            return False
+    all_ips    = list(dict.fromkeys(raw_ips))
+    public_ips = [ip for ip in all_ips if _is_public(ip)]
+
+    # Hashes (SHA-256 = 64 hex, SHA-1 = 40, MD5 = 32 — en orden para evitar subsets)
+    sha256 = list(dict.fromkeys(_re.findall(r'\b[0-9a-fA-F]{64}\b', text)))
+    # Quitar hashes SHA-256 para no incluirlos en SHA-1/MD5
+    text_no256 = _re.sub(r'\b[0-9a-fA-F]{64}\b', '', text)
+    sha1 = list(dict.fromkeys(_re.findall(r'\b[0-9a-fA-F]{40}\b', text_no256)))
+    text_no4040 = _re.sub(r'\b[0-9a-fA-F]{40}\b', '', text_no256)
+    md5  = list(dict.fromkeys(_re.findall(r'\b[0-9a-fA-F]{32}\b', text_no4040)))
+
+    # Dominios (TLDs comunes)
+    domains = list(dict.fromkeys(_re.findall(
+        r'\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+(?:com|net|org|io|xyz|gg|ru|'
+        r'cn|me|to|cc|tv|pro|online|dev|app|cloud|site)\b', text, _re.IGNORECASE
+    )))
+
+    # Rutas Windows
+    paths = list(dict.fromkeys(_re.findall(
+        r'[A-Za-z]:\\(?:[^\\\s"<>|]+\\)*[^\\\s"<>|]+', text)))[:30]
+
+    # Archivos JAR
+    jars = list(dict.fromkeys(_re.findall(r'\b[\w\-. ]+\.jar\b', text, _re.IGNORECASE)))[:20]
+
+    total = len(all_ips) + len(sha256) + len(sha1) + len(md5) + len(domains) + len(paths) + len(jars)
+    return jsonify({
+        'ips':        {'public': public_ips, 'all': all_ips},
+        'hashes':     {'sha256': sha256, 'sha1': sha1, 'md5': md5},
+        'domains':    domains,
+        'file_paths': paths,
+        'jar_files':  jars,
+        'total':      total,
+    }), 200
+
+
+# ── P2 #10 — AbuseIPDB — reputación de IPs ────────────────────────────────────
+
+@app.route('/api/ml/check-ip-reputation', methods=['POST'])
+def check_ip_reputation():
+    """Consulta AbuseIPDB para obtener el historial de abuso de una IP.
+    Requiere la variable de entorno ABUSEIPDB_API_KEY (tier gratuito: 1000 req/día).
+    """
+    if not _is_staff_authenticated():
+        return jsonify({'error': 'unauthorized'}), 403
+    api_key = os.environ.get('ABUSEIPDB_API_KEY', '').strip()
+    if not api_key:
+        return jsonify({'error': 'ABUSEIPDB_API_KEY not configured on server'}), 503
+    data = request.get_json(silent=True) or {}
+    ip = data.get('ip', '').strip()
+    if not ip:
+        return jsonify({'error': 'ip required'}), 400
+    try:
+        resp = requests.get(
+            'https://api.abuseipdb.com/api/v2/check',
+            headers={'Key': api_key, 'Accept': 'application/json'},
+            params={'ipAddress': ip, 'maxAgeInDays': 90},
+            timeout=8,
+        )
+        if not resp.ok:
+            return jsonify({'error': f'AbuseIPDB returned HTTP {resp.status_code}'}), 502
+        d = resp.json().get('data', {})
+        score = d.get('abuseConfidenceScore', 0)
+        label = 'LIMPIO' if score < 25 else ('SOSPECHOSO' if score < 75 else 'MALICIOSO')
+        return jsonify({
+            'ip':            ip,
+            'abuse_score':   score,
+            'label':         label,
+            'country':       d.get('countryCode', ''),
+            'isp':           d.get('isp', ''),
+            'domain':        d.get('domain', ''),
+            'usage_type':    d.get('usageType', ''),
+            'total_reports': d.get('totalReports', 0),
+            'last_reported': d.get('lastReportedAt', ''),
+            'is_tor':        d.get('isTor', False),
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     print("🌐 Iniciando aplicación web de ASPERS Projects...")
     api_url_display = os.environ.get('API_URL') or (API_BASE_URL if IS_RENDER else API_BASE_URL)

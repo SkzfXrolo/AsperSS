@@ -4038,3 +4038,59 @@ async function aiFollowupQuestions(scanId, btn) {
     }
     if (btn) { btn.textContent = '❓ Preguntas'; btn.disabled = false; }
 }
+
+// ── IOC Extractor ─────────────────────────────────────────────────────────────
+
+function openIocExtractor() {
+    const m = document.getElementById('ioc-modal');
+    if (m) { m.style.display = 'flex'; }
+}
+
+function closeIocExtractor() {
+    const m = document.getElementById('ioc-modal');
+    if (m) { m.style.display = 'none'; }
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeIocExtractor();
+});
+
+async function runIocExtract() {
+    const text = (document.getElementById('ioc-input')?.value || '').trim();
+    const out  = document.getElementById('ioc-results');
+    if (!text) { out.innerHTML = '<span style="color:#ef4444">Pega texto primero.</span>'; return; }
+    out.innerHTML = '<span style="color:#94a3b8">Extrayendo…</span>';
+    try {
+        const res  = await fetch('/api/staff/extract-iocs', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text}),
+        });
+        const d = await res.json();
+        if (d.error) { out.innerHTML = `<span style="color:#ef4444">⚠️ ${d.error}</span>`; return; }
+
+        const section = (title, color, items) => items.length
+            ? `<div style="margin-bottom:10px"><span style="color:${color};font-weight:700">${title}</span><br>`
+              + items.map(x => `<span style="color:#e2e8f0;background:#0f172a;border-radius:4px;padding:1px 6px;display:inline-block;margin:2px">${x}</span>`).join(' ')
+              + '</div>'
+            : '';
+
+        const parts = [
+            section('🌐 IPs públicas',    '#60a5fa', d.ips?.public  || []),
+            section('🌐 Todas las IPs',   '#94a3b8', (d.ips?.all || []).filter(ip => !(d.ips?.public||[]).includes(ip))),
+            section('🔑 SHA-256',         '#a78bfa', d.hashes?.sha256 || []),
+            section('🔑 SHA-1',           '#c084fc', d.hashes?.sha1   || []),
+            section('🔑 MD5',             '#e879f9', d.hashes?.md5    || []),
+            section('🌍 Dominios',        '#34d399', d.domains        || []),
+            section('📂 Rutas',           '#fbbf24', d.file_paths     || []),
+            section('☕ JARs',            '#fb923c', d.jar_files      || []),
+        ].filter(Boolean).join('');
+
+        out.innerHTML = parts || '<span style="color:#94a3b8">No se encontraron IOCs.</span>';
+        if (d.total) {
+            out.innerHTML = `<div style="color:#94a3b8;margin-bottom:8px;font-size:11px">Total: ${d.total} IOC(s) encontrados</div>` + out.innerHTML;
+        }
+    } catch(e) {
+        out.innerHTML = '<span style="color:#ef4444">Error de red.</span>';
+    }
+}
