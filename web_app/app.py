@@ -29,24 +29,30 @@ app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-produ
 CORS(app)
 
 # Inicializar base de datos de autenticación al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.18'  # sincronizar con SCANNER_VERSION en main.py
+_ARGUS_VERSION = '1.6.19'  # sincronizar con SCANNER_VERSION en main.py
 
 
 def _notify_new_deploy():
     """Detecta si es un deploy nuevo comparando RENDER_GIT_COMMIT con el último
-    commit almacenado en BD. Si es nuevo, envía embed al canal de Discord.
+    commit almacenado en BD. Si es nuevo, envía embed a Discord vía webhook.
     Solo se ejecuta en Render (RENDER_GIT_COMMIT presente).
+
+    Variable de entorno requerida:
+      DISCORD_DEPLOY_WEBHOOK — URL completa del webhook de Discord
     """
     commit  = os.environ.get('RENDER_GIT_COMMIT', '').strip()
     branch  = os.environ.get('RENDER_GIT_BRANCH', 'main').strip()
     service = os.environ.get('RENDER_SERVICE_NAME', 'argus-web').strip()
+    webhook = os.environ.get('DISCORD_DEPLOY_WEBHOOK', '').strip()
 
     if not commit:
         return  # entorno local — no notificar
+    if not webhook:
+        print('[Deploy] DISCORD_DEPLOY_WEBHOOK no configurado — notificación omitida')
+        return
 
     try:
         with get_api_db_cursor() as cur:
-            # Crear tabla de meta si no existe
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS app_meta (
                     key   VARCHAR(100) PRIMARY KEY,
@@ -61,33 +67,52 @@ def _notify_new_deploy():
             if last_commit == commit:
                 return  # mismo commit — restart normal, no nuevo deploy
 
-            # Nuevo commit → actualizar BD
             cur.execute('''
                 INSERT INTO app_meta (key, value, updated_at)
                 VALUES (%s, %s, NOW())
                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
             ''', ('last_deploy_commit', commit))
 
-        # Esperar un poco a que el bot de Discord esté listo antes de enviar
-        def _delayed_notify():
-            import time as _t
-            _t.sleep(15)
-            try:
-                from discord_bot import notify_deploy
-                notify_deploy(
-                    commit=commit,
-                    branch=branch,
-                    service=service,
-                    version=_ARGUS_VERSION,
-                )
-                print(f'✅ [Deploy] Notificación Discord enviada — commit {commit[:7]}')
-            except Exception as e:
-                print(f'⚠️ [Deploy] Error enviando notificación Discord: {e}')
-
-        threading.Thread(target=_delayed_notify, daemon=True).start()
-
     except Exception as e:
-        print(f'⚠️ [Deploy] Error en _notify_new_deploy: {e}')
+        print(f'⚠️ [Deploy] Error leyendo BD en _notify_new_deploy: {e}')
+        return
+
+    def _send_webhook():
+        import time as _t
+        import datetime as _dt
+        _t.sleep(3)  # espera mínima para que Gunicorn esté completamente levantado
+        short = commit[:7]
+        now   = _dt.datetime.utcnow().strftime('%d/%m/%Y %H:%M UTC')
+        payload = {
+            'embeds': [{
+                'title': '🚀 ArgusScanner desplegado',
+                'description': (
+                    'El sistema de detección de hacks ha sido desplegado '
+                    'exitosamente en producción.'
+                ),
+                'color': 0x7C3AED,
+                'fields': [
+                    {'name': '📦 Versión',   'value': f'`{_ARGUS_VERSION}`', 'inline': True},
+                    {'name': '🔖 Commit',    'value': f'`{short}`',           'inline': True},
+                    {'name': '🌿 Rama',      'value': f'`{branch}`',          'inline': True},
+                    {'name': '🖥️ Servicio', 'value': f'`{service}`',          'inline': True},
+                    {'name': '✅ Estado',    'value': 'Operativo',             'inline': True},
+                    {'name': '🕐 Hora',      'value': now,                    'inline': True},
+                ],
+                'footer': {'text': 'ASPERS Projects — Sistema Argus'},
+            }]
+        }
+        try:
+            import requests as _req
+            r = _req.post(webhook, json=payload, timeout=10)
+            if r.status_code in (200, 204):
+                print(f'✅ [Deploy] Webhook Discord enviado — commit {short}')
+            else:
+                print(f'⚠️ [Deploy] Webhook respondió HTTP {r.status_code}: {r.text[:200]}')
+        except Exception as e:
+            print(f'⚠️ [Deploy] Error enviando webhook Discord: {e}')
+
+    threading.Thread(target=_send_webhook, daemon=True).start()
 
 
 def init_db_async():
