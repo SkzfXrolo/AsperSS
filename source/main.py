@@ -4030,6 +4030,10 @@ class ArgusApp:
                 _run_safe(self.scan_inetcache)
                 self._set_scan_phase("☕ java.policy modificado...")
                 _run_safe(self.scan_java_policy)
+                self._set_scan_phase("📅 Fecha de instalación de Minecraft...")
+                _run_safe(self.scan_minecraft_install_date)
+                self._set_scan_phase("🕹️ Última sesión de Minecraft...")
+                _run_safe(self.scan_minecraft_last_session)
 
             # Grupo D — Hardware y red (I/O alto)
             def _group_hardware():
@@ -8353,6 +8357,136 @@ class ArgusApp:
                 pass
             except Exception as e:
                 print(f"Error en scan_java_policy {pol_path}: {e}")
+
+    def scan_minecraft_install_date(self):
+        """P2 #21 — Correlaciona fecha de instalación de Minecraft con hallazgos.
+        Instalación muy reciente (<30 días) + muchos hallazgos = bandera de sospecha.
+        """
+        print("🔍 Verificando fecha de instalación de Minecraft...")
+        try:
+            appdata  = os.environ.get('APPDATA', '')
+            mc_dir   = os.path.join(appdata, '.minecraft')
+            if not os.path.isdir(mc_dir):
+                return
+
+            # Fecha de creación del directorio .minecraft
+            mc_ctime = os.path.getctime(mc_dir)
+            age_days  = (time.time() - mc_ctime) / 86400
+
+            if age_days < 30:
+                label = f'{int(age_days)}d'
+                self.issues_found.append({
+                    'tipo':     'mc_install_recent',
+                    'nombre':   f'Minecraft instalado hace {int(age_days)} día(s)',
+                    'ruta':     mc_dir,
+                    'archivo':  mc_dir,
+                    'categoria': 'CONTEXTO',
+                    'alerta':   'POCO_SOSPECHOSO' if age_days > 7 else 'SOSPECHOSO',
+                    'confidence': 0.45,
+                    'detected_patterns': [f'mc_age_{label}', 'recent_install'],
+                })
+                print(f"[mc_install] .minecraft tiene {int(age_days)} días")
+
+            # También revisar logs de instalador en el registro (UninstallString)
+            try:
+                import winreg
+                for hive, flag in [
+                    (winreg.HKEY_CURRENT_USER,  0),
+                    (winreg.HKEY_LOCAL_MACHINE, winreg.KEY_WOW64_32KEY),
+                    (winreg.HKEY_LOCAL_MACHINE, winreg.KEY_WOW64_64KEY),
+                ]:
+                    key_path = r'Software\Microsoft\Windows\CurrentVersion\Uninstall'
+                    try:
+                        with winreg.OpenKey(hive, key_path, 0, winreg.KEY_READ | flag) as base:
+                            n = winreg.QueryInfoKey(base)[0]
+                            for i in range(n):
+                                try:
+                                    sub_name = winreg.EnumKey(base, i)
+                                    with winreg.OpenKey(base, sub_name) as sub:
+                                        display = winreg.QueryValueEx(sub, 'DisplayName')[0].lower()
+                                        if 'minecraft' not in display:
+                                            continue
+                                        try:
+                                            install_date_str = winreg.QueryValueEx(sub, 'InstallDate')[0]
+                                            # format: YYYYMMDD
+                                            if len(install_date_str) == 8:
+                                                from datetime import datetime as _dt
+                                                inst = _dt.strptime(install_date_str, '%Y%m%d')
+                                                reg_age = (time.time() - inst.timestamp()) / 86400
+                                                if reg_age < 30:
+                                                    print(f"[mc_install] Registro: MC instalado {int(reg_age)}d atrás")
+                                        except (FileNotFoundError, ValueError):
+                                            pass
+                                except (FileNotFoundError, PermissionError):
+                                    pass
+                    except (FileNotFoundError, PermissionError):
+                        pass
+            except ImportError:
+                pass
+        except Exception as e:
+            print(f"Error en scan_minecraft_install_date: {e}")
+
+    def scan_minecraft_last_session(self):
+        """P2 #22 — Correlaciona últimas sesiones de juego con hallazgos.
+        Detecta cuándo fue la última partida y si los hacks encontrados son contemporáneos.
+        """
+        print("🔍 Analizando últimas sesiones de Minecraft...")
+        try:
+            appdata = os.environ.get('APPDATA', '')
+            mc_dir  = os.path.join(appdata, '.minecraft')
+            logs_dir = os.path.join(mc_dir, 'logs')
+            if not os.path.isdir(logs_dir):
+                return
+
+            # Fecha del latest.log = última vez que se ejecutó MC
+            latest_log = os.path.join(logs_dir, 'latest.log')
+            last_session = None
+            if os.path.isfile(latest_log):
+                last_session = os.path.getmtime(latest_log)
+
+            # También revisar logs comprimidos — el más reciente es la penúltima sesión
+            log_dates = []
+            try:
+                for fname in os.listdir(logs_dir):
+                    if fname.endswith('.log.gz') and len(fname) >= 10:
+                        # Nombre: YYYY-MM-DD-N.log.gz
+                        date_part = fname[:10]
+                        try:
+                            from datetime import datetime as _dt
+                            d = _dt.strptime(date_part, '%Y-%m-%d')
+                            log_dates.append(d.timestamp())
+                        except ValueError:
+                            pass
+            except OSError:
+                pass
+
+            if log_dates and not last_session:
+                last_session = max(log_dates)
+
+            if last_session is None:
+                return
+
+            days_since = (time.time() - last_session) / 86400
+            # Guardar en atributo para correlaciones posteriores
+            self._last_mc_session_days = days_since
+
+            # Si no ha jugado en >30 días pero tiene muchos hallazgos recientes → limpieza
+            if days_since > 30:
+                self.issues_found.append({
+                    'tipo':      'mc_long_inactive',
+                    'nombre':    f'Minecraft sin actividad hace {int(days_since)} días',
+                    'ruta':      logs_dir,
+                    'archivo':   latest_log if os.path.isfile(latest_log) else logs_dir,
+                    'categoria': 'CONTEXTO',
+                    'alerta':    'POCO_SOSPECHOSO',
+                    'confidence': 0.30,
+                    'detected_patterns': [f'inactive_{int(days_since)}d'],
+                })
+                print(f"[mc_session] Sin actividad hace {int(days_since)} días")
+            else:
+                print(f"[mc_session] Última sesión hace {int(days_since)} días")
+        except Exception as e:
+            print(f"Error en scan_minecraft_last_session: {e}")
 
     def scan_installed_programs(self):
         """Escanea programas instalados en el registro en busca de CheatEngine u otras herramientas de trampa."""

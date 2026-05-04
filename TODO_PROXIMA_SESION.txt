@@ -100,8 +100,8 @@
 
 ── ANÁLISIS DE CONTEXTO DEL SISTEMA ────────────────────────────────────────
 
-[PENDING] 21. Correlación con fecha de instalación de Minecraft
-[PENDING] 22. Correlación con últimas sesiones de juego en logs
+[DONE] 21. Correlación con fecha de instalación de Minecraft
+[DONE] 22. Correlación con últimas sesiones de juego en logs
 [PENDING] 23. Verificar proceso padre de java.exe (launcher vs cmd.exe)
 [DONE] 24. Análisis de carpeta de instalación del ejecutable (Program Files vs AppData)
 [PENDING] 25. Verificar si el proceso tiene ventana visible (CREATE_NO_WINDOW)
@@ -131,7 +131,7 @@
 
 [DONE] 41. Auto-whitelist por frecuencia en scans "Limpio" (>30 scans, <5%)
 [DONE] 42. Auto-blacklist por frecuencia en scans "Con Hacks" (/api/hack_blacklist/sync)
-[PENDING] 43. Aprender de diferencia entre scans consecutivos del mismo usuario
+[DONE] 43. Aprender de diferencia entre scans consecutivos del mismo usuario
 [DONE] 44. Base de datos de aplicaciones por categoría (whitelists curadas)
 [DONE] 45. Modrinth search API por nombre de JAR (pasivo, en background)
 
@@ -218,9 +218,6 @@
   P3 #2   Embeddings semánticos con sentence-transformers para nombres de archivos
   P3 #4   Modelo de secuencia temporal (LSTM/Transformer) para patrones de instalación
   P3 #19  Reputación de jugadores entre servidores (cross-server machine_id)
-  P2 #21  Correlación con fecha de instalación de Minecraft
-  P2 #22  Correlación con últimas sesiones de juego en logs
-  P2 #43  Aprender de diferencia entre scans consecutivos del mismo usuario
   P3 #32  Feature store centralizado (precalcular features por machine_id)
 
 ================================================================================

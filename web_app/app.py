@@ -2333,6 +2333,62 @@ def _ensemble_risk_score(results):
         return heuristic
 
 
+def _compare_consecutive_scans(cursor, scan_id, machine_id, current_results):
+    """P2 #43 — Compara scan actual con el anterior del mismo machine_id.
+    Inserta notas de 'new_finding' en scan_results para hallazgos que no estaban antes.
+    Devuelve (new_types, disappeared_types) para logging.
+    """
+    if not machine_id or not current_results:
+        return [], []
+    try:
+        # Obtener el scan anterior completado del mismo machine
+        cursor.execute(
+            f'SELECT id FROM scans WHERE machine_id={_PH} AND status={_PH}'
+            f' AND id != {_PH} ORDER BY id DESC LIMIT 1',
+            (machine_id, 'completed', scan_id)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return [], []
+        prev_scan_id = _row_get(row, 0, 'id')
+
+        # Tipos de hallazgos del scan anterior
+        cursor.execute(
+            f'SELECT DISTINCT issue_type FROM scan_results WHERE scan_id={_PH}',
+            (prev_scan_id,)
+        )
+        prev_types = {
+            (_row_get(r, 0, 'issue_type') or '').lower()
+            for r in (cursor.fetchall() or [])
+        } - {''}
+
+        current_types = {
+            (r.get('tipo') or r.get('issue_type') or '').lower()
+            for r in current_results
+        } - {''}
+
+        new_types        = current_types - prev_types
+        disappeared_types = prev_types - current_types
+
+        if new_types:
+            print(f"[consecutive] {len(new_types)} tipo(s) nuevos vs scan {prev_scan_id}: {new_types}")
+        if disappeared_types:
+            print(f"[consecutive] {len(disappeared_types)} tipo(s) desaparecidos: {disappeared_types}")
+
+        # Marcar en scan_results los hallazgos que son nuevos respecto al anterior
+        if new_types:
+            cursor.execute(
+                f'UPDATE scan_results SET detected_patterns = COALESCE(detected_patterns,{_PH}) || {_PH}'
+                f' WHERE scan_id={_PH} AND LOWER(issue_type) = ANY({_PH})',
+                ('[]', ',"new_vs_prev_scan"', scan_id, list(new_types))
+            )
+
+        return list(new_types), list(disappeared_types)
+    except Exception as ex:
+        print(f"[consecutive] Error: {ex}")
+        return [], []
+
+
 @app.route('/api/scans/<int:scan_id>/results', methods=['POST'])
 def submit_scan_results(scan_id):
     """Recibe y almacena resultados de escaneo (usado por el cliente .exe) — sin login requerido"""
@@ -2448,6 +2504,12 @@ def submit_scan_results(scan_id):
                     cursor.execute('ROLLBACK TO SAVEPOINT risk_score_save')
                 except Exception:
                     pass
+
+            # P2 #43 — Comparación con scan anterior del mismo machine
+            try:
+                _compare_consecutive_scans(cursor, scan_id, data.get('machine_id', ''), results)
+            except Exception:
+                pass
 
         print(f"[DEBUG] ===== SCAN {scan_id} COMPLETADO OK: "
               f"{len(data.get('results',[]))} resultados, status={data.get('status','completed')} =====\n")
