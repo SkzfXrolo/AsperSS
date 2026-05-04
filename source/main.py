@@ -4036,6 +4036,12 @@ class ArgusApp:
                 _run_safe(self.scan_minecraft_last_session)
                 self._set_scan_phase("👨‍💻 Proceso padre de java.exe...")
                 _run_safe(self.scan_java_parent_process)
+                self._set_scan_phase("🪟 Procesos java sin ventana...")
+                _run_safe(self.scan_windowless_java)
+                self._set_scan_phase("🔒 Atributos de solo lectura...")
+                _run_safe(self.scan_readonly_suspicious_files)
+                self._set_scan_phase("📂 Cambios recientes en .minecraft...")
+                _run_safe(self.scan_minecraft_fs_changes)
                 self._set_scan_phase("💥 Crash reports de Minecraft...")
                 _run_safe(self.scan_minecraft_crash_reports)
                 self._set_scan_phase("🔤 Análisis de nombres de carpetas...")
@@ -8385,6 +8391,144 @@ class ArgusApp:
                 pass
             except Exception as e:
                 print(f"Error en scan_java_policy {pol_path}: {e}")
+
+    def scan_windowless_java(self):
+        """P2 #25 — Detecta procesos java sin ventana visible (CREATE_NO_WINDOW / headless injection)."""
+        print("🔍 Verificando procesos java sin ventana...")
+        try:
+            import psutil, ctypes
+            user32 = ctypes.windll.user32
+
+            # Enumerar ventanas visibles y sus PIDs
+            visible_pids: set = set()
+            def _enum_cb(hwnd, _):
+                if user32.IsWindowVisible(hwnd):
+                    pid = ctypes.c_ulong(0)
+                    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                    visible_pids.add(pid.value)
+                return True
+            WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+            user32.EnumWindows(WNDENUMPROC(_enum_cb), 0)
+
+            for proc in psutil.process_iter(['pid', 'name', 'exe', 'cmdline']):
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                    if 'java' not in pname:
+                        continue
+                    if proc.pid in visible_pids:
+                        continue  # tiene ventana visible → legítimo
+                    cmdline = ' '.join(proc.info.get('cmdline') or []).lower()
+                    # Solo nos importa si tiene argumentos de agente o injection
+                    if any(kw in cmdline for kw in ('-javaagent', '-agentlib', '-agentpath', 'lwjgl', 'minecraft')):
+                        if 'minecraft' in cmdline and '-javaagent' not in cmdline:
+                            continue  # MC legítimo sin agente → skip
+                        self.issues_found.append({
+                            'tipo':     'java_no_window',
+                            'nombre':   f'{pname} (PID {proc.pid}) sin ventana visible',
+                            'ruta':     proc.info.get('exe') or '',
+                            'archivo':  proc.info.get('exe') or '',
+                            'categoria': 'JAVA_INJECTION',
+                            'alerta':   'SOSPECHOSO',
+                            'confidence': 0.65,
+                            'detected_patterns': ['windowless_java', 'no_visible_window'],
+                        })
+                        print(f"[java_nowin] {pname} PID {proc.pid} sin ventana")
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"Error en scan_windowless_java: {e}")
+
+    def scan_readonly_suspicious_files(self):
+        """P2 #28 — Detecta archivos sospechosos con atributo de solo lectura (dificultan borrado)."""
+        print("🔍 Verificando atributos de solo lectura en archivos sospechosos...")
+        try:
+            import ctypes
+            FILE_ATTRIBUTE_READONLY = 0x1
+            FILE_ATTRIBUTE_HIDDEN   = 0x2
+
+            appdata     = os.environ.get('APPDATA', '')
+            userprofile = os.environ.get('USERPROFILE', '')
+            SCAN_DIRS   = [
+                os.path.join(appdata, '.minecraft', 'mods'),
+                os.path.join(appdata, '.weave'),
+                os.path.join(appdata, '.sigma'),
+                os.path.join(appdata, '.aristois'),
+                os.path.join(userprofile, 'Downloads'),
+            ]
+            for scan_dir in SCAN_DIRS:
+                if not os.path.isdir(scan_dir):
+                    continue
+                try:
+                    for entry in os.scandir(scan_dir):
+                        if not entry.name.lower().endswith(('.jar', '.exe', '.dll')):
+                            continue
+                        try:
+                            attrs = ctypes.windll.kernel32.GetFileAttributesW(entry.path)
+                            if attrs == 0xFFFFFFFF:
+                                continue
+                            if attrs & FILE_ATTRIBUTE_READONLY:
+                                self.issues_found.append({
+                                    'tipo':     'readonly_suspicious',
+                                    'nombre':   f'Archivo sospechoso de solo lectura: {entry.name}',
+                                    'ruta':     scan_dir,
+                                    'archivo':  entry.path,
+                                    'categoria': 'EVASION',
+                                    'alerta':   'POCO_SOSPECHOSO',
+                                    'confidence': 0.45,
+                                    'detected_patterns': ['readonly_attr',
+                                                          'hidden_attr' if attrs & FILE_ATTRIBUTE_HIDDEN else 'readonly_attr'],
+                                })
+                                print(f"[readonly] {entry.name}")
+                        except (PermissionError, OSError):
+                            pass
+                except PermissionError:
+                    pass
+        except Exception as e:
+            print(f"Error en scan_readonly_suspicious_files: {e}")
+
+    def scan_minecraft_fs_changes(self):
+        """P3 #30 — Detecta archivos modificados en .minecraft durante los últimos 5 minutos (cambios durante scan)."""
+        print("🔍 Detectando cambios recientes en .minecraft...")
+        try:
+            appdata  = os.environ.get('APPDATA', '')
+            mc_dir   = os.path.join(appdata, '.minecraft')
+            if not os.path.isdir(mc_dir):
+                return
+
+            WATCH_SUBDIRS = ['mods', 'config', 'shaderpacks', 'resourcepacks', 'versions']
+            cutoff = time.time() - 300  # últimos 5 minutos
+
+            changed: list = []
+            for sub in WATCH_SUBDIRS:
+                sub_dir = os.path.join(mc_dir, sub)
+                if not os.path.isdir(sub_dir):
+                    continue
+                try:
+                    for entry in os.scandir(sub_dir):
+                        try:
+                            if entry.stat().st_mtime > cutoff:
+                                changed.append(entry.path)
+                        except OSError:
+                            pass
+                except PermissionError:
+                    pass
+
+            if changed:
+                self.issues_found.append({
+                    'tipo':     'mc_files_changed_during_scan',
+                    'nombre':   f'{len(changed)} archivo(s) modificados en .minecraft en últimos 5min',
+                    'ruta':     mc_dir,
+                    'archivo':  mc_dir,
+                    'categoria': 'EVASION',
+                    'alerta':   'SOSPECHOSO' if len(changed) >= 3 else 'POCO_SOSPECHOSO',
+                    'confidence': 0.60,
+                    'detected_patterns': ['fs_change_during_scan'] + [os.path.basename(p) for p in changed[:5]],
+                })
+                print(f"[fs_watch] {len(changed)} cambios en .minecraft: {[os.path.basename(p) for p in changed[:3]]}")
+        except Exception as e:
+            print(f"Error en scan_minecraft_fs_changes: {e}")
 
     def scan_java_parent_process(self):
         """P2 #23 — Detecta java.exe/javaw.exe lanzado desde cmd.exe/powershell en lugar de un launcher legítimo."""

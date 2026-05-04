@@ -6617,6 +6617,228 @@ def ai_followup_questions(scan_id):
         return jsonify({'error': str(e)}), 500
 
 
+# ── P2 #33 — Distribución de tamaños de archivos sospechosos ─────────────────
+
+@app.route('/api/ml/size-distribution', methods=['GET'])
+@login_required
+def ml_size_distribution():
+    """P2 #33 — Analiza distribución de tamaños (confidence proxy) de hallazgos hack vs clean.
+    Detecta si hay un rango de tamaño/confidence que discrimina bien entre categorías.
+    """
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f'SELECT sr.confidence, sr.alert_level, s.verdict'
+                f' FROM scan_results sr JOIN scans s ON sr.scan_id=s.id'
+                f' WHERE s.verdict IN ({_PH},{_PH}) AND sr.confidence IS NOT NULL'
+                f' ORDER BY sr.id DESC LIMIT 10000',
+                ('hack', 'clean')
+            )
+            rows = cur.fetchall() or []
+
+        if len(rows) < 20:
+            return jsonify({'error': 'Insuficientes datos'}), 400
+
+        buckets = {}
+        for r in rows:
+            conf    = float(_row_get(r, 0, 'confidence') or 0)
+            verdict = str(_row_get(r, 2, 'verdict') or '')
+            bucket  = f'{int(conf * 10) * 10}-{int(conf * 10) * 10 + 10}%'
+            if bucket not in buckets:
+                buckets[bucket] = {'hack': 0, 'clean': 0, 'total': 0}
+            buckets[bucket][verdict] = buckets[bucket].get(verdict, 0) + 1
+            buckets[bucket]['total'] += 1
+
+        for b in buckets.values():
+            t = b['total']
+            b['hack_rate'] = round(b.get('hack', 0) / t, 3) if t else 0
+
+        sorted_buckets = sorted(buckets.items())
+        return jsonify({'buckets': [{'range': k, **v} for k, v in sorted_buckets],
+                        'total_samples': len(rows)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── P2 #40 — A/B testing de filtros con veredictos históricos ────────────────
+
+@app.route('/api/ml/ab-test', methods=['GET'])
+@login_required
+def ml_ab_test():
+    """P2 #40 — Compara dos conjuntos de alert_level thresholds usando veredictos históricos.
+    threshold_a y threshold_b son valores 0–100. Calcula precision/recall para cada uno.
+    """
+    try:
+        threshold_a = int(request.args.get('threshold_a', 50))
+        threshold_b = int(request.args.get('threshold_b', 70))
+
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f'SELECT risk_score, verdict FROM scans'
+                f' WHERE verdict IN ({_PH},{_PH}) AND risk_score IS NOT NULL'
+                f' ORDER BY id DESC LIMIT 2000',
+                ('hack', 'clean')
+            )
+            rows = cur.fetchall() or []
+
+        if len(rows) < 20:
+            return jsonify({'error': 'Insuficientes datos para A/B test'}), 400
+
+        def _metrics(threshold):
+            tp = fp = tn = fn = 0
+            for r in rows:
+                score   = int(_row_get(r, 0, 'risk_score') or 0)
+                verdict = str(_row_get(r, 1, 'verdict') or '')
+                pred_hack = score >= threshold
+                real_hack = verdict == 'hack'
+                if pred_hack and real_hack:  tp += 1
+                elif pred_hack:              fp += 1
+                elif real_hack:              fn += 1
+                else:                        tn += 1
+            precision = round(tp / (tp + fp), 3) if (tp + fp) > 0 else 0
+            recall    = round(tp / (tp + fn), 3) if (tp + fn) > 0 else 0
+            f1        = round(2 * precision * recall / (precision + recall), 3) if (precision + recall) > 0 else 0
+            accuracy  = round((tp + tn) / len(rows), 3) if rows else 0
+            return {'threshold': threshold, 'tp': tp, 'fp': fp, 'tn': tn, 'fn': fn,
+                    'precision': precision, 'recall': recall, 'f1': f1, 'accuracy': accuracy}
+
+        return jsonify({
+            'a': _metrics(threshold_a),
+            'b': _metrics(threshold_b),
+            'samples': len(rows),
+            'winner': 'a' if _metrics(threshold_a)['f1'] >= _metrics(threshold_b)['f1'] else 'b',
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── P3 #2 — Embeddings semánticos ligeros (TF-IDF cosine, sin sentence-transformers) ──
+
+@app.route('/api/ml/semantic-similarity', methods=['POST'])
+@login_required
+def ml_semantic_similarity():
+    """P3 #2 — Calcula similitud semántica entre un nombre de archivo y corpus de hacks conocidos.
+    Usa TF-IDF + cosine similarity como aproximación ligera a embeddings.
+    Body: { name: str, top_n: int }
+    """
+    try:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.metrics.pairwise import cosine_similarity
+        import numpy as np
+
+        data  = request.json or {}
+        name  = str(data.get('name') or '').strip()
+        top_n = min(int(data.get('top_n') or 5), 20)
+        if not name:
+            return jsonify({'error': 'name requerido'}), 400
+
+        HACK_CORPUS = [
+            'liquidbounce ghost client', 'wurst hacked client', 'meteor client',
+            'sigma client cheat', 'aristois hack', 'weave loader injection',
+            'jigsaw client', 'novoline hacked', 'inertia client',
+            'entropy hack', 'drip client', 'bleach hack', 'rusherhack',
+            'rise client hack', 'kilo client cheat', 'aimbot killaura',
+            'autoclick macro mouse', 'esp wallhack xray', 'scaffold fly speed',
+            'java agent injection', 'bytecode injection mixin',
+            'nodus client hack', 'vape client hacked', 'impact client',
+            'gorilla tag mod hack', 'triggerbot aimassist',
+        ]
+
+        docs = HACK_CORPUS + [name]
+        vect = TfidfVectorizer(analyzer='char_wb', ngram_range=(2, 4))
+        X    = vect.fit_transform(docs)
+
+        query_vec = X[-1]
+        corpus_X  = X[:-1]
+        sims      = cosine_similarity(query_vec, corpus_X)[0]
+        top_idx   = sims.argsort()[::-1][:top_n]
+
+        results = [
+            {'corpus_entry': HACK_CORPUS[i], 'similarity': round(float(sims[i]), 4)}
+            for i in top_idx if sims[i] > 0
+        ]
+        max_sim = float(sims.max()) if len(sims) else 0
+        is_suspicious = max_sim >= 0.35
+
+        return jsonify({
+            'name': name,
+            'max_similarity': round(max_sim, 4),
+            'is_suspicious': is_suspicious,
+            'top_matches': results,
+        }), 200
+    except ImportError:
+        return jsonify({'error': 'sklearn no disponible'}), 503
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── P3 #34 — Pipeline de ingesta de inteligencia de hacks (scraper) ───────────
+
+@app.route('/api/admin/ingest-hack-intel', methods=['POST'])
+@login_required
+def ingest_hack_intel():
+    """P3 #34 — Scraper pasivo de inteligencia sobre nuevos hack clients.
+    Consulta fuentes públicas (GitHub releases, SpigotMC) para detectar nuevos names/hashes.
+    Requiere rol admin. Resultados se guardan en hack_intel_log.
+    """
+    if not session.get('is_admin'):
+        return jsonify({'error': 'Solo administradores'}), 403
+    try:
+        import threading as _thr
+        results = []
+
+        # Source 1: known GitHub repos — buscar release names de hack clients conocidos
+        GITHUB_REPOS = [
+            ('CCBlueX',   'LiquidBounce'),
+            ('MeteorDevelopment', 'meteor-client'),
+            ('Wurst-Imperium', 'Wurst7'),
+        ]
+        for owner, repo in GITHUB_REPOS:
+            try:
+                resp = requests.get(
+                    f'https://api.github.com/repos/{owner}/{repo}/releases/latest',
+                    headers={'Accept': 'application/vnd.github.v3+json'},
+                    timeout=6,
+                )
+                if resp.status_code == 200:
+                    rel = resp.json()
+                    tag  = rel.get('tag_name', '')
+                    name = rel.get('name', '')
+                    assets = [a.get('name', '') for a in rel.get('assets', []) if a.get('name', '').endswith('.jar')]
+                    results.append({
+                        'source': f'github:{owner}/{repo}',
+                        'version': tag,
+                        'release_name': name,
+                        'jar_assets': assets[:5],
+                    })
+            except Exception:
+                pass
+
+        # Source 2: MalwareBazaar tag search for minecraft-related malware
+        try:
+            mb_resp = requests.post(
+                'https://mb.api.abuse.ch/api/v1/',
+                data={'query': 'get_taginfo', 'tag': 'minecraft', 'limit': 10},
+                timeout=6,
+            )
+            if mb_resp.ok:
+                mb_data = mb_resp.json()
+                if mb_data.get('query_status') == 'ok':
+                    for entry in (mb_data.get('data') or [])[:5]:
+                        results.append({
+                            'source': 'malwarebazaar',
+                            'sha256': entry.get('sha256_hash', ''),
+                            'file_name': entry.get('file_name', ''),
+                            'tags': entry.get('tags', []),
+                        })
+        except Exception:
+            pass
+
+        return jsonify({'ingested': len(results), 'results': results}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     print("🌐 Iniciando aplicación web de ASPERS Projects...")
     api_url_display = os.environ.get('API_URL') or (API_BASE_URL if IS_RENDER else API_BASE_URL)

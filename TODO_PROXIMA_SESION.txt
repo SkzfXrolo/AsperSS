@@ -104,10 +104,10 @@
 [DONE] 22. Correlación con últimas sesiones de juego en logs
 [DONE] 23. Verificar proceso padre de java.exe (launcher vs cmd.exe)
 [DONE] 24. Análisis de carpeta de instalación del ejecutable (Program Files vs AppData)
-[PENDING] 25. Verificar si el proceso tiene ventana visible (CREATE_NO_WINDOW)
-[PENDING] 26. Verificar antigüedad del archivo en el sistema (>1 año → bajar severidad)
+[DONE] 25. Verificar si el proceso tiene ventana visible (CREATE_NO_WINDOW)
+[DONE] 26. Verificar antigüedad del archivo en el sistema (>1 año → bajar severidad)
 [DONE] 27. Comparar con baseline del mismo usuario (scans anteriores, archivo_baseline)
-[PENDING] 28. Verificar atributos de solo lectura del archivo
+[DONE] 28. Verificar atributos de solo lectura del archivo
 [PENDING] 29. Verificar certificados SSL de conexiones sospechosas
 [PENDING] 30. Análisis de DLLs cargadas vs baseline de instalación limpia
 
@@ -115,7 +115,7 @@
 
 [DONE] 31. TF-IDF sobre nombres de archivos en scans históricos
 [DONE] 32. Clustering de hallazgos por similitud de path
-[PENDING] 33. Análisis de distribución de tamaños de archivos sospechosos
+[DONE] 33. Análisis de distribución de tamaños de archivos sospechosos
 [DONE] 34. Modelo de frecuencia de hashes por tipo de alerta (cloud blacklist)
 [DONE] 35. Regresión logística → Random Forest con features de archivos (ml_classifier)
 
@@ -125,7 +125,7 @@
 [DONE] 37. Whitelist automática entre servidores por frecuencia (/api/learning/auto_whitelist)
 [DONE] 38. Ajuste de pesos por tasa de acierto histórica (/api/learning/auto_weights)
 [DONE] 39. Historial de veredictos por tipo de hallazgo (auto-weights)
-[PENDING] 40. A/B testing de filtros usando veredictos históricos
+[DONE] 40. A/B testing de filtros usando veredictos históricos
 
 ── MÉTODOS DE APRENDIZAJE PASIVO ────────────────────────────────────────────
 
@@ -151,7 +151,7 @@
 ── SCORING Y CLASIFICACIÓN ──────────────────────────────────────────────────
 
 [DONE]  1. Reemplazar scoring manual por Random Forest (ml_classifier.py)
-[PENDING] 2. Embeddings semánticos de nombres de archivos (sentence-transformers)
+[DONE]  2. Embeddings semánticos de nombres de archivos (sentence-transformers)
 [DONE]  3. Detección de anomalías con Isolation Forest (/api/ml/anomaly/<scan_id>)
 [PENDING] 4. Modelo de secuencia temporal (LSTM/Transformer) para patrones de instalación
 [DONE]  5. Clasificador NLP para explicaciones (Claude/Groq/Gemini vía /api/staff/ai/explain)
@@ -191,14 +191,14 @@
 [PENDING] 27. Análisis de timing de pulsaciones de teclado
 [DONE] 28. Detección de VM por comportamiento de hardware (CPUID, timing, VMware MAC)
 [DONE] 29. Análisis de instalaciones recientes (MSI, últimos 7 días)
-[PENDING] 30. Monitor de cambios en .minecraft durante el scan (filesystem watcher)
+[DONE] 30. Monitor de cambios en .minecraft durante el scan (filesystem watcher)
 
 ── INFRAESTRUCTURA DE IA ───────────────────────────────────────────────────
 
 [DONE] 31. Pipeline de reentrenamiento automático semanal (APScheduler, domingos 03:00)
 [DONE] 32. Feature store centralizado (precalcular features por machine_id)
 [PENDING] 33. Modelo de embedding de hashes de archivos
-[PENDING] 34. Pipeline de ingesta de nueva inteligencia sobre hacks (scraper)
+[DONE] 34. Pipeline de ingesta de nueva inteligencia sobre hacks (scraper)
 [DONE] 35. API de predicción expuesta al scanner (/api/predict pre-scan)
 
 
