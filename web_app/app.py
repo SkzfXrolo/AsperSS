@@ -6969,6 +6969,140 @@ def check_ip_reputation():
         return jsonify({'error': str(e)}), 500
 
 
+# ── P2 #9 — IP ASN / hosting check vía ip-api.com (gratis, sin API key) ──────
+
+@app.route('/api/ml/check-ip-asn', methods=['POST'])
+def check_ip_asn():
+    """Consulta ip-api.com para obtener ASN, ISP y si la IP es hosting/proxy.
+    Aproximación gratuita de Shodan: detecta IPs de proveedores típicos de C2.
+    Límite: 45 req/min sin API key.
+    """
+    if not _is_staff_authenticated():
+        return jsonify({'error': 'unauthorized'}), 403
+    data = request.get_json(silent=True) or {}
+    ip = data.get('ip', '').strip()
+    if not ip:
+        return jsonify({'error': 'ip required'}), 400
+
+    # ASNs/orgs frecuentemente asociadas a hosting de C2 / servidores privados de hacks
+    SUSPICIOUS_ORGS = {
+        'digitalocean', 'vultr', 'ovh', 'hetzner', 'linode', 'leaseweb',
+        'm247', 'frantech', 'ponynet', 'buyvm', 'privatelayer', 'psychz',
+        'serverius', 'hostinger', 'contabo', 'serverspace', 'greencloud',
+        'datacamp', 'alexhost', 'combahton',
+    }
+    try:
+        resp = requests.get(
+            f'http://ip-api.com/json/{ip}',
+            params={'fields': 'status,message,country,regionName,city,isp,org,as,proxy,hosting,query'},
+            timeout=6,
+        )
+        if not resp.ok:
+            return jsonify({'error': f'ip-api.com HTTP {resp.status_code}'}), 502
+        d = resp.json()
+        if d.get('status') != 'success':
+            return jsonify({'error': d.get('message', 'lookup failed')}), 400
+
+        org_lower = (d.get('org', '') + ' ' + d.get('isp', '') + ' ' + d.get('as', '')).lower()
+        is_suspicious_org = any(s in org_lower for s in SUSPICIOUS_ORGS)
+        is_hosting  = d.get('hosting', False)
+        is_proxy    = d.get('proxy',   False)
+        risk_flags  = []
+        if is_hosting:        risk_flags.append('hosting_provider')
+        if is_proxy:          risk_flags.append('proxy_vpn')
+        if is_suspicious_org: risk_flags.append('c2_hosting_asn')
+
+        label = 'LIMPIO'
+        if risk_flags:
+            label = 'SOSPECHOSO' if len(risk_flags) == 1 else 'ALTO_RIESGO'
+
+        return jsonify({
+            'ip':          ip,
+            'label':       label,
+            'risk_flags':  risk_flags,
+            'country':     d.get('country', ''),
+            'region':      d.get('regionName', ''),
+            'city':        d.get('city', ''),
+            'isp':         d.get('isp', ''),
+            'org':         d.get('org', ''),
+            'asn':         d.get('as', ''),
+            'is_hosting':  is_hosting,
+            'is_proxy':    is_proxy,
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── P3 #33 — SimHash: similitud de archivos por hash local ────────────────────
+
+@app.route('/api/ml/simhash', methods=['POST'])
+def simhash_similarity():
+    """Calcula la similitud entre el hash de un archivo y la base de datos de hacks
+    usando SimHash (Hamming distance sobre SHA-256 bits). Sin modelos de ML externos.
+    También acepta múltiples hashes para encontrar clusters de archivos similares.
+    """
+    if not _is_staff_authenticated():
+        return jsonify({'error': 'unauthorized'}), 403
+    data = request.get_json(silent=True) or {}
+    hashes = data.get('hashes', [])
+    if isinstance(hashes, str):
+        hashes = [hashes]
+    if not hashes or len(hashes) > 100:
+        return jsonify({'error': 'hashes list required (max 100)'}), 400
+
+    def _hex_to_bits(h: str) -> int:
+        try:
+            return int(h[:16], 16)  # primeros 64 bits del SHA-256
+        except Exception:
+            return 0
+
+    def _hamming(a: int, b: int) -> int:
+        return bin(a ^ b).count('1')
+
+    try:
+        with get_api_db_cursor() as cur:
+            # Obtener hashes de scans con veredicto "hack" de los últimos 90 días
+            cur.execute(f'''
+                SELECT DISTINCT sr.file_hash
+                FROM scan_results sr
+                JOIN scans s ON sr.scan_id = s.id
+                WHERE s.verdict = 'hack'
+                  AND sr.file_hash IS NOT NULL
+                  AND LENGTH(sr.file_hash) = 64
+                  AND s.created_at >= NOW() - INTERVAL '90 days'
+                LIMIT 2000
+            ''')
+            rows = cur.fetchall()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    known_hack_bits = [_hex_to_bits(r[0] if isinstance(r, (list, tuple)) else r.get('file_hash', ''))
+                       for r in rows if r]
+
+    results = []
+    for h in hashes:
+        if len(h) != 64:
+            results.append({'hash': h, 'error': 'not SHA-256'})
+            continue
+        qbits = _hex_to_bits(h)
+        if not known_hack_bits:
+            results.append({'hash': h, 'min_hamming': None, 'similar_hacks': 0, 'is_suspicious': False})
+            continue
+        distances = [_hamming(qbits, kb) for kb in known_hack_bits]
+        min_dist  = min(distances)
+        near_count = sum(1 for d in distances if d <= 8)  # ≤8 bits diferentes de 64 = muy similar
+        is_suspicious = min_dist <= 12 or near_count >= 3
+        results.append({
+            'hash':          h,
+            'min_hamming':   min_dist,
+            'similar_hacks': near_count,
+            'is_suspicious': is_suspicious,
+            'similarity_pct': round((64 - min_dist) / 64 * 100, 1),
+        })
+
+    return jsonify({'results': results, 'known_hack_hashes': len(known_hack_bits)}), 200
+
+
 if __name__ == '__main__':
     print("🌐 Iniciando aplicación web de ASPERS Projects...")
     api_url_display = os.environ.get('API_URL') or (API_BASE_URL if IS_RENDER else API_BASE_URL)

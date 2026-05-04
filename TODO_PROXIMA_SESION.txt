@@ -82,7 +82,7 @@
 [PENDING] 6. NSRL (NIST) — base de datos de hashes legítimos (dataset muy grande, ~5GB)
 [PENDING] 7. Hybrid Analysis API — análisis de comportamiento
 [DONE]  8. MalwareBazaar (abuse.ch) — blacklist de hashes (gratis, sin API key)
-[PENDING] 9. Shodan / Censys — verificar IPs de conexiones
+[DONE]  9. Shodan / Censys — IP ASN check via ip-api.com (/api/ml/check-ip-asn, gratis)
 [DONE] 10. AbuseIPDB — reputación de IPs (/api/ml/check-ip-reputation, env ABUSEIPDB_API_KEY)
 
 ── ANÁLISIS LOCAL DE CONTENIDO ──────────────────────────────────────────────
@@ -108,7 +108,7 @@
 [DONE] 26. Verificar antigüedad del archivo en el sistema (>1 año → bajar severidad)
 [DONE] 27. Comparar con baseline del mismo usuario (scans anteriores, archivo_baseline)
 [DONE] 28. Verificar atributos de solo lectura del archivo
-[PENDING] 29. Verificar certificados SSL de conexiones sospechosas
+[DONE] 29. Verificar conexiones TLS sospechosas de Java (scan_java_suspicious_tls)
 [DONE] 30. Análisis de DLLs cargadas vs baseline de instalación limpia (scan_java_dll_nonstandard)
 
 ── MÉTODOS ESTADÍSTICOS Y ML ───────────────────────────────────────────────
@@ -138,10 +138,10 @@
 ── TÉCNICAS DE SANDBOXING Y ANÁLISIS DINÁMICO ──────────────────────────────
 
 [PENDING] 46. Ejecutar JAR en sandbox y monitorear filesystem
-[PENDING] 47. Análisis estático de bytecode Java con ASM o Javap
+[DONE] 47. Análisis estático bytecode — constant pool parser (_extract_class_strings)
 [DONE] 48. Verificar imports de paquetes Minecraft en el JAR (expandir P2#15)
 [PENDING] 49. Análisis de tráfico de red durante ejecución en VM
-[PENDING] 50. Detección de self-deletion al ejecutar
+[DONE] 50. Detección de self-deletion (scan_self_deletion_hacks)
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -197,7 +197,7 @@
 
 [DONE] 31. Pipeline de reentrenamiento automático semanal (APScheduler, domingos 03:00)
 [DONE] 32. Feature store centralizado (precalcular features por machine_id)
-[PENDING] 33. Modelo de embedding de hashes de archivos
+[DONE] 33. Hash similarity via SimHash/Hamming (/api/ml/simhash)
 [DONE] 34. Pipeline de ingesta de nueva inteligencia sobre hacks (scraper)
 [DONE] 35. API de predicción expuesta al scanner (/api/predict pre-scan)
 

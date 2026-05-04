@@ -255,6 +255,49 @@ def _is_non_instance_location(path: str) -> bool:
     p = path.lower()
     return any(frag in p for frag in _NON_INSTANCE_FRAGMENTS)
 
+def _extract_class_strings(data: bytes) -> list:
+    """P2 #47 — Parsea el constant pool de un .class de Java y devuelve sus strings UTF-8.
+    Implementación directa del formato Class File Spec (sin necesitar javap/ASM).
+    Sólo extrae CONSTANT_Utf8 (tag=1); ignora el resto de tags.
+    """
+    import struct as _struct
+    if len(data) < 10 or data[:4] != b'\xca\xfe\xba\xbe':
+        return []
+    try:
+        pos = 8  # magic(4) + minor(2) + major(2)
+        const_count = _struct.unpack_from('>H', data, pos)[0]
+        pos += 2
+        strings = []
+        i = 1
+        while i < const_count and pos < len(data):
+            tag = data[pos]; pos += 1
+            if tag == 1:       # Utf8: u2 length + bytes
+                ln = _struct.unpack_from('>H', data, pos)[0]; pos += 2
+                try:
+                    s = data[pos:pos+ln].decode('utf-8', errors='ignore')
+                    if len(s) >= 3:
+                        strings.append(s)
+                except Exception:
+                    pass
+                pos += ln
+            elif tag in (3, 4):    # Integer / Float
+                pos += 4
+            elif tag in (5, 6):    # Long / Double — ocupan 2 slots
+                pos += 8; i += 1
+            elif tag in (7, 8, 16, 19, 20):  # Class / String / MethodType / Module / Package
+                pos += 2
+            elif tag in (9, 10, 11, 12, 17, 18):  # Fieldref / Methodref / etc.
+                pos += 4
+            elif tag == 15:    # MethodHandle
+                pos += 3
+            else:
+                break           # tag desconocido → detener parseo
+            i += 1
+        return strings
+    except Exception:
+        return []
+
+
 def _is_hack_folder(dir_name: str, root_lower: str) -> bool:
     """Devuelve True si el nombre de carpeta parece ser de un hack client.
 
@@ -4065,6 +4108,10 @@ class ArgusApp:
                 _run_safe(self.scan_dll_injection_java)
                 self._set_scan_phase("📋 DLLs fuera de baseline en Java...")
                 _run_safe(self.scan_java_dll_nonstandard)
+                self._set_scan_phase("🗑️ JARs borrados durante ejecución...")
+                _run_safe(self.scan_self_deletion_hacks)
+                self._set_scan_phase("🔒 Conexiones TLS sospechosas de Java...")
+                _run_safe(self.scan_java_suspicious_tls)
                 self._set_scan_phase("🔬 Strings de hack en JARs cargados por Java...")
                 _run_safe(self.scan_process_memory_strings)
                 self._set_scan_phase("📍 Correlación de ruta de proceso sospechoso...")
@@ -4922,6 +4969,39 @@ class ArgusApp:
                                     result['is_hack'] = True
                                     if b'net/minecraft/client/Minecraft' in str(_bc_hits).encode():
                                         result['detected_patterns'].append('direct_mc_client_access')
+
+                                # P2 #47 — Constant pool parsing: strings de alta precisión
+                                _CP_HACK_STRINGS = [
+                                    'killaura', 'aimbot', 'aimassist', 'autoclick', 'autoclicker',
+                                    'scaffold', 'bhop', 'bhopmodule', 'flightmod', 'speedmod',
+                                    'nofall', 'antikb', 'antiknockback', 'fastplace', 'reach',
+                                    'xrayfinder', 'esp', 'chams', 'fullbright', 'cavefinder',
+                                    'liquidbounce', 'wurst', 'meteor', 'vape', 'sigma',
+                                    'aristois', 'impact', 'weave', 'drip', 'reflex',
+                                    'javaagent', 'bypassdetection', 'anticheat', 'bypass',
+                                ]
+                                _cp_hits = []
+                                for _cf in _class_files[:50]:
+                                    try:
+                                        _cp_strings = _extract_class_strings(zf.read(_cf))
+                                        for _s in _cp_strings:
+                                            _sl = _s.lower()
+                                            for _pat in _CP_HACK_STRINGS:
+                                                if _pat in _sl and _sl not in _cp_hits:
+                                                    _cp_hits.append(_sl[:40])
+                                                    break
+                                            if len(_cp_hits) >= 8:
+                                                break
+                                    except Exception:
+                                        pass
+                                    if len(_cp_hits) >= 8:
+                                        break
+                                if _cp_hits:
+                                    result['detected_patterns'].extend(
+                                        [f'cp_string:{h}' for h in _cp_hits[:5]]
+                                    )
+                                    result['confidence'] = min(100, result['confidence'] + 15)
+                                    result['is_hack'] = True
                             except Exception:
                                 pass
 
@@ -9882,6 +9962,120 @@ class ArgusApp:
                     f'desde una ruta no estándar: {full_path[:120]}. '
                     f'Las DLLs de hack suelen residir fuera de Windows\\, Program Files\\ '
                     f'o las carpetas del launcher.'
+                ),
+            })
+
+    def scan_self_deletion_hacks(self):
+        """P2 #50 — Detecta JARs en la línea de comandos de Java que ya no existen en disco.
+        Técnica común de hacks: cargar el JAR vía classloader y luego borrarlo para ocultar evidencia.
+        """
+        found = []
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                    if 'java' not in pname:
+                        continue
+                    cmdline = proc.info.get('cmdline') or []
+                    cmdline_str = ' '.join(cmdline).lower()
+                    if 'minecraft' not in cmdline_str and 'net.minecraft' not in cmdline_str:
+                        continue
+                    for arg in cmdline:
+                        if not (arg.endswith('.jar') or arg.endswith('.JAR')):
+                            continue
+                        jar_path = os.path.normpath(arg) if os.path.isabs(arg) else arg
+                        if not os.path.exists(jar_path):
+                            found.append((jar_path, proc.pid))
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_self_deletion_hacks: {e}")
+        for jar_path, pid in found:
+            self.issues_found.append({
+                'nombre':   f'JAR borrado mientras Minecraft corre: {os.path.basename(jar_path)}',
+                'ruta':     os.path.dirname(jar_path),
+                'archivo':  jar_path,
+                'tipo':     'jar_self_deleted',
+                'categoria': 'GHOST_CLIENT',
+                'alerta':   'CRITICAL',
+                'confidence': 0.91,
+                'detected_patterns': ['jar_deleted_while_running'],
+                'explicacion': (
+                    f'El archivo "{jar_path}" aparece en los argumentos de Minecraft '
+                    f'(PID {pid}) pero ya NO existe en disco. Esta técnica — cargar el '
+                    f'JAR y luego borrarlo — es usada por hacks para eliminar evidencia '
+                    f'forense del escaneo.'
+                ),
+            })
+
+    def scan_java_suspicious_tls(self):
+        """P2 #29 — Detecta conexiones TLS activas de Java hacia servidores desconocidos.
+        Complementa scan_javaw_network_connections con foco en puertos HTTPS no estándar.
+        """
+        import socket as _sock
+        SAFE_TLS_SUFFIXES = (
+            '.mojang.com', '.minecraft.net', '.microsoft.com', '.live.com',
+            '.cloudfront.net', '.amazonaws.com', '.fastly.net', '.akamai.net',
+            '.modrinth.com', '.curseforge.com', '.twitch.tv', '.cdn.net',
+            '.discordapp.com', '.discord.com', '.googleapis.com', '.gstatic.com',
+        )
+        SAFE_TLS_PORTS = {443, 8443}
+        SUSPICIOUS_TLS_PORTS = {4433, 8444, 9000, 9001, 9090, 1443, 2083, 2087, 2096}
+
+        found = []
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                    if 'java' not in pname:
+                        continue
+                    cmdline_str = ' '.join(proc.info.get('cmdline') or []).lower()
+                    if 'minecraft' not in cmdline_str and 'net.minecraft' not in cmdline_str:
+                        continue
+                    for conn in proc.connections('tcp4'):
+                        if conn.status != psutil.CONN_ESTABLISHED:
+                            continue
+                        rip   = conn.raddr.ip   if conn.raddr else ''
+                        rport = conn.raddr.port if conn.raddr else 0
+                        if not rip or not rport:
+                            continue
+                        if rport not in SAFE_TLS_PORTS and rport not in SUSPICIOUS_TLS_PORTS:
+                            continue
+                        try:
+                            hostname = _sock.getfqdn(rip)
+                        except Exception:
+                            hostname = rip
+                        if any(hostname.endswith(s) for s in SAFE_TLS_SUFFIXES):
+                            continue
+                        # Conexión TLS a host desconocido
+                        is_nonstandard_port = rport in SUSPICIOUS_TLS_PORTS
+                        found.append((rip, rport, hostname, proc.pid, is_nonstandard_port))
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_java_suspicious_tls: {e}")
+
+        for rip, rport, hostname, pid, nonstandard in found[:8]:
+            severity = 'CRITICAL' if nonstandard else 'SOSPECHOSO'
+            conf     = 0.78 if nonstandard else 0.55
+            self.issues_found.append({
+                'nombre':   f'Conexión TLS de Minecraft a host desconocido: {hostname} :{rport}',
+                'ruta':     f'{rip}:{rport}',
+                'archivo':  hostname,
+                'tipo':     'java_suspicious_tls',
+                'categoria': 'RED',
+                'alerta':   severity,
+                'confidence': conf,
+                'detected_patterns': [
+                    f'tls_host:{hostname[:40]}',
+                    f'tls_port:{rport}',
+                    *(['nonstandard_tls_port'] if nonstandard else []),
+                ],
+                'explicacion': (
+                    f'El proceso Minecraft (PID {pid}) tiene una conexión TLS activa '
+                    f'hacia {hostname} (IP {rip}) en el puerto {rport}. '
+                    f'Este dominio/IP no pertenece a Mojang, CDNs conocidas ni '
+                    f'servicios de launchers. Podría ser un servidor C2 de un hack client.'
                 ),
             })
 
