@@ -1,7 +1,7 @@
 ================================================================================
   ARGUS SCANNER — TAREAS PARA LA PRÓXIMA SESIÓN
-  Última actualización: 2026-05-03
-  SESIÓN 2026-05-03 (parte 3): P2#5 CurseForge, P2#14 JAR firma cripto, P3#7 ensemble, P3#35 pre-scan predict integrado
+  Última actualización: 2026-05-04
+  SESIÓN 2026-05-04: P2#10+30+14 IOC extractor, P2#47+50+29+9 bytecode/TLS/simhash, webhook retry scheduler
 ================================================================================
 
 
@@ -209,6 +209,58 @@
 [DONE] Fase 1: Backend POST /api/staff/chat — Claude+Groq+Gemini ensemble + DuckDuckGo web search
 [DONE] Fase 2: UI — botón flotante 🤖 + panel de chat slide-in + badge de contexto de scan
 [DONE] Fase 3: Botón 🤖 en cada hallazgo (aiExplainFinding), rate limit 20msg/h, clear history
+
+
+════════════════════════════════════════════════════════════════════════════════
+  PARTE 5 — NUEVAS MEJORAS (próximas sesiones)
+════════════════════════════════════════════════════════════════════════════════
+
+── DETECCIÓN NUEVA EN SCANNER ───────────────────────────────────────────────
+
+[PENDING]  1. Detectar Cheat Engine activo (cheatengine*.exe, CE.exe en procesos/prefetch)
+[PENDING]  2. Detectar packet sniffers activos: Wireshark, Fiddler, mitmproxy, Charles
+[PENDING]  3. Scan de extensiones de Chrome/Firefox sospechosas (manifest.json, permisos all_urls)
+[PENDING]  4. Detectar JDK completo instalado (inusual en jugador normal — señal de desarrollo de hacks)
+[PENDING]  5. Scan de scripts Python en Desktop/Downloads (bots de macro/autoclicker)
+[PENDING]  6. Detectar modificación del minecraft:client.jar oficial (hash distinto al de Mojang)
+[PENDING]  7. Scan de NBT exploits en saves (.minecraft/saves — libros con comandos, baúles trampa)
+[PENDING]  8. Detectar Lunar Client con módulos no oficiales (carpeta .lunarclient/offline/multiver)
+[PENDING]  9. Scan de drivers sospechosos instalados (kmdf, minifilter — usados por algunos hacks de kernel)
+[PENDING] 10. Detectar virtual audio cable / VB-Audio (usado para ocultar comunicaciones de equipo)
+[PENDING] 11. Scan de historial de Git local en Desktop/Documents (repos de hack clients propios)
+[PENDING] 12. Detectar IP forwarding habilitado (registro Windows — señal de proxy/MITM)
+
+── MEJORAS DEL PANEL WEB ────────────────────────────────────────────────────
+
+[PENDING] 13. Vista diff de dos scans del mismo jugador — mostrar hallazgos nuevos vs desaparecidos
+[PENDING] 14. Gráfico de evolución del risk score a lo largo del tiempo por jugador (sparkline)
+[PENDING] 15. Exportación de scan a PDF con evidencias formateadas para reporte de ban
+[PENDING] 16. Notificación push al staff cuando llega un nuevo scan (Web Push API / Service Worker)
+[PENDING] 17. Log de actividad del staff: quién revisó qué scan y cuándo (tabla staff_audit_log)
+[PENDING] 18. Heatmap de horarios: días/horas con más scans y más detecciones positivas
+[PENDING] 19. Auto-generar mensaje de ban con las evidencias más relevantes del scan (Claude)
+[PENDING] 20. Búsqueda de jugadores por username cruzando con la API de Mojang (UUID → nick)
+[PENDING] 21. Panel de reputación del jugador: historial de scans, trend, badges (reincidente, limpio)
+[PENDING] 22. Filtro de hallazgos por categoría en el panel (GHOST_CLIENT / FORENSE / RED / etc.)
+
+── MEJORAS DE SERVIDOR / ML ─────────────────────────────────────────────────
+
+[PENDING] 23. /api/scan/diff/<id_a>/<id_b> — endpoint para comparar dos scans y ver el delta
+[PENDING] 24. Webhook de Telegram como alternativa a Discord (env TELEGRAM_BOT_TOKEN + CHAT_ID)
+[PENDING] 25. Detección de cheating coordinado: múltiples jugadores del mismo equipo con hacks similares
+[PENDING] 26. Rate limiting por IP en endpoints públicos de la API (/api/submit, /api/predict)
+[PENDING] 27. Clustering de jugadores por perfil de hallazgos con DBSCAN (sklearn, sin deps nuevas)
+[PENDING] 28. /api/player/timeline/<machine_id> — serie temporal de risk scores con tendencia lineal
+[PENDING] 29. Soporte multi-servidor en el panel: selector de servidor activo, aislamiento de datos
+[PENDING] 30. Dashboard de salud del sistema: latencia de BD, cola de scans, uptime, errores recientes
+
+── MEJORAS DE INFRAESTRUCTURA DEL SCANNER ───────────────────────────────────
+
+[PENDING] 31. Mecanismo de auto-actualización del scanner: descarga nueva versión si /api/scanner/version lo indica
+[PENDING] 32. Modo silencioso (headless) para el scanner: ejecutar sin UI desde línea de comandos
+[PENDING] 33. Firma digital del EXE con certificado autofirmado para reducir alertas de Windows Defender
+[PENDING] 34. Logging estructurado del scan a un archivo .log local (rotación automática)
+[PENDING] 35. Soporte para múltiples perfiles de configuración (distintos servidores guardados)
 
 
 ════════════════════════════════════════════════════════════════════════════════
