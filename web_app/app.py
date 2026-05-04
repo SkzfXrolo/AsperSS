@@ -1960,7 +1960,7 @@ def debug_last_scan():
 
 
 # Current released scanner version — update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.3.0"
+CURRENT_SCANNER_VERSION = "1.6.18"
 
 @app.route('/sw.js')
 def service_worker():
@@ -1974,11 +1974,28 @@ def service_worker():
 
 @app.route('/api/scanner/version', methods=['GET'])
 def scanner_version():
-    """Returns latest scanner version info so the .exe can self-update."""
+    """Returns latest scanner version info so the .exe can self-update.
+    Reads from app_versions table if available; falls back to CURRENT_SCANNER_VERSION."""
+    base_url = request.host_url.rstrip('/')
+    version  = CURRENT_SCANNER_VERSION
+    changelog = ''
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                'SELECT version, changelog FROM app_versions ORDER BY id DESC LIMIT 1'
+            )
+            row = cur.fetchone()
+            if row:
+                v = _row_get(row, 0, 'version') or ''
+                if v:
+                    version   = v
+                    changelog = _row_get(row, 1, 'changelog') or ''
+    except Exception:
+        pass
     return jsonify({
-        'version': CURRENT_SCANNER_VERSION,
-        'download_url': '',   # fill in the direct .exe URL when hosting a new build
-        'changelog': '',
+        'version':      version,
+        'download_url': f'{base_url}/descargar/exe',
+        'changelog':    changelog,
     })
 
 
