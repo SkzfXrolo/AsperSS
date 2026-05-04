@@ -6362,6 +6362,261 @@ def internal_scan_review(scan_id):
         return jsonify({'error': str(exc), 'trace': _tb.format_exc()}), 500
 
 
+# ── P3 #19 — Reputación cross-server por machine_id ──────────────────────────
+
+@app.route('/api/player_reputation/<string:machine_id>', methods=['GET'])
+@login_required
+def player_reputation(machine_id):
+    """P3 #19 — Reputación histórica agregada de un jugador por machine_id.
+    Devuelve veredictos, risk_score promedio y tipos de hallazgos más frecuentes.
+    """
+    if not machine_id or len(machine_id) > 128:
+        return jsonify({'error': 'machine_id inválido'}), 400
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f'SELECT id, verdict, risk_score, issues_found, started_at'
+                f' FROM scans WHERE machine_id={_PH} AND status={_PH} ORDER BY id DESC LIMIT 50',
+                (machine_id, 'completed')
+            )
+            scans = cur.fetchall() or []
+            if not scans:
+                return jsonify({'machine_id': machine_id, 'scan_count': 0, 'reputation': None}), 200
+
+            scan_ids = [_row_get(r, 0, 'id') for r in scans]
+            verdicts  = [(_row_get(r, 1, 'verdict') or '').lower() for r in scans]
+            risks     = [int(_row_get(r, 2, 'risk_score') or 0) for r in scans]
+
+            hack_count  = verdicts.count('hack')
+            clean_count = verdicts.count('clean')
+            total       = len(scans)
+
+            # Top issue types across all scans
+            placeholders = ','.join([_PH] * len(scan_ids))
+            cur.execute(
+                f'SELECT issue_type, COUNT(*) as cnt FROM scan_results'
+                f' WHERE scan_id IN ({placeholders})'
+                f' GROUP BY issue_type ORDER BY cnt DESC LIMIT 10',
+                scan_ids
+            )
+            top_types = [
+                {'type': _row_get(r, 0, 'issue_type'), 'count': int(_row_get(r, 1, 'cnt') or 0)}
+                for r in (cur.fetchall() or [])
+            ]
+
+        hack_rate   = round(hack_count / total, 3) if total else 0
+        avg_risk    = round(sum(risks) / total, 1) if total else 0
+        rep_label   = 'ALTO_RIESGO' if hack_rate >= 0.5 else 'SOSPECHOSO' if hack_rate >= 0.2 else 'LIMPIO'
+
+        return jsonify({
+            'machine_id':  machine_id,
+            'scan_count':  total,
+            'hack_count':  hack_count,
+            'clean_count': clean_count,
+            'hack_rate':   hack_rate,
+            'avg_risk':    avg_risk,
+            'reputation':  rep_label,
+            'top_types':   top_types,
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── P2 #31 — TF-IDF sobre nombres de archivos en scans históricos ─────────────
+
+@app.route('/api/ml/tfidf-names', methods=['GET'])
+@login_required
+def ml_tfidf_names():
+    """P2 #31 — TF-IDF sobre issue_name de scans con veredicto hack.
+    Retorna los términos más discriminantes entre scans hack vs clean.
+    """
+    try:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        import numpy as np
+
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f'SELECT sr.issue_name, s.verdict FROM scan_results sr'
+                f' JOIN scans s ON sr.scan_id=s.id'
+                f' WHERE s.verdict IN ({_PH},{_PH}) AND sr.issue_name IS NOT NULL'
+                f' ORDER BY sr.id DESC LIMIT 5000',
+                ('hack', 'clean')
+            )
+            rows = cur.fetchall() or []
+
+        if len(rows) < 20:
+            return jsonify({'error': 'Insuficientes datos para TF-IDF'}), 400
+
+        docs    = [str(_row_get(r, 0, 'issue_name') or '') for r in rows]
+        labels  = [str(_row_get(r, 1, 'verdict') or '') for r in rows]
+
+        vect = TfidfVectorizer(max_features=200, ngram_range=(1, 2), min_df=2)
+        X    = vect.fit_transform(docs)
+
+        feature_names = vect.get_feature_names_out()
+        hack_mask  = np.array([l == 'hack'  for l in labels])
+        clean_mask = np.array([l == 'clean' for l in labels])
+
+        hack_mean  = X[hack_mask].mean(axis=0).A1  if hack_mask.any()  else np.zeros(len(feature_names))
+        clean_mean = X[clean_mask].mean(axis=0).A1 if clean_mask.any() else np.zeros(len(feature_names))
+        diff       = hack_mean - clean_mean
+
+        top_idx    = diff.argsort()[::-1][:30]
+        top_terms  = [{'term': feature_names[i], 'hack_bias': round(float(diff[i]), 4)} for i in top_idx]
+
+        return jsonify({'top_hack_terms': top_terms, 'samples': len(rows)}), 200
+    except ImportError:
+        return jsonify({'error': 'sklearn no disponible'}), 503
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── P3 #32 — Feature store: precomputar features por machine_id ───────────────
+
+@app.route('/api/ml/feature-store/<string:machine_id>', methods=['GET'])
+@login_required
+def feature_store_get(machine_id):
+    """P3 #32 — Devuelve features precalculadas para un machine_id.
+    Si no están en caché, las calcula y las guarda para futuras consultas.
+    """
+    if not machine_id or len(machine_id) > 128:
+        return jsonify({'error': 'machine_id inválido'}), 400
+    try:
+        with get_api_db_cursor() as cur:
+            # Intentar leer de caché (tabla feature_cache si existe)
+            try:
+                cur.execute(
+                    f'SELECT features, updated_at FROM feature_cache WHERE machine_id={_PH}',
+                    (machine_id,)
+                )
+                cached = cur.fetchone()
+                if cached:
+                    import json as _j
+                    feat_raw = _row_get(cached, 0, 'features') or '{}'
+                    updated  = str(_row_get(cached, 1, 'updated_at') or '')
+                    features = _j.loads(feat_raw) if isinstance(feat_raw, str) else feat_raw
+                    return jsonify({'machine_id': machine_id, 'features': features,
+                                    'cached': True, 'updated_at': updated}), 200
+            except Exception:
+                pass  # tabla no existe aún → calcular igualmente
+
+            # Calcular features desde cero
+            cur.execute(
+                f'SELECT verdict, risk_score, issues_found, scan_duration'
+                f' FROM scans WHERE machine_id={_PH} AND status={_PH} ORDER BY id DESC LIMIT 20',
+                (machine_id, 'completed')
+            )
+            rows = cur.fetchall() or []
+            if not rows:
+                return jsonify({'machine_id': machine_id, 'features': None, 'cached': False}), 200
+
+            verdicts = [(_row_get(r, 0, 'verdict') or '').lower() for r in rows]
+            risks    = [float(_row_get(r, 1, 'risk_score') or 0) for r in rows]
+            issues   = [int(_row_get(r, 2, 'issues_found') or 0) for r in rows]
+            durs     = [float(_row_get(r, 3, 'scan_duration') or 0) for r in rows]
+
+            features = {
+                'scan_count':       len(rows),
+                'hack_rate':        round(verdicts.count('hack') / len(rows), 3),
+                'avg_risk':         round(sum(risks) / len(risks), 1),
+                'max_risk':         max(risks),
+                'avg_issues':       round(sum(issues) / len(issues), 1),
+                'avg_duration':     round(sum(durs) / len(durs), 1),
+                'recent_hack':      int(verdicts[0] == 'hack') if verdicts else 0,
+            }
+
+            # Guardar en caché si la tabla existe
+            try:
+                import json as _j
+                cur.execute(
+                    f'INSERT INTO feature_cache (machine_id, features, updated_at)'
+                    f' VALUES ({_PH},{_PH},NOW())'
+                    f' ON CONFLICT (machine_id) DO UPDATE SET features={_PH}, updated_at=NOW()',
+                    (machine_id, _j.dumps(features), _j.dumps(features))
+                )
+            except Exception:
+                pass
+
+        return jsonify({'machine_id': machine_id, 'features': features, 'cached': False}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── P3 #24 — Preguntas de seguimiento para el staff ───────────────────────────
+
+@app.route('/api/staff/ai/followup-questions/<int:scan_id>', methods=['GET'])
+@login_required
+def ai_followup_questions(scan_id):
+    """P3 #24 — Genera preguntas de seguimiento que el staff debería hacerle al jugador."""
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f'SELECT machine_name, minecraft_username, risk_score, issues_found, verdict'
+                f' FROM scans WHERE id={_PH}', (scan_id,)
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify({'error': 'Scan no encontrado'}), 404
+            machine   = _row_get(row, 0, 'machine_name') or 'N/A'
+            username  = _row_get(row, 1, 'minecraft_username') or 'N/A'
+            risk      = int(_row_get(row, 2, 'risk_score') or 0)
+            n_issues  = int(_row_get(row, 3, 'issues_found') or 0)
+            verdict   = _row_get(row, 4, 'verdict') or 'pending'
+
+            cur.execute(
+                f'SELECT issue_name, issue_category, alert_level, confidence'
+                f' FROM scan_results WHERE scan_id={_PH} ORDER BY confidence DESC LIMIT 15',
+                (scan_id,)
+            )
+            results = cur.fetchall() or []
+
+        findings_summary = '\n'.join(
+            f"- [{_row_get(r,2,'alert_level')}] {_row_get(r,0,'issue_name')} ({_row_get(r,1,'issue_category')})"
+            for r in results
+        )
+
+        prompt = (
+            f"Eres un moderador senior de Minecraft analizando un reporte de anti-cheat.\n\n"
+            f"Jugador: {username} | Máquina: {machine}\n"
+            f"Risk Score: {risk}/100 | Hallazgos: {n_issues} | Veredicto actual: {verdict}\n\n"
+            f"Hallazgos principales:\n{findings_summary}\n\n"
+            f"Genera 5 preguntas específicas y directas que el staff debería hacerle al jugador "
+            f"para clarificar los hallazgos. Las preguntas deben ser concretas, basadas en los "
+            f"hallazgos encontrados, y ayudar a distinguir entre falsos positivos y hacks reales. "
+            f"Formato: lista numerada, sin explicaciones adicionales."
+        )
+
+        ai_key = os.environ.get('ANTHROPIC_API_KEY', '')
+        questions_text = None
+
+        if ai_key:
+            resp = _ai_call_claude(
+                ai_key,
+                "Eres un moderador experto de servidores Minecraft.",
+                [{"role": "user", "content": prompt}]
+            )
+            questions_text = resp
+
+        if not questions_text:
+            groq_key = os.environ.get('GROQ_API_KEY', '')
+            if groq_key:
+                resp = _ai_call_groq(
+                    groq_key,
+                    "Eres un moderador experto de servidores Minecraft.",
+                    [{"role": "user", "content": prompt}]
+                )
+                questions_text = resp
+
+        if not questions_text:
+            return jsonify({'error': 'No hay API de IA configurada'}), 503
+
+        questions = [q.strip() for q in questions_text.strip().split('\n') if q.strip() and q.strip()[0].isdigit()]
+        return jsonify({'scan_id': scan_id, 'questions': questions, 'raw': questions_text}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     print("🌐 Iniciando aplicación web de ASPERS Projects...")
     api_url_display = os.environ.get('API_URL') or (API_BASE_URL if IS_RENDER else API_BASE_URL)

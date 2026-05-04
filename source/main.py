@@ -4034,6 +4034,12 @@ class ArgusApp:
                 _run_safe(self.scan_minecraft_install_date)
                 self._set_scan_phase("🕹️ Última sesión de Minecraft...")
                 _run_safe(self.scan_minecraft_last_session)
+                self._set_scan_phase("👨‍💻 Proceso padre de java.exe...")
+                _run_safe(self.scan_java_parent_process)
+                self._set_scan_phase("💥 Crash reports de Minecraft...")
+                _run_safe(self.scan_minecraft_crash_reports)
+                self._set_scan_phase("🔤 Análisis de nombres de carpetas...")
+                _run_safe(self.scan_folder_name_nlp)
 
             # Grupo D — Hardware y red (I/O alto)
             def _group_hardware():
@@ -4871,23 +4877,45 @@ class ArgusApp:
                             except Exception:
                                 pass
 
-                        # P2 #15 — Direct net.minecraft.client.* access (hooking sin mod loader)
+                        # P2 #15 + P2 #48 — Imports de bytecode Java: MC client hooks y paquetes de hack
                         if not has_legit_marker:
                             try:
-                                _mc_hook_found = False
-                                _class_files   = [n for n in zf.namelist() if n.endswith('.class')][:80]
+                                _HACK_BYTECODE = [
+                                    # MC client hooking
+                                    b'net/minecraft/client/Minecraft',
+                                    b'net/minecraft/client/MinecraftClient',
+                                    # Ghost client package patterns
+                                    b'com/vape/', b'net/sigma/', b'com/entropy/',
+                                    b'me/drip/', b'com/aristois/', b'me/weaveclient/',
+                                    b'net/liquidbounce/', b'meteordevelopment/',
+                                    b'com/github/wurstclient/', b'me/zeroeightsix/',
+                                    # Injection/hook APIs
+                                    b'java/lang/instrument/Instrumentation',
+                                    b'sun/reflect/Reflection',
+                                    b'java/lang/reflect/Proxy',
+                                    # AimBot / KillAura typical patterns
+                                    b'RotationUtils', b'TargetUtils', b'KillAura',
+                                    b'AimBot', b'AimAssist', b'AutoClick',
+                                ]
+                                _bc_hits = []
+                                _class_files = [n for n in zf.namelist() if n.endswith('.class')][:100]
                                 for _cf in _class_files:
                                     try:
                                         _bc = zf.read(_cf)
-                                        if b'net/minecraft/client/Minecraft' in _bc or b'net/minecraft/client/MinecraftClient' in _bc:
-                                            _mc_hook_found = True
-                                            break
+                                        for _pat in _HACK_BYTECODE:
+                                            if _pat in _bc:
+                                                _bc_hits.append(_pat.decode('latin-1').split('/')[-1][:30])
+                                                break
                                     except Exception:
                                         pass
-                                if _mc_hook_found:
-                                    result['detected_patterns'].append('direct_mc_client_access')
+                                if _bc_hits:
+                                    result['detected_patterns'].extend(
+                                        [f'bytecode:{h}' for h in _bc_hits[:5]]
+                                    )
                                     result['confidence'] = min(100, result['confidence'] + 20)
                                     result['is_hack'] = True
+                                    if b'net/minecraft/client/Minecraft' in str(_bc_hits).encode():
+                                        result['detected_patterns'].append('direct_mc_client_access')
                             except Exception:
                                 pass
 
@@ -8357,6 +8385,163 @@ class ArgusApp:
                 pass
             except Exception as e:
                 print(f"Error en scan_java_policy {pol_path}: {e}")
+
+    def scan_java_parent_process(self):
+        """P2 #23 — Detecta java.exe/javaw.exe lanzado desde cmd.exe/powershell en lugar de un launcher legítimo."""
+        print("🔍 Verificando proceso padre de java.exe...")
+        try:
+            import psutil
+            SUSPICIOUS_PARENTS = {'cmd.exe', 'powershell.exe', 'powershell_ise.exe',
+                                   'wscript.exe', 'cscript.exe', 'mshta.exe', 'regsvr32.exe'}
+            LEGIT_PARENTS = {
+                'javaw.exe', 'java.exe', 'explorer.exe', 'minecraft launcher.exe',
+                'minecraftlauncher.exe', 'multimc.exe', 'prismlauncher.exe',
+                'gdlauncher.exe', 'atlauncher.exe', 'curseforgeapp.exe',
+                'modrinthapp.exe', 'ftb_app.exe', 'tlauncher.exe',
+            }
+            for proc in psutil.process_iter(['pid', 'name', 'exe', 'cmdline']):
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                    if 'java' not in pname:
+                        continue
+                    parent = proc.parent()
+                    if not parent:
+                        continue
+                    par_name = parent.name().lower()
+                    if par_name in LEGIT_PARENTS:
+                        continue
+                    if par_name in SUSPICIOUS_PARENTS:
+                        cmdline = ' '.join(proc.info.get('cmdline') or [])[:200]
+                        self.issues_found.append({
+                            'tipo':     'java_suspicious_parent',
+                            'nombre':   f'{pname} lanzado desde {par_name}',
+                            'ruta':     proc.info.get('exe') or '',
+                            'archivo':  proc.info.get('exe') or '',
+                            'categoria': 'JAVA_INJECTION',
+                            'alerta':   'SOSPECHOSO',
+                            'confidence': 0.72,
+                            'detected_patterns': ['java_from_shell', f'parent_{par_name}'],
+                        })
+                        print(f"[java_parent] {pname} (PID {proc.pid}) lanzado desde {par_name}")
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except ImportError:
+            pass
+        except Exception as e:
+            print(f"Error en scan_java_parent_process: {e}")
+
+    def scan_minecraft_crash_reports(self):
+        """P3 #13 — Analiza crash reports de Minecraft buscando mods/clientes de hack."""
+        print("🔍 Analizando crash reports de Minecraft...")
+        try:
+            appdata  = os.environ.get('APPDATA', '')
+            mc_dir   = os.path.join(appdata, '.minecraft')
+            crash_dir = os.path.join(mc_dir, 'crash-reports')
+            if not os.path.isdir(crash_dir):
+                return
+
+            HACK_CRASH_PATTERNS = [
+                b'liquidbounce', b'wurst', b'meteor', b'sigma', b'aristois',
+                b'weave', b'javaagent', b'injection', b'mixin.hack',
+                b'net.minecraft.client.gui.hud', b'aimbot', b'killaura',
+                b'autoclick', b'esp.render', b'fly.module',
+            ]
+
+            try:
+                crash_files = sorted(
+                    [f for f in os.listdir(crash_dir) if f.endswith('.txt')],
+                    key=lambda x: os.path.getmtime(os.path.join(crash_dir, x)),
+                    reverse=True
+                )[:10]  # solo los 10 más recientes
+            except OSError:
+                return
+
+            for fname in crash_files:
+                fpath = os.path.join(crash_dir, fname)
+                try:
+                    with open(fpath, 'rb') as f:
+                        content = f.read(32768).lower()
+                    hits = [p.decode() for p in HACK_CRASH_PATTERNS if p in content]
+                    if hits:
+                        self.issues_found.append({
+                            'tipo':     'crash_report_hack',
+                            'nombre':   f'Crash report con indicadores de hack: {fname}',
+                            'ruta':     crash_dir,
+                            'archivo':  fpath,
+                            'categoria': 'GHOST_CLIENT',
+                            'alerta':   'SOSPECHOSO',
+                            'confidence': 0.65,
+                            'detected_patterns': hits[:5],
+                        })
+                        print(f"[crash_report] Hallazgo en {fname}: {hits[:3]}")
+                except (PermissionError, OSError):
+                    pass
+        except Exception as e:
+            print(f"Error en scan_minecraft_crash_reports: {e}")
+
+    def scan_folder_name_nlp(self):
+        """P3 #11 — Análisis NLP/heurístico de nombres de carpetas y archivos.
+        Detecta nombres que suenan a hack aunque no estén en la whitelist exacta.
+        """
+        print("🔍 Análisis NLP de nombres de carpetas/archivos...")
+        try:
+            import difflib
+            appdata     = os.environ.get('APPDATA', '')
+            userprofile = os.environ.get('USERPROFILE', '')
+            desktop     = os.path.join(userprofile, 'Desktop')
+            downloads   = os.path.join(userprofile, 'Downloads')
+
+            HACK_KEYWORDS = [
+                'liquidbounce', 'wurst', 'meteor', 'sigma', 'aristois',
+                'weaveloader', 'jigsaw', 'novoline', 'inertia', 'entropy',
+                'drip', 'bleach', 'rusherhack', 'hypixel client', 'rise client',
+                'kilo client', 'cheat client', 'ghost client', 'hack client',
+                'aimbot', 'killaura', 'autoclick', 'blatant', 'esp hack',
+                'xray hack', 'flymod', 'speedhack', 'scaffold',
+            ]
+
+            scan_roots = [appdata, desktop, downloads,
+                          os.path.join(appdata, '.minecraft')]
+            for root in scan_roots:
+                if not os.path.isdir(root):
+                    continue
+                try:
+                    for entry in os.scandir(root):
+                        name_low = entry.name.lower().replace('_', ' ').replace('-', ' ')
+                        for kw in HACK_KEYWORDS:
+                            if kw in name_low:
+                                self.issues_found.append({
+                                    'tipo':     'folder_name_hack',
+                                    'nombre':   f'Nombre sospechoso: {entry.name}',
+                                    'ruta':     root,
+                                    'archivo':  entry.path,
+                                    'categoria': 'GHOST_CLIENT',
+                                    'alerta':   'SOSPECHOSO',
+                                    'confidence': 0.68,
+                                    'detected_patterns': [f'name_match:{kw}'],
+                                })
+                                print(f"[nlp_name] '{entry.name}' → '{kw}'")
+                                break
+                        else:
+                            # Fuzzy similarity check for 1-char typos
+                            best = difflib.get_close_matches(
+                                name_low, HACK_KEYWORDS, n=1, cutoff=0.82
+                            )
+                            if best:
+                                self.issues_found.append({
+                                    'tipo':     'folder_name_fuzzy',
+                                    'nombre':   f'Nombre similar a hack: {entry.name} ≈ {best[0]}',
+                                    'ruta':     root,
+                                    'archivo':  entry.path,
+                                    'categoria': 'GHOST_CLIENT',
+                                    'alerta':   'POCO_SOSPECHOSO',
+                                    'confidence': 0.50,
+                                    'detected_patterns': [f'fuzzy_match:{best[0]}'],
+                                })
+                except PermissionError:
+                    pass
+        except Exception as e:
+            print(f"Error en scan_folder_name_nlp: {e}")
 
     def scan_minecraft_install_date(self):
         """P2 #21 — Correlaciona fecha de instalación de Minecraft con hallazgos.

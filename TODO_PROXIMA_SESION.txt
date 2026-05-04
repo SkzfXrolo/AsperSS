@@ -102,7 +102,7 @@
 
 [DONE] 21. Correlación con fecha de instalación de Minecraft
 [DONE] 22. Correlación con últimas sesiones de juego en logs
-[PENDING] 23. Verificar proceso padre de java.exe (launcher vs cmd.exe)
+[DONE] 23. Verificar proceso padre de java.exe (launcher vs cmd.exe)
 [DONE] 24. Análisis de carpeta de instalación del ejecutable (Program Files vs AppData)
 [PENDING] 25. Verificar si el proceso tiene ventana visible (CREATE_NO_WINDOW)
 [PENDING] 26. Verificar antigüedad del archivo en el sistema (>1 año → bajar severidad)
@@ -113,8 +113,8 @@
 
 ── MÉTODOS ESTADÍSTICOS Y ML ───────────────────────────────────────────────
 
-[PENDING] 31. TF-IDF sobre nombres de archivos en scans históricos
-[PENDING] 32. Clustering de hallazgos por similitud de path
+[DONE] 31. TF-IDF sobre nombres de archivos en scans históricos
+[DONE] 32. Clustering de hallazgos por similitud de path
 [PENDING] 33. Análisis de distribución de tamaños de archivos sospechosos
 [DONE] 34. Modelo de frecuencia de hashes por tipo de alerta (cloud blacklist)
 [DONE] 35. Regresión logística → Random Forest con features de archivos (ml_classifier)
@@ -139,7 +139,7 @@
 
 [PENDING] 46. Ejecutar JAR en sandbox y monitorear filesystem
 [PENDING] 47. Análisis estático de bytecode Java con ASM o Javap
-[PENDING] 48. Verificar imports de paquetes Minecraft en el JAR (expandir P2#15)
+[DONE] 48. Verificar imports de paquetes Minecraft en el JAR (expandir P2#15)
 [PENDING] 49. Análisis de tráfico de red durante ejecución en VM
 [PENDING] 50. Detección de self-deletion al ejecutar
 
@@ -163,9 +163,9 @@
 
 ── PROCESAMIENTO DE LENGUAJE NATURAL ───────────────────────────────────────
 
-[PENDING] 11. Análisis NLP de nombres de carpetas/archivos con contexto
+[DONE] 11. Análisis NLP de nombres de carpetas/archivos con contexto
 [DONE] 12. Generación automática de resúmenes de scan (/api/staff/ai/scan-summary)
-[PENDING] 13. Clasificación de crash reports por causa
+[DONE] 13. Clasificación de crash reports por causa
 [PENDING] 14. Extracción de IOCs de texto libre del staff
 [PENDING] 15. Análisis de sentimiento en historial de chat del servidor
 
@@ -174,7 +174,7 @@
 [PENDING] 16. Federated learning entre servidores de ASPERS
 [DONE] 17. Blacklist dinámica actualizada por la comunidad (/api/hack_blacklist/sync)
 [DONE] 18. Whitelist colaborativa de mods legítimos (/api/mod_whitelist)
-[PENDING] 19. Reputación de jugadores entre servidores (cross-server machine_id)
+[DONE] 19. Reputación de jugadores entre servidores (cross-server machine_id)
 [DONE] 20. Benchmark continuo usando veredictos históricos (auto_weights)
 
 ── INTEGRACIÓN DE IA GENERATIVA ────────────────────────────────────────────
@@ -182,7 +182,7 @@
 [DONE] 21. Explicaciones automáticas de hallazgos con Claude/GPT (/api/staff/ai/explain)
 [DONE] 22. Sugerencias de veredicto con justificación (/api/staff/ai/suggest-verdict)
 [DONE] 23. Detección de inconsistencias en el scan (/api/staff/ai/inconsistencies/<scan_id>)
-[PENDING] 24. Generación de preguntas de seguimiento para el staff
+[DONE] 24. Generación de preguntas de seguimiento para el staff
 [DONE] 25. Resumen ejecutivo diario de scans (daily_summary_job + Discord embed 09:00 UTC)
 
 ── DETECCIÓN BASADA EN COMPORTAMIENTO ──────────────────────────────────────
@@ -196,7 +196,7 @@
 ── INFRAESTRUCTURA DE IA ───────────────────────────────────────────────────
 
 [DONE] 31. Pipeline de reentrenamiento automático semanal (APScheduler, domingos 03:00)
-[PENDING] 32. Feature store centralizado (precalcular features por machine_id)
+[DONE] 32. Feature store centralizado (precalcular features por machine_id)
 [PENDING] 33. Modelo de embedding de hashes de archivos
 [PENDING] 34. Pipeline de ingesta de nueva inteligencia sobre hacks (scraper)
 [DONE] 35. API de predicción expuesta al scanner (/api/predict pre-scan)

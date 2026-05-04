@@ -4003,3 +4003,38 @@ async function aiCheckAnomaly(scanId, btn) {
     }
     if (btn) { btn.textContent = '🔬 Anomalía'; btn.disabled = false; }
 }
+
+async function aiFollowupQuestions(scanId, btn) {
+    const container = document.getElementById('ai-followup-container');
+    if (!container) return;
+
+    if (container.style.display !== 'none' && container.dataset.scanId == scanId) {
+        container.style.display = 'none';
+        if (btn) btn.textContent = '❓ Preguntas';
+        return;
+    }
+
+    if (btn) { btn.textContent = '⋯'; btn.disabled = true; }
+    container.style.display = 'block';
+    container.dataset.scanId = scanId;
+    container.innerHTML = '<em>Generando preguntas de seguimiento...</em>';
+
+    try {
+        const res  = await fetch(`/api/staff/ai/followup-questions/${scanId}`);
+        const data = await res.json();
+        if (data.error) {
+            container.innerHTML = '⚠️ ' + data.error;
+        } else {
+            const qs = data.questions || [];
+            if (!qs.length) {
+                container.innerHTML = data.raw || 'Sin preguntas generadas.';
+            } else {
+                container.innerHTML = '<strong style="color:#6ee7b7">Preguntas sugeridas para el jugador:</strong><ol style="margin:6px 0 0 16px;padding:0">' +
+                    qs.map(q => `<li style="margin-bottom:4px">${q}</li>`).join('') + '</ol>';
+            }
+        }
+    } catch(e) {
+        container.innerHTML = 'Error al generar preguntas.';
+    }
+    if (btn) { btn.textContent = '❓ Preguntas'; btn.disabled = false; }
+}
