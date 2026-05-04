@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.18"
+SCANNER_VERSION = "1.6.19"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -4042,8 +4042,6 @@ class ArgusApp:
                 _run_safe(self.scan_readonly_suspicious_files)
                 self._set_scan_phase("📂 Cambios recientes en .minecraft...")
                 _run_safe(self.scan_minecraft_fs_changes)
-                self._set_scan_phase("💥 Crash reports de Minecraft...")
-                _run_safe(self.scan_minecraft_crash_reports)
                 self._set_scan_phase("🔤 Análisis de nombres de carpetas...")
                 _run_safe(self.scan_folder_name_nlp)
 
@@ -8574,55 +8572,6 @@ class ArgusApp:
         except Exception as e:
             print(f"Error en scan_java_parent_process: {e}")
 
-    def scan_minecraft_crash_reports(self):
-        """P3 #13 — Analiza crash reports de Minecraft buscando mods/clientes de hack."""
-        print("🔍 Analizando crash reports de Minecraft...")
-        try:
-            appdata  = os.environ.get('APPDATA', '')
-            mc_dir   = os.path.join(appdata, '.minecraft')
-            crash_dir = os.path.join(mc_dir, 'crash-reports')
-            if not os.path.isdir(crash_dir):
-                return
-
-            HACK_CRASH_PATTERNS = [
-                b'liquidbounce', b'wurst', b'meteor', b'sigma', b'aristois',
-                b'weave', b'javaagent', b'injection', b'mixin.hack',
-                b'net.minecraft.client.gui.hud', b'aimbot', b'killaura',
-                b'autoclick', b'esp.render', b'fly.module',
-            ]
-
-            try:
-                crash_files = sorted(
-                    [f for f in os.listdir(crash_dir) if f.endswith('.txt')],
-                    key=lambda x: os.path.getmtime(os.path.join(crash_dir, x)),
-                    reverse=True
-                )[:10]  # solo los 10 más recientes
-            except OSError:
-                return
-
-            for fname in crash_files:
-                fpath = os.path.join(crash_dir, fname)
-                try:
-                    with open(fpath, 'rb') as f:
-                        content = f.read(32768).lower()
-                    hits = [p.decode() for p in HACK_CRASH_PATTERNS if p in content]
-                    if hits:
-                        self.issues_found.append({
-                            'tipo':     'crash_report_hack',
-                            'nombre':   f'Crash report con indicadores de hack: {fname}',
-                            'ruta':     crash_dir,
-                            'archivo':  fpath,
-                            'categoria': 'GHOST_CLIENT',
-                            'alerta':   'SOSPECHOSO',
-                            'confidence': 0.65,
-                            'detected_patterns': hits[:5],
-                        })
-                        print(f"[crash_report] Hallazgo en {fname}: {hits[:3]}")
-                except (PermissionError, OSError):
-                    pass
-        except Exception as e:
-            print(f"Error en scan_minecraft_crash_reports: {e}")
-
     def scan_folder_name_nlp(self):
         """P3 #11 — Análisis NLP/heurístico de nombres de carpetas y archivos.
         Detecta nombres que suenan a hack aunque no estén en la whitelist exacta.
@@ -12721,6 +12670,8 @@ class ArgusApp:
             'hack', 'xray', 'aimbot', 'esp', 'ghost', 'rise', 'sigma', 'novoline',
             'wolfram', 'astolfo', 'reflex', 'drip', 'flux', 'freelook',
             'mixin conflict', 'coremods', 'optifine conflict', 'forge conflict',
+            'weave', 'javaagent', 'injection', 'mixin.hack',
+            'net.minecraft.client.gui.hud', 'esp.render', 'fly.module',
         ]
         now = datetime.now()
         cutoff = now - timedelta(days=30)

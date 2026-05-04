@@ -212,12 +212,26 @@
 
 
 ════════════════════════════════════════════════════════════════════════════════
-  PENDIENTE DE ALTA PRIORIDAD (próxima sesión)
+  PENDIENTE — REQUIERE INFRAESTRUCTURA EXTERNA (fuera de alcance)
 ════════════════════════════════════════════════════════════════════════════════
 
-  P3 #2   Embeddings semánticos con sentence-transformers para nombres de archivos
-  P3 #4   Modelo de secuencia temporal (LSTM/Transformer) para patrones de instalación
-  P3 #19  Reputación de jugadores entre servidores (cross-server machine_id)
-  P3 #32  Feature store centralizado (precalcular features por machine_id)
+  P2 #6   NSRL (NIST) — dataset ~5GB, no viable en Render
+  P2 #7   Hybrid Analysis API — requiere suscripción de pago
+  P2 #9   Shodan/Censys — requiere API key de pago
+  P2 #10  AbuseIPDB — requiere API key
+  P2 #29  Verificar certificados SSL de conexiones activas
+  P2 #30  Baseline de DLLs vs instalación limpia
+  P2 #46  Sandbox JAR (ejecutar y monitorear)
+  P2 #47  Análisis estático bytecode con ASM/Javap
+  P2 #49  Análisis de tráfico en VM
+  P2 #50  Detección de self-deletion
+  P3 #4   LSTM/Transformer para patrones temporales
+  P3 #10  Graph Neural Network para correlación
+  P3 #14  Extracción de IOCs de texto libre
+  P3 #15  Análisis de sentimiento en chat
+  P3 #16  Federated learning entre servidores
+  P3 #26  Perfil de comportamiento de mouse
+  P3 #27  Timing de pulsaciones de teclado
+  P3 #33  Modelo de embedding de hashes
 
 ================================================================================
