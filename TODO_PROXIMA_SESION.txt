@@ -215,6 +215,25 @@
   PARTE 5 — NUEVAS MEJORAS (próximas sesiones)
 ════════════════════════════════════════════════════════════════════════════════
 
+── FILTRADO Y REDUCCIÓN DE FALSOS POSITIVOS (PRIORIDAD ALTA) ────────────────
+
+[PENDING] F1. Acotar _MINECRAFT_INSTANCE_FRAGMENTS: sacar versions/, resourcepacks/, shaderpacks/,
+              saves/, config/ — solo dejar mods/, coremods/ y launchers alternativos. El problema:
+              vanilla 1.19.4.jar está en versions/ y se clasifica como "en instancia".
+[PENDING] F2. Añadir _VANILLA_MC_PATHS: lista de rutas vanilla que NUNCA son hacks
+              (.minecraft\versions\, \libraries\, \assets\, \logs\, \crash-reports\,
+              \screenshots\, \natives\) — filtro absoluto previo al scoring.
+[PENDING] F3. Añadir factor de scoring en_instancia vs no_en_instancia en filter_false_positives:
+              archivo en .minecraft\mods\ → bonus +15; archivo en versions\ o libraries\ → penalty
+              para evitar que JARs de Fabric/Forge/vanilla escalen a SOSPECHOSO.
+[PENDING] F4. Completar _NON_INSTANCE_FRAGMENTS con más rutas: \onedrive\, \dropbox\,
+              \google drive\, \appdata\local\ (fuera de .minecraft) — reducir falsos positivos
+              de archivos que no están activos.
+[PENDING] F5. Diferenciar "instancia activa" de "mods descargados no activos": si el JAR está en
+              \mods\ pero Minecraft NO está corriendo actualmente → SOSPECHOSO en vez de CRITICAL.
+[PENDING] F6. Revisión completa de TRUSTED_TYPES: auditar qué tipos saltaban el filtro de
+              ABSOLUTE_SAFE_PATHS y estaban causando false positives en rutas de launcher legítimo.
+
 ── DETECCIÓN NUEVA EN SCANNER ───────────────────────────────────────────────
 
 [PENDING]  1. Detectar Cheat Engine activo (cheatengine*.exe, CE.exe en procesos/prefetch)
