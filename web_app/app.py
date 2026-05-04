@@ -7440,9 +7440,9 @@ def system_health():
     # Scans en cola/recientes
     try:
         with get_api_db_cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM scans WHERE scan_timestamp > NOW() - INTERVAL '1 hour'")
+            cur.execute("SELECT COUNT(*) FROM scans WHERE started_at > NOW() - INTERVAL '1 hour'")
             health['scans_last_hour'] = (cur.fetchone() or [0])[0]
-            cur.execute("SELECT COUNT(*) FROM scans WHERE scan_timestamp > NOW() - INTERVAL '24 hours'")
+            cur.execute("SELECT COUNT(*) FROM scans WHERE started_at > NOW() - INTERVAL '24 hours'")
             health['scans_last_24h'] = (cur.fetchone() or [0])[0]
             cur.execute('SELECT COUNT(*) FROM scans')
             health['scans_total'] = (cur.fetchone() or [0])[0]
@@ -7566,7 +7566,7 @@ def generate_ban_message():
             )
             rows = cur.fetchall() or []
             cur.execute(
-                'SELECT player_name, machine_id, scan_timestamp FROM scans WHERE id = %s',
+                'SELECT machine_name, machine_id, started_at FROM scans WHERE id = %s',
                 (scan_id,)
             )
             scan_row = cur.fetchone()
@@ -7578,7 +7578,7 @@ def generate_ban_message():
 
     player = ''
     if scan_row:
-        player = (scan_row[0] if isinstance(scan_row, (list, tuple)) else scan_row.get('player_name', '')) or ''
+        player = (scan_row[0] if isinstance(scan_row, (list, tuple)) else scan_row.get('machine_name', '')) or ''
 
     findings_text = '\n'.join(
         f'- [{r[2] if isinstance(r,(list,tuple)) else r.get("alert_level","")}] '
@@ -7637,14 +7637,14 @@ def player_clusters():
     try:
         with get_api_db_cursor() as cur:
             cur.execute('''
-                SELECT s.machine_id, s.player_name,
+                SELECT s.machine_id, s.machine_name,
                        array_agg(DISTINCT sr.issue_type ORDER BY sr.issue_type) AS issue_types,
                        MAX(s.risk_score) AS max_risk,
                        COUNT(sr.id) AS total_findings
                 FROM scans s
                 JOIN scan_results sr ON sr.scan_id = s.id
-                WHERE s.scan_timestamp > NOW() - INTERVAL '30 days'
-                GROUP BY s.machine_id, s.player_name
+                WHERE s.started_at > NOW() - INTERVAL '30 days'
+                GROUP BY s.machine_id, s.machine_name
                 HAVING COUNT(sr.id) > 0
                 LIMIT 500
             ''')
@@ -7678,7 +7678,7 @@ def player_clusters():
                 clusters[label] = []
             r = rows[idx]
             if isinstance(r, dict):
-                clusters[label].append({'machine_id': r.get('machine_id'), 'player': r.get('player_name'),
+                clusters[label].append({'machine_id': r.get('machine_id'), 'player': r.get('machine_name'),
                                         'risk': r.get('max_risk'), 'findings': r.get('total_findings')})
             else:
                 clusters[label].append({'machine_id': r[0], 'player': r[1],
@@ -7705,10 +7705,10 @@ def player_timeline(machine_id):
     try:
         with get_api_db_cursor() as cur:
             cur.execute('''
-                SELECT scan_timestamp, risk_score, verdict, player_name
+                SELECT started_at, risk_score, verdict, machine_name
                 FROM scans
                 WHERE machine_id = %s AND risk_score IS NOT NULL
-                ORDER BY scan_timestamp ASC
+                ORDER BY started_at ASC
                 LIMIT 100
             ''', (machine_id,))
             rows = cur.fetchall() or []
@@ -7721,8 +7721,8 @@ def player_timeline(machine_id):
     points = []
     for r in rows:
         if isinstance(r, dict):
-            points.append({'ts': str(r.get('scan_timestamp','')), 'score': r.get('risk_score',0),
-                           'verdict': r.get('verdict',''), 'player': r.get('player_name','')})
+            points.append({'ts': str(r.get('started_at','')), 'score': r.get('risk_score',0),
+                           'verdict': r.get('verdict',''), 'player': r.get('machine_name','')})
         else:
             points.append({'ts': str(r[0]), 'score': r[1], 'verdict': r[2], 'player': r[3]})
 
@@ -7765,7 +7765,7 @@ def scan_diff(id_a, id_b):
             )
             rows_b = cur.fetchall() or []
             cur.execute(
-                'SELECT player_name, scan_timestamp, machine_id FROM scans WHERE id IN (%s, %s)',
+                'SELECT machine_name, started_at, machine_id FROM scans WHERE id IN (%s, %s)',
                 (id_a, id_b)
             )
             meta_rows = cur.fetchall() or []
