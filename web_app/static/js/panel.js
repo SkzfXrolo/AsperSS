@@ -66,7 +66,7 @@ function togglePalettePanel(e) {
     if (!panel) return;
     const isOpen = panel.style.display !== 'none';
     panel.style.display = isOpen ? 'none' : 'block';
-    if (!isOpen) _buildPaletteSwatches();
+    if (!isOpen) { _buildPaletteSwatches(); setTimeout(_initCustomColorPicker, 50); }
 }
 
 // P5 #16 — Web Push subscription toggle
@@ -307,10 +307,32 @@ async function pollForNewScans() {
             if (completed.length > 0) {
                 _newScansCount += completed.length;
                 showNewScansBadge(_newScansCount);
-                showToast(`Nuevo scan de ${completed[0].machine_name || 'desconocido'}`, 'info', completed[0].id);
-                playNotificationSound();
+                // V70: play critical sound if risk > 75
+                const highRisk = completed.find(s => (s.risk_score || 0) > 75);
+                if (highRisk) {
+                    playCriticalSound();
+                    // V68: Critical alert banner
+                    _showCriticalBanner(highRisk.machine_name || 'desconocido', highRisk.id);
+                } else {
+                    showToast(`Nuevo scan de ${completed[0].machine_name || 'desconocido'}`, 'info', completed[0].id);
+                    playNotificationSound();
+                }
                 const activeSection = document.querySelector('.panel-section.active');
                 if (activeSection && activeSection.id === 'dashboard-section') loadDashboard();
+                // V15: Flash new rows in scan list
+                setTimeout(() => {
+                    completed.forEach(s => {
+                        const tr = document.querySelector(`tr[data-scan-id="${s.id}"]`);
+                        if (tr) tr.classList.add('tr-new-scan');
+                    });
+                }, 200);
+                // V69: Add to notification center
+                completed.forEach(s => _addNotification({
+                    icon: (s.risk_score || 0) > 75 ? '🔴' : 'ℹ️',
+                    text: `Nuevo scan: ${s.machine_name || 'desconocido'}`,
+                    scanId: s.id,
+                    time: new Date(),
+                }));
             }
         }
 
@@ -336,8 +358,14 @@ function _checkPendingRunningWithData(scans) {
             _pendingRunning.delete(id);
             _newScansCount++;
             showNewScansBadge(_newScansCount);
-            showToast(`Scan completado: ${name}`, 'success', id);
-            playNotificationSound();
+            const rs = scan.risk_score || 0;
+            if (rs > 75) {
+                _showCriticalBanner(name, id);
+            } else {
+                showToast(`Scan completado: ${name}`, 'success', id);
+                playNotificationSound();
+            }
+            _addNotification({ icon: rs > 75 ? '🔴' : '✅', text: `Scan completado: ${name}`, scanId: id, time: new Date() });
             const activeSection = document.querySelector('.panel-section.active');
             if (activeSection && activeSection.id === 'dashboard-section') loadDashboard();
         } else if (!scan) {
@@ -630,6 +658,105 @@ function _scanInitials(machineName) {
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
     return machineName.substring(0,2).toUpperCase();
 }
+
+// V7: Path highlight — folder gray, filename white-bold
+function _formatPath(path) {
+    if (!path) return '';
+    const sep = path.includes('\\') ? '\\' : '/';
+    const lastSep = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
+    if (lastSep < 0) return `<span class="path-file">${path}</span>`;
+    const dir  = path.slice(0, lastSep + 1);
+    const file = path.slice(lastSep + 1);
+    return `<span class="path-dir">${dir}</span><span class="path-file">${file}</span>`;
+}
+
+// V3: Category icons
+function _catIcon(cat) {
+    const m = {
+        'GHOST_CLIENT':'💀','HACKS':'⚔️','FORENSE':'🔬','RED':'🌐',
+        'NETWORK_FORENSICS':'🌐','PROCESO':'⚙️','PROCESSES':'⚙️',
+        'MACRO_DETECTION':'🖱️','EXECUTED_FILES':'📄','CMD_HISTORY':'💻',
+        'JAVA_MEMORY':'☕','JAVA_AGENT':'🤖','REGISTRY':'🔑',
+        'MOUSE_WEIGHT':'🖱️','MOUSE':'🖱️','AUTOCLICKER':'🖱️',
+    };
+    return m[cat] || '🔎';
+}
+
+// V9: Flame indicators by severity × confidence
+function _flameIndicator(alertLevel, confidence) {
+    const c = confidence || 0;
+    const isCrit = alertLevel === 'CRITICAL';
+    const isSusp = alertLevel === 'SOSPECHOSO';
+    let flames = 1;
+    if (isCrit && c >= 80) flames = 4;
+    else if (isCrit && c >= 60) flames = 3;
+    else if (isCrit) flames = 2;
+    else if (isSusp && c >= 70) flames = 2;
+    return '🔥'.repeat(flames);
+}
+
+// V41: Ripple effect — attach to a click event
+function _addRipple(e) {
+    const btn = e.currentTarget;
+    const circle = document.createElement('span');
+    circle.className = 'ripple-circle';
+    const r = Math.max(btn.clientWidth, btn.clientHeight);
+    const rect = btn.getBoundingClientRect();
+    circle.style.cssText = `width:${r}px;height:${r}px;left:${e.clientX - rect.left - r/2}px;top:${e.clientY - rect.top - r/2}px`;
+    btn.appendChild(circle);
+    circle.addEventListener('animationend', () => circle.remove());
+}
+
+// V8: Copy to clipboard with feedback
+function _copyWithFeedback(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✓';
+        btn.style.color = '#10b981';
+        setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 2000);
+    });
+}
+window._copyWithFeedback = _copyWithFeedback;
+
+// V45: Shake element on error
+function _shakeEl(el) {
+    el.classList.remove('shake');
+    void el.offsetWidth; // reflow
+    el.classList.add('shake');
+    el.addEventListener('animationend', () => el.classList.remove('shake'), { once: true });
+}
+
+// V1: Render SVG risk gauge
+function _renderRiskGauge(containerId, value) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    const v = Math.min(Math.max(value || 0, 0), 100);
+    const r = 34, cx = 44, cy = 44;
+    const circ = 2 * Math.PI * r;
+    const fill = circ * (1 - v / 100);
+    const color = v >= 80 ? '#ef4444' : v >= 60 ? '#f97316' : v >= 30 ? '#f59e0b' : '#10b981';
+    const pulse = v >= 80 ? 'animation:critical-glow-pulse 2s ease-in-out infinite;' : '';
+    el.innerHTML = `
+        <div class="risk-gauge-wrap">
+            <svg width="88" height="88" viewBox="0 0 88 88" style="${pulse}">
+                <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="7"/>
+                <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="7"
+                    stroke-linecap="round" stroke-dasharray="${circ}"
+                    stroke-dashoffset="${circ}"
+                    class="risk-gauge-arc" id="${containerId}-arc"
+                    style="transform:rotate(-90deg);transform-origin:${cx}px ${cy}px;"/>
+                <text x="${cx}" y="${cy+7}" text-anchor="middle" font-size="18" font-weight="800" fill="${color}">${v}</text>
+                <text x="${cx}" y="${cy+21}" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.35)" letter-spacing="1">RISK</text>
+            </svg>
+        </div>`;
+    requestAnimationFrame(() => {
+        setTimeout(() => {
+            const arc = document.getElementById(`${containerId}-arc`);
+            if (arc) arc.style.strokeDashoffset = fill;
+        }, 80);
+    });
+}
+window._renderRiskGauge = _renderRiskGauge;
 
 function _resultBadge(scan) {
     let badge = '';
@@ -1217,6 +1344,21 @@ window.deleteToken = deleteToken;
 // ============================================================
 
 async function loadScans() {
+    const tbody = document.getElementById('results-table-body');
+    // V18: Skeleton loading
+    if (tbody && !tbody._loaded) {
+        tbody.innerHTML = Array(6).fill(0).map(() => `
+            <tr>
+                <td><div style="display:flex;gap:8px;align-items:center;">
+                    <div class="skel" style="width:32px;height:32px;border-radius:50%;flex-shrink:0;"></div>
+                    <div style="flex:1"><div class="skel" style="height:11px;width:70%;border-radius:4px;margin-bottom:5px;"></div><div class="skel" style="height:9px;width:40%;border-radius:4px;"></div></div>
+                </div></td>
+                <td><div class="skel" style="height:20px;width:70px;border-radius:10px;"></div></td>
+                <td><div class="skel" style="height:20px;width:80px;border-radius:10px;"></div></td>
+                <td><div class="skel" style="height:10px;width:60px;border-radius:4px;"></div></td>
+                <td><div class="skel" style="height:28px;width:90px;border-radius:6px;"></div></td>
+            </tr>`).join('');
+    }
     try {
         const params = new URLSearchParams({ limit: 50 });
         const search    = (document.getElementById('filter-search')?.value || '').trim();
@@ -1238,25 +1380,58 @@ async function loadScans() {
 
         const response = await fetch('/api/scans?' + params.toString());
         const data = await response.json();
-        
-        const tbody = document.getElementById('results-table-body');
+
         if (data.scans && data.scans.length > 0) {
+            if (tbody) tbody._loaded = true;
             // Actualizar baseline del polling con el scan más reciente visible
             if (data.scans[0].id > (_lastKnownScanId || 0)) {
                 _lastKnownScanId = data.scans[0].id;
             }
-            tbody.innerHTML = data.scans.map(scan => `
-                <tr style="cursor:pointer" onclick="viewScanDetails(${scan.id})">
+            // V67: highlight search term in cells
+            const searchTerm = (document.getElementById('filter-search')?.value || '').trim().toLowerCase();
+            const _hl = (text) => {
+                if (!searchTerm || !text) return text || '';
+                const re = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+                return String(text).replace(re, '<mark style="background:#fbbf2455;color:inherit;border-radius:2px;padding:0 1px;">$1</mark>');
+            };
+
+            const now = Date.now();
+            tbody.innerHTML = data.scans.map((scan, idx) => {
+                const rs = scan.risk_score;
+                const riskClass = rs >= 70 ? 'tr-risk-critical' : rs >= 30 ? 'tr-risk-suspicious' : (rs !== undefined && rs !== null ? 'tr-risk-clean' : '');
+
+                // V12: Crafatar avatar or initials
+                const uuid = scan.minecraft_uuid || null;
+                const avatar = uuid
+                    ? `<img src="https://crafatar.com/avatars/${uuid}?size=32&overlay" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;" onerror="this.outerHTML='<div class=\\"scan-avatar-circle\\">${_scanInitials(scan.machine_name)}</div>'">`
+                    : `<div class="scan-avatar-circle">${_scanInitials(scan.machine_name)}</div>`;
+
+                // V13: NUEVO badge if scan < 30min old
+                const scanAge = scan.started_at ? (now - new Date(scan.started_at).getTime()) : Infinity;
+                const nuevoBadge = scanAge < 30 * 60 * 1000 ? `<span class="badge-nuevo">NUEVO</span>` : '';
+
+                // V14: Trend arrow (up/down based on risk vs previous if available)
+                const trend = scan.risk_trend;
+                const trendArrow = trend === 'up' ? `<span style="color:#ef4444;font-size:11px;" title="Tendencia empeorando">↑</span>`
+                    : trend === 'down' ? `<span style="color:#10b981;font-size:11px;" title="Tendencia mejorando">↓</span>` : '';
+
+                // V17: OS icon
+                const osStr = (scan.os_name || scan.os || '').toLowerCase();
+                const osIcon = osStr.includes('linux') ? '🐧' : osStr.includes('mac') ? '🍎' : osStr.includes('win') ? '🪟' : '';
+
+                const machineName = _hl(scan.machine_name || 'N/A');
+
+                return `
+                <tr class="${riskClass}" style="cursor:pointer" onclick="viewScanDetails(${scan.id})" data-scan-id="${scan.id}">
                     <td>
                         <div class="scan-details-cell">
-                            <div class="scan-avatar-circle">${_scanInitials(scan.machine_name)}</div>
-                            <div>
-                                <div class="scan-machine-name"
+                            ${avatar}
+                            <div style="min-width:0;">
+                                <div class="scan-machine-name" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;"
                                     onclick="event.stopPropagation();viewPlayerProfile(${JSON.stringify(scan.machine_name || '')})"
                                     title="Ver perfil del jugador"
-                                    style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;"
-                                >${scan.machine_name || 'N/A'}</div>
-                                <div class="scan-date-small">${formatDate(scan.started_at)}</div>
+                                >${machineName}${nuevoBadge}${trendArrow}</div>
+                                <div class="scan-date-small">${_timeAgo(scan.started_at)}</div>
                                 ${scan.scanned_by ? `<div style="font-size:10px;color:var(--text-d);margin-top:1px;">por <strong style="color:var(--text-s);">${scan.scanned_by}</strong></div>` : ''}
                             </div>
                         </div>
@@ -1264,7 +1439,7 @@ async function loadScans() {
                     <td>
                         <span class="game-badge">
                             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="1" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M4 6H8M6 4V8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-                            Minecraft
+                            Minecraft${osIcon ? ` <span>${osIcon}</span>` : ''}
                         </span>
                     </td>
                     <td>${_resultBadge(scan)}</td>
@@ -1274,14 +1449,26 @@ async function loadScans() {
                             Ver detalles
                         </button>
                     </td>
-                </tr>
-            `).join('');
+                </tr>`;
+            }).join('');
         } else {
+            if (tbody) tbody._loaded = false;
             tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No hay escaneos</td></tr>';
         }
     } catch (error) {
         console.error('Error cargando escaneos:', error);
     }
+}
+
+// V20: time-ago helper
+function _timeAgo(dateStr) {
+    if (!dateStr) return '—';
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const s = Math.floor(diff / 1000);
+    if (s < 60)  return 'hace ' + s + 's';
+    if (s < 3600) return 'hace ' + Math.floor(s/60) + 'min';
+    if (s < 86400) return 'hace ' + Math.floor(s/3600) + 'h';
+    return formatDate(dateStr);
 }
 
 function applyFilters() { loadScans(); }
@@ -1608,21 +1795,49 @@ function renderIssuePage(container, scanId) {
 
         const safeLevel = (result.alert_level || 'SOSPECHOSO').replace(/'/g,"");
         const safeName  = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        return `<div data-result-id="${result.id}" style="
+        const rowIdx    = slice.indexOf(result);
+
+        // V3: Category icon
+        const catIcon = _catIcon(cat);
+        // V9: Flames
+        const flames = _flameIndicator(result.alert_level, result.confidence);
+        // V4: Critical glow class
+        const glowCls = isCrit ? 'issue-critical-glow' : '';
+        // V48: Stagger delay
+        const staggerStyle = `animation-delay:${rowIdx * 40}ms;`;
+        // V2: Confidence bar
+        const conf = result.confidence;
+        const confBar = (conf !== undefined && conf !== null) ? `
+            <div style="margin-top:5px;display:flex;align-items:center;gap:6px;">
+                <div style="flex:1;height:3px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;">
+                    <div style="height:100%;width:${Math.min(conf,100)}%;background:${accent};border-radius:2px;transition:width 0.8s ease;"></div>
+                </div>
+                <span style="font-size:10px;color:var(--text-d);flex-shrink:0;">${conf}%</span>
+            </div>` : '';
+        // V7: Formatted path
+        const fmtPath = _formatPath(path);
+        // V8: Copy hash button (shown if path contains SHA256-like string)
+        const hashMatch = path.match(/\b([a-f0-9]{64})\b/i);
+        const copyBtn = hashMatch ? `<button onclick="event.stopPropagation();_copyWithFeedback('${hashMatch[1]}',this)" title="Copiar hash" style="font-size:11px;padding:1px 5px;border-radius:4px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;flex-shrink:0;margin-left:4px;">📋</button>` : '';
+
+        return `<div data-result-id="${result.id}" class="issue-row-stagger ${glowCls}" style="${staggerStyle}
             background:${bg};border:1px solid ${accent}33;border-left:3px solid ${accent};
             border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:10px;
-            overflow:hidden;max-width:100%;min-width:0;">
-            <span style="font-size:14px;flex-shrink:0;margin-top:1px;">${dot}</span>
+            overflow:hidden;max-width:100%;min-width:0;cursor:pointer;transition:outline 0.15s,background 0.15s;"
+            onclick="_selectIssue(this)">
+            <span style="font-size:18px;flex-shrink:0;margin-top:0;">${catIcon}</span>
             <div style="flex:1;min-width:0;overflow:hidden;">
                 <div style="font-size:12px;font-weight:600;color:var(--text-h);display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;overflow:hidden;">
                     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;word-break:break-all;min-width:0;flex:1;">${name}</span>
+                    <span style="font-size:12px;flex-shrink:0;" title="Nivel de peligro">${flames}</span>
                     ${instBadge}
                     ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;flex-shrink:0;white-space:nowrap;">${_getCategoryLabel(cat)}</span>` : ''}
-                    <button onclick="aiExplainFinding('${safeName}','${safeLevel}',this)" title="Explicar con IA"
+                    <button onclick="event.stopPropagation();aiExplainFinding('${safeName}','${safeLevel}',this)" title="Explicar con IA"
                             style="font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid rgba(124,58,237,.35);
                                    background:rgba(124,58,237,.1);color:#a78bfa;cursor:pointer;flex-shrink:0;">🤖</button>
                 </div>
-                ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;" title="${path}">${truncPath}</div>` : ''}
+                ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:3px;overflow:hidden;text-overflow:ellipsis;max-width:100%;" title="${path}">${fmtPath}${copyBtn}</div>` : ''}
+                ${confBar}
             </div>
         </div>`;
     }).join('');
@@ -1641,6 +1856,14 @@ function renderIssuePage(container, scanId) {
         <div style="display:flex;flex-direction:column;gap:6px;">${rows || '<div style="padding:20px;text-align:center;color:var(--text-d);font-size:12px;">Sin hallazgos en esta categoría.</div>'}</div>
         ${loadMoreBtn}`;
 }
+
+// V47: click to select/deselect a finding
+function _selectIssue(el) {
+    const wasSelected = el.classList.contains('issue-selected');
+    document.querySelectorAll('.issue-selected').forEach(e => e.classList.remove('issue-selected'));
+    if (!wasSelected) el.classList.add('issue-selected');
+}
+window._selectIssue = _selectIssue;
 
 function _toggleOnlyInstance(scanId) {
     window._issuesOnlyInstance = !window._issuesOnlyInstance;
@@ -1695,7 +1918,13 @@ function openVerdictModal(verdictType) {
 async function confirmVerdict() {
     const reason = (document.getElementById('verdict-reason-input')?.value || '').trim();
     const errEl  = document.getElementById('verdict-reason-error');
-    if (!reason) { if (errEl) errEl.style.display = 'block'; return; }
+    if (!reason) {
+        if (errEl) errEl.style.display = 'block';
+        // V45: shake the textarea on error
+        const inp = document.getElementById('verdict-reason-input');
+        if (inp) _shakeEl(inp);
+        return;
+    }
     if (errEl) errEl.style.display = 'none';
 
     const verdict = _pendingVerdictType;
@@ -1712,8 +1941,21 @@ async function confirmVerdict() {
 
         // 2. Si es "hack", abrir la selección de archivos; si es "clean", marcar todo como legítimo
         if (verdict === 'hack') {
+            // V43: destroy animation — shake + staggered fade-out
+            const issueEls = document.querySelectorAll('#issues-list-container [data-result-id]');
+            issueEls.forEach((el, i) => {
+                setTimeout(() => {
+                    el.style.transition = 'opacity 0.3s, transform 0.3s';
+                    el.style.transform = `translateX(${i % 2 === 0 ? -8 : 8}px) scale(0.97)`;
+                    el.style.opacity = '0';
+                }, i * 40);
+            });
             openHackSelection();
         } else {
+            // V42: confetti on clean verdict
+            if (typeof confetti === 'function') {
+                confetti({ particleCount: 90, spread: 70, origin: { y: 0.5 }, colors: ['#10b981','#34d399','#6ee7b7','#fff'] });
+            }
             await submitVerdictClean(reason);
         }
 
@@ -1863,13 +2105,12 @@ async function viewScanDetails(scanId) {
 
         // ── Severity summary bar (log de indicaciones) ──────────────────
         const _set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-        _set('log-severe', severityStats.severe);
-        _set('log-alert',  severityStats.alert);
-        _set('log-clean',  severityStats.clean + severityStats.low);
-        _set('ring-num-critical', severityStats.severe);
-        _set('ring-num-alert',    severityStats.alert);
-        _set('ring-num-low',      severityStats.low);
-        _set('ring-num-clean',    severityStats.clean);
+        // V5: animated counters for severity stats
+        ['log-severe','ring-num-critical'].forEach(id => animateNumber(document.getElementById(id), severityStats.severe, 800));
+        ['log-alert','ring-num-alert'].forEach(id => animateNumber(document.getElementById(id), severityStats.alert, 800));
+        animateNumber(document.getElementById('log-clean'), severityStats.clean + severityStats.low, 800);
+        animateNumber(document.getElementById('ring-num-low'), severityStats.low, 800);
+        animateNumber(document.getElementById('ring-num-clean'), severityStats.clean, 800);
 
         // ── Donut ring chart (SVG) ───────────────────────────────────────
         (function renderRingChart(stats) {
@@ -1990,6 +2231,11 @@ async function viewScanDetails(scanId) {
             riskBar.style.width = `${Math.min(riskScore, 100)}%`;
         }
 
+        // V1: Render animated SVG gauge if container exists
+        if (riskScore !== undefined && riskScore !== null) {
+            _renderRiskGauge('risk-gauge-container', riskScore);
+        }
+
         // P3 #13 — Active learning: marcar casos inciertos donde la revisión del staff es más valiosa
         const verdict = data.verdict || '';
         const alBadge = document.getElementById('active-learning-badge');
@@ -2066,6 +2312,19 @@ async function viewScanDetails(scanId) {
 
         document.getElementById('bulk-actions-bar').style.display = currentIssuesList.length > 0 ? 'flex' : 'none';
         updateBulkActions();
+
+        // V10: Auto-scroll to first CRITICAL after 600ms
+        if (severityStats.severe > 0) {
+            setTimeout(() => {
+                const firstCrit = issuesContainer.querySelector('.issue-critical-glow');
+                if (firstCrit) {
+                    firstCrit.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    firstCrit.style.outline = '2px solid #ef4444';
+                    firstCrit.style.outlineOffset = '2px';
+                    setTimeout(() => { firstCrit.style.outline = ''; firstCrit.style.outlineOffset = ''; }, 2500);
+                }
+            }, 650);
+        }
 
         // Mostrar veredicto actual si existe
         refreshCurrentVerdictBanner(data);
@@ -4593,3 +4852,442 @@ async function _renderPlayerReputation(machineName, allScans) {
         }
     }
 }
+
+// ============================================================
+// V31: SIDEBAR COLLAPSE TOGGLE
+// ============================================================
+function toggleSidebarCollapse() {
+    const sidebar = document.querySelector('.sidebar');
+    const btn     = document.getElementById('sidebar-toggle-btn');
+    const main    = document.querySelector('.main-content');
+    if (!sidebar) return;
+    const collapsed = sidebar.classList.toggle('collapsed');
+    localStorage.setItem('argus_sidebar_collapsed', collapsed ? '1' : '0');
+    if (btn) btn.textContent = collapsed ? '▶' : '◀';
+    if (main) main.style.marginLeft = collapsed ? '60px' : '';
+}
+window.toggleSidebarCollapse = toggleSidebarCollapse;
+
+(function _initSidebarCollapse() {
+    if (localStorage.getItem('argus_sidebar_collapsed') === '1') {
+        document.addEventListener('DOMContentLoaded', () => {
+            const sidebar = document.querySelector('.sidebar');
+            const btn     = document.getElementById('sidebar-toggle-btn');
+            const main    = document.querySelector('.main-content');
+            if (sidebar) sidebar.classList.add('collapsed');
+            if (btn)     btn.textContent = '▶';
+            if (main)    main.style.marginLeft = '60px';
+        });
+    }
+})();
+
+// ============================================================
+// V39: SCROLL TO TOP
+// ============================================================
+(function _initScrollToTop() {
+    window.addEventListener('scroll', () => {
+        const btn = document.getElementById('scroll-to-top');
+        if (!btn) return;
+        btn.classList.toggle('visible', window.scrollY > 300);
+    }, { passive: true });
+})();
+
+// ============================================================
+// V37: KEYBOARD SHORTCUTS OVERLAY
+// ============================================================
+function closeKbdOverlay() {
+    document.getElementById('kbd-overlay')?.classList.remove('open');
+}
+window.closeKbdOverlay = closeKbdOverlay;
+
+// ============================================================
+// V38: GLOBAL SEARCH (Ctrl+K)
+// ============================================================
+let _globalSearchIndex = -1;
+let _globalSearchResults = [];
+
+function openGlobalSearch() {
+    const overlay = document.getElementById('global-search-overlay');
+    if (!overlay) return;
+    overlay.classList.add('open');
+    setTimeout(() => document.getElementById('global-search-input')?.focus(), 50);
+}
+function closeGlobalSearch() {
+    document.getElementById('global-search-overlay')?.classList.remove('open');
+    _globalSearchIndex = -1;
+}
+window.openGlobalSearch = openGlobalSearch;
+window.closeGlobalSearch = closeGlobalSearch;
+
+async function _globalSearchInput(q) {
+    const res = document.getElementById('global-search-results');
+    if (!res) return;
+    q = q.trim();
+    if (q.length < 2) {
+        res.innerHTML = '<div style="padding:14px 20px;font-size:12px;color:var(--text-d);">Escribe al menos 2 caracteres...</div>';
+        _globalSearchResults = [];
+        return;
+    }
+    res.innerHTML = '<div style="padding:14px 20px;font-size:12px;color:var(--text-d);">Buscando...</div>';
+    try {
+        const r = await fetch(`/api/scans?search=${encodeURIComponent(q)}&limit=8`);
+        const d = await r.json();
+        _globalSearchResults = d.scans || [];
+        _globalSearchIndex   = -1;
+        if (_globalSearchResults.length === 0) {
+            res.innerHTML = '<div style="padding:14px 20px;font-size:12px;color:var(--text-d);">Sin resultados</div>';
+            return;
+        }
+        res.innerHTML = _globalSearchResults.map((s, i) => {
+            const rs = s.risk_score;
+            const col = rs >= 70 ? '#ef4444' : rs >= 30 ? '#f59e0b' : '#10b981';
+            return `<div class="global-search-result" data-idx="${i}" onclick="_globalSearchOpen(${i})">
+                <span style="font-size:18px;">${rs >= 70 ? '🔴' : rs >= 30 ? '🟠' : '🟢'}</span>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.machine_name || 'N/A'}</div>
+                    <div style="font-size:11px;color:var(--text-d);">${_timeAgo(s.started_at)} · <span style="color:${col};">${rs !== undefined ? rs + ' pts' : '—'}</span></div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch(_) {
+        res.innerHTML = '<div style="padding:14px 20px;font-size:12px;color:#ef4444;">Error de búsqueda</div>';
+    }
+}
+function _globalSearchOpen(idx) {
+    const s = _globalSearchResults[idx];
+    if (s) { closeGlobalSearch(); viewScanDetails(s.id); }
+}
+function _globalSearchKey(e) {
+    const items = document.querySelectorAll('.global-search-result');
+    if (e.key === 'ArrowDown') {
+        _globalSearchIndex = Math.min(_globalSearchIndex + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+        _globalSearchIndex = Math.max(_globalSearchIndex - 1, 0);
+    } else if (e.key === 'Enter') {
+        if (_globalSearchIndex >= 0) _globalSearchOpen(_globalSearchIndex);
+        else if (_globalSearchResults.length > 0) _globalSearchOpen(0);
+        return;
+    } else if (e.key === 'Escape') {
+        closeGlobalSearch(); return;
+    }
+    items.forEach((el, i) => el.classList.toggle('selected', i === _globalSearchIndex));
+    if (items[_globalSearchIndex]) items[_globalSearchIndex].scrollIntoView({ block: 'nearest' });
+}
+window._globalSearchInput = _globalSearchInput;
+window._globalSearchKey   = _globalSearchKey;
+window._globalSearchOpen  = _globalSearchOpen;
+
+// ============================================================
+// V69: NOTIFICATION CENTER
+// ============================================================
+const _notifications = [];
+let _unreadNotifCount = 0;
+
+function _addNotification({ icon, text, scanId, time }) {
+    _notifications.unshift({ icon, text, scanId, time, read: false });
+    if (_notifications.length > 20) _notifications.pop();
+    _unreadNotifCount++;
+    const badge = document.getElementById('notif-badge');
+    if (badge) { badge.textContent = _unreadNotifCount; badge.classList.add('visible'); }
+    _renderNotifList();
+}
+
+function _renderNotifList() {
+    const list = document.getElementById('notif-list');
+    if (!list) return;
+    if (_notifications.length === 0) {
+        list.innerHTML = '<div style="padding:16px 14px;font-size:12px;color:var(--text-d);text-align:center;">Sin notificaciones</div>';
+        return;
+    }
+    list.innerHTML = _notifications.map((n, i) => `
+        <div class="notif-item ${n.read ? '' : 'unread'}" onclick="_notifClick(${i})">
+            <span style="font-size:14px;margin-right:6px;">${n.icon}</span>
+            <div style="flex:1;min-width:0;">
+                <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${n.text}</div>
+                <div style="font-size:10px;color:var(--text-d);margin-top:2px;">${_timeAgo(n.time)}</div>
+            </div>
+        </div>`).join('');
+}
+
+function _notifClick(idx) {
+    const n = _notifications[idx];
+    if (!n) return;
+    n.read = true;
+    if (n.scanId) { viewScanDetails(n.scanId); toggleNotifCenter(null); }
+    _renderNotifList();
+}
+
+function toggleNotifCenter(e) {
+    if (e) e.stopPropagation();
+    const dd = document.getElementById('notif-dropdown');
+    if (!dd) return;
+    dd.classList.toggle('open');
+    if (dd.classList.contains('open')) {
+        _unreadNotifCount = 0;
+        _notifications.forEach(n => n.read = true);
+        const badge = document.getElementById('notif-badge');
+        if (badge) badge.classList.remove('visible');
+        _renderNotifList();
+    }
+}
+window.toggleNotifCenter = toggleNotifCenter;
+window._notifClick = _notifClick;
+
+// Close notif dropdown on outside click
+document.addEventListener('click', e => {
+    const dd = document.getElementById('notif-dropdown');
+    const btn = document.getElementById('notif-bell-btn');
+    if (dd && !dd.contains(e.target) && e.target !== btn) dd.classList.remove('open');
+});
+
+// ============================================================
+// V68: CRITICAL ALERT BANNER
+// ============================================================
+let _criticalAlertScanId = null;
+function _showCriticalBanner(name, scanId) {
+    _criticalAlertScanId = scanId;
+    const banner = document.getElementById('critical-alert-banner');
+    const nameEl = document.getElementById('critical-alert-name');
+    if (!banner) return;
+    if (nameEl) nameEl.textContent = name;
+    banner.classList.add('visible');
+    showToast(`⚠️ CRÍTICO: ${name}`, 'error', scanId);
+    playCriticalSound();
+    _addNotification({ icon: '🔴', text: `⚠️ CRÍTICO: ${name}`, scanId, time: new Date() });
+    setTimeout(() => banner.classList.remove('visible'), 12000);
+}
+function _criticalAlertView() {
+    if (_criticalAlertScanId) {
+        viewScanDetails(_criticalAlertScanId);
+        document.getElementById('critical-alert-banner')?.classList.remove('visible');
+    }
+}
+window._criticalAlertView = _criticalAlertView;
+
+// ============================================================
+// V70: CRITICAL SOUND (extended)
+// ============================================================
+function playCriticalSound() {
+    if (!_soundEnabled) return;
+    try {
+        const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+        const gain = ctx.createGain();
+        gain.connect(ctx.destination);
+        gain.gain.setValueAtTime(0.18, ctx.currentTime);
+
+        // Two-note alert chord
+        [880, 1109].forEach((freq, i) => {
+            const osc = ctx.createOscillator();
+            osc.connect(gain);
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.12);
+            gain.gain.setValueAtTime(0.18, ctx.currentTime + i * 0.12);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.35);
+            osc.start(ctx.currentTime + i * 0.12);
+            osc.stop(ctx.currentTime + i * 0.12 + 0.35);
+        });
+    } catch(_) {}
+}
+
+// ============================================================
+// V40: SECTION TRANSITION ANIMATION
+// ============================================================
+const _origShowSection = window.showSection;
+window.showSection = function(sectionId) {
+    const current = document.querySelector('.panel-section.active');
+    if (current && current.id !== sectionId) {
+        current.classList.add('section-leaving');
+        setTimeout(() => {
+            current.classList.remove('section-leaving');
+            if (typeof _origShowSection === 'function') _origShowSection(sectionId);
+            else _showSectionInner(sectionId);
+            const next = document.getElementById(sectionId);
+            if (next) next.classList.add('section-entering');
+            setTimeout(() => next?.classList.remove('section-entering'), 220);
+        }, 120);
+    } else {
+        if (typeof _origShowSection === 'function') _origShowSection(sectionId);
+        else _showSectionInner(sectionId);
+    }
+};
+function _showSectionInner(sectionId) {
+    document.querySelectorAll('.panel-section').forEach(s => {
+        s.classList.remove('active'); s.style.display = 'none';
+    });
+    const target = document.getElementById(sectionId);
+    if (target) { target.style.display = 'block'; target.classList.add('active'); }
+}
+
+// ============================================================
+// V41: RIPPLE — attach to all buttons on DOMContentLoaded
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('click', e => {
+        const btn = e.target.closest('.btn, button[class*="btn"]');
+        if (!btn) return;
+        _addRipple({ ...e, currentTarget: btn });
+    });
+});
+
+// ============================================================
+// V62: MATRIX THEME + KONAMI CODE
+// ============================================================
+const _konamiSeq = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
+let _konamiIdx = 0;
+document.addEventListener('keydown', e => {
+    if (e.key === _konamiSeq[_konamiIdx]) {
+        _konamiIdx++;
+        if (_konamiIdx === _konamiSeq.length) {
+            _konamiIdx = 0;
+            const active = document.body.classList.toggle('matrix-theme');
+            localStorage.setItem('argus_matrix', active ? '1' : '0');
+            showToast(active ? '🟩 Matrix mode activado' : 'Matrix mode desactivado');
+        }
+    } else {
+        _konamiIdx = 0;
+    }
+});
+if (localStorage.getItem('argus_matrix') === '1') document.body.classList.add('matrix-theme');
+
+// ============================================================
+// V63: CUSTOM COLOR PICKER (extended palette panel)
+// ============================================================
+function _initCustomColorPicker() {
+    const panel = document.getElementById('palette-panel');
+    if (!panel) return;
+    if (panel.querySelector('.custom-color-input')) return;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-top:10px;display:flex;align-items:center;gap:8px;';
+    wrap.innerHTML = `
+        <label style="font-size:11px;color:var(--text-d);">Custom:</label>
+        <input type="color" class="custom-color-input" value="#8B5CF6"
+               style="width:28px;height:28px;border:none;border-radius:6px;cursor:pointer;background:none;padding:0;"
+               oninput="_applyCustomColor(this.value)">`;
+    panel.appendChild(wrap);
+    const saved = localStorage.getItem('argus_custom_color');
+    if (saved) { wrap.querySelector('input').value = saved; _applyCustomColor(saved); }
+}
+function _applyCustomColor(hex) {
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    const dr = Math.max(r-40,0), dg = Math.max(g-40,0), db = Math.max(b-40,0);
+    document.documentElement.style.setProperty('--accent', hex);
+    document.documentElement.style.setProperty('--accent-d', `rgb(${dr},${dg},${db})`);
+    document.documentElement.style.setProperty('--accent-bg', `rgba(${r},${g},${b},0.08)`);
+    document.documentElement.style.setProperty('--accent-glow', `rgba(${r},${g},${b},0.22)`);
+    localStorage.setItem('argus_custom_color', hex);
+}
+document.addEventListener('DOMContentLoaded', _initCustomColorPicker);
+window._applyCustomColor = _applyCustomColor;
+
+// ============================================================
+// V64: SORTABLE TABLE COLUMNS
+// ============================================================
+let _sortKey = null;
+let _sortDir = 1;
+
+function _sortScans(key) {
+    if (_sortKey === key) _sortDir *= -1;
+    else { _sortKey = key; _sortDir = -1; }
+
+    // Update sort icons
+    document.querySelectorAll('[id^="sort-"][id$="-icon"]').forEach(el => el.textContent = '');
+    const iconEl = document.getElementById(`sort-${key}-icon`);
+    if (iconEl) iconEl.textContent = _sortDir === -1 ? '↓' : '↑';
+
+    const tbody = document.getElementById('results-table-body');
+    if (!tbody) return;
+    const rows = Array.from(tbody.querySelectorAll('tr[data-scan-id]'));
+    if (rows.length === 0) return;
+
+    rows.sort((a, b) => {
+        if (key === 'risk') {
+            const ra = parseFloat(a.querySelector('.risk-score-badge')?.textContent || '0');
+            const rb = parseFloat(b.querySelector('.risk-score-badge')?.textContent || '0');
+            return (ra - rb) * _sortDir;
+        }
+        if (key === 'machine') {
+            const na = a.querySelector('.scan-machine-name')?.textContent?.trim() || '';
+            const nb = b.querySelector('.scan-machine-name')?.textContent?.trim() || '';
+            return na.localeCompare(nb) * _sortDir;
+        }
+        return 0;
+    });
+
+    rows.forEach((r, i) => {
+        r.style.transition = 'opacity 0.15s';
+        r.style.opacity = '0';
+        setTimeout(() => {
+            tbody.appendChild(r);
+            r.style.opacity = '1';
+        }, i * 25);
+    });
+}
+window._sortScans = _sortScans;
+
+// ============================================================
+// V65: TABLE DENSITY TOGGLE
+// ============================================================
+function setTableDensity(density) {
+    document.body.classList.remove('density-compact','density-spacious');
+    if (density !== 'normal') document.body.classList.add(`density-${density}`);
+    localStorage.setItem('argus_density', density);
+}
+window.setTableDensity = setTableDensity;
+(function _initDensity() {
+    const d = localStorage.getItem('argus_density');
+    if (d) setTableDensity(d);
+})();
+
+// ============================================================
+// V37: KEYBOARD SHORTCUT HANDLER
+// ============================================================
+document.addEventListener('keydown', e => {
+    const tag = (document.activeElement?.tagName || '').toLowerCase();
+    const inInput = tag === 'input' || tag === 'textarea' || tag === 'select';
+
+    // Ctrl+K: global search
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        openGlobalSearch();
+        return;
+    }
+    if (inInput) return;
+
+    if (e.key === '?') {
+        const overlay = document.getElementById('kbd-overlay');
+        if (overlay) overlay.classList.toggle('open');
+        return;
+    }
+    if (e.key === 'Escape') {
+        closeKbdOverlay();
+        closeGlobalSearch();
+        document.getElementById('critical-alert-banner')?.classList.remove('visible');
+        return;
+    }
+    if (e.key === '1') { const a = document.querySelector('[data-section="dashboard"]');  if (a) a.click(); }
+    if (e.key === '2') { const a = document.querySelector('[data-section="resultados"]'); if (a) a.click(); }
+    if (e.key === '3') { const a = document.querySelector('[data-section="tokens"]');     if (a) a.click(); }
+    if (e.key === 'f' || e.key === 'F') { document.getElementById('filter-search')?.focus(); }
+});
+
+// ============================================================
+// V33: BREADCRUMB helper
+// ============================================================
+function _setBreadcrumb(parts) {
+    let container = document.getElementById('argus-breadcrumb');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'argus-breadcrumb';
+        container.className = 'argus-breadcrumb';
+        const mainContent = document.querySelector('.main-content');
+        const header = document.querySelector('.panel-header');
+        if (header && mainContent) mainContent.insertBefore(container, header.nextSibling);
+    }
+    container.innerHTML = parts.map((p, i) => {
+        const isLast = i === parts.length - 1;
+        const sep = i > 0 ? `<span class="sep">›</span>` : '';
+        if (isLast) return `${sep}<span class="current">${p.label}</span>`;
+        return `${sep}<a onclick="${p.onclick || ''}">${p.label}</a>`;
+    }).join('');
+}
+window._setBreadcrumb = _setBreadcrumb;

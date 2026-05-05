@@ -423,300 +423,300 @@
 
 ── SCAN DETAIL — HALLAZGOS ──────────────────────────────────────────────────
 
-[PENDING] V1.  Gauge circular animado de risk score — reemplaza el número estático por un
+[DONE] V1.  Gauge circular animado de risk score — reemplaza el número estático por un
                 arco SVG que se llena de 0 al valor real al abrir el scan, coloreado:
                 verde (0-30) → amarillo (30-60) → naranja (60-80) → rojo pulsante (80-100).
 
-[PENDING] V2.  Barra de confianza visual en cada hallazgo — debajo del nombre del hallazgo,
+[DONE] V2.  Barra de confianza visual en cada hallazgo — debajo del nombre del hallazgo,
                 una barra horizontal coloreada (0-100%) con el % de confidence, animada al
                 cargar. Más visual que el número solo.
 
-[PENDING] V3.  Ícono de categoría por tipo de hallazgo — skull para GHOST_CLIENT, 🔬 para
+[DONE] V3.  Ícono de categoría por tipo de hallazgo — skull para GHOST_CLIENT, 🔬 para
                 FORENSE, 🌐 para RED, ⚙️ para PROCESO, 🖱️ para MOUSE_WEIGHT, etc.
                 Mostrado como chip de color a la izquierda del nombre del hallazgo.
 
-[PENDING] V4.  Glow pulsante en hallazgos CRITICAL — los findings con alerta=CRITICAL tienen
+[DONE] V4.  Glow pulsante en hallazgos CRITICAL — los findings con alerta=CRITICAL tienen
                 un borde animado con box-shadow pulsante en rojo cada 2s, llamando la
                 atención del staff sin ser molesto.
 
-[PENDING] V5.  Contador animado en el banner de detección — al cargar el scan, los números
+[DONE] V5.  Contador animado en el banner de detección — al cargar el scan, los números
                 de "X hallazgos críticos" cuentan desde 0 hasta el valor real en 800ms.
                 Mucho más impactante que aparecer instantáneamente.
 
-[PENDING] V6.  Expandir/colapsar hallazgo con animación — click en la tarjeta de hallazgo
+[DONE] V6.  Expandir/colapsar hallazgo con animación — click en la tarjeta de hallazgo
                 expande un panel con el detalle completo (path, descripción, hash) con
                 animación de altura suave (max-height transition 300ms).
 
-[PENDING] V7.  Resaltado de path del hallazgo — el campo "ruta" muestra la carpeta en
+[DONE] V7.  Resaltado de path del hallazgo — el campo "ruta" muestra la carpeta en
                 color apagado y el nombre del archivo en negrita brillante, separados
                 visualmente. Hace mucho más fácil leer paths largos.
 
-[PENDING] V8.  Botón "Copiar hash" con feedback visual — al lado de cada SHA256, un
+[DONE] V8.  Botón "Copiar hash" con feedback visual — al lado de cada SHA256, un
                 botón 📋 que al hacer clic copia al portapapeles y cambia a ✓ verde
                 durante 2 segundos antes de volver al ícono original.
 
-[PENDING] V9.  Indicador de "peligro relativo" con llamas — junto al nivel de alerta,
+[DONE] V9.  Indicador de "peligro relativo" con llamas — junto al nivel de alerta,
                 mostrar 1-4 íconos de fuego (🔥) según la severidad combinada de
                 confidence × alerta. Más intuitivo que las etiquetas textuales.
 
-[PENDING] V10. Scroll automático animado al primer CRITICAL — cuando se abre un scan
+[DONE] V10. Scroll automático animado al primer CRITICAL — cuando se abre un scan
                 con hallazgos CRITICAL, hacer smooth scroll automático hasta el primer
                 hallazgo crítico después de 600ms de carga, con flash highlight temporal.
 
 ── SCAN LIST — VISTA DE ESCANEOS ────────────────────────────────────────────
 
-[PENDING] V11. Fila coloreada según risk score en la lista — fondo de cada fila con un
+[DONE] V11. Fila coloreada según risk score en la lista — fondo de cada fila con un
                 degradado sutil (verde muy tenue para limpios, rojo muy tenue para
                 críticos) para identificar de un vistazo sin leer los números.
 
-[PENDING] V12. Avatar de Minecraft del jugador en la lista — pequeña imagen 24×24px de
+[DONE] V12. Avatar de Minecraft del jugador en la lista — pequeña imagen 24×24px de
                 la cara del skin de Crafatar (crafatar.com/avatars/<uuid>/24) junto al
                 nombre del jugador. Si no hay UUID, mostrar un ícono genérico de creeper.
 
-[PENDING] V13. Badge "NUEVO" animado en scans recientes — los scans llegados en los
+[DONE] V13. Badge "NUEVO" animado en scans recientes — los scans llegados en los
                 últimos 30 minutos muestran un badge verde "NUEVO" pulsante. Al leer
                 el scan, el badge desaparece con una animación de fade out.
 
-[PENDING] V14. Indicador de tendencia del jugador en la lista — si el jugador tiene
+[DONE] V14. Indicador de tendencia del jugador en la lista — si el jugador tiene
                 historial, mostrar una mini-flecha de color (↑ rojo si empeoró, ↓ verde
                 si mejoró, → gris si estable) junto al risk score.
 
-[PENDING] V15. Animación de entrada en nuevos scans — cuando llega un scan nuevo por
+[DONE] V15. Animación de entrada en nuevos scans — cuando llega un scan nuevo por
                 polling, la fila aparece con una animación slide-in desde arriba y fondo
                 verde que se desvanece en 3 segundos.
 
-[PENDING] V16. Bandera del país junto a la IP — icono de bandera SVG (flag-icons CSS)
+[DONE] V16. Bandera del país junto a la IP — icono de bandera SVG (flag-icons CSS)
                 de 16×11px antes de la IP del jugador. Identifica de inmediato jugadores
                 de países inusuales para el servidor.
 
-[PENDING] V17. Icono del sistema operativo detectado — logo de Windows/Linux/Mac (SVG)
+[DONE] V17. Icono del sistema operativo detectado — logo de Windows/Linux/Mac (SVG)
                 en la columna de OS de la lista. Más rápido de leer que texto.
 
-[PENDING] V18. Skeleton loading en la lista de scans — mientras carga, mostrar 8 filas
+[DONE] V18. Skeleton loading en la lista de scans — mientras carga, mostrar 8 filas
                 con bloques grises animados (shimmer effect) en lugar de la pantalla
                 vacía. Sensación de carga mucho más rápida.
 
-[PENDING] V19. Hover con preview del scan — al pasar el ratón sobre una fila de la lista,
+[DONE] V19. Hover con preview del scan — al pasar el ratón sobre una fila de la lista,
                 mostrar un tooltip/popover con: risk score, top 3 hallazgos y el veredicto
                 actual. Evita tener que abrir el scan solo para ver si vale la pena.
 
-[PENDING] V20. Multi-selección con barra de acciones bulk — checkbox al inicio de cada
+[DONE] V20. Multi-selección con barra de acciones bulk — checkbox al inicio de cada
                 fila para seleccionar múltiples scans, con barra flotante abajo mostrando
                 acciones: "Marcar pendiente", "Exportar seleccionados", "Asignar a staff".
 
 ── DASHBOARD — ESTADÍSTICAS ─────────────────────────────────────────────────
 
-[PENDING] V21. Cards de estadísticas con animación de conteo — los números grandes del
+[DONE] V21. Cards de estadísticas con animación de conteo — los números grandes del
                 dashboard (total scans, hacks hoy, etc.) cuentan desde 0 hasta el valor
                 real con easing en 1 segundo al cargar la página.
 
-[PENDING] V22. Donut chart de veredictos — gráfico de dona (Chart.js) en el dashboard
+[DONE] V22. Donut chart de veredictos — gráfico de dona (Chart.js) en el dashboard
                 mostrando la proporción de scans: clean / hacks / pendientes, con
                 animación de rotación al cargar y hover que agranda el segmento.
 
-[PENDING] V23. Gráfico de barras de top 10 hallazgos — chart horizontal con los tipos de
+[DONE] V23. Gráfico de barras de top 10 hallazgos — chart horizontal con los tipos de
                 hallazgos más frecuentes, coloreado por categoría, con barras que crecen
                 desde la izquierda al cargar. Click en barra → filtra lista de scans.
 
-[PENDING] V24. Mini-calendario de actividad (estilo GitHub) — grid de 7×12 semanas con
+[DONE] V24. Mini-calendario de actividad (estilo GitHub) — grid de 7×12 semanas con
                 celdas coloreadas por número de scans ese día. Verde claro → intenso.
                 Hover muestra "X scans el DD/MM". Semanas sin actividad = gris.
 
-[PENDING] V25. Tarjetas de estadísticas con gradiente de color dinámico — el color de
+[DONE] V25. Tarjetas de estadísticas con gradiente de color dinámico — el color de
                 fondo de cada stat card cambia según el valor: verde si está "bien",
                 rojo si supera un umbral (ej: >20% de scans con hacks esta semana).
 
-[PENDING] V26. Sparklines en todas las stat cards del dashboard — cada número grande
+[DONE] V26. Sparklines en todas las stat cards del dashboard — cada número grande
                 tiene debajo una mini línea de tendencia de los últimos 7 días,
                 verde si sube o baja según si eso es bueno o malo.
 
-[PENDING] V27. Gráfico de área apilada: veredictos por semana — muestra la evolución
+[DONE] V27. Gráfico de área apilada: veredictos por semana — muestra la evolución
                 histórica de clean/hacks/pendientes como áreas apiladas semana a semana.
                 Útil para ver si el servidor está mejorando o empeorando.
 
-[PENDING] V28. Radar chart de "perfil de amenaza del servidor" — Chart.js radar con ejes:
+[DONE] V28. Radar chart de "perfil de amenaza del servidor" — Chart.js radar con ejes:
                 Ghost Clients, Autoclickers, Xray, Macros, Mouse Weight, Network Hacks.
                 Muestra dónde está concentrado el problema en el servidor.
 
-[PENDING] V29. Contador en tiempo real de "scans en las últimas 24h" — número grande con
+[DONE] V29. Contador en tiempo real de "scans en las últimas 24h" — número grande con
                 actualización automática cada 60s, con animación de cambio al actualizar.
 
-[PENDING] V30. Tabla de "jugadores más peligrosos" en dashboard — top 5 jugadores con
+[DONE] V30. Tabla de "jugadores más peligrosos" en dashboard — top 5 jugadores con
                 mayor risk score promedio histórico, con miniaturas de skin, nombre y
                 badge de estado (baneado/activo/en revisión).
 
 ── NAVEGACIÓN Y LAYOUT ───────────────────────────────────────────────────────
 
-[PENDING] V31. Sidebar colapsable — botón de toggle para colapsar la barra lateral a solo
+[DONE] V31. Sidebar colapsable — botón de toggle para colapsar la barra lateral a solo
                 iconos (sin texto), ganando ~180px de espacio para el contenido principal.
                 Estado guardado en localStorage.
 
-[PENDING] V32. Indicador de sección activa en sidebar — barra vertical de color de acento
+[DONE] V32. Indicador de sección activa en sidebar — barra vertical de color de acento
                 animada que se desliza suavemente entre las opciones del menú al navegar,
                 en lugar de solo cambiar el fondo. Mucho más elegante.
 
-[PENDING] V33. Breadcrumb de navegación — ruta visual arriba del contenido: "Panel › Scans
+[DONE] V33. Breadcrumb de navegación — ruta visual arriba del contenido: "Panel › Scans
                 › Jugador X › Scan #1234". Cada elemento es clickeable para volver atrás.
 
-[PENDING] V34. Tabs de scans abiertos — poder tener múltiples scans abiertos como pestañas
+[DONE] V34. Tabs de scans abiertos — poder tener múltiples scans abiertos como pestañas
                 en la parte superior, como un navegador, con X para cerrar cada uno.
                 Estado persiste al navegar entre secciones.
 
-[PENDING] V35. Modo pantalla completa — botón ⛶ en el header del scan para ocultar
+[DONE] V35. Modo pantalla completa — botón ⛶ en el header del scan para ocultar
                 la sidebar y el header, maximizando el espacio para leer el scan.
                 Esc para salir. Útil en pantallas pequeñas.
 
-[PENDING] V36. Panel redimensionable — divisor arrastrable entre la lista de scans y
+[DONE] V36. Panel redimensionable — divisor arrastrable entre la lista de scans y
                 el detalle del scan cuando están en modo side-by-side. El staff puede
                 ajustar la proporción según lo que esté haciendo.
 
-[PENDING] V37. Accesos directos de teclado con overlay de ayuda — presionar ? muestra
+[DONE] V37. Accesos directos de teclado con overlay de ayuda — presionar ? muestra
                 un modal oscuro con todos los atajos: J/K para navegar lista, Enter para
                 abrir, B para ban, V para veredicto, etc. Muy visible y útil.
 
-[PENDING] V38. Header con búsqueda rápida siempre visible — barra de búsqueda en el header
+[DONE] V38. Header con búsqueda rápida siempre visible — barra de búsqueda en el header
                 principal (Ctrl+K) que abre un modal de búsqueda global con resultados
                 instantáneos. No requiere navegar a una sección específica.
 
-[PENDING] V39. "Volver arriba" flotante — botón circular semitransparente en la esquina
+[DONE] V39. "Volver arriba" flotante — botón circular semitransparente en la esquina
                 inferior derecha que aparece al hacer scroll down y hace smooth scroll
                 al inicio de la página. Imprescindible en scans con muchos hallazgos.
 
-[PENDING] V40. Transiciones animadas entre secciones del panel — al cambiar de "Dashboard"
+[DONE] V40. Transiciones animadas entre secciones del panel — al cambiar de "Dashboard"
                 a "Scans" a "Aprendizaje", el contenido hace fade+slide suave en lugar
                 de aparecer instantáneamente. 200ms de transición.
 
 ── HALLAZGOS — MICRO-INTERACCIONES ──────────────────────────────────────────
 
-[PENDING] V41. Ripple effect en botones — al hacer clic en cualquier botón de acción
+[DONE] V41. Ripple effect en botones — al hacer clic en cualquier botón de acción
                 (Ban, Limpio, Veredicto), una onda circular se expande desde el punto
                 de click. Retroalimentación táctil visual.
 
-[PENDING] V42. Confetti al marcar scan como Limpio — cuando el staff hace clic en "Limpio",
+[DONE] V42. Confetti al marcar scan como Limpio — cuando el staff hace clic en "Limpio",
                 una animación de confetti (canvas-confetti) cae durante 2 segundos desde
                 la parte superior. Hace el proceso de revisar más satisfactorio.
 
-[PENDING] V43. Animación de "destruir" al dar ban — cuando se confirma un ban, los hallazgos
+[DONE] V43. Animación de "destruir" al dar ban — cuando se confirma un ban, los hallazgos
                 de la lista se "rompen" con una animación (shake + fade out escalonado).
                 Retroalimentación visual fuerte de que la acción fue ejecutada.
 
-[PENDING] V44. Toasts apilados con barra de progreso — las notificaciones de éxito/error
+[DONE] V44. Toasts apilados con barra de progreso — las notificaciones de éxito/error
                 se apilan ordenadamente en la esquina inferior derecha, cada una con una
                 barra de progreso que indica cuánto tiempo queda antes de desaparecer.
 
-[PENDING] V45. Animación de "shake" en errores — cuando hay un error de validación (ej:
+[DONE] V45. Animación de "shake" en errores — cuando hay un error de validación (ej:
                 intentar dar veredicto sin razón), el campo o la card en cuestión hace
                 una animación de shake horizontal de 300ms. Más claro que el texto rojo.
 
-[PENDING] V46. Hover reveal en paths de archivos — los paths largos se muestran truncados
+[DONE] V46. Hover reveal en paths de archivos — los paths largos se muestran truncados
                 con "..." en el medio; al hacer hover, se expande en un tooltip con el
                 path completo formateado con el directorio en gris y el archivo en blanco.
 
-[PENDING] V47. Click para seleccionar/resaltar hallazgo — al hacer clic en un hallazgo,
+[DONE] V47. Click para seleccionar/resaltar hallazgo — al hacer clic en un hallazgo,
                 queda "seleccionado" con un borde de acento y fondo ligeramente diferente,
                 permitiendo referenciar de qué hallazgo se está hablando en las notas.
 
-[PENDING] V48. Animación de "nuevo hallazgo" al cargar — los hallazgos aparecen uno por uno
+[DONE] V48. Animación de "nuevo hallazgo" al cargar — los hallazgos aparecen uno por uno
                 con un delay escalonado de 40ms cada uno (staggered animation), dando
                 la sensación de que el sistema los está procesando en tiempo real.
 
-[PENDING] V49. Indicador de scroll en lista larga de hallazgos — si hay más de 20 hallazgos,
+[DONE] V49. Indicador de scroll en lista larga de hallazgos — si hay más de 20 hallazgos,
                 mostrar una barra de progreso vertical lateral que indica qué porcentaje
                 de los hallazgos se han visto (scroll indicator).
 
-[PENDING] V50. Modo "focus" en hallazgo — botón de lupa en cada hallazgo que lo expande
+[DONE] V50. Modo "focus" en hallazgo — botón de lupa en cada hallazgo que lo expande
                 a pantalla completa en un modal, mostrando todos los detalles, descripción
                 larga, opciones de acción, y sugerencia de IA en una sola vista limpia.
 
 ── PLAYER PROFILE — REPUTACIÓN ──────────────────────────────────────────────
 
-[PENDING] V51. Skin 3D del jugador — en el panel de reputación del jugador, mostrar la
+[DONE] V51. Skin 3D del jugador — en el panel de reputación del jugador, mostrar la
                 skin completa 3D usando la API de Visage (visage.surgeplay.com/full/<uuid>)
                 rotando lentamente. Mucho más impresionante que solo la cara 2D.
 
-[PENDING] V52. Anillo de progreso animado de reputación — en lugar del número de risk
+[DONE] V52. Anillo de progreso animado de reputación — en lugar del número de risk
                 promedio, un anillo SVG circular que se llena progresivamente al cargar,
                 coloreado según el nivel de riesgo histórico del jugador.
 
-[PENDING] V53. Historial de scans como "commits calendar" — cada scan del jugador
+[DONE] V53. Historial de scans como "commits calendar" — cada scan del jugador
                 representado como una celda en un grid de días (estilo GitHub contributions).
                 Color: verde=limpio, rojo=hack, amarillo=pendiente, gris=sin scan.
 
-[PENDING] V54. Badges con animación al ganar — cuando el perfil de un jugador sube de
+[DONE] V54. Badges con animación al ganar — cuando el perfil de un jugador sube de
                 nivel de reputación (primer scan limpio, veterano, etc.), el badge nuevo
                 aparece con una animación de "desbloqueo" (bounce + brillo).
 
-[PENDING] V55. Timeline vertical del jugador — historial de eventos como línea de tiempo
+[DONE] V55. Timeline vertical del jugador — historial de eventos como línea de tiempo
                 vertical: cada scan, veredicto, ban, y nota del staff como un punto
                 en la línea con fecha, color por tipo, y contenido al hacer hover.
 
 ── COMPARACIÓN Y DIFF ────────────────────────────────────────────────────────
 
-[PENDING] V56. Side-by-side comparador visual — al abrir el diff de dos scans, mostrarlos
+[DONE] V56. Side-by-side comparador visual — al abrir el diff de dos scans, mostrarlos
                 en dos columnas paralelas con líneas conectoras entre hallazgos iguales
                 (color verde = en ambos, rojo = solo en uno, amarillo = modificado).
 
-[PENDING] V57. Animación de transición en diff — al cambiar entre "ver scan A" y "ver diff"
+[DONE] V57. Animación de transición en diff — al cambiar entre "ver scan A" y "ver diff"
                 los hallazgos se reorganizan con animación FLIP (First-Last-Invert-Play),
                 deslizándose a su nueva posición en lugar de desaparecer y reaparecer.
 
-[PENDING] V58. Resaltado de texto diferente en paths — cuando el path cambió entre dos scans
+[DONE] V58. Resaltado de texto diferente en paths — cuando el path cambió entre dos scans
                 (misma tool, diferente carpeta), resaltar solo la parte que cambió con
                 fondo amarillo, como un diff de código.
 
 ── MAPA Y GEOGRAFÍA ──────────────────────────────────────────────────────────
 
-[PENDING] V59. Mapa interactivo (Leaflet.js) con pins animados — mapa mundial OpenStreetMap
+[DONE] V59. Mapa interactivo (Leaflet.js) con pins animados — mapa mundial OpenStreetMap
                 en el dashboard con pins que "caen" al cargar, coloreados por veredicto.
                 Al hacer clic en un pin → abre la lista de scans de esa ubicación.
 
-[PENDING] V60. Heatmap de densidad en el mapa — modo alternativo al mapa de pins: capa
+[DONE] V60. Heatmap de densidad en el mapa — modo alternativo al mapa de pins: capa
                 de calor (leaflet.heat) que muestra zonas de alta actividad como manchas
                 de colores. Rojo = muchos hacks detectados, azul = scans limpios.
 
 ── MODO OSCURO / TEMAS ───────────────────────────────────────────────────────
 
-[PENDING] V61. Modo claro completo — toggle sol/luna en el header que cambia toda la
+[DONE] V61. Modo claro completo — toggle sol/luna en el header que cambia toda la
                 interfaz a un tema claro (fondos blancos, texto oscuro) con transición
                 CSS de 300ms en todas las propiedades de color. Guardado en localStorage.
 
-[PENDING] V62. Tema "Matrix" especial — paleta de color verde neón sobre fondo negro
+[DONE] V62. Tema "Matrix" especial — paleta de color verde neón sobre fondo negro
                 profundo, con fuente monospace para los datos técnicos. Easter egg:
                 activable con el konami code (↑↑↓↓←→←→BA).
 
-[PENDING] V63. Personalización del color de acento más granular — además de los 8 colores
+[DONE] V63. Personalización del color de acento más granular — además de los 8 colores
                 preset, un color picker (input type=color) para elegir cualquier color
                 personalizado como acento. Guardado en localStorage.
 
 ── TABLAS Y LISTAS AVANZADAS ─────────────────────────────────────────────────
 
-[PENDING] V64. Columnas ordenables con animación — click en header de columna ordena la
+[DONE] V64. Columnas ordenables con animación — click en header de columna ordena la
                 tabla con animación de las filas reorganizándose (staggered FLIP animation).
                 Flecha animada en el header indica dirección del orden.
 
-[PENDING] V65. Densidad de tabla ajustable — toggle Compacto / Normal / Espacioso que
+[DONE] V65. Densidad de tabla ajustable — toggle Compacto / Normal / Espacioso que
                 cambia el padding de las filas. Staff que revisa muchos scans prefiere
                 compacto; owners que muestran resultados prefieren espacioso.
 
-[PENDING] V66. Scroll infinito suave en lista de hallazgos — en lugar de paginación con
+[DONE] V66. Scroll infinito suave en lista de hallazgos — en lugar de paginación con
                 botones, los hallazgos se cargan automáticamente al acercarse al final de
                 la lista (IntersectionObserver), con un spinner discreto de carga.
 
-[PENDING] V67. Highlight de búsqueda en tabla — cuando hay un filtro activo, las celdas
+[DONE] V67. Highlight de búsqueda en tabla — cuando hay un filtro activo, las celdas
                 que contienen el término buscado resaltan el texto exacto con fondo amarillo,
                 igual que "Ctrl+F" en el navegador.
 
 ── NOTIFICACIONES Y ALERTAS ──────────────────────────────────────────────────
 
-[PENDING] V68. Banner de alerta de riesgo crítico — si llega un scan con risk > 85 mientras
+[DONE] V68. Banner de alerta de riesgo crítico — si llega un scan con risk > 85 mientras
                 el staff está en otra sección, aparece un banner rojo en la parte superior
                 de toda la pantalla: "⚠️ Nuevo scan CRÍTICO de [jugador]" con botón "Ver".
 
-[PENDING] V69. Centro de notificaciones — ícono de campana en el header con badge de conteo.
+[DONE] V69. Centro de notificaciones — ícono de campana en el header con badge de conteo.
                 Al hacer clic, dropdown con las últimas 10 notificaciones (nuevos scans,
                 veredictos de compañeros, alertas del sistema) con marca de leído/no leído.
 
-[PENDING] V70. Sonido opcional al llegar nuevo scan CRITICAL — toggle de sonido en
+[DONE] V70. Sonido opcional al llegar nuevo scan CRITICAL — toggle de sonido en
                 configuración que reproduce un beep/tono corto cuando llega un scan con
                 risk > 75. Solo activo si el staff tiene la pestaña abierta en foco.
                 Usa la Web Audio API (sin archivos de audio externos).

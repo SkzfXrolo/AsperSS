@@ -11,11 +11,13 @@
     <title>Panel Staff - Argus Projects</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=11">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=12">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css">
 </head>
 <body data-user-id="{{ user.id if user else 0 }}">
     <!-- Sidebar -->
@@ -137,7 +139,18 @@
                 <span>Cerrar Sesión</span>
             </a>
         </div>
+        <!-- V31: Sidebar collapse toggle -->
+        <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" onclick="toggleSidebarCollapse()" title="Colapsar menú">◀</button>
     </aside>
+
+    <!-- V68: Critical alert banner (hidden by default) -->
+    <div id="critical-alert-banner">
+        <span>⚠️ <strong>Nuevo scan CRÍTICO</strong>: <span id="critical-alert-name">—</span></span>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <button id="critical-alert-view-btn" onclick="_criticalAlertView()" style="background:rgba(239,68,68,0.25);border:1px solid rgba(239,68,68,0.5);color:#fca5a5;font-size:12px;font-weight:700;padding:4px 12px;border-radius:6px;cursor:pointer;">Ver ahora</button>
+            <button onclick="document.getElementById('critical-alert-banner').classList.remove('visible')" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:16px;line-height:1;">✕</button>
+        </div>
+    </div>
 
     <!-- Overlay para cerrar sidebar en móvil -->
     <div id="sidebar-overlay" class="sidebar-overlay" onclick="closeMobileSidebar()"></div>
@@ -178,11 +191,31 @@
                         <div id="server-list" style="font-size:12px;"></div>
                     </div>
                 </div>
-                <!-- P5 #16 — Notificaciones push -->
+                <!-- V38: Ctrl+K global search button -->
+                <button onclick="openGlobalSearch()" title="Buscar (Ctrl+K)" style="
+                    background:var(--accent-bg);border:1px solid var(--border-m);border-radius:var(--radius-sm);
+                    color:var(--text-m);height:36px;padding:0 10px;display:flex;align-items:center;gap:5px;
+                    cursor:pointer;font-size:12px;transition:var(--trans);">
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="5.5" cy="5.5" r="4" stroke="currentColor" stroke-width="1.4"/><path d="M9 9L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    <span style="font-size:11px;opacity:0.6;">⌃K</span>
+                </button>
+                <!-- V69: Notification center bell -->
+                <div class="notif-bell-wrap">
+                    <button id="notif-bell-btn" onclick="toggleNotifCenter(event)" title="Notificaciones" style="
+                        background:var(--accent-bg);border:1px solid var(--border-m);border-radius:var(--radius-sm);
+                        color:var(--text-d);width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+                        cursor:pointer;transition:var(--trans);font-size:16px;">🔔</button>
+                    <span class="notif-badge" id="notif-badge">0</span>
+                    <div id="notif-dropdown">
+                        <div style="padding:10px 14px 6px;font-size:11px;font-weight:700;color:var(--text-d);text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border);margin-bottom:4px;">Notificaciones</div>
+                        <div id="notif-list"><div style="padding:16px 14px;font-size:12px;color:var(--text-d);text-align:center;">Sin notificaciones</div></div>
+                    </div>
+                </div>
+                <!-- P5 #16 — Notificaciones push (ahora ícono discreto) -->
                 <button id="push-notif-btn" onclick="togglePushSubscription(this)" title="Activar notificaciones push" style="
                     background:var(--accent-bg);border:1px solid var(--border-m);border-radius:var(--radius-sm);
                     color:var(--text-d);width:36px;height:36px;display:flex;align-items:center;justify-content:center;
-                    cursor:pointer;transition:var(--trans);font-size:16px;" aria-label="Notificaciones">🔔</button>
+                    cursor:pointer;transition:var(--trans);font-size:14px;" aria-label="Push">📡</button>
 
                 <!-- Palette picker -->
                 <div style="position:relative;">
@@ -598,8 +631,15 @@
 
         <!-- Resultados Section -->
         <section class="panel-section" id="resultados-section">
-            <div class="section-header-actions">
+            <div class="section-header-actions" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
                 <h2 class="section-subtitle">Resultados de Escaneos - Argus Projects</h2>
+                <!-- V65: Table density toggle -->
+                <div style="display:flex;align-items:center;gap:4px;">
+                    <span style="font-size:11px;color:var(--text-d);margin-right:2px;">Densidad:</span>
+                    <button onclick="setTableDensity('compact')" title="Compacto" style="font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">▣</button>
+                    <button onclick="setTableDensity('normal')" title="Normal" style="font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">▤</button>
+                    <button onclick="setTableDensity('spacious')" title="Espacioso" style="font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">▥</button>
+                </div>
             </div>
 
             <!-- Chips de filtro rápido -->
@@ -653,12 +693,12 @@
             </div>
 
             <div class="results-table-container">
-                <table class="data-table echo-results-table">
+                <table class="data-table echo-results-table results-table">
                     <thead>
                         <tr>
-                            <th>Detalles</th>
+                            <th onclick="_sortScans('machine')" style="cursor:pointer;user-select:none;" title="Ordenar">Detalles <span id="sort-machine-icon" style="opacity:0.4;font-size:10px;"></span></th>
                             <th>Juego</th>
-                            <th>Resultado</th>
+                            <th onclick="_sortScans('risk')" style="cursor:pointer;user-select:none;" title="Ordenar por risk">Resultado <span id="sort-risk-icon" style="opacity:0.4;font-size:10px;"></span></th>
                             <th>Indicaciones</th>
                             <th>Acciones</th>
                         </tr>
@@ -897,12 +937,14 @@
                                 <div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text-d);">Velocidad</span><span style="color:#38bdf8;font-weight:600;" id="detail-scan-speed">—</span></div>
                                 <div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text-d);">Fecha</span><span style="color:var(--text-h);font-weight:600;" id="detail-scan-date">—</span></div>
                                 <div style="height:1px;background:var(--border-m);"></div>
-                                <div style="display:flex;flex-direction:column;gap:5px;">
-                                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+                                <div style="display:flex;flex-direction:column;gap:5px;align-items:center;">
+                                    <!-- V1: Animated SVG gauge -->
+                                    <div id="risk-gauge-container" style="margin:4px 0;"></div>
+                                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;width:100%;">
                                         <span style="color:var(--text-d);">Risk Score</span>
                                         <span id="detail-risk-score-badge" class="risk-score-badge risk-clean" style="font-size:11px;padding:3px 10px;">—</span>
                                     </div>
-                                    <div class="risk-score-bar-wrap">
+                                    <div class="risk-score-bar-wrap" style="width:100%;">
                                         <div id="detail-risk-score-bar" class="risk-score-bar risk-clean" style="width:0%"></div>
                                     </div>
                                 </div>
@@ -1885,7 +1927,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=30"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=31"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────
@@ -1994,6 +2036,44 @@
             .catch(err => console.warn('[PWA] SW error:', err));
     }
     </script>
+
+<!-- V39: Scroll to top -->
+<button id="scroll-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Volver arriba">▲</button>
+
+<!-- V37: Keyboard shortcuts overlay -->
+<div id="kbd-overlay" onclick="if(event.target===this)closeKbdOverlay()">
+    <div class="kbd-box">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+            <div style="font-size:15px;font-weight:700;color:var(--text);">⌨ Atajos de teclado</div>
+            <button onclick="closeKbdOverlay()" style="background:none;border:none;color:var(--text-m);font-size:18px;cursor:pointer;">✕</button>
+        </div>
+        <div class="kbd-row"><span class="kbd-key">Ctrl K</span><span>Búsqueda global rápida</span></div>
+        <div class="kbd-row"><span class="kbd-key">?</span><span>Mostrar atajos de teclado</span></div>
+        <div class="kbd-row"><span class="kbd-key">Esc</span><span>Cerrar modal / overlay</span></div>
+        <div class="kbd-row"><span class="kbd-key">1</span><span>Ir a Dashboard</span></div>
+        <div class="kbd-row"><span class="kbd-key">2</span><span>Ir a Escaneos</span></div>
+        <div class="kbd-row"><span class="kbd-key">3</span><span>Ir a Tokens</span></div>
+        <div class="kbd-row"><span class="kbd-key">F</span><span>Enfocar filtro de búsqueda</span></div>
+        <div class="kbd-row"><span class="kbd-key">↑ ↓</span><span>Navegar hallazgos seleccionados</span></div>
+        <div style="margin-top:16px;font-size:11px;color:var(--text-d);border-top:1px solid var(--border);padding-top:12px;">
+            Konami: ↑↑↓↓←→←→BA → Tema Matrix 🟩
+        </div>
+    </div>
+</div>
+
+<!-- V38: Global search modal -->
+<div id="global-search-overlay" onclick="if(event.target===this)closeGlobalSearch()">
+    <div class="global-search-box">
+        <input id="global-search-input" type="text" placeholder="Buscar jugador, scan ID, IP..." oninput="_globalSearchInput(this.value)" onkeydown="_globalSearchKey(event)" autocomplete="off">
+        <div class="global-search-results" id="global-search-results">
+            <div style="padding:16px 20px;font-size:12px;color:var(--text-d);">Escribe para buscar...</div>
+        </div>
+        <div style="padding:8px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--text-d);display:flex;gap:12px;">
+            <span><span class="kbd-key" style="font-size:10px;">↵</span> Abrir</span>
+            <span><span class="kbd-key" style="font-size:10px;">Esc</span> Cerrar</span>
+        </div>
+    </div>
+</div>
 
 <!-- Modal: Extractor de IOCs -->
 <div id="ioc-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.65);align-items:center;justify-content:center;">
