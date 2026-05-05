@@ -355,6 +355,178 @@
 
 
 ════════════════════════════════════════════════════════════════════════════════
+  PARTE 6 — 40 MEJORAS DE SCANNEO (sesión 2026-05-04)
+════════════════════════════════════════════════════════════════════════════════
+
+── DETECCIÓN NUEVA ──────────────────────────────────────────────────────────
+
+[PENDING]  1. Detectar screen recorders activos durante el scan (OBS, Bandicam, XSplit, Fraps,
+               ShadowPlay) — podrían capturar la pantalla para compartirla con alguien externo
+               y burlar el SS. Señal SOSPECHOSO si están corriendo; CRITICAL si graban activamente.
+
+[PENDING]  2. Detectar VPN/proxy adapters activos en el momento del scan (WireGuard TAP, OpenVPN,
+               NordVPN, ExpressVPN, ProtonVPN) — ipconfig + registro de adaptadores de red.
+               Un jugador legítimo no debería tener VPN activa durante el SS.
+
+[PENDING]  3. Detectar archivos .CT (Cheat Engine Tables) en cualquier parte del sistema
+               (Desktop, Documents, Downloads, AppData). Un .CT es evidencia directa de uso
+               de Cheat Engine para modificar memoria de procesos en tiempo real.
+
+[PENDING]  4. Detectar Java agents inyectados: leer launcher_profiles.json buscando argumentos
+               -javaagent: apuntando a JARs fuera de .minecraft — técnica de inyección avanzada
+               que permite modificar bytecode del juego en carga (bypass de detección por hash).
+
+[PENDING]  5. Detectar editores hexadecimales instalados o ejecutados recientemente (HxD, 010 Editor,
+               ImHex, Hex Workshop) via prefetch/BAM — usados para modificar archivos binarios
+               de Minecraft o inyectar código en memoria de procesos.
+
+[PENDING]  6. Detectar .minecraft/crash-reports/*.txt que contengan en el stack trace nombres
+               de mods de hack conocidos — aunque el mod haya sido eliminado, los crash reports
+               persisten y revelan qué tenía el jugador antes del SS.
+
+[PENDING]  7. Detectar launcher_profiles.json con JVM path personalizado (campo "javaDir"
+               apuntando a un javaw.exe fuera de Program Files/Java) — técnica para usar
+               una JVM modificada o con agentes inyectados por defecto.
+
+[PENDING]  8. Detectar carpetas .tlauncher en AppData/Roaming o directorio del usuario —
+               TLauncher es un launcher pirata que permite cuentas cracked y facilita
+               uso de clientes modificados sin autenticación Mojang.
+
+[PENDING]  9. Scan de .minecraft/logs/latest.log buscando mensajes de módulos de hack:
+               "[KillAura]", "[Scaffold]", "CheatBreaker", "LiquidBounce module", etc.
+               Los logs persisten aunque se borre el cliente; muy difícil de limpiar a tiempo.
+
+[PENDING] 10. Detectar archivos de perfil de macros hardware guardados localmente:
+               Razer Synapse profiles (.json en AppData/Razer), Corsair iCUE profiles,
+               Logitech G Hub profiles — si contienen macros de click rapidísimos configurados
+               (intervalo < 50ms), es evidencia de autoclicker configurado en hardware.
+
+[PENDING] 11. Detectar instancias de MultiMC/Prism con nombres sospechosos en el campo
+               "name" de instance.cfg: "pvp", "hack", "cheat", "1.8pvp", "bypasser", etc.
+               El nombre de la instancia lo pone el jugador y a menudo es revelador.
+
+[PENDING] 12. Detectar shaderpacks modificados para wallhack: parsear archivos .vsh/.fsh
+               en .minecraft/shaderpacks/ buscando "discard" o "alpha=0" aplicado a bloques
+               sólidos — técnica de xray/wallhack por shader modificado.
+
+[PENDING] 13. Detectar presencia de packet capture tools instalados o en prefetch:
+               RawCap, WinPcap, Npcap (si no está justificado por Wireshark legítimo) —
+               usados para interceptar/modificar paquetes de red de Minecraft.
+
+[PENDING] 14. Scan de .minecraft/options.txt para detectar configuración PvP agresiva:
+               sensitivity > 150% (imposible jugar normal), FOV extremo (> 110), keybinds
+               de attack/use asignados a botones de mouse extra (button4–button8).
+
+[PENDING] 15. Detectar Minecraft corriendo dentro de VirtualBox o VMware durante el SS:
+               verificar adaptadores de red VirtualBox/VMware, procesos vboxservice.exe/vmtoolsd,
+               y registry HKLM\SOFTWARE\Oracle\VirtualBox — VM dentro de VM es evasión.
+
+[PENDING] 16. Detectar archivos de configuración de RCon/bot clients (MCC ToolChest, Baritone
+               settings.json, mineflayer configs) — acceso remoto/automatizado al servidor
+               desde la misma máquina mientras juegan.
+
+[PENDING] 17. Detectar presencia de drivers de audio virtual (VB-Audio Cable, Voicemeeter,
+               Virtual Audio Cable) instalados — usados para ocultar comunicación de equipo
+               (call en Discord privado mientras el SS corre "sin audio sospechoso").
+
+[PENDING] 18. Scan de carpeta .minecraft/saves/ buscando NBT artifacts de hack: baúles con
+               items con enchantments imposibles (nivel > 5 en espada), libros con comandos
+               inyectados, o items con NBT tags de mods de hack (LiquidBounce, Wurst items).
+
+[PENDING] 19. Detectar Remote Desktop / AnyDesk / TeamViewer activos durante el scan —
+               alguien podría estar controlando el PC del jugador de forma remota para
+               manejar el SS. Verificar procesos y conexiones activas de estos programas.
+
+[PENDING] 20. Detectar archivos de "replay" de mods sospechosos: ReplayMod guarda .mcpr en
+               .minecraft/replay_recordings/ — analizar si hay replays de partidas PvP con
+               movimientos que indican reach/killaura (puede parsearse el formato .mcpr).
+
+── REDUCCIÓN DE FALSOS POSITIVOS ────────────────────────────────────────────
+
+[PENDING] 21. Whitelist de carpetas de Minecraft Education Edition (%LOCALAPPDATA%\Packages\
+               Microsoft.MinecraftEducationEdition*) — genera muchos FP al tener JARs
+               con nombres genéricos en rutas no estándar.
+
+[PENDING] 22. Skip completo de carpetas .gradle y .maven en cualquier ruta — son dependencias
+               de build de proyectos Java legítimos (desarrollo de mods), no hacks.
+               Un modder puede tener cientos de JARs en ~/.gradle/caches/.
+
+[PENDING] 23. Whitelist de Minecraft Dungeons (%LOCALAPPDATA%\Packages\Microsoft.Lovika*)
+               y Minecraft Legends — son juegos oficiales de Mojang con ejecutables y DLLs
+               que disparan detecciones falsas de "proceso Java sospechoso".
+
+[PENDING] 24. Mejorar detección de modpacks de CurseForge/ATLauncher: leer manifest.json
+               o minecraftinstance.json del modpack y whitelist automática de todos los
+               mods listados — si el modpack es oficial, todos sus mods son legítimos.
+
+[PENDING] 25. Whitelist de entornos de desarrollo de mods: si existe un archivo build.gradle
+               o pom.xml en la carpeta padre del JAR, es un proyecto de desarrollo, no un hack.
+
+[PENDING] 26. Reducir severidad si el jugador tiene cuenta premium verificada (no cracked):
+               verificar en launcher_accounts.json si el tipo de cuenta es "msa" (Microsoft)
+               vs "legacy" vs ausente — cuenta premium = jugador con algo que perder.
+
+[PENDING] 27. Whitelist extendida de launchers alternativos legítimos: GDLauncher, ATLauncher,
+               PolyMC, Modrinth App — sus carpetas de cache y JARs internos generan FP
+               similares a los de MultiMC/Prism.
+
+[PENDING] 28. Skip de archivos en carpeta %APPDATA%\.minecraft\logs\ — los archivos de log
+               de Minecraft son texto plano que contiene menciones de mods, versiones y
+               rutas que pueden disparar detecciones de keywords incorrectamente.
+
+[PENDING] 29. Whitelist de aplicaciones de accesibilidad: NVDA, JAWS, ZoomText, Windows
+               Magnifier — sus DLLs de hook al sistema se detectan como inyección de DLL
+               sospechosa pero son herramientas legítimas de accesibilidad.
+
+[PENDING] 30. Whitelist de game launchers legítimos con clientes personalizados: Lunar Client
+               (sin mods no oficiales), Badlion Client, Feather Client — son anticheat-partners
+               de algunos servidores; tenerlos no es evidencia de trampa.
+
+── SCORING E INTELIGENCIA ───────────────────────────────────────────────────
+
+[PENDING] 31. Boost de confianza si el mismo hallazgo aparece en múltiples rutas distintas
+               (ej: mismo hash de hack en Desktop Y Downloads Y AppData) — indica distribución
+               activa, no un archivo olvidado; multiplicar confidence × 1.3.
+
+[PENDING] 32. Penalizar scans de cuentas con menos de 5h de juego en logs de .minecraft
+               (logs/ muestra sesiones) — cuenta nueva o de prueba recién creada para evadir
+               bans. Si hay pocas sesiones pero archivos de hack presentes → más sospechoso.
+
+[PENDING] 33. Boost si herramientas eliminadas aparecen en BAM/Prefetch pero NO en disco:
+               archivo ejecutado hace < 3h que ya no existe = limpieza activa antes del SS.
+               Este es uno de los hallazgos más fuertes posibles → CRITICAL automático.
+
+[PENDING] 34. Reducir score si TODOS los hallazgos son del mismo tipo/categoría (baja diversidad
+               de evidencia): 10 hallazgos de "DLL cargada" del mismo proceso son menos
+               convincentes que 3 hallazgos de categorías distintas.
+
+[PENDING] 35. Correlación temporal: si la fecha de creación de un archivo sospechoso coincide
+               ±7 días con el primer scan de otra cuenta baneada del mismo servidor
+               → boost de confianza (posible ban evasion con misma tool).
+
+[PENDING] 36. Detectar si el jugador cambió su username de Minecraft recientemente (consultar
+               Mojang Name History API) — cambio de nombre reciente + historial de scans
+               anteriores del mismo machine_id → posible evasión de registro staff.
+
+── NUEVAS FUENTES DE EVIDENCIA ──────────────────────────────────────────────
+
+[PENDING] 37. Parsear .minecraft/crash-reports/*.txt buscando en stack traces: nombres de
+               clases de hack clients (net.ccbluex, me.zero, xyz.tempfile, com.darkmagician),
+               mods no listados en .minecraft/mods/, y errores específicos de inyección.
+
+[PENDING] 38. Leer Windows Clipboard history (Get-Clipboard o PowerShell Get-WinEvent) —
+               puede contener comandos de consola, tokens de activación de hacks, IPs de
+               servidores de C2, o scripts copiados recientemente.
+
+[PENDING] 39. Scan de .minecraft/screenshots/ metadata: imágenes con EXIF que revelen
+               software de captura (OBS, Bandicam), o screenshots de menús de hack clients
+               (detectar texto en imagen via OCR básico o nombre de archivo sospechoso).
+
+[PENDING] 40. Leer registro HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\
+               RecentDocs para los últimos 50 documentos abiertos — puede revelar archivos
+               .jar, .ahk, .py, .exe de herramientas de trampa abiertas antes del SS.
+
+════════════════════════════════════════════════════════════════════════════════
   PENDIENTE — REQUIERE INFRAESTRUCTURA EXTERNA (fuera de alcance)
 ════════════════════════════════════════════════════════════════════════════════
 
