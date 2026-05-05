@@ -15,3 +15,5 @@ anthropic>=0.30.0
 duckduckgo-search>=6.0.0
 groq>=0.9.0
 google-generativeai>=0.7.0
+pywebpush>=2.0.0
+py_vapid>=1.9.0
