@@ -5291,3 +5291,166 @@ function _setBreadcrumb(parts) {
     }).join('');
 }
 window._setBreadcrumb = _setBreadcrumb;
+
+// ============================================================
+// 🖼 BACKGROUND CUSTOMIZER
+// ============================================================
+
+const BG_PRESETS = ['default','aurora','nebula','cyber','ocean','lava','forest'];
+
+function openBgCustomizer() {
+    document.getElementById('bg-customizer')?.classList.add('open');
+    _syncBgUI();
+}
+function closeBgCustomizer() {
+    document.getElementById('bg-customizer')?.classList.remove('open');
+}
+window.openBgCustomizer  = openBgCustomizer;
+window.closeBgCustomizer = closeBgCustomizer;
+
+function _syncBgUI() {
+    const cfg = _loadBgCfg();
+    // Active preset card
+    document.querySelectorAll('.bg-preset-card').forEach(c =>
+        c.classList.toggle('active', c.dataset.preset === (cfg.preset || 'default')));
+    // Sliders
+    const ov = document.getElementById('bg-overlay-slider');
+    const bl = document.getElementById('bg-blur-slider');
+    const gr = document.getElementById('bg-grid-slider');
+    if (ov) { ov.value = cfg.overlay ?? 72; document.getElementById('bg-overlay-val').textContent = (cfg.overlay ?? 72) + '%'; }
+    if (bl) { bl.value = cfg.blur ?? 0;    document.getElementById('bg-blur-val').textContent   = (cfg.blur ?? 0) + 'px'; }
+    if (gr) { gr.value = cfg.grid ?? 100;  document.getElementById('bg-grid-val').textContent   = (cfg.grid ?? 100) + '%'; }
+    // Preview
+    const prev = document.getElementById('bg-upload-preview');
+    if (prev && cfg.customUrl) {
+        prev.src = cfg.customUrl;
+        prev.style.display = 'block';
+    }
+}
+
+function _loadBgCfg() {
+    try { return JSON.parse(localStorage.getItem('argus_bg') || '{}'); } catch(_) { return {}; }
+}
+function _saveBgCfg(patch) {
+    const cfg = { ..._loadBgCfg(), ...patch };
+    localStorage.setItem('argus_bg', JSON.stringify(cfg));
+    return cfg;
+}
+
+function setBgPreset(preset) {
+    const cfg = _saveBgCfg({ preset, customUrl: preset !== 'custom' ? undefined : _loadBgCfg().customUrl });
+    _applyBg(cfg);
+    _syncBgUI();
+}
+window.setBgPreset = setBgPreset;
+
+function handleBgUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+        const url = ev.target.result;
+        const prev = document.getElementById('bg-upload-preview');
+        if (prev) { prev.src = url; prev.style.display = 'block'; }
+        // Try to store — if too large for localStorage, warn
+        try {
+            const cfg = _saveBgCfg({ preset: 'custom', customUrl: url });
+            _applyBg(cfg);
+            _syncBgUI();
+        } catch(err) {
+            showToast('Imagen demasiado grande para localStorage. Usa una imagen más pequeña.', 'error');
+        }
+    };
+    reader.readAsDataURL(file);
+}
+window.handleBgUpload = handleBgUpload;
+
+function updateBgOverlay(val) {
+    document.getElementById('bg-overlay-val').textContent = val + '%';
+    const cfg = _saveBgCfg({ overlay: parseInt(val) });
+    _applyBg(cfg);
+}
+function updateBgBlur(val) {
+    document.getElementById('bg-blur-val').textContent = val + 'px';
+    const cfg = _saveBgCfg({ blur: parseInt(val) });
+    _applyBg(cfg);
+}
+function updateBgGrid(val) {
+    document.getElementById('bg-grid-val').textContent = val + '%';
+    const cfg = _saveBgCfg({ grid: parseInt(val) });
+    _applyBg(cfg);
+}
+window.updateBgOverlay = updateBgOverlay;
+window.updateBgBlur    = updateBgBlur;
+window.updateBgGrid    = updateBgGrid;
+
+function resetBg() {
+    localStorage.removeItem('argus_bg');
+    _applyBg({});
+    _syncBgUI();
+    const prev = document.getElementById('bg-upload-preview');
+    if (prev) { prev.src = ''; prev.style.display = 'none'; }
+    const inp = document.getElementById('bg-file-input');
+    if (inp) inp.value = '';
+}
+window.resetBg = resetBg;
+
+function _applyBg(cfg) {
+    const body      = document.body;
+    const bgEl      = document.getElementById('argus-bg');
+    const overlayEl = document.getElementById('argus-bg-overlay');
+    const preset    = cfg.preset || 'default';
+    const overlay   = cfg.overlay ?? 72;
+    const blur      = cfg.blur    ?? 0;
+    const grid      = cfg.grid    ?? 100;
+
+    // Remove all bg preset classes
+    BG_PRESETS.forEach(p => body.classList.remove(`bg-${p}`));
+
+    if (preset === 'custom' && cfg.customUrl) {
+        if (bgEl) { bgEl.style.backgroundImage = `url(${cfg.customUrl})`; bgEl.style.background = ''; }
+    } else if (preset !== 'default') {
+        body.classList.add(`bg-${preset}`);
+        if (bgEl) bgEl.style.backgroundImage = '';
+    } else {
+        if (bgEl) { bgEl.style.backgroundImage = ''; bgEl.style.background = ''; }
+    }
+
+    // Overlay darkness
+    if (overlayEl) {
+        overlayEl.style.setProperty('--bg-overlay-color', `rgba(9,9,28,${overlay/100})`);
+        overlayEl.style.background = `rgba(9,9,28,${overlay/100})`;
+        overlayEl.style.backdropFilter = `blur(${blur}px)`;
+        overlayEl.style.webkitBackdropFilter = `blur(${blur}px)`;
+    }
+
+    // Grid opacity
+    document.documentElement.style.setProperty('--grid-opacity', grid / 100);
+}
+
+// Init on load
+document.addEventListener('DOMContentLoaded', () => {
+    const cfg = _loadBgCfg();
+    if (cfg && Object.keys(cfg).length > 0) _applyBg(cfg);
+
+    // Drag & drop on the upload area
+    const uploadLabel = document.getElementById('bg-upload-label');
+    if (uploadLabel) {
+        uploadLabel.addEventListener('dragover', e => { e.preventDefault(); uploadLabel.style.borderColor = 'var(--accent)'; });
+        uploadLabel.addEventListener('dragleave', () => { uploadLabel.style.borderColor = ''; });
+        uploadLabel.addEventListener('drop', e => {
+            e.preventDefault();
+            uploadLabel.style.borderColor = '';
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                document.getElementById('bg-file-input').files = e.dataTransfer.files;
+                handleBgUpload({ target: { files: [file] } });
+            }
+        });
+    }
+});
+
+// Also close on Esc
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeBgCustomizer();
+});

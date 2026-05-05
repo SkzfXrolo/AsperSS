@@ -11,7 +11,7 @@
     <title>Panel Staff - Argus Projects</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=12">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=13">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -20,6 +20,10 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css">
 </head>
 <body data-user-id="{{ user.id if user else 0 }}">
+    <!-- Background layers -->
+    <div id="argus-bg"></div>
+    <div id="argus-bg-overlay"></div>
+
     <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-header">
@@ -216,6 +220,12 @@
                     background:var(--accent-bg);border:1px solid var(--border-m);border-radius:var(--radius-sm);
                     color:var(--text-d);width:36px;height:36px;display:flex;align-items:center;justify-content:center;
                     cursor:pointer;transition:var(--trans);font-size:14px;" aria-label="Push">📡</button>
+
+                <!-- 🖼 Background customizer -->
+                <button onclick="openBgCustomizer()" title="Personalizar fondo" style="
+                    background:var(--accent-bg);border:1px solid var(--border-m);border-radius:var(--radius-sm);
+                    color:var(--accent);width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+                    cursor:pointer;transition:var(--trans);font-size:16px;">🖼</button>
 
                 <!-- Palette picker -->
                 <div style="position:relative;">
@@ -1927,7 +1937,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=31"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=32"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────
@@ -2036,6 +2046,88 @@
             .catch(err => console.warn('[PWA] SW error:', err));
     }
     </script>
+
+<!-- 🖼 Background Customizer Modal -->
+<div id="bg-customizer" onclick="if(event.target===this)closeBgCustomizer()">
+    <div class="bg-customizer-box">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <div style="font-size:16px;font-weight:700;color:var(--text);">🖼 Personalizar Fondo</div>
+            <button onclick="closeBgCustomizer()" style="background:none;border:none;color:var(--text-m);font-size:20px;cursor:pointer;">✕</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-d);margin-bottom:16px;">Elige un preset animado o sube tu propia imagen PNG/JPG</div>
+
+        <!-- Presets -->
+        <div style="font-size:11px;font-weight:700;color:var(--text-d);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Presets</div>
+        <div class="bg-preset-grid">
+            <div class="bg-preset-card" data-preset="default" onclick="setBgPreset('default')"
+                style="background:linear-gradient(135deg,#09091C,#141430);">
+                <span>Default</span>
+            </div>
+            <div class="bg-preset-card" data-preset="aurora" onclick="setBgPreset('aurora')"
+                style="background:linear-gradient(125deg,#0a0015,#1a0535,#060d2e);">
+                <div style="position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 30% 40%,rgba(139,92,246,0.5),transparent 60%),radial-gradient(ellipse 60% 50% at 70% 70%,rgba(59,130,246,0.35),transparent 55%);"></div>
+                <span>Aurora ✨</span>
+            </div>
+            <div class="bg-preset-card" data-preset="nebula" onclick="setBgPreset('nebula')"
+                style="background:radial-gradient(ellipse at 50% 50%,#0d001f,#020008);">
+                <div style="position:absolute;inset:0;background:radial-gradient(ellipse 60% 50% at 30% 40%,rgba(168,85,247,0.55),transparent 55%),radial-gradient(ellipse 40% 50% at 70% 60%,rgba(236,72,153,0.4),transparent 50%);filter:blur(8px);"></div>
+                <span>Nebula 🔮</span>
+            </div>
+            <div class="bg-preset-card" data-preset="cyber" onclick="setBgPreset('cyber')"
+                style="background:#000510;background-image:linear-gradient(rgba(0,255,200,0.1) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,200,0.1) 1px,transparent 1px);background-size:20px 20px;">
+                <div style="position:absolute;inset:0;background:radial-gradient(ellipse 80% 40% at 50% 100%,rgba(0,255,200,0.3),transparent 55%);"></div>
+                <span>Cyber 🟩</span>
+            </div>
+            <div class="bg-preset-card" data-preset="ocean" onclick="setBgPreset('ocean')"
+                style="background:linear-gradient(160deg,#000d1a,#001530,#000a22);">
+                <div style="position:absolute;inset:0;background:radial-gradient(ellipse 80% 50% at 50% 110%,rgba(6,182,212,0.4),transparent 55%),radial-gradient(ellipse 40% 40% at 20% 30%,rgba(59,130,246,0.25),transparent 50%);filter:blur(6px);"></div>
+                <span>Océano 🌊</span>
+            </div>
+            <div class="bg-preset-card" data-preset="lava" onclick="setBgPreset('lava')"
+                style="background:radial-gradient(ellipse at 50% 100%,#1a0500,#0d0000);">
+                <div style="position:absolute;inset:0;background:radial-gradient(ellipse 80% 40% at 50% 100%,rgba(239,68,68,0.5),transparent 55%),radial-gradient(ellipse 50% 35% at 20% 70%,rgba(245,158,11,0.35),transparent 50%);filter:blur(8px);"></div>
+                <span>Lava 🌋</span>
+            </div>
+            <div class="bg-preset-card" data-preset="forest" onclick="setBgPreset('forest')"
+                style="background:linear-gradient(160deg,#000d08,#001208,#000a10);">
+                <div style="position:absolute;inset:0;background:radial-gradient(ellipse 70% 50% at 30% 70%,rgba(16,185,129,0.4),transparent 55%),radial-gradient(ellipse 50% 40% at 70% 30%,rgba(52,211,153,0.25),transparent 50%);filter:blur(8px);"></div>
+                <span>Forest 🌿</span>
+            </div>
+        </div>
+
+        <!-- Upload custom -->
+        <div style="font-size:11px;font-weight:700;color:var(--text-d);text-transform:uppercase;letter-spacing:1px;margin-top:20px;margin-bottom:8px;">Imagen personalizada</div>
+        <label class="bg-upload-btn" for="bg-file-input" id="bg-upload-label">
+            <span style="font-size:20px;">📁</span>
+            <span>Arrastra o haz clic para subir PNG / JPG</span>
+        </label>
+        <input type="file" id="bg-file-input" accept="image/*" style="display:none;" onchange="handleBgUpload(event)">
+        <img id="bg-upload-preview" class="bg-upload-preview" alt="Preview">
+
+        <!-- Sliders -->
+        <div style="font-size:11px;font-weight:700;color:var(--text-d);text-transform:uppercase;letter-spacing:1px;margin-top:20px;margin-bottom:4px;">Ajustes</div>
+        <div class="bg-slider-row">
+            <label>Oscurecido</label>
+            <input type="range" min="0" max="95" value="72" id="bg-overlay-slider" oninput="updateBgOverlay(this.value)">
+            <span id="bg-overlay-val">72%</span>
+        </div>
+        <div class="bg-slider-row">
+            <label>Desenfoque</label>
+            <input type="range" min="0" max="20" value="0" id="bg-blur-slider" oninput="updateBgBlur(this.value)">
+            <span id="bg-blur-val">0px</span>
+        </div>
+        <div class="bg-slider-row">
+            <label>Cuadrícula</label>
+            <input type="range" min="0" max="100" value="100" id="bg-grid-slider" oninput="updateBgGrid(this.value)">
+            <span id="bg-grid-val">100%</span>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:20px;">
+            <button onclick="resetBg()" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;font-size:13px;">Resetear</button>
+            <button onclick="closeBgCustomizer()" style="flex:2;padding:10px;border-radius:8px;border:none;background:var(--accent);color:white;cursor:pointer;font-size:13px;font-weight:700;">Guardar y cerrar</button>
+        </div>
+    </div>
+</div>
 
 <!-- V39: Scroll to top -->
 <button id="scroll-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Volver arriba">▲</button>
