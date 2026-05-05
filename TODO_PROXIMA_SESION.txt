@@ -334,6 +334,89 @@
 [DONE]  21. Panel de reputación del jugador: historial de scans, trend, badges (reincidente, limpio)
 [DONE]  22. Filtro de hallazgos por categoría en el panel (GHOST_CLIENT / FORENSE / RED / etc.) + chips con colores
 
+── PANEL VISUAL P6 — 20 NUEVAS MEJORAS ──────────────────────────────────────
+
+[PENDING] P6-1.  Mapa mundial de scans (Leaflet.js + OpenStreetMap) — pins coloreados por
+                   veredicto (rojo=ban, verde=limpio, gris=pendiente) sobre el mapa.
+                   Endpoint: /api/dashboard/geo — devuelve lat/lon por IP con conteos.
+
+[PENDING] P6-2.  Timeline de actividad del servidor — línea de tiempo horizontal interactiva
+                   (vis-timeline o D3) mostrando scans, veredictos y bans por fecha.
+                   Permite ver picos de actividad (torneos, raids) con zoom in/out.
+
+[PENDING] P6-3.  Histograma de distribución de risk scores — gráfico de barras mostrando
+                   cuántos scans cayeron en cada rango (0-10, 10-20 … 90-100).
+                   Ayuda al staff a calibrar qué score es "normal" en el servidor.
+
+[PENDING] P6-4.  Panel kanban de "casos abiertos" — vista de tarjetas de scans sin veredicto,
+                   ordenadas por riesgo, con columnas: Nuevo / En revisión / Esperando info.
+                   Staff puede arrastrar tarjetas y asignarse casos.
+
+[PENDING] P6-5.  Visor de evidencia inline — al hacer clic en un hallazgo JAR/EXE,
+                   mostrar popup con: entropy del archivo, primeras strings sospechosas,
+                   imports detectados, tamaño, y hash SHA256 — sin salir del panel.
+
+[PENDING] P6-6.  Búsqueda global unificada — barra de búsqueda (Ctrl+K) que busca
+                   simultáneamente en machine_name, minecraft_username, IP, hallazgos,
+                   y staff notes. Resultados agrupados por tipo con highlight del término.
+
+[PENDING] P6-7.  Panel de performance del staff — tabla con: nombre del staff, scans revisados
+                   este mes, tiempo promedio de revisión, % baneados, % falsos positivos
+                   reportados. Motiva al equipo y detecta quién necesita capacitación.
+
+[PENDING] P6-8.  Feed de actividad en tiempo real (SSE) — sidebar derecho con eventos live:
+                   "nuevo scan de X", "staff Y dio veredicto a Z", "alerta: spike de scans".
+                   Server-Sent Events desde /api/events/stream — no requiere WebSocket.
+
+[PENDING] P6-9.  Vista "jugadores conocidos" — tabla de todos los machine_ids con ≥2 scans,
+                   mostrando nombre, total scans, último risk score, tendencia (↑↓→) y
+                   badge de reputación. Click → abre historial completo del jugador.
+
+[PENDING] P6-10. Patrón de hack conocido — resaltar en el scan cuando los hallazgos juntos
+                   forman un patrón conocido (ej: "Perfil Wurst" = JAR + DLL + prefetch).
+                   Card especial con nombre del patrón, descripción, y nivel de certeza.
+
+[PENDING] P6-11. Estadísticas de precisión por tipo de hallazgo — tabla mostrando para cada
+                   issue_type: cuántas veces se confirmó como hack real vs falso positivo,
+                   calculando precision y recall. Ayuda a priorizar qué hallazgos importan.
+
+[PENDING] P6-12. Exportación masiva a Excel/CSV — botón en dashboard para exportar todos
+                   los scans del mes con columnas: fecha, jugador, risk, veredicto, hallazgos
+                   top3, staff reviewer. Útil para reportes de servidor / owners.
+
+[PENDING] P6-13. Slider de confianza en filtro de hallazgos — además del filtro por categoría,
+                   un range slider 0-100% para mostrar solo hallazgos con confidence ≥ X%.
+                   Permite al staff enfocar en evidencia fuerte e ignorar ruido menor.
+
+[PENDING] P6-14. Badge visual "primera vez vs recurrente" en lista de scans — ícono distinto
+                   para scans de machine_ids vistos por primera vez vs jugadores ya escaneados.
+                   Ayuda a priorizar: los nuevos necesitan más atención.
+
+[PENDING] P6-15. Comparador visual de dos scans side-by-side — abrir dos scans en columnas
+                   paralelas con hallazgos alineados, diferencias resaltadas en amarillo,
+                   hallazgos comunes en gris, nuevos en rojo. Mejor que el diff de texto actual.
+
+[PENDING] P6-16. Contador de ban rate semanal con tendencia — card en dashboard mostrando
+                   % de scans que resultaron en ban esta semana vs la anterior, con gráfico
+                   sparkline de las últimas 8 semanas. Detecta si el servidor está mejorando.
+
+[PENDING] P6-17. Panel de alertas automáticas de Argus — sección donde el sistema notifica
+                   automáticamente: "spike de scans inusual (3x)", "tipo de hack nuevo detectado",
+                   "posible evasión: mismo machine_id con nombre distinto". Con dismiss/snooze.
+
+[PENDING] P6-18. Vista de "scans en progreso" en tiempo real — lista de scans con status=running
+                   que se auto-actualiza cada 5s, mostrando progreso estimado y tiempo transcurrido.
+                   Click → ver hallazgos parciales que ya se enviaron.
+
+[PENDING] P6-19. Anotaciones del staff en hallazgos individuales — click derecho en un hallazgo
+                   → añadir nota privada del staff ("ya investigado, es FP", "confirmar con dueño").
+                   Las notas se guardan en BD y son visibles para todo el equipo.
+
+[PENDING] P6-20. Modo "presentación para owner" — botón que genera una vista simplificada
+                   del scan (sin detalles técnicos) pensada para mostrarle al owner del servidor
+                   o al jugador baneado como evidencia: solo el nombre, nivel de alerta y
+                   descripción en lenguaje no técnico de cada hallazgo crítico.
+
 ── MEJORAS DE SERVIDOR / ML ─────────────────────────────────────────────────
 
 [DONE]  23. /api/scan/diff/<id_a>/<id_b> — endpoint para comparar dos scans y ver el delta
