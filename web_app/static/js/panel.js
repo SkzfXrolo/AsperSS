@@ -4863,7 +4863,10 @@ function toggleSidebarCollapse() {
     if (!sidebar) return;
     const collapsed = sidebar.classList.toggle('collapsed');
     localStorage.setItem('argus_sidebar_collapsed', collapsed ? '1' : '0');
-    if (btn) btn.textContent = collapsed ? '▶' : '◀';
+    if (btn) {
+        btn.textContent = collapsed ? '▶' : '◀';
+        btn.style.left = collapsed ? '47px' : '227px';
+    }
     if (main) main.style.marginLeft = collapsed ? '60px' : '';
 }
 window.toggleSidebarCollapse = toggleSidebarCollapse;
@@ -4875,7 +4878,7 @@ window.toggleSidebarCollapse = toggleSidebarCollapse;
             const btn     = document.getElementById('sidebar-toggle-btn');
             const main    = document.querySelector('.main-content');
             if (sidebar) sidebar.classList.add('collapsed');
-            if (btn)     btn.textContent = '▶';
+            if (btn) { btn.textContent = '▶'; btn.style.left = '47px'; }
             if (main)    main.style.marginLeft = '60px';
         });
     }
@@ -5617,7 +5620,9 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
             const h = new Date().getHours();
             const saludo = h < 12 ? 'Buenos días' : h < 20 ? 'Buenas tardes' : 'Buenas noches';
-            const name = '{{ user.username if user else "Staff" }}';
+            // Extract name from Jinja2-rendered element (panel.js is static, can't use template syntax)
+            const rendered = greetEl.textContent.trim();
+            const name = rendered.replace(/^(buenos\s+d[íi]as|buenas\s+tardes|buenas\s+noches|bienvenido)[,\s]*/i, '').replace(/!$/, '').trim() || 'Staff';
             _typeText(greetEl, `${saludo}, ${name}!`, 40);
         }, 500);
     }

@@ -3105,14 +3105,16 @@ body.light-theme .skel {
 .sidebar.collapsed + div + main,
 .sidebar.collapsed ~ .main-content { margin-left: 60px !important; }
 .sidebar-toggle-btn {
-    position: absolute; bottom: 70px; right: -14px;
+    position: fixed; bottom: 80px; left: 227px;
     width: 26px; height: 26px; border-radius: 50%;
     background: var(--bg-card); border: 1px solid var(--border-m);
-    color: var(--text-m); cursor: pointer; font-size: 11px; z-index: 101;
+    color: var(--text-m); cursor: pointer; font-size: 11px; z-index: 110;
     display: flex; align-items: center; justify-content: center;
-    transition: var(--trans); box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    transition: left 0.25s cubic-bezier(0.4,0,0.2,1), background 0.15s, color 0.15s;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.4);
 }
 .sidebar-toggle-btn:hover { background: var(--accent-bg); color: var(--accent); }
+.sidebar.collapsed ~ .main-content .sidebar-toggle-btn { left: 47px; }
 
 /* ═══════════════════════════════════════════════════════════════
    V39 Scroll-to-top button
