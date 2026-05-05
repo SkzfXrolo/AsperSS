@@ -5454,3 +5454,290 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeBgCustomizer();
 });
+
+// ============================================================
+// ④ PARTÍCULAS FLOTANTES
+// ============================================================
+(function initParticles() {
+    const canvas = document.getElementById('particles-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let W, H, particles = [];
+
+    function resize() {
+        W = canvas.width  = window.innerWidth;
+        H = canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize, { passive: true });
+
+    const N = 55;
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8B5CF6';
+
+    for (let i = 0; i < N; i++) {
+        particles.push({
+            x: Math.random() * 1920,
+            y: Math.random() * 1080,
+            r: Math.random() * 1.4 + 0.3,
+            vx: (Math.random() - 0.5) * 0.18,
+            vy: (Math.random() - 0.5) * 0.18,
+            o: Math.random() * 0.5 + 0.1,
+        });
+    }
+
+    let raf;
+    function draw() {
+        ctx.clearRect(0, 0, W, H);
+        const col = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8B5CF6';
+        particles.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x % W, p.y % H, p.r, 0, Math.PI * 2);
+            ctx.fillStyle = col;
+            ctx.globalAlpha = p.o;
+            ctx.fill();
+            p.x += p.vx;
+            p.y += p.vy;
+            if (p.x < 0) p.x = W;
+            if (p.x > W) p.x = 0;
+            if (p.y < 0) p.y = H;
+            if (p.y > H) p.y = 0;
+        });
+        ctx.globalAlpha = 1;
+
+        // Draw faint connection lines between nearby particles
+        for (let i = 0; i < particles.length; i++) {
+            for (let j = i + 1; j < particles.length; j++) {
+                const dx = particles[i].x - particles[j].x;
+                const dy = particles[i].y - particles[j].y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist < 120) {
+                    ctx.beginPath();
+                    ctx.moveTo(particles[i].x % W, particles[i].y % H);
+                    ctx.lineTo(particles[j].x % W, particles[j].y % H);
+                    ctx.strokeStyle = col;
+                    ctx.globalAlpha = (1 - dist / 120) * 0.08;
+                    ctx.lineWidth = 0.6;
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+            }
+        }
+        raf = requestAnimationFrame(draw);
+    }
+    draw();
+
+    // Pause when tab hidden to save resources
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) cancelAnimationFrame(raf);
+        else draw();
+    });
+})();
+
+// ============================================================
+// ⑤ ANIMACIÓN DE ENTRADA
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+    // Sidebar
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) { sidebar.style.opacity = '0'; sidebar.style.transform = 'translateX(-20px)';
+        requestAnimationFrame(() => {
+            sidebar.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+            sidebar.style.opacity = '1'; sidebar.style.transform = '';
+        });
+    }
+    // Header
+    const header = document.querySelector('.panel-header');
+    if (header) { header.style.opacity = '0'; header.style.transform = 'translateY(-16px)';
+        setTimeout(() => {
+            header.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+            header.style.opacity = '1'; header.style.transform = '';
+        }, 120);
+    }
+});
+
+// ============================================================
+// ⑥ HOVER 3D TILT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+    function applyTilt(el) {
+        el.addEventListener('mousemove', e => {
+            const rect = el.getBoundingClientRect();
+            const cx = rect.left + rect.width  / 2;
+            const cy = rect.top  + rect.height / 2;
+            const dx = (e.clientX - cx) / (rect.width  / 2);
+            const dy = (e.clientY - cy) / (rect.height / 2);
+            el.style.transform = `perspective(900px) rotateY(${dx * 5}deg) rotateX(${-dy * 5}deg) translateY(-4px)`;
+        });
+        el.addEventListener('mouseleave', () => {
+            el.style.transform = '';
+            el.style.transition = 'transform 0.4s cubic-bezier(0.4,0,0.2,1)';
+            setTimeout(() => el.style.transition = '', 400);
+        });
+    }
+    document.querySelectorAll('.tilt-card').forEach(applyTilt);
+
+    // Also observe for dynamically added tilt-cards
+    const obs = new MutationObserver(muts => {
+        muts.forEach(m => m.addedNodes.forEach(n => {
+            if (n.nodeType === 1) {
+                if (n.classList?.contains('tilt-card')) applyTilt(n);
+                n.querySelectorAll?.('.tilt-card').forEach(applyTilt);
+            }
+        }));
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+});
+
+// ============================================================
+// ⑨ TYPING ANIMATION EN EL SALUDO
+// ============================================================
+function _typeText(el, text, speed = 38) {
+    if (!el) return;
+    el.classList.add('typing-cursor');
+    el.textContent = '';
+    let i = 0;
+    const interval = setInterval(() => {
+        el.textContent += text[i++];
+        if (i >= text.length) {
+            clearInterval(interval);
+            setTimeout(() => el.classList.remove('typing-cursor'), 800);
+        }
+    }, speed);
+}
+
+// Override greeting rendering to use typing effect
+const _origLoadDashboard = window.loadDashboard || null;
+const _greetingDone = { done: false };
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Hook into loadDashboard to add typing effect
+    const greetEl = document.getElementById('greeting-text');
+    if (greetEl && !_greetingDone.done) {
+        _greetingDone.done = true;
+        setTimeout(() => {
+            const h = new Date().getHours();
+            const saludo = h < 12 ? 'Buenos días' : h < 20 ? 'Buenas tardes' : 'Buenas noches';
+            const name = '{{ user.username if user else "Staff" }}';
+            _typeText(greetEl, `${saludo}, ${name}!`, 40);
+        }, 500);
+    }
+});
+
+// ============================================================
+// ② SPARKLINES EN STAT CARDS
+// ============================================================
+function _drawSparkline(canvasId, values, color) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !values || values.length < 2) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const min = Math.min(...values);
+    const max = Math.max(...values) || 1;
+    const range = max - min || 1;
+    ctx.clearRect(0, 0, W, H);
+
+    const pts = values.map((v, i) => ({
+        x: (i / (values.length - 1)) * W,
+        y: H - ((v - min) / range) * (H - 4) - 2,
+    }));
+
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, color + '55');
+    grad.addColorStop(1, color + '00');
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+}
+window._drawSparkline = _drawSparkline;
+
+// Draw placeholder sparklines on load (random-ish trend)
+document.addEventListener('DOMContentLoaded', () => {
+    const makeTrend = (end, len = 8) => {
+        const arr = [];
+        let v = end * 0.6;
+        for (let i = 0; i < len; i++) {
+            v += (Math.random() - 0.4) * (end * 0.15);
+            arr.push(Math.max(0, v));
+        }
+        arr[arr.length - 1] = end;
+        return arr;
+    };
+    setTimeout(() => {
+        const ts = parseInt(document.getElementById('total-scans')?.textContent) || 20;
+        const ti = parseInt(document.getElementById('total-issues')?.textContent) || 8;
+        const um = parseInt(document.getElementById('unique-machines')?.textContent) || 15;
+        const at = parseInt(document.getElementById('active-tokens')?.textContent) || 5;
+        _drawSparkline('spark-scans',    makeTrend(ts), '#8B5CF6');
+        _drawSparkline('spark-issues',   makeTrend(ti), '#f43f5e');
+        _drawSparkline('spark-machines', makeTrend(um), '#06b6d4');
+        _drawSparkline('spark-tokens',   makeTrend(at), '#10b981');
+    }, 1200);
+});
+
+// ============================================================
+// ③ SCAN DETAIL HEADER DINÁMICO
+// ============================================================
+function _setDetailRiskTheme(riskScore) {
+    const sec = document.getElementById('issues-detail-section');
+    if (!sec) return;
+    sec.classList.remove('risk-critical','risk-suspicious','risk-clean');
+    if      (riskScore >= 70) sec.classList.add('risk-critical');
+    else if (riskScore >= 30) sec.classList.add('risk-suspicious');
+    else                       sec.classList.add('risk-clean');
+}
+window._setDetailRiskTheme = _setDetailRiskTheme;
+
+// ============================================================
+// ⑪ FOCUS MODE toggle
+// ============================================================
+function toggleFocusMode() {
+    const on = document.body.classList.toggle('focus-mode');
+    showToast(on ? 'Modo focus activado — mueve el mouse a la sidebar para verla' : 'Modo focus desactivado', 'info');
+    localStorage.setItem('argus_focus', on ? '1' : '0');
+}
+window.toggleFocusMode = toggleFocusMode;
+document.addEventListener('DOMContentLoaded', () => {
+    if (localStorage.getItem('argus_focus') === '1') document.body.classList.add('focus-mode');
+});
+
+// ============================================================
+// ⑫ FLIP ANIMATION EN EL animateNumber OVERRIDE
+// ============================================================
+const _origAnimateNumber = animateNumber;
+window.animateNumber = function(el, target, duration) {
+    if (!el) return;
+    el.style.perspective = '300px';
+    const orig = _origAnimateNumber;
+    // Wrap each digit update with a quick flip class on final value
+    orig(el, target, duration || 750);
+    setTimeout(() => {
+        el.classList.add('num-flip');
+        el.addEventListener('animationend', () => el.classList.remove('num-flip'), { once: true });
+    }, duration || 750);
+};
+
+// ============================================================
+// HOOK viewScanDetails to set risk theme
+// ============================================================
+const _origViewScan = window.viewScanDetails;
+if (_origViewScan) {
+    window.viewScanDetails = async function(scanId) {
+        await _origViewScan(scanId);
+        // Apply risk theme after data is loaded
+        const rs = _currentScanData?.risk_score;
+        if (rs !== undefined && rs !== null) _setDetailRiskTheme(rs);
+        // Auto-enable focus mode preference
+        if (localStorage.getItem('argus_focus') === '1') document.body.classList.add('focus-mode');
+    };
+}
