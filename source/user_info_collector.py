@@ -114,13 +114,22 @@ class UserInfoCollector:
             return None
     
     def get_minecraft_username(self):
-        """Obtiene el username de Minecraft desde archivos locales Y conexiones activas"""
-        # Primero intentar desde conexiones activas (más confiable)
-        username_from_conn = self.get_minecraft_username_from_connections()
-        if username_from_conn:
-            return username_from_conn
-        
-        # Si no se encuentra, buscar en archivos
+        """Obtiene el username de Minecraft. Orden de prioridad:
+        1. --username del proceso Java en ejecución (100% fiable, todos los launchers lo pasan)
+        2. launcher_accounts.json → cuenta activa (cuenta Microsoft moderna)
+        3. launcher_profiles.json → authenticationDatabase (cuentas legacy/Mojang)
+        4. usercache.json → entrada más reciente (puede ser de otro jugador, evitar si es posible)
+        """
+        # Prioridad máxima: leer --username del proceso Java activo
+        try:
+            mc_info = self.get_minecraft_active_info()
+            if mc_info.get('mc_username'):
+                self.minecraft_username = mc_info['mc_username']
+                return self.minecraft_username
+        except Exception:
+            pass
+
+        # Si no hay proceso corriendo, buscar en archivos del launcher
         try:
             # Rutas comunes donde se guarda el username de Minecraft
             minecraft_paths = [
@@ -186,47 +195,36 @@ class UserInfoCollector:
                     except:
                         pass
                 
-                # Buscar en usercache.json (ordenado por expiresOn desc = el más reciente)
-                usercache = os.path.join(minecraft_path, 'usercache.json')
-                if os.path.exists(usercache):
-                    try:
-                        with open(usercache, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
-                        if isinstance(data, list) and len(data) > 0:
-                            sorted_entries = sorted(
-                                data,
-                                key=lambda e: e.get('expiresOn', ''),
-                                reverse=True
-                            )
-                            for entry in sorted_entries:
-                                username = entry.get('name', '')
-                                if username and len(username) >= 3:
-                                    self.minecraft_username = username
-                                    return username
-                    except:
-                        pass
-                
-                # Buscar en logs recientes
+                # NOTE: usercache.json is intentionally skipped — it caches names of OTHER
+                # players seen on servers, not the logged-in user. Using it causes the bug
+                # where a random player's name appears instead of the real account holder.
+
+                # Last resort: scan MC logs for login/session lines that identify the account holder
                 logs_path = os.path.join(minecraft_path, 'logs')
                 if os.path.exists(logs_path):
                     try:
+                        import re
                         log_files = sorted(
-                            [f for f in os.listdir(logs_path) if f.endswith('.log')],
+                            [f for f in os.listdir(logs_path) if f.endswith('.log') or f == 'latest.log'],
                             key=lambda x: os.path.getmtime(os.path.join(logs_path, x)),
                             reverse=True
                         )
-                        
-                        for log_file in log_files[:3]:  # Revisar últimos 3 logs
+                        for log_file in log_files[:3]:
                             log_path = os.path.join(logs_path, log_file)
                             try:
                                 with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
                                     content = f.read()
-                                    # Buscar patrones comunes de username en logs
-                                    import re
-                                    # Patrón: [Client thread/INFO]: [CHAT] <Username> ...
-                                    matches = re.findall(r'<([A-Za-z0-9_]{3,16})>', content)
-                                    if matches:
-                                        self.minecraft_username = matches[-1]  # Último username encontrado
+                                # These patterns only appear once per session and identify the logged-in account:
+                                # "Setting user: <name>" (vanilla/Forge/Fabric)
+                                # "Logging in with <name>" (some launchers)
+                                for pattern in [
+                                    r'Setting user:\s+([A-Za-z0-9_]{3,16})',
+                                    r'Logging in with\s+([A-Za-z0-9_]{3,16})',
+                                    r'\[(?:Client thread|main)/INFO\].*?Hello,\s+([A-Za-z0-9_]{3,16})',
+                                ]:
+                                    m = re.search(pattern, content)
+                                    if m:
+                                        self.minecraft_username = m.group(1)
                                         return self.minecraft_username
                             except:
                                 continue
@@ -239,37 +237,42 @@ class UserInfoCollector:
             return None
     
     def get_minecraft_active_info(self):
-        """Detects running Minecraft version, launcher type, and loaded mods/agents."""
+        """Detects running Minecraft version, launcher type, loaded mods/agents, and logged-in username."""
         result = {
             'mc_running': False,
             'mc_version': None,
             'mc_launcher': None,
             'mc_mods': [],
             'java_agents': [],
+            'mc_username': None,  # username from --username flag (most reliable source)
         }
         try:
-            import psutil
+            import psutil, re
             for proc in psutil.process_iter(['name', 'cmdline', 'exe']):
                 try:
                     name = (proc.info.get('name') or '').lower()
                     cmdline = proc.info.get('cmdline') or []
-                    cmd_str = ' '.join(str(c) for c in cmdline).lower()
+                    cmd_str = ' '.join(str(c) for c in cmdline)
+                    cmd_lower = cmd_str.lower()
 
                     is_java = name in ('java.exe', 'javaw.exe', 'java', 'javaw')
                     if not is_java:
                         continue
-                    if 'minecraft' not in cmd_str and 'net.minecraft' not in cmd_str:
+                    if 'minecraft' not in cmd_lower and 'net.minecraft' not in cmd_lower:
                         continue
 
                     result['mc_running'] = True
 
-                    # Version: --version 1.8.9 or --gameDir
-                    import re
-                    vm = re.search(r'--version\s+([^\s]+)', cmd_str)
+                    # --username is passed by ALL launchers (vanilla, Lunar, Badlion, Forge…)
+                    # Use original cmd_str (not lowercased) to preserve casing
+                    um = re.search(r'--username\s+([A-Za-z0-9_]{3,16})', cmd_str)
+                    if um:
+                        result['mc_username'] = um.group(1)
+
+                    vm = re.search(r'--version\s+([^\s]+)', cmd_lower)
                     if vm:
                         result['mc_version'] = vm.group(1)
 
-                    # Launcher detection
                     for launcher, keyword in [
                         ('Lunar Client', 'lunarclient'),
                         ('Badlion Client', 'badlion'),
@@ -280,15 +283,13 @@ class UserInfoCollector:
                         ('OptiFine', 'optifine'),
                         ('Official Launcher', 'net.minecraft.client.main'),
                     ]:
-                        if keyword in cmd_str:
+                        if keyword in cmd_lower:
                             result['mc_launcher'] = launcher
                             break
 
-                    # Java agents (-javaagent:path)
                     agents = re.findall(r'-javaagent:([^\s]+)', cmd_str)
                     result['java_agents'] = agents
 
-                    # Mods from --gameDir or --assetsDir
                     game_dir_m = re.search(r'--gameDir\s+([^\s]+)', cmd_str)
                     if game_dir_m:
                         mods_path = os.path.join(game_dir_m.group(1), 'mods')
@@ -296,9 +297,9 @@ class UserInfoCollector:
                             result['mc_mods'] = [
                                 f for f in os.listdir(mods_path)
                                 if f.endswith(('.jar', '.zip'))
-                            ][:50]  # cap at 50
+                            ][:50]
 
-                    break  # Found MC process, stop
+                    break
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
         except Exception as e:
@@ -308,10 +309,19 @@ class UserInfoCollector:
     def collect_all_info(self):
         """Recopila toda la información del usuario"""
         mc_info = self.get_minecraft_active_info()
+
+        # If MC is running, we already have the username from --username flag;
+        # pass it directly so get_minecraft_username() doesn't scan the process again.
+        if mc_info.get('mc_username'):
+            self.minecraft_username = mc_info['mc_username']
+            mc_username = mc_info['mc_username']
+        else:
+            mc_username = self.get_minecraft_username()
+
         info = {
             'ip_address': self.get_ip_address(),
             'country': self.get_country_from_ip(),
-            'minecraft_username': self.get_minecraft_username(),
+            'minecraft_username': mc_username,
             'os': platform.system(),
             'os_version': platform.version(),
             'mc_running': mc_info['mc_running'],
