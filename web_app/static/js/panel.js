@@ -805,6 +805,18 @@ function _renderEnsembleVerdict(scan) {
         ? `<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">SANCIONABLE</span>`
         : `<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);">NO SANCIONABLE</span>`;
 
+    // Instance gate indicator
+    const inInst = instSys.in_instance || 0;
+    const gateColor = inInst > 0 ? '#10b981' : '#f59e0b';
+    const gateIcon  = inInst > 0 ? '🔓' : '🔒';
+    const gateLabel = inInst > 0 ? `${inInst} en instancia` : 'Sin evidencia en instancia';
+    const gateCapped = ens.gate_capped;
+    const gateHtml = `<div style="display:flex;align-items:center;gap:5px;font-size:9px;padding:3px 7px;border-radius:5px;background:${inInst>0?'rgba(16,185,129,0.08)':'rgba(245,158,11,0.08)'};border:1px solid ${inInst>0?'rgba(16,185,129,0.2)':'rgba(245,158,11,0.2)'};">
+        <span>${gateIcon}</span>
+        <span style="color:${gateColor};font-weight:600;">${gateLabel}</span>
+        ${gateCapped ? '<span style="color:var(--text-d);">· verdict topado</span>' : ''}
+    </div>`;
+
     // Top clients from signal convergence
     const clients = convSys.clients || {};
     const topClients = Object.entries(clients).sort((a,b) => b[1].length - a[1].length).slice(0,2)
@@ -823,15 +835,14 @@ function _renderEnsembleVerdict(scan) {
                 </div>
                 <span style="font-size:10px;color:${v.color};font-weight:700;">${score}</span>
             </div>
+            ${gateHtml}
             <div style="display:flex;flex-direction:column;gap:4px;">
-                ${_row('En instancia', instSys.score||0, 4, '#10b981')}
-                ${_row('Convergencia', convSys.score||0, 4, '#818cf8')}
                 ${_row('Risk Score',   rsSys.score||0,   4, '#f59e0b')}
+                ${_row('Convergencia', convSys.score||0, 4, '#818cf8')}
                 ${_row('Hash Rep.',    hashSys.score||0, 4, '#ef4444')}
                 ${_row('Temporalidad', tempSys.score||0, 4, '#38bdf8')}
                 ${_row('ML',           mlSys.score||0,   4, '#a78bfa')}
             </div>
-            ${ens.reason ? `<div style="font-size:9px;color:var(--text-d);margin-top:1px;">${ens.reason}</div>` : ''}
             ${topClients ? `<div style="font-size:9px;color:var(--text-d);">Clientes: ${topClients}</div>` : ''}
         </div>`;
 }

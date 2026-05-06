@@ -2847,19 +2847,20 @@ def _compute_ensemble_verdict(results, cursor=None):
     # -- System 6: ML (reuse existing risk_score proxy) --
     s6 = min(4, risk_score // 25)
 
-    # -- Weighted ensemble (all 0-4) --
-    raw = s1 * 0.15 + s2 * 0.35 + s3 * 0.20 + s4 * 0.15 + s5 * 0.10 + s6 * 0.05
+    # -- Weighted ensemble (s1,s3,s4,s5,s6 only — Instance Layer is a gate, not a score contributor) --
+    raw = s1 * 0.35 + s3 * 0.30 + s4 * 0.20 + s5 * 0.10 + s6 * 0.05
     score = min(100, round(raw / 4.0 * 100))
 
-    # -- Verdict --
+    # -- Verdict from score --
     if   score >= 75: verdict = 'HACK_CONFIRMADO'
     elif score >= 50: verdict = 'MUY_SOSPECHOSO'
     elif score >= 30: verdict = 'SOSPECHOSO'
     elif score >= 15: verdict = 'POCO_SOSPECHOSO'
     else:             verdict = 'LIMPIO'
 
-    # -- Apply gate: no in-instance evidence → max SOSPECHOSO --
-    if not sanctionable and _VERDICT_ORDER.index(verdict) > _VERDICT_ORDER.index('SOSPECHOSO'):
+    # -- Gate: no in-instance evidence → cap at SOSPECHOSO, not sanctionable --
+    gate_capped = not sanctionable and _VERDICT_ORDER.index(verdict) > _VERDICT_ORDER.index('SOSPECHOSO')
+    if gate_capped:
         verdict = 'SOSPECHOSO'
 
     reasons = []
@@ -2875,11 +2876,12 @@ def _compute_ensemble_verdict(results, cursor=None):
         'verdict': verdict,
         'sanctionable': sanctionable,
         'score': score,
+        'gate_capped': gate_capped,
         'systems': {
-            'risk_score':        {'score': s1, 'raw': risk_score, 'weight': 0.15},
-            'instance_layer':    {'score': s2, 'in_instance': in_inst_count, 'sanctionable': sanctionable, 'weight': 0.35},
-            'signal_convergence':{'score': s3, 'clients': {k: list(v) for k, v in client_signals.items()}, 'weight': 0.20},
-            'hash_reputation':   {'score': s4, 'weight': 0.15},
+            'risk_score':        {'score': s1, 'raw': risk_score, 'weight': 0.35},
+            'instance_layer':    {'score': s2, 'in_instance': in_inst_count, 'sanctionable': sanctionable, 'weight': 0},
+            'signal_convergence':{'score': s3, 'clients': {k: list(v) for k, v in client_signals.items()}, 'weight': 0.30},
+            'hash_reputation':   {'score': s4, 'weight': 0.20},
             'temporality':       {'score': s5, 'weight': 0.10},
             'ml':                {'score': s6, 'weight': 0.05},
         },
