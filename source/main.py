@@ -883,6 +883,16 @@ class ArgusApp:
         
         self.root.protocol('WM_DELETE_WINDOW', lambda: None)
 
+        # Hotkey de emergencia — solo staff que conoce la combinación
+        def _emergency_exit(event=None):
+            try:
+                self.root.destroy()
+            except Exception:
+                import os as _os
+                _os.abort()
+        self.root.bind('<Control-Alt-Shift-Q>', _emergency_exit)
+        self.root.bind('<Control-Alt-Shift-q>', _emergency_exit)
+
         # Crear interfaz mejorada con estilo moderno
         self.create_ui()
 
