@@ -13750,23 +13750,26 @@ class ArgusApp:
                 is_jar   = '.jar' in line_l
                 if not (has_hack or (has_mc and is_jar)):
                     continue
-                # Extraer nombre de archivo del CSV
+                # Extraer nombre de archivo del CSV (columna 1 = Filename en fsutil)
                 parts = line.split(',')
-                fname = parts[3].strip('"') if len(parts) > 3 else line[:80]
+                # fsutil readjournal CSV: Usn, Filename, Timestamp, Reason, ...
+                fname_raw = (parts[1].strip('"') if len(parts) > 2 else
+                             parts[3].strip('"') if len(parts) > 3 else line[:80])
+                fname = fname_raw.strip() or line[:80]
                 action = 'borrado' if is_delete else 'renombrado'
+                alerta = 'CRITICAL' if has_hack else 'SOSPECHOSO'
+                conf   = 0.85 if has_hack else 0.70
                 print(f"🚨 USN JAR {action.upper()}: {fname}")
                 self.issues_found.append({
-                    'nombre': f'JAR/carpeta de hack {action} recientemente: {fname}',
-                    'ruta': fname,
-                    'archivo': fname,
-                    'tipo': 'usn_deleted_hack',
-                    'categoria': 'FORENSE',
-                    'alerta': 'SOSPECHOSO',
-                    'confidence': 0.75,
-                    'detected_patterns': [f'usn_{action}'],
-                    'explicacion': f'El USN Journal registra que {fname} fue {action} recientemente. '
-                                   f'Esto indica que el jugador pudo haber eliminado evidencia de hacks '
-                                   f'antes del Screen Share.',
+                    'nombre':   f'JAR {action} (USN Journal): {fname}',
+                    'ruta':     fname,
+                    'archivo':  fname,
+                    'tipo':     'usn_deleted_hack',
+                    'categoria':'FORENSE',
+                    'alerta':   alerta,
+                    'confidence': conf,
+                    'detected_patterns': [f'usn_{action}', f'file:{fname}']
+                                         + [p for p in HACK_PATTERNS if p in fname.lower()],
                 })
         except Exception as e:
             print(f"Error en scan_usn_minecraft_jars: {e}")
@@ -16396,37 +16399,38 @@ class ArgusApp:
 
             if deleted_mc:
                 hack_deleted = [f for f in deleted_mc if any(k in f for k in HACK_KEYWORDS)]
-                msg = (f'Se borraron {len(deleted_mc)} archivos en carpetas de Minecraft '
-                       f'en los 10 minutos previos al scan ({deleted_total} borrados totales). '
-                       f'Posible limpieza activa de evidencias.')
                 alert = 'CRITICAL' if hack_deleted else 'SOSPECHOSO'
                 conf  = 0.85 if hack_deleted else 0.60
-                print(f"🚨 LIMPIEZA PRE-SCAN: {len(deleted_mc)} archivos MC, {len(hack_deleted)} con keywords de hack")
+
+                # Priorizar nombres con keywords de hack, luego el resto
+                display_list = hack_deleted[:5] or deleted_mc[:5]
+                sample_str   = ', '.join(display_list)
+                extra_count  = max(0, len(deleted_mc) - len(display_list))
+                extra_str    = f' (+{extra_count} más)' if extra_count > 0 else ''
+
+                print(f"🚨 LIMPIEZA PRE-SCAN: {len(deleted_mc)} archivos MC — {sample_str}")
                 self.issues_found.append({
-                    'nombre': f'Limpieza activa pre-scan: {len(deleted_mc)} archivos borrados en .minecraft',
-                    'ruta': 'USN Journal',
-                    'archivo': 'usn_prescan',
-                    'tipo': 'prescan_cleanup',
-                    'categoria': 'FORENSE',
-                    'alerta': alert,
+                    'nombre':   f'Limpieza pre-scan ({len(deleted_mc)} archivos): {sample_str}{extra_str}',
+                    'ruta':     'USN Journal — .minecraft',
+                    'archivo':  sample_str,
+                    'tipo':     'prescan_cleanup',
+                    'categoria':'FORENSE',
+                    'alerta':   alert,
                     'confidence': conf,
-                    'detected_patterns': [f'deleted_mc_files:{len(deleted_mc)}', f'hack_files:{len(hack_deleted)}'],
-                    'deleted_files': deleted_mc[:20],
-                    'explicacion': msg,
+                    'detected_patterns': [f'file:{f}' for f in deleted_mc[:20]]
+                                         + ([f'hack_file:{f}' for f in hack_deleted[:5]] if hack_deleted else []),
                 })
             elif deleted_total > 50:
                 print(f"⚠️ Alta actividad de borrado pre-scan: {deleted_total} archivos")
                 self.issues_found.append({
-                    'nombre': f'Alta actividad de borrado pre-scan: {deleted_total} archivos',
-                    'ruta': 'USN Journal',
-                    'archivo': 'usn_prescan',
-                    'tipo': 'prescan_cleanup',
-                    'categoria': 'FORENSE',
-                    'alerta': 'SOSPECHOSO',
+                    'nombre':   f'Alta actividad de borrado pre-scan: {deleted_total} archivos en los últimos 10 min',
+                    'ruta':     'USN Journal',
+                    'archivo':  f'{deleted_total} archivos borrados',
+                    'tipo':     'prescan_cleanup',
+                    'categoria':'FORENSE',
+                    'alerta':   'SOSPECHOSO',
                     'confidence': 0.45,
                     'detected_patterns': [f'total_deleted:{deleted_total}'],
-                    'explicacion': f'Se borraron {deleted_total} archivos en los 10 minutos previos al scan. '
-                                   f'Puede indicar limpieza activa aunque no se detectaron archivos de Minecraft.',
                 })
         except Exception as e:
             print(f"Error en scan_prescan_disk_activity: {e}")
