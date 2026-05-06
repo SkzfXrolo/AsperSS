@@ -11,7 +11,7 @@
     <title>Panel Staff - Argus Projects</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=17">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=18">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -441,86 +441,6 @@
         <!-- Generar App Section -->
         <section class="panel-section" id="generar-app-section">
 
-            <!-- Hero: app info strip -->
-            <div class="ga-hero entrance-anim tilt-card" style="display:none">
-                <div class="ga-hero-left">
-                    <div class="ga-app-icon">
-                        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                            <circle cx="18" cy="18" r="17" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4 3"/>
-                            <circle cx="18" cy="18" r="10" stroke="var(--accent)" stroke-width="1"/>
-                            <circle cx="18" cy="18" r="4" fill="var(--accent)" opacity=".85"/>
-                        </svg>
-                    </div>
-                    <div>
-                        <div class="ga-app-name">Argus Scanner</div>
-                        <div class="ga-app-meta">
-                            <span class="ga-badge ga-badge-version">v{{ scanner_version or '1.6.22' }}</span>
-                            <span class="ga-badge ga-badge-platform">
-                                <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="margin-right:3px"><rect x="1" y="1" width="4" height="4" rx=".5" fill="currentColor"/><rect x="6" y="1" width="4" height="4" rx=".5" fill="currentColor"/><rect x="1" y="6" width="4" height="4" rx=".5" fill="currentColor"/><rect x="6" y="6" width="4" height="4" rx=".5" fill="currentColor"/></svg>
-                                Windows x64
-                            </span>
-                            <span class="ga-badge ga-badge-ai">IA Autónoma</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="ga-hero-right">
-                    <div class="ga-status-pill" id="ga-status-pill">
-                        <span class="ga-status-dot"></span>
-                        <span id="ga-status-text">Listo para descargar</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- AI stats row -->
-            <div class="ga-stats-row entrance-anim">
-                <div class="ga-stat-chip">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="var(--accent)" stroke-width="1.2"/><path d="M5 8l2 2 4-4" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    <span class="ga-stat-val" id="ga-patterns-val">—</span>
-                    <span class="ga-stat-lbl">Patrones IA</span>
-                </div>
-                <div class="ga-stat-chip">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="9" rx="1.5" stroke="var(--accent)" stroke-width="1.2"/><path d="M5 4V3a3 3 0 016 0v1" stroke="var(--accent)" stroke-width="1.2"/></svg>
-                    <span class="ga-stat-val" id="ga-hashes-val">—</span>
-                    <span class="ga-stat-lbl">Hashes conocidos</span>
-                </div>
-                <div class="ga-stat-chip">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2a6 6 0 100 12A6 6 0 008 2z" stroke="var(--accent)" stroke-width="1.2"/><path d="M8 5v3l2 2" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round"/></svg>
-                    <span class="ga-stat-val" id="ga-autolabels-val">—</span>
-                    <span class="ga-stat-lbl">Auto-labels</span>
-                </div>
-                <div class="ga-stat-chip">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3 3 7-7" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    <span class="ga-stat-val ga-ai-status" id="ga-ai-status-val">—</span>
-                    <span class="ga-stat-lbl">Modelo RF</span>
-                </div>
-            </div>
-
-            <!-- Download card -->
-            <div class="ga-download-card entrance-anim tilt-card">
-                <div class="ga-download-glow"></div>
-                <div class="ga-download-content">
-                    <div class="ga-download-info">
-                        <div class="ga-download-title">Argus Scanner — Ejecutable</div>
-                        <div class="ga-download-sub">Incluye IA actualizada · Detección autónoma · Hash verificado</div>
-                        <div class="ga-download-features">
-                            <span class="ga-feat"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Ghost client detection</span>
-                            <span class="ga-feat"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Java injection scanner</span>
-                            <span class="ga-feat"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Macro &amp; autoclicker</span>
-                            <span class="ga-feat"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>IA autoaprendizaje</span>
-                        </div>
-                    </div>
-                    <button class="ga-download-btn" id="download-app-btn">
-                        <span class="ga-btn-inner">
-                            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                                <path d="M11 3v12M5 10l6 7 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M3 19h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Descargar</span>
-                        </span>
-                        <span class="ga-btn-shimmer"></span>
-                    </button>
-                </div>
-            </div>
 
             <!-- ══════════════════════════════════════════════
                  NUEVO DISEÑO — reemplaza todo lo anterior
