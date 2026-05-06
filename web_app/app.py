@@ -29,7 +29,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-produ
 CORS(app)
 
 # Inicializar base de datos de autenticación al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.22'  # sincronizar con SCANNER_VERSION en main.py
+_ARGUS_VERSION = '1.6.23'  # sincronizar con SCANNER_VERSION en main.py
 
 
 def _notify_new_deploy():
@@ -2166,7 +2166,7 @@ def debug_last_scan():
 
 
 # Current released scanner version — update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.6.22"
+CURRENT_SCANNER_VERSION = "1.6.23"
 
 @app.route('/sw.js')
 def service_worker():

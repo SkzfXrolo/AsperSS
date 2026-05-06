@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.22"
+SCANNER_VERSION = "1.6.23"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
