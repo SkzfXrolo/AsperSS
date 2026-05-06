@@ -11,7 +11,7 @@
     <title>Panel Staff - Argus Projects</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=16">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=17">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -442,7 +442,7 @@
         <section class="panel-section" id="generar-app-section">
 
             <!-- Hero: app info strip -->
-            <div class="ga-hero entrance-anim tilt-card">
+            <div class="ga-hero entrance-anim tilt-card" style="display:none">
                 <div class="ga-hero-left">
                     <div class="ga-app-icon">
                         <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
@@ -522,18 +522,154 @@
                 </div>
             </div>
 
-            <!-- Changelog strip -->
-            <div class="ga-changelog entrance-anim">
-                <div class="ga-changelog-title">
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="var(--accent)" stroke-width="1.2"/><path d="M7 4v3l2 2" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round"/></svg>
-                    Novedades v{{ scanner_version or '1.6.22' }}
+            <!-- ══════════════════════════════════════════════
+                 NUEVO DISEÑO — reemplaza todo lo anterior
+                 ══════════════════════════════════════════════ -->
+
+            <!-- HERO PRINCIPAL -->
+            <div class="ga2-hero">
+                <div class="ga2-hero-glow"></div>
+                <div class="ga2-hero-rings" aria-hidden="true">
+                    <span class="ga2-ring ga2-ring-1"></span>
+                    <span class="ga2-ring ga2-ring-2"></span>
+                    <span class="ga2-ring ga2-ring-3"></span>
                 </div>
-                <ul class="ga-changelog-list">
-                    <li>Detección de username vía proceso Java (100% fiable)</li>
-                    <li>IA autónoma — aprende sin input humano (Isolation Forest)</li>
-                    <li>Auto-etiquetado por consenso de señales</li>
-                    <li>Consensus hashing — hashes maliciosos detectados por frecuencia</li>
-                </ul>
+                <div class="ga2-hero-body">
+                    <div class="ga2-icon">
+                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                            <circle cx="24" cy="24" r="22" stroke="url(#argus-g)" stroke-width="1.5" stroke-dasharray="5 3"/>
+                            <circle cx="24" cy="24" r="13" stroke="url(#argus-g)" stroke-width="1" opacity=".6"/>
+                            <circle cx="24" cy="24" r="6" fill="url(#argus-g)" opacity=".9"/>
+                            <defs>
+                                <linearGradient id="argus-g" x1="2" y1="2" x2="46" y2="46" gradientUnits="userSpaceOnUse">
+                                    <stop stop-color="#8B5CF6"/>
+                                    <stop offset="1" stop-color="#06b6d4"/>
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                    <div class="ga2-hero-text">
+                        <div class="ga2-hero-label">ARGUS PROJECTS</div>
+                        <h1 class="ga2-hero-title">Argus Scanner</h1>
+                        <p class="ga2-hero-desc">Sistema anti-cheat autónomo para servidores de Minecraft</p>
+                        <div class="ga2-hero-badges">
+                            <span class="ga-badge ga-badge-version">v{{ scanner_version or '1.6.22' }}</span>
+                            <span class="ga-badge ga-badge-platform">
+                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style="margin-right:3px"><rect x="0" y="0" width="4" height="4" rx=".4" fill="currentColor"/><rect x="6" y="0" width="4" height="4" rx=".4" fill="currentColor"/><rect x="0" y="6" width="4" height="4" rx=".4" fill="currentColor"/><rect x="6" y="6" width="4" height="4" rx=".4" fill="currentColor"/></svg>
+                                Windows x64
+                            </span>
+                            <span class="ga-badge ga-badge-ai">IA Autónoma</span>
+                        </div>
+                    </div>
+                    <div class="ga2-hero-actions">
+                        <button class="ga2-btn-dl" id="download-app-btn">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M10 3v11M4 10l6 7 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M2 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            Descargar
+                            <span class="ga2-btn-version">v{{ scanner_version or '1.6.22' }}</span>
+                        </button>
+                        <div class="ga2-live-pill">
+                            <span class="ga-status-dot"></span>
+                            <span id="ga-status-text">Listo para descargar</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STATS DE IA -->
+            <div class="ga2-stats-row">
+                <div class="ga2-stat-card">
+                    <div class="ga2-stat-icon ga2-stat-purple">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2a7 7 0 100 14A7 7 0 009 2z" stroke="currentColor" stroke-width="1.4"/><path d="M6 9l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div class="ga2-stat-body">
+                        <span class="ga2-stat-val" id="ga-patterns-val">—</span>
+                        <span class="ga2-stat-lbl">Patrones IA</span>
+                    </div>
+                    <div class="ga2-stat-trend">Auto-aprendidos</div>
+                </div>
+                <div class="ga2-stat-card">
+                    <div class="ga2-stat-icon ga2-stat-blue">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="5" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M6 5V4a3 3 0 016 0v1" stroke="currentColor" stroke-width="1.4"/></svg>
+                    </div>
+                    <div class="ga2-stat-body">
+                        <span class="ga2-stat-val" id="ga-hashes-val">—</span>
+                        <span class="ga2-stat-lbl">Hashes conocidos</span>
+                    </div>
+                    <div class="ga2-stat-trend">Base de datos</div>
+                </div>
+                <div class="ga2-stat-card">
+                    <div class="ga2-stat-icon ga2-stat-teal">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M9 6v3l2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    </div>
+                    <div class="ga2-stat-body">
+                        <span class="ga2-stat-val" id="ga-autolabels-val">—</span>
+                        <span class="ga2-stat-lbl">Auto-labels</span>
+                    </div>
+                    <div class="ga2-stat-trend">Sin input humano</div>
+                </div>
+                <div class="ga2-stat-card">
+                    <div class="ga2-stat-icon ga2-stat-green">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 9l4 4 8-8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div class="ga2-stat-body">
+                        <span class="ga2-stat-val ga-ai-status" id="ga-ai-status-val" style="font-size:13px">—</span>
+                        <span class="ga2-stat-lbl">Modelo RF</span>
+                    </div>
+                    <div class="ga2-stat-trend" id="ga-iso-status">Isolation Forest</div>
+                </div>
+            </div>
+
+            <!-- FEATURES + CHANGELOG grid -->
+            <div class="ga2-grid">
+                <div class="ga2-features-card">
+                    <div class="ga2-card-header">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1l2 4h4l-3 3 1 4-4-2-4 2 1-4L2 5h4z" stroke="var(--accent)" stroke-width="1.3" stroke-linejoin="round"/></svg>
+                        Capacidades de detección
+                    </div>
+                    <ul class="ga2-feat-list">
+                        <li><span class="ga2-feat-dot ga2-dot-red"></span>Ghost clients &amp; hacked mods</li>
+                        <li><span class="ga2-feat-dot ga2-dot-orange"></span>Java injection &amp; DLL hijacking</li>
+                        <li><span class="ga2-feat-dot ga2-dot-yellow"></span>Macro &amp; autoclicker</li>
+                        <li><span class="ga2-feat-dot ga2-dot-purple"></span>Historial de navegador</li>
+                        <li><span class="ga2-feat-dot ga2-dot-teal"></span>Descargas no ejecutadas</li>
+                        <li><span class="ga2-feat-dot ga2-dot-blue"></span>IA autoaprendizaje continuo</li>
+                    </ul>
+                </div>
+                <div class="ga2-changelog-card">
+                    <div class="ga2-card-header">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="var(--accent)" stroke-width="1.3"/><path d="M8 5v3l2 2" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round"/></svg>
+                        Novedades v{{ scanner_version or '1.6.22' }}
+                    </div>
+                    <ul class="ga2-cl-list">
+                        <li>
+                            <span class="ga2-cl-tag ga2-tag-fix">FIX</span>
+                            Username vía proceso Java — 100% fiable
+                        </li>
+                        <li>
+                            <span class="ga2-cl-tag ga2-tag-new">NEW</span>
+                            IA autónoma con Isolation Forest
+                        </li>
+                        <li>
+                            <span class="ga2-cl-tag ga2-tag-new">NEW</span>
+                            Auto-etiquetado por consenso de señales
+                        </li>
+                        <li>
+                            <span class="ga2-cl-tag ga2-tag-new">NEW</span>
+                            Consensus hashing — detección automática
+                        </li>
+                        <li>
+                            <span class="ga2-cl-tag ga2-tag-new">NEW</span>
+                            Slinky + 4 clientes nuevos detectados
+                        </li>
+                        <li>
+                            <span class="ga2-cl-tag ga2-tag-fix">FIX</span>
+                            PAGINA_SOSPECHOSA — visita web sin descarga
+                        </li>
+                    </ul>
+                </div>
             </div>
 
         </section>
@@ -1883,7 +2019,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=36"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=37"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────

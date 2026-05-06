@@ -3832,6 +3832,293 @@ body.focus-mode #issues-detail-section { position: relative; z-index: 10; }
 }
 
 /* ════════════════════════════════════════════════════════════
+   ⑭-B  GENERAR APP — ga2 redesign
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Hero ─────────────────────────────────────────────────── */
+.ga2-hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(139,92,246,.12) 0%, rgba(6,182,212,.07) 100%);
+    border: 1px solid rgba(139,92,246,.25);
+    padding: 44px 40px 40px;
+    margin-bottom: 20px;
+}
+
+/* ambient glow blob */
+.ga2-hero-glow {
+    position: absolute;
+    top: -80px; left: -80px;
+    width: 380px; height: 380px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(139,92,246,.18) 0%, transparent 70%);
+    pointer-events: none;
+}
+
+/* animated concentric rings */
+.ga2-hero-rings {
+    position: absolute;
+    top: 50%; right: -60px;
+    transform: translateY(-50%);
+    width: 340px; height: 340px;
+    pointer-events: none;
+}
+.ga2-ring {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: 1px solid rgba(139,92,246,.18);
+    animation: ga2-pulse 3.6s ease-in-out infinite;
+}
+.ga2-ring-1 { width: 120px; height: 120px; animation-delay: 0s; border-color: rgba(139,92,246,.35); }
+.ga2-ring-2 { width: 220px; height: 220px; animation-delay: .8s; border-color: rgba(139,92,246,.20); }
+.ga2-ring-3 { width: 320px; height: 320px; animation-delay: 1.6s; border-color: rgba(6,182,212,.12); }
+
+@keyframes ga2-pulse {
+    0%,100% { opacity: .5; transform: translate(-50%,-50%) scale(1); }
+    50%      { opacity: 1;  transform: translate(-50%,-50%) scale(1.04); }
+}
+
+/* hero body layout */
+.ga2-hero-body {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    z-index: 1;
+}
+
+/* icon */
+.ga2-icon {
+    flex-shrink: 0;
+    width: 64px; height: 64px;
+    border-radius: 16px;
+    background: rgba(139,92,246,.15);
+    border: 1px solid rgba(139,92,246,.3);
+    display: flex; align-items: center; justify-content: center;
+    animation: ga2-icon-spin 12s linear infinite;
+}
+@keyframes ga2-icon-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+.ga2-icon svg { animation: ga2-icon-spin 12s linear infinite reverse; }
+
+/* text block */
+.ga2-hero-text { flex: 1; min-width: 0; }
+
+.ga2-hero-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    color: rgba(139,92,246,.85);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+.ga2-hero-title {
+    font-size: 28px;
+    font-weight: 800;
+    margin: 0 0 6px;
+    background: linear-gradient(90deg, #fff 30%, #c4b5fd 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.15;
+}
+.ga2-hero-desc {
+    font-size: 13px;
+    color: rgba(255,255,255,.55);
+    margin: 0 0 14px;
+}
+.ga2-hero-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* actions */
+.ga2-hero-actions {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+.ga2-btn-dl {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 28px;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 700;
+    border: none;
+    color: #fff;
+    background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 60%, #0ea5e9 100%);
+    box-shadow: 0 0 28px rgba(139,92,246,.45), 0 4px 16px rgba(0,0,0,.35);
+    transition: transform .18s, box-shadow .18s, filter .18s;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.ga2-btn-dl:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 40px rgba(139,92,246,.65), 0 8px 24px rgba(0,0,0,.4);
+    filter: brightness(1.08);
+}
+.ga2-btn-dl:active { transform: translateY(0); filter: brightness(.95); }
+.ga2-btn-version {
+    font-size: 11px;
+    font-weight: 600;
+    opacity: .75;
+    background: rgba(255,255,255,.15);
+    padding: 2px 7px;
+    border-radius: 6px;
+}
+
+/* live pill */
+.ga2-live-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11.5px;
+    color: rgba(255,255,255,.55);
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 20px;
+    padding: 5px 12px;
+}
+
+/* ── Stat cards row ───────────────────────────────────────── */
+.ga2-stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+}
+.ga2-stat-card {
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 14px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: border-color .2s, background .2s;
+}
+.ga2-stat-card:hover {
+    border-color: rgba(139,92,246,.3);
+    background: rgba(139,92,246,.06);
+}
+.ga2-stat-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.ga2-stat-purple { background: rgba(139,92,246,.2);  color: #a78bfa; }
+.ga2-stat-blue   { background: rgba(59,130,246,.2);  color: #60a5fa; }
+.ga2-stat-teal   { background: rgba(20,184,166,.2);  color: #2dd4bf; }
+.ga2-stat-green  { background: rgba(16,185,129,.2);  color: #34d399; }
+
+.ga2-stat-body { display: flex; flex-direction: column; gap: 2px; }
+.ga2-stat-val  { font-size: 22px; font-weight: 800; color: #fff; line-height: 1; }
+.ga2-stat-lbl  { font-size: 11px; color: rgba(255,255,255,.45); font-weight: 500; }
+.ga2-stat-trend {
+    font-size: 10.5px;
+    color: rgba(255,255,255,.3);
+    border-top: 1px solid rgba(255,255,255,.06);
+    padding-top: 8px;
+    margin-top: auto;
+}
+
+/* ── Features + Changelog grid ────────────────────────────── */
+.ga2-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+.ga2-features-card,
+.ga2-changelog-card {
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 14px;
+    padding: 22px 24px;
+}
+.ga2-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(255,255,255,.85);
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255,255,255,.07);
+}
+
+/* feature list */
+.ga2-feat-list {
+    list-style: none;
+    padding: 0; margin: 0;
+    display: flex; flex-direction: column; gap: 10px;
+}
+.ga2-feat-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: rgba(255,255,255,.65);
+}
+.ga2-feat-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.ga2-dot-red    { background: #f87171; box-shadow: 0 0 6px #f87171; }
+.ga2-dot-orange { background: #fb923c; box-shadow: 0 0 6px #fb923c; }
+.ga2-dot-yellow { background: #facc15; box-shadow: 0 0 6px #facc15; }
+.ga2-dot-purple { background: #a78bfa; box-shadow: 0 0 6px #a78bfa; }
+.ga2-dot-teal   { background: #2dd4bf; box-shadow: 0 0 6px #2dd4bf; }
+.ga2-dot-blue   { background: #60a5fa; box-shadow: 0 0 6px #60a5fa; }
+
+/* changelog list */
+.ga2-cl-list {
+    list-style: none;
+    padding: 0; margin: 0;
+    display: flex; flex-direction: column; gap: 10px;
+}
+.ga2-cl-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: rgba(255,255,255,.65);
+}
+.ga2-cl-tag {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    padding: 2px 7px;
+    border-radius: 5px;
+    text-transform: uppercase;
+}
+.ga2-tag-new { background: rgba(16,185,129,.2);  color: #34d399; border: 1px solid rgba(16,185,129,.3); }
+.ga2-tag-fix { background: rgba(59,130,246,.2);  color: #60a5fa; border: 1px solid rgba(59,130,246,.3); }
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 900px) {
+    .ga2-stats-row { grid-template-columns: repeat(2, 1fr); }
+    .ga2-grid      { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+    .ga2-hero         { padding: 28px 20px 24px; }
+    .ga2-hero-body    { flex-direction: column; align-items: flex-start; }
+    .ga2-hero-actions { width: 100%; align-items: stretch; }
+    .ga2-btn-dl       { justify-content: center; }
+    .ga2-stats-row    { grid-template-columns: 1fr 1fr; }
+    .ga2-hero-rings   { display: none; }
+}
+
+/* ════════════════════════════════════════════════════════════
    ⑮ CURSOR PERSONALIZADO
    ════════════════════════════════════════════════════════════ */
 *, *::before, *::after { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Ccircle cx='4' cy='4' r='3' fill='%238B5CF6' fill-opacity='0.85'/%3E%3Ccircle cx='4' cy='4' r='1.2' fill='white'/%3E%3C/svg%3E") 4 4, auto; }
