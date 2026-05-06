@@ -4,6 +4,12 @@ import os
 import sys
 import math
 
+try:
+    from PIL import Image, ImageTk
+    _PIL_OK = True
+except ImportError:
+    _PIL_OK = False
+
 
 class ModernUI:
     """Argus Scanner — Echo-inspired UI. Dark, red accent, minimal."""
@@ -72,23 +78,28 @@ class ModernUI:
     @staticmethod
     def apply_window_style(root):
         root.title("Argus Scanner")
-        sw = root.winfo_screenwidth()
-        if sw <= 1366:
-            w, h = 620, 400
-        elif sw <= 1920:
-            w, h = 700, 440
-        else:
-            w, h = 760, 480
+        w, h = 705, 279
         x = (root.winfo_screenwidth()  - w) // 2
         y = (root.winfo_screenheight() - h) // 2
         root.geometry(f"{w}x{h}+{x}+{y}")
         root.resizable(False, False)
         root.overrideredirect(True)
         root.configure(bg=ModernUI.COLORS['bg_primary'])
+        base = ModernUI._base_path()
+        # Ícono taskbar — intentar .ico primero, luego .png
         try:
-            ico = os.path.join(ModernUI._base_path(), 'assets', 'logo.ico')
+            ico = os.path.join(base, 'assets', 'logo.ico')
             if os.path.exists(ico):
                 root.iconbitmap(ico)
+        except Exception:
+            pass
+        try:
+            png = os.path.join(base, 'assets', 'logo.png')
+            if os.path.exists(png) and _PIL_OK:
+                _img = Image.open(png).resize((32, 32), Image.LANCZOS)
+                _photo = ImageTk.PhotoImage(_img)
+                root.iconphoto(True, _photo)
+                root._icon_ref = _photo  # evitar GC
         except Exception:
             pass
 
@@ -107,21 +118,36 @@ class ModernUI:
         hdr.pack(fill=tk.X)
 
         inner = tk.Frame(hdr, bg=C['bg_primary'])
-        inner.pack(fill=tk.X, padx=24, pady=(14, 12))
+        inner.pack(fill=tk.X, padx=24, pady=(12, 10))
 
-        # Left: brand
+        # Left: logo + brand
         left = tk.Frame(inner, bg=C['bg_primary'])
         left.pack(side=tk.LEFT, fill=tk.Y)
 
-        # Shield icon via canvas
-        ic = tk.Canvas(left, width=22, height=22,
-                       bg=C['bg_primary'], highlightthickness=0)
-        ic.pack(side=tk.LEFT, padx=(0, 8))
-        ic.create_polygon(11, 2, 3, 6, 3, 13, 11, 20, 19, 13, 19, 6,
-                          fill='', outline=C['accent'], width=1.5)
-        ic.create_line(7, 11, 10, 14, 15, 8,
-                       fill=C['accent'], width=1.5,
-                       joinstyle='round', capstyle='round')
+        # Logo image (24×24); fallback to canvas shield
+        _logo_shown = False
+        try:
+            logo_path = os.path.join(cls._base_path(), 'assets', 'logo.png')
+            if os.path.exists(logo_path) and _PIL_OK:
+                _raw = Image.open(logo_path).resize((24, 24), Image.LANCZOS)
+                _photo = ImageTk.PhotoImage(_raw)
+                logo_lbl = tk.Label(left, image=_photo,
+                                    bg=C['bg_primary'], bd=0)
+                logo_lbl.image = _photo  # evitar GC
+                logo_lbl.pack(side=tk.LEFT, padx=(0, 8))
+                _logo_shown = True
+        except Exception:
+            pass
+
+        if not _logo_shown:
+            ic = tk.Canvas(left, width=22, height=22,
+                           bg=C['bg_primary'], highlightthickness=0)
+            ic.pack(side=tk.LEFT, padx=(0, 8))
+            ic.create_polygon(11, 2, 3, 6, 3, 13, 11, 20, 19, 13, 19, 6,
+                              fill='', outline=C['accent'], width=1.5)
+            ic.create_line(7, 11, 10, 14, 15, 8,
+                           fill=C['accent'], width=1.5,
+                           joinstyle='round', capstyle='round')
 
         brand = tk.Frame(left, bg=C['bg_primary'])
         brand.pack(side=tk.LEFT)
@@ -161,7 +187,7 @@ class ModernUI:
         C = cls.COLORS
 
         outer = tk.Frame(parent, bg=C['bg_primary'])
-        outer.pack(fill=tk.BOTH, expand=True, padx=24, pady=(20, 8))
+        outer.pack(fill=tk.BOTH, expand=True, padx=24, pady=(14, 6))
 
         # ── Top row: big percentage + animated ring ───────────────────────────
         top = tk.Frame(outer, bg=C['bg_primary'])
@@ -249,7 +275,7 @@ class ModernUI:
         bot = tk.Frame(outer, bg=C['bg_primary'])
         bot.pack(fill=tk.X, pady=(10, 0))
 
-        timer = tk.Label(bot, text="00:00:00",
+        timer = tk.Label(bot, text="⏱️ Tiempo: 00:00:00",
                          font=('Consolas', 9),
                          bg=C['bg_primary'], fg=C['text_secondary'])
         timer.pack(side=tk.LEFT)
@@ -284,8 +310,8 @@ class ModernUI:
     def create_completion_panel(cls, parent):
         C = cls.COLORS
 
+        # No se hace .pack() — la ventana solo muestra header + progress
         outer = tk.Frame(parent, bg=C['bg_primary'])
-        outer.pack(fill=tk.BOTH, expand=True, padx=24, pady=(0, 20))
 
         card = tk.Frame(outer, bg=C['bg_card'],
                         highlightbackground=C['border_bright'],
