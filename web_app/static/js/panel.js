@@ -594,6 +594,13 @@ function showSection(sectionName) {
 // DASHBOARD
 // ============================================================
 
+function _nameToHslColor(name) {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    const hue = ((hash % 360) + 360) % 360;
+    return `hsl(${hue},55%,38%)`;
+}
+
 function animateNumber(el, target, duration = 750) {
     if (!el) return;
     const start = parseInt(el.textContent) || 0;
@@ -2276,6 +2283,17 @@ async function viewScanDetails(scanId) {
         const minecraftUsernameEl = document.getElementById('detail-minecraft-username');
         if (minecraftUsernameEl) minecraftUsernameEl.textContent = data.minecraft_username || 'No detectado';
 
+        // Player avatar + subtitle label
+        const _username = data.minecraft_username || data.machine_name || '';
+        const avatarEl = document.getElementById('scan-header-avatar');
+        if (avatarEl) {
+            avatarEl.textContent = _username ? _username[0].toUpperCase() : '?';
+            avatarEl.title = _username || 'Jugador';
+            avatarEl.style.background = _username ? _nameToHslColor(_username) : 'var(--accent-d)';
+        }
+        const playerLabelEl = document.getElementById('scan-page-player-label');
+        if (playerLabelEl) playerLabelEl.textContent = _username || 'Minecraft';
+
         const scannedByEl = document.getElementById('detail-scanned-by');
         if (scannedByEl) scannedByEl.textContent = data.scanned_by || '—';
         
@@ -2307,6 +2325,41 @@ async function viewScanDetails(scanId) {
         
         const dateEl = document.getElementById('detail-scan-date');
         if (dateEl) dateEl.textContent = formatDate(data.started_at);
+
+        // Installation date + Recycle Bin date from scan results
+        const _results = data.results || [];
+        const _installResult = _results.find(r => {
+            const n = (r.issue_name || '').toLowerCase();
+            return n.includes('instalacion') || n.includes('installación') || n.includes('installation') || n.includes('install_date');
+        });
+        const mcInstallRow = document.getElementById('mc-install-row');
+        const mcInstallEl  = document.getElementById('detail-mc-install');
+        if (_installResult && mcInstallRow && mcInstallEl) {
+            const _ip = _installResult.issue_path || _installResult.issue_name || '';
+            const _dateMatch = _ip.match(/\d{4}-\d{2}-\d{2}/);
+            if (_dateMatch) {
+                mcInstallEl.textContent = _dateMatch[0];
+                mcInstallRow.style.display = 'flex';
+            }
+        }
+        const _recycleResult = _results.find(r => {
+            const n = (r.issue_name || '').toLowerCase();
+            const c = (r.issue_category || '').toLowerCase();
+            return c === 'forense' && (n.includes('borrado') || n.includes('reciclaje') || n.includes('recicl') || n.includes('deleted') || n.includes('limpieza'));
+        });
+        const recycleDateRow = document.getElementById('recycle-date-row');
+        const recycleDateEl  = document.getElementById('detail-recycle-date');
+        if (_recycleResult && recycleDateRow && recycleDateEl) {
+            const _rp = _recycleResult.issue_path || '';
+            const _rdMatch = _rp.match(/\d{4}-\d{2}-\d{2}/);
+            if (_rdMatch) {
+                recycleDateEl.textContent = _rdMatch[0];
+                recycleDateRow.style.display = 'flex';
+            } else if (_recycleResult.issue_name) {
+                recycleDateEl.textContent = 'Detectado';
+                recycleDateRow.style.display = 'flex';
+            }
+        }
 
         // Risk score badge
         const riskScore = data.risk_score || 0;

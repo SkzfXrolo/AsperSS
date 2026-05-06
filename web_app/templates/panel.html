@@ -11,7 +11,7 @@
     <title>Panel Staff - Argus Projects</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=19">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=20">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -829,7 +829,7 @@
                     </button>
                     <div>
                         <h2 class="scan-page-title">Resultados del escaneo</h2>
-                        <p class="scan-page-subtitle">Minecraft</p>
+                        <p class="scan-page-subtitle" id="scan-page-player-label">Minecraft</p>
                     </div>
                 </div>
                 <div class="scan-page-header-right" style="display:flex;gap:8px;align-items:center;">
@@ -842,6 +842,7 @@
                     <button class="btn btn-secondary" id="export-pdf-btn" onclick="exportScanPDF()" style="font-size:12px;padding:7px 14px;">
                         📄 PDF
                     </button>
+                    <div class="scan-player-avatar" id="scan-header-avatar" title="">?</div>
                 </div>
             </div>
 
@@ -1008,19 +1009,68 @@
                     <span id="sum-clean" style="display:none;">0</span>
 
                     <!-- MAIN THREE-COLUMN -->
-                    <div style="display:grid;grid-template-columns:260px 230px 1fr;gap:16px;align-items:start;">
+                    <div style="display:grid;grid-template-columns:280px 220px 1fr;gap:16px;align-items:start;">
 
                         <!-- LEFT: Scan info -->
                         <div style="background:var(--bg-s);border:1px solid var(--border-m);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;">
-                            <div style="font-size:11px;font-weight:700;color:var(--text-d);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;">Info del Scan</div>
-                            <div style="display:flex;flex-direction:column;gap:8px;" id="scan-info-block">
-                                <div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text-d);">ID</span><span style="color:var(--text-h);font-weight:600;" id="detail-scan-id">—</span></div>
-                                <div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text-d);">OS</span><span style="color:#38bdf8;font-weight:600;" id="detail-os">—</span></div>
-                                <div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text-d);">VM</span><span style="color:var(--text-h);font-weight:600;" id="detail-vm">No</span></div>
-                                <div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text-d);">Conexión</span><span style="color:#38bdf8;font-weight:600;" id="detail-connection">—</span></div>
-                                <div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text-d);">País</span><span style="color:var(--text-h);font-weight:600;" id="detail-country">—</span></div>
-                                <div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text-d);">Username</span><span style="color:#10b981;font-weight:600;" id="detail-minecraft-username">—</span></div>
-                                <div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text-d);">Staff SS</span><span style="color:#a78bfa;font-weight:600;" id="detail-scanned-by">—</span></div>
+                            <div style="font-size:11px;font-weight:700;color:var(--text-d);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">Info del Scan</div>
+                            <div class="echo-info-list" id="scan-info-block">
+                                <div class="echo-info-item">
+                                    <div class="echo-info-icon" style="color:#6366f1;">
+                                        <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="11" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="2" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/></svg>
+                                    </div>
+                                    <span class="echo-info-label">ID</span>
+                                    <span class="echo-info-value accent-text" id="detail-scan-id">—</span>
+                                </div>
+                                <div class="echo-info-item">
+                                    <div class="echo-info-icon" style="color:#64748b;">
+                                        <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="16" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M6 18H14M10 13V18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                    </div>
+                                    <span class="echo-info-label">Máquina</span>
+                                    <span class="echo-info-value" id="detail-machine-name" style="color:var(--text-h);">—</span>
+                                </div>
+                                <div class="echo-info-item">
+                                    <div class="echo-info-icon" style="color:#38bdf8;">
+                                        <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><path d="M2 5C2 3.895 2.895 3 4 3H16C17.105 3 18 3.895 18 5V12C18 13.105 17.105 14 16 14H4C2.895 14 2 13.105 2 12V5Z" stroke="currentColor" stroke-width="2"/><path d="M6 17H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                    </div>
+                                    <span class="echo-info-label">OS</span>
+                                    <span class="echo-info-value cyan-text" id="detail-os">—</span>
+                                </div>
+                                <div class="echo-info-item">
+                                    <div class="echo-info-icon" style="color:#94a3b8;">
+                                        <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 9H13M7 12H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                    </div>
+                                    <span class="echo-info-label">VM</span>
+                                    <span class="echo-info-value" id="detail-vm" style="color:var(--text-h);">No</span>
+                                </div>
+                                <div class="echo-info-item">
+                                    <div class="echo-info-icon" style="color:#38bdf8;">
+                                        <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><path d="M2 10C2 10 5 4 10 4C15 4 18 10 18 10C18 10 15 16 10 16C5 16 2 10 2 10Z" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="2"/></svg>
+                                    </div>
+                                    <span class="echo-info-label">Conexión</span>
+                                    <span class="echo-info-value cyan-text" id="detail-connection">—</span>
+                                </div>
+                                <div class="echo-info-item">
+                                    <div class="echo-info-icon" style="color:#a78bfa;">
+                                        <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="2"/><path d="M7 13C7 13 8 11 10 11C12 11 13 13 13 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M7 8H7.01M13 8H13.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                    </div>
+                                    <span class="echo-info-label">País</span>
+                                    <span class="echo-info-value" id="detail-country" style="color:var(--text-h);">—</span>
+                                </div>
+                                <div class="echo-info-item">
+                                    <div class="echo-info-icon" style="color:#10b981;">
+                                        <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7" r="3.5" stroke="currentColor" stroke-width="2"/><path d="M3 18C3 14.686 6.134 12 10 12C13.866 12 17 14.686 17 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                    </div>
+                                    <span class="echo-info-label">Username</span>
+                                    <span class="echo-info-value" id="detail-minecraft-username" style="color:#10b981;">—</span>
+                                </div>
+                                <div class="echo-info-item">
+                                    <div class="echo-info-icon" style="color:#a78bfa;">
+                                        <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><path d="M10 2L3 7V18H17V7L10 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 18V13H12V18" stroke="currentColor" stroke-width="2"/></svg>
+                                    </div>
+                                    <span class="echo-info-label">Staff SS</span>
+                                    <span class="echo-info-value" id="detail-scanned-by" style="color:#a78bfa;">—</span>
+                                </div>
                                 <div id="mc-process-info" style="display:none;flex-direction:column;gap:6px;padding-top:4px;border-top:1px solid var(--border-m);">
                                     <div style="font-size:10px;font-weight:700;color:#a78bfa;text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px;">Proceso MC</div>
                                     <div style="display:flex;justify-content:space-between;font-size:11px;"><span style="color:var(--text-d);">PID</span><span style="color:#e2e8f7;font-weight:600;" id="detail-mc-pid">—</span></div>
@@ -1035,11 +1085,43 @@
                                     <div id="mc-agents-row" style="display:none;justify-content:space-between;font-size:11px;"><span style="color:var(--text-d);">Agentes Java</span><span style="color:#ef4444;font-weight:700;" id="detail-mc-agents">—</span></div>
                                     <div id="mc-mods-row" style="display:none;font-size:11px;color:var(--text-d);">Mods: <span id="detail-mc-mods" style="color:var(--text-m);"></span></div>
                                 </div>
-                                <div style="height:1px;background:var(--border-m);"></div>
-                                <div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text-d);">Archivos</span><span style="color:var(--text-h);font-weight:600;" id="detail-files-count">0</span></div>
-                                <div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text-d);">Velocidad</span><span style="color:#38bdf8;font-weight:600;" id="detail-scan-speed">—</span></div>
-                                <div style="display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--text-d);">Fecha</span><span style="color:var(--text-h);font-weight:600;" id="detail-scan-date">—</span></div>
-                                <div style="height:1px;background:var(--border-m);"></div>
+                                <div style="height:1px;background:var(--border-m);margin:2px 0;"></div>
+                                <div class="echo-info-item">
+                                    <div class="echo-info-icon" style="color:#6366f1;">
+                                        <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><path d="M4 4H16V8H4V4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M4 8V16H16V8" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 12H12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                    </div>
+                                    <span class="echo-info-label">Archivos</span>
+                                    <span class="echo-info-value" id="detail-files-count" style="color:var(--text-h);">0</span>
+                                </div>
+                                <div class="echo-info-item">
+                                    <div class="echo-info-icon" style="color:#38bdf8;">
+                                        <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="2"/><path d="M10 6V10L13 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                    </div>
+                                    <span class="echo-info-label">Duración</span>
+                                    <span class="echo-info-value cyan-text" id="detail-scan-speed">—</span>
+                                </div>
+                                <div class="echo-info-item">
+                                    <div class="echo-info-icon" style="color:#94a3b8;">
+                                        <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 2V6M13 2V6M3 9H17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                    </div>
+                                    <span class="echo-info-label">Fecha</span>
+                                    <span class="echo-info-value" id="detail-scan-date" style="color:var(--text-h);">—</span>
+                                </div>
+                                <div class="echo-info-item" id="mc-install-row" style="display:none;">
+                                    <div class="echo-info-icon" style="color:#10b981;">
+                                        <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><path d="M10 2L12 8H18L13 12L15 18L10 14L5 18L7 12L2 8H8L10 2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+                                    </div>
+                                    <span class="echo-info-label">Instalación</span>
+                                    <span class="echo-info-value" id="detail-mc-install" style="color:#10b981;">—</span>
+                                </div>
+                                <div class="echo-info-item" id="recycle-date-row" style="display:none;">
+                                    <div class="echo-info-icon" style="color:#f59e0b;">
+                                        <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><path d="M5 7H15M8 7V5H12V7M6 7L7 16H13L14 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                    </div>
+                                    <span class="echo-info-label">Papelera</span>
+                                    <span class="echo-info-value" id="detail-recycle-date" style="color:#f59e0b;">—</span>
+                                </div>
+                                <div style="height:1px;background:var(--border-m);margin:2px 0;"></div>
                                 <div style="display:flex;flex-direction:column;gap:5px;align-items:center;">
                                     <!-- V1: Animated SVG gauge -->
                                     <div id="risk-gauge-container" style="margin:4px 0;"></div>
@@ -1109,17 +1191,26 @@
                         <div style="display:flex;flex-direction:column;gap:10px;">
                             <!-- Severity summary bar -->
                             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
-                                <div style="background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.18);border-radius:10px;padding:10px 8px;text-align:center;">
-                                    <div style="font-size:9px;font-weight:700;color:#10b981;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Limpio</div>
-                                    <div id="log-clean"    style="font-size:22px;font-weight:900;color:#10b981;line-height:1;">0</div>
+                                <div style="background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.20);border-radius:12px;padding:12px 8px;text-align:center;position:relative;overflow:hidden;">
+                                    <div style="font-size:9px;font-weight:700;color:#10b981;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">Limpio</div>
+                                    <div id="log-clean" style="font-size:26px;font-weight:900;color:#10b981;line-height:1;">0</div>
+                                    <div style="position:absolute;bottom:6px;right:8px;opacity:.18;">
+                                        <svg width="16" height="16" viewBox="0 0 20 20" fill="#10b981"><path d="M7 10L9.5 12.5L13.5 7.5" stroke="#10b981" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="10" cy="10" r="8" stroke="#10b981" stroke-width="1.5" fill="none"/></svg>
+                                    </div>
                                 </div>
-                                <div style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.18);border-radius:10px;padding:10px 8px;text-align:center;">
-                                    <div style="font-size:9px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Alerta</div>
-                                    <div id="log-alert"    style="font-size:22px;font-weight:900;color:#f59e0b;line-height:1;">0</div>
+                                <div style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.20);border-radius:12px;padding:12px 8px;text-align:center;position:relative;overflow:hidden;">
+                                    <div style="font-size:9px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">Alerta</div>
+                                    <div id="log-alert" style="font-size:26px;font-weight:900;color:#f59e0b;line-height:1;">0</div>
+                                    <div style="position:absolute;bottom:6px;right:8px;opacity:.18;">
+                                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 3L17 16H3L10 3Z" stroke="#f59e0b" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 9V12M10 14.5V15" stroke="#f59e0b" stroke-width="1.8" stroke-linecap="round"/></svg>
+                                    </div>
                                 </div>
-                                <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.18);border-radius:10px;padding:10px 8px;text-align:center;">
-                                    <div style="font-size:9px;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Severo</div>
-                                    <div id="log-severe"   style="font-size:22px;font-weight:900;color:#ef4444;line-height:1;">0</div>
+                                <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.20);border-radius:12px;padding:12px 8px;text-align:center;position:relative;overflow:hidden;">
+                                    <div style="font-size:9px;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">Severo</div>
+                                    <div id="log-severe" style="font-size:26px;font-weight:900;color:#ef4444;line-height:1;">0</div>
+                                    <div style="position:absolute;bottom:6px;right:8px;opacity:.18;">
+                                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 4V10M10 14V14.01" stroke="#ef4444" stroke-width="2.2" stroke-linecap="round"/><circle cx="10" cy="10" r="8" stroke="#ef4444" stroke-width="1.5"/></svg>
+                                    </div>
                                 </div>
                             </div>
                             <!-- Veredicto actual -->
@@ -1941,7 +2032,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=39"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=40"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────
