@@ -240,24 +240,6 @@ class ModernUI:
                              bg=C['bg_card'], fg=C['text_secondary'])
         resources.pack(side=tk.RIGHT)
 
-        # Botón cancelar (oculto hasta que el scan comience)
-        cancel_row = tk.Frame(content, bg=C['bg_card'])
-        cancel_row.pack(fill=tk.X, pady=(4, 0))
-        cancel_btn = tk.Button(
-            cancel_row,
-            text="✕  Cancelar escaneo",
-            font=('Segoe UI', 8),
-            bg=C['bg_card'],
-            fg=C['text_secondary'],
-            activebackground=C['bg_hover'],
-            activeforeground=C['red'],
-            relief='flat', bd=0, cursor='hand2',
-        )
-        cancel_btn.pack(side=tk.RIGHT)
-        cancel_btn.bind('<Enter>', lambda e: cancel_btn.config(fg=C['red']))
-        cancel_btn.bind('<Leave>', lambda e: cancel_btn.config(fg=C['text_secondary']))
-        cancel_row.pack_forget()  # hidden until scan starts
-
         # Hidden ttk bar (compat)
         pb = ttk.Progressbar(content, mode='determinate', maximum=100,
                              style='Argus.Horizontal.TProgressbar')
@@ -271,8 +253,6 @@ class ModernUI:
             'resources':  resources,
             'percent':    pct,
             '_canvas':    canvas,
-            'cancel_row': cancel_row,
-            'cancel_btn': cancel_btn,
         }
 
     # ── completion panel ──────────────────────────────────────────────────────

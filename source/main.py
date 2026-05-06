@@ -881,12 +881,13 @@ class ArgusApp:
             # Asegurar que legitimate_patterns sea None si falla
             self.legitimate_patterns = None
         
+        self.root.protocol('WM_DELETE_WINDOW', lambda: None)
+
         # Crear interfaz mejorada con estilo moderno
         self.create_ui()
 
-        # Auto-ejecutar escaneo al arrancar — pasa primero por el test de clicks
         self._click_test_result = None
-        self.root.after(800, self._show_click_test)
+        self.root.after(800, self.full_scan_with_discord)
 
         # Inicializar variables de cronómetro
         self.scan_start_time = None
@@ -4481,36 +4482,6 @@ class ArgusApp:
                     
                     if self.db_integration.scan_token:
                         try:
-                            # Item #40 — confirmación pre-envío
-                            _n_issues = len(self.issues_found)
-                            _n_crit   = sum(1 for i in self.issues_found if i.get('alerta') == 'CRITICAL')
-                            _confirm  = [True]
-                            _confirm_evt = threading.Event()
-
-                            def _show_confirm():
-                                _msg = (
-                                    f"El escaneo encontró {_n_issues} hallazgo(s)"
-                                    + (f", {_n_crit} CRÍTICO(s)" if _n_crit else "")
-                                    + ".\n\n¿Enviar resultados al staff?"
-                                )
-                                from tkinter import messagebox as _mb
-                                _confirm[0] = _mb.askyesno(
-                                    "Enviar resultados",
-                                    _msg,
-                                    icon='question'
-                                )
-                                _confirm_evt.set()
-
-                            self.root.after(0, _show_confirm)
-                            _confirm_evt.wait(timeout=60)  # 60s timeout → auto-enviar
-
-                            if not _confirm[0]:
-                                self._update_progress_safe(100, "⚠️ Envío cancelado por el usuario", "")
-                                print("⚠️ Usuario canceló el envío de resultados")
-                                self.scanning_mode = False
-                                self.root.after(3000, self.root.destroy)
-                                return
-
                             self._update_progress_safe(99, "📤 Enviando resultados...", "Subiendo a servidor...")
                             success = self.db_integration.submit_results(
                                 self.issues_found,
