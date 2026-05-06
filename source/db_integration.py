@@ -205,7 +205,14 @@ class DatabaseIntegration:
 
             # Calcular risk_score 0-100 agregando scores por severidad
             _risk = 0
-            _ALERTA_WEIGHTS = {'CRITICAL': 25, 'SOSPECHOSO': 12, 'POCO_SOSPECHOSO': 4, 'NORMAL': 1}
+            _ALERTA_WEIGHTS = {
+                'CRITICAL':          25,
+                'MUY_SOSPECHOSO':    16,
+                'SOSPECHOSO':        12,
+                'PAGINA_SOSPECHOSA':  6,   # visita a sitio hack sin descarga confirmada
+                'POCO_SOSPECHOSO':    4,
+                'NORMAL':             1,
+            }
             for _iss in issues_found:
                 _alerta = _iss.get('alerta', 'NORMAL')
                 _conf = float(_iss.get('confidence') or 0)

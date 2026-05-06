@@ -134,6 +134,12 @@ _DEFINITE_HACK_NAMES = {
     'nbtedit', 'nbt-edit',
     'mcaselector', 'mca-selector',
     'nbteditor',
+    # ── Clientes recientes (2024-2025) ────────────────────────────────────
+    'slinky', 'slinkyclient', 'slinky-client',
+    'reflex', 'reflexclient',
+    'rageclient', 'rage-client',
+    'biscuit', 'biscuitclient',
+    'thunderhack', 'thunder-hack',
 }
 
 # Palabras genéricas que sólo se marcan cuando son palabra completa
@@ -1728,6 +1734,56 @@ class ArgusApp:
         scan()
         return issues
     
+    def scan_downloads_folder(self):
+        """Escanea Downloads, Desktop y Documents en busca de hack clients descargados
+        pero que nunca se ejecutaron (no aparecen en Prefetch/DPS).
+        """
+        print("🔍 ESCANEANDO CARPETA DE DESCARGAS...")
+        issues = []
+        user_profile = os.environ.get('USERPROFILE', os.path.expanduser('~'))
+        scan_dirs = [
+            os.path.join(user_profile, 'Downloads'),
+            os.path.join(user_profile, 'Desktop'),
+            os.path.join(user_profile, 'Documents'),
+            os.path.join(os.environ.get('TEMP', ''), ''),
+        ]
+        seen = set()
+        for base_dir in scan_dirs:
+            if not os.path.isdir(base_dir):
+                continue
+            try:
+                for fname in os.listdir(base_dir):
+                    fname_lower = fname.lower()
+                    if fname_lower in seen:
+                        continue
+                    ext = os.path.splitext(fname_lower)[1]
+                    if ext not in ('.exe', '.jar', '.zip', '.rar', '.7z', '.dll'):
+                        continue
+                    matched = next((h for h in _DEFINITE_HACK_NAMES if h in fname_lower), None)
+                    if not matched:
+                        continue
+                    fpath = os.path.join(base_dir, fname)
+                    seen.add(fname_lower)
+                    print(f"⚠️ HACK DESCARGADO (no ejecutado): {fpath}")
+                    issues.append({
+                        'nombre': f'Hack client descargado (no ejecutado): {fname}',
+                        'ruta':   fpath,
+                        'archivo': fname,
+                        'tipo':   'downloaded_hack',
+                        'categoria': 'FORENSE',
+                        'alerta': 'CRITICAL' if ext in ('.exe', '.jar') else 'SOSPECHOSO',
+                        'confidence': 0.90 if ext in ('.exe', '.jar') else 0.75,
+                        'detected_patterns': [f'hack_name:{matched}', f'ext:{ext}', f'dir:{os.path.basename(base_dir)}'],
+                        'explicacion': (
+                            f'Se encontró el archivo "{fname}" en {os.path.basename(base_dir)}. '
+                            f'Contiene el nombre "{matched}" — cliente de hack conocido. '
+                            f'El archivo no fue ejecutado pero está presente en el sistema.'
+                        ),
+                    })
+            except Exception as e:
+                print(f"Error escaneando {base_dir}: {e}")
+        return issues
+
     def scan_temp_jna(self):
         """Escanea archivos temporales y JNA"""
         print("🔍 ESCANEANDO ARCHIVOS TEMPORALES...")
@@ -2289,10 +2345,15 @@ class ArgusApp:
                 self.issues_found.extend(jar_issues)
                 
                 # Escanear archivos recientes
-                self._update_progress_safe(80, "Escaneando archivos recientes...", "Revisando archivos modificados recientemente")
+                self._update_progress_safe(75, "Escaneando archivos recientes...", "Revisando archivos modificados recientemente")
                 recent_issues = self.scan_recent_files()
                 self.issues_found.extend(recent_issues)
-                
+
+                # Escanear descargas (hacks descargados pero no ejecutados)
+                self._update_progress_safe(83, "Escaneando carpeta de descargas...", "Buscando hacks descargados")
+                dl_issues = self.scan_downloads_folder()
+                self.issues_found.extend(dl_issues)
+
                 # Filtrar falsos positivos
                 self._update_progress_safe(90, "Filtrando resultados...", "Eliminando falsos positivos")
                 self.issues_found = self.filter_false_positives(self.issues_found)
@@ -2354,10 +2415,15 @@ class ArgusApp:
                 self.issues_found.extend(jar_issues)
                 
                 # Escanear archivos recientes
-                self._update_progress_safe(75, "Escaneando archivos recientes...", "Revisando archivos modificados recientemente")
+                self._update_progress_safe(65, "Escaneando archivos recientes...", "Revisando archivos modificados recientemente")
                 recent_issues = self.scan_recent_files()
                 self.issues_found.extend(recent_issues)
-                
+
+                # Escanear descargas
+                self._update_progress_safe(85, "Escaneando carpeta de descargas...", "Buscando hacks descargados")
+                dl_issues = self.scan_downloads_folder()
+                self.issues_found.extend(dl_issues)
+
                 self._update_progress_safe(100, "✅ Escaneo de archivos completado", f"Encontrados {len(self.issues_found)} archivos")
                 
                 print(f"📁 ESCANEO DE ARCHIVOS COMPLETADO - {len(self.issues_found)} archivos encontrados")
@@ -13757,6 +13823,9 @@ class ArgusApp:
             'kingaura.com':         ('KingAura', 'CRITICAL'),
             'lucidclient.net':      ('Lucid Client', 'CRITICAL'),
             'predatorhack.net':     ('Predator Hack', 'CRITICAL'),
+            'slinky.gg':            ('Slinky Client', 'CRITICAL'),
+            'slinkyclient.com':     ('Slinky Client', 'CRITICAL'),
+            'reflex.rip':           ('Reflex Client', 'CRITICAL'),
             'blackspigot.com':      ('BlackSpigot Leaks', 'SOSPECHOSO'),
             'leakednation.com':     ('Leaked Hacks', 'CRITICAL'),
             'nulled.to':            ('Nulled Leaks', 'SOSPECHOSO'),
@@ -13910,14 +13979,17 @@ class ArgusApp:
                                     dl_files = _check_downloads(cur, domain, db_type)
                                     dl_txt = f' | Descargó: {", ".join(dl_files)}' if dl_files else ''
                                     print(f"🚨 VISITA HACK ({browser_name}): {domain} — {visits} visita(s) {visited_ago}{dl_txt}")
+                                    # Solo CRITICAL si hay descarga confirmada; solo visitar = PAGINA_SOSPECHOSA
+                                    alerta_nivel = 'CRITICAL' if dl_files else 'PAGINA_SOSPECHOSA'
+                                    conf_nivel   = 0.97 if dl_files else 0.75
                                     self.issues_found.append({
                                         'nombre': f'Sitio de hack visitado {visited_ago} en {browser_name}: {domain}{dl_txt}',
                                         'ruta':   url[:200],
                                         'archivo': domain,
                                         'tipo':   'browser_visited_hack',
                                         'categoria': 'FORENSE',
-                                        'alerta': 'CRITICAL' if dl_files else severity,
-                                        'confidence': 0.97 if dl_files else 0.90,
+                                        'alerta': alerta_nivel,
+                                        'confidence': conf_nivel,
                                         'detected_patterns': [f'visited:{domain}', f'browser:{browser_name}'] + ([f'downloaded:{f}' for f in dl_files]),
                                         'explicacion': (
                                             f'{browser_name} registra {visits} visita(s) al sitio "{domain}" '

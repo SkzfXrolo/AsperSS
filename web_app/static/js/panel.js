@@ -681,8 +681,9 @@ function _catIcon(cat) {
 // V9: Flame indicators by severity × confidence
 function _flameIndicator(alertLevel, confidence) {
     const c = confidence || 0;
+    if (alertLevel === 'PAGINA_SOSPECHOSA') return '🌐';
     const isCrit = alertLevel === 'CRITICAL';
-    const isSusp = alertLevel === 'SOSPECHOSO';
+    const isSusp = alertLevel === 'SOSPECHOSO' || alertLevel === 'MUY_SOSPECHOSO';
     let flames = 1;
     if (isCrit && c >= 80) flames = 4;
     else if (isCrit && c >= 60) flames = 3;
@@ -1766,10 +1767,11 @@ function renderIssuePage(container, scanId) {
 
     const rows = slice.map((result) => {
         const isCrit  = result.alert_level === 'CRITICAL';
-        const isMid   = result.alert_level === 'SOSPECHOSO';
-        const accent  = isCrit ? '#ef4444' : isMid ? '#f59e0b' : '#6b7280';
-        const bg      = isCrit ? 'rgba(239,68,68,0.05)' : isMid ? 'rgba(245,158,11,0.04)' : 'rgba(107,114,128,0.03)';
-        const dot     = isCrit ? '🔴' : isMid ? '🟠' : '🔵';
+        const isMid   = result.alert_level === 'SOSPECHOSO' || result.alert_level === 'MUY_SOSPECHOSO';
+        const isWeb   = result.alert_level === 'PAGINA_SOSPECHOSA';
+        const accent  = isCrit ? '#ef4444' : isMid ? '#f59e0b' : isWeb ? '#818cf8' : '#6b7280';
+        const bg      = isCrit ? 'rgba(239,68,68,0.05)' : isMid ? 'rgba(245,158,11,0.04)' : isWeb ? 'rgba(129,140,248,0.04)' : 'rgba(107,114,128,0.03)';
+        const dot     = isCrit ? '🔴' : isMid ? '🟠' : isWeb ? '🌐' : '🔵';
         const cat     = result.issue_category || '';
         const name    = (result.issue_name || 'Hallazgo').slice(0, 100);
         const path    = result.issue_path || '';
