@@ -12663,9 +12663,9 @@ class ArgusApp:
             import re as _re2
             vanilla = [v for v in versions if _re2.match(VANILLA_RE, v)]
             non_vanilla = [v for v in versions if not _re2.match(VANILLA_RE, v)]
-            if len(versions) >= 4:
-                level = 'SOSPECHOSO' if len(versions) < 7 else 'CRITICAL'
-                conf = 0.60 if len(versions) < 7 else 0.75
+            if len(versions) >= 8:
+                level = 'SOSPECHOSO' if len(versions) < 12 else 'CRITICAL'
+                conf = 0.55 if len(versions) < 12 else 0.70
                 print(f"⚠️ MÚLTIPLES VERSIONES MC: {len(versions)} ({len(non_vanilla)} no-vanilla)")
                 self.issues_found.append({
                     'nombre': f'{len(versions)} versiones de Minecraft instaladas ({len(non_vanilla)} no-vanilla)',

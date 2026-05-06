@@ -209,16 +209,31 @@ class DatabaseIntegration:
                 'CRITICAL':          25,
                 'MUY_SOSPECHOSO':    16,
                 'SOSPECHOSO':        12,
-                'PAGINA_SOSPECHOSA':  6,   # visita a sitio hack sin descarga confirmada
+                'PAGINA_SOSPECHOSA':  6,
                 'POCO_SOSPECHOSO':    4,
                 'NORMAL':             1,
             }
+            _NON_INST_FRAGS = ('\\downloads\\', '\\desktop\\', '/downloads/', '/desktop/', '\\temp\\', '/temp/')
+            _KNOWN_RISK_CLIENTS = ['vape','entropy','whiteout','liquidbounce','wurst','sigma','flux',
+                'future','astolfo','ghost','rise','moon','drip','meteor','aristois','tenacity',
+                'vertex','inertia','salhack','slinky','reflex','rage','biscuit','thunder']
+            _seen_risk_clients: set = set()
             for _iss in issues_found:
                 _alerta = _iss.get('alerta', 'NORMAL')
                 _conf = float(_iss.get('confidence') or 0)
                 if _conf <= 1:
                     _conf = _conf * 100
-                _item_score = _ALERTA_WEIGHTS.get(_alerta, 1) * min(_conf / 100, 1)
+                # Reduce weight for files outside the Minecraft instance
+                _ruta = (_iss.get('ruta', '') or _iss.get('archivo', '') or '').lower()
+                _inst_mult = 0.55 if any(f in _ruta for f in _NON_INST_FRAGS) else 1.0
+                # Each hack client counts only once toward risk (avoid 5x slinky = 100)
+                _iss_text = (_iss.get('nombre', '') + ' ' + _iss.get('tipo', '')).lower()
+                _client_key = next((c for c in _KNOWN_RISK_CLIENTS if c in _iss_text), None)
+                if _client_key:
+                    if _client_key in _seen_risk_clients:
+                        continue
+                    _seen_risk_clients.add(_client_key)
+                _item_score = _ALERTA_WEIGHTS.get(_alerta, 1) * min(_conf / 100, 1) * _inst_mult
                 _risk += _item_score
             risk_score = min(100, int(_risk))
 

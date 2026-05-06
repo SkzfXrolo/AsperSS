@@ -1735,6 +1735,16 @@ function renderIssuePage(container, scanId) {
     const slice = filtered.slice(0, showCount);
     const hasMore = filtered.length > showCount;
 
+    // Agrupación por cliente hack
+    const _KNOWN_CLIENTS_GRP = ['vape','entropy','whiteout','liquidbounce','wurst','sigma','flux','future','astolfo','ghost','rise','moon','drip','meteor','aristois','tenacity','vertex','inertia','salhack','slinky','reflex','rage','biscuit','thunder','autoclick','autoclicker'];
+    const _cGroups = {};
+    for (const r of slice) {
+        const t = ((r.issue_name||'') + ' ' + (r.issue_type||'')).toLowerCase();
+        const k = _KNOWN_CLIENTS_GRP.find(c => t.includes(c));
+        if (k) { if (!_cGroups[k]) _cGroups[k] = []; _cGroups[k].push(r); }
+    }
+    Object.keys(_cGroups).forEach(k => { if (_cGroups[k].length < 2) delete _cGroups[k]; });
+
     // Chips de categoría
     const onlyInst = !!window._issuesOnlyInstance;
     const instCount = all.filter(r => _isInMinecraftInstance(r.issue_path)).length;
@@ -1765,7 +1775,13 @@ function renderIssuePage(container, scanId) {
         En instancia <span style="opacity:.7">${instCount}</span>
     </button>`;
 
-    const rows = slice.map((result) => {
+    const rows = slice.map((result, rowIdx) => {
+        // Group detection — skip non-lead items
+        const _gText = ((result.issue_name||'') + ' ' + (result.issue_type||'')).toLowerCase();
+        const _gKey  = _KNOWN_CLIENTS_GRP.find(c => _gText.includes(c) && _cGroups[c]);
+        if (_gKey && _cGroups[_gKey][0] !== result) return '';
+        const _grp = _gKey ? _cGroups[_gKey] : null;
+
         const isCrit  = result.alert_level === 'CRITICAL';
         const isMid   = result.alert_level === 'SOSPECHOSO' || result.alert_level === 'MUY_SOSPECHOSO';
         const isWeb   = result.alert_level === 'PAGINA_SOSPECHOSA';
@@ -1777,23 +1793,18 @@ function renderIssuePage(container, scanId) {
         const path    = result.issue_path || '';
         const truncPath = path.length > 90 ? '…' + path.slice(-87) : path;
         const inInst  = _isInMinecraftInstance(path);
-        const instBadge = inInst
+        // PAGINA_SOSPECHOSA es una visita web — no tiene sentido el badge de instancia
+        const instBadge = isWeb ? '' : (inInst
             ? `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);flex-shrink:0;white-space:nowrap;">En instancia</span>`
-            : `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);flex-shrink:0;white-space:nowrap;">Fuera de instancia</span>`;
+            : `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);flex-shrink:0;white-space:nowrap;">Fuera de instancia</span>`);
+        const variantBadge = _grp ? `<button onclick="event.stopPropagation();var el=document.getElementById('vg_${_gKey}');el.style.display=el.style.display==='flex'?'none':'flex';" style="font-size:10px;padding:1px 7px;border-radius:4px;background:rgba(129,140,248,0.15);color:#818cf8;border:1px solid rgba(129,140,248,0.3);cursor:pointer;flex-shrink:0;">${_grp.length} variantes ▾</button>` : '';
 
         const safeLevel = (result.alert_level || 'SOSPECHOSO').replace(/'/g,"");
         const safeName  = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        const rowIdx    = slice.indexOf(result);
-
-        // V3: Category icon
         const catIcon = _catIcon(cat);
-        // V9: Flames
         const flames = _flameIndicator(result.alert_level, result.confidence);
-        // V4: Critical glow class
         const glowCls = isCrit ? 'issue-critical-glow' : '';
-        // V48: Stagger delay
         const staggerStyle = `animation-delay:${rowIdx * 40}ms;`;
-        // V2: Confidence bar
         const conf = result.confidence;
         const confBar = (conf !== undefined && conf !== null) ? `
             <div style="margin-top:5px;display:flex;align-items:center;gap:6px;">
@@ -1802,13 +1813,11 @@ function renderIssuePage(container, scanId) {
                 </div>
                 <span style="font-size:10px;color:var(--text-d);flex-shrink:0;">${conf}%</span>
             </div>` : '';
-        // V7: Formatted path
         const fmtPath = _formatPath(path);
-        // V8: Copy hash button (shown if path contains SHA256-like string)
         const hashMatch = path.match(/\b([a-f0-9]{64})\b/i);
         const copyBtn = hashMatch ? `<button onclick="event.stopPropagation();_copyWithFeedback('${hashMatch[1]}',this)" title="Copiar hash" style="font-size:11px;padding:1px 5px;border-radius:4px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;flex-shrink:0;margin-left:4px;">📋</button>` : '';
 
-        return `<div data-result-id="${result.id}" class="issue-row-stagger ${glowCls}" style="${staggerStyle}
+        const mainRow = `<div data-result-id="${result.id}" class="issue-row-stagger ${glowCls}" style="${staggerStyle}
             background:${bg};border:1px solid ${accent}33;border-left:3px solid ${accent};
             border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:10px;
             overflow:hidden;max-width:100%;min-width:0;cursor:pointer;transition:outline 0.15s,background 0.15s;"
@@ -1818,6 +1827,7 @@ function renderIssuePage(container, scanId) {
                 <div style="font-size:12px;font-weight:600;color:var(--text-h);display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;overflow:hidden;">
                     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;word-break:break-all;min-width:0;flex:1;">${name}</span>
                     <span style="font-size:12px;flex-shrink:0;" title="Nivel de peligro">${flames}</span>
+                    ${variantBadge}
                     ${instBadge}
                     ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;flex-shrink:0;white-space:nowrap;">${_getCategoryLabel(cat)}</span>` : ''}
                     <button onclick="event.stopPropagation();aiExplainFinding('${safeName}','${safeLevel}',this)" title="Explicar con IA"
@@ -1826,6 +1836,23 @@ function renderIssuePage(container, scanId) {
                 </div>
                 ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:3px;overflow:hidden;text-overflow:ellipsis;max-width:100%;" title="${path}">${fmtPath}${copyBtn}</div>` : ''}
                 ${confBar}
+            </div>
+        </div>`;
+
+        if (!_grp) return mainRow;
+
+        const varHtml = _grp.slice(1).map(v => {
+            const vn = (v.issue_name||'').slice(0, 100);
+            const vp = v.issue_path || '';
+            return `<div style="padding:7px 10px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);font-size:11px;">
+                <div style="color:var(--text-h);font-weight:500;">${vn}</div>
+                ${vp ? `<div style="color:var(--text-d);margin-top:2px;font-size:10px;">${vp.length>80?'…'+vp.slice(-78):vp}</div>` : ''}
+            </div>`;
+        }).join('');
+        return `<div style="display:flex;flex-direction:column;gap:4px;">
+            ${mainRow}
+            <div id="vg_${_gKey}" style="display:none;flex-direction:column;gap:3px;margin-left:28px;padding-left:10px;border-left:2px solid rgba(129,140,248,0.25);">
+                ${varHtml}
             </div>
         </div>`;
     }).join('');
