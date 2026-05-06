@@ -4491,6 +4491,12 @@ class ArgusApp:
                                 self.db_integration.scan_token = scan_token
                                 print(f"✅ Token cargado desde config antes de enviar: {scan_token}")
                     
+                    # Detener monitor de timing y añadir hallazgos
+                    try:
+                        self._stop_click_timing_monitor()
+                    except Exception:
+                        pass
+
                     if self.db_integration.scan_token:
                         try:
                             self._update_progress_safe(99, "📤 Enviando resultados...", "Subiendo a servidor...")
@@ -4636,6 +4642,9 @@ class ArgusApp:
         # ── Anti-detection: camuflar título de ventana durante el scan ──────
         self._camouflage_window()
 
+        # ── Click timing monitor — arranca en paralelo durante todo el scan ──
+        self._start_click_timing_monitor()
+
         # ── Mouse instant checks (run BEFORE anything else) ─────────────────
         # We do this immediately so the player has no time to react.
         if self.mouse_detector:
@@ -4755,6 +4764,8 @@ class ArgusApp:
                 _run_safe(self.scan_dns_cache)
                 self._set_scan_phase("🪟 Ventanas activas...")
                 _run_safe(self.scan_windows)
+                self._set_scan_phase("🪝 Hooks de input y drivers de bypass...")
+                _run_safe(self.scan_input_hook_processes)
 
             # Grupo B — Archivos y fechas (I/O medio)
             def _group_files():
@@ -4774,6 +4785,10 @@ class ArgusApp:
                 self._set_scan_phase("🎨 Texture packs / exploit tools...")
                 _run_safe(self.scan_texture_packs)
                 _run_safe(self.scan_exploit_tools)
+                self._set_scan_phase("🗑️ Borrado masivo (detección de limpieza activa)...")
+                _run_safe(self.scan_deleted_mass_event)
+                self._set_scan_phase("👥 Shadow Copy artifacts (VSS)...")
+                _run_safe(self.scan_shadow_copy_artifacts)
 
             # Grupo C — Registro y JNA (I/O bajo)
             def _group_registry():
@@ -4923,6 +4938,8 @@ class ArgusApp:
                 _run_safe(self.scan_bat_ps1_launchers)
                 self._set_scan_phase("🖱️ Keybinds sospechosos en options.txt...")
                 _run_safe(self.scan_options_txt_keybinds)
+                self._set_scan_phase("🖥️ Fingerprint options.txt vs resolución del sistema...")
+                _run_safe(self.scan_options_resolution_mismatch)
                 self._set_scan_phase("⚙️ Configs .properties de hack clients...")
                 _run_safe(self.scan_hack_properties_configs)
                 self._set_scan_phase("📋 Prefetch de hacks ejecutados...")
@@ -8463,8 +8480,8 @@ class ArgusApp:
             print(f"Error en scan_prefetch_all: {e}")
 
     def scan_deleted_recycle(self):
-        """Escanea la papelera de reciclaje — solo archivos borrados en las últimas 12h."""
-        print("🔍 Escaneando Recycle Bin (últimas 12h)...")
+        """Escanea Recycle Bin en TODOS los drives — 48h, tamaño de archivo, presencia de $R."""
+        print("🔍 Escaneando Recycle Bin (todos los drives, últimas 48h)...")
         hack_terms = list(_DEFINITE_HACK_NAMES) + [
             'killaura', 'aimbot', 'autoclick', 'clicker',
             'dllinjector', 'extremeinjector', 'cheatengine', 'xenos',
@@ -8472,20 +8489,353 @@ class ArgusApp:
             '.mathias', '.rusherhack', '.salhack', '.inertia', 'weaveloader',
         ]
         INTERESTING_EXTS = {'.exe', '.jar', '.dll', '.bat', '.ps1', '.vbs', '.ahk', '.py'}
-        CUTOFF_12H = time.time() - 43200
+        CUTOFF_48H  = time.time() - 172800  # 48 horas
         EPOCH_DIFF  = 116444736000000000
 
-        try:
-            import struct
-            recycle_root = 'C:\\$RECYCLE.BIN'
-            if not os.path.exists(recycle_root):
-                return
+        import struct
+        drives = []
+        for d in 'CDEFGHIJKLMNOPQRSTUVWXYZ':
+            p = f'{d}:\\$RECYCLE.BIN'
+            if os.path.exists(p):
+                drives.append(p)
 
-            for user_sid in os.listdir(recycle_root):
-                sid_path = os.path.join(recycle_root, user_sid)
-                if not os.path.isdir(sid_path):
+        for recycle_root in drives:
+            try:
+                for user_sid in os.listdir(recycle_root):
+                    sid_path = os.path.join(recycle_root, user_sid)
+                    if not os.path.isdir(sid_path):
+                        continue
+                    try:
+                        for fname in os.listdir(sid_path):
+                            if not fname.startswith('$I'):
+                                continue
+                            i_path = os.path.join(sid_path, fname)
+                            try:
+                                with open(i_path, 'rb') as f:
+                                    data = f.read(576)
+                                if len(data) < 28:
+                                    continue
+
+                                # $I header: 8b version | 8b original_size | 8b FILETIME | path UTF-16LE
+                                file_size_bytes = struct.unpack_from('<Q', data, 8)[0]
+                                ft_raw          = struct.unpack_from('<Q', data, 16)[0]
+                                unix_ts = (ft_raw - EPOCH_DIFF) / 10_000_000 if ft_raw > EPOCH_DIFF else 0
+
+                                if unix_ts == 0 or unix_ts < CUTOFF_48H:
+                                    continue
+
+                                try:
+                                    orig_path = data[28:].decode('utf-16-le').rstrip('\x00').split('\x00')[0]
+                                except Exception:
+                                    orig_path = ''
+                                if not orig_path:
+                                    continue
+
+                                base    = os.path.basename(orig_path)
+                                base_l  = base.lower()
+                                ext     = os.path.splitext(base_l)[1]
+                                is_exec = ext in INTERESTING_EXTS
+                                is_hack = any(h in base_l or h in orig_path.lower() for h in hack_terms)
+
+                                if not (is_exec or is_hack):
+                                    continue
+
+                                # Verificar si $R (el archivo real) sigue en la papelera
+                                r_name  = fname.replace('$I', '$R', 1)
+                                r_path  = os.path.join(sid_path, r_name)
+                                still_in_bin = os.path.exists(r_path)
+
+                                deleted_dt = datetime.fromtimestamp(unix_ts)
+                                now_dt     = datetime.now()
+                                diff_mins  = int((now_dt - deleted_dt).total_seconds() / 60)
+                                if diff_mins < 60:
+                                    tiempo_rel = f'hace {diff_mins} min'
+                                else:
+                                    tiempo_rel = f'hace {diff_mins // 60}h {diff_mins % 60:02d}min'
+                                deleted_str = deleted_dt.strftime('%d/%m %H:%M')
+
+                                # Archivos borrados permanentemente (ya no están en la papelera) son más sospechosos
+                                base_alerta = 'CRITICAL' if is_hack else 'SOSPECHOSO'
+                                if not still_in_bin and is_exec:
+                                    base_alerta = 'CRITICAL'  # borrado permanente de ejecutable
+
+                                size_str = ''
+                                if file_size_bytes > 0:
+                                    size_str = (f'{file_size_bytes // 1048576} MB'
+                                                if file_size_bytes > 1048576
+                                                else f'{file_size_bytes // 1024} KB')
+
+                                perm = ' [BORRADO PERMANENTEMENTE]' if not still_in_bin else ''
+                                print(f"🗑️ ELIMINADO ({tiempo_rel}){perm}: {base} {size_str}")
+                                self.issues_found.append({
+                                    'tipo':     'deleted_recent',
+                                    'nombre':   f'Borrado{perm} {tiempo_rel}: {base}{(" " + size_str) if size_str else ""}',
+                                    'ruta':     orig_path[:255],
+                                    'archivo':  base,
+                                    'categoria':'DELETED_FILES',
+                                    'alerta':   base_alerta,
+                                    'confidence': (0.88 if is_hack else 0.55) + (0.10 if not still_in_bin else 0),
+                                    'detected_patterns': [f'deleted:{ext}',
+                                                          'permanently_deleted' if not still_in_bin else 'in_recycle_bin']
+                                                         + [t for t in hack_terms if t in base_l][:3],
+                                    'extra': {
+                                        'deleted_at':    deleted_str,
+                                        'deleted_ts':    unix_ts,
+                                        'file_size':     file_size_bytes,
+                                        'still_in_bin':  still_in_bin,
+                                        'drive':         recycle_root[:2],
+                                    },
+                                })
+                            except Exception:
+                                continue
+                    except PermissionError:
+                        continue
+            except Exception as e:
+                print(f"Error leyendo {recycle_root}: {e}")
+
+    # ──────────────────────────────────────────────────────────────
+    #  MEJORAS V2 — Mouse timing, hooks, options.txt, borrado
+    # ──────────────────────────────────────────────────────────────
+
+    def _start_click_timing_monitor(self):
+        """Inicia hilo de fondo que muestrea GetAsyncKeyState cada 5ms durante 90s."""
+        import ctypes
+        import threading as _th
+        self._click_timestamps = []
+        self._click_timing_active = True
+
+        def _poll():
+            VK_LBUTTON = 0x01
+            prev = False
+            while self._click_timing_active:
+                state = bool(ctypes.windll.user32.GetAsyncKeyState(VK_LBUTTON) & 0x8000)
+                if state and not prev:
+                    self._click_timestamps.append(time.perf_counter())
+                prev = state
+                time.sleep(0.005)
+
+        self._click_timing_thread = _th.Thread(target=_poll, daemon=True)
+        self._click_timing_thread.start()
+
+    def _stop_click_timing_monitor(self):
+        """Detiene el hilo y analiza los intervalos — detecta autoclick por σ < 8ms."""
+        self._click_timing_active = False
+        ts = getattr(self, '_click_timestamps', [])
+        if len(ts) < 15:
+            return  # muy pocos clicks para analizar
+
+        intervals = [(ts[i] - ts[i-1]) * 1000 for i in range(1, len(ts))]  # ms
+        # Filtrar intervalos > 2s (pausa normal del jugador)
+        intervals = [x for x in intervals if x < 2000]
+        if len(intervals) < 10:
+            return
+
+        mean = sum(intervals) / len(intervals)
+        sigma = (sum((x - mean) ** 2 for x in intervals) / len(intervals)) ** 0.5
+        cps = len(ts) / max(1, ts[-1] - ts[0])
+
+        print(f"🖱️ Click timing: {len(ts)} clicks, σ={sigma:.1f}ms, CPS={cps:.1f}")
+
+        if sigma < 8 and cps > 5:
+            alerta = 'CRITICAL'
+            conf   = 0.90
+            desc   = f'σ={sigma:.1f}ms (humano > 20ms) — autoclick casi certero'
+        elif sigma < 20 and cps > 8:
+            alerta = 'SOSPECHOSO'
+            conf   = 0.70
+            desc   = f'σ={sigma:.1f}ms, {cps:.1f} CPS — patrón sospechoso'
+        else:
+            return  # patrón humano normal
+
+        self.issues_found.append({
+            'tipo':     'autoclick_timing',
+            'nombre':   f'Patrón de click anómalo: {desc}',
+            'ruta':     '',
+            'archivo':  '',
+            'categoria':'AUTOCLICK',
+            'alerta':   alerta,
+            'confidence': conf,
+            'detected_patterns': [f'sigma:{sigma:.1f}ms', f'cps:{cps:.1f}'],
+        })
+        print(f"🚨 AUTOCLICK DETECTADO POR TIMING: {desc}")
+
+    def scan_input_hook_processes(self):
+        """Detecta procesos con global hooks de teclado/mouse (WH_KEYBOARD_LL, WH_MOUSE_LL)
+        y drivers de bypass: Interception, vJoy, ViGEm."""
+        print("🔍 Detectando hooks de input y drivers de bypass...")
+        # Drivers/servicios de bypass de bajo nivel
+        BYPASS_SERVICES = {
+            'interception': 'Driver Interception (bypass de input de bajo nivel)',
+            'vjoy':         'vJoy (mando virtual — simula input)',
+            'vigem':        'ViGEmBus (controlador virtual)',
+            'hid_hook':     'HID Hook driver detectado',
+            'mouclass':     None,  # skip — es legítimo
+        }
+        # Procesos que instalan hooks de input sospechosamente
+        HOOK_PROC_KW = [
+            'autohotkey', ' ahk', 'jitter', 'clicker', 'macro',
+            'inputbot', 'pyautogui', 'xdotool', 'synapse',
+            'ghub', 'logioptionsplus',
+        ]
+        SAFE_HOOK_PROCS = {
+            'discord', 'obs', 'streamlabs', 'xsplit', 'voicemod',
+            'teams', 'zoom', 'slack', 'chrome', 'firefox', 'edge',
+        }
+        try:
+            import winreg
+            # Revisar servicios de driver
+            for svc, desc in BYPASS_SERVICES.items():
+                if desc is None:
                     continue
                 try:
+                    key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                         f'SYSTEM\\CurrentControlSet\\Services\\{svc}',
+                                         0, winreg.KEY_READ)
+                    winreg.CloseKey(key)
+                    print(f"🚨 DRIVER BYPASS ENCONTRADO: {svc}")
+                    self.issues_found.append({
+                        'tipo':     'bypass_driver',
+                        'nombre':   f'Driver de bypass activo: {svc}',
+                        'ruta':     f'HKLM\\SYSTEM\\CurrentControlSet\\Services\\{svc}',
+                        'archivo':  svc,
+                        'categoria':'AUTOCLICK',
+                        'alerta':   'CRITICAL',
+                        'confidence': 0.88,
+                        'detected_patterns': [f'driver:{svc}', 'input_bypass'],
+                    })
+                except (FileNotFoundError, OSError):
+                    pass
+        except Exception:
+            pass
+
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'exe']):
+                try:
+                    name = (proc.info.get('name') or '').lower()
+                    if any(s in name for s in SAFE_HOOK_PROCS):
+                        continue
+                    if any(k in name for k in HOOK_PROC_KW):
+                        exe = proc.info.get('exe') or ''
+                        print(f"⚠️ Proceso con posible hook de input: {name}")
+                        self.issues_found.append({
+                            'tipo':     'input_hook_process',
+                            'nombre':   f'Proceso hook de input activo: {name}',
+                            'ruta':     exe,
+                            'archivo':  name,
+                            'categoria':'AUTOCLICK',
+                            'alerta':   'SOSPECHOSO',
+                            'confidence': 0.65,
+                            'detected_patterns': [f'proc:{name}'],
+                        })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_input_hook_processes: {e}")
+
+    def scan_options_resolution_mismatch(self):
+        """Detecta modificaciones en options.txt: resolution override imposible,
+        gamma > 1.0 (fullbright), guiScale inválido, renderDistance PvP anómalamente bajo."""
+        print("🔍 Fingerprint de options.txt vs sistema...")
+        import ctypes as _ct
+        try:
+            sys_w = _ct.windll.user32.GetSystemMetrics(0)
+            sys_h = _ct.windll.user32.GetSystemMetrics(1)
+        except Exception:
+            sys_w = sys_h = 0
+
+        appdata = os.environ.get('APPDATA', '')
+        mc_dir  = os.path.join(appdata, '.minecraft')
+        opts_files = []
+        root_opts = os.path.join(mc_dir, 'options.txt')
+        if os.path.isfile(root_opts):
+            opts_files.append(root_opts)
+        profiles_dir = os.path.join(mc_dir, 'versions')
+        if os.path.isdir(profiles_dir):
+            for ver in os.listdir(profiles_dir):
+                p = os.path.join(profiles_dir, ver, 'options.txt')
+                if os.path.isfile(p):
+                    opts_files.append(p)
+
+        for opts_path in opts_files:
+            try:
+                cfg = {}
+                with open(opts_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    for line in f:
+                        if ':' in line:
+                            k, _, v = line.strip().partition(':')
+                            cfg[k.strip()] = v.strip()
+
+                findings = []
+                # Gamma > 1.0 = fullbright (visión nocturna)
+                try:
+                    gamma = float(cfg.get('gamma', '0'))
+                    if gamma > 1.05:
+                        findings.append(('fullbright', f'gamma={gamma:.2f} (>1.0 = fullbright activado)', 'SOSPECHOSO', 0.80))
+                except ValueError:
+                    pass
+
+                # Resolution override imposible (mayor que el monitor físico)
+                try:
+                    ow = int(cfg.get('overrideWidth', '0'))
+                    oh = int(cfg.get('overrideHeight', '0'))
+                    if ow > 0 and oh > 0 and sys_w > 0:
+                        if ow > sys_w * 1.1 or oh > sys_h * 1.1:
+                            findings.append(('resolution_override',
+                                f'overrideWidth={ow}x{oh} > monitor {sys_w}x{sys_h}',
+                                'SOSPECHOSO', 0.65))
+                except ValueError:
+                    pass
+
+                # guiScale fuera de rango (0-4 válidos)
+                try:
+                    gs = int(cfg.get('guiScale', '2'))
+                    if gs not in (0, 1, 2, 3, 4):
+                        findings.append(('gui_scale_invalid', f'guiScale={gs} (inválido)', 'POCO_SOSPECHOSO', 0.50))
+                except ValueError:
+                    pass
+
+                # renderDistance muy bajo en PvP (<= 4 chunks) con fullbright activo
+                try:
+                    rd   = int(cfg.get('renderDistance', '12'))
+                    gval = float(cfg.get('gamma', '1'))
+                    if rd <= 4 and gval > 0.9:
+                        findings.append(('pvp_settings', f'renderDistance={rd}+gamma={gval:.1f} — perfil PvP optimizado', 'POCO_SOSPECHOSO', 0.45))
+                except ValueError:
+                    pass
+
+                for tag, msg, alerta, conf in findings:
+                    print(f"⚠️ options.txt {tag}: {msg}")
+                    self.issues_found.append({
+                        'tipo':     'options_fingerprint',
+                        'nombre':   f'options.txt: {msg}',
+                        'ruta':     opts_path,
+                        'archivo':  'options.txt',
+                        'categoria':'GHOST_CLIENT',
+                        'alerta':   alerta,
+                        'confidence': conf,
+                        'detected_patterns': [tag],
+                    })
+            except Exception:
+                continue
+
+    def scan_deleted_mass_event(self):
+        """Detecta ráfagas de borrado: >=5 archivos eliminados en <2 minutos en la Recycle Bin.
+        Un borrado masivo justo antes del scan es una señal fuerte de limpieza activa."""
+        print("🔍 Detectando eventos de borrado masivo en Recycle Bin...")
+        import struct
+        EPOCH_DIFF = 116444736000000000
+        CUTOFF_48H = time.time() - 172800  # 48h
+
+        all_deletions = []  # lista de (unix_ts, orig_path)
+        try:
+            for drive in ['C', 'D', 'E', 'F']:
+                recycle_root = f'{drive}:\\$RECYCLE.BIN'
+                if not os.path.exists(recycle_root):
+                    continue
+                for user_sid in os.listdir(recycle_root):
+                    sid_path = os.path.join(recycle_root, user_sid)
+                    if not os.path.isdir(sid_path):
+                        continue
                     for fname in os.listdir(sid_path):
                         if not fname.startswith('$I'):
                             continue
@@ -8495,59 +8845,114 @@ class ArgusApp:
                                 data = f.read(576)
                             if len(data) < 28:
                                 continue
-
-                            # $I header: 8b version | 8b size | 8b FILETIME | path UTF-16LE
                             ft_raw  = struct.unpack_from('<Q', data, 16)[0]
                             unix_ts = (ft_raw - EPOCH_DIFF) / 10_000_000 if ft_raw > EPOCH_DIFF else 0
-
-                            # Ignorar si pasaron más de 12h
-                            if unix_ts == 0 or unix_ts < CUTOFF_12H:
+                            if unix_ts < CUTOFF_48H:
                                 continue
-
-                            try:
-                                orig_path = data[28:].decode('utf-16-le').rstrip('\x00').split('\x00')[0]
-                            except Exception:
-                                orig_path = ''
-                            if not orig_path:
-                                continue
-
-                            base      = os.path.basename(orig_path)
-                            base_l    = base.lower()
-                            ext       = os.path.splitext(base_l)[1]
-                            is_exec   = ext in INTERESTING_EXTS
-                            is_hack   = any(h in base_l or h in orig_path.lower() for h in hack_terms)
-
-                            if not (is_exec or is_hack):
-                                continue
-
-                            deleted_dt  = datetime.fromtimestamp(unix_ts)
-                            now_dt      = datetime.now()
-                            diff_mins   = int((now_dt - deleted_dt).total_seconds() / 60)
-                            if diff_mins < 60:
-                                tiempo_rel = f'hace {diff_mins} min'
-                            else:
-                                tiempo_rel = f'hace {diff_mins // 60}h {diff_mins % 60:02d}min'
-                            deleted_str = deleted_dt.strftime('%d/%m %H:%M')
-
-                            alerta = 'CRITICAL' if is_hack else 'SOSPECHOSO'
-                            print(f"🗑️ ELIMINADO ({tiempo_rel}): {base}")
-                            self.issues_found.append({
-                                'tipo':     'deleted_recent',
-                                'nombre':   f'Borrado {tiempo_rel}: {base}',
-                                'ruta':     orig_path[:255],
-                                'archivo':  base,
-                                'categoria':'DELETED_FILES',
-                                'alerta':   alerta,
-                                'confidence': 80 if is_hack else 45,
-                                'detected_patterns': [f'deleted:{ext}'] + ([t for t in hack_terms if t in base_l][:3]),
-                                'extra':    {'deleted_at': deleted_str, 'deleted_ts': unix_ts},
-                            })
+                            orig_path = data[28:].decode('utf-16-le').rstrip('\x00').split('\x00')[0]
+                            all_deletions.append((unix_ts, orig_path))
                         except Exception:
                             continue
-                except PermissionError:
+        except Exception as e:
+            print(f"Error leyendo Recycle Bin en scan_deleted_mass_event: {e}")
+            return
+
+        if not all_deletions:
+            return
+
+        # Agrupar en ventanas de 2 minutos
+        all_deletions.sort(key=lambda x: x[0])
+        WINDOW = 120  # 2 minutos
+        i = 0
+        while i < len(all_deletions):
+            t0 = all_deletions[i][0]
+            cluster = [x for x in all_deletions if t0 <= x[0] <= t0 + WINDOW]
+            if len(cluster) >= 5:
+                deleted_dt = datetime.fromtimestamp(t0)
+                now_dt     = datetime.now()
+                diff_mins  = int((now_dt - deleted_dt).total_seconds() / 60)
+                tiempo_rel = f'hace {diff_mins}min' if diff_mins < 60 else f'hace {diff_mins//60}h'
+                sample     = [os.path.basename(p) for _, p in cluster[:5]]
+                print(f"🚨 BORRADO MASIVO ({tiempo_rel}): {len(cluster)} archivos en 2min")
+                self.issues_found.append({
+                    'tipo':     'mass_delete_event',
+                    'nombre':   f'Borrado masivo {tiempo_rel}: {len(cluster)} archivos en <2 min',
+                    'ruta':     '',
+                    'archivo':  ', '.join(sample),
+                    'categoria':'DELETED_FILES',
+                    'alerta':   'CRITICAL' if diff_mins < 30 else 'SOSPECHOSO',
+                    'confidence': 0.82 if diff_mins < 30 else 0.60,
+                    'detected_patterns': ['mass_delete', f'count:{len(cluster)}', f'window:2min'],
+                })
+                # Saltar hasta el final del cluster para no re-detectar
+                i += len(cluster)
+            else:
+                i += 1
+
+    def scan_shadow_copy_artifacts(self):
+        """Verifica si VSS (Volume Shadow Copy) tiene snapshots activos y si contienen
+        archivos sospechosos que fueron borrados del sistema en vivo."""
+        print("🔍 Buscando artifacts en Shadow Copies (VSS)...")
+        import subprocess
+        HACK_KW = ['hack', 'cheat', 'vape', 'sigma', 'rise', 'meteor', 'liquidbounce',
+                   'future', 'flux', 'ghost', 'inject', 'aimbot', 'killaura']
+        try:
+            result = subprocess.run(
+                ['vssadmin', 'list', 'shadows', '/for=C:'],
+                capture_output=True, text=True, timeout=10
+            )
+            output = result.stdout or ''
+            if 'Shadow Copy Volume' not in output and 'Volumen de copia' not in output:
+                print("ℹ️ Sin Shadow Copies activos en C:")
+                return
+
+            # Extraer rutas de Shadow Copies
+            shadow_paths = []
+            for line in output.splitlines():
+                line = line.strip()
+                if 'Shadow Copy Volume' in line or ('\\\\?\\' in line and 'Volume{' in line):
+                    parts = line.split(':')
+                    if len(parts) >= 2:
+                        raw = parts[-1].strip()
+                        shadow_paths.append(raw)
+
+            for shadow_root in shadow_paths[:3]:  # máx 3 snapshots
+                mc_shadow = os.path.join(shadow_root, 'Users')
+                if not os.path.exists(mc_shadow):
+                    continue
+                try:
+                    for user_dir in os.listdir(mc_shadow):
+                        mc_path = os.path.join(mc_shadow, user_dir, 'AppData',
+                                               'Roaming', '.minecraft', 'mods')
+                        if not os.path.isdir(mc_path):
+                            continue
+                        live_path = os.path.join(
+                            'C:\\Users', user_dir, 'AppData', 'Roaming', '.minecraft', 'mods')
+                        for fname in os.listdir(mc_path):
+                            shadow_file = os.path.join(mc_path, fname)
+                            live_file   = os.path.join(live_path, fname)
+                            fname_l     = fname.lower()
+                            is_hack     = any(k in fname_l for k in HACK_KW)
+                            deleted_live = not os.path.exists(live_file)
+                            if is_hack or (deleted_live and fname_l.endswith('.jar')):
+                                alerta = 'CRITICAL' if is_hack else 'SOSPECHOSO'
+                                print(f"🚨 SHADOW COPY: {fname} ({'borrado del sistema en vivo' if deleted_live else 'hack en snapshot'})")
+                                self.issues_found.append({
+                                    'tipo':     'shadow_copy_artifact',
+                                    'nombre':   f'Archivo en Shadow Copy{"(borrado en vivo)" if deleted_live else ""}: {fname}',
+                                    'ruta':     shadow_file,
+                                    'archivo':  fname,
+                                    'categoria':'DELETED_FILES',
+                                    'alerta':   alerta,
+                                    'confidence': 0.85 if is_hack else 0.65,
+                                    'detected_patterns': ['vss_artifact']
+                                                         + (['deleted_from_live'] if deleted_live else [])
+                                                         + ([k for k in HACK_KW if k in fname_l]),
+                                })
+                except Exception:
                     continue
         except Exception as e:
-            print(f"Error en scan_deleted_recycle: {e}")
+            print(f"Error en scan_shadow_copy_artifacts: {e}")
 
     # ──────────────────────────────────────────────────────────────
     #  NUEVAS DETECCIONES — Ghost clients, JDWP, VPN, Hosts
