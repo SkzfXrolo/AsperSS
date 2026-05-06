@@ -268,6 +268,13 @@ def init_db_async():
         print("✅ Tabla hack_blacklist verificada/creada")
     except Exception as _e:
         print(f"⚠️ Error creando hack_blacklist: {_e}")
+    # Migración: columna ensemble_data en scans (veredicto 6-sistemas)
+    try:
+        with get_api_db_cursor() as _cur:
+            _cur.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS ensemble_data TEXT")
+        print("✅ Columna ensemble_data en scans verificada/creada")
+    except Exception as _e:
+        print(f"⚠️ Error migrando ensemble_data: {_e}")
     # Notificación de deploy nuevo — se dispara una sola vez por commit
     _notify_new_deploy()
 
@@ -2727,6 +2734,159 @@ def _ensemble_risk_score(results):
         return heuristic
 
 
+# ---------------------------------------------------------------------------
+# 6-system ensemble verdict
+# ---------------------------------------------------------------------------
+_ENSEMBLE_IN_INST_FRAGS = (
+    '/.minecraft/mods/', '/.minecraft/versions/', '/.minecraft/resourcepacks/',
+    '/.minecraft/shaderpacks/', '/.minecraft/saves/', '/.minecraft/config/',
+    '.minecraft/mods', '.minecraft/versions', '.minecraft/resourcepacks',
+    '.minecraft/shaderpacks', '.minecraft/saves', '.minecraft/config',
+    'multimc/instances', 'prismlauncher/instances',
+    'curseforge/minecraft/instances', 'gdlauncher/instances',
+    'atlauncher/instances',
+)
+
+_ENSEMBLE_KNOWN_CLIENTS = [
+    'vape', 'entropy', 'whiteout', 'liquidbounce', 'wurst', 'sigma', 'flux',
+    'future', 'astolfo', 'ghost', 'rise', 'moon', 'drip', 'meteor', 'aristois',
+    'tenacity', 'vertex', 'inertia', 'salhack', 'slinky', 'reflex', 'rage',
+    'biscuit', 'thunder', 'autoclick', 'autoclicker',
+]
+
+_VERDICT_ORDER = ['LIMPIO', 'POCO_SOSPECHOSO', 'SOSPECHOSO', 'MUY_SOSPECHOSO', 'HACK_CONFIRMADO']
+
+
+def _compute_ensemble_verdict(results, cursor=None):
+    """6-system ensemble verdict with in-instance hard gate.
+
+    Gate rule: without any in-instance evidence, max verdict = SOSPECHOSO (not sanctionable).
+    Systems and weights:
+      1. Risk Score       0.15
+      2. Instance Layer   0.35  (also acts as sanctionability gate)
+      3. Signal Conv.     0.20
+      4. Hash Reputation  0.15
+      5. Temporality      0.10
+      6. ML               0.05
+    All systems return 0-4; final score is weighted average scaled to 0-100.
+    """
+    if not results:
+        return {'verdict': 'LIMPIO', 'sanctionable': False, 'score': 0, 'systems': {}, 'reason': 'Sin hallazgos'}
+
+    # -- System 2: Instance Layer (GATE) --
+    in_inst_count = 0
+    for r in results:
+        path = (r.get('issue_path') or r.get('ruta') or r.get('archivo') or '').lower().replace('\\', '/')
+        if any(f in path for f in _ENSEMBLE_IN_INST_FRAGS):
+            in_inst_count += 1
+    sanctionable = in_inst_count > 0
+    s2 = 4 if in_inst_count >= 3 else 2 if in_inst_count >= 1 else 0
+
+    # -- System 1: Risk Score --
+    risk_score = _ensemble_risk_score(results)
+    s1 = min(4, risk_score // 20)
+
+    # -- System 3: Signal Convergence --
+    _TYPE_TO_SIG = {
+        'ghost_client': 'file', 'hack_client': 'file', 'hacks': 'file', 'mod': 'file',
+        'proceso': 'process', 'process': 'process', 'processes': 'process',
+        'network': 'network', 'red': 'network', 'network_forensics': 'network',
+        'browser': 'browser', 'web': 'browser', 'forense': 'browser',
+        'descarga': 'download', 'download': 'download',
+    }
+    client_signals = {}
+    for r in results:
+        r_text = ' '.join([
+            r.get('issue_name') or r.get('nombre') or '',
+            r.get('issue_type') or r.get('tipo') or '',
+        ]).lower()
+        r_type = (r.get('issue_type') or r.get('tipo') or '').lower()
+        r_cat  = (r.get('issue_category') or r.get('categoria') or '').lower()
+        sig_cat = next((v for k, v in _TYPE_TO_SIG.items() if k in r_type or k in r_cat), 'file')
+        client = next((c for c in _ENSEMBLE_KNOWN_CLIENTS if c in r_text), None)
+        if client:
+            client_signals.setdefault(client, set()).add(sig_cat)
+    max_convergence = max((len(v) for v in client_signals.values()), default=0)
+    s3 = min(4, max_convergence)
+
+    # -- System 4: Hash Reputation --
+    s4 = 0
+    if cursor:
+        try:
+            hashes = [r.get('file_hash') for r in results if r.get('file_hash') and len(r.get('file_hash', '')) > 8]
+            if hashes:
+                placeholders = ','.join([_PH] * len(hashes))
+                cursor.execute(
+                    f'SELECT COUNT(*) FROM scan_results sr '
+                    f'JOIN scans s ON sr.scan_id = s.id '
+                    f'WHERE sr.file_hash IN ({placeholders}) AND s.verdict = {_PH}',
+                    hashes + ['hack']
+                )
+                row = cursor.fetchone()
+                matches = int(_row_get(row, 0, 'count') or 0)
+                s4 = 4 if matches >= 3 else 2 if matches >= 1 else 0
+        except Exception:
+            s4 = 0
+
+    # -- System 5: Temporality --
+    _TEMP_MAP = {
+        'proceso': 4, 'process': 4, 'processes': 4,
+        'descarga': 3, 'download': 3,
+        'ghost_client': 2, 'hack_client': 2, 'hacks': 2, 'mod': 2,
+        'browser': 1, 'web': 1, 'red': 1, 'network': 1,
+    }
+    max_temp = 0
+    for r in results:
+        r_type = (r.get('issue_type') or r.get('tipo') or '').lower()
+        r_cat  = (r.get('issue_category') or r.get('categoria') or '').lower()
+        t = next((v for k, v in _TEMP_MAP.items() if k in r_type or k in r_cat), 0)
+        if t > max_temp:
+            max_temp = t
+    s5 = max_temp
+
+    # -- System 6: ML (reuse existing risk_score proxy) --
+    s6 = min(4, risk_score // 25)
+
+    # -- Weighted ensemble (all 0-4) --
+    raw = s1 * 0.15 + s2 * 0.35 + s3 * 0.20 + s4 * 0.15 + s5 * 0.10 + s6 * 0.05
+    score = min(100, round(raw / 4.0 * 100))
+
+    # -- Verdict --
+    if   score >= 75: verdict = 'HACK_CONFIRMADO'
+    elif score >= 50: verdict = 'MUY_SOSPECHOSO'
+    elif score >= 30: verdict = 'SOSPECHOSO'
+    elif score >= 15: verdict = 'POCO_SOSPECHOSO'
+    else:             verdict = 'LIMPIO'
+
+    # -- Apply gate: no in-instance evidence → max SOSPECHOSO --
+    if not sanctionable and _VERDICT_ORDER.index(verdict) > _VERDICT_ORDER.index('SOSPECHOSO'):
+        verdict = 'SOSPECHOSO'
+
+    reasons = []
+    if sanctionable:
+        reasons.append(f'{in_inst_count} hallazgo(s) en instancia')
+    else:
+        reasons.append('Sin evidencia en instancia')
+    if client_signals:
+        top_client = max(client_signals, key=lambda k: len(client_signals[k]))
+        reasons.append(f'{top_client} ({len(client_signals[top_client])} señal(es))')
+
+    return {
+        'verdict': verdict,
+        'sanctionable': sanctionable,
+        'score': score,
+        'systems': {
+            'risk_score':        {'score': s1, 'raw': risk_score, 'weight': 0.15},
+            'instance_layer':    {'score': s2, 'in_instance': in_inst_count, 'sanctionable': sanctionable, 'weight': 0.35},
+            'signal_convergence':{'score': s3, 'clients': {k: list(v) for k, v in client_signals.items()}, 'weight': 0.20},
+            'hash_reputation':   {'score': s4, 'weight': 0.15},
+            'temporality':       {'score': s5, 'weight': 0.10},
+            'ml':                {'score': s6, 'weight': 0.05},
+        },
+        'reason': ' · '.join(reasons) if reasons else '',
+    }
+
+
 def _compare_consecutive_scans(cursor, scan_id, machine_id, current_results):
     """P2 #43 — Compara scan actual con el anterior del mismo machine_id.
     Inserta notas de 'new_finding' en scan_results para hallazgos que no estaban antes.
@@ -2896,6 +3056,22 @@ def submit_scan_results(scan_id):
             except Exception:
                 try:
                     cursor.execute('ROLLBACK TO SAVEPOINT risk_score_save')
+                except Exception:
+                    pass
+
+            # 6-system ensemble verdict
+            try:
+                cursor.execute('SAVEPOINT ensemble_save')
+                _ens = _compute_ensemble_verdict(results, cursor)
+                cursor.execute(
+                    f'UPDATE scans SET ensemble_data = {_PH} WHERE id = {_PH}',
+                    (json.dumps(_ens), scan_id)
+                )
+                cursor.execute('RELEASE SAVEPOINT ensemble_save')
+                print(f"[DEBUG] ensemble verdict={_ens['verdict']} sanctionable={_ens['sanctionable']} score={_ens['score']}")
+            except Exception:
+                try:
+                    cursor.execute('ROLLBACK TO SAVEPOINT ensemble_save')
                 except Exception:
                     pass
 
@@ -3227,16 +3403,17 @@ def get_scan(scan_id):
                     'verdict_by': None, 'verdict_at': '',
                 }
 
-                # Columnas opcionales: total_dirs_scanned, verdict, screenshot, mc_info
+                # Columnas opcionales: total_dirs_scanned, verdict, screenshot, mc_info, ensemble_data
                 # Usa SAVEPOINT para que un fallo (columna inexistente) no aborte la transacción
                 scan['screenshot'] = None
                 scan['mc_info'] = None
                 scan['risk_score'] = 0
+                scan['ensemble_data'] = None
                 try:
                     cursor.execute('SAVEPOINT opt_cols')
                     cursor.execute(f'''
                         SELECT total_dirs_scanned, verdict, verdict_reason, verdict_by, verdict_at,
-                               screenshot, mc_info, risk_score
+                               screenshot, mc_info, risk_score, ensemble_data
                         FROM scans WHERE id = {_PH}
                     ''', (scan_id,))
                     vrow = cursor.fetchone()
@@ -3255,6 +3432,12 @@ def get_scan(scan_id):
                             except Exception:
                                 scan['mc_info'] = None
                         scan['risk_score'] = int(_row_get(vrow, 7, 'risk_score') or 0)
+                        raw_ens = _row_get(vrow, 8, 'ensemble_data')
+                        if raw_ens:
+                            try:
+                                scan['ensemble_data'] = json.loads(raw_ens)
+                            except Exception:
+                                scan['ensemble_data'] = None
                     cursor.execute('RELEASE SAVEPOINT opt_cols')
                 except Exception:
                     try:

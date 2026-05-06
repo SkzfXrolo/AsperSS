@@ -755,6 +755,81 @@ function _renderRiskGauge(containerId, value) {
 }
 window._renderRiskGauge = _renderRiskGauge;
 
+// Render 6-system ensemble verdict card
+function _renderEnsembleVerdict(scan) {
+    const el = document.getElementById('ensemble-verdict-container');
+    if (!el) return;
+    const ens = scan.ensemble_data;
+    if (!ens) { el.style.display = 'none'; return; }
+
+    const _V = {
+        HACK_CONFIRMADO:  { label: 'HACK CONFIRMADO',  color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.35)'  },
+        MUY_SOSPECHOSO:   { label: 'MUY SOSPECHOSO',   color: '#f97316', bg: 'rgba(249,115,22,0.12)', border: 'rgba(249,115,22,0.35)' },
+        SOSPECHOSO:       { label: 'SOSPECHOSO',        color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.35)' },
+        POCO_SOSPECHOSO:  { label: 'POCO SOSPECHOSO',  color: '#6366f1', bg: 'rgba(99,102,241,0.12)', border: 'rgba(99,102,241,0.35)' },
+        LIMPIO:           { label: 'LIMPIO',            color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.35)' },
+    };
+    const vk = ens.verdict || 'LIMPIO';
+    const v  = _V[vk] || _V.LIMPIO;
+    const sys = ens.systems || {};
+    const score = ens.score || 0;
+
+    const _bar = (val, max=4, color) => {
+        const pct = Math.round(val / max * 100);
+        return `<div style="flex:1;height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">
+            <div style="width:${pct}%;height:100%;background:${color};border-radius:2px;transition:width .4s;"></div>
+        </div>`;
+    };
+    const _row = (label, score, max, color, detail='') => `
+        <div style="display:flex;align-items:center;gap:6px;font-size:10px;">
+            <span style="color:var(--text-d);width:80px;flex-shrink:0;">${label}</span>
+            ${_bar(score, max, color)}
+            <span style="color:${color};font-weight:700;width:16px;text-align:right;">${score}</span>
+        </div>`;
+
+    const instSys  = sys.instance_layer    || {};
+    const convSys  = sys.signal_convergence || {};
+    const hashSys  = sys.hash_reputation   || {};
+    const tempSys  = sys.temporality       || {};
+    const rsSys    = sys.risk_score        || {};
+    const mlSys    = sys.ml                || {};
+
+    const sanctionHtml = ens.sanctionable
+        ? `<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">SANCIONABLE</span>`
+        : `<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);">NO SANCIONABLE</span>`;
+
+    // Top clients from signal convergence
+    const clients = convSys.clients || {};
+    const topClients = Object.entries(clients).sort((a,b) => b[1].length - a[1].length).slice(0,2)
+        .map(([k,v]) => `<span style="color:var(--text-m);">${k}</span> <span style="color:var(--text-d);">(${v.join(',')})</span>`).join(' · ');
+
+    el.style.display = 'block';
+    el.innerHTML = `
+        <div style="background:${v.bg};border:1px solid ${v.border};border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                <span style="font-size:11px;font-weight:800;color:${v.color};letter-spacing:.5px;">${v.label}</span>
+                ${sanctionHtml}
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <div style="flex:1;height:5px;background:rgba(255,255,255,0.07);border-radius:3px;overflow:hidden;">
+                    <div style="width:${score}%;height:100%;background:${v.color};border-radius:3px;transition:width .5s;"></div>
+                </div>
+                <span style="font-size:10px;color:${v.color};font-weight:700;">${score}</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+                ${_row('En instancia', instSys.score||0, 4, '#10b981')}
+                ${_row('Convergencia', convSys.score||0, 4, '#818cf8')}
+                ${_row('Risk Score',   rsSys.score||0,   4, '#f59e0b')}
+                ${_row('Hash Rep.',    hashSys.score||0, 4, '#ef4444')}
+                ${_row('Temporalidad', tempSys.score||0, 4, '#38bdf8')}
+                ${_row('ML',           mlSys.score||0,   4, '#a78bfa')}
+            </div>
+            ${ens.reason ? `<div style="font-size:9px;color:var(--text-d);margin-top:1px;">${ens.reason}</div>` : ''}
+            ${topClients ? `<div style="font-size:9px;color:var(--text-d);">Clientes: ${topClients}</div>` : ''}
+        </div>`;
+}
+window._renderEnsembleVerdict = _renderEnsembleVerdict;
+
 function _resultBadge(scan) {
     let badge = '';
     if (scan.status === 'running') {
@@ -2250,6 +2325,9 @@ async function viewScanDetails(scanId) {
         if (riskScore !== undefined && riskScore !== null) {
             _renderRiskGauge('risk-gauge-container', riskScore);
         }
+
+        // 6-system ensemble verdict card
+        _renderEnsembleVerdict(data);
 
         // P3 #13 — Active learning: marcar casos inciertos donde la revisión del staff es más valiosa
         const verdict = data.verdict || '';
