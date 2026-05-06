@@ -3989,6 +3989,7 @@ class ArgusApp:
             self.resources_label = progress_widgets['resources']
             self.progress_percent_label = progress_widgets.get('percent', None)
             self._progress_canvas = progress_widgets.get('_canvas', None)
+            self._progress_ring   = progress_widgets.get('_ring', None)
             self._cancel_row = progress_widgets.get('cancel_row', None)
             self._cancel_btn_widget = progress_widgets.get('cancel_btn', None)
             self.progress_value = 0
