@@ -3392,7 +3392,7 @@ def update_model():
 
 
 @app.route('/api/ml/trigger', methods=['POST'])
-@require_role('admin')
+@admin_required
 def trigger_autonomous_learning():
     """Dispara el pipeline de aprendizaje autónomo manualmente (sin esperar al cron)."""
     import threading
