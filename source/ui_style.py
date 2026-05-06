@@ -82,8 +82,8 @@ class ModernUI:
         x = (root.winfo_screenwidth()  - w) // 2
         y = (root.winfo_screenheight() - h) // 2
         root.geometry(f"{w}x{h}+{x}+{y}")
-        root.minsize(580, 360)
         root.resizable(False, False)
+        root.overrideredirect(True)
         root.configure(bg=ModernUI.COLORS['bg_primary'])
         try:
             ico = os.path.join(ModernUI._base_path(), 'assets', 'logo.ico')
