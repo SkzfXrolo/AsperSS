@@ -275,20 +275,48 @@ def init_db_async():
 import threading
 threading.Thread(target=init_db_async, daemon=True).start()
 
-# P3 #20 — Reentrenamiento automático semanal del clasificador RF
-def _weekly_ml_retrain():
-    """Reentrena el clasificador RF y registra el resultado."""
+def _autonomous_daily_learning():
+    """Pipeline de aprendizaje autónomo — corre cada día a las 2:00 UTC.
+
+    Pasos en orden:
+      1. Hash consensus  — detecta hashes maliciosos por frecuencia estadística
+      2. Auto-labels     — genera pseudo-etiquetas para scans extremos sin veredicto humano
+      3. RF retrain      — reentrena Random Forest con humanos + auto-labels
+      4. Isolation Forest— reentrena detector de anomalías con todos los scans
+    No requiere ningún input externo ni veredicto humano para operar.
+    """
     try:
         from ml_classifier import get_classifier
         clf = get_classifier()
         with get_api_db_cursor() as cursor:
-            result = clf.train(cursor)
-        if result.get('trained'):
-            print(f"[ML Weekly] Reentrenamiento OK: accuracy={result.get('accuracy')}, samples={result.get('samples')}")
-        else:
-            print(f"[ML Weekly] No reentrenado: {result.get('error')}")
+            # 1. Hash consensus
+            h = clf.learn_hash_consensus(cursor)
+            print(f"[ML Auto] Hash consensus: {h.get('promoted',0)} promovidos")
+
+            # 2. Auto-labels from extreme heuristic scores
+            al = clf.generate_auto_labels(cursor)
+            print(f"[ML Auto] Auto-labels: {al.get('labeled',0)} nuevos")
+
+            # 3. RF retraining (human verdicts + auto-labels)
+            rf = clf.train(cursor)
+            if rf.get('trained'):
+                print(f"[ML Auto] RF: acc={rf.get('accuracy')}, "
+                      f"muestras={rf.get('samples')} "
+                      f"({rf.get('human_samples')} humanas + {rf.get('auto_samples')} auto)")
+            else:
+                print(f"[ML Auto] RF no reentrenado: {rf.get('error')}")
+
+            # 4. Isolation Forest (unsupervised, all scans)
+            iso = clf.train_isolation_forest(cursor)
+            if iso.get('trained'):
+                print(f"[ML Auto] IsoForest: {iso.get('scans')} scans")
+            else:
+                print(f"[ML Auto] IsoForest no entrenado: {iso.get('error')}")
+
     except Exception as e:
-        print(f"[ML Weekly] Error: {e}")
+        import traceback
+        print(f"[ML Auto] Error en pipeline autónomo: {e}")
+        print(traceback.format_exc())
 
 def _daily_summary_job():
     """P3 #25 — Resumen diario de scans del día anterior, enviado a Discord a las 9:00 UTC."""
@@ -350,14 +378,14 @@ def _daily_summary_job():
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
     _scheduler = BackgroundScheduler(daemon=True)
-    _scheduler.add_job(_weekly_ml_retrain, 'cron', day_of_week='sun', hour=3, minute=0,
-                       id='weekly_ml_retrain', replace_existing=True)
+    _scheduler.add_job(_autonomous_daily_learning, 'cron', hour=2, minute=0,
+                       id='autonomous_ml_daily', replace_existing=True)
     _scheduler.add_job(_daily_summary_job, 'cron', hour=9, minute=0,
                        id='daily_summary', replace_existing=True)
     _scheduler.add_job(_try_send_deploy_webhook, 'interval', minutes=10,
                        id='deploy_webhook_retry', replace_existing=True)
     _scheduler.start()
-    print('[Scheduler] ML semanal + resumen diario + deploy webhook retry (10 min) activados')
+    print('[Scheduler] ML autónomo diario (2:00 UTC) + resumen diario + deploy webhook retry activados')
 except Exception as _sch_err:
     print(f'[Scheduler] APScheduler no disponible: {_sch_err}')
 
@@ -2628,37 +2656,71 @@ def _calculate_risk_score(results, return_breakdown=False):
 
 
 def _ensemble_risk_score(results):
-    """P3 #7 — Ensemble: combina scoring heurístico + Random Forest con votación ponderada.
-    Peso 60% heurístico (reglas explícitas, interpretable) + 40% RF (aprendido de datos).
-    Si el RF no está disponible o no está entrenado, cae a 100% heurístico.
+    """Ensemble autónomo: 50% heurístico + 30% RF + 20% Isolation Forest.
+    Si un modelo no está disponible, sus pesos se redistribuyen a heurístico.
     """
     heuristic = _calculate_risk_score(results)
 
     try:
+        from ml_classifier import get_classifier
         clf = get_classifier()
-        if not clf.is_available:
-            return heuristic
 
-        hack_probs = []
-        for r in results:
-            features = {
-                'alert_level':          r.get('alerta') or r.get('alert_level') or 'NORMAL',
-                'issue_category':       r.get('categoria') or r.get('issue_category') or 'OTHER',
-                'confidence':           float(r.get('confidence') or 0.5),
-                'obfuscation_detected': int(bool(r.get('obfuscation_detected') or 0)),
-            }
-            pred = clf.predict(features)
-            if pred.get('available'):
-                hack_probs.append(pred.get('hack_prob', 0.0))
+        rf_score  = None
+        iso_score = None
 
-        if not hack_probs:
-            return heuristic
+        # --- Random Forest (supervised / pseudo-supervised) ---
+        if clf.is_available and results:
+            hack_probs = []
+            for r in results:
+                features = {
+                    'alert_level':          r.get('alerta') or r.get('alert_level') or 'NORMAL',
+                    'issue_category':       r.get('categoria') or r.get('issue_category') or 'OTHER',
+                    'confidence':           float(r.get('confidence') or 0.5),
+                    'obfuscation_detected': int(bool(r.get('obfuscation_detected') or 0)),
+                }
+                pred = clf.predict(features)
+                if pred.get('available'):
+                    hack_probs.append(pred.get('hack_prob', 0.0))
+            if hack_probs:
+                rf_score = round(sum(hack_probs) / len(hack_probs) * 100)
 
-        # RF scan-level score: mean of per-finding hack probability, scaled to 0–100
-        rf_score = round(sum(hack_probs) / len(hack_probs) * 100)
+        # --- Isolation Forest (unsupervised anomaly detection) ---
+        if clf.iso_available and results:
+            from ml_classifier import _ALERT_MAP, _CAT_MAP
+            alert_nums = [_ALERT_MAP.get(str((r.get('alerta') or r.get('alert_level') or '')).upper(), 0) for r in results]
+            cat_nums   = [_CAT_MAP.get(str((r.get('categoria') or r.get('issue_category') or '')).upper(), 1) for r in results]
+            confs      = [float(r.get('confidence') or 0.5) for r in results]
+            obfuscs    = [int(bool(r.get('obfuscation_detected') or 0)) for r in results]
+            n = len(results)
+            scan_feats = [
+                n,
+                sum(1 for a in alert_nums if a >= 4),
+                max(alert_nums) if alert_nums else 0,
+                sum(confs) / n,
+                sum(obfuscs),
+                len(set(cat_nums)),
+                sum(1 for a in alert_nums if a >= 3),
+            ]
+            iso_pred = clf.predict_iso(scan_feats)
+            if iso_pred.get('available'):
+                # score_samples returns negative values near 0 for anomalies,
+                # more negative = more anomalous. Normalize to 0–100 hack probability.
+                raw = iso_pred.get('score', 0.0)
+                # Typical range is roughly -0.20 (anomaly) to +0.10 (normal).
+                # Map: -0.20 → 100, 0.0 → 50, +0.10 → 0
+                iso_hack = max(0, min(100, round((-raw / 0.20) * 50 + 50)))
+                iso_score = iso_hack
 
-        # Weighted ensemble: 60% heuristic + 40% RF
-        ensemble = round(heuristic * 0.6 + rf_score * 0.4)
+        # --- Weighted ensemble ---
+        if rf_score is None and iso_score is None:
+            return heuristic                         # fallback: 100% heuristic
+        elif rf_score is None:
+            ensemble = round(heuristic * 0.70 + iso_score * 0.30)
+        elif iso_score is None:
+            ensemble = round(heuristic * 0.60 + rf_score * 0.40)
+        else:
+            ensemble = round(heuristic * 0.50 + rf_score * 0.30 + iso_score * 0.20)
+
         return min(100, ensemble)
 
     except Exception:
@@ -3328,10 +3390,23 @@ def update_model():
         print(traceback.format_exc())
         return jsonify({'error': f'Error inesperado: {str(e)}'}), 500
 
+
+@app.route('/api/ml/trigger', methods=['POST'])
+@require_role('admin')
+def trigger_autonomous_learning():
+    """Dispara el pipeline de aprendizaje autónomo manualmente (sin esperar al cron)."""
+    import threading
+    def _run():
+        _autonomous_daily_learning()
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({'success': True, 'message': 'Pipeline autónomo iniciado en segundo plano'})
+
 @app.route('/api/learning-stats', methods=['GET'])
 def get_learning_stats():
-    """Estadísticas del sistema de aprendizaje: patrones, hashes y feedbacks."""
+    """Estadísticas del sistema de aprendizaje autónomo."""
     try:
+        from ml_classifier import get_classifier
+        clf = get_classifier()
         with get_api_db_cursor() as cursor:
             cursor.execute("SELECT COUNT(*) FROM learned_patterns WHERE is_active = TRUE AND pattern_type != 'legitimate_path'")
             patterns_count = (_row_get(cursor.fetchone(), 0, 'count') or 0)
@@ -3339,10 +3414,21 @@ def get_learning_stats():
             hashes_count = (_row_get(cursor.fetchone(), 0, 'count') or 0)
             cursor.execute("SELECT COUNT(*) FROM staff_feedback")
             feedbacks_count = (_row_get(cursor.fetchone(), 0, 'count') or 0)
+            auto_count = 0
+            try:
+                cursor.execute("SELECT COUNT(*) FROM auto_labels")
+                auto_count = (_row_get(cursor.fetchone(), 0, 'count') or 0)
+            except Exception:
+                pass
         return jsonify({
-            'patterns_count': int(patterns_count),
-            'hashes_count': int(hashes_count),
-            'feedbacks_count': int(feedbacks_count),
+            'patterns_count':   int(patterns_count),
+            'hashes_count':     int(hashes_count),
+            'feedbacks_count':  int(feedbacks_count),
+            'auto_labels':      int(auto_count),
+            'rf_trained_on':    clf._trained_on,
+            'rf_available':     clf.is_available,
+            'iso_available':    clf.iso_available,
+            'iso_trained_on':   getattr(clf, '_iso_trained_on', 0),
         }), 200
     except Exception as e:
         return jsonify({'patterns_count': 0, 'hashes_count': 0, 'feedbacks_count': 0, 'error': str(e)}), 200
