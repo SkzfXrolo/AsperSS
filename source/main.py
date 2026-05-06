@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.24"
+SCANNER_VERSION = "1.6.25"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -6867,33 +6867,9 @@ class ArgusApp:
                 except Exception as e:
                     print(f"Error detectando hooks: {e}")
             
-            # 4. Análisis de conexiones de red de procesos de Minecraft
+            # 4. Análisis de conexiones de red — delegado a scan_javaw_network_connections()
             def scan_network_connections():
-                print("🔍 Analizando conexiones de red de Minecraft...")
-                try:
-                    for proc in psutil.process_iter(['pid', 'name', 'connections']):
-                        try:
-                            if proc.info['name'].lower() in ['java.exe', 'javaw.exe', 'minecraft.exe']:
-                                connections = proc.connections()
-                                for conn in connections:
-                                    if conn.status == 'ESTABLISHED':
-                                        # Verificar si la conexión es sospechosa
-                                        if conn.raddr.ip not in ['127.0.0.1', '0.0.0.0']:
-                                            # Buscar IPs sospechosas o puertos no estándar de Minecraft
-                                            if conn.raddr.port not in [25565, 25566, 25567]:  # Puertos estándar de Minecraft
-                                                self.issues_found.append({
-                                                    'nombre': f"Conexión sospechosa desde {proc.info['name']}",
-                                                    'ruta': f"PID: {proc.info['pid']}",
-                                                    'archivo': f"{conn.raddr.ip}:{conn.raddr.port}",
-                                                    'tipo': 'suspicious_connection',
-                                                    'categoria': 'NETWORK_CONNECTIONS',
-                                                    'alerta': 'CRITICAL'
-                                                })
-                                                print(f"🚨 CONEXIÓN SOSPECHOSA: {conn.raddr.ip}:{conn.raddr.port}")
-                        except:
-                            continue
-                except Exception as e:
-                    print(f"Error analizando conexiones: {e}")
+                pass  # reemplazado por scan_javaw_network_connections (más preciso, evita duplicados)
             
             # 5. Reporte detallado de proceso Minecraft / Java
             def scan_minecraft_process_info():
@@ -16484,37 +16460,39 @@ class ArgusApp:
                         rwx_total_kb = 0
                         _region_iter = 0
                         _t0 = _time.time()
+                        # Solo regiones grandes (>=512KB): el JIT crea muchas pequeñas legítimas
+                        _RWX_MIN_KB = 512
                         while k32.VirtualQueryEx(h, ctypes.c_void_p(addr), ctypes.byref(mbi), mbi_sz):
                             _region_iter += 1
-                            # Cap: JVMs con heap grande pueden tener 100k+ regiones → timeout
                             if _region_iter > 30_000 or (_time.time() - _t0) > 10:
                                 break
                             if (mbi.State == MEM_COMMIT
                                     and mbi.Type == MEM_PRIVATE
-                                    and mbi.Protect in (PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY)):
+                                    and mbi.Protect in (PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY)
+                                    and mbi.RegionSize // 1024 >= _RWX_MIN_KB):
                                 rwx_count    += 1
                                 rwx_total_kb += mbi.RegionSize // 1024
-                                if rwx_count >= 20:  # con 20 ya sabemos suficiente, salir antes
+                                if rwx_count >= 10:
                                     break
                             next_addr = mbi.BaseAddress + mbi.RegionSize
                             if next_addr <= addr:
                                 break
                             addr = next_addr
-                        if rwx_count >= 3:  # Umbral: >=3 regiones RWX privadas
-                            print(f"🚨 REGIONES RWX EN JAVAW (PID {pid}): {rwx_count} regiones, {rwx_total_kb}KB total")
+                        if rwx_count >= 2:  # >=2 regiones grandes (>=512KB cada una) = sospechoso
+                            print(f"🚨 REGIONES RWX GRANDES EN JAVAW (PID {pid}): {rwx_count} regiones de >=512KB, {rwx_total_kb}KB total")
                             self.issues_found.append({
-                                'nombre': f'Regiones de memoria ejecutable privada (RWX) en Minecraft: {rwx_count} regiones',
+                                'nombre': f'Regiones RWX grandes en Minecraft ({rwx_count}x >=512KB, {rwx_total_kb}KB total)',
                                 'ruta': f'PID:{pid}',
                                 'archivo': 'javaw.exe',
                                 'tipo': 'javaagent_injection',
                                 'categoria': 'JAVA_INJECTION',
-                                'alerta': 'CRITICAL' if rwx_count >= 8 else 'SOSPECHOSO',
-                                'confidence': min(0.92, 0.60 + rwx_count * 0.04),
-                                'detected_patterns': [f'rwx_regions:{rwx_count}', f'rwx_kb:{rwx_total_kb}'],
-                                'explicacion': f'javaw.exe (PID {pid}) tiene {rwx_count} regiones de memoria '
-                                               f'privadas con permisos Read+Write+Execute ({rwx_total_kb}KB). '
-                                               f'Java legítimo no crea estas regiones — indican código '
-                                               f'inyectado en runtime (DLL injection, JVM bytecode injection).',
+                                'alerta': 'CRITICAL' if rwx_count >= 5 else 'SOSPECHOSO',
+                                'confidence': min(0.88, 0.55 + rwx_count * 0.06),
+                                'detected_patterns': [f'rwx_large_regions:{rwx_count}', f'rwx_kb:{rwx_total_kb}'],
+                                'explicacion': f'javaw.exe (PID {pid}) tiene {rwx_count} regiones de memoria privada RWX '
+                                               f'de más de 512KB cada una ({rwx_total_kb}KB total). '
+                                               f'El JIT del JVM crea muchas regiones RWX pequeñas; las grandes (>=512KB) '
+                                               f'no son generadas por código Java legítimo e indican posible injection.',
                             })
                     finally:
                         k32.CloseHandle(h)
@@ -16656,8 +16634,29 @@ class ArgusApp:
             '.mojang.com', '.minecraft.net', '.minecraftservices.com',
             '.amazonaws.com', '.microsoft.com', '.xbox.com', '.live.com',
             '.akamai.net', '.akamaiedge.net', '.fastly.net', '.cloudfront.net',
+            # Plataformas de mods/launchers legítimos
+            '.discord.com', '.discordapp.com', '.discord.gg',
+            '.github.com', '.githubusercontent.com', '.github.io',
+            '.modrinth.com', '.curseforge.com', '.overwolf.com',
+            '.hypixel.net', '.badlion.net', '.badlioncdn.com',
+            '.lunarclient.com', '.lunarclientcdn.com',
+            '.cloudflare.com', '.cdn77.com', '.jsdelivr.net',
+            '.optifine.net', '.fabricmc.net', '.quiltmc.org', '.neoforged.net',
         )
         TRUSTED_IPS_PREFIX = ('127.', '::1', '0.0.0.0', '192.168.', '10.', '172.')
+        HACK_CLIENT_DOMAINS = (
+            'vape.gg', 'vape.sh', 'api.vape.gg',
+            'future.gg', 'api.future.gg',
+            'sigma.rip', 'api.sigma.rip',
+            'liquidbounce.net', 'api.liquidbounce.net',
+            'slinky.gg', 'entropy.zip', 'whiteout.gg',
+            'drip.cx', 'meteor.gg', 'astolfo.club',
+            'rise.wtf', 'wurst-client.xyz', 'aristois.net',
+            'tenacity.gg', 'vertex.wtf', 'inertia.cc',
+            'flux.gg', 'ghost.wtf', 'moonclient.cc', 'reflex.rip',
+            'novoline.wtf', 'crtclient.cc', 'thunderhack.net',
+            'volpe.gg', 'nextgen.wtf', 'iridium.pw',
+        )
         try:
             import socket as _sock
             for proc in psutil.process_iter(['pid', 'name']):
@@ -16681,7 +16680,6 @@ class ArgusApp:
                         remote_ip = raddr.ip
                         if any(remote_ip.startswith(p) for p in TRUSTED_IPS_PREFIX):
                             continue
-                        # Try reverse DNS (non-blocking, short timeout)
                         hostname = ''
                         try:
                             _sock.setdefaulttimeout(0.5)
@@ -16692,26 +16690,45 @@ class ArgusApp:
                             _sock.setdefaulttimeout(None)
 
                         if hostname and any(hostname.endswith(d) for d in TRUSTED_DOMAINS_SUFFIX):
-                            continue  # trusted host
-                        # External connection not to Mojang/CDN
+                            continue
                         label = hostname or remote_ip
                         port  = raddr.port
-                        print(f"⚠️ CONEXIÓN EXTERNA DE JAVAW: {label}:{port}")
-                        self.issues_found.append({
-                            'nombre': f'Conexión de Minecraft a host externo desconocido: {label}',
-                            'ruta': f'{remote_ip}:{port}',
-                            'archivo': 'javaw.exe',
-                            'tipo': 'suspicious_network_connection',
-                            'categoria': 'RED',
-                            'alerta': 'SOSPECHOSO',
-                            'confidence': 0.65,
-                            'detected_patterns': [f'javaw_external_conn:{label}:{port}'],
-                            'explicacion': f'javaw.exe tiene una conexión activa a {label}:{port}, '
-                                           f'que no es un servidor de Mojang ni CDN conocido. '
-                                           f'Los ghost clients con sistema de licencias online '
-                                           f'(Vape, Future, Sigma) se conectan a sus propios servidores '
-                                           f'para verificar la licencia del usuario.',
-                        })
+                        # Check if it's a known hack client domain
+                        is_hack_domain = hostname and any(
+                            hostname == hd or hostname.endswith('.' + hd)
+                            for hd in HACK_CLIENT_DOMAINS
+                        )
+                        if is_hack_domain:
+                            print(f"🚨 CONEXIÓN A SERVIDOR DE GHOST CLIENT: {label}:{port}")
+                            self.issues_found.append({
+                                'nombre': f'Conexión activa a servidor de ghost client: {label}',
+                                'ruta': f'{remote_ip}:{port}',
+                                'archivo': 'javaw.exe',
+                                'tipo': 'hack_client_network_connection',
+                                'categoria': 'RED',
+                                'alerta': 'CRITICAL',
+                                'confidence': 0.90,
+                                'detected_patterns': [f'hack_client_conn:{label}:{port}'],
+                                'explicacion': f'javaw.exe tiene una conexión activa a {label}:{port}, '
+                                               f'dominio asociado a un ghost client conocido. '
+                                               f'Los clientes como Vape, Future y Sigma se conectan '
+                                               f'a sus servidores de licencia mientras están activos.',
+                            })
+                        else:
+                            print(f"⚠️ CONEXIÓN EXTERNA DE JAVAW: {label}:{port}")
+                            self.issues_found.append({
+                                'nombre': f'Conexión de Minecraft a host externo no reconocido: {label}',
+                                'ruta': f'{remote_ip}:{port}',
+                                'archivo': 'javaw.exe',
+                                'tipo': 'suspicious_network_connection',
+                                'categoria': 'RED',
+                                'alerta': 'POCO_SOSPECHOSO',
+                                'confidence': 0.35,
+                                'detected_patterns': [f'javaw_external_conn:{label}:{port}'],
+                                'explicacion': f'javaw.exe tiene una conexión activa a {label}:{port}. '
+                                               f'No coincide con dominios de Mojang, CDNs ni launchers conocidos. '
+                                               f'Puede ser un mod, plugin o recurso externo legítimo.',
+                            })
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
         except Exception as e:
