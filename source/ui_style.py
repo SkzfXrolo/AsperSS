@@ -3,6 +3,7 @@ from tkinter import ttk, scrolledtext
 import os
 import sys
 import math
+import ctypes
 
 try:
     from PIL import Image, ImageTk
@@ -86,7 +87,8 @@ class ModernUI:
         root.overrideredirect(True)
         root.configure(bg=ModernUI.COLORS['bg_primary'])
         base = ModernUI._base_path()
-        # Ícono taskbar — intentar .ico primero, luego .png
+
+        # Ícono — intentar .ico primero, luego .png
         try:
             ico = os.path.join(base, 'assets', 'logo.ico')
             if os.path.exists(ico):
@@ -99,7 +101,48 @@ class ModernUI:
                 _img = Image.open(png).resize((32, 32), Image.LANCZOS)
                 _photo = ImageTk.PhotoImage(_img)
                 root.iconphoto(True, _photo)
-                root._icon_ref = _photo  # evitar GC
+                root._icon_ref = _photo
+        except Exception:
+            pass
+
+        # Aplicar estilos DWM (Windows 10/11) después de que la ventana tenga HWND
+        root.update_idletasks()
+        try:
+            hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
+
+            # 1. Mostrar en barra de tareas: quitar WS_EX_TOOLWINDOW, poner WS_EX_APPWINDOW
+            GWL_EXSTYLE     = -20
+            WS_EX_APPWINDOW = 0x00040000
+            WS_EX_TOOLWINDOW= 0x00000080
+            style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            style = (style & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW
+            ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+            # Withdraw/deiconify para que el cambio tome efecto en la barra de tareas
+            root.withdraw()
+            root.after(15, root.deiconify)
+
+            # 2. Esquinas redondeadas via DWM (solo Win 11 build 22000+)
+            DWMWA_WINDOW_CORNER_PREFERENCE = 33
+            DWMWCP_ROUND = 2
+            pref = ctypes.c_int(DWMWCP_ROUND)
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE,
+                ctypes.byref(pref),
+                ctypes.sizeof(pref),
+            )
+
+            # 3. Borde de color acento (rojo) via DWM
+            DWMWA_BORDER_COLOR = 34
+            # COLORREF BGR: #3E3EE5 → rojo en BGR = 0x003E3EE5... usamos acento rojo #E53E3E → BGR 0x003E3EE5
+            # En COLORREF: 0x00BBGGRR  → rojo E53E3E = R=0xE5 G=0x3E B=0x3E → 0x003E3EE5
+            red_colorref = ctypes.c_int(0x003E3EE5)
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_BORDER_COLOR,
+                ctypes.byref(red_colorref),
+                ctypes.sizeof(red_colorref),
+            )
         except Exception:
             pass
 

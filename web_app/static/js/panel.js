@@ -1795,6 +1795,35 @@ function _isNonInstanceLocation(path) {
            p.includes('/appdata/local/temp');
 }
 
+function _renderWebHistory(items, scanId) {
+    const el = document.getElementById('web-history-container');
+    if (!el) return;
+    if (!items || items.length === 0) { el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    const rows = items.map(r => {
+        const name = r.issue_name || r.issue_path || 'Página desconocida';
+        const path = r.issue_path || '';
+        const shortPath = path.length > 60 ? '…' + path.slice(-58) : path;
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid rgba(99,102,241,0.1);">
+            <span style="font-size:13px;flex-shrink:0;">🌐</span>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:11px;font-weight:600;color:var(--text-h);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
+                ${shortPath && shortPath !== name ? `<div style="font-size:10px;color:var(--text-d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${shortPath}</div>` : ''}
+            </div>
+            <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:rgba(99,102,241,0.12);color:#818cf8;border:1px solid rgba(99,102,241,0.25);flex-shrink:0;">Sospechoso</span>
+        </div>`;
+    }).join('');
+    el.innerHTML = `
+        <div style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.2);border-radius:10px;overflow:hidden;margin-bottom:4px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid rgba(99,102,241,0.15);">
+                <span style="font-size:11px;font-weight:700;color:#818cf8;letter-spacing:.4px;">🌐 HISTORIAL WEB SOSPECHOSO</span>
+                <span style="font-size:10px;color:var(--text-d);">${items.length} visita(s)</span>
+            </div>
+            <div style="max-height:140px;overflow-y:auto;">${rows}</div>
+        </div>`;
+}
+window._renderWebHistory = _renderWebHistory;
+
 function renderIssuePage(container, scanId) {
     const all = currentIssuesList;
     if (!all || all.length === 0) {
@@ -2472,15 +2501,22 @@ async function viewScanDetails(scanId) {
         const _cl = document.getElementById('issues-count-label');
         if (_cl) _cl.textContent = '';
         const _alertOrder = { CRITICAL: 0, SOSPECHOSO: 1, MUY_SOSPECHOSO: 2, POCO_SOSPECHOSO: 3 };
-        currentIssuesList = (data.results || [])
-            .filter(r => r.alert_level && r.alert_level !== 'CLEAN')
-            // Primero en-instancia, luego por severidad dentro de cada grupo
+        const _allNonClean = (data.results || []).filter(r => r.alert_level && r.alert_level !== 'CLEAN');
+
+        // Páginas web van a su propia sección — fuera de la lista principal
+        const _webResults = _allNonClean.filter(r => r.alert_level === 'PAGINA_SOSPECHOSA');
+        currentIssuesList = _allNonClean
+            .filter(r => r.alert_level !== 'PAGINA_SOSPECHOSA')
             .sort((a, b) => {
                 const ai = _isInMinecraftInstance(a.issue_path) ? 0 : 1;
                 const bi = _isInMinecraftInstance(b.issue_path) ? 0 : 1;
                 if (ai !== bi) return ai - bi;
                 return (_alertOrder[a.alert_level] ?? 9) - (_alertOrder[b.alert_level] ?? 9);
             });
+
+        // Renderizar sección de historial web si hay resultados
+        _renderWebHistory(_webResults, scanId);
+
         renderIssuePage(issuesContainer, scanId);
 
         document.getElementById('bulk-actions-bar').style.display = currentIssuesList.length > 0 ? 'flex' : 'none';

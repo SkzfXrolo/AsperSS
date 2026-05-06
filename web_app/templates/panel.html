@@ -1263,6 +1263,8 @@
                                 </select>
                                 <span id="issues-count-label" style="font-size:11px;color:var(--text-d);white-space:nowrap;flex-shrink:0;"></span>
                             </div>
+                            <!-- Historial web sospechoso (PAGINA_SOSPECHOSA) — separado de hallazgos -->
+                            <div id="web-history-container" style="display:none;"></div>
                             <!-- Issues list (scrollable) -->
                             <div id="issues-list-container" class="issues-list-scroll">
                                 <div style="padding:40px;text-align:center;color:var(--text-d);font-size:13px;">Cargando...</div>
@@ -2032,7 +2034,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=42"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=43"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────
