@@ -708,7 +708,7 @@ def panel():
         except:
             user['roles'] = [user.get('roles', 'user')]
     staff_role = get_staff_role(user) if user else 'helper'
-    return render_template('panel.html', user=user, staff_role=staff_role)
+    return render_template('panel.html', user=user, staff_role=staff_role, scanner_version=_ARGUS_VERSION)
 
 @app.route('/aspers-sa', methods=['GET', 'POST'])
 def admin_subscriptions():

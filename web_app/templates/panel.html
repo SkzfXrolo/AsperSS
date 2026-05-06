@@ -11,7 +11,7 @@
     <title>Panel Staff - Argus Projects</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=15">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=16">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -73,13 +73,6 @@
                     <path d="M3 14H15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
                 </svg>
                 <span>Generar App</span>
-            </a>
-            <a href="/panel" class="nav-item" data-section="aprendizaje">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                    <path d="M9 2C5.686 2 3 4.686 3 8C3 10.09 4.06 11.93 5.67 13.04L5 16L9 14.5L13 16L12.33 13.04C13.94 11.93 15 10.09 15 8C15 4.686 12.314 2 9 2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-                    <path d="M6.5 8.5L8 10L11.5 6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <span>Aprendizaje IA</span>
             </a>
 
             {% if staff_role in ('admin','owner') or (user and user.company_id) %}
@@ -447,64 +440,102 @@
 
         <!-- Generar App Section -->
         <section class="panel-section" id="generar-app-section">
-            <div class="section-card">
-                <h2 class="section-subtitle">Gestión de Aplicación - Argus Projects</h2>
-                <p class="section-description">
-                    <strong>IMPORTANTE:</strong> Las actualizaciones de IA se descargan automáticamente sin necesidad de recompilar.
-                    Solo compila cuando hay cambios en el código del programa.
-                </p>
-                
-                <div class="app-actions-grid">
-                    <div class="app-action-card">
-                        <div class="action-icon">📥</div>
-                        <h3 class="action-title">Descargar Aplicación Actualizada</h3>
-                        <p class="action-description">
-                            Descarga el ejecutable más reciente sin compilar.
-                            Incluye todas las actualizaciones de IA descargadas automáticamente.
-                        </p>
-                        <button class="btn btn-primary btn-large" id="download-app-btn">
-                            <span>Descargar Aplicación</span>
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M10 3L10 17M3 10L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                        </button>
+
+            <!-- Hero: app info strip -->
+            <div class="ga-hero entrance-anim tilt-card">
+                <div class="ga-hero-left">
+                    <div class="ga-app-icon">
+                        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                            <circle cx="18" cy="18" r="17" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4 3"/>
+                            <circle cx="18" cy="18" r="10" stroke="var(--accent)" stroke-width="1"/>
+                            <circle cx="18" cy="18" r="4" fill="var(--accent)" opacity=".85"/>
+                        </svg>
                     </div>
-                    
-                    <div class="app-action-card">
-                        <div class="action-icon">🔨</div>
-                        <h3 class="action-title">Compilar Nueva Versión</h3>
-                        <p class="action-description">
-                            Solo usa esto si hay cambios en el código del programa.
-                            La compilación puede tardar varios minutos.
-                        </p>
-                        <button class="btn btn-secondary btn-large" id="compile-app-btn">
-                            <span>Compilar Ejecutable</span>
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M10 3L10 17M3 10L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                        </button>
+                    <div>
+                        <div class="ga-app-name">Argus Scanner</div>
+                        <div class="ga-app-meta">
+                            <span class="ga-badge ga-badge-version">v{{ scanner_version or '1.6.22' }}</span>
+                            <span class="ga-badge ga-badge-platform">
+                                <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style="margin-right:3px"><rect x="1" y="1" width="4" height="4" rx=".5" fill="currentColor"/><rect x="6" y="1" width="4" height="4" rx=".5" fill="currentColor"/><rect x="1" y="6" width="4" height="4" rx=".5" fill="currentColor"/><rect x="6" y="6" width="4" height="4" rx=".5" fill="currentColor"/></svg>
+                                Windows x64
+                            </span>
+                            <span class="ga-badge ga-badge-ai">IA Autónoma</span>
+                        </div>
                     </div>
                 </div>
-
-                <div class="generation-status" id="generation-status" style="display: none;">
-                    <div class="status-indicator">
-                        <div class="status-dot"></div>
-                        <span>Listo</span>
+                <div class="ga-hero-right">
+                    <div class="ga-status-pill" id="ga-status-pill">
+                        <span class="ga-status-dot"></span>
+                        <span id="ga-status-text">Listo para descargar</span>
                     </div>
-                </div>
-
-                <div class="progress-container" id="progress-container" style="display: none;">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progress-fill"></div>
-                    </div>
-                    <div class="progress-text" id="progress-text">0%</div>
-                </div>
-
-                <div class="generation-log" id="generation-log" style="display: none;">
-                    <h3>Log de Compilación - Argus Projects</h3>
-                    <div class="log-content" id="log-content"></div>
                 </div>
             </div>
+
+            <!-- AI stats row -->
+            <div class="ga-stats-row entrance-anim">
+                <div class="ga-stat-chip">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="var(--accent)" stroke-width="1.2"/><path d="M5 8l2 2 4-4" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="ga-stat-val" id="ga-patterns-val">—</span>
+                    <span class="ga-stat-lbl">Patrones IA</span>
+                </div>
+                <div class="ga-stat-chip">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="9" rx="1.5" stroke="var(--accent)" stroke-width="1.2"/><path d="M5 4V3a3 3 0 016 0v1" stroke="var(--accent)" stroke-width="1.2"/></svg>
+                    <span class="ga-stat-val" id="ga-hashes-val">—</span>
+                    <span class="ga-stat-lbl">Hashes conocidos</span>
+                </div>
+                <div class="ga-stat-chip">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2a6 6 0 100 12A6 6 0 008 2z" stroke="var(--accent)" stroke-width="1.2"/><path d="M8 5v3l2 2" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round"/></svg>
+                    <span class="ga-stat-val" id="ga-autolabels-val">—</span>
+                    <span class="ga-stat-lbl">Auto-labels</span>
+                </div>
+                <div class="ga-stat-chip">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3 3 7-7" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="ga-stat-val ga-ai-status" id="ga-ai-status-val">—</span>
+                    <span class="ga-stat-lbl">Modelo RF</span>
+                </div>
+            </div>
+
+            <!-- Download card -->
+            <div class="ga-download-card entrance-anim tilt-card">
+                <div class="ga-download-glow"></div>
+                <div class="ga-download-content">
+                    <div class="ga-download-info">
+                        <div class="ga-download-title">Argus Scanner — Ejecutable</div>
+                        <div class="ga-download-sub">Incluye IA actualizada · Detección autónoma · Hash verificado</div>
+                        <div class="ga-download-features">
+                            <span class="ga-feat"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Ghost client detection</span>
+                            <span class="ga-feat"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Java injection scanner</span>
+                            <span class="ga-feat"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Macro &amp; autoclicker</span>
+                            <span class="ga-feat"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>IA autoaprendizaje</span>
+                        </div>
+                    </div>
+                    <button class="ga-download-btn" id="download-app-btn">
+                        <span class="ga-btn-inner">
+                            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                                <path d="M11 3v12M5 10l6 7 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M3 19h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            <span>Descargar</span>
+                        </span>
+                        <span class="ga-btn-shimmer"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Changelog strip -->
+            <div class="ga-changelog entrance-anim">
+                <div class="ga-changelog-title">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="var(--accent)" stroke-width="1.2"/><path d="M7 4v3l2 2" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round"/></svg>
+                    Novedades v{{ scanner_version or '1.6.22' }}
+                </div>
+                <ul class="ga-changelog-list">
+                    <li>Detección de username vía proceso Java (100% fiable)</li>
+                    <li>IA autónoma — aprende sin input humano (Isolation Forest)</li>
+                    <li>Auto-etiquetado por consenso de señales</li>
+                    <li>Consensus hashing — hashes maliciosos detectados por frecuencia</li>
+                </ul>
+            </div>
+
         </section>
 
         <!-- Tokens Section -->
@@ -1377,97 +1408,6 @@
 
         </section>
 
-        <!-- Aprendizaje IA Section -->
-        <section class="panel-section" id="aprendizaje-section">
-            <div class="section-card">
-                <div class="section-header-actions">
-                    <div>
-                        <h2 class="section-subtitle">Sistema de Aprendizaje Progresivo</h2>
-                        <p class="section-description">
-                            Argus Projects aprende continuamente de cada hack confirmado por el staff.
-                            Este sistema mejora automáticamente la detección con el tiempo.
-                            <strong>Los clientes descargan automáticamente los nuevos patrones sin necesidad de recompilar.</strong>
-                        </p>
-                    </div>
-                    <button class="btn btn-primary" id="update-model-btn">
-                        <span>Actualizar Modelo de IA</span>
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <path d="M10 3L10 17M3 10L17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                    </button>
-                </div>
-
-                <div class="learning-stats">
-                    <div class="stat-card">
-                        <div class="stat-icon">🧠</div>
-                        <div class="stat-content">
-                            <div class="stat-value" id="learned-patterns-count">0</div>
-                            <div class="stat-label">Patrones Aprendidos</div>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">🔐</div>
-                        <div class="stat-content">
-                            <div class="stat-value" id="learned-hashes-count">0</div>
-                            <div class="stat-label">Hashes Aprendidos</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="learned-patterns-container">
-                    <h3 class="subsection-title">Patrones Aprendidos por Argus Projects</h3>
-                    <div class="patterns-list" id="patterns-list">
-                        <div class="loading-cell">Cargando patrones aprendidos...</div>
-                    </div>
-                </div>
-
-                <!-- P3 #1 — Clasificador Random Forest -->
-                <div style="margin-top:24px;padding:20px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-                        <div>
-                            <h3 style="font-size:14px;font-weight:700;color:var(--text);margin:0 0 4px;">🤖 Clasificador Random Forest</h3>
-                            <p style="font-size:12px;color:var(--text-muted);margin:0;">Entrena un modelo ML con los feedbacks acumulados (mín. 5 hacks + 5 limpios)</p>
-                        </div>
-                        <button class="btn btn-primary btn-sm" id="ml-train-btn" onclick="mlTrain()">Entrenar ahora</button>
-                    </div>
-                    <div id="ml-status-row" style="font-size:12px;color:var(--text-muted);">
-                        <span id="ml-status-text">Comprobando estado...</span>
-                    </div>
-                    <div id="ml-train-result" style="display:none;margin-top:12px;padding:10px 14px;border-radius:8px;font-size:12px;"></div>
-                </div>
-
-                <!-- P3 #4 — Clustering de perfiles -->
-                <div style="margin-top:16px;padding:20px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-                        <div>
-                            <h3 style="font-size:14px;font-weight:700;color:var(--text);margin:0 0 4px;">🔬 Clustering de Perfiles (K-Means)</h3>
-                            <p style="font-size:12px;color:var(--text-muted);margin:0;">Agrupa scans por patrones similares. Detecta hacks nuevos distribuyéndose.</p>
-                        </div>
-                        <button class="btn btn-primary btn-sm" onclick="mlCluster()">Analizar</button>
-                    </div>
-                    <div id="ml-cluster-result" style="display:none;margin-top:8px;font-size:12px;"></div>
-                </div>
-
-                <!-- P5 #25 — Detección de cheating coordinado -->
-                <div style="margin-top:16px;padding:20px;background:var(--bg-card);border:1px solid rgba(239,68,68,0.2);border-radius:12px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-                        <div>
-                            <h3 style="font-size:14px;font-weight:700;color:#f87171;margin:0 0 4px;">👥 Cheating Coordinado</h3>
-                            <p style="font-size:12px;color:var(--text-muted);margin:0;">Detecta grupos de jugadores con los mismos hacks en un rango de 24h.</p>
-                        </div>
-                        <div style="display:flex;gap:6px;align-items:center;">
-                            <select id="coord-days-select" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-t);color:var(--text);">
-                                <option value="7">7 días</option>
-                                <option value="14">14 días</option>
-                                <option value="30" selected>30 días</option>
-                            </select>
-                            <button class="btn btn-primary btn-sm" onclick="loadCoordinatedCheating()" style="background:rgba(239,68,68,0.12);color:#f87171;border-color:rgba(239,68,68,0.4);">Analizar</button>
-                        </div>
-                    </div>
-                    <div id="coord-cheating-result" style="font-size:12px;color:var(--text-d);">Haz clic en Analizar para buscar patrones coordinados.</div>
-                </div>
-            </div>
-        </section>
 
         <!-- Administración Section (Solo para admins y administradores de empresa) -->
         {% if user and ('admin' in user.roles or 'administrador' in user.roles) %}
@@ -1943,7 +1883,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=34"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=35"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────

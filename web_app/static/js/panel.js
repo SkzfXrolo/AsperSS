@@ -584,12 +584,8 @@ function showSection(sectionName) {
         case 'resultados':
             loadScans();
             break;
-        case 'aprendizaje':
-            loadLearningStats();
-            loadLearnedPatterns();
-            break;
         case 'generar-app':
-            // No necesita cargar datos adicionales
+            loadLearningStats();
             break;
     }
 }
@@ -1236,19 +1232,9 @@ function setupEventListeners() {
         document.getElementById('scan-details-modal').classList.remove('active');
     });
 
-    // Actualizar modelo
-    document.getElementById('update-model-btn')?.addEventListener('click', async () => {
-        await updateModel();
-    });
-
-    // Descargar aplicación (sin compilar)
+    // Descargar aplicación
     document.getElementById('download-app-btn')?.addEventListener('click', async () => {
         await downloadApp();
-    });
-
-    // Compilar aplicación (solo si hay cambios en código)
-    document.getElementById('compile-app-btn')?.addEventListener('click', async () => {
-        await compileApp();
     });
 }
 
@@ -3118,28 +3104,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadLearningStats() {
     try {
-        const response = await fetch('/api/learning-stats');
-        const data = await response.json();
-        document.getElementById('learned-patterns-count').textContent = data.patterns_count  ?? 0;
-        document.getElementById('learned-hashes-count').textContent   = data.hashes_count   ?? 0;
-    } catch (error) {
-        console.error('Error cargando estadísticas de aprendizaje:', error);
-    }
-    // P3 #1 — Estado del clasificador RF
-    try {
-        const r2  = await fetch('/api/ml/status');
-        const ml  = await r2.json();
-        const txt = document.getElementById('ml-status-text');
-        if (txt) {
-            if (ml.available) {
-                txt.textContent = `✅ Modelo activo — entrenado con ${ml.trained_on} muestras`;
-                txt.style.color = 'var(--success, #22c55e)';
+        const data = await fetch('/api/learning-stats').then(r => r.json());
+
+        // Generar App stats chips
+        const setChip = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val ?? '—';
+        };
+        setChip('ga-patterns-val',   data.patterns_count ?? '—');
+        setChip('ga-hashes-val',     data.hashes_count   ?? '—');
+        setChip('ga-autolabels-val', data.auto_labels     ?? '—');
+
+        const rfEl = document.getElementById('ga-ai-status-val');
+        if (rfEl) {
+            if (data.rf_available) {
+                rfEl.textContent = `${data.rf_trained_on ?? 0} muestras`;
+                rfEl.style.color = '#34d399';
             } else {
-                txt.textContent = '⚠ Modelo no disponible — haz clic en "Entrenar ahora" para generarlo';
-                txt.style.color = 'var(--warning, #f59e0b)';
+                rfEl.textContent = 'Sin entrenar';
+                rfEl.style.color = 'var(--text-m)';
             }
         }
-    } catch (_) {}
+
+        const isoEl = document.getElementById('ga-iso-status');
+        if (isoEl) isoEl.textContent = data.iso_available ? `${data.iso_trained_on ?? 0} scans` : 'Sin datos';
+
+    } catch (e) {
+        console.error('Error cargando learning stats:', e);
+    }
 }
 
 async function mlCluster() {
