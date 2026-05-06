@@ -2287,9 +2287,25 @@ async function viewScanDetails(scanId) {
         const _username = data.minecraft_username || data.machine_name || '';
         const avatarEl = document.getElementById('scan-header-avatar');
         if (avatarEl) {
-            avatarEl.textContent = _username ? _username[0].toUpperCase() : '?';
             avatarEl.title = _username || 'Jugador';
-            avatarEl.style.background = _username ? _nameToHslColor(_username) : 'var(--accent-d)';
+            if (_username) {
+                avatarEl.innerHTML = '';
+                avatarEl.style.background = 'rgba(0,0,0,0.25)';
+                avatarEl.style.padding = '2px';
+                const _img = document.createElement('img');
+                _img.src = `https://mc-heads.net/avatar/${encodeURIComponent(_username)}/32`;
+                _img.style.cssText = 'width:100%;height:100%;border-radius:6px;object-fit:cover;image-rendering:pixelated;display:block;';
+                _img.onerror = () => {
+                    avatarEl.innerHTML = _username[0].toUpperCase();
+                    avatarEl.style.background = _nameToHslColor(_username);
+                    avatarEl.style.padding = '0';
+                };
+                avatarEl.appendChild(_img);
+            } else {
+                avatarEl.textContent = '?';
+                avatarEl.style.background = 'var(--accent-d)';
+                avatarEl.style.padding = '0';
+            }
         }
         const playerLabelEl = document.getElementById('scan-page-player-label');
         if (playerLabelEl) playerLabelEl.textContent = _username || 'Minecraft';

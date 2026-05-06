@@ -11,7 +11,7 @@
     <title>Panel Staff - Argus Projects</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=20">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=21">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -2032,7 +2032,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=40"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=41"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────

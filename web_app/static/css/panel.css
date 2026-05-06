@@ -2550,18 +2550,19 @@ body.light-theme .avatar-online {
     font-weight: 800;
     color: #fff;
     background: var(--accent-d);
-    border: 2px solid rgba(255,255,255,0.12);
-    box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+    border: 2px solid rgba(255,255,255,0.14);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.40);
     flex-shrink: 0;
     text-transform: uppercase;
     letter-spacing: -0.5px;
     font-family: 'Syne', 'Inter', sans-serif;
     transition: transform 0.18s, box-shadow 0.18s;
     cursor: default;
+    overflow: hidden;
 }
 .scan-player-avatar:hover {
-    transform: scale(1.08);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+    transform: scale(1.10);
+    box-shadow: 0 4px 18px rgba(0,0,0,0.5), 0 0 0 2px rgba(139,92,246,0.35);
 }
 
 /* Light theme scan detail */
