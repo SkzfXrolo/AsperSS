@@ -1,26 +1,38 @@
-"""Cog tickets — sistema de soporte privado.
+"""Cog tickets — sistema de soporte inteligente con triage automatico.
 
 Flujo:
-  1. Staff ejecuta /ticket-panel en #soporte (o donde quiera).
-  2. Mensaje con embed + boton "Crear ticket" + select de categoria.
-  3. Cuando alguien crea: el bot crea un canal privado bajo la categoria
-     STAFF, accesible solo para el creador y el staff. Le hace ping al staff.
-  4. /close en el canal del ticket -> genera transcript, lo guarda en
-     bot_tickets.transcript, postea resumen en #tickets-cola, borra el canal.
-  5. Solo 1 ticket activo por usuario.
+  1. Staff publica panel con /ticket-panel.
+  2. Usuario elige categoria del select menu -> bot crea canal privado.
+  3. Bot postea mensaje guiado con preguntas especificas de la categoria.
+  4. Bot taguea el rol correcto segun la categoria:
+       soporte   -> Staff
+       scanner   -> Developer + Staff
+       compra    -> Admin + Owner
+       denuncia  -> Senior Staff + Staff
+       otro      -> Staff
+  5. on_message en el ticket: si el usuario describe el problema, el bot
+     escanea contra ticket_faq.json con keywords. Si match -> postea
+     respuesta automatica con botones [Resuelto / Necesito humano].
+  6. Staff puede /ticket-claim para marcarse como responsable.
+  7. /close [razon] -> transcript + cierre.
 
 Comandos:
-    /ticket-panel       Publica el panel publico (staff).
-    /ticket-add @user   Anade alguien al ticket actual.
-    /ticket-remove @user Quita.
-    /close [razon]      Cierra el ticket actual (solo en canales de ticket).
-    /tickets [@user]    Historial de tickets de un usuario.
+    /ticket-panel              Publica el panel publico (staff).
+    /ticket-claim              Toma el ticket actual (staff).
+    /ticket-escalate <rol>     Escala el ticket pingeando otro rol.
+    /ticket-add @user          Anade alguien al ticket actual.
+    /ticket-remove @user       Quita.
+    /close [razon]             Cierra el ticket (creador o staff).
+    /tickets [@user]           Historial de tickets de un usuario.
 """
 from __future__ import annotations
 
 import datetime as dt
 import io
+import json
 import logging
+import re
+from pathlib import Path
 from typing import Optional
 
 import discord
@@ -32,19 +44,104 @@ from .. import config, db, utils
 log = logging.getLogger("bot.cogs.tickets")
 
 
+_FAQ_PATH = Path(__file__).resolve().parent.parent / "data" / "ticket_faq.json"
+
+
 TICKET_CATEGORIES = [
-    {"value": "soporte",   "label": "Soporte tecnico"},
-    {"value": "scanner",   "label": "Problema con Argus Scanner"},
-    {"value": "compra",    "label": "Pago / Cliente Pro"},
-    {"value": "denuncia",  "label": "Denuncia / reporte"},
-    {"value": "otro",      "label": "Otro"},
+    {"value": "soporte",   "label": "Soporte tecnico",        "emoji": "🛠"},
+    {"value": "scanner",   "label": "Problema con Argus Scanner", "emoji": "💻"},
+    {"value": "compra",    "label": "Pago / Cliente Pro",     "emoji": "💳"},
+    {"value": "denuncia",  "label": "Denuncia / reporte",     "emoji": "🚨"},
+    {"value": "otro",      "label": "Otro",                   "emoji": "📋"},
 ]
 
 
-def _staff_role_ids(guild: discord.Guild) -> list[int]:
-    """Devuelve IDs de los roles staff configurados por /setup."""
+# ─── Mapping de quien recibe ping segun categoria ────────────────────────
+# El orden de las keys es de mas alto a mas bajo (primero los principales).
+ROLE_KEYS_BY_CATEGORY: dict[str, list[str]] = {
+    "soporte":   ["role_staff", "role_trainee"],
+    "scanner":   ["role_dev", "role_staff"],
+    "compra":    ["role_admin", "role_owner"],
+    "denuncia":  ["role_senior", "role_staff"],
+    "otro":      ["role_staff"],
+}
+
+# ─── Preguntas guiadas por categoria ─────────────────────────────────────
+GUIDED_QUESTIONS: dict[str, dict] = {
+    "soporte": {
+        "title": "🛠 Soporte tecnico",
+        "questions": [
+            "1. ¿Cual es el problema en una frase?",
+            "2. ¿Que estabas haciendo cuando ocurrio?",
+            "3. ¿Que pasa exactamente? ¿Mensaje de error?",
+            "4. ¿Probaste reiniciar / actualizar / reinstalar?",
+        ],
+    },
+    "scanner": {
+        "title": "💻 Problema con Argus Scanner",
+        "questions": [
+            "1. ¿Que version del scanner usas? (en la primera linea cuando arranca)",
+            "2. ¿Sistema operativo y antivirus instalado?",
+            "3. ¿Lo ejecutaste como administrador?",
+            "4. **Sube captura del error** o del scan en cuestion (machine_name + scan_id).",
+            "5. Si es falso positivo: ¿que hallazgo especifico crees que esta mal?",
+        ],
+    },
+    "compra": {
+        "title": "💳 Pago / Cliente Pro",
+        "questions": [
+            "1. ¿Que producto / suscripcion te interesa?",
+            "2. ¿Metodo de pago preferido? (PayPal / transferencia / crypto)",
+            "3. Si es renovacion: ¿desde que email pagaste antes?",
+            "4. ¿Algun descuento / promocion que te haya llegado?",
+        ],
+    },
+    "denuncia": {
+        "title": "🚨 Denuncia / reporte",
+        "questions": [
+            "1. **Usuario denunciado** (mention o ID).",
+            "2. **Capturas de pantalla** del incidente (sin pruebas no se sanciona).",
+            "3. **Fecha aproximada** del incidente.",
+            "4. **Tu version de los hechos** (resumen claro).",
+            "5. (Opcional) Testigos que vieron lo mismo.",
+        ],
+    },
+    "otro": {
+        "title": "📋 Ticket general",
+        "questions": [
+            "1. Describi tu problema o consulta con todo el detalle posible.",
+            "2. Si aplica, capturas de pantalla.",
+        ],
+    },
+}
+
+
+def _load_faq() -> dict:
+    try:
+        return json.loads(_FAQ_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        log.exception("[Tickets] Error cargando FAQ")
+        return {}
+
+
+def _staff_role_ids_for_category(guild: discord.Guild, category: str) -> list[int]:
+    """Devuelve IDs de roles a pingear segun la categoria."""
+    keys = ROLE_KEYS_BY_CATEGORY.get(category, ["role_staff"])
     ids: list[int] = []
-    for key in ("role_owner", "role_admin", "role_senior", "role_staff", "role_trainee"):
+    for key in keys:
+        rid = db.get_setting(guild.id, key)
+        if rid:
+            try:
+                ids.append(int(rid))
+            except ValueError:
+                pass
+    return ids
+
+
+def _all_staff_role_ids(guild: discord.Guild) -> list[int]:
+    """Todos los roles staff (para overwrites de visibilidad del canal)."""
+    ids: list[int] = []
+    for key in ("role_owner", "role_admin", "role_dev", "role_senior", "role_staff", "role_trainee"):
         rid = db.get_setting(guild.id, key)
         if rid:
             try:
@@ -76,11 +173,30 @@ def _queue_channel(guild: discord.Guild) -> Optional[discord.TextChannel]:
         return None
 
 
+def _faq_match(category: str, message_text: str) -> Optional[dict]:
+    """Busca en el FAQ una respuesta que coincida con keywords del mensaje.
+    Devuelve la entrada {title, answer} o None.
+    """
+    faq = _load_faq()
+    entries = faq.get(category) or []
+    text_low = message_text.lower()
+    best: Optional[dict] = None
+    best_score = 0
+    for entry in entries:
+        score = sum(1 for kw in entry.get("keywords", []) if kw.lower() in text_low)
+        if score > best_score:
+            best_score = score
+            best = entry
+    return best if best_score > 0 else None
+
+
 # ═════════════════════════════════════════════════════════════════════════
-# View del panel
+# Views
 # ═════════════════════════════════════════════════════════════════════════
 
 class TicketPanelView(discord.ui.View):
+    """Panel publico de creacion de tickets."""
+
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -88,21 +204,112 @@ class TicketPanelView(discord.ui.View):
         placeholder="Elige el motivo de tu ticket...",
         custom_id="argus:ticket:cat",
         options=[
-            discord.SelectOption(label=c["label"], value=c["value"]) for c in TICKET_CATEGORIES
+            discord.SelectOption(
+                label=c["label"], value=c["value"], emoji=c["emoji"]
+            )
+            for c in TICKET_CATEGORIES
         ],
     )
     async def category_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        cog = interaction.client.get_cog("Tickets")
+        if cog:
+            await cog._open_ticket(interaction, select.values[0])  # type: ignore[attr-defined]
+
+
+class FAQResolutionView(discord.ui.View):
+    """Botones que aparecen tras una respuesta automatica del FAQ."""
+
+    def __init__(self, ticket_id: int, category: str):
+        super().__init__(timeout=None)
+        self.ticket_id = ticket_id
+        self.category = category
+
+    @discord.ui.button(
+        label="Esto soluciona mi problema",
+        style=discord.ButtonStyle.success,
+        emoji="✅",
+        custom_id="argus:ticket:faq:resolved",
+    )
+    async def resolved(self, interaction: discord.Interaction, button: discord.ui.Button):
+        cog = interaction.client.get_cog("Tickets")
+        if cog:
+            await cog._close_logic(interaction, reason="Resuelto via FAQ automatica")  # type: ignore[attr-defined]
+
+    @discord.ui.button(
+        label="Necesito ayuda humana",
+        style=discord.ButtonStyle.danger,
+        emoji="👤",
+        custom_id="argus:ticket:faq:human",
+    )
+    async def need_human(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        if not guild:
+            return
+        # Pingear los roles correspondientes a la categoria
+        role_ids = _staff_role_ids_for_category(guild, self.category)
+        mentions = " ".join(f"<@&{rid}>" for rid in role_ids)
+        # Deshabilitar los botones para que no se spamee
+        for child in self.children:
+            child.disabled = True  # type: ignore[attr-defined]
+        await interaction.response.edit_message(view=self)
+        if interaction.channel:
+            await interaction.channel.send(  # type: ignore[union-attr]
+                f"{mentions} <@{interaction.user.id}> necesita ayuda humana, la FAQ no le sirvio.",
+            )
+
+
+class CloseTicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Cerrar ticket",
+        style=discord.ButtonStyle.danger,
+        emoji="🔒",
+        custom_id="argus:ticket:close",
+    )
+    async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        cog = interaction.client.get_cog("Tickets")
+        if cog:
+            await cog._close_logic(interaction, reason="Cerrado por boton")  # type: ignore[attr-defined]
+
+    @discord.ui.button(
+        label="Reclamar (staff)",
+        style=discord.ButtonStyle.primary,
+        emoji="🙋",
+        custom_id="argus:ticket:claim",
+    )
+    async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        cog = interaction.client.get_cog("Tickets")
+        if cog:
+            await cog._claim_logic(interaction)  # type: ignore[attr-defined]
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# Cog
+# ═════════════════════════════════════════════════════════════════════════
+
+class Tickets(commands.Cog):
+    def __init__(self, bot: commands.Bot) -> None:
+        self.bot = bot
+        bot.add_view(TicketPanelView())
+        bot.add_view(CloseTicketView())
+        # Cache de mensajes del usuario por ticket para evitar disparar FAQ varias veces
+        self._faq_fired: set[int] = set()  # channel_ids donde ya disparamos FAQ
+
+    # ── Apertura del ticket ────────────────────────────────────────────
+    async def _open_ticket(self, interaction: discord.Interaction, category_value: str) -> None:
         guild = interaction.guild
         if not guild or not isinstance(interaction.user, discord.Member):
             return
         await interaction.response.defer(ephemeral=True)
-        category_value = select.values[0]
-        category_label = next(
-            (c["label"] for c in TICKET_CATEGORIES if c["value"] == category_value),
-            category_value,
+
+        category_meta = next(
+            (c for c in TICKET_CATEGORIES if c["value"] == category_value),
+            {"label": category_value, "emoji": "📋"},
         )
 
-        # Checar 1 ticket activo
+        # 1 ticket activo por usuario
         with db.cursor() as cur:
             cur.execute(
                 "SELECT id, channel_id FROM bot_tickets WHERE guild_id = %s AND user_id = %s AND status = 'open'",
@@ -119,9 +326,9 @@ class TicketPanelView(discord.ui.View):
             )
             return
 
-        # Crear canal
+        # Crear canal con permisos
         cat = _staff_category(guild)
-        staff_ids = _staff_role_ids(guild)
+        all_staff_ids = _all_staff_role_ids(guild)
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             interaction.user: discord.PermissionOverwrite(
@@ -129,7 +336,7 @@ class TicketPanelView(discord.ui.View):
                 embed_links=True, read_message_history=True,
             ),
         }
-        for sid in staff_ids:
+        for sid in all_staff_ids:
             role = guild.get_role(sid)
             if role:
                 overwrites[role] = discord.PermissionOverwrite(
@@ -137,14 +344,14 @@ class TicketPanelView(discord.ui.View):
                     attach_files=True, embed_links=True, read_message_history=True,
                 )
 
-        clean_name = "".join(c if c.isalnum() else "-" for c in interaction.user.name.lower())[:20]
-        channel_name = f"ticket-{clean_name}"
+        clean_name = "".join(c if c.isalnum() else "-" for c in interaction.user.name.lower())[:18]
+        channel_name = f"{category_meta['emoji']}-{clean_name}"[:32].lstrip("-").rstrip("-")
         try:
             channel = await guild.create_text_channel(
                 name=channel_name,
                 category=cat,
                 overwrites=overwrites,
-                topic=f"Ticket de {interaction.user} — {category_label}",
+                topic=f"Ticket de {interaction.user} — {category_meta['label']}",
                 reason=f"Ticket creado por {interaction.user}",
             )
         except discord.Forbidden:
@@ -165,53 +372,196 @@ class TicketPanelView(discord.ui.View):
             )
             ticket_id = cur.fetchone()["id"]
 
-        # Mensaje inicial
-        ping = " ".join(f"<@&{sid}>" for sid in staff_ids if guild.get_role(sid))
-        embed = utils.brand_embed(
-            title=f"🎫 Ticket #{ticket_id} — {category_label}",
+        # Mensaje 1: bienvenida + ping al rol correspondiente
+        target_role_ids = _staff_role_ids_for_category(guild, category_value)
+        ping = " ".join(f"<@&{rid}>" for rid in target_role_ids if guild.get_role(rid))
+
+        bienvenida = utils.brand_embed(
+            title=f"{category_meta['emoji']} Ticket #{ticket_id} — {category_meta['label']}",
             description=(
-                f"Hola {interaction.user.mention}, gracias por abrir un ticket.\n"
-                f"Por favor describe tu problema con detalle:\n\n"
-                f"• Que estabas intentando hacer?\n"
-                f"• Que ocurrio? Que esperabas que pasara?\n"
-                f"• Capturas / logs si aplica.\n\n"
-                f"Un staff te respondera pronto.\n\n"
-                f"Para cerrar el ticket, usa **`/close [razon]`**."
+                f"Hola {interaction.user.mention}, gracias por abrir un ticket.\n\n"
+                f"**A quien estoy avisando:** {ping or '(sin staff configurado)'}\n"
+                f"**Para cerrar:** boton `🔒 Cerrar ticket` o comando `/close [razon]`."
             ),
         )
-        await channel.send(content=ping, embed=embed, view=CloseTicketView())
+        await channel.send(content=ping, embed=bienvenida, view=CloseTicketView())
+
+        # Mensaje 2: preguntas guiadas
+        guide = GUIDED_QUESTIONS.get(category_value, GUIDED_QUESTIONS["otro"])
+        guide_embed = utils.brand_embed(
+            title=guide["title"],
+            color=0x3498DB,
+            description=(
+                "Para que el staff pueda ayudarte rapido, **respondé estas preguntas en mensajes "
+                "separados** (uno por uno o todos juntos):\n\n"
+                + "\n".join(guide["questions"])
+                + "\n\n*Mientras escribes, mi IA escanea tu mensaje y te puede sugerir una solucion automatica si tu problema es comun.*"
+            ),
+        )
+        await channel.send(embed=guide_embed)
 
         await interaction.followup.send(
             embed=utils.success_embed(f"Ticket creado: {channel.mention}"),
             ephemeral=True,
         )
 
+    # ── on_message: FAQ automatica ─────────────────────────────────────
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if message.author.bot or not message.guild:
+            return
+        if message.channel.id in self._faq_fired:
+            return
+        # Verificar que sea un canal de ticket activo del propio creador
+        with db.cursor() as cur:
+            cur.execute(
+                "SELECT id, user_id, category FROM bot_tickets WHERE channel_id = %s AND status = 'open'",
+                (message.channel.id,),
+            )
+            ticket = cur.fetchone()
+        if not ticket:
+            return
+        if int(ticket["user_id"]) != message.author.id:
+            return  # solo aplicamos FAQ al primer mensaje del CREADOR
+        if len(message.content) < 15:
+            return  # mensaje muy corto, no escaneamos
+        match = _faq_match(ticket["category"], message.content)
+        if not match:
+            return
+        self._faq_fired.add(message.channel.id)
+        answer = match["answer"].replace("{panel}", config.PANEL_URL)
+        embed = utils.brand_embed(
+            title=f"💡 Sugerencia automatica · {match['title']}",
+            color=0xFEE75C,
+            description=answer + "\n\n*Si esto resuelve tu problema, click en ✅. Si no, click en 👤 para que un humano se haga cargo.*",
+        )
+        embed.set_footer(text="Argus FAQ · respuesta sugerida por keywords")
+        try:
+            await message.channel.send(  # type: ignore[union-attr]
+                embed=embed,
+                view=FAQResolutionView(int(ticket["id"]), ticket["category"]),
+            )
+        except discord.Forbidden:
+            pass
 
-class CloseTicketView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
+    # ── /ticket-panel ──────────────────────────────────────────────────
+    @app_commands.command(name="ticket-panel", description="Publica el panel de tickets en este canal.")
+    @app_commands.default_permissions(manage_guild=True)
+    async def ticket_panel(self, interaction: discord.Interaction):
+        if not isinstance(interaction.channel, discord.TextChannel):
+            return
+        embed = utils.brand_embed(
+            title="🎫 Sistema de soporte",
+            description=(
+                "Necesitas ayuda? Crea un ticket usando el menu de abajo.\n\n"
+                "**Categorias y a quien pingean:**\n"
+                "🛠 **Soporte tecnico** — Staff\n"
+                "💻 **Problema con Argus Scanner** — Developers + Staff\n"
+                "💳 **Pago / Cliente Pro** — Admin + Owner\n"
+                "🚨 **Denuncia / reporte** — Senior Staff + Staff\n"
+                "📋 **Otro** — Staff\n\n"
+                "**Solo podes tener 1 ticket abierto a la vez.** "
+                "El bot te hace preguntas guiadas y, si tu problema es comun, "
+                "te sugiere una solucion automatica antes de involucrar humanos."
+            ),
+        )
+        await interaction.channel.send(embed=embed, view=TicketPanelView())
+        await interaction.response.send_message(
+            embed=utils.success_embed("Panel publicado."), ephemeral=True
+        )
 
-    @discord.ui.button(
-        label="Cerrar ticket",
-        style=discord.ButtonStyle.danger,
-        emoji="🔒",
-        custom_id="argus:ticket:close",
-    )
-    async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        cog: Optional[Tickets] = interaction.client.get_cog("Tickets")  # type: ignore[assignment]
-        if cog:
-            await cog._close_logic(interaction, reason="Cerrado por boton")
+    # ── /ticket-claim ──────────────────────────────────────────────────
+    @app_commands.command(name="ticket-claim", description="(Staff) Toma el ticket actual.")
+    @app_commands.default_permissions(manage_messages=True)
+    async def claim_cmd(self, interaction: discord.Interaction):
+        await self._claim_logic(interaction)
 
+    async def _claim_logic(self, interaction: discord.Interaction):
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            return
+        if not utils.is_staff(interaction.user):
+            await interaction.response.send_message(
+                embed=utils.error_embed("Solo staff puede reclamar tickets."), ephemeral=True
+            )
+            return
+        with db.cursor() as cur:
+            cur.execute(
+                "SELECT id, user_id FROM bot_tickets WHERE channel_id = %s AND status = 'open'",
+                (interaction.channel.id if interaction.channel else 0,),
+            )
+            tk = cur.fetchone()
+        if not tk:
+            await interaction.response.send_message(
+                embed=utils.error_embed("Este canal no es un ticket activo."), ephemeral=True
+            )
+            return
+        # Persistir como setting del ticket
+        db.set_setting(interaction.guild.id, f"ticket_claim_{tk['id']}", str(interaction.user.id))
+        embed = utils.success_embed(
+            f"{interaction.user.mention} se hizo cargo de este ticket. <@{tk['user_id']}>, vas a ser atendido por este staff.",
+            title="🙋 Ticket reclamado",
+        )
+        try:
+            await interaction.response.send_message(embed=embed)
+        except discord.InteractionResponded:
+            await interaction.followup.send(embed=embed)
 
-# ═════════════════════════════════════════════════════════════════════════
-# Cog
-# ═════════════════════════════════════════════════════════════════════════
+    # ── /ticket-escalate ───────────────────────────────────────────────
+    @app_commands.command(name="ticket-escalate", description="(Staff) Escala el ticket pingeando otro rol.")
+    @app_commands.default_permissions(manage_messages=True)
+    @app_commands.choices(rol=[
+        app_commands.Choice(name="Developers", value="role_dev"),
+        app_commands.Choice(name="Admin",      value="role_admin"),
+        app_commands.Choice(name="Senior Staff", value="role_senior"),
+        app_commands.Choice(name="Owner",      value="role_owner"),
+    ])
+    async def escalate_cmd(self, interaction: discord.Interaction, rol: app_commands.Choice[str], razon: str = ""):
+        if not isinstance(interaction.user, discord.Member) or not utils.is_staff(interaction.user):
+            await interaction.response.send_message(
+                embed=utils.error_embed("Solo staff."), ephemeral=True
+            )
+            return
+        if not interaction.guild:
+            return
+        rid_raw = db.get_setting(interaction.guild.id, rol.value)
+        if not rid_raw:
+            await interaction.response.send_message(
+                embed=utils.error_embed(f"No hay rol configurado para `{rol.value}`."),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.send_message(
+            f"<@&{rid_raw}>",
+            embed=utils.warning_embed(
+                f"Este ticket fue **escalado** a <@&{rid_raw}> por {interaction.user.mention}."
+                + (f"\n**Razon:** {razon}" if razon else ""),
+                title="📈 Escalada",
+            ),
+        )
 
-class Tickets(commands.Cog):
-    def __init__(self, bot: commands.Bot) -> None:
-        self.bot = bot
-        bot.add_view(TicketPanelView())
-        bot.add_view(CloseTicketView())
+    # ── /close ─────────────────────────────────────────────────────────
+    @app_commands.command(name="close", description="Cierra el ticket actual.")
+    async def close_cmd(self, interaction: discord.Interaction, razon: str = ""):
+        if not isinstance(interaction.user, discord.Member) or not interaction.guild:
+            return
+        with db.cursor() as cur:
+            cur.execute(
+                "SELECT user_id FROM bot_tickets WHERE channel_id = %s AND status = 'open'",
+                (interaction.channel.id if interaction.channel else 0,),
+            )
+            tk = cur.fetchone()
+        if not tk:
+            await interaction.response.send_message(
+                embed=utils.error_embed("Este canal no es un ticket activo."), ephemeral=True
+            )
+            return
+        if not utils.is_staff(interaction.user) and int(tk["user_id"]) != interaction.user.id:
+            await interaction.response.send_message(
+                embed=utils.error_embed("Solo el creador del ticket o staff pueden cerrarlo."),
+                ephemeral=True,
+            )
+            return
+        await self._close_logic(interaction, reason=razon)
 
     async def _build_transcript(self, channel: discord.TextChannel) -> str:
         lines: list[str] = []
@@ -221,6 +571,8 @@ class Tickets(commands.Cog):
                 content = msg.content or ""
                 if msg.attachments:
                     content += " " + " ".join(a.url for a in msg.attachments)
+                if msg.embeds and not content:
+                    content = "[embed: " + (msg.embeds[0].title or "?") + "]"
                 lines.append(f"[{ts}] {msg.author}: {content}")
         except Exception:
             log.exception("[Tickets] Error generando transcript")
@@ -228,9 +580,12 @@ class Tickets(commands.Cog):
 
     async def _close_logic(self, interaction: discord.Interaction, reason: str = ""):
         if not interaction.guild or not isinstance(interaction.channel, discord.TextChannel):
-            await interaction.response.send_message(
-                embed=utils.error_embed("Solo en canales de texto."), ephemeral=True
-            )
+            try:
+                await interaction.response.send_message(
+                    embed=utils.error_embed("Solo en canales de texto."), ephemeral=True
+                )
+            except discord.InteractionResponded:
+                pass
             return
         with db.cursor() as cur:
             cur.execute(
@@ -239,19 +594,25 @@ class Tickets(commands.Cog):
             )
             ticket = cur.fetchone()
         if not ticket:
-            await interaction.response.send_message(
-                embed=utils.error_embed("Este canal no es un ticket activo."),
-                ephemeral=True,
-            )
+            try:
+                await interaction.response.send_message(
+                    embed=utils.error_embed("Este canal no es un ticket activo."), ephemeral=True
+                )
+            except discord.InteractionResponded:
+                pass
             return
 
-        await interaction.response.send_message(
-            embed=utils.warning_embed("🔒 Cerrando ticket... generando transcript..."),
-        )
+        try:
+            await interaction.response.send_message(
+                embed=utils.warning_embed("🔒 Cerrando ticket... generando transcript..."),
+            )
+        except discord.InteractionResponded:
+            await interaction.followup.send(
+                embed=utils.warning_embed("🔒 Cerrando ticket... generando transcript..."),
+            )
 
         transcript = await self._build_transcript(interaction.channel)
 
-        # Persistir
         with db.cursor() as cur:
             cur.execute(
                 """
@@ -289,60 +650,11 @@ class Tickets(commands.Cog):
                 await queue.send(embed=embed)
 
         # Borrar canal
+        self._faq_fired.discard(interaction.channel.id)
         try:
             await interaction.channel.delete(reason=f"Ticket cerrado por {interaction.user}")
         except discord.Forbidden:
             pass
-
-    # ── /ticket-panel ──────────────────────────────────────────────────
-    @app_commands.command(name="ticket-panel", description="Publica el panel de tickets en este canal.")
-    @app_commands.default_permissions(manage_guild=True)
-    async def ticket_panel(self, interaction: discord.Interaction):
-        if not isinstance(interaction.channel, discord.TextChannel):
-            return
-        embed = utils.brand_embed(
-            title="🎫 Sistema de soporte",
-            description=(
-                "Necesitas ayuda? Crea un ticket usando el menu de abajo.\n\n"
-                "**Categorias disponibles:**\n"
-                "• Soporte tecnico\n"
-                "• Problema con Argus Scanner\n"
-                "• Pago / Cliente Pro\n"
-                "• Denuncia / reporte\n"
-                "• Otro\n\n"
-                "Solo puedes tener **1 ticket abierto a la vez**. "
-                "Un staff te respondera lo antes posible."
-            ),
-        )
-        await interaction.channel.send(embed=embed, view=TicketPanelView())
-        await interaction.response.send_message(
-            embed=utils.success_embed("Panel publicado."), ephemeral=True
-        )
-
-    # ── /close ─────────────────────────────────────────────────────────
-    @app_commands.command(name="close", description="Cierra el ticket actual.")
-    async def close_cmd(self, interaction: discord.Interaction, razon: str = ""):
-        if not isinstance(interaction.user, discord.Member) or not interaction.guild:
-            return
-        # Permitir si es staff o el creador del ticket
-        with db.cursor() as cur:
-            cur.execute(
-                "SELECT user_id FROM bot_tickets WHERE channel_id = %s AND status = 'open'",
-                (interaction.channel.id if interaction.channel else 0,),
-            )
-            tk = cur.fetchone()
-        if not tk:
-            await interaction.response.send_message(
-                embed=utils.error_embed("Este canal no es un ticket activo."), ephemeral=True
-            )
-            return
-        if not utils.is_staff(interaction.user) and int(tk["user_id"]) != interaction.user.id:
-            await interaction.response.send_message(
-                embed=utils.error_embed("Solo el creador del ticket o staff pueden cerrarlo."),
-                ephemeral=True,
-            )
-            return
-        await self._close_logic(interaction, reason=razon)
 
     # ── /ticket-add / /ticket-remove ───────────────────────────────────
     @app_commands.command(name="ticket-add", description="Anade un usuario al ticket actual (staff).")

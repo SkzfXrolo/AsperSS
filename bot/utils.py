@@ -118,7 +118,7 @@ def is_staff(member: discord.Member) -> bool:
     """True si el miembro tiene Manage Guild o algun rol de staff por nombre."""
     if member.guild_permissions.manage_guild:
         return True
-    staff_role_names = {"admin", "owner", "senior staff", "staff", "moderator", "mod"}
+    staff_role_names = {"admin", "owner", "senior staff", "staff", "moderator", "mod", "developer", "dev", "trainee staff"}
     return any(r.name.lower() in staff_role_names for r in member.roles)
 
 

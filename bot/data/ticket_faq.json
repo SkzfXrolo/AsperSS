@@ -1,0 +1,56 @@
+{
+  "scanner": [
+    {
+      "keywords": ["false positive", "falso positivo", "marco como hack", "no soy hack", "esta limpio", "esta clean"],
+      "title": "Posible falso positivo",
+      "answer": "Si crees que es un falso positivo:\n\n1. **Revisa el detalle del scan** en el panel — entra a `{panel}/panel`, busca tu scan_id y mira QUÉ hallazgos específicos disparó el risk score.\n2. **Subí captura del panel** acá en este ticket. Sin la captura del scan completo no podemos analizar.\n3. **Indica versión de Windows, antivirus instalado y si modificas archivos del juego** — eso ayuda a triagear.\n\nEl rol Developer va a revisar tu caso. Pueden pedirte info adicional o el archivo de log del scanner."
+    },
+    {
+      "keywords": ["no abre", "no funciona el exe", "no inicia", "no ejecuta", "se cierra solo", "crashea"],
+      "title": "El scanner no abre o se cierra solo",
+      "answer": "Los crashes al iniciar suelen ser:\n\n1. **No ejecutaste como administrador**. Click derecho → Ejecutar como administrador. Sin esto el scanner no puede acceder a Prefetch/USN Journal y crashea silencioso.\n2. **Antivirus está bloqueando partes del .exe**. Excluí `ArgusScanner.exe` del antivirus o desactivá el AV durante el scan.\n3. **Versión de Windows incompatible**. Solo Windows 10/11 64-bit. Win7/8/Server no tienen las APIs que usamos.\n4. **Archivo corrupto al descargar**. Volvé a descargar desde {panel}/descargar y verificá el tamaño.\n\nSi probaste todo lo anterior, **subí captura del error** en este ticket."
+    },
+    {
+      "keywords": ["windows protected", "smartscreen", "windows defender", "no es seguro"],
+      "title": "Windows protege la PC al ejecutar",
+      "answer": "Mensaje **'Windows protected your PC'**:\n\n1. Click en **`More info`** (palabra azul pequeña debajo del título).\n2. Aparece un botón **`Run anyway`**, click ahí.\n3. El scanner arranca normal.\n\nEsto pasa porque el `.exe` aún no está firmado con un certificado comercial. **No es virus**, simplemente Microsoft pide $300/año por la firma digital y por ahora vale la pena el paso extra."
+    },
+    {
+      "keywords": ["token", "expir", "no me reconoce el codigo", "codigo invalido", "auth"],
+      "title": "Token / código de autenticación",
+      "answer": "Sobre los tokens:\n\n• **Solo duran 30 minutos** desde que se generan.\n• **Solo se pueden usar 1 vez**. Si hiciste click en 'Iniciar' y se canceló, el token ya está consumido.\n• Si pegaste mal el token (espacios extra, falta una letra), también se considera consumido.\n\n**Solución:** Pídele al mismo staff que te generó el token que ejecute `/ss <vos>` de nuevo para emitir uno nuevo. **No inventes tokens** — el bot los genera con `secrets.token_urlsafe(32)` y son random."
+    },
+    {
+      "keywords": ["actualiza", "version vieja", "version desactualizada", "ya no sirve", "tengo la 1."],
+      "title": "Actualizar el scanner",
+      "answer": "Si tu scanner es viejo:\n\n1. Bajá la última versión desde {panel}/descargar.\n2. **Borrá la versión vieja** antes de ejecutar la nueva (no hace falta uninstall, no se 'instala' formalmente).\n3. Ejecutá la nueva como administrador.\n\nLa versión actual la podés ver con `/stats` o en el panel. Si querés mantenerte al día, fijate en `🔄・actualizaciones`, ahí se publican los releases nuevos."
+    }
+  ],
+  "soporte": [
+    {
+      "keywords": ["no veo mi scan", "no aparece", "donde esta", "no se cargo"],
+      "title": "El scan no aparece en el panel",
+      "answer": "Si no ves el scan que hiciste:\n\n1. **Verificá que el scanner haya terminado completamente** antes de cerrarlo. Si lo cerraste a la mitad, no se subió nada.\n2. **Confirmá la conexión a internet** durante el scan — necesita subir los datos al panel al final.\n3. **Buscá por machine_name o username**, no por nombre Discord.\n4. Si pasaron <5 minutos, **dale un refresh** al panel — a veces tarda en aparecer.\n\nSi aún no aparece después de 10 min, **subí el `panel_response.log`** (está en la misma carpeta del scanner) en este ticket."
+    },
+    {
+      "keywords": ["panel", "no entra", "login", "loguear", "olvide contrase"],
+      "title": "Acceso al panel",
+      "answer": "El acceso al panel staff lo da el Owner del proyecto. Si:\n\n• **Sos staff de un server que usa Argus** y nunca tuviste acceso → habla con el Owner para que te cree una cuenta.\n• **Olvidaste tu password** → mencioná tu username y un Admin lo resetea.\n• **Te bloquearon el acceso** → eso es decisión del Owner. Discutilo con él."
+    }
+  ],
+  "compra": [
+    {
+      "keywords": ["pro", "cliente pro", "suscripcion", "pagar", "comprar", "precio"],
+      "title": "Cliente Pro / suscripciones",
+      "answer": "Sobre Cliente Pro:\n\n• **Beneficios:** cola prioritaria de scans, más SS simultáneos, soporte directo via DM al Admin, badges en Discord.\n• **Precio:** depende del plan, contactá a un Admin.\n• **Métodos de pago:** PayPal, transferencia, crypto (BTC/ETH).\n\nUn Admin va a contactarte por este ticket en breve para concretar."
+    }
+  ],
+  "denuncia": [
+    {
+      "keywords": ["denuncio", "reporto", "abusa", "abuso", "se porto mal", "es toxico"],
+      "title": "Denuncia recibida",
+      "answer": "Para procesar tu denuncia necesitamos:\n\n1. **Usuario denunciado** (mention o ID).\n2. **Capturas de pantalla** del incidente. Sin pruebas no podemos sancionar.\n3. **Fecha aproximada** del incidente.\n4. **Tu versión de los hechos** clara y concisa.\n5. (Opcional) **Testigos** que vieron lo mismo.\n\nEl Senior Staff revisa todas las denuncias y aplica sanción si corresponde. Las denuncias falsas o malintencionadas también se sancionan."
+    }
+  ],
+  "otro": []
+}
