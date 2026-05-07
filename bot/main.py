@@ -10,6 +10,14 @@ import logging
 import sys
 import traceback
 
+# La consola de Windows usa cp1252 por defecto y se asfixia con los
+# emojis del banner. Forzamos UTF-8 antes de cualquier print.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except (AttributeError, OSError):
+    pass
+
 import discord
 from discord.ext import commands
 
@@ -63,16 +71,16 @@ class ArgusBot(commands.Bot):
         guild = self.get_guild(config.DISCORD_GUILD) if config.DISCORD_GUILD else None
         guild_name = guild.name if guild else "(no configurado)"
         members = guild.member_count if guild else 0
+        db_host = config.DATABASE_URL.split("@")[-1] if "@" in config.DATABASE_URL else "local"
 
-        line = "═" * 60
-        print()
-        print(line)
-        print(f"  🛡  ARGUS DISCORD BOT — conectado como {self.user}")
-        print(f"  📡  Guild: {guild_name} ({members} miembros)")
-        print(f"  🌐  Panel: {config.PANEL_URL}")
-        print(f"  💾  DB:    {config.DATABASE_URL.split('@')[-1] if '@' in config.DATABASE_URL else 'local'}")
-        print(line)
-        print()
+        # Usar logging en vez de print: el logger del root maneja unicode
+        # incluso cuando stdout no esta reconfigurado a UTF-8 en Windows.
+        log.info("=" * 60)
+        log.info("  ARGUS DISCORD BOT - conectado como %s", self.user)
+        log.info("  Guild: %s (%d miembros)", guild_name, members)
+        log.info("  Panel: %s", config.PANEL_URL)
+        log.info("  DB:    %s", db_host)
+        log.info("=" * 60)
 
         await self.change_presence(
             status=discord.Status.online,
