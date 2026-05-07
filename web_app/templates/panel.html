@@ -164,6 +164,18 @@
             </button>
             <h1 class="panel-title" id="section-title">Dashboard</h1>
             <div class="header-actions">
+                <!-- Discord -->
+                <a href="{{ discord_invite }}" target="_blank" rel="noopener" title="Servidor de Discord" style="
+                    background: linear-gradient(135deg, rgba(88,101,242,0.18), rgba(88,101,242,0.06));
+                    border: 1px solid rgba(88,101,242,0.40);
+                    border-radius: var(--radius-sm);
+                    color: #C9D0FF;
+                    width: 36px; height: 36px;
+                    display: flex; align-items: center; justify-content: center;
+                    cursor: pointer; transition: var(--trans); text-decoration: none;
+                " onmouseover="this.style.background='linear-gradient(135deg,rgba(88,101,242,0.32),rgba(88,101,242,0.14))';this.style.color='#FFFFFF';" onmouseout="this.style.background='linear-gradient(135deg,rgba(88,101,242,0.18),rgba(88,101,242,0.06))';this.style.color='#C9D0FF';">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.952 5.672a17.45 17.45 0 0 0-4.349-1.341c-.158.286-.34.65-.502 1.024a16.222 16.222 0 0 0-4.846 0c-.146-.342-.34-.736-.524-1.078A17.45 17.45 0 0 0 5.31 5.66a18.27 18.27 0 0 0-2.967 12.2 17.59 17.59 0 0 0 5.336 2.69 13.6 13.6 0 0 0 1.143-1.85 11.31 11.31 0 0 1-1.79-.857c.151-.111.298-.227.44-.343a12.443 12.443 0 0 0 10.83 0c.142.116.289.232.434.341a11.32 11.32 0 0 1-1.794.86 13.62 13.62 0 0 0 1.142 1.852 17.65 17.65 0 0 0 5.42-2.7 18.196 18.196 0 0 0-2.973-12.226zM8.052 15.495c-.99 0-1.808-.918-1.808-2.045 0-1.128.81-2.046 1.808-2.046s1.808.92 1.808 2.046c0 1.128-.81 2.045-1.808 2.045zm7.896 0c-.99 0-1.81-.918-1.81-2.045 0-1.128.81-2.046 1.81-2.046.99 0 1.81.92 1.81 2.046 0 1.127-.812 2.045-1.81 2.045z"/></svg>
+                </a>
                 <!-- Theme toggle -->
                 <button id="theme-toggle" onclick="toggleTheme()" title="Cambiar tema" style="
                     background: var(--accent-bg);

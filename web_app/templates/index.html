@@ -693,6 +693,220 @@
 
         .footer-copy { font-size: 12px; color: var(--text-d); }
 
+        /* ── Discord branding & widgets ─────────────────────────── */
+        :root {
+            --discord:        #5865F2;
+            --discord-light:  #7A85F5;
+            --discord-glow:   rgba(88, 101, 242, 0.35);
+        }
+
+        /* Pill inline (navbar / footer / CTAs) */
+        .discord-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, rgba(88,101,242,0.18), rgba(88,101,242,0.06));
+            border: 1px solid rgba(88,101,242,0.35);
+            color: #C9D0FF;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            text-decoration: none;
+            transition: var(--trans);
+            box-shadow: 0 4px 14px rgba(88,101,242,0.15);
+        }
+        .discord-pill:hover {
+            background: linear-gradient(135deg, rgba(88,101,242,0.32), rgba(88,101,242,0.14));
+            border-color: rgba(122,133,245,0.65);
+            color: #FFFFFF;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 22px rgba(88,101,242,0.32);
+        }
+        .discord-pill svg {
+            width: 18px; height: 18px;
+            fill: currentColor;
+            flex-shrink: 0;
+        }
+
+        /* Floating Action Button (sticky abajo derecha) */
+        .discord-fab {
+            position: fixed;
+            right: 24px;
+            bottom: 24px;
+            z-index: 999;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 18px 12px 14px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #5865F2 0%, #4752C4 100%);
+            color: #FFFFFF;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-decoration: none;
+            box-shadow:
+                0 10px 30px rgba(88,101,242,0.45),
+                0 0 0 1px rgba(255,255,255,0.08) inset;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+        .discord-fab:hover {
+            transform: translateY(-2px) scale(1.03);
+            box-shadow:
+                0 14px 38px rgba(88,101,242,0.6),
+                0 0 0 1px rgba(255,255,255,0.15) inset;
+        }
+        .discord-fab svg { width: 22px; height: 22px; fill: currentColor; }
+        .discord-fab .discord-fab-pulse {
+            position: absolute;
+            inset: -4px;
+            border-radius: 999px;
+            border: 2px solid rgba(88,101,242,0.55);
+            animation: discordPulse 2.4s ease-out infinite;
+            pointer-events: none;
+        }
+        @keyframes discordPulse {
+            0%   { transform: scale(0.95); opacity: 0.85; }
+            70%  { transform: scale(1.18); opacity: 0; }
+            100% { transform: scale(1.18); opacity: 0; }
+        }
+
+        /* Sección Comunidad */
+        .community-section {
+            padding: 110px 32px;
+            position: relative;
+            z-index: 2;
+        }
+        .community-inner {
+            max-width: 980px;
+            margin: 0 auto;
+            text-align: center;
+            padding: 64px 48px;
+            border-radius: 24px;
+            background:
+                radial-gradient(ellipse 80% 60% at 50% 0%, rgba(88,101,242,0.20) 0%, transparent 65%),
+                linear-gradient(180deg, rgba(20,18,30,0.92) 0%, rgba(15,13,22,0.96) 100%);
+            border: 1px solid rgba(88,101,242,0.28);
+            box-shadow:
+                0 30px 80px rgba(0,0,0,0.55),
+                0 0 0 1px rgba(88,101,242,0.10) inset,
+                0 0 60px rgba(88,101,242,0.12);
+            overflow: hidden;
+            position: relative;
+        }
+        .community-inner::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 10% 20%, rgba(88,101,242,0.12), transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(184,115,51,0.10), transparent 50%);
+            pointer-events: none;
+        }
+        .community-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(88,101,242,0.5);
+            background: rgba(88,101,242,0.10);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.18em;
+            color: #C9D0FF;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+        }
+        .community-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(34px, 5vw, 56px);
+            font-weight: 800;
+            color: var(--text);
+            line-height: 1.05;
+            letter-spacing: -0.02em;
+            margin-bottom: 18px;
+            position: relative;
+            z-index: 1;
+        }
+        .community-title span {
+            background: linear-gradient(135deg, #7A85F5 0%, #5865F2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .community-sub {
+            font-size: 17px;
+            color: var(--text-m);
+            line-height: 1.6;
+            max-width: 640px;
+            margin: 0 auto 32px;
+            position: relative;
+            z-index: 1;
+        }
+        .community-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 32px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #5865F2 0%, #4752C4 100%);
+            color: #FFFFFF;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-decoration: none;
+            box-shadow:
+                0 14px 32px rgba(88,101,242,0.45),
+                0 0 0 1px rgba(255,255,255,0.10) inset;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+            position: relative;
+            z-index: 1;
+        }
+        .community-cta:hover {
+            transform: translateY(-2px);
+            box-shadow:
+                0 20px 44px rgba(88,101,242,0.6),
+                0 0 0 1px rgba(255,255,255,0.18) inset;
+        }
+        .community-cta svg { width: 24px; height: 24px; fill: currentColor; }
+        .community-perks {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 28px;
+            margin-top: 40px;
+            position: relative;
+            z-index: 1;
+        }
+        .community-perk {
+            font-size: 13px;
+            color: var(--text-m);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .community-perk::before {
+            content: '✓';
+            color: #7A85F5;
+            font-weight: 700;
+            font-size: 15px;
+        }
+
+        @media (max-width: 600px) {
+            .community-section { padding: 80px 16px; }
+            .community-inner { padding: 44px 24px; }
+            .community-perks { gap: 14px 22px; }
+            .discord-fab { right: 16px; bottom: 16px; padding: 10px 14px 10px 12px; font-size: 12px; }
+            .discord-fab svg { width: 18px; height: 18px; }
+            .discord-fab-text { display: none; } /* solo icono en mobile */
+        }
+
         /* ── Responsive ─────────────────────────────────────────── */
         @media (max-width: 900px) {
             .features-grid { grid-template-columns: 1fr 1fr; }
@@ -1233,6 +1447,11 @@
                 <a href="#que-es" class="nav-link">Sistema</a>
                 <a href="#como-funciona" class="nav-link">Proceso</a>
                 <a href="#planes" class="nav-link">Planes</a>
+                <a href="#comunidad" class="nav-link">Comunidad</a>
+                <a href="{{ discord_invite }}" class="discord-pill" target="_blank" rel="noopener" aria-label="Únete a nuestro Discord">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.952 5.672a17.45 17.45 0 0 0-4.349-1.341c-.158.286-.34.65-.502 1.024a16.222 16.222 0 0 0-4.846 0c-.146-.342-.34-.736-.524-1.078A17.45 17.45 0 0 0 5.31 5.66a18.27 18.27 0 0 0-2.967 12.2 17.59 17.59 0 0 0 5.336 2.69 13.6 13.6 0 0 0 1.143-1.85 11.31 11.31 0 0 1-1.79-.857c.151-.111.298-.227.44-.343a12.443 12.443 0 0 0 10.83 0c.142.116.289.232.434.341a11.32 11.32 0 0 1-1.794.86 13.62 13.62 0 0 0 1.142 1.852 17.65 17.65 0 0 0 5.42-2.7 18.196 18.196 0 0 0-2.973-12.226zM8.052 15.495c-.99 0-1.808-.918-1.808-2.045 0-1.128.81-2.046 1.808-2.046s1.808.92 1.808 2.046c0 1.128-.81 2.045-1.808 2.045zm7.896 0c-.99 0-1.81-.918-1.81-2.045 0-1.128.81-2.046 1.81-2.046.99 0 1.81.92 1.81 2.046 0 1.127-.812 2.045-1.81 2.045z"/></svg>
+                    Discord
+                </a>
                 <a href="/login" class="nav-link cta">Acceder</a>
             </div>
         </div>
@@ -1500,18 +1719,51 @@
 
     <div class="divider"></div>
 
+    <!-- COMUNIDAD / DISCORD -->
+    <section class="community-section" id="comunidad">
+        <div class="community-inner reveal">
+            <span class="community-eyebrow">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="opacity:0.9"><path d="M19.952 5.672a17.45 17.45 0 0 0-4.349-1.341c-.158.286-.34.65-.502 1.024a16.222 16.222 0 0 0-4.846 0c-.146-.342-.34-.736-.524-1.078A17.45 17.45 0 0 0 5.31 5.66a18.27 18.27 0 0 0-2.967 12.2 17.59 17.59 0 0 0 5.336 2.69 13.6 13.6 0 0 0 1.143-1.85 11.31 11.31 0 0 1-1.79-.857c.151-.111.298-.227.44-.343a12.443 12.443 0 0 0 10.83 0c.142.116.289.232.434.341a11.32 11.32 0 0 1-1.794.86 13.62 13.62 0 0 0 1.142 1.852 17.65 17.65 0 0 0 5.42-2.7 18.196 18.196 0 0 0-2.973-12.226zM8.052 15.495c-.99 0-1.808-.918-1.808-2.045 0-1.128.81-2.046 1.808-2.046s1.808.92 1.808 2.046c0 1.128-.81 2.045-1.808 2.045zm7.896 0c-.99 0-1.81-.918-1.81-2.045 0-1.128.81-2.046 1.81-2.046.99 0 1.81.92 1.81 2.046 0 1.127-.812 2.045-1.81 2.045z"/></svg>
+                COMUNIDAD OFICIAL
+            </span>
+            <h2 class="community-title">Únete al <span>Discord de Argus</span></h2>
+            <p class="community-sub">
+                Soporte directo, novedades del scanner, anuncios de versiones, beta testing,
+                eventos semanales y la comunidad anti-cheat más activa. Todo en un solo lugar.
+            </p>
+            <a href="{{ discord_invite }}" class="community-cta" target="_blank" rel="noopener">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.952 5.672a17.45 17.45 0 0 0-4.349-1.341c-.158.286-.34.65-.502 1.024a16.222 16.222 0 0 0-4.846 0c-.146-.342-.34-.736-.524-1.078A17.45 17.45 0 0 0 5.31 5.66a18.27 18.27 0 0 0-2.967 12.2 17.59 17.59 0 0 0 5.336 2.69 13.6 13.6 0 0 0 1.143-1.85 11.31 11.31 0 0 1-1.79-.857c.151-.111.298-.227.44-.343a12.443 12.443 0 0 0 10.83 0c.142.116.289.232.434.341a11.32 11.32 0 0 1-1.794.86 13.62 13.62 0 0 0 1.142 1.852 17.65 17.65 0 0 0 5.42-2.7 18.196 18.196 0 0 0-2.973-12.226zM8.052 15.495c-.99 0-1.808-.918-1.808-2.045 0-1.128.81-2.046 1.808-2.046s1.808.92 1.808 2.046c0 1.128-.81 2.045-1.808 2.045zm7.896 0c-.99 0-1.81-.918-1.81-2.045 0-1.128.81-2.046 1.81-2.046.99 0 1.81.92 1.81 2.046 0 1.127-.812 2.045-1.81 2.045z"/></svg>
+                Entrar al servidor
+            </a>
+            <div class="community-perks">
+                <span class="community-perk">Soporte humano y de Argus AI</span>
+                <span class="community-perk">Cambios y novedades en vivo</span>
+                <span class="community-perk">Tickets internos para clientes</span>
+                <span class="community-perk">Comunidad anti-cheat 24/7</span>
+            </div>
+        </div>
+    </section>
+
+    <div class="divider"></div>
+
     <!-- CTA -->
     <section class="cta-section">
         <div class="cta-inner reveal">
             <div class="cta-eyebrow">// ARGUS PROJECTS</div>
             <h2 class="cta-title">¿Listo para activar<br>la vigilancia total?</h2>
             <p class="cta-sub">Accede al panel y comienza a gestionar tu equipo, tokens y análisis de seguridad.</p>
-            <a href="/login" class="btn-hero-primary" style="display:inline-flex;">
-                Iniciar Sesión
-                <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-                    <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-            </a>
+            <div style="display:flex; flex-wrap:wrap; gap:14px; justify-content:center;">
+                <a href="/login" class="btn-hero-primary" style="display:inline-flex;">
+                    Iniciar Sesión
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+                        <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </a>
+                <a href="{{ discord_invite }}" class="discord-pill" target="_blank" rel="noopener" style="padding:14px 22px; font-size:14px;">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" style="width:20px; height:20px;"><path d="M19.952 5.672a17.45 17.45 0 0 0-4.349-1.341c-.158.286-.34.65-.502 1.024a16.222 16.222 0 0 0-4.846 0c-.146-.342-.34-.736-.524-1.078A17.45 17.45 0 0 0 5.31 5.66a18.27 18.27 0 0 0-2.967 12.2 17.59 17.59 0 0 0 5.336 2.69 13.6 13.6 0 0 0 1.143-1.85 11.31 11.31 0 0 1-1.79-.857c.151-.111.298-.227.44-.343a12.443 12.443 0 0 0 10.83 0c.142.116.289.232.434.341a11.32 11.32 0 0 1-1.794.86 13.62 13.62 0 0 0 1.142 1.852 17.65 17.65 0 0 0 5.42-2.7 18.196 18.196 0 0 0-2.973-12.226zM8.052 15.495c-.99 0-1.808-.918-1.808-2.045 0-1.128.81-2.046 1.808-2.046s1.808.92 1.808 2.046c0 1.128-.81 2.045-1.808 2.045zm7.896 0c-.99 0-1.81-.918-1.81-2.045 0-1.128.81-2.046 1.81-2.046.99 0 1.81.92 1.81 2.046 0 1.127-.812 2.045-1.81 2.045z"/></svg>
+                    Únete al Discord
+                </a>
+            </div>
         </div>
     </section>
 
@@ -1523,9 +1775,22 @@
                 <span class="footer-brand-name">ARGUS PROJECTS</span>
             </div>
             <div class="footer-center">SECURITY SCANNER PRO // POWERED BY AI</div>
-            <div class="footer-copy">© 2025 Argus Projects. All rights reserved.</div>
+            <div style="display:flex; align-items:center; gap:14px;">
+                <a href="{{ discord_invite }}" class="discord-pill" target="_blank" rel="noopener" aria-label="Discord">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.952 5.672a17.45 17.45 0 0 0-4.349-1.341c-.158.286-.34.65-.502 1.024a16.222 16.222 0 0 0-4.846 0c-.146-.342-.34-.736-.524-1.078A17.45 17.45 0 0 0 5.31 5.66a18.27 18.27 0 0 0-2.967 12.2 17.59 17.59 0 0 0 5.336 2.69 13.6 13.6 0 0 0 1.143-1.85 11.31 11.31 0 0 1-1.79-.857c.151-.111.298-.227.44-.343a12.443 12.443 0 0 0 10.83 0c.142.116.289.232.434.341a11.32 11.32 0 0 1-1.794.86 13.62 13.62 0 0 0 1.142 1.852 17.65 17.65 0 0 0 5.42-2.7 18.196 18.196 0 0 0-2.973-12.226zM8.052 15.495c-.99 0-1.808-.918-1.808-2.045 0-1.128.81-2.046 1.808-2.046s1.808.92 1.808 2.046c0 1.128-.81 2.045-1.808 2.045zm7.896 0c-.99 0-1.81-.918-1.81-2.045 0-1.128.81-2.046 1.81-2.046.99 0 1.81.92 1.81 2.046 0 1.127-.812 2.045-1.81 2.045z"/></svg>
+                    Discord
+                </a>
+                <div class="footer-copy">© 2025 Argus Projects.</div>
+            </div>
         </div>
     </footer>
+
+    <!-- DISCORD FAB (sticky, presente en toda la home) -->
+    <a href="{{ discord_invite }}" class="discord-fab" target="_blank" rel="noopener" aria-label="Únete a nuestro Discord">
+        <span class="discord-fab-pulse" aria-hidden="true"></span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.952 5.672a17.45 17.45 0 0 0-4.349-1.341c-.158.286-.34.65-.502 1.024a16.222 16.222 0 0 0-4.846 0c-.146-.342-.34-.736-.524-1.078A17.45 17.45 0 0 0 5.31 5.66a18.27 18.27 0 0 0-2.967 12.2 17.59 17.59 0 0 0 5.336 2.69 13.6 13.6 0 0 0 1.143-1.85 11.31 11.31 0 0 1-1.79-.857c.151-.111.298-.227.44-.343a12.443 12.443 0 0 0 10.83 0c.142.116.289.232.434.341a11.32 11.32 0 0 1-1.794.86 13.62 13.62 0 0 0 1.142 1.852 17.65 17.65 0 0 0 5.42-2.7 18.196 18.196 0 0 0-2.973-12.226zM8.052 15.495c-.99 0-1.808-.918-1.808-2.045 0-1.128.81-2.046 1.808-2.046s1.808.92 1.808 2.046c0 1.128-.81 2.045-1.808 2.045zm7.896 0c-.99 0-1.81-.918-1.81-2.045 0-1.128.81-2.046 1.81-2.046.99 0 1.81.92 1.81 2.046 0 1.127-.812 2.045-1.81 2.045z"/></svg>
+        <span class="discord-fab-text">Únete</span>
+    </a>
 
     <script>
         // Scroll reveal

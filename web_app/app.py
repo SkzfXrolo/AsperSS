@@ -31,6 +31,23 @@ CORS(app)
 # Inicializar base de datos de autenticación al iniciar (en background para no bloquear)
 _ARGUS_VERSION = '1.6.31'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
+# URL de invitacion permanente al Discord oficial. Se inyecta en todos los
+# templates como `discord_invite` via @app.context_processor (ver mas abajo).
+# Se puede sobreescribir desde .env / Render con la variable DISCORD_INVITE_URL.
+DISCORD_INVITE_URL = os.environ.get(
+    'DISCORD_INVITE_URL',
+    'https://discord.gg/argusprojects',  # placeholder hasta que se confirme la invitacion final
+).strip()
+
+
+@app.context_processor
+def _inject_globals():
+    """Variables disponibles en TODOS los templates sin pasarlas explicitamente."""
+    return {
+        'discord_invite': DISCORD_INVITE_URL,
+        'argus_version': _ARGUS_VERSION,
+    }
+
 
 def _notify_new_deploy():
     """Detecta si es un deploy nuevo comparando RENDER_GIT_COMMIT con el último

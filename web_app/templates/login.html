@@ -319,6 +319,58 @@
         }
 
         .card { position: relative; }
+
+        /* Discord widgets */
+        .discord-help {
+            margin-top: 18px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, rgba(88,101,242,0.14), rgba(88,101,242,0.04));
+            border: 1px solid rgba(88,101,242,0.30);
+            color: #C9D0FF;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .discord-help svg.icon { width: 22px; height: 22px; fill: #7A85F5; flex-shrink: 0; }
+        .discord-help span { flex: 1; }
+        .discord-help a {
+            color: #FFFFFF;
+            font-weight: 700;
+            text-decoration: none;
+            white-space: nowrap;
+            padding: 6px 12px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #5865F2, #4752C4);
+            font-size: 12px;
+            box-shadow: 0 4px 12px rgba(88,101,242,0.30);
+        }
+        .discord-help a:hover { filter: brightness(1.1); }
+
+        .discord-fab {
+            position: fixed;
+            right: 22px;
+            bottom: 22px;
+            z-index: 999;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px 12px 14px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #5865F2 0%, #4752C4 100%);
+            color: #FFFFFF;
+            font-size: 13px;
+            font-weight: 700;
+            text-decoration: none;
+            box-shadow: 0 10px 30px rgba(88,101,242,0.45);
+            transition: transform 0.25s ease;
+        }
+        .discord-fab:hover { transform: translateY(-2px) scale(1.03); }
+        .discord-fab svg { width: 20px; height: 20px; fill: currentColor; }
+        @media (max-width: 540px) {
+            .discord-fab span { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -410,6 +462,12 @@
                 <button type="submit" class="btn-submit">Acceso Empresarial</button>
             </form>
 
+            <div class="discord-help">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.952 5.672a17.45 17.45 0 0 0-4.349-1.341c-.158.286-.34.65-.502 1.024a16.222 16.222 0 0 0-4.846 0c-.146-.342-.34-.736-.524-1.078A17.45 17.45 0 0 0 5.31 5.66a18.27 18.27 0 0 0-2.967 12.2 17.59 17.59 0 0 0 5.336 2.69 13.6 13.6 0 0 0 1.143-1.85 11.31 11.31 0 0 1-1.79-.857c.151-.111.298-.227.44-.343a12.443 12.443 0 0 0 10.83 0c.142.116.289.232.434.341a11.32 11.32 0 0 1-1.794.86 13.62 13.62 0 0 0 1.142 1.852 17.65 17.65 0 0 0 5.42-2.7 18.196 18.196 0 0 0-2.973-12.226zM8.052 15.495c-.99 0-1.808-.918-1.808-2.045 0-1.128.81-2.046 1.808-2.046s1.808.92 1.808 2.046c0 1.128-.81 2.045-1.808 2.045zm7.896 0c-.99 0-1.81-.918-1.81-2.045 0-1.128.81-2.046 1.81-2.046.99 0 1.81.92 1.81 2.046 0 1.127-.812 2.045-1.81 2.045z"/></svg>
+                <span>¿Problemas para entrar? Pide ayuda en nuestro Discord.</span>
+                <a href="{{ discord_invite }}" target="_blank" rel="noopener">Discord</a>
+            </div>
+
             <div class="footer-links">
                 <a href="/register" class="register-link">Registrarse con token de invitación</a>
                 <a href="/">← Volver al inicio</a>
@@ -418,6 +476,11 @@
 
         </div>
     </div>
+
+    <a href="{{ discord_invite }}" class="discord-fab" target="_blank" rel="noopener" aria-label="Únete a nuestro Discord">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.952 5.672a17.45 17.45 0 0 0-4.349-1.341c-.158.286-.34.65-.502 1.024a16.222 16.222 0 0 0-4.846 0c-.146-.342-.34-.736-.524-1.078A17.45 17.45 0 0 0 5.31 5.66a18.27 18.27 0 0 0-2.967 12.2 17.59 17.59 0 0 0 5.336 2.69 13.6 13.6 0 0 0 1.143-1.85 11.31 11.31 0 0 1-1.79-.857c.151-.111.298-.227.44-.343a12.443 12.443 0 0 0 10.83 0c.142.116.289.232.434.341a11.32 11.32 0 0 1-1.794.86 13.62 13.62 0 0 0 1.142 1.852 17.65 17.65 0 0 0 5.42-2.7 18.196 18.196 0 0 0-2.973-12.226zM8.052 15.495c-.99 0-1.808-.918-1.808-2.045 0-1.128.81-2.046 1.808-2.046s1.808.92 1.808 2.046c0 1.128-.81 2.045-1.808 2.045zm7.896 0c-.99 0-1.81-.918-1.81-2.045 0-1.128.81-2.046 1.81-2.046.99 0 1.81.92 1.81 2.046 0 1.127-.812 2.045-1.81 2.045z"/></svg>
+        <span>Soporte</span>
+    </a>
 
     <script>
         function switchTab(type) {
