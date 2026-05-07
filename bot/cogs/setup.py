@@ -887,21 +887,22 @@ class ServerBuilder:
         if not isinstance(support, discord.TextChannel):
             return
         embed = utils.brand_embed(
-            title="❓ Soporte — abrí un ticket",
+            title="❓ Soporte",
             description=(
-                "**Elegí el motivo en el menú de abajo** para abrir un ticket privado.\n\n"
-                "Cada categoría pingea a roles distintos automáticamente:\n\n"
-                "🛠 **Soporte técnico** — Staff genérico\n"
-                "💻 **Problema con Argus Scanner** — Developers + Staff (bugs, falsos positivos)\n"
-                "💳 **Pago / Cliente Pro** — Admin + Owner (suscripciones, facturas)\n"
-                "🚨 **Denuncia / reporte** — Senior Staff + Staff (reportes graves)\n"
-                "📋 **Otro** — Staff genérico\n\n"
-                "**Solo podés tener 1 ticket abierto a la vez.** "
-                "Cuando lo abras, el bot te hace preguntas guiadas y, si tu problema es común, "
-                "te sugiere una solución automática antes de involucrar humanos.\n\n"
-                "Dentro del ticket vas a tener 3 botones: **🔒 Cerrar**, **🙋 Reclamar (staff)** "
-                "y **📈 Escalar (IA)** — el staff puede escalar describiendo el motivo y la IA "
-                "decide a qué rol pingear."
+                "Necesitás algo? Elegí el motivo en el menú de abajo y te abro un canal privado.\n\n"
+                "**Cada motivo va a la gente correcta:**\n"
+                "🛠 **Soporte técnico** → Staff\n"
+                "💻 **Problema con Argus Scanner** → Developers + Staff\n"
+                "💳 **Pago / Cliente Pro** → Admin + Owner\n"
+                "🚨 **Denuncia / reporte** → Senior Staff + Staff\n"
+                "📋 **Otro** → Staff\n\n"
+                "**Solo 1 ticket abierto a la vez.** Te recibe **Argus AI** 👁 — "
+                "si tu problema lo vio antes te tira la solución al toque y "
+                "te ahorrás esperar al staff.\n\n"
+                "Adentro del ticket tenés 3 botones: **🔒 Cerrar** lo cierra, "
+                "**🙋 Reclamar** es para que un staff se haga cargo, y "
+                "**📈 Escalar** sirve para que el staff me cuente el motivo "
+                "y yo aviso al rol que mejor pueda ayudar."
             ),
         )
         # Publicar embed + panel funcional con dropdown de categorias

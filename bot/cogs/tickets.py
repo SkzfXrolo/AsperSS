@@ -325,7 +325,8 @@ class FAQResolutionView(discord.ui.View):
         await interaction.response.edit_message(view=self)
         if interaction.channel:
             await interaction.channel.send(  # type: ignore[union-attr]
-                f"{mentions} <@{interaction.user.id}> necesita ayuda humana, la FAQ no le sirvio.",
+                f"{mentions} mi sugerencia no le sirvió a <@{interaction.user.id}>, "
+                f"hace falta que entren ojos humanos.",
             )
 
 
@@ -346,11 +347,11 @@ class CloseTicketModal(discord.ui.Modal, title="🔒 Cerrar ticket"):
 
 
 class EscalateModal(discord.ui.Modal, title="📈 Escalar ticket"):
-    """Modal donde el staff escribe el motivo. La IA decide a quien pingear."""
+    """Modal donde el staff escribe el motivo. Argus AI decide a quien pingear."""
     motivo = discord.ui.TextInput(
-        label="Motivo y contexto",
+        label="Contame qué pasa",
         style=discord.TextStyle.paragraph,
-        placeholder="Describi el problema. La IA va a clasificarlo y elegir el rol mas adecuado a pingear...",
+        placeholder="Explicalo como se lo contarias a un companero. Argus AI lee y avisa al rol que mejor pueda ayudar.",
         min_length=15,
         max_length=500,
         required=True,
@@ -493,14 +494,15 @@ class Tickets(commands.Cog):
         ping = " ".join(f"<@&{rid}>" for rid in target_role_ids if guild.get_role(rid))
 
         bienvenida = utils.brand_embed(
-            title=f"{category_meta['emoji']} Ticket #{ticket_id} — {category_meta['label']}",
+            title=f"{category_meta['emoji']} Ticket #{ticket_id}",
             description=(
-                f"Hola {interaction.user.mention}, gracias por abrir un ticket.\n\n"
-                f"**A quien estoy avisando:** {ping or '(sin staff configurado)'}\n"
-                f"**Botones disponibles abajo:**\n"
-                f"🔒 **Cerrar** — cierra el ticket (modal con razon)\n"
-                f"🙋 **Reclamar** — staff se marca como responsable\n"
-                f"📈 **Escalar (IA)** — describe el motivo y la IA elige a quien tagear"
+                f"Hola {interaction.user.mention}, soy **Argus AI** 👁\n\n"
+                f"Te ayudo mientras esperás al staff. Avisé a {ping or 'al equipo'} "
+                f"para que se hagan cargo cuando puedan.\n\n"
+                f"Mientras tanto, **contame qué pasa con el mayor detalle posible**. "
+                f"Si tu problema lo vimos antes, te tiro la solución en el momento "
+                f"y te ahorrás la espera.\n\n"
+                f"Cuando termines, los botones de abajo cierran o escalan el ticket."
             ),
         )
         await channel.send(content=ping, embed=bienvenida, view=CloseTicketView())
@@ -511,10 +513,9 @@ class Tickets(commands.Cog):
             title=guide["title"],
             color=0x3498DB,
             description=(
-                "Para que el staff pueda ayudarte rapido, **respondé estas preguntas en mensajes "
-                "separados** (uno por uno o todos juntos):\n\n"
+                "Para no hacerte ir y volver, contame esto cuando puedas "
+                "(uno por uno o todo de una):\n\n"
                 + "\n".join(guide["questions"])
-                + "\n\n*Mientras escribes, mi IA escanea tu mensaje y te puede sugerir una solucion automatica si tu problema es comun.*"
             ),
         )
         await channel.send(embed=guide_embed)
@@ -550,11 +551,16 @@ class Tickets(commands.Cog):
         self._faq_fired.add(message.channel.id)
         answer = match["answer"].replace("{panel}", config.PANEL_URL)
         embed = utils.brand_embed(
-            title=f"💡 Sugerencia automatica · {match['title']}",
+            title=f"👁 {match['title']}",
             color=0xFEE75C,
-            description=answer + "\n\n*Si esto resuelve tu problema, click en ✅. Si no, click en 👤 para que un humano se haga cargo.*",
+            description=(
+                f"Por lo que escribís me suena conocido, ya vi esto antes. Probá esto:\n\n"
+                f"{answer}\n\n"
+                f"Si te resuelve, marcá ✅ abajo y cierro el ticket. "
+                f"Si no, dale a 👤 y aviso a alguien del equipo."
+            ),
         )
-        embed.set_footer(text="Argus FAQ · respuesta sugerida por keywords")
+        embed.set_footer(text="Argus AI")
         try:
             await message.channel.send(  # type: ignore[union-attr]
                 embed=embed,
@@ -570,18 +576,18 @@ class Tickets(commands.Cog):
         if not isinstance(interaction.channel, discord.TextChannel):
             return
         embed = utils.brand_embed(
-            title="🎫 Sistema de soporte",
+            title="🎫 Soporte",
             description=(
-                "Necesitas ayuda? Crea un ticket usando el menu de abajo.\n\n"
-                "**Categorias y a quien pingean:**\n"
-                "🛠 **Soporte tecnico** — Staff\n"
-                "💻 **Problema con Argus Scanner** — Developers + Staff\n"
-                "💳 **Pago / Cliente Pro** — Admin + Owner\n"
-                "🚨 **Denuncia / reporte** — Senior Staff + Staff\n"
-                "📋 **Otro** — Staff\n\n"
-                "**Solo podes tener 1 ticket abierto a la vez.** "
-                "El bot te hace preguntas guiadas y, si tu problema es comun, "
-                "te sugiere una solucion automatica antes de involucrar humanos."
+                "Necesitás algo? Elegí el motivo en el menú de abajo y te abro un canal privado.\n\n"
+                "**Cada motivo va a la gente correcta:**\n"
+                "🛠 **Soporte técnico** → Staff\n"
+                "💻 **Problema con Argus Scanner** → Developers + Staff\n"
+                "💳 **Pago / Cliente Pro** → Admin + Owner\n"
+                "🚨 **Denuncia / reporte** → Senior Staff + Staff\n"
+                "📋 **Otro** → Staff\n\n"
+                "**Solo 1 ticket abierto a la vez.** Soy **Argus AI**, te recibo "
+                "yo primero — si tu problema lo vi antes te tiro la solución al "
+                "toque, así no esperás al staff."
             ),
         )
         await interaction.channel.send(embed=embed, view=TicketPanelView())
@@ -679,24 +685,31 @@ class Tickets(commands.Cog):
             return
 
         role_label = ROLE_LABELS.get(role_key, role_key)
+
+        # Mensaje humano segun a quien estamos escalando
+        reasons_by_role = {
+            "role_owner":  "esto excede lo operativo, parece un tema de Owner",
+            "role_admin":  "es un tema de pagos / billing, lo paso a Admin",
+            "role_dev":    "esto huele a problema técnico del scanner, llamo a los devs",
+            "role_senior": "esto necesita ojo experimentado, llamo a Senior Staff",
+            "role_staff":  "no veo señales claras, así que aviso al staff",
+        }
+        explicacion = reasons_by_role.get(role_key, f"lo paso a {role_label}")
         if matches:
-            ia_explanation = (
-                f"**Análisis IA:** {role_label}\n"
-                f"**Keywords detectadas:** `{', '.join(matches[:6])}`"
-                + (f" *(y {len(matches) - 6} mas)*" if len(matches) > 6 else "")
-            )
-        else:
-            ia_explanation = (
-                f"**Análisis IA:** {role_label} *(sin keywords especificas, default por categoria)*"
-            )
+            explicacion += f" — me dispararon palabras como *{matches[0]}*"
+            if len(matches) > 1:
+                explicacion += f", *{matches[1]}*"
+            if len(matches) > 2:
+                explicacion += " (entre otras)"
+            explicacion += " en el motivo."
 
         embed = utils.warning_embed(
-            f"{interaction.user.mention} **escaló** este ticket.\n\n"
-            f"**Motivo:**\n>>> {motivo}\n\n"
-            f"{ia_explanation}",
-            title="📈 Ticket escalado por IA",
+            f"👁 **Argus AI**: {interaction.user.mention} pasa este ticket a {role_label}.\n\n"
+            f"> {motivo}\n\n"
+            f"_{explicacion}_",
+            title="📈 Escalada",
         )
-        embed.set_footer(text="Argus IA · clasificacion automatica por keywords")
+        embed.set_footer(text="Argus AI")
         await interaction.response.send_message(content=f"<@&{rid_raw}>", embed=embed)
 
     async def _build_transcript(self, channel: discord.TextChannel) -> str:
