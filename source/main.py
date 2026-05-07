@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.25"
+SCANNER_VERSION = "1.6.26"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -136,7 +136,7 @@ _DEFINITE_HACK_NAMES = {
     'nbteditor',
     # ── Clientes recientes (2024-2025) ────────────────────────────────────
     'slinky', 'slinkyclient', 'slinky-client',
-    'reflex', 'reflexclient',
+    'reflexclient',  # 'reflex' solo matchea NVIDIA Reflex (falso positivo)
     'rageclient', 'rage-client',
     'biscuit', 'biscuitclient',
     'thunderhack', 'thunder-hack',
@@ -162,7 +162,8 @@ _SAFE_ROOT_FRAGMENTS = {
     'nvidia corporation', 'nvidia\\cubins', 'amd\\radeon', 'intel corporation',
     'discord\\app-', 'teamspeak 3 client', 'zoom\\', 'skype\\',
     'microsoft teams', 'appdata\\local\\packages',
-    'appdata\\local\\nvidia', 'wondershare', 'obs-studio', 'obs studio',
+    'appdata\\local\\nvidia', 'programdata\\nvidia',  # NVIDIA NGX/DLSS/Reflex models
+    'wondershare', 'obs-studio', 'obs studio',
     'site-packages', 'voicemod', 'node_modules',
     'lunarclient', 'badlionclient', 'badlion', 'blclient',
     'tlauncher', 'prismlauncher', 'multimc', 'polymc',
@@ -225,7 +226,8 @@ _VANILLA_MC_PATHS = [
     '.minecraft\\crash-reports\\', '.minecraft/crash-reports/',
     '.minecraft\\screenshots\\', '.minecraft/screenshots/',
     '.minecraft\\backups\\',     '.minecraft/backups/',
-    '-natives\\',                '-natives/',   # DLLs nativas de LWJGL/OpenAL dentro de versions
+    '.minecraft\\runtime\\',     '.minecraft/runtime/',  # JRE bundled con MC (jrt-fs.jar, etc.)
+    '-natives\\',                '-natives/',
     '\\natives\\',               '/natives/',
 ]
 
@@ -7637,10 +7639,10 @@ class ArgusApp:
         # Servicios críticos que los tramposos deshabilitan para evadir anticheat.
         # DPS (Diagnostic Policy Service) detenido = ban inmediato en la mayoría de servidores.
         CRITICAL_SERVICES = {
-            'dps':    ('Diagnostic Policy Service (DPS)', 'Servicio usado por anticheats para monitoreo. Tramposos lo detienen para evadir detección. Indicador de ban inmediato.'),
-            'wersvc': ('Windows Error Reporting (WerSvc)', 'Reportes de errores — detenido para ocultar crashes de hacks/injectors.'),
+            'dps': ('Diagnostic Policy Service (DPS)', 'Servicio usado por anticheats para monitoreo. Tramposos lo detienen para evadir detección. Indicador de ban inmediato.'),
         }
         SUSPICIOUS_SERVICES = {
+            'wersvc':   ('Windows Error Reporting (WerSvc)', 'Reportes de errores — detenido para ocultar crashes de hacks/injectors. También común en usuarios que lo desactivan por privacidad.'),
             'diagtrack': ('Connected User Experiences (DiagTrack)', 'Telemetría — a veces detenida para evitar reportes.'),
         }
         try:
@@ -13801,13 +13803,16 @@ class ArgusApp:
                             if not matches:
                                 continue
                             found_paths.add(fpath)
-                            # ¿El archivo está en una carpeta de hack o tiene keyword de hack?
                             root_lower = root.lower()
                             fname_lower = fname.lower()
                             is_hack_context = (
                                 any(kw in root_lower for kw in HACK_CONFIG_KW) or
                                 any(kw in fname_lower for kw in HACK_CONFIG_KW)
                             )
+                            # En Desktop/Downloads sin contexto hack: puede ser bot de staff legítimo
+                            in_generic_location = any(loc in root_lower for loc in ('\\desktop\\', '\\downloads\\', '\\documents\\'))
+                            if in_generic_location and not is_hack_context:
+                                continue  # skip — Discord webhook en carpeta genérica sin contexto hack
                             alert = 'CRITICAL' if is_hack_context else 'SOSPECHOSO'
                             conf  = 0.92 if is_hack_context else 0.72
                             print(f"🚨 DISCORD WEBHOOK en config: {fpath} ({len(matches)} URL(s))")
@@ -16643,7 +16648,12 @@ class ArgusApp:
             '.cloudflare.com', '.cdn77.com', '.jsdelivr.net',
             '.optifine.net', '.fabricmc.net', '.quiltmc.org', '.neoforged.net',
         )
-        TRUSTED_IPS_PREFIX = ('127.', '::1', '0.0.0.0', '192.168.', '10.', '172.')
+        TRUSTED_IPS_PREFIX = ('127.', '::1', '0.0.0.0', '192.168.', '10.', '172.',
+                              '104.16.', '104.17.', '104.18.', '104.19.',  # Cloudflare /12
+                              '104.20.', '104.21.', '104.22.', '104.24.', '104.25.',
+                              '104.26.', '104.27.', '104.28.', '104.31.',)
+        # Puertos de juego normales — conexión al servidor de Minecraft
+        GAME_PORTS = (25565, 25566, 25567, 19132, 19133)  # Java + Bedrock
         HACK_CLIENT_DOMAINS = (
             'vape.gg', 'vape.sh', 'api.vape.gg',
             'future.gg', 'api.future.gg',
@@ -16677,6 +16687,8 @@ class ArgusApp:
                         raddr = conn.raddr
                         if not raddr or not raddr.ip:
                             continue
+                        if raddr.port in GAME_PORTS:
+                            continue  # conexión al servidor Minecraft, completamente normal
                         remote_ip = raddr.ip
                         if any(remote_ip.startswith(p) for p in TRUSTED_IPS_PREFIX):
                             continue
