@@ -50,3 +50,6 @@ Thumbs.db
 web_app/auth.db
 web_app/diagnostico_login.html
 
+# Tools — credenciales del CLI inspector (nunca subir)
+tools/.argus_creds.json
+
