@@ -11,7 +11,7 @@
     <title>Panel Staff - Argus Projects</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=21">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=22">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -188,6 +188,37 @@
                         background:var(--bg-s);border:1px solid var(--border-m);border-radius:var(--radius);
                         padding:6px 0;box-shadow:0 8px 24px rgba(0,0,0,0.35);min-width:180px;">
                         <div id="server-list" style="font-size:12px;"></div>
+                    </div>
+                </div>
+                <!-- Cursor picker -->
+                <div style="position:relative;" id="cursor-picker-wrap">
+                    <button id="cursor-picker-btn" onclick="toggleCursorPicker(event)" title="Personalizar cursor" style="
+                        background:var(--accent-bg);border:1px solid var(--border-m);border-radius:var(--radius-sm);
+                        color:var(--accent);width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+                        cursor:pointer;transition:var(--trans);" onmouseover="this.style.background='var(--border-m)'" onmouseout="this.style.background='var(--accent-bg)'">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 1.5L3 12.5L6.5 9.5L8.5 14L10 13.5L8 9L12 9L3 1.5Z" fill="currentColor"/></svg>
+                    </button>
+                    <div id="cursor-picker-dropdown" style="display:none;position:absolute;top:42px;right:0;z-index:400;
+                        background:var(--bg-2);border:1px solid var(--border-m);border-radius:var(--radius);
+                        padding:10px;box-shadow:0 12px 32px rgba(0,0,0,0.5);min-width:200px;">
+                        <div style="font-size:10px;font-weight:700;color:var(--text-d);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Estilo de cursor</div>
+                        <div style="display:flex;flex-direction:column;gap:4px;" id="cursor-options">
+                            <button class="cursor-opt" data-cursor="default" onclick="applyCursor('default')" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--text);font-size:12px;cursor:pointer;width:100%;text-align:left;transition:all .15s;">
+                                <span style="font-size:15px;">🖱️</span><span>Default</span>
+                            </button>
+                            <button class="cursor-opt" data-cursor="crosshair" onclick="applyCursor('crosshair')" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--text);font-size:12px;cursor:pointer;width:100%;text-align:left;transition:all .15s;">
+                                <span style="font-size:15px;">➕</span><span>Crosshair</span>
+                            </button>
+                            <button class="cursor-opt" data-cursor="dot" onclick="applyCursor('dot')" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--text);font-size:12px;cursor:pointer;width:100%;text-align:left;transition:all .15s;">
+                                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#8B5CF6;margin:2px;flex-shrink:0;"></span><span>Punto</span>
+                            </button>
+                            <button class="cursor-opt" data-cursor="target" onclick="applyCursor('target')" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--text);font-size:12px;cursor:pointer;width:100%;text-align:left;transition:all .15s;">
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="flex-shrink:0;margin:1px;"><circle cx="7" cy="7" r="5.5" stroke="#8B5CF6" stroke-width="1.2"/><line x1="7" y1="1" x2="7" y2="4" stroke="#8B5CF6" stroke-width="1.2"/><line x1="7" y1="10" x2="7" y2="13" stroke="#8B5CF6" stroke-width="1.2"/><line x1="1" y1="7" x2="4" y2="7" stroke="#8B5CF6" stroke-width="1.2"/><line x1="10" y1="7" x2="13" y2="7" stroke="#8B5CF6" stroke-width="1.2"/></svg><span>Target</span>
+                            </button>
+                            <button class="cursor-opt" data-cursor="none" onclick="applyCursor('none')" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--text);font-size:12px;cursor:pointer;width:100%;text-align:left;transition:all .15s;">
+                                <span style="font-size:15px;">🚫</span><span>Oculto</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <!-- V38: Ctrl+K global search button -->
@@ -2054,6 +2085,32 @@
             const icon = document.getElementById('theme-icon');
             if (icon) icon.textContent = '🌙';
         }
+    })();
+
+    // ── Cursor picker ─────────────────────────────────────────────────────
+    const _CURSOR_CLASSES = ['cursor-crosshair','cursor-dot','cursor-target','cursor-none'];
+    function applyCursor(type) {
+        _CURSOR_CLASSES.forEach(c => document.body.classList.remove(c));
+        if (type !== 'default') document.body.classList.add('cursor-' + type);
+        localStorage.setItem('argus-cursor', type);
+        document.querySelectorAll('.cursor-opt').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.cursor === type);
+        });
+        document.getElementById('cursor-picker-dropdown').style.display = 'none';
+    }
+    function toggleCursorPicker(e) {
+        e.stopPropagation();
+        const dd = document.getElementById('cursor-picker-dropdown');
+        dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+    }
+    document.addEventListener('click', e => {
+        const wrap = document.getElementById('cursor-picker-wrap');
+        if (wrap && !wrap.contains(e.target))
+            document.getElementById('cursor-picker-dropdown').style.display = 'none';
+    });
+    (function initCursor() {
+        const saved = localStorage.getItem('argus-cursor') || 'default';
+        applyCursor(saved);
     })();
     </script>
     <!-- ═══════════════════════════════════════════════════════════════════
