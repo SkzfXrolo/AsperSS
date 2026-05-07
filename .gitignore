@@ -62,4 +62,5 @@ logo/
 
 # Mensaje temporal de commit (workaround para PowerShell que no soporta heredoc)
 .commit_msg.txt
+web_app/static/img/*.bak
 
