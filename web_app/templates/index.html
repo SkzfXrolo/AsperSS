@@ -177,18 +177,82 @@
             50% { opacity: 0.5; transform: scale(0.8); }
         }
 
+        /* Wrapper del logo: cobija el halo radial detras del sello */
+        .hero-logo-wrap {
+            position: relative;
+            display: block;
+            margin: 0 auto 48px;
+            width: clamp(190px, 24vw, 240px);
+            height: clamp(190px, 24vw, 240px);
+            z-index: 4;
+        }
+        .hero-logo-wrap::before {
+            content: '';
+            position: absolute;
+            inset: -50px;
+            border-radius: 50%;
+            background: radial-gradient(
+                circle at center,
+                rgba(212,145,90, 0.55) 0%,
+                rgba(184,115,51, 0.32) 28%,
+                rgba(184,134,11, 0.12) 52%,
+                transparent 75%
+            );
+            filter: blur(22px);
+            z-index: -1;
+            animation: heroLogoHalo 4.5s ease-in-out infinite;
+            pointer-events: none;
+        }
+        .hero-logo-wrap::after {
+            content: '';
+            position: absolute;
+            inset: -10px;
+            border-radius: 50%;
+            background: radial-gradient(
+                circle at center,
+                rgba(255, 215, 130, 0.18) 0%,
+                rgba(212,145,90, 0.10) 35%,
+                transparent 60%
+            );
+            z-index: -1;
+            animation: heroLogoCore 3.2s ease-in-out infinite;
+            pointer-events: none;
+        }
+        @keyframes heroLogoHalo {
+            0%,100% { transform: scale(0.94); opacity: 0.85; }
+            50%      { transform: scale(1.10); opacity: 1.00; }
+        }
+        @keyframes heroLogoCore {
+            0%,100% { transform: scale(1.00); opacity: 0.75; }
+            50%      { transform: scale(1.08); opacity: 1.00; }
+        }
+
         .hero-logo {
-            display: block; margin: 0 auto 40px;
-            width: 120px; height: 120px; object-fit: contain;
+            display: block;
+            width: 100%; height: 100%;
+            object-fit: contain;
             filter:
-                drop-shadow(0 0 24px rgba(184,115,51,0.50))
-                drop-shadow(0 0 60px rgba(184,115,51,0.20));
+                brightness(1.18) saturate(1.30) contrast(1.06)
+                drop-shadow(0 0 26px rgba(212,145,90, 0.75))
+                drop-shadow(0 0 60px rgba(184,115,51, 0.35));
             animation: floatLogo 6s ease-in-out infinite;
         }
 
         @keyframes floatLogo {
-            0%,100% { transform: translateY(0); filter: drop-shadow(0 0 24px rgba(184,115,51,0.50)) drop-shadow(0 0 60px rgba(184,115,51,0.20)); }
-            50%      { transform: translateY(-10px); filter: drop-shadow(0 0 36px rgba(184,115,51,0.70)) drop-shadow(0 0 80px rgba(184,115,51,0.30)); }
+            0%,100% {
+                transform: translateY(0);
+                filter:
+                    brightness(1.18) saturate(1.30) contrast(1.06)
+                    drop-shadow(0 0 26px rgba(212,145,90, 0.75))
+                    drop-shadow(0 0 60px rgba(184,115,51, 0.35));
+            }
+            50% {
+                transform: translateY(-12px);
+                filter:
+                    brightness(1.28) saturate(1.45) contrast(1.10)
+                    drop-shadow(0 0 42px rgba(255,200,140, 0.95))
+                    drop-shadow(0 0 100px rgba(212,145,90, 0.55));
+            }
         }
 
         .hero-title {
@@ -709,20 +773,20 @@
             100% { background-position: 0% 200%; }
         }
 
-        /* ── Anillos orbitales VISIBLES alrededor del logo ──────── */
+        /* ── Anillos orbitales alrededor del logo (escalados al tamano nuevo) ── */
         .hero-inner::before {
             content: '';
             position: absolute;
-            top: 50px;
+            top: 30px;
             left: 50%;
-            width: 240px;
-            height: 240px;
-            margin-left: -120px;
+            width: 340px;
+            height: 340px;
+            margin-left: -170px;
             border-radius: 50%;
             border: 2px solid rgba(212,145,90, 0.45);
             box-shadow:
-                0 0 30px rgba(212,145,90, 0.20),
-                inset 0 0 30px rgba(212,145,90, 0.08);
+                0 0 40px rgba(212,145,90, 0.22),
+                inset 0 0 40px rgba(212,145,90, 0.08);
             pointer-events: none;
             z-index: 1;
             animation: orbitalRotate 22s linear infinite, orbitalPulse 3s ease-in-out infinite;
@@ -730,11 +794,11 @@
         .hero-inner::after {
             content: '';
             position: absolute;
-            top: 10px;
+            top: -20px;
             left: 50%;
-            width: 320px;
-            height: 320px;
-            margin-left: -160px;
+            width: 440px;
+            height: 440px;
+            margin-left: -220px;
             border-radius: 50%;
             border: 1px dashed rgba(184, 134, 11, 0.40);
             pointer-events: none;
@@ -753,25 +817,17 @@
             .hero-inner::before, .hero-inner::after { display: none; }
         }
 
-        /* ── Hero logo con glow PRONUNCIADO ──────────────────────── */
-        .hero-logo {
-            position: relative;
-            z-index: 4 !important;
-            filter:
-                drop-shadow(0 0 30px rgba(212,145,90, 0.85))
-                drop-shadow(0 0 80px rgba(212,145,90, 0.45))
-                drop-shadow(0 0 140px rgba(184, 134, 11, 0.20)) !important;
-            animation: logoFloat 5s ease-in-out infinite !important;
+        /* ── Hero logo: boost del halo cuando el viewport es grande ─ */
+        @media (min-width: 900px) {
+            .hero-logo-wrap::before {
+                inset: -70px;
+                filter: blur(28px);
+            }
         }
-        @keyframes logoFloat {
-            0%, 100% {
-                transform: translateY(0) scale(1);
-                filter: drop-shadow(0 0 30px rgba(212,145,90, 0.85)) drop-shadow(0 0 80px rgba(212,145,90, 0.45));
-            }
-            50% {
-                transform: translateY(-12px) scale(1.04);
-                filter: drop-shadow(0 0 50px rgba(212,145,90, 1)) drop-shadow(0 0 120px rgba(212,145,90, 0.65));
-            }
+        /* En mobile mantener el glow pero un poco mas chico */
+        @media (max-width: 600px) {
+            .hero-logo-wrap::before { inset: -30px; filter: blur(16px); }
+            .hero-logo-wrap::after  { inset: -6px; }
         }
 
         /* ── Hero title con shimmer continuo ─────────────────────── */
@@ -1190,8 +1246,10 @@
                 ARGUS // SECURITY INTELLIGENCE
             </div>
 
-            <img src="{{ url_for('static', filename='img/logo.png') }}"
-                 alt="Argus Projects" class="hero-logo">
+            <div class="hero-logo-wrap">
+                <img src="{{ url_for('static', filename='img/logo.png') }}"
+                     alt="Argus Projects" class="hero-logo">
+            </div>
 
             <h1 class="hero-title">
                 <span class="hero-title-main">All-Seeing.</span>
