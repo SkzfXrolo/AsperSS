@@ -29,7 +29,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-produ
 CORS(app)
 
 # Inicializar base de datos de autenticación al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.24'  # sincronizar con SCANNER_VERSION en main.py
+_ARGUS_VERSION = '1.6.30'  # sincronizar con SCANNER_VERSION en main.py
 
 
 def _notify_new_deploy():
