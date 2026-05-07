@@ -297,20 +297,30 @@ class ServerBuilder:
                 db.set_setting(self.guild.id, spec["key"], str(role.id))
                 self._log(f"✓ Rol @{spec['name']} creado.")
 
-        # Reordenar por jerarquia (Owner top -> Muted bottom)
-        # discord.py edit_role_positions
+        # Reordenar por jerarquia (Owner top -> Muted bottom).
+        # IMPORTANTE: Discord no permite mover roles por encima del top_role del bot.
+        # Calculamos un techo seguro = top_role.position - 1 y distribuimos hacia abajo.
         if self.created_roles:
-            ordered_specs = list(reversed(ROLES_SPEC))  # de menor a mayor para position
+            bot_member = self.guild.me
+            ceiling = (bot_member.top_role.position - 1) if bot_member else 1
+            ceiling = max(1, ceiling)
+            ordered_specs = list(reversed(ROLES_SPEC))  # menor a mayor (Muted -> Owner)
             positions: dict[discord.Role, int] = {}
             for idx, spec in enumerate(ordered_specs, start=1):
                 role = self.created_roles.get(spec["key"])
-                if role:
+                if role and idx <= ceiling:
                     positions[role] = idx
-            await self._safe(
-                self.guild.edit_role_positions(positions=positions, reason="/setup reorden"),
-                "reordenar roles",
-            )
-            self._log("✓ Roles ordenados jerarquicamente.")
+            if positions:
+                ok = await self._safe(
+                    self.guild.edit_role_positions(positions=positions, reason="/setup reorden"),
+                    "reordenar roles",
+                )
+                if ok is not None:
+                    self._log("✓ Roles ordenados jerarquicamente.")
+                else:
+                    self._log("⚠ No se pudo reordenar — sube el rol del bot al top y reintenta.")
+            else:
+                self._log("⚠ Bot no tiene rol alto suficiente para reordenar.")
 
     # ── overwrites helpers ─────────────────────────────────────────────
     def _build_overwrites(self, *, private: bool, readonly: bool, voice_private: bool = False) -> dict:
@@ -377,17 +387,31 @@ class ServerBuilder:
 
                 channel = None
                 if ch_type == "text" or ch_type == "announcement":
-                    channel = await self._safe(
-                        category.create_text_channel(
+                    # Announcement channels requieren feature COMMUNITY en el guild.
+                    # Si no esta disponible, caemos a canal de texto normal.
+                    want_news = (ch_type == "announcement"
+                                  and "COMMUNITY" in self.guild.features)
+                    try:
+                        channel = await category.create_text_channel(
                             name=ch_spec["name"],
                             topic=topic,
                             slowmode_delay=slowmode,
-                            news=(ch_type == "announcement"),
+                            news=want_news,
                             overwrites=ch_overwrites,
                             reason="/setup",
-                        ),
-                        f"crear canal #{ch_spec['name']}",
-                    )
+                        )
+                    except discord.HTTPException:
+                        # Reintentar sin news=True (server sin feature COMMUNITY)
+                        channel = await self._safe(
+                            category.create_text_channel(
+                                name=ch_spec["name"],
+                                topic=topic,
+                                slowmode_delay=slowmode,
+                                overwrites=ch_overwrites,
+                                reason="/setup (fallback texto)",
+                            ),
+                            f"crear canal #{ch_spec['name']}",
+                        )
                 elif ch_type == "voice":
                     channel = await self._safe(
                         category.create_voice_channel(
