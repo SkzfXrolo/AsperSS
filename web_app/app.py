@@ -4306,7 +4306,13 @@ def get_scan(scan_id):
 
                 # Obtener resultados (incluye feedback_status para mostrar veredicto del staff
                 # y extra con la metadata adicional para FILE_ACTIVITY del tab Logs).
+                # IMPORTANTE: hay que hacer fetchall() ANTES del RELEASE SAVEPOINT.
+                # En psycopg2 cualquier cursor.execute() siguiente (incluido RELEASE)
+                # descarta los resultados pendientes del SELECT y el fetchall posterior
+                # tira "ProgrammingError: no results to fetch". Por eso guardamos los
+                # rows en una variable local y recien despues hacemos RELEASE.
                 _has_extra_col = True
+                _result_rows = []
                 try:
                     cursor.execute('SAVEPOINT extra_select')
                     cursor.execute(f'''
@@ -4316,6 +4322,7 @@ def get_scan(scan_id):
                         FROM scan_results
                         WHERE scan_id = {_PH}
                     ''', (scan_id,))
+                    _result_rows = cursor.fetchall()
                     cursor.execute('RELEASE SAVEPOINT extra_select')
                 except Exception:
                     try:
@@ -4330,9 +4337,10 @@ def get_scan(scan_id):
                         FROM scan_results
                         WHERE scan_id = {_PH}
                     ''', (scan_id,))
+                    _result_rows = cursor.fetchall()
 
                 results = []
-                for r in cursor.fetchall():
+                for r in _result_rows:
                     raw_patterns = _row_get(r, 7, 'detected_patterns')
                     extra_obj = {}
                     if _has_extra_col:
