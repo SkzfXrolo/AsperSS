@@ -447,384 +447,181 @@ class ServerBuilder:
         await self._seed_downloads()
         await self._seed_docs()
         await self._seed_support()
-        self._log("✓ Mensajes seedeados: reglas (6 embeds), descargas, docs, soporte.")
+        self._log("✓ Mensajes seedeados: reglas (4 embeds), descargas, docs, soporte.")
 
     async def _seed_rules(self) -> None:
-        """Publica 6 embeds en #reglas: bienvenida, reglas, jerarquia, SS,
-        FAQ, links."""
+        """Publica embeds densos y utiles en #reglas: reglas, roles, FAQ, links."""
         rules = self.created_channels.get("ch_rules")
         if not isinstance(rules, discord.TextChannel):
             return
 
-        # ─── Embed 1: Bienvenida + identidad ────────────────────────────
-        e1 = utils.brand_embed(
-            title="🛡 Bienvenido a Argus Projects",
-            description=(
-                "**All-Seeing. Always Watching.**\n\n"
-                "Argus Projects es la empresa detrás del sistema de detección "
-                "avanzada anti-cheat con inteligencia artificial evolutiva para "
-                "servidores de Minecraft. Este Discord es el **punto de contacto "
-                "oficial** entre nuestro equipo y nuestros clientes.\n\n"
-                "**Qué ofrecemos:**\n"
-                "• El scanner `ArgusScanner.exe` que detecta ghost clients, "
-                "  inyección Java, DLL hijacking, macros, autoclickers y más.\n"
-                "• Soporte técnico directo a clientes activos.\n"
-                "• Dos planes de contratación:\n"
-                "  🌟 **Cliente Pro** — individual, para staff de un server.\n"
-                "  🏢 **Cliente Empresa** — corporativo, para networks y organizaciones.\n"
-                "• Mejora continua del modelo de IA con cada análisis nuevo.\n\n"
-                f"🌐 **Web pública:** {config.PANEL_URL}\n"
-                f"💾 **Descarga del scanner:** {config.PANEL_URL}/descargar\n\n"
-                "Si querés contratar el servicio, abrí un ticket tipo "
-                "**`compra`** en `❓・soporte` y nuestro equipo te atiende."
-            ),
-        )
-        e1.set_footer(text="Argus Projects · Lee todos los embeds antes de participar")
-        await self._safe(rules.send(embed=e1), "enviar bienvenida")
-
-        # ─── Embed 2: Reglas detalladas ─────────────────────────────────
-        e2 = utils.brand_embed(
+        # ─── Embed 1: Reglas (10 reglas, agrupadas en bloques) ──────────
+        e_rules = utils.brand_embed(
             title="📜 Reglas del servidor",
             color=0xED4245,
             description=(
-                "Al permanecer en este servidor **aceptás todas las reglas** que siguen. "
-                "El staff aplica warns/mutes/kicks/bans a criterio. Las violaciones graves "
-                "son ban inmediato sin warn previo."
+                "Al permanecer en este Discord aceptás estas reglas. Sanciones "
+                "estándar: warn → mute → kick → ban según gravedad. Violaciones "
+                "graves (NSFW, doxxing, distribución de cheats) son ban directo."
             ),
         )
-        e2.add_field(
-            name="1️⃣ Respeto absoluto",
+        e_rules.add_field(
+            name="1 · Respeto",
             value=(
-                "Trato decente entre miembros y staff. **Cero insultos personales**, "
-                "discriminación, racismo, homofobia, transfobia o acoso. "
-                "Discusiones técnicas sí, ataques personales no.\n"
-                "*Sanción: warn → mute → ban*"
+                "Cero insultos personales, discriminación, racismo, homofobia, "
+                "transfobia o acoso. Discusiones técnicas sí, ataques personales no."
             ),
             inline=False,
         )
-        e2.add_field(
-            name="2️⃣ Sin spam ni flood",
+        e_rules.add_field(
+            name="2 · Sin spam ni autopromoción",
             value=(
-                "No enviar el mismo mensaje repetido, no usar caps lock excesivo, "
-                "no hacer mention spam (>5 menciones por mensaje), no autopromoción "
-                "de servidores/canales sin permiso explícito de staff.\n"
-                "*El automod borra automáticamente y mutea por 60s.*"
+                "Nada de mensajes repetidos, caps abusivos, mention spam (>5 por mensaje), "
+                "ni promocionar otros servers/canales sin permiso. Automod aplica mute "
+                "automático de 60s."
             ),
             inline=False,
         )
-        e2.add_field(
-            name="3️⃣ Sin contenido NSFW / ilegal",
+        e_rules.add_field(
+            name="3 · Sin NSFW ni contenido ilegal",
             value=(
-                "Este es un espacio **profesional**. Cero porno, gore, contenido violento "
-                "explícito, drogas o cualquier contenido ilegal. Tampoco enlaces a sitios "
-                "warez/cracks/cheats.\n"
-                "*Sanción: ban directo, no hay warn.*"
+                "Este es un espacio profesional. Nada de porno, gore, drogas, ni links "
+                "a warez/cracks/cheats. **Ban directo, sin warn.**"
             ),
             inline=False,
         )
-        e2.add_field(
-            name="4️⃣ Argus es ANTI-cheat",
+        e_rules.add_field(
+            name="4 · Argus es ANTI-cheat",
             value=(
-                "**Prohibido distribuir, promocionar o pedir cheats** en cualquier canal o DM. "
-                "No compartas links a clients hackeados ni preguntes 'dónde bajar X cheat'. "
-                "Compartir capturas de hacks **atrapados** sí está permitido en `📸・capturas-de-hacks`.\n"
-                "*Sanción: ban permanente.*"
+                "Prohibido distribuir, promocionar o pedir cheats. Compartir capturas de "
+                "hacks **atrapados** sí, en `📸・capturas-de-hacks`. Romperla = **ban permanente.**"
             ),
             inline=False,
         )
-        e2.add_field(
-            name="5️⃣ Idioma",
+        e_rules.add_field(
+            name="5 · Sin doxxing",
             value=(
-                "Español o inglés en canales públicos. Otros idiomas en DM o privado. "
-                "Esto facilita la moderación y evita que mensajes ofensivos pasen sin ser entendidos."
+                "Nunca IPs reales, datos personales, teléfonos, emails. Las capturas de "
+                "scans pueden tener `machine_name` y username del juego, nada más."
             ),
             inline=False,
         )
-        e2.add_field(
-            name="6️⃣ Tickets para soporte privado",
+        e_rules.add_field(
+            name="6 · Idioma",
+            value="Español o inglés en canales públicos. Otros idiomas en DM.",
+            inline=False,
+        )
+        e_rules.add_field(
+            name="7 · Tickets para soporte",
             value=(
-                "**No spamees DMs al staff.** Para problemas técnicos, dudas, denuncias "
-                "o pagos, abrí un ticket en `❓・soporte`. El bot te guía para que el "
-                "ticket llegue al rol correcto (staff, devs, admin)."
+                "No spamees DMs al equipo. Para soporte, dudas, contratación o denuncias, "
+                "abrí ticket en `❓・soporte`. Argus AI te recibe primero."
             ),
             inline=False,
         )
-        e2.add_field(
-            name="7️⃣ Reportá hacks que atrapaste",
+        e_rules.add_field(
+            name="8 · ToS de Discord + sin alts",
             value=(
-                "Si Argus te atrapó un hacker en tu server, postealo en `📸・capturas-de-hacks` "
-                "con captura del scan, evidencia y un breve relato. **Tachá nicks/IPs sensibles**. "
-                "Esto nos ayuda a entrenar la IA y sirve de ejemplo para la comunidad."
+                "Edad mínima 13 (16 en EU). Cuentas alt prohibidas. Saltarse un ban con "
+                "alt = ban permanente sobre la nueva."
             ),
             inline=False,
         )
-        e2.add_field(
-            name="8️⃣ Sin doxxing ni datos privados",
-            value=(
-                "Nunca compartas direcciones IP reales, datos personales, números de teléfono, "
-                "emails ni nada que identifique a una persona privada. Las capturas de scans "
-                "deben tener el `machine_name` y `username` del juego — eso está bien — pero "
-                "no más allá."
-            ),
-            inline=False,
-        )
-        e2.add_field(
-            name="9️⃣ Sigue las ToS de Discord",
-            value=(
-                "Edad mínima 13 años (16 en EU). Cuentas alt están prohibidas. "
-                "Saltarse un ban con cuenta nueva = ban permanente sobre la nueva."
-            ),
-            inline=False,
-        )
-        e2.add_field(
-            name="🔟 Sentido común",
-            value=(
-                "Si tenés que preguntarte 'esto está permitido?', probablemente no lo está. "
-                "Cuando dudes, preguntá a staff antes de hacerlo. Vale más prevenir."
-            ),
-            inline=False,
-        )
-        e2.set_footer(text="Argus Projects · Reglas v1.0 · Las reglas pueden actualizarse, vuelve aquí")
-        await self._safe(rules.send(embed=e2), "enviar reglas")
+        e_rules.set_footer(text="Argus Projects · Reglas v1.0")
+        await self._safe(rules.send(embed=e_rules), "enviar reglas")
 
-        # ─── Embed 3: Roles del servidor ────────────────────────────────
-        e3 = utils.brand_embed(
+        # ─── Embed 2: Roles compactos (equipo + clientes) ──────────────
+        e_roles = utils.brand_embed(
             title="🎖 Roles del servidor",
             color=0xE67E22,
-            description=(
-                "Este Discord agrupa a dos comunidades: el **equipo de Argus "
-                "Projects** (la empresa que desarrolla el servicio) y los "
-                "**clientes** que lo usan."
-            ),
+            description="**Equipo Argus Projects** (sostiene el servicio) · **Clientes** (lo contratan).",
         )
-        # Equipo Argus
-        e3.add_field(
-            name="━━━━━ EQUIPO ARGUS PROJECTS ━━━━━",
-            value="*Empleados / colaboradores que sostienen el servicio.*",
-            inline=False,
-        )
-        e3.add_field(
-            name="👑 Owner",
+        e_roles.add_field(
+            name="Equipo",
             value=(
-                "Dueño del proyecto. Decisiones estratégicas, partnerships, "
-                "dirección del negocio. **No es soporte de primera línea.**"
+                "👑 **Owner** — dirección del proyecto.\n"
+                "🛡 **Admin** — pagos, contratos, decisiones.\n"
+                "💻 **Developer** — bugs, falsos positivos, mejoras del scanner.\n"
+                "⚖ **Senior Staff** — investigaciones, casos delicados.\n"
+                "🔍 **Staff** — soporte de primera línea.\n"
+                "🎓 **Trainee** — staff en entrenamiento."
             ),
             inline=False,
         )
-        e3.add_field(
-            name="🛡 Admin",
+        e_roles.add_field(
+            name="Clientes",
             value=(
-                "Administración del proyecto. Resuelven escalaciones, gestionan "
-                "pagos/contratos de clientes y aprueban decisiones importantes."
+                "🏢 **Cliente Empresa** — networks/organizaciones, plan B2B con SLA.\n"
+                "🌟 **Cliente Pro** — clientes individuales con plan activo.\n"
+                "✅ **Verificado** — miembro general (sin acceso a `/ss`)."
             ),
             inline=False,
         )
-        e3.add_field(
-            name="💻 Developer",
-            value=(
-                "Desarrolladores del scanner. Atienden bugs del `.exe`, falsos "
-                "positivos, problemas técnicos del software, sugerencias de "
-                "detección. **Tickets tipo `scanner` les llegan automáticamente.**"
-            ),
-            inline=False,
-        )
-        e3.add_field(
-            name="⚖ Senior Staff",
-            value=(
-                "Staff veterano. Lideran investigaciones complejas, supervisan "
-                "casos graves de moderación y asisten a clientes con problemas "
-                "delicados."
-            ),
-            inline=False,
-        )
-        e3.add_field(
-            name="🔍 Staff",
-            value=(
-                "Soporte de primera línea para clientes. Atienden la mayoría "
-                "de tickets, moderan canales públicos y derivan a Devs/Admin "
-                "cuando es necesario."
-            ),
-            inline=False,
-        )
-        e3.add_field(
-            name="🎓 Trainee Staff",
-            value=(
-                "Staff en entrenamiento, bajo supervisión de Staff/Senior. "
-                "Pueden mutear/timeoutear pero no kick/ban."
-            ),
-            inline=False,
-        )
-        # Clientes
-        e3.add_field(
-            name="━━━━━━━━ CLIENTES ━━━━━━━━",
-            value="*Quienes contrataron el servicio Argus.*",
-            inline=False,
-        )
-        e3.add_field(
-            name="🏢 Cliente Empresa",
-            value=(
-                "Servidores grandes, networks o organizaciones que contrataron "
-                "Argus bajo plan corporativo. Tienen acceso a `/ss`, soporte "
-                "prioritario, SLA, y línea directa con Devs/Admin."
-            ),
-            inline=False,
-        )
-        e3.add_field(
-            name="🌟 Cliente Pro",
-            value=(
-                "Clientes individuales con plan activo. Acceso a `/ss` para "
-                "Screen Shares, cola prioritaria de scans, soporte directo "
-                "y badge en Discord."
-            ),
-            inline=False,
-        )
-        e3.add_field(
-            name="✅ Verificado",
-            value=(
-                "Miembro general del Discord, completó la verificación captcha. "
-                "Puede chatear, jugar, abrir tickets de información — pero "
-                "**no tiene acceso a `/ss`** (eso requiere ser cliente activo)."
-            ),
-            inline=False,
-        )
-        await self._safe(rules.send(embed=e3), "enviar jerarquia")
+        e_roles.set_footer(text="Solo Cliente Pro/Empresa pueden ejecutar /ss")
+        await self._safe(rules.send(embed=e_roles), "enviar roles")
 
-        # ─── Embed 4: Cómo pedir un Screen Share ────────────────────────
-        e4 = utils.brand_embed(
-            title="🔍 Cómo funciona un Screen Share (SS)",
-            color=0x3498DB,
-            description=(
-                "Un **Screen Share** es una sesión donde Argus escanea la PC de "
-                "un sospechoso para detectar cheats. **Es exclusivo para clientes "
-                "activos del servicio** — es la funcionalidad principal del plan.\n\n"
-                "**Pueden emitirlos:**\n"
-                "🌟 Cliente Pro (plan individual)\n"
-                "🏢 Cliente Empresa (plan corporativo)"
-            ),
-        )
-        e4.add_field(
-            name="Si sos cliente y querés escanear a alguien",
-            value=(
-                "1. En tu server donde está el sospechoso, pedíle que entre a este Discord.\n"
-                "2. Acá ejecutá `/ss <@usuario>`. Argus AI:\n"
-                "   • Genera un **token único** (1 uso, expira en 30 min).\n"
-                "   • Le manda el token + link de descarga **por DM** al sospechoso.\n"
-                "   • Anuncia el SS iniciado en `📝・logs-scans`.\n"
-                "3. El sospechoso descarga `ArgusScanner.exe`, lo ejecuta como **admin**, "
-                "   pega el token, y escanea.\n"
-                "4. Vos revisás el resultado en el panel:\n"
-                f"   {config.PANEL_URL}/panel\n"
-                "5. Ejecutás `/veredicto <id> hack|clean <razón>` para sentenciar."
-            ),
-            inline=False,
-        )
-        e4.add_field(
-            name="Si todavía no contrataste el servicio",
-            value=(
-                "Argus Projects no tiene tier gratis. Si te interesa el servicio "
-                "para tu server o tu organización, abrí un ticket tipo "
-                "**`compra`** en `❓・soporte` — nuestro equipo te atiende, "
-                "te explica los planes (individual o corporativo) y los métodos "
-                "de pago disponibles."
-            ),
-            inline=False,
-        )
-        e4.add_field(
-            name="Si te están haciendo un SS",
-            value=(
-                "1. Si recibís un DM con un token de SS, **no es opcional**: si no "
-                "   aceptás, probablemente te bannean del server donde ocurre el incidente.\n"
-                "2. Descargá `ArgusScanner.exe` (link en el DM o en `💾・descargas`).\n"
-                "3. Ejecutalo como **administrador** (click derecho → Ejecutar como admin).\n"
-                "4. Pegá el token cuando lo pida.\n"
-                "5. Esperá a que termine. **No cierres** el programa antes de tiempo."
-            ),
-            inline=False,
-        )
-        e4.set_footer(text="Tokens de SS: 1 uso · 30 min · solo clientes activos pueden emitirlos")
-        await self._safe(rules.send(embed=e4), "enviar SS info")
-
-        # ─── Embed 5: FAQ ───────────────────────────────────────────────
-        e5 = utils.brand_embed(
-            title="❓ Preguntas frecuentes",
+        # ─── Embed 3: FAQ esencial (solo lo no-obvio) ──────────────────
+        e_faq = utils.brand_embed(
+            title="❓ Lo que más preguntan",
             color=0x9B59B6,
         )
-        e5.add_field(
-            name="¿Cuánto cuesta usar Argus?",
+        e_faq.add_field(
+            name="¿Cómo contrato Argus?",
             value=(
-                "Argus Projects no tiene tier gratis — manejamos dos planes "
-                "según el cliente:\n"
-                "🌟 **Cliente Pro** — plan individual, ideal para staff de un "
-                "server pequeño/mediano que quiere hacer SS.\n"
-                "🏢 **Cliente Empresa** — plan B2B para servers grandes, networks "
-                "u organizaciones, con SLA y soporte prioritario.\n\n"
-                "Ambos planes desbloquean `/ss`, cola prioritaria, soporte "
-                "directo y badge en Discord. Para precios y métodos de pago, "
-                "abrí un ticket tipo **`compra`**."
+                "No hay tier gratis. Manejamos dos planes:\n"
+                "🌟 **Cliente Pro** — individual, para staff de un server.\n"
+                "🏢 **Cliente Empresa** — corporativo, networks/organizaciones, SLA.\n\n"
+                "Abrí ticket tipo **`compra`** en `❓・soporte` y nuestro equipo "
+                "te atiende con planes y métodos de pago."
             ),
             inline=False,
         )
-        e5.add_field(
-            name="¿Cómo contrato el servicio?",
+        e_faq.add_field(
+            name="Mi antivirus marca el .exe",
             value=(
-                "Abrí un ticket tipo **`compra`** en `❓・soporte`. Nuestro "
-                "equipo te atiende, te muestra los planes disponibles, te "
-                "asesora sobre cuál encaja con tu caso y te guía con el pago. "
-                "Una vez confirmado, recibís el rol correspondiente y "
-                "desbloqueás todas las funciones."
+                "Falso positivo. Argus accede a APIs sensibles de Windows "
+                "(Prefetch, USN Journal, Recycle Bin parsing) — eso dispara "
+                "heurísticas. Excluí el `.exe` del AV o ejecutalo con AV apagado."
             ),
             inline=False,
         )
-        e5.add_field(
-            name="¿Argus tiene falsos positivos?",
-            value="Cualquier anti-cheat los tiene. Argus filtra agresivamente y la IA aprende con cada veredicto. Si pensás que un veredicto está mal, abrí ticket tipo `scanner` con la captura del scan.",
+        e_faq.add_field(
+            name="¿Falso positivo en un scan?",
+            value=(
+                "Posible. Argus filtra agresivamente pero ningún anti-cheat "
+                "es perfecto. Si tu cliente cree que un veredicto está mal, "
+                "abrí ticket tipo **`scanner`** con captura del scan completo "
+                "y los devs lo revisan."
+            ),
             inline=False,
         )
-        e5.add_field(
-            name="¿Funciona en Linux / Mac?",
-            value="No por ahora. Solo Windows 10/11 64-bit. Es un requerimiento técnico de las APIs de detección que usamos (Prefetch, USN Journal, Recycle Bin parsing, etc.).",
+        e_faq.add_field(
+            name="¿Argus es decisión final de banneo?",
+            value=(
+                "No. Argus emite veredictos (HACK/SOSPECHOSO/CLEAN), pero la "
+                "decisión de banear queda al staff del server cliente. Argus "
+                "es la herramienta, no el juez."
+            ),
             inline=False,
         )
-        e5.add_field(
-            name="¿Mi antivirus marca el .exe?",
-            value="Falso positivo. Argus accede a APIs sensibles de Windows (justamente lo que necesitamos para detectar hacks) y eso dispara heurísticas. **Excluí el `.exe` del antivirus** o ejecutalo como admin con AV apagado durante el scan.",
-            inline=False,
-        )
-        e5.add_field(
-            name="¿Puedo ver los scans de otros servers?",
-            value="No. Cada staff solo ve los scans hechos con sus tokens. La privacidad de los sospechosos está garantizada.",
-            inline=False,
-        )
-        e5.add_field(
-            name="¿Qué pasa si mi server bannea por error a un clean?",
-            value="Eso es decisión del staff de tu server, Argus solo da el dato. Si la IA dijo 🟩 CLEAN y igual lo bannean, eso es responsabilidad del staff humano, no del scanner.",
-            inline=False,
-        )
-        await self._safe(rules.send(embed=e5), "enviar FAQ")
+        await self._safe(rules.send(embed=e_faq), "enviar FAQ")
 
-        # ─── Embed 6: Links útiles ──────────────────────────────────────
-        e6 = utils.brand_embed(
-            title="🔗 Links útiles",
+        # ─── Embed 4: Links + comandos ─────────────────────────────────
+        e_links = utils.brand_embed(
+            title="🔗 Links y comandos",
             color=0x57F287,
             description=(
-                f"🌐 **Web pública:** {config.PANEL_URL}\n"
-                f"💾 **Descarga del scanner:** {config.PANEL_URL}/descargar\n"
-                f"🛡 **Panel staff:** {config.PANEL_URL}/panel *(requiere login)*\n\n"
-                "**Canales clave dentro del server:**\n"
-                "📜 <#" + str(rules.id) + "> — estás aquí, leelas\n"
-                "💾 `💾・descargas` — instrucciones de instalación\n"
-                "📚 `📚・documentación` — qué detecta Argus, veredictos\n"
-                "❓ `❓・soporte` — abrí un ticket si necesitás ayuda\n"
-                "📸 `📸・capturas-de-hacks` — comparte hacks atrapados\n"
-                "🔢 `🔢・counting` y `🎲・trivia` — juegos para ganar XP\n\n"
-                "**Comandos útiles:**\n"
-                "• `/rank` — tu nivel y XP\n"
-                "• `/top` — leaderboard\n"
-                "• `/scan <jugador>` — último scan de alguien\n"
-                "• `/stats` — estadísticas globales del panel"
+                f"🌐 **Web** {config.PANEL_URL} · "
+                f"💾 **Descarga** {config.PANEL_URL}/descargar · "
+                f"🛡 **Panel cliente** {config.PANEL_URL}/panel\n\n"
+                "**Comandos clave:**\n"
+                "`/ss <@user>` — emitir token de Screen Share *(solo clientes activos)*\n"
+                "`/scan <user>` — último scan de un jugador\n"
+                "`/veredicto <id> hack|clean <razón>` — sentenciar un scan\n"
+                "`/stats` — estadísticas globales · `/rank` `/top` — XP y leaderboard"
             ),
         )
-        await self._safe(rules.send(embed=e6), "enviar links")
+        await self._safe(rules.send(embed=e_links), "enviar links")
 
     async def _seed_downloads(self) -> None:
         downloads = self.created_channels.get("ch_downloads")
