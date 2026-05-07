@@ -2439,15 +2439,31 @@ def start_scan():
 _SERVER_FP_FRAGMENTS = [
     # Sistema Windows
     'windows\\system32', 'windows\\syswow64', 'windows\\winsxs',
+    'windows\\servicing', 'windows\\inf', 'windows\\panther',
+    'windows\\softwaredistribution', 'windows\\assembly',
     'program files\\microsoft', 'program files (x86)\\microsoft',
+    'program files\\windowsapps', 'program files\\common files',
+    'program files (x86)\\common files',
+    'programdata\\microsoft', 'programdata\\package cache',
+    'programdata\\windows', 'programdata\\nvidia',
     # AppData — apps legítimas
     'webview2runtime', 'trust protection lists', 'pspc_sdk',
     'appdata\\local\\packages',        # Windows Store apps (firmadas, sandboxed)
     'appdata\\local\\origin',          # EA Origin
     'appdata\\local\\nvidia',
+    'appdata\\local\\nvidia corporation',
+    'appdata\\local\\amd', 'appdata\\local\\intel',
+    'appdata\\local\\temp\\nv',         # NVIDIA temp installers
     'appdata\\roaming\\opera software',
+    'appdata\\roaming\\microsoft\\windows',
+    'appdata\\local\\microsoft\\windows',
+    'appdata\\local\\microsoft\\onedrive',
+    'appdata\\local\\microsoft\\teams',
+    'appdata\\local\\microsoft\\office',
+    'appdata\\local\\microsoft\\powertoys',
     'electronic arts\\ea desktop',
     'site-packages',                   # librerías Python instaladas
+    'node_modules',                    # módulos JS de proyectos
     # Windows AppRepository — paquetes firmados del sistema, jamás hacks
     'apprepository\\packages', 'microsoft\\windows\\apprepository',
     'activationstore.dat', 'credentialstore', '.pckgdep',
@@ -2456,21 +2472,39 @@ _SERVER_FP_FRAGMENTS = [
     'appdata\\local\\microsoft\\edge',
     'appdata\\local\\brave-browser',
     'appdata\\local\\vivaldi',
+    'appdata\\local\\chromium',
+    'appdata\\local\\opera software\\opera',
     'appdata\\roaming\\mozilla\\firefox',
+    'appdata\\roaming\\waterfox', 'appdata\\roaming\\librewolf',
     # Launchers / clientes legítimos de Minecraft
     'lunar client', 'lunarclient',
     'steam\\steamapps', 'epicgames', 'origin games',
     'tlauncher', 'prismlauncher', 'badlion client',
     'gdlauncher', 'multimc', 'atlauncher', 'curseforgeapp',
     'feather launcher', 'feathermc',   # Feather — launcher legítimo
+    'modrinth-app', 'modrinth.app',    # Modrinth official launcher
+    'minecraftlauncher.exe',           # launcher oficial Mojang
+    'xboxlivegames', 'minecraft launcher\\',
     # Anti-cheats y herramientas de seguridad legítimas
     'easyanticheat',                   # anti-cheat de juegos (EAC)
     'battleye', 'vanguard', 'faceit',  # otros anti-cheats
+    'riot vanguard', 'riotclientservices',
     # Herramientas del sistema Windows que aparecen en prefetch
     'screenclippinghost',              # captura de pantalla nativa de Windows
     'snippingtool', 'snipping tool',
+    'magnify.exe', 'narrator.exe', 'osk.exe',
+    'taskmgr.exe', 'mmc.exe', 'compmgmt.msc',
+    'svchost.exe', 'lsass.exe', 'csrss.exe',
+    'dwm.exe', 'explorer.exe', 'fontdrvhost.exe',
+    'searchapp.exe', 'searchhost.exe', 'startmenuexperiencehost',
+    'shellexperiencehost', 'runtimebroker.exe',
+    'wmiprvse.exe', 'audiodg.exe', 'winlogon.exe',
     # El propio scanner — no flaggear sus propias copias borradas
     'argusscanner', 'minecraftsstool',
+    # Java oficial / OpenJDK / temurin — runtime legítimo
+    'java\\jdk', 'java\\jre', 'temurin', 'corretto',
+    'eclipse adoptium', 'openjdk',
+    'oracle\\java', 'azul zulu',
     # Dominios seguros en URLs de historial/descargas de navegador
     'github.com', 'modrinth.com', 'curseforge.com', 'files.minecraftforge.net',
     'spigotmc.org', 'papermc.io', 'fabricmc.net', 'quiltmc.org',
@@ -2479,12 +2513,24 @@ _SERVER_FP_FRAGMENTS = [
     'lifehacker.com', 'lifehack.org', 'medium.com',
     'stackoverflow.com', 'reddit.com', 'youtube.com',
     'google.com', 'bing.com', 'wikipedia.org',
+    'discord.com', 'discord.gg', 'discordapp.com',
+    'twitch.tv', 'twitter.com', 'x.com', 'facebook.com',
+    'amazon.com', 'amazonaws.com', 'cloudflare.com',
+    'office.com', 'microsoft.com', 'live.com',
+    'nvidia.com', 'amd.com', 'intel.com',
+    'mediafire.com', 'mega.nz', 'drive.google.com',
+    'docs.google.com', 'gmail.com',
     # Mods / datapacks legítimos conocidos
     'optifine', 'fabricmc', 'quiltmc', 'sodium', 'lithium', 'phosphor',
     'iris', 'indium', 'ferritecore', 'lazydfu', 'starlight',
     'journeymap', 'just enough items', 'jei-', 'rei-',
     'terralith', 'amplified_nether', 'william_wythers',  # datapacks populares
     'create-', 'botania-', 'waystones-', 'appleskin-',   # mods comunes
+    'modmenu-', 'cloth-config-', 'architectury-',
+    'fabric-api-', 'forgeconfigapiport-', 'jade-',
+    'distanthorizons', 'embeddium-', 'rubidium-',
+    'oculus-', 'continuity-', 'lambdynamiclights-',
+    'voicechat-', 'simplevoicechat-',
     # JNA — archivos temporales normales de Java/Minecraft
     'jna', 'jna-',
     # Otros programas legítimos
@@ -2492,18 +2538,36 @@ _SERVER_FP_FRAGMENTS = [
     # Drivers y software de hardware
     'nvidia corporation', 'amd\\radeon', 'intel corporation',
     'discord\\app-', 'teamspeak 3 client',
+    'logitech\\logi options', 'razer\\synapse',
+    'corsair\\icue', 'steelseries\\engine',
     # LabyMod — cliente legítimo de Minecraft
     'labymod', 'labymodlauncher', 'labymod-neo',
     # Fabric API processed mods y librerías de Minecraft
     '.fabric\\processedmods', '.minecraft\\.fabric', '.minecraft\\libraries',
+    '.minecraft\\assets', '.minecraft\\versions',
+    '.minecraft\\bin\\natives', '.minecraft\\natives',
+    '.minecraft\\crash-reports', '.minecraft\\logs\\debug',
     # Grabadores de clips
     'medal\\', 'medal.tv',
     # Juegos y apps legítimas
     'roblox\\', 'innersloth', 'vseeface',
+    'epic games\\launcher', 'riot games\\',
+    'ubisoft connect', 'gog galaxy',
     # Overwolf
     'ow-electron', 'overwolf',
     # Conexiones de red internas de Minecraft
     '127.0.0.1', 'connection to addr(ip=\'127.0.0.1\'',
+    '::1', '0.0.0.0', 'localhost',
+    # Servidores Minecraft populares (no son C2)
+    '.hypixel.net', 'mc.hypixel.net', 'mineplex.com',
+    'cubecraft.net', '.cubecraft.net',
+    # IDE y herramientas de desarrollo (modders legítimos)
+    'jetbrains\\intellij', 'jetbrains\\toolbox', 'pycharm',
+    'visual studio code', 'microsoft vs code', 'cursor\\',
+    'eclipse\\', 'netbeans\\',
+    '.gradle\\caches', '.gradle\\wrapper', '.m2\\repository',
+    # OBS y streaming (no es evidencia per se, salvo que se grabe el SS)
+    'obs-studio\\bin', 'streamlabs',
 ]
 
 # Tipos de issue que nunca deben guardarse (FP estructural, no por ruta)
@@ -2547,13 +2611,61 @@ _LEGACY_FP_CATEGORIES = {'EXECUTED_DELETED'}
 _BINARY_GARBAGE_RE = _re_fp.compile(
     r'\bLMEM\b|Windows\.Data\.|Matrix3x2|\.CenterX|\.CenterY|'
     r'ItemReference|MEOW\b|CloudData|RevealBrush|XamlAnim|'
-    r'BaseM\s+I&|BorderBrush\s+[A-Z]|\bMEM\s+[A-Z]|\bLE[A-Z]\b',
+    r'BaseM\s+I&|BorderBrush\s+[A-Z]|\bMEM\s+[A-Z]|\bLE[A-Z]\b|'
+    r'D2D1\.|DCompositionBrush|DXGI_|\\u[0-9a-f]{4}|'
+    r'^[\x00-\x08\x0b\x0c\x0e-\x1f]{2,}|[\xc0-\xff]{6,}',
     _re_fp.IGNORECASE
 )
+# Strings de control / no-imprimibles típicos de basura binaria
+_NONPRINTABLE_RE = _re_fp.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+# Caracteres "raros" no-ASCII que aparecen al decodificar UTF-16 incorrectamente
+_HIGH_BYTE_RUN_RE = _re_fp.compile(r'[\u0080-\uFFFF]{4,}')
+
+
+def _normalize_path(p: str) -> str:
+    """Normaliza una ruta para comparación robusta:
+       - lowercase
+       - separadores unificados a '\\'
+       - quitar prefijos extendidos '\\\\?\\' y '\\\\.\\'
+       - colapsar separadores duplicados.
+    """
+    if not p:
+        return ''
+    s = str(p).lower().replace('/', '\\').strip()
+    if s.startswith('\\\\?\\') or s.startswith('\\\\.\\'):
+        s = s[4:]
+    while '\\\\' in s:
+        s = s.replace('\\\\', '\\')
+    return s
+
+
+def _is_garbage_string(s: str) -> bool:
+    """True si el string parece basura binaria (parser viejo, encoding roto)."""
+    if not s:
+        return False
+    s_str = str(s)
+    if len(s_str) > 600:
+        return True  # nombres absurdamente largos = basura
+    # Caracteres de control no-imprimibles
+    if len(_NONPRINTABLE_RE.findall(s_str)) >= 2:
+        return True
+    # Run largo de caracteres no-ASCII (típico de UTF-16 mal decodificado)
+    if _HIGH_BYTE_RUN_RE.search(s_str):
+        return True
+    if _BINARY_GARBAGE_RE.search(s_str):
+        return True
+    # Ratio de caracteres alfanuméricos: si <30% es probable basura
+    alnum = sum(1 for c in s_str if c.isalnum() or c in ' .\\/_-:()[]')
+    if len(s_str) >= 12 and alnum / max(1, len(s_str)) < 0.30:
+        return True
+    return False
 
 
 def _is_server_false_positive(result: dict) -> bool:
-    """Devuelve True si el resultado es un falso positivo conocido y debe descartarse."""
+    """Devuelve True si el resultado es un falso positivo conocido y debe descartarse.
+    Mejorado: normaliza paths, detecta basura binaria en cualquier campo,
+    descarta confidence cero, y aplica matching robusto contra fragmentos seguros.
+    """
     # Tipos que son FP estructural independientemente de la ruta
     tipo = (result.get('tipo') or result.get('issue_type') or '').lower().replace(' ', '_')
     if tipo in _ZERO_RISK_ISSUE_TYPES:
@@ -2564,17 +2676,63 @@ def _is_server_false_positive(result: dict) -> bool:
     if categoria in _LEGACY_FP_CATEGORIES:
         return True
 
-    ruta     = (result.get('ruta', '') or '').lower().replace('/', '\\')
-    nombre   = (result.get('nombre', '') or result.get('archivo', '') or '')
-    combined = ruta + '|' + nombre.lower()
+    ruta_raw = result.get('ruta', '') or result.get('issue_path', '') or ''
+    nombre   = (result.get('nombre', '') or result.get('archivo', '')
+                or result.get('issue_name', '') or '')
+    ruta     = _normalize_path(ruta_raw)
+    combined = ruta + '|' + (nombre or '').lower()
 
-    # Basura binaria decodificada por parsers viejos (prefetch/shimcache binario)
-    if _BINARY_GARBAGE_RE.search(nombre):
+    # Confidence numéricamente nula y sin patrones detectados → ruido
+    try:
+        c = float(result.get('confidence', 0) or 0)
+        if c > 1.0:
+            c = c / 100.0
+    except (TypeError, ValueError):
+        c = 0.0
+    patterns = result.get('detected_patterns') or []
+    has_evidence = bool(patterns) or bool(result.get('file_hash'))
+    nivel = (result.get('alerta') or result.get('alert_level') or '').upper()
+    if c <= 0.05 and not has_evidence and nivel not in ('CRITICAL', 'SOSPECHOSO', 'MUY_SOSPECHOSO'):
+        return True
+
+    # Basura binaria en nombre o ruta (parser viejo decodificaba .pf como UTF-16)
+    if _is_garbage_string(nombre) or _is_garbage_string(ruta_raw):
+        return True
+
+    # Hallazgos sin nombre y sin ruta no son procesables
+    if not (nombre or '').strip() and not (ruta or '').strip():
+        return True
+
+    # Hallazgos con descripción genérica de fecha/hora del sistema (NTP) — FP histórico
+    desc = (result.get('descripcion') or result.get('issue_description') or '').lower()
+    if 'cambio de hora' in desc or 'time-service' in desc or 'w32time' in desc:
         return True
 
     if any(frag in combined for frag in _SERVER_FP_FRAGMENTS):
         return True
     return False
+
+
+def _scrub_results_for_display(results: list) -> list:
+    """Aplica el filtro server-side a una lista de resultados ya almacenados,
+    devolviendo solo los que NO son FP. Útil para sanear scans antiguos al servirlos.
+    Conserva el orden original y nunca elimina más de un 95% de los resultados como
+    medida de seguridad (evita ocultar todos los hallazgos por un bug del filtro).
+    """
+    if not results:
+        return results
+    keep = []
+    for r in results:
+        try:
+            if not _is_server_false_positive(r):
+                keep.append(r)
+        except Exception:
+            keep.append(r)  # ante error, conservar
+    if len(keep) == 0 and len(results) > 0:
+        return results  # safety: nunca devolver lista vacía si había datos
+    if len(results) >= 6 and len(keep) / len(results) < 0.05:
+        return results  # safety: filtro demasiado agresivo, devolver original
+    return keep
 
 
 def _calculate_risk_score(results, return_breakdown=False):
@@ -3499,7 +3657,11 @@ def get_scan(scan_id):
                         'ai_confidence': _row_get(r, 11, 'ai_confidence'),
                         'feedback_status': _row_get(r, 12, 'feedback_status'),
                     })
-                
+
+                # Saneo de display: filtrar FPs de scans antiguos al servirlos al panel
+                # (no toca la BD, solo lo que ve el staff)
+                results = _scrub_results_for_display(results)
+
                 scan['results'] = results
                 
                 # Guardar en caché

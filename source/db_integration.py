@@ -175,6 +175,79 @@ class DatabaseIntegration:
                     deduped.append(_iss)
             issues_found = deduped
 
+            # ─── Filtro pre-envío: descartar basura obvia para garantizar
+            #     que jamás llegue ruido al servidor / panel ──────────────────
+            import re as _pre_re
+            _PRE_GARBAGE_RE = _pre_re.compile(
+                r'\bLMEM\b|Windows\.Data\.|Matrix3x2|\.CenterX|\.CenterY|'
+                r'ItemReference|MEOW\b|CloudData|RevealBrush|XamlAnim|'
+                r'D2D1\.|DCompositionBrush|\\u[0-9a-f]{4}|'
+                r'^[\x00-\x08\x0b\x0c\x0e-\x1f]{2,}',
+                _pre_re.IGNORECASE
+            )
+            _PRE_NONPRINT_RE = _pre_re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+            _PRE_HIGH_RUN_RE = _pre_re.compile(r'[\u0080-\uFFFF]{4,}')
+
+            def _pre_is_garbage(s: str) -> bool:
+                if not s:
+                    return False
+                s = str(s)
+                if len(s) > 600:
+                    return True
+                if len(_PRE_NONPRINT_RE.findall(s)) >= 2:
+                    return True
+                if _PRE_HIGH_RUN_RE.search(s):
+                    return True
+                if _PRE_GARBAGE_RE.search(s):
+                    return True
+                alnum = sum(1 for c in s if c.isalnum() or c in ' .\\/_-:()[]')
+                if len(s) >= 12 and alnum / max(1, len(s)) < 0.30:
+                    return True
+                return False
+
+            _PRE_SAFE_FRAGS = (
+                'windows\\system32', 'windows\\syswow64', 'windows\\winsxs',
+                'windows\\servicing', 'windows\\softwaredistribution',
+                'program files\\microsoft', 'program files (x86)\\microsoft',
+                'programdata\\microsoft', 'programdata\\package cache',
+                'appdata\\local\\packages', 'appdata\\local\\microsoft',
+                'webview2runtime', 'site-packages', 'node_modules',
+                '.gradle\\caches', '.gradle\\wrapper', '.m2\\repository',
+                'jetbrains\\intellij', 'jetbrains\\toolbox',
+                'visual studio code', 'cursor\\',
+                'lunar client', 'lunarclient', 'feathermc',
+                'badlion client', 'labymod',
+                'easyanticheat', 'battleye', 'vanguard',
+                'argusscanner', 'minecraftsstool',  # propio scanner
+            )
+            _PRE_ZERO_RISK_TYPES = {
+                'texture_pack', 'texture_pack_xray', 'texture_pack_analysis',
+                'resource_pack', 'resource_pack_xray', 'event_logs',
+            }
+
+            def _pre_is_fp(_iss: dict) -> bool:
+                _tipo = (_iss.get('tipo') or '').lower().replace(' ', '_')
+                if _tipo in _PRE_ZERO_RISK_TYPES:
+                    return True
+                _nombre = _iss.get('nombre') or _iss.get('archivo') or ''
+                _ruta_raw = _iss.get('ruta') or _iss.get('archivo') or ''
+                if _pre_is_garbage(_nombre) or _pre_is_garbage(_ruta_raw):
+                    return True
+                if not str(_nombre).strip() and not str(_ruta_raw).strip():
+                    return True
+                _ruta_n = str(_ruta_raw).lower().replace('/', '\\')
+                while '\\\\' in _ruta_n:
+                    _ruta_n = _ruta_n.replace('\\\\', '\\')
+                _combined = _ruta_n + '|' + str(_nombre).lower()
+                if any(f in _combined for f in _PRE_SAFE_FRAGS):
+                    return True
+                return False
+
+            _before_pre = len(issues_found)
+            issues_found = [i for i in issues_found if not _pre_is_fp(i)]
+            if len(issues_found) < _before_pre:
+                print(f"🧹 Pre-filter: {_before_pre} → {len(issues_found)} ({_before_pre - len(issues_found)} FP descartados antes del envío)")
+
             # Preparar resultados para la API — ordenar por severidad y limitar payload
             _severity_order = {'CRITICAL': 0, 'SOSPECHOSO': 1, 'POCO_SOSPECHOSO': 2, 'NORMAL': 3}
             sorted_issues = sorted(

@@ -16,26 +16,30 @@ class ModernUI:
     """Argus Scanner — Echo-inspired UI. Dark, red accent, minimal."""
 
     COLORS = {
-        'bg_primary':   '#0D0D0D',
-        'bg_secondary': '#111111',
-        'bg_card':      '#161616',
-        'bg_hover':     '#1C1C1C',
+        'bg_primary':   '#0A0A0C',
+        'bg_secondary': '#101013',
+        'bg_card':      '#16161A',
+        'bg_hover':     '#1C1C22',
 
-        'text_primary':   '#F0F0F0',
-        'text_secondary': '#666666',
-        'text_muted':     '#333333',
+        'text_primary':   '#F5F2F4',
+        'text_secondary': '#7A7580',
+        'text_muted':     '#3A3640',
 
         'accent':       '#E53E3E',
         'accent_light': '#FC8181',
         'accent_hover': '#C53030',
+        'accent_deep':  '#7A1722',
+        'accent_glow':  '#FF5050',
         'green':        '#48BB78',
+        'green_glow':   '#5DD08C',
         'amber':        '#ECC94B',
         'red':          '#FC5555',
         'blue':         '#63B3ED',
+        'gold':         '#B8860B',
 
-        'border':       '#1E1E1E',
-        'border_bright':'#2A2A2A',
-        'separator':    '#181818',
+        'border':       '#1E1E24',
+        'border_bright':'#2A2A30',
+        'separator':    '#181820',
     }
 
     FONTS = {
@@ -264,26 +268,80 @@ class ModernUI:
         cls._ring_canvas = ring_c
         cls._ring_pct    = 0
 
+        def _interp_color(c1, c2, t):
+            """Interpolación lineal entre dos colores hex."""
+            try:
+                r1, g1, b1 = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
+                r2, g2, b2 = int(c2[1:3], 16), int(c2[3:5], 16), int(c2[5:7], 16)
+                r = int(r1 + (r2 - r1) * t)
+                g = int(g1 + (g2 - g1) * t)
+                b = int(b1 + (b2 - b1) * t)
+                return f'#{r:02x}{g:02x}{b:02x}'
+            except Exception:
+                return c1
+
         def _draw_ring(pct):
             ring_c.delete('all')
             pad = 10
             x0, y0 = pad, pad
             x1, y1 = ring_size - pad, ring_size - pad
 
-            # Track (full grey circle)
+            # Halo exterior sutil (capa 1)
+            ring_c.create_arc(x0 - 3, y0 - 3, x1 + 3, y1 + 3,
+                              start=90, extent=360,
+                              style='arc',
+                              outline=C['bg_card'],
+                              width=2)
+            # Track principal
             ring_c.create_arc(x0, y0, x1, y1,
                               start=90, extent=360,
                               style='arc', outline=C['border_bright'], width=6)
+            # Track interior leve para profundidad
+            ring_c.create_arc(x0 + 3, y0 + 3, x1 - 3, y1 - 3,
+                              start=90, extent=360,
+                              style='arc',
+                              outline=C['bg_secondary'],
+                              width=1)
 
-            # Progress arc
+            # Progress arc — degradado por segmentos (rojo → amarillo→verde según pct)
             if pct > 0:
-                extent = -int(360 * pct / 100)
-                ring_c.create_arc(x0, y0, x1, y1,
-                                  start=90, extent=extent,
-                                  style='arc', outline=C['accent'], width=6)
+                # Color según progreso: profundo en bajo, brillante en alto
+                if pct < 50:
+                    arc_color = _interp_color(C['accent_deep'], C['accent'], pct / 50)
+                else:
+                    arc_color = _interp_color(C['accent'], C['accent_glow'], (pct - 50) / 50)
 
-            # Center percentage text
-            ring_c.create_text(ring_size // 2, ring_size // 2,
+                # Glow exterior (más ancho, color tenue)
+                extent_full = -int(360 * pct / 100)
+                ring_c.create_arc(x0 - 1, y0 - 1, x1 + 1, y1 + 1,
+                                  start=90, extent=extent_full,
+                                  style='arc',
+                                  outline=arc_color,
+                                  width=8,
+                                  stipple='gray25')
+                # Arco principal
+                ring_c.create_arc(x0, y0, x1, y1,
+                                  start=90, extent=extent_full,
+                                  style='arc',
+                                  outline=arc_color,
+                                  width=6)
+                # Punta brillante (último 8% del arco)
+                if pct > 5:
+                    tip_extent = max(-30, int(-360 * 0.08))
+                    tip_start  = 90 + extent_full - tip_extent
+                    ring_c.create_arc(x0, y0, x1, y1,
+                                      start=tip_start, extent=tip_extent,
+                                      style='arc',
+                                      outline=C['accent_light'],
+                                      width=6)
+
+            # Texto del porcentaje (sombra + main)
+            cx, cy = ring_size // 2, ring_size // 2
+            ring_c.create_text(cx + 1, cy + 1,
+                               text=f"{int(pct)}%",
+                               font=('Segoe UI', 18, 'bold'),
+                               fill=C['bg_primary'])
+            ring_c.create_text(cx, cy,
                                text=f"{int(pct)}%",
                                font=('Segoe UI', 18, 'bold'),
                                fill=C['text_primary'])
@@ -313,11 +371,11 @@ class ModernUI:
         detail.pack(anchor='w')
 
         # ── Progress bar ──────────────────────────────────────────────────────
-        bar_wrap = tk.Frame(outer, bg=C['border'], height=3)
+        bar_wrap = tk.Frame(outer, bg=C['border'], height=4)
         bar_wrap.pack(fill=tk.X, pady=(18, 0))
         bar_wrap.pack_propagate(False)
-        bar_c = tk.Canvas(bar_wrap, height=3,
-                          bg=C['border'], highlightthickness=0, bd=0)
+        bar_c = tk.Canvas(bar_wrap, height=4,
+                          bg=C['bg_secondary'], highlightthickness=0, bd=0)
         bar_c.pack(fill=tk.BOTH, expand=True)
 
         def _draw_bar(pct_val):
@@ -327,8 +385,35 @@ class ModernUI:
                 return
             fw = max(0, int(w * pct_val / 100))
             if fw > 0:
-                bar_c.create_rectangle(0, 0, fw, 3,
-                                       fill=C['accent'], outline='', tags='bar')
+                # Degradado simulado por segmentos verticales
+                # de accent_deep → accent → accent_glow
+                segments = 30
+                seg_w = max(1, fw // segments)
+                for i in range(0, fw, seg_w):
+                    t = (i + seg_w / 2) / max(1, fw)
+                    if t < 0.5:
+                        # accent_deep -> accent
+                        r1, g1, b1 = 0x7A, 0x17, 0x22
+                        r2, g2, b2 = 0xE5, 0x3E, 0x3E
+                        tt = t / 0.5
+                    else:
+                        # accent -> accent_glow
+                        r1, g1, b1 = 0xE5, 0x3E, 0x3E
+                        r2, g2, b2 = 0xFF, 0x50, 0x50
+                        tt = (t - 0.5) / 0.5
+                    rr = int(r1 + (r2 - r1) * tt)
+                    gg = int(g1 + (g2 - g1) * tt)
+                    bb = int(b1 + (b2 - b1) * tt)
+                    color = f'#{rr:02x}{gg:02x}{bb:02x}'
+                    bar_c.create_rectangle(i, 0, min(i + seg_w, fw), 4,
+                                           fill=color, outline='', tags='bar')
+                # Punta brillante (highlight a la derecha)
+                tip_w = min(8, fw)
+                if tip_w > 0:
+                    bar_c.create_rectangle(fw - tip_w, 0, fw, 4,
+                                           fill=C['accent_light'], outline='', tags='bar')
+                    bar_c.create_rectangle(fw - 1, 0, fw, 4,
+                                           fill='#FFFFFF', outline='', tags='bar')
         bar_c._draw = _draw_bar
 
         # ── Bottom row: timer + file count ────────────────────────────────────
@@ -474,8 +559,55 @@ class ModernUI:
         col = color or cls.COLORS['accent']
         try:
             cls._status_badge.config(text=f"●  {text}", fg=col)
+            # Animación de pulso del punto rojo cuando está escaneando
+            if text and 'ESCANE' in text.upper():
+                cls._start_badge_pulse(col)
+            else:
+                cls._stop_badge_pulse()
         except Exception:
             pass
+
+    _badge_pulse_after = None
+    _badge_pulse_state = 0
+
+    @classmethod
+    def _start_badge_pulse(cls, base_color):
+        if cls._status_badge is None:
+            return
+        cls._stop_badge_pulse()
+        try:
+            base_text = cls._status_badge.cget('text') or '●  ESCANEANDO'
+            txt_only = base_text.split('  ', 1)[-1] if '  ' in base_text else base_text
+
+            # Variantes de color para el pulso
+            try:
+                r, g, b = int(base_color[1:3], 16), int(base_color[3:5], 16), int(base_color[5:7], 16)
+            except Exception:
+                r, g, b = 0xE5, 0x3E, 0x3E
+            dim = f'#{int(r*0.5):02x}{int(g*0.5):02x}{int(b*0.5):02x}'
+
+            def _tick():
+                if cls._status_badge is None:
+                    return
+                try:
+                    cls._badge_pulse_state = (cls._badge_pulse_state + 1) % 2
+                    color_now = base_color if cls._badge_pulse_state else dim
+                    cls._status_badge.config(text=f"●  {txt_only}", fg=color_now)
+                    cls._badge_pulse_after = cls._status_badge.after(700, _tick)
+                except Exception:
+                    pass
+            _tick()
+        except Exception:
+            pass
+
+    @classmethod
+    def _stop_badge_pulse(cls):
+        try:
+            if cls._badge_pulse_after and cls._status_badge is not None:
+                cls._status_badge.after_cancel(cls._badge_pulse_after)
+        except Exception:
+            pass
+        cls._badge_pulse_after = None
 
     @classmethod
     def update_counter(cls, key, value):
@@ -505,10 +637,21 @@ class ModernUI:
 
         if icon_c:
             icon_c.delete('all')
-            color = C['green'] if success else C['red']
+            color = C['green_glow'] if success else C['red']
+            color_dim = C['green'] if success else C['accent_deep']
             bg    = C['bg_card']
-            icon_c.create_oval(2, 2, 46, 46, outline=color, width=1.5, fill=bg)
+            # Halo exterior tenue (efecto glow)
+            icon_c.create_oval(0, 0, 48, 48, outline=color_dim, width=1, fill=bg)
+            # Borde principal
+            icon_c.create_oval(3, 3, 45, 45, outline=color, width=2, fill=bg)
+            # Borde interior leve
+            icon_c.create_oval(6, 6, 42, 42, outline=color_dim, width=1, fill='')
             if success:
+                # Sombra del check
+                icon_c.create_line(15, 25, 22, 34, 35, 15,
+                                   fill=color_dim, width=3,
+                                   joinstyle='round', capstyle='round')
+                # Check principal
                 icon_c.create_line(14, 24, 21, 33, 34, 14,
                                    fill=color, width=2,
                                    joinstyle='round', capstyle='round')
@@ -518,7 +661,7 @@ class ModernUI:
 
         if main_lbl:
             txt = message or ("Escaneo completado" if success else "Error en el escaneo")
-            main_lbl.config(text=txt, fg=C['green'] if success else C['red'])
+            main_lbl.config(text=txt, fg=C['green_glow'] if success else C['red'])
 
         if sub_lbl:
             sub_lbl.config(text=sub or "", fg=C['text_secondary'])

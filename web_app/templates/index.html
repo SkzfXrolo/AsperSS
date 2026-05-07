@@ -646,6 +646,317 @@
         /* ── Scroll reveal ───────────────────────────────────────── */
         .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
         .reveal.visible { opacity: 1; transform: translateY(0); }
+
+        /* ────────────────────────────────────────────────────────── */
+        /*  ARGUS · PREMIUM POLISH LAYER (V2026.05)                  */
+        /* ────────────────────────────────────────────────────────── */
+
+        /* Cinematic spotlight detrás del hero */
+        .hero {
+            position: relative;
+            overflow: hidden;
+            isolation: isolate;
+        }
+        .hero::before {
+            content: '';
+            position: absolute;
+            inset: -10% -10% auto -10%;
+            height: 90%;
+            background:
+                radial-gradient(ellipse 60% 70% at 50% 30%,
+                    rgba(220, 30, 60, 0.18) 0%,
+                    rgba(196, 30, 58, 0.08) 35%,
+                    transparent 70%);
+            filter: blur(12px);
+            opacity: 0.95;
+            z-index: 0;
+            pointer-events: none;
+            animation: heroSpotlightDrift 14s ease-in-out infinite alternate;
+        }
+        .hero::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 18% 80%, rgba(184, 134, 11, 0.06) 0%, transparent 30%),
+                radial-gradient(circle at 82% 20%, rgba(196, 30, 58, 0.10) 0%, transparent 35%);
+            z-index: 0;
+            pointer-events: none;
+            mix-blend-mode: screen;
+        }
+        .hero-inner { position: relative; z-index: 2; }
+
+        @keyframes heroSpotlightDrift {
+            0%   { transform: translate(-3%, 0) scale(1); opacity: 0.85; }
+            50%  { transform: translate(2%, 1%) scale(1.04); opacity: 1; }
+            100% { transform: translate(-1%, -1%) scale(1.02); opacity: 0.9; }
+        }
+
+        /* Anillo orbital sutil alrededor del logo */
+        .hero-logo {
+            position: relative;
+            z-index: 2;
+        }
+        .hero-inner::before {
+            content: '';
+            position: absolute;
+            top: 60px;
+            left: 50%;
+            width: 260px;
+            height: 260px;
+            margin-left: -130px;
+            border-radius: 50%;
+            border: 1px solid rgba(196, 30, 58, 0.18);
+            box-shadow:
+                0 0 0 1px rgba(196, 30, 58, 0.06) inset,
+                0 0 40px rgba(196, 30, 58, 0.10);
+            opacity: 0.7;
+            pointer-events: none;
+            animation: orbitalRotate 28s linear infinite;
+        }
+        .hero-inner::after {
+            content: '';
+            position: absolute;
+            top: 30px;
+            left: 50%;
+            width: 320px;
+            height: 320px;
+            margin-left: -160px;
+            border-radius: 50%;
+            border: 1px dashed rgba(184, 134, 11, 0.12);
+            opacity: 0.5;
+            pointer-events: none;
+            animation: orbitalRotate 56s linear infinite reverse;
+        }
+        @keyframes orbitalRotate {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+        }
+        @media (max-width: 600px) {
+            .hero-inner::before, .hero-inner::after { display: none; }
+        }
+
+        /* CTA primario con beam animado */
+        .btn-hero-primary {
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
+        .btn-hero-primary::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(110deg,
+                transparent 0%,
+                transparent 35%,
+                rgba(255, 255, 255, 0.18) 50%,
+                transparent 65%,
+                transparent 100%);
+            transform: translateX(-100%);
+            transition: transform 0.7s cubic-bezier(0.65, 0, 0.35, 1);
+            pointer-events: none;
+        }
+        .btn-hero-primary:hover::before { transform: translateX(100%); }
+        .btn-hero-primary svg {
+            transition: transform 0.3s cubic-bezier(0.65, 0, 0.35, 1);
+        }
+        .btn-hero-primary:hover svg { transform: translateX(4px); }
+
+        /* Grano sutil sobre stats / cards (textura premium) */
+        .stat-item, .feature-card, .step, .pricing-card {
+            position: relative;
+        }
+
+        /* Stats — value con leve glow rojo-dorado */
+        .stat-value {
+            text-shadow:
+                0 0 20px rgba(220, 30, 60, 0.10),
+                0 0 40px rgba(184, 134, 11, 0.05);
+        }
+
+        /* Feature card — elevación + accent border en hover */
+        .feature-card {
+            transition:
+                background 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .feature-card::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--red), transparent);
+            opacity: 0;
+            transition: opacity 0.35s ease;
+            pointer-events: none;
+        }
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow:
+                0 12px 32px rgba(0, 0, 0, 0.4),
+                0 0 0 1px rgba(196, 30, 58, 0.25),
+                inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        }
+        .feature-card:hover::after { opacity: 1; }
+        .feature-card:hover .feature-icon {
+            background: rgba(196, 30, 58, 0.18);
+            border-color: rgba(196, 30, 58, 0.45);
+            box-shadow:
+                0 0 0 4px rgba(196, 30, 58, 0.06),
+                0 0 24px rgba(196, 30, 58, 0.18);
+        }
+        .feature-icon {
+            transition:
+                background 0.3s ease,
+                border-color 0.3s ease,
+                box-shadow 0.3s ease,
+                transform 0.3s ease;
+        }
+        .feature-card:hover .feature-icon { transform: scale(1.06) rotate(-2deg); }
+
+        /* Step — número grande resalta más en hover */
+        .step {
+            transition:
+                border-color 0.3s ease,
+                background 0.3s ease,
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+        .step:hover {
+            transform: translateY(-3px);
+            box-shadow:
+                0 16px 40px rgba(0, 0, 0, 0.4),
+                0 0 0 1px rgba(196, 30, 58, 0.20);
+        }
+        .step:hover .step-num {
+            background: linear-gradient(135deg, rgba(232, 36, 63, 0.65), rgba(184, 134, 11, 0.30));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .step-num {
+            transition: background 0.4s ease;
+        }
+
+        /* Pricing — borde animado en featured */
+        .pricing-card.featured {
+            position: relative;
+            overflow: hidden;
+        }
+        .pricing-card.featured::after {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: inherit;
+            padding: 1px;
+            background: conic-gradient(
+                from 0deg,
+                transparent 0deg,
+                rgba(196, 30, 58, 0.6) 60deg,
+                rgba(184, 134, 11, 0.5) 120deg,
+                transparent 180deg,
+                transparent 360deg);
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor;
+                    mask-composite: exclude;
+            opacity: 0;
+            animation: featuredBorder 6s linear infinite;
+            transition: opacity 0.4s ease;
+            pointer-events: none;
+        }
+        .pricing-card.featured:hover::after { opacity: 1; }
+        @keyframes featuredBorder {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+        }
+
+        /* Pricing CTA — micro-bounce */
+        .btn-pricing {
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-pricing::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%),
+                rgba(255, 255, 255, 0.12) 0%, transparent 50%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        .btn-pricing:hover::before { opacity: 1; }
+
+        /* CTA section — glow más rico */
+        .cta-inner {
+            box-shadow:
+                0 0 0 1px rgba(196, 30, 58, 0.18) inset,
+                0 30px 60px rgba(0, 0, 0, 0.40),
+                0 0 80px rgba(196, 30, 58, 0.08);
+        }
+        .cta-inner::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 60% 50% at 50% 110%,
+                    rgba(196, 30, 58, 0.18) 0%, transparent 60%),
+                radial-gradient(ellipse 40% 30% at 50% -10%,
+                    rgba(184, 134, 11, 0.10) 0%, transparent 60%);
+            opacity: 0.8;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .cta-inner > * { position: relative; z-index: 1; }
+
+        /* Navbar — añadir leve elevación al hacer scroll */
+        .navbar.scrolled {
+            background: rgba(8, 5, 8, 0.95);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+        .navbar { transition: background 0.3s ease, box-shadow 0.3s ease; }
+
+        /* Footer — leve accent */
+        .footer { position: relative; }
+        .footer::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent,
+                rgba(196, 30, 58, 0.5),
+                rgba(184, 134, 11, 0.3),
+                transparent);
+        }
+
+        /* Selección de texto */
+        ::selection {
+            background: rgba(196, 30, 58, 0.35);
+            color: #fff;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: var(--bg0); }
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, var(--red-dim), var(--red));
+            border-radius: 10px;
+            border: 2px solid var(--bg0);
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(180deg, var(--red), var(--red-bright));
+        }
+
+        /* Reduce motion */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -977,6 +1288,67 @@
                 if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
             });
         });
+
+        // ── Polish layer · interacciones premium ─────────────────
+        // Navbar — clase scrolled tras 12px
+        const _nav = document.querySelector('.navbar');
+        const _onScroll = () => {
+            if (!_nav) return;
+            if (window.scrollY > 12) _nav.classList.add('scrolled');
+            else _nav.classList.remove('scrolled');
+        };
+        window.addEventListener('scroll', _onScroll, { passive: true });
+        _onScroll();
+
+        // Mouse-tracking sutil en feature cards (efecto tilt + glow)
+        const _isFinePointer = window.matchMedia('(pointer: fine)').matches;
+        const _reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (_isFinePointer && !_reduceMotion) {
+            document.querySelectorAll('.feature-card, .pricing-card, .step').forEach(card => {
+                card.addEventListener('mousemove', (e) => {
+                    const r = card.getBoundingClientRect();
+                    const x = ((e.clientX - r.left) / r.width) * 100;
+                    const y = ((e.clientY - r.top) / r.height) * 100;
+                    card.style.setProperty('--mx', x + '%');
+                    card.style.setProperty('--my', y + '%');
+                    const tx = (x - 50) * 0.06;
+                    const ty = (y - 50) * 0.06;
+                    card.style.transform = `translateY(-3px) rotateX(${-ty}deg) rotateY(${tx}deg)`;
+                });
+                card.addEventListener('mouseleave', () => {
+                    card.style.transform = '';
+                });
+            });
+        }
+
+        // Contador animado de stats (cuando entran en viewport)
+        const _statObserver = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                if (!entry.isIntersecting) return;
+                const el = entry.target;
+                const txt = (el.textContent || '').trim();
+                const m = txt.match(/^([+\-]?)(\d+)([%a-z]*)$/i);
+                if (m) {
+                    const sign = m[1] || '';
+                    const target = parseInt(m[2], 10);
+                    const suffix = m[3] || '';
+                    let cur = 0;
+                    const start = performance.now();
+                    const dur = 1200;
+                    const tick = (now) => {
+                        const t = Math.min(1, (now - start) / dur);
+                        const eased = 1 - Math.pow(1 - t, 3);
+                        cur = Math.round(target * eased);
+                        el.textContent = sign + cur + suffix;
+                        if (t < 1) requestAnimationFrame(tick);
+                        else el.textContent = txt;
+                    };
+                    requestAnimationFrame(tick);
+                }
+                _statObserver.unobserve(el);
+            });
+        }, { threshold: 0.4 });
+        document.querySelectorAll('.stat-value').forEach(el => _statObserver.observe(el));
     </script>
 </body>
 </html>
