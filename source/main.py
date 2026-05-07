@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.26"
+SCANNER_VERSION = "1.6.27"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -13409,10 +13409,13 @@ class ArgusApp:
 
                 xray_textures = []
                 try:
-                    for target in XRAY_TARGETS | ORE_NAMES:
+                    # Solo analizar texturas de bloques sólidos (stone/dirt/etc.) — en xray
+                    # ESTAS se vuelven transparentes para ver a través. Las texturas de ores
+                    # permanecen opacas en packs xray (son el objetivo visible), no las chequeamos.
+                    for target in XRAY_TARGETS:
                         candidate_paths = [
                             f'assets/minecraft/textures/block/{target}.png',
-                            f'assets/minecraft/textures/blocks/{target}.png',  # older format
+                            f'assets/minecraft/textures/blocks/{target}.png',
                         ]
                         for cp in candidate_paths:
                             if cp in entries:
@@ -13421,8 +13424,9 @@ class ArgusApp:
                                     if not _png_has_alpha(png_data):
                                         break
                                     avg_alpha = _png_avg_alpha(png_data)
-                                    # Threshold: avg alpha < 200/255 = ~78% opaque → transparent
-                                    if avg_alpha < 200:
+                                    # Umbral estricto: solo alpha < 80/255 (~31%) = realmente transparente.
+                                    # Packs PvP legítimos usan efectos de alpha artísticos > 80.
+                                    if avg_alpha < 80:
                                         xray_textures.append(f'{target} (alpha={avg_alpha:.0f}/255)')
                                 except Exception:
                                     pass
@@ -13438,14 +13442,14 @@ class ArgusApp:
                         'archivo': rp_name,
                         'tipo': 'ghost_client_config',
                         'categoria': 'XRAY',
-                        'alerta': 'CRITICAL' if any('ore' in t for t in xray_textures) else 'SOSPECHOSO',
-                        'confidence': 0.85,
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.90,
                         'detected_patterns': [f'xray_texture:{t}' for t in xray_textures[:6]],
                         'explicacion': (
-                            f'El resourcepack "{rp_name}" tiene {len(xray_textures)} textura(s) con '
-                            f'transparencia anormal: {", ".join(xray_textures[:3])}. '
-                            'Los packs Xray hacen transparentes las texturas de roca/tierra para '
-                            'que los minerales sean visibles a través de las paredes.'
+                            f'El resourcepack "{rp_name}" tiene {len(xray_textures)} textura(s) de bloques '
+                            f'sólidos con transparencia extrema: {", ".join(xray_textures[:3])}. '
+                            'Los packs Xray hacen casi invisibles las texturas de piedra/tierra '
+                            'para que los minerales sean visibles a través de las paredes.'
                         ),
                     })
         except Exception as e:
