@@ -3713,6 +3713,70 @@ def submit_scan_results(scan_id):
         return jsonify({'error': f'Error almacenando resultados: {str(e)}'}), 500
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# ENDPOINT TEMPORAL DE DIAGNOSTICO — sin login, devuelve resumen del scan.
+# Solo expone metadata + count (NO el contenido completo) para no filtrar
+# datos sensibles. Permite verificar si el backend ve los resultados o no.
+# Eliminar cuando el bug este resuelto.
+# ──────────────────────────────────────────────────────────────────────────
+@app.route('/api/debug/scan/<int:scan_id>', methods=['GET'])
+def debug_scan_summary(scan_id):
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT id, status, total_files_scanned, issues_found, "
+                f"started_at, completed_at, machine_name, minecraft_username "
+                f"FROM scans WHERE id = {_PH}", (scan_id,))
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'found': False, 'scan_id': scan_id}), 404
+
+            scan_meta = {
+                'id': _row_get(row, 0, 'id'),
+                'status': _row_get(row, 1, 'status'),
+                'total_files_scanned': _row_get(row, 2, 'total_files_scanned'),
+                'issues_found_col': _row_get(row, 3, 'issues_found'),
+                'started_at': str(_row_get(row, 4, 'started_at') or ''),
+                'completed_at': str(_row_get(row, 5, 'completed_at') or ''),
+                'machine_name': _row_get(row, 6, 'machine_name'),
+                'minecraft_username': _row_get(row, 7, 'minecraft_username'),
+            }
+
+            cursor.execute(
+                f"SELECT COUNT(*) as c FROM scan_results WHERE scan_id = {_PH}",
+                (scan_id,))
+            cnt = _row_get(cursor.fetchone(), 0, 'c') or 0
+
+            cursor.execute(
+                f"SELECT alert_level, issue_type, issue_name "
+                f"FROM scan_results WHERE scan_id = {_PH} "
+                f"ORDER BY id DESC LIMIT 10", (scan_id,))
+            sample = []
+            for r in cursor.fetchall():
+                sample.append({
+                    'alert_level': _row_get(r, 0, 'alert_level'),
+                    'issue_type': _row_get(r, 1, 'issue_type'),
+                    'issue_name': (_row_get(r, 2, 'issue_name') or '')[:60],
+                })
+
+            return jsonify({
+                'found': True,
+                'scan': scan_meta,
+                'scan_results_count_in_db': cnt,
+                'sample_first_10': sample,
+                'plugin_schema_ready': bool(globals().get('_PLUGIN_SCHEMA_READY')),
+                'php_marker': _PH,
+                'argus_version': _ARGUS_VERSION,
+            }), 200
+    except Exception as e:
+        import traceback as _tb
+        return jsonify({
+            'error': str(e),
+            'type': type(e).__name__,
+            'tb': _tb.format_exc()[:2000],
+        }), 500
+
+
 @app.route('/api/scans', methods=['GET'])
 @login_required
 def list_scans():
