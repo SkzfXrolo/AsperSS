@@ -1,0 +1,85 @@
+# ============================================================
+#  Argus MC — Plugin de Screen Share
+#  https://argusprojects.com
+# ============================================================
+#
+# Como obtener tu API key:
+#   1. Entra al panel staff (https://asperss.onrender.com/panel)
+#   2. Si eres admin de empresa, ve a "Plugin keys" y crea una nueva.
+#   3. La key SE MUESTRA UNA SOLA VEZ. Guardala aqui inmediatamente.
+#   4. Recarga el plugin con  /argus reload
+#
+# Si necesitas otra clave porque perdiste la anterior, revoca la
+# vieja desde el panel y crea otra. Nunca compartas esta clave.
+
+api:
+  # URL base de tu instancia de Argus. Por defecto la oficial.
+  base_url: "https://asperss.onrender.com"
+
+  # Tu API key (la que recibiste al crearla en el panel).
+  # IMPORTANTE: pega la clave completa con el prefijo `argus_pk_`.
+  key: "REEMPLAZA_AQUI_TU_API_KEY"
+
+  # Timeout en segundos para las llamadas HTTP.
+  timeout_seconds: 12
+
+# ── Comportamiento del comando /ss ────────────────────────────
+ss:
+  # Si true, el target tambien recibe el codigo y la URL en chat
+  # privado. Si false, solo el staff que ejecuto /ss lo ve.
+  notify_target: true
+
+  # Tiempo (en minutos) que el plugin recordara al staff en
+  # broadcast/log que hay un SS pendiente para target X. Solo
+  # afecta al log local; el token expira segun lo defina la web.
+  remind_window_minutes: 30
+
+  # Si true, los anuncios "X esta haciendo SS a Y" se envian a
+  # todos los staff con el permiso 'argus.ss.notify'.
+  broadcast_to_staff: true
+
+  # Mensaje opcional al ejecutar /ss <player> sin razon — pide razon.
+  require_reason: false
+
+  # Numero minimo de chars de la razon cuando se exige.
+  min_reason_length: 4
+
+# ── Mensajes (puedes traducir libremente) ─────────────────────
+messages:
+  prefix: "&8[&6Argus&8]&r "
+
+  no_permission: "&cNo tienes permiso para usar este comando."
+  player_not_found: "&cNo se encontro al jugador &f{player}&c en el servidor."
+  player_is_bypassed: "&cEse jugador esta exento de Screen Share (permiso argus.ss.bypass)."
+  cannot_target_self: "&cNo puedes hacerte SS a ti mismo."
+  reason_too_short: "&cLa razon es obligatoria y debe tener al menos {min} caracteres."
+  api_misconfigured: "&cEl plugin no esta configurado. Avisa a un admin (config.yml > api.key)."
+  api_error: "&cError contactando a Argus: &f{error}&c. Reintenta en unos segundos."
+
+  ss_issued_staff: |
+    &7&m──────────────────────────────────────────&r
+    &6&l[ ARGUS SS ]&r &7Codigo emitido para &e{target}&7:
+    &fCodigo: &e&l{code}    &7Expira en: &c30 min
+    &7Descarga: &b{download}
+    &7Si el target no descarga en 30 min, vuelve a ejecutar /ss.
+    &7&m──────────────────────────────────────────&r
+  ss_issued_target: |
+    &7&m──────────────────────────────────────────&r
+    &6&l[ ARGUS SS ]&r &7El staff &e{staff}&7 te pidio un Screen Share.
+    &7Razon: &f{reason}
+    &7&m──────────────────────────────────────────&r
+    &fDescarga &eArgusScanner.exe&f desde:
+    &b{download}
+    &fIngresa este codigo cuando lo abras:
+    &e&l{code}    &7(expira en 30 min, 1 solo uso)
+    &7&m──────────────────────────────────────────&r
+  ss_broadcast_staff: "&8[&6Argus&8] &e{staff} &7esta haciendo SS a &e{target}&7. Razon: &f{reason}"
+
+  argus_reload_ok: "&aConfig recargada correctamente."
+  argus_reload_fail: "&cError recargando config: &f{error}"
+  argus_info: |
+    &6&lArgus MC &fv{version} &8| &7conectado a:
+    &7Endpoint: &f{endpoint}
+    &7Estado:   {status}
+    &7Empresa:  &f{company}
+    &7Quota:    &e{used}/{quota} &7emisiones hoy.

@@ -29,7 +29,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-produ
 CORS(app)
 
 # Inicializar base de datos de autenticación al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.31'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
+_ARGUS_VERSION = '1.6.32'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
 # URL de invitacion permanente al Discord oficial. Se inyecta en todos los
 # templates como `discord_invite` via @app.context_processor (ver mas abajo).
@@ -1970,6 +1970,374 @@ def create_token():
         print(traceback.format_exc())
         return jsonify({'success': False, 'error': f'Error al crear token: {str(e)}'}), 500
 
+
+# ════════════════════════════════════════════════════════════════════════════
+#  PLUGIN KEYS — sistema multi-tenant para servidores Minecraft
+#  -----------------------------------------------------------------
+#  Cada empresa puede emitir N "plugin keys" (una por servidor MC). El plugin
+#  Java que va dentro del server las usa para llamar a /api/plugin/issue-token
+#  cuando el staff ejecuta /ss <player>. El backend genera un token de scan
+#  marcado con `minecraft_staff` (quien ejecuto /ss) y `plugin_key_id` para
+#  trackeo, y lo devuelve al plugin.
+#
+#  Compatibilidad: NO toca scan_tokens existentes; solo agrega columnas
+#  nullable mediante ALTER TABLE IF NOT EXISTS.
+# ════════════════════════════════════════════════════════════════════════════
+
+def _ensure_plugin_keys_schema():
+    """Crea/migra las tablas necesarias para el sistema de plugin keys.
+    Idempotente: se puede llamar muchas veces sin efectos secundarios."""
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS company_plugin_keys (
+                    id SERIAL PRIMARY KEY,
+                    company_id INTEGER NOT NULL,
+                    api_key VARCHAR(96) UNIQUE NOT NULL,
+                    label VARCHAR(160),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_by VARCHAR(255),
+                    last_used_at TIMESTAMP,
+                    last_used_ip VARCHAR(64),
+                    is_active BOOLEAN DEFAULT TRUE,
+                    daily_quota INTEGER DEFAULT 200,
+                    used_today INTEGER DEFAULT 0,
+                    quota_reset_at DATE
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_cpk_api_key ON company_plugin_keys(api_key)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_cpk_company ON company_plugin_keys(company_id)")
+
+            # Columnas adicionales en scan_tokens para tracking del plugin MC
+            cursor.execute("ALTER TABLE scan_tokens ADD COLUMN IF NOT EXISTS plugin_key_id INTEGER")
+            cursor.execute("ALTER TABLE scan_tokens ADD COLUMN IF NOT EXISTS minecraft_staff VARCHAR(160)")
+            cursor.execute("ALTER TABLE scan_tokens ADD COLUMN IF NOT EXISTS minecraft_target VARCHAR(160)")
+            cursor.execute("ALTER TABLE scan_tokens ADD COLUMN IF NOT EXISTS source VARCHAR(32) DEFAULT 'web'")
+    except Exception as e:
+        print(f"[plugin_keys] error en _ensure_plugin_keys_schema: {e}")
+
+
+# Auto-migracion al primer request a algun endpoint /api/plugin/*
+_PLUGIN_SCHEMA_READY = False
+
+def _plugin_schema_guard():
+    global _PLUGIN_SCHEMA_READY
+    if not _PLUGIN_SCHEMA_READY:
+        _ensure_plugin_keys_schema()
+        _PLUGIN_SCHEMA_READY = True
+
+
+def _resolve_company_id_for_user(user):
+    """Devuelve el company_id del usuario o None si no aplica."""
+    if not user:
+        return None
+    return user.get('company_id') or None
+
+
+@app.route('/api/admin/plugin-keys', methods=['GET'])
+@login_required
+def api_list_plugin_keys():
+    """Lista las plugin keys del usuario.
+    - Owner / Admin global: ve TODAS las keys de todas las empresas.
+    - Admin de empresa:     ve solo las de su empresa.
+    - Usuario normal:       no tiene acceso (403)."""
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+
+        roles = user.get('roles') or []
+        if isinstance(roles, str):
+            try: roles = json.loads(roles)
+            except Exception: roles = [roles]
+        roles_lower = {str(r).lower() for r in roles}
+        is_global_admin = bool(roles_lower & {'admin', 'owner', 'super_admin'})
+        company_id = _resolve_company_id_for_user(user)
+
+        if not is_global_admin and not (company_id and ('company_admin' in roles_lower)):
+            return jsonify({'success': False, 'error': 'No tienes permisos para listar plugin keys'}), 403
+
+        with get_api_db_cursor() as cursor:
+            if is_global_admin:
+                cursor.execute(
+                    "SELECT id, company_id, label, created_at, created_by, last_used_at, "
+                    "last_used_ip, is_active, daily_quota, used_today, "
+                    "SUBSTRING(api_key, 1, 8) || '...' AS api_key_preview "
+                    "FROM company_plugin_keys ORDER BY created_at DESC"
+                )
+            else:
+                cursor.execute(
+                    f"SELECT id, company_id, label, created_at, created_by, last_used_at, "
+                    f"last_used_ip, is_active, daily_quota, used_today, "
+                    f"SUBSTRING(api_key, 1, 8) || '...' AS api_key_preview "
+                    f"FROM company_plugin_keys WHERE company_id = {_PH} ORDER BY created_at DESC",
+                    (company_id,)
+                )
+            rows = cursor.fetchall()
+
+        keys = []
+        for r in rows:
+            d = dict(r) if not isinstance(r, dict) else r
+            for k, v in list(d.items()):
+                if hasattr(v, 'isoformat'):
+                    d[k] = v.isoformat()
+            keys.append(d)
+        return jsonify({'success': True, 'keys': keys}), 200
+    except Exception as e:
+        print(f"ERROR api_list_plugin_keys: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/plugin-keys', methods=['POST'])
+@login_required
+def api_create_plugin_key():
+    """Crea una nueva plugin key. Devuelve la key COMPLETA una sola vez.
+    Body: {"label": "Server Hispano", "company_id": 1, "daily_quota": 300}"""
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+
+        roles = user.get('roles') or []
+        if isinstance(roles, str):
+            try: roles = json.loads(roles)
+            except Exception: roles = [roles]
+        roles_lower = {str(r).lower() for r in roles}
+        is_global_admin = bool(roles_lower & {'admin', 'owner', 'super_admin'})
+
+        body = request.get_json(silent=True) or {}
+        label = (body.get('label') or '').strip()[:160]
+        daily_quota = int(body.get('daily_quota') or 200)
+        target_company_id = body.get('company_id')
+
+        if is_global_admin:
+            if not target_company_id:
+                return jsonify({'success': False, 'error': 'company_id requerido para admin global'}), 400
+        else:
+            if 'company_admin' not in roles_lower:
+                return jsonify({'success': False, 'error': 'No tienes permisos para crear plugin keys'}), 403
+            target_company_id = _resolve_company_id_for_user(user)
+            if not target_company_id:
+                return jsonify({'success': False, 'error': 'Tu cuenta no tiene empresa asignada'}), 400
+
+        # API key: prefijo `argus_pk_` + 56 chars urlsafe (~ 42 bytes de entropia)
+        api_key = 'argus_pk_' + secrets.token_urlsafe(42)
+        with get_api_db_cursor() as cursor:
+            new_id = _insert_id(
+                cursor,
+                f"INSERT INTO company_plugin_keys (company_id, api_key, label, created_by, daily_quota) "
+                f"VALUES ({_PH}, {_PH}, {_PH}, {_PH}, {_PH})",
+                (target_company_id, api_key, label or None, user.get('username'), daily_quota)
+            )
+
+        return jsonify({
+            'success': True,
+            'key_id': new_id,
+            'api_key': api_key,            # FULL key — solo se muestra esta vez
+            'label': label,
+            'company_id': target_company_id,
+            'daily_quota': daily_quota,
+            'usage_note': 'Guarda esta API key, NO se mostrara de nuevo. Configurala en config.yml del plugin Minecraft.',
+        }), 201
+    except Exception as e:
+        print(f"ERROR api_create_plugin_key: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/plugin-keys/<int:key_id>', methods=['DELETE'])
+@login_required
+def api_delete_plugin_key(key_id):
+    """Revoca permanentemente una plugin key."""
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+
+        roles = user.get('roles') or []
+        if isinstance(roles, str):
+            try: roles = json.loads(roles)
+            except Exception: roles = [roles]
+        roles_lower = {str(r).lower() for r in roles}
+        is_global_admin = bool(roles_lower & {'admin', 'owner', 'super_admin'})
+        company_id = _resolve_company_id_for_user(user)
+
+        with get_api_db_cursor() as cursor:
+            cursor.execute(f"SELECT company_id FROM company_plugin_keys WHERE id = {_PH}", (key_id,))
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'success': False, 'error': 'Key no encontrada'}), 404
+
+            row_company = dict(row).get('company_id') if not isinstance(row, dict) else row.get('company_id')
+            if not is_global_admin:
+                if 'company_admin' not in roles_lower or row_company != company_id:
+                    return jsonify({'success': False, 'error': 'No puedes eliminar esta key'}), 403
+
+            cursor.execute(f"DELETE FROM company_plugin_keys WHERE id = {_PH}", (key_id,))
+
+        return jsonify({'success': True, 'deleted': key_id}), 200
+    except Exception as e:
+        print(f"ERROR api_delete_plugin_key: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/plugin/issue-token', methods=['POST'])
+def api_plugin_issue_token():
+    """Endpoint llamado por el plugin Minecraft cuando un staff ejecuta /ss.
+    Auth: header `X-Argus-Plugin-Key`.
+    Body: {"staff": "<staff_mc_name>", "target": "<player_mc_name>", "reason": "..."}.
+    Genera un short_code de 6 chars, 1 uso, 30 min, marcado con minecraft_staff.
+
+    Multi-tenant: cada empresa tiene sus keys; los tokens emitidos por una key
+    quedan asociados a su empresa via `created_by` y `plugin_key_id`."""
+    _plugin_schema_guard()
+    try:
+        api_key = (
+            request.headers.get('X-Argus-Plugin-Key')
+            or request.headers.get('Authorization', '').replace('Bearer ', '').strip()
+        )
+        if not api_key:
+            return jsonify({'success': False, 'error': 'Falta header X-Argus-Plugin-Key'}), 401
+
+        # Validar key y rate limit
+        client_ip = request.headers.get('CF-Connecting-IP') or request.headers.get('X-Forwarded-For', '').split(',')[0].strip() or request.remote_addr
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT id, company_id, label, is_active, daily_quota, used_today, quota_reset_at "
+                f"FROM company_plugin_keys WHERE api_key = {_PH}",
+                (api_key,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'success': False, 'error': 'API key invalida'}), 401
+            row = dict(row) if not isinstance(row, dict) else row
+            if not row.get('is_active'):
+                return jsonify({'success': False, 'error': 'API key revocada'}), 403
+
+            # Reset diario de quota
+            today = datetime.date.today()
+            quota_reset_at = row.get('quota_reset_at')
+            if quota_reset_at != today:
+                cursor.execute(
+                    f"UPDATE company_plugin_keys SET used_today = 0, quota_reset_at = {_PH} WHERE id = {_PH}",
+                    (today, row['id'])
+                )
+                row['used_today'] = 0
+
+            if (row.get('used_today') or 0) >= (row.get('daily_quota') or 200):
+                return jsonify({
+                    'success': False,
+                    'error': 'Quota diaria excedida',
+                    'daily_quota': row.get('daily_quota'),
+                }), 429
+
+        body = request.get_json(silent=True) or {}
+        staff = (body.get('staff') or '').strip()[:120]
+        target = (body.get('target') or '').strip()[:120]
+        reason = (body.get('reason') or '').strip()[:500]
+        if not staff:
+            return jsonify({'success': False, 'error': 'Falta staff (nombre del staff que ejecuto /ss)'}), 400
+
+        # Generacion del short_code (mismo charset y politica que el endpoint web)
+        _CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+        scan_token = secrets.token_urlsafe(32)
+        expires_at = (datetime.datetime.now() + datetime.timedelta(minutes=30)).isoformat()
+        max_uses = 1
+
+        # short_code unico
+        short_code = ''
+        with get_api_db_cursor() as cursor:
+            for _ in range(20):
+                short_code = ''.join(secrets.choice(_CODE_CHARS) for _ in range(6))
+                cursor.execute(f'SELECT 1 FROM scan_tokens WHERE short_code = {_PH}', (short_code,))
+                if not cursor.fetchone():
+                    break
+
+        created_by_label = f"mc:{staff}"
+        if row.get('label'):
+            created_by_label += f"@{row['label']}"
+
+        with get_api_db_cursor() as cursor:
+            token_id = _insert_id(
+                cursor,
+                f"INSERT INTO scan_tokens (token, expires_at, max_uses, created_by, short_code, "
+                f"plugin_key_id, minecraft_staff, minecraft_target, source, description) "
+                f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})",
+                (
+                    scan_token, expires_at, max_uses, created_by_label, short_code,
+                    row['id'], staff, target or None,
+                    'minecraft_plugin',
+                    f"reason: {reason}" if reason else None
+                )
+            )
+            # Bump usage
+            cursor.execute(
+                f"UPDATE company_plugin_keys SET used_today = used_today + 1, "
+                f"last_used_at = CURRENT_TIMESTAMP, last_used_ip = {_PH} WHERE id = {_PH}",
+                (client_ip, row['id'])
+            )
+
+        base_url = os.environ.get('RENDER_EXTERNAL_URL', request.host_url).rstrip('/')
+        return jsonify({
+            'success': True,
+            'short_code': short_code,
+            'token': scan_token,        # full token (el plugin normalmente solo usa short_code)
+            'token_id': token_id,
+            'expires_at': expires_at,
+            'expires_in_seconds': 30 * 60,
+            'max_uses': max_uses,
+            'staff': staff,
+            'target': target or None,
+            'download_url': f"{base_url}/descargar/exe",
+            'download_page_url': f"{base_url}/descargar",
+            'company_id': row.get('company_id'),
+            'remaining_quota_today': max(0, (row.get('daily_quota') or 200) - (row.get('used_today') or 0) - 1),
+        }), 201
+
+    except Exception as e:
+        print(f"ERROR api_plugin_issue_token: {type(e).__name__}: {e}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'Error interno: {str(e)}'}), 500
+
+
+@app.route('/api/plugin/health', methods=['GET'])
+def api_plugin_health():
+    """Health check para que el plugin valide la conectividad y la key."""
+    _plugin_schema_guard()
+    api_key = (
+        request.headers.get('X-Argus-Plugin-Key')
+        or request.headers.get('Authorization', '').replace('Bearer ', '').strip()
+    )
+    if not api_key:
+        return jsonify({'success': True, 'status': 'ok', 'authenticated': False, 'argus_version': _ARGUS_VERSION}), 200
+
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT id, company_id, label, is_active, daily_quota, used_today "
+                f"FROM company_plugin_keys WHERE api_key = {_PH}",
+                (api_key,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'success': False, 'authenticated': False, 'error': 'API key invalida'}), 401
+            row = dict(row) if not isinstance(row, dict) else row
+            return jsonify({
+                'success': True,
+                'authenticated': True,
+                'status': 'active' if row.get('is_active') else 'revoked',
+                'company_id': row.get('company_id'),
+                'label': row.get('label'),
+                'daily_quota': row.get('daily_quota'),
+                'used_today': row.get('used_today'),
+                'argus_version': _ARGUS_VERSION,
+            }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/tokens/<int:token_id>', methods=['DELETE'])
 @login_required
 def delete_token(token_id):
@@ -2183,7 +2551,7 @@ def debug_last_scan():
 
 
 # Current released scanner version — update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.6.31"
+CURRENT_SCANNER_VERSION = "1.6.32"
 
 @app.route('/sw.js')
 def service_worker():
@@ -4522,12 +4890,63 @@ def download_with_token(token):
         print(traceback.format_exc())
         return jsonify({'error': f'Error al procesar descarga: {str(e)}'}), 500
 
+# Cache de metadatos del .exe (tamano + sha256). Se invalida si mtime cambia.
+_EXE_META_CACHE = {'mtime': None, 'data': None}
+
+def _get_exe_metadata():
+    """Devuelve dict con {size_mb, size_bytes, sha256, mtime, exists, path}.
+    Cachea el SHA-256 entre requests porque calcularlo es caro.
+    Si el archivo no existe devuelve un dict 'best-effort' con exists=False."""
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidates = [
+        os.path.join(project_root, 'dist', 'ArgusScanner.exe'),
+        os.path.join(project_root, 'downloads', 'ArgusScanner.exe'),
+    ]
+    exe_path = next((p for p in candidates if os.path.exists(p)), None)
+    if not exe_path:
+        return {'exists': False, 'size_mb': None, 'size_bytes': 0, 'sha256': None, 'mtime': None, 'path': None}
+
+    mtime = os.path.getmtime(exe_path)
+    if _EXE_META_CACHE['mtime'] == mtime and _EXE_META_CACHE['data'] is not None:
+        return _EXE_META_CACHE['data']
+
+    try:
+        import hashlib
+        size_bytes = os.path.getsize(exe_path)
+        h = hashlib.sha256()
+        with open(exe_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b''):
+                h.update(chunk)
+        sha256 = h.hexdigest()
+        data = {
+            'exists': True,
+            'size_bytes': size_bytes,
+            'size_mb': round(size_bytes / (1024 * 1024), 1),
+            'sha256': sha256,
+            'mtime': mtime,
+            'path': exe_path,
+        }
+        _EXE_META_CACHE['mtime'] = mtime
+        _EXE_META_CACHE['data'] = data
+        return data
+    except Exception as exc:
+        print(f"[descargar] error calculando metadata exe: {exc}")
+        return {'exists': True, 'size_mb': None, 'size_bytes': 0, 'sha256': None, 'mtime': mtime, 'path': exe_path}
+
+
 @app.route('/descargar')
 def descargar_page():
-    """Página pública de descarga de ArgusScanner."""
+    """Pagina publica de descarga de ArgusScanner."""
     base_url = os.environ.get('RENDER_EXTERNAL_URL', request.host_url).rstrip('/')
     exe_url = f"{base_url}/descargar/exe"
-    return render_template('descargar.html', exe_url=exe_url)
+    meta = _get_exe_metadata()
+    return render_template(
+        'descargar.html',
+        exe_url=exe_url,
+        exe_size_mb=meta.get('size_mb'),
+        exe_sha256=meta.get('sha256'),
+        exe_exists=meta.get('exists', False),
+    )
 
 
 @app.route('/descargar/exe')

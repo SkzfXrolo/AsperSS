@@ -3,165 +3,476 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Descargar Argus Scanner — ASPERS Projects</title>
+    <meta name="theme-color" content="#B87333">
+    <title>Descargar Argus Scanner v{{ argus_version }} — Argus Projects</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/logo.png') }}" type="image/png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <meta property="og:title" content="Descargar Argus Scanner v{{ argus_version }}">
+    <meta property="og:description" content="Anti-cheat de nueva generacion para Minecraft. Descarga gratuita, soporte 24/7 en Discord.">
+    <meta property="og:image" content="{{ url_for('static', filename='img/logo.png', _external=True) }}">
+    <meta property="og:type" content="website">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+        :root {
+            --bg0:        #080508;
+            --bg1:        #0E0805;
+            --bg2:        #15100A;
+            --bg3:        #1C150F;
+            --card:       rgba(22, 16, 10, 0.92);
+            --border:     rgba(184, 115, 51, 0.18);
+            --border-h:   rgba(212, 145, 90, 0.50);
+            --cobre:      #B87333;
+            --cobre-l:    #D4915A;
+            --cobre-glow: #E8A86F;
+            --cobre-d:    #6B3A1D;
+            --oro:        #B8860B;
+            --oro-l:      #D4A017;
+            --crema:      #EAD8C0;
+            --text-m:     #A89578;
+            --text-d:     #5A4A38;
+            --discord:    #5865F2;
+            --discord-l:  #7A85F5;
+        }
+
+        html { scroll-behavior: smooth; }
+
         body {
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            background: #080b14;
-            color: #e2e8f0;
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            background: var(--bg0);
+            color: var(--crema);
+            -webkit-font-smoothing: antialiased;
             min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
+            padding: 32px 20px 80px;
+            position: relative;
+            overflow-x: hidden;
         }
 
-        .card {
-            background: #0f1623;
-            border: 1px solid rgba(99,102,241,0.2);
-            border-radius: 20px;
-            padding: 48px 40px;
-            max-width: 480px;
+        /* Ambient cobre */
+        body::before {
+            content: '';
+            position: fixed; inset: 0; z-index: 0;
+            background:
+                radial-gradient(ellipse 80% 50% at 50% -10%, rgba(184,115,51,0.18) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 35% at 100% 100%, rgba(92,46,26,0.12) 0%, transparent 50%),
+                radial-gradient(ellipse 50% 35% at 0% 100%, rgba(184,115,51,0.08) 0%, transparent 50%);
+            pointer-events: none;
+        }
+        body::after {
+            content: '';
+            position: fixed; inset: 0; z-index: 0;
+            background-image:
+                linear-gradient(rgba(184,115,51,0.030) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(184,115,51,0.030) 1px, transparent 1px);
+            background-size: 64px 64px;
+            mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, black 30%, transparent 80%);
+            -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, black 30%, transparent 80%);
+            pointer-events: none;
+        }
+
+        .wrap {
+            position: relative;
+            z-index: 1;
+            max-width: 720px;
+            margin: 0 auto;
+        }
+
+        /* ── Logo hero ─────────────────────────────────────── */
+        .hero-logo {
+            position: relative;
+            width: clamp(120px, 18vw, 160px);
+            height: clamp(120px, 18vw, 160px);
+            margin: 12px auto 28px;
+            display: block;
+        }
+        .hero-logo::before {
+            content: '';
+            position: absolute;
+            inset: -30%;
+            background: radial-gradient(circle at 50% 50%,
+                rgba(212,145,90,0.45) 0%,
+                rgba(184,115,51,0.18) 30%,
+                transparent 65%);
+            filter: blur(28px);
+            border-radius: 50%;
+            animation: heroPulse 4.5s ease-in-out infinite;
+            pointer-events: none;
+        }
+        .hero-logo img {
+            position: relative;
             width: 100%;
-            text-align: center;
-            box-shadow: 0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,102,241,0.08);
+            height: 100%;
+            object-fit: contain;
+            filter:
+                brightness(1.15) saturate(1.25)
+                drop-shadow(0 0 18px rgba(212,145,90,0.65))
+                drop-shadow(0 0 44px rgba(184,115,51,0.30));
+            animation: floatLogo 6s ease-in-out infinite;
+        }
+        @keyframes heroPulse {
+            0%, 100% { opacity: 0.75; transform: scale(1); }
+            50%      { opacity: 1; transform: scale(1.08); }
+        }
+        @keyframes floatLogo {
+            0%, 100% { transform: translateY(0); }
+            50%      { transform: translateY(-6px); }
         }
 
-        .logo {
-            width: 64px;
-            height: 64px;
-            background: linear-gradient(135deg, #6366f1, #8b5cf6);
-            border-radius: 16px;
-            display: flex;
+        /* ── Eyebrow ───────────────────────────────────────── */
+        .eyebrow {
+            display: inline-flex;
             align-items: center;
-            justify-content: center;
-            margin: 0 auto 24px;
-            font-size: 28px;
-        }
-
-        .brand {
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 3px;
-            color: #6366f1;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(212,145,90,0.45);
+            background: linear-gradient(135deg, rgba(184,115,51,0.18), rgba(184,115,51,0.04));
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.18em;
+            color: var(--cobre-glow);
             text-transform: uppercase;
-            margin-bottom: 10px;
+            margin: 0 auto 18px;
+            box-shadow: 0 4px 14px rgba(184,115,51,0.18);
+        }
+        .eyebrow .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--cobre-glow);
+            box-shadow: 0 0 10px var(--cobre-glow);
+            animation: blink 1.6s ease-in-out infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: 0.4; transform: scale(0.8); }
         }
 
+        /* ── Heading ───────────────────────────────────────── */
         h1 {
-            font-size: 26px;
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(36px, 6vw, 56px);
             font-weight: 800;
-            color: #f1f5f9;
-            margin-bottom: 10px;
-            line-height: 1.2;
+            line-height: 1.05;
+            letter-spacing: -0.02em;
+            text-align: center;
+            margin-bottom: 12px;
+        }
+        h1 .grad {
+            background: linear-gradient(135deg, #FFEFE0 0%, var(--crema) 30%, var(--cobre-l) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 32px rgba(212,145,90,0.22);
         }
 
         .subtitle {
-            font-size: 14px;
-            color: #64748b;
-            margin-bottom: 36px;
+            text-align: center;
+            color: var(--text-m);
+            font-size: 15px;
             line-height: 1.6;
+            max-width: 520px;
+            margin: 0 auto 36px;
         }
 
+        /* ── Release card ──────────────────────────────────── */
+        .release-card {
+            background: linear-gradient(160deg, rgba(40,28,18,0.92) 0%, rgba(22,16,10,0.96) 60%, rgba(15,11,7,0.98) 100%);
+            border: 1px solid rgba(212,145,90,0.30);
+            border-radius: 24px;
+            padding: 36px;
+            box-shadow:
+                0 32px 72px rgba(0,0,0,0.60),
+                0 0 0 1px rgba(212,145,90,0.10) inset,
+                0 0 60px rgba(184,115,51,0.10);
+            position: relative;
+            overflow: hidden;
+        }
+        .release-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--cobre-glow), var(--oro-l), var(--cobre-glow), transparent);
+            pointer-events: none;
+            animation: shimmer 5s ease-in-out infinite;
+        }
+        @keyframes shimmer {
+            0%, 100% { opacity: 0.55; }
+            50%      { opacity: 1; }
+        }
+        .release-card::after {
+            content: '';
+            position: absolute;
+            right: -30%;
+            bottom: -30%;
+            width: 60%;
+            height: 60%;
+            background: radial-gradient(circle, rgba(212,145,90,0.16) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        /* ── Version meta row ──────────────────────────────── */
+        .version-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 28px;
+            padding-bottom: 22px;
+            border-bottom: 1px solid rgba(184,115,51,0.18);
+            position: relative;
+            z-index: 1;
+        }
+        .version-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, rgba(212,145,90,0.22), rgba(184,115,51,0.08));
+            border: 1px solid rgba(212,145,90,0.40);
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 14px;
+            color: var(--cobre-glow);
+            box-shadow: 0 4px 12px rgba(184,115,51,0.16);
+        }
+        .version-tag .v-number { color: #FFEFE0; }
+        .version-tag::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: #6EE7B7;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #6EE7B7;
+            animation: blink 1.8s ease-in-out infinite;
+        }
+        .build-meta {
+            display: flex;
+            gap: 18px;
+            font-size: 12px;
+            color: var(--text-m);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .build-meta span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .build-meta .label { color: var(--text-d); }
+
+        /* ── Download primary ──────────────────────────────── */
         .download-btn {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 12px;
+            gap: 14px;
             width: 100%;
-            padding: 16px 24px;
-            background: linear-gradient(135deg, #6366f1, #8b5cf6);
-            color: #fff;
-            font-size: 16px;
+            padding: 22px 28px;
+            background: linear-gradient(135deg, #D4915A 0%, #B87333 45%, #8B4513 100%);
+            color: #FFFFFF;
+            font-family: 'Syne', sans-serif;
+            font-size: 18px;
             font-weight: 700;
-            border: none;
-            border-radius: 12px;
+            letter-spacing: 0.5px;
+            border: 1px solid rgba(232,168,111,0.55);
+            border-radius: 14px;
             cursor: pointer;
             text-decoration: none;
-            transition: opacity 0.15s, transform 0.15s;
+            text-shadow: 0 1px 0 rgba(92,46,26,0.30);
+            box-shadow:
+                0 14px 32px rgba(184,115,51,0.40),
+                inset 0 1px 0 rgba(255,235,210,0.30),
+                inset 0 -2px 0 rgba(92,46,26,0.30);
+            transition: transform 0.25s cubic-bezier(0.4,0,0.2,1), box-shadow 0.25s ease;
+            position: relative;
+            overflow: hidden;
             margin-bottom: 14px;
+            z-index: 1;
         }
-        .download-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        .download-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(110deg,
+                transparent 30%,
+                rgba(255,235,210,0.30) 50%,
+                transparent 70%);
+            transform: translateX(-100%);
+            transition: transform 0.7s cubic-bezier(0.4,0,0.2,1);
+            pointer-events: none;
+        }
+        .download-btn:hover {
+            transform: translateY(-2px);
+            background: linear-gradient(135deg, #E8A86F 0%, #D4915A 45%, #B87333 100%);
+            box-shadow:
+                0 20px 44px rgba(184,115,51,0.55),
+                0 0 0 1px rgba(232,168,111,0.65),
+                inset 0 1px 0 rgba(255,235,210,0.45),
+                inset 0 -2px 0 rgba(92,46,26,0.30);
+        }
+        .download-btn:hover::before { transform: translateX(100%); }
         .download-btn:active { transform: translateY(0); }
 
         .download-btn svg { flex-shrink: 0; }
 
+        /* ── File info row ─────────────────────────────────── */
         .file-info {
             display: flex;
-            align-items: center;
             justify-content: center;
-            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 14px;
             font-size: 12px;
-            color: #475569;
-            margin-bottom: 36px;
+            color: var(--text-m);
+            font-family: 'JetBrains Mono', monospace;
+            margin-bottom: 30px;
+            position: relative;
+            z-index: 1;
         }
-        .file-info span { color: #64748b; }
+        .file-info span { display: inline-flex; align-items: center; gap: 6px; }
+        .file-info .pin {
+            width: 4px; height: 4px;
+            background: var(--cobre); border-radius: 50%;
+            opacity: 0.5;
+        }
 
-        .steps {
-            background: rgba(99,102,241,0.06);
-            border: 1px solid rgba(99,102,241,0.15);
-            border-radius: 12px;
-            padding: 20px;
-            text-align: left;
-            margin-bottom: 28px;
-        }
+        /* ── Steps ─────────────────────────────────────────── */
         .steps-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'JetBrains Mono', monospace;
             font-size: 11px;
             font-weight: 700;
             letter-spacing: 1.5px;
-            color: #6366f1;
+            color: var(--cobre-glow);
             text-transform: uppercase;
-            margin-bottom: 14px;
+            margin-bottom: 18px;
+            position: relative;
+            z-index: 1;
+        }
+        .steps-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, rgba(212,145,90,0.40), transparent);
+        }
+
+        .steps {
+            margin-bottom: 28px;
+            position: relative;
+            z-index: 1;
         }
         .step {
             display: flex;
-            gap: 12px;
+            gap: 14px;
             align-items: flex-start;
-            margin-bottom: 12px;
-            font-size: 13px;
-            color: #94a3b8;
+            padding: 14px 16px;
+            border-radius: 12px;
+            background: linear-gradient(180deg, rgba(15,11,7,0.55), rgba(22,16,10,0.55));
+            border: 1px solid rgba(184,115,51,0.12);
+            margin-bottom: 10px;
+            font-size: 13.5px;
+            color: var(--text-m);
             line-height: 1.5;
+            transition: border-color 0.25s ease, transform 0.25s ease, background 0.25s ease;
         }
-        .step:last-child { margin-bottom: 0; }
+        .step:hover {
+            border-color: rgba(212,145,90,0.45);
+            background: linear-gradient(180deg, rgba(28,20,12,0.65), rgba(22,16,10,0.55));
+            transform: translateX(2px);
+        }
+        .step strong { color: var(--crema); font-weight: 600; }
         .step-num {
-            width: 22px;
-            height: 22px;
-            background: rgba(99,102,241,0.15);
-            border-radius: 6px;
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, rgba(212,145,90,0.30), rgba(184,115,51,0.10));
+            border: 1px solid rgba(212,145,90,0.40);
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 800;
-            color: #818cf8;
+            color: var(--cobre-glow);
+            font-family: 'JetBrains Mono', monospace;
             flex-shrink: 0;
-            margin-top: 1px;
+            box-shadow: inset 0 1px 0 rgba(232,168,111,0.20), 0 2px 6px rgba(0,0,0,0.30);
         }
 
+        /* ── Warning ───────────────────────────────────────── */
         .warning {
-            background: rgba(245,158,11,0.07);
-            border: 1px solid rgba(245,158,11,0.2);
-            border-radius: 10px;
-            padding: 12px 16px;
-            font-size: 12px;
-            color: #92400e;
-            color: #d97706;
+            background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(217,119,6,0.06));
+            border: 1px solid rgba(252,211,77,0.40);
+            border-radius: 12px;
+            padding: 14px 16px;
+            font-size: 13px;
+            color: #FCD34D;
             display: flex;
-            gap: 8px;
+            gap: 10px;
             align-items: flex-start;
             text-align: left;
+            line-height: 1.5;
+            margin-bottom: 22px;
+            position: relative;
+            z-index: 1;
         }
+        .warning strong { color: #FFFFFF; font-weight: 700; }
 
-        .footer {
-            margin-top: 32px;
+        /* ── SHA hash ──────────────────────────────────────── */
+        .hash-row {
+            background: linear-gradient(180deg, #0A0805, #0F0B07);
+            border: 1px solid rgba(184,115,51,0.22);
+            border-radius: 10px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'JetBrains Mono', monospace;
             font-size: 11px;
-            color: #334155;
+            color: var(--text-m);
+            margin-bottom: 22px;
+            position: relative;
+            z-index: 1;
+            box-shadow: inset 0 2px 6px rgba(0,0,0,0.45);
+        }
+        .hash-row .label {
+            color: var(--cobre-glow);
+            font-weight: 600;
+            letter-spacing: 0.6px;
+            flex-shrink: 0;
+        }
+        .hash-row .value {
+            flex: 1;
+            color: var(--crema);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            opacity: 0.85;
+        }
+        .hash-row button {
+            background: rgba(184,115,51,0.18);
+            border: 1px solid rgba(212,145,90,0.35);
+            color: var(--cobre-glow);
+            border-radius: 6px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 10px;
+            letter-spacing: 0.5px;
+            transition: all 0.2s ease;
+        }
+        .hash-row button:hover {
+            background: rgba(212,145,90,0.28);
+            color: #FFFFFF;
         }
 
-        /* Discord widgets (mismo lenguaje visual que index) */
+        /* ── Discord card ──────────────────────────────────── */
         .discord-card {
             margin-top: 22px;
             padding: 20px 22px;
@@ -169,18 +480,20 @@
             background:
                 radial-gradient(ellipse 100% 80% at 50% 0%, rgba(88,101,242,0.18) 0%, transparent 70%),
                 linear-gradient(180deg, rgba(20,18,30,0.85), rgba(15,13,22,0.92));
-            border: 1px solid rgba(88,101,242,0.30);
+            border: 1px solid rgba(88,101,242,0.32);
             color: #C9D0FF;
             text-align: left;
             display: flex;
             gap: 16px;
             align-items: center;
-            box-shadow: 0 10px 28px rgba(88,101,242,0.18);
+            box-shadow: 0 14px 32px rgba(88,101,242,0.22);
+            position: relative;
+            z-index: 1;
         }
         .discord-card svg.icon {
             width: 36px;
             height: 36px;
-            fill: #7A85F5;
+            fill: var(--discord-l);
             flex-shrink: 0;
         }
         .discord-card .text { flex: 1; }
@@ -192,7 +505,7 @@
             gap: 8px;
             padding: 10px 16px;
             border-radius: 10px;
-            background: linear-gradient(135deg, #5865F2 0%, #4752C4 100%);
+            background: linear-gradient(135deg, var(--discord) 0%, #4752C4 100%);
             color: #FFFFFF;
             font-size: 13px;
             font-weight: 700;
@@ -203,104 +516,200 @@
         }
         .discord-card a.go:hover {
             transform: translateY(-1px);
-            box-shadow: 0 10px 24px rgba(88,101,242,0.5);
+            box-shadow: 0 12px 28px rgba(88,101,242,0.55);
         }
         .discord-card a.go svg { width: 16px; height: 16px; fill: currentColor; }
 
         @media (max-width: 540px) {
             .discord-card { flex-direction: column; text-align: center; align-items: stretch; }
             .discord-card svg.icon { margin: 0 auto; }
+            .release-card { padding: 24px 20px; }
+            .version-row { flex-direction: column; align-items: flex-start; }
+            .build-meta { flex-direction: column; gap: 6px; }
         }
 
+        /* ── Footer ────────────────────────────────────────── */
+        .page-footer {
+            margin-top: 36px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-d);
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.4px;
+        }
+        .page-footer .links {
+            display: flex;
+            justify-content: center;
+            gap: 18px;
+            margin-top: 12px;
+        }
+        .page-footer a {
+            color: var(--cobre-glow);
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s ease;
+        }
+        .page-footer a:hover { color: #FFFFFF; }
+
+        /* ── FAB ───────────────────────────────────────────── */
         .discord-fab {
             position: fixed;
-            right: 20px;
-            bottom: 20px;
+            right: 22px;
+            bottom: 22px;
             z-index: 999;
             display: inline-flex;
             align-items: center;
             gap: 10px;
-            padding: 12px 16px 12px 14px;
+            padding: 12px 18px 12px 14px;
             border-radius: 999px;
-            background: linear-gradient(135deg, #5865F2 0%, #4752C4 100%);
+            background: linear-gradient(135deg, var(--discord) 0%, #4752C4 100%);
             color: #FFFFFF;
             font-size: 13px;
             font-weight: 700;
             text-decoration: none;
-            box-shadow: 0 10px 30px rgba(88,101,242,0.45);
+            box-shadow:
+                0 10px 30px rgba(88,101,242,0.45),
+                0 0 0 1px rgba(255,255,255,0.08) inset;
             transition: transform 0.25s ease, box-shadow 0.25s ease;
         }
-        .discord-fab:hover { transform: translateY(-2px) scale(1.03); }
-        .discord-fab svg { width: 20px; height: 20px; fill: currentColor; }
-        @media (max-width: 540px) {
-            .discord-fab span { display: none; }
+        .discord-fab:hover {
+            transform: translateY(-2px) scale(1.03);
+            box-shadow:
+                0 14px 38px rgba(88,101,242,0.6),
+                0 0 0 1px rgba(255,255,255,0.15) inset;
+        }
+        .discord-fab svg { width: 22px; height: 22px; fill: currentColor; }
+        @media (max-width: 540px) { .discord-fab span { display: none; } }
+
+        /* ── Reveal ────────────────────────────────────────── */
+        .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s ease; }
+        .reveal.visible { opacity: 1; transform: translateY(0); }
+
+        ::selection {
+            background: rgba(212,145,90,0.45);
+            color: #FFEFE0;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 10px; }
+        ::-webkit-scrollbar-track { background: var(--bg0); }
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, rgba(184,115,51,0.45), rgba(122,72,36,0.55));
+            border-radius: 999px;
+            border: 2px solid var(--bg0);
         }
     </style>
 </head>
 <body>
-    <div class="card">
-        <div class="logo">🛡️</div>
-        <div class="brand">ASPERS Projects</div>
-        <h1>Argus Scanner</h1>
-        <p class="subtitle">Herramienta de Screen Share para servidores de Minecraft.<br>Requiere código de acceso proporcionado por el staff.</p>
+    <div class="wrap">
 
-        <a href="{{ exe_url }}" class="download-btn" id="dl-btn">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M10 3v10M10 13l-3.5-3.5M10 13l3.5-3.5M3 17h14" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Descargar ArgusScanner.exe
-        </a>
-
-        <div class="file-info">
-            <span>ArgusScanner.exe</span>
-            <span>·</span>
-            <span>Windows 10 / 11</span>
-            <span>·</span>
-            <span>64-bit</span>
+        <div class="hero-logo reveal">
+            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Argus Projects">
         </div>
 
-        <div class="steps">
-            <div class="steps-title">Cómo usarlo</div>
-            <div class="step">
-                <div class="step-num">1</div>
-                <div>Descarga y ejecuta <strong style="color:#e2e8f0;">ArgusScanner.exe</strong> como administrador.</div>
-            </div>
-            <div class="step">
-                <div class="step-num">2</div>
-                <div>Ingresa el <strong style="color:#e2e8f0;">código de 6 caracteres</strong> que el staff te proporcionó.</div>
-            </div>
-            <div class="step">
-                <div class="step-num">3</div>
-                <div>Haz clic en <strong style="color:#e2e8f0;">Autenticar</strong> y espera a que el escaneo finalice.</div>
-            </div>
-            <div class="step">
-                <div class="step-num">4</div>
-                <div>El staff revisará los resultados en el panel. Mantén el programa abierto hasta que te indiquen.</div>
+        <div style="text-align:center;">
+            <div class="eyebrow reveal">
+                <span class="dot"></span>
+                ARGUS // SECURITY SCANNER
             </div>
         </div>
 
-        <div class="warning">
-            <span>⚠️</span>
-            <span>El código de acceso es de <strong>1 solo uso</strong> y expira a los <strong>30 minutos</strong>. Si no tienes un código, pídele uno al staff antes de descargar.</span>
-        </div>
+        <h1 class="reveal"><span class="grad">Descarga el<br>Argus Scanner</span></h1>
 
-        <div class="discord-card">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.952 5.672a17.45 17.45 0 0 0-4.349-1.341c-.158.286-.34.65-.502 1.024a16.222 16.222 0 0 0-4.846 0c-.146-.342-.34-.736-.524-1.078A17.45 17.45 0 0 0 5.31 5.66a18.27 18.27 0 0 0-2.967 12.2 17.59 17.59 0 0 0 5.336 2.69 13.6 13.6 0 0 0 1.143-1.85 11.31 11.31 0 0 1-1.79-.857c.151-.111.298-.227.44-.343a12.443 12.443 0 0 0 10.83 0c.142.116.289.232.434.341a11.32 11.32 0 0 1-1.794.86 13.62 13.62 0 0 0 1.142 1.852 17.65 17.65 0 0 0 5.42-2.7 18.196 18.196 0 0 0-2.973-12.226zM8.052 15.495c-.99 0-1.808-.918-1.808-2.045 0-1.128.81-2.046 1.808-2.046s1.808.92 1.808 2.046c0 1.128-.81 2.045-1.808 2.045zm7.896 0c-.99 0-1.81-.918-1.81-2.045 0-1.128.81-2.046 1.81-2.046.99 0 1.81.92 1.81 2.046 0 1.127-.812 2.045-1.81 2.045z"/></svg>
-            <div class="text">
-                <strong>¿Necesitas ayuda o un código de acceso?</strong>
-                <small>Soporte en vivo, novedades del scanner y comunidad anti-cheat 24/7.</small>
+        <p class="subtitle reveal">
+            Anti-cheat de nueva generación para Minecraft. Detección por IA evolutiva,
+            análisis profundo del sistema y veredictos en segundos.
+        </p>
+
+        <div class="release-card reveal">
+
+            <div class="version-row">
+                <div class="version-tag">
+                    <span>VERSION</span>
+                    <span class="v-number">v{{ argus_version }}</span>
+                </div>
+                <div class="build-meta">
+                    <span><span class="label">PLATFORM</span> WIN 10/11 x64</span>
+                    {% if exe_size_mb %}
+                    <span><span class="label">SIZE</span> {{ exe_size_mb }} MB</span>
+                    {% endif %}
+                    <span><span class="label">SIGNED</span> SHA-256</span>
+                </div>
             </div>
-            <a href="{{ discord_invite }}" class="go" target="_blank" rel="noopener">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.952 5.672a17.45 17.45 0 0 0-4.349-1.341c-.158.286-.34.65-.502 1.024a16.222 16.222 0 0 0-4.846 0c-.146-.342-.34-.736-.524-1.078A17.45 17.45 0 0 0 5.31 5.66a18.27 18.27 0 0 0-2.967 12.2 17.59 17.59 0 0 0 5.336 2.69 13.6 13.6 0 0 0 1.143-1.85 11.31 11.31 0 0 1-1.79-.857c.151-.111.298-.227.44-.343a12.443 12.443 0 0 0 10.83 0c.142.116.289.232.434.341a11.32 11.32 0 0 1-1.794.86 13.62 13.62 0 0 0 1.142 1.852 17.65 17.65 0 0 0 5.42-2.7 18.196 18.196 0 0 0-2.973-12.226zM8.052 15.495c-.99 0-1.808-.918-1.808-2.045 0-1.128.81-2.046 1.808-2.046s1.808.92 1.808 2.046c0 1.128-.81 2.045-1.808 2.045zm7.896 0c-.99 0-1.81-.918-1.81-2.045 0-1.128.81-2.046 1.81-2.046.99 0 1.81.92 1.81 2.046 0 1.127-.812 2.045-1.81 2.045z"/></svg>
-                Discord
+
+            <a href="{{ exe_url }}" class="download-btn" id="dl-btn">
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                    <path d="M11 3v11M11 14l-4-4M11 14l4-4M3 19h16" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>Descargar ArgusScanner.exe</span>
             </a>
-        </div>
-    </div>
 
-    <div class="footer">
-        ASPERS Projects · Argus Scanner · Uso exclusivo para staff autorizado
-        <br><br>
-        <a href="/panel" style="color:#6366f1;text-decoration:none;font-weight:600;">← Volver al panel</a>
+            <div class="file-info">
+                <span>ArgusScanner.exe</span>
+                <span class="pin"></span>
+                <span>Windows 10 / 11</span>
+                <span class="pin"></span>
+                <span>64-bit</span>
+                {% if exe_size_mb %}
+                <span class="pin"></span>
+                <span>{{ exe_size_mb }} MB</span>
+                {% endif %}
+            </div>
+
+            {% if exe_sha256 %}
+            <div class="hash-row">
+                <span class="label">SHA-256</span>
+                <span class="value" id="sha-value">{{ exe_sha256 }}</span>
+                <button type="button" onclick="copyHash()" id="copy-btn">COPIAR</button>
+            </div>
+            {% endif %}
+
+            <div class="steps-title">CÓMO USARLO</div>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div>Descarga y ejecuta <strong>ArgusScanner.exe</strong> como administrador.</div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div>Ingresa el <strong>código de 6 caracteres</strong> que tu staff te proporcionó.</div>
+                </div>
+                <div class="step">
+                    <div class="step-num">3</div>
+                    <div>Haz clic en <strong>Autenticar</strong> y deja al scanner trabajar; el análisis tarda menos de 60 segundos.</div>
+                </div>
+                <div class="step">
+                    <div class="step-num">4</div>
+                    <div>El staff revisará el veredicto en el panel. Mantén el programa abierto hasta que te indiquen.</div>
+                </div>
+            </div>
+
+            <div class="warning">
+                <span style="flex-shrink:0;">⚠</span>
+                <span>El código de acceso es de <strong>1 solo uso</strong> y expira a los <strong>30 minutos</strong>. Si no tienes uno, pídelo al staff de tu servidor o entra a nuestro Discord antes de descargar.</span>
+            </div>
+
+            <div class="discord-card">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.952 5.672a17.45 17.45 0 0 0-4.349-1.341c-.158.286-.34.65-.502 1.024a16.222 16.222 0 0 0-4.846 0c-.146-.342-.34-.736-.524-1.078A17.45 17.45 0 0 0 5.31 5.66a18.27 18.27 0 0 0-2.967 12.2 17.59 17.59 0 0 0 5.336 2.69 13.6 13.6 0 0 0 1.143-1.85 11.31 11.31 0 0 1-1.79-.857c.151-.111.298-.227.44-.343a12.443 12.443 0 0 0 10.83 0c.142.116.289.232.434.341a11.32 11.32 0 0 1-1.794.86 13.62 13.62 0 0 0 1.142 1.852 17.65 17.65 0 0 0 5.42-2.7 18.196 18.196 0 0 0-2.973-12.226zM8.052 15.495c-.99 0-1.808-.918-1.808-2.045 0-1.128.81-2.046 1.808-2.046s1.808.92 1.808 2.046c0 1.128-.81 2.045-1.808 2.045zm7.896 0c-.99 0-1.81-.918-1.81-2.045 0-1.128.81-2.046 1.81-2.046.99 0 1.81.92 1.81 2.046 0 1.127-.812 2.045-1.81 2.045z"/></svg>
+                <div class="text">
+                    <strong>¿Necesitas ayuda o un código de acceso?</strong>
+                    <small>Soporte en vivo, novedades del scanner y comunidad anti-cheat 24/7.</small>
+                </div>
+                <a href="{{ discord_invite }}" class="go" target="_blank" rel="noopener">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.952 5.672a17.45 17.45 0 0 0-4.349-1.341c-.158.286-.34.65-.502 1.024a16.222 16.222 0 0 0-4.846 0c-.146-.342-.34-.736-.524-1.078A17.45 17.45 0 0 0 5.31 5.66a18.27 18.27 0 0 0-2.967 12.2 17.59 17.59 0 0 0 5.336 2.69 13.6 13.6 0 0 0 1.143-1.85 11.31 11.31 0 0 1-1.79-.857c.151-.111.298-.227.44-.343a12.443 12.443 0 0 0 10.83 0c.142.116.289.232.434.341a11.32 11.32 0 0 1-1.794.86 13.62 13.62 0 0 0 1.142 1.852 17.65 17.65 0 0 0 5.42-2.7 18.196 18.196 0 0 0-2.973-12.226zM8.052 15.495c-.99 0-1.808-.918-1.808-2.045 0-1.128.81-2.046 1.808-2.046s1.808.92 1.808 2.046c0 1.128-.81 2.045-1.808 2.045zm7.896 0c-.99 0-1.81-.918-1.81-2.045 0-1.128.81-2.046 1.81-2.046.99 0 1.81.92 1.81 2.046 0 1.127-.812 2.045-1.81 2.045z"/></svg>
+                    Discord
+                </a>
+            </div>
+        </div>
+
+        <div class="page-footer">
+            ARGUS PROJECTS · ARGUS SCANNER v{{ argus_version }} · ALL-SEEING. ALWAYS WATCHING.
+            <div class="links">
+                <a href="/">Inicio</a>
+                <a href="/panel">Panel staff</a>
+                <a href="{{ discord_invite }}" target="_blank" rel="noopener">Discord</a>
+            </div>
+        </div>
     </div>
 
     <a href="{{ discord_invite }}" class="discord-fab" target="_blank" rel="noopener" aria-label="Únete a nuestro Discord">
@@ -309,13 +718,46 @@
     </a>
 
     <script>
-        document.getElementById('dl-btn').addEventListener('click', function() {
-            this.textContent = '✓ Descarga iniciada...';
-            this.style.background = 'linear-gradient(135deg,#10b981,#059669)';
+        // Reveal on load (instant, paginas cortas)
+        document.addEventListener('DOMContentLoaded', () => {
+            const reveals = document.querySelectorAll('.reveal');
+            reveals.forEach((el, i) => {
+                setTimeout(() => el.classList.add('visible'), 80 + i * 90);
+            });
+        });
+
+        // Copiar SHA-256
+        function copyHash() {
+            const v = document.getElementById('sha-value');
+            const btn = document.getElementById('copy-btn');
+            if (!v) return;
+            navigator.clipboard?.writeText(v.textContent.trim()).then(() => {
+                if (btn) {
+                    const t0 = btn.textContent;
+                    btn.textContent = 'COPIADO';
+                    btn.style.background = 'rgba(16,185,129,0.20)';
+                    btn.style.color = '#6EE7B7';
+                    btn.style.borderColor = 'rgba(52,211,153,0.45)';
+                    setTimeout(() => {
+                        btn.textContent = t0;
+                        btn.style.background = '';
+                        btn.style.color = '';
+                        btn.style.borderColor = '';
+                    }, 1600);
+                }
+            }).catch(() => {});
+        }
+
+        // Animacion al click en Descargar
+        document.getElementById('dl-btn')?.addEventListener('click', function() {
+            const btn = this;
+            const original = btn.innerHTML;
+            btn.style.background = 'linear-gradient(135deg, #10B981 0%, #047857 100%)';
+            btn.innerHTML = '<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M5 11l4 4 8-8" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Descarga iniciada</span>';
             setTimeout(() => {
-                this.innerHTML = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3v10M10 13l-3.5-3.5M10 13l3.5-3.5M3 17h14" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Descargar ArgusScanner.exe`;
-                this.style.background = '';
-            }, 3000);
+                btn.innerHTML = original;
+                btn.style.background = '';
+            }, 2400);
         });
     </script>
 </body>
