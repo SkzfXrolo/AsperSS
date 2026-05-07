@@ -353,6 +353,7 @@ def init_mysql_db():
                 file_hash VARCHAR(64),
                 ai_analysis TEXT,
                 ai_confidence DECIMAL(5, 2),
+                extra TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (scan_id) REFERENCES scans(id) ON DELETE CASCADE,
                 INDEX idx_scan_id (scan_id),
@@ -360,6 +361,11 @@ def init_mysql_db():
                 INDEX idx_alert_level (alert_level)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ''')
+        # Migración: añadir columna extra si la tabla ya existe sin ella
+        try:
+            cursor.execute('ALTER TABLE scan_results ADD COLUMN extra TEXT')
+        except Exception:
+            pass  # ya existe
         
         # Tabla de análisis de IA
         cursor.execute('''

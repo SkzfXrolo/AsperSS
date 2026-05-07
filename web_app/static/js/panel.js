@@ -16,6 +16,7 @@ let _currentScanData = null;
 
 // ── Paleta de colores ──────────────────────────────────────────────────────
 const ARGUS_PALETTES = {
+    copper: { label:'Cobre',   swatch:'#B87333', accent:'#B87333', d:'#7A4824', bg:'rgba(184,115,51,0.08)', glow:'rgba(184,115,51,0.22)', border:'rgba(184,115,51,0.12)', borderM:'rgba(184,115,51,0.28)', borderH:'rgba(184,115,51,0.55)' },
     purple: { label:'Morado',  swatch:'#8B5CF6', accent:'#8B5CF6', d:'#6D28D9', bg:'rgba(139,92,246,0.08)', glow:'rgba(139,92,246,0.22)', border:'rgba(139,92,246,0.12)', borderM:'rgba(139,92,246,0.28)', borderH:'rgba(139,92,246,0.55)' },
     blue:   { label:'Azul',    swatch:'#3B82F6', accent:'#3B82F6', d:'#1D4ED8', bg:'rgba(59,130,246,0.08)',  glow:'rgba(59,130,246,0.22)',  border:'rgba(59,130,246,0.12)',  borderM:'rgba(59,130,246,0.28)',  borderH:'rgba(59,130,246,0.55)'  },
     green:  { label:'Verde',   swatch:'#10B981', accent:'#10B981', d:'#059669', bg:'rgba(16,185,129,0.08)',  glow:'rgba(16,185,129,0.22)',  border:'rgba(16,185,129,0.12)',  borderM:'rgba(16,185,129,0.28)',  borderH:'rgba(16,185,129,0.55)'  },
@@ -25,7 +26,7 @@ const ARGUS_PALETTES = {
     cyan:   { label:'Cyan',    swatch:'#06B6D4', accent:'#06B6D4', d:'#0891B2', bg:'rgba(6,182,212,0.08)',   glow:'rgba(6,182,212,0.22)',   border:'rgba(6,182,212,0.12)',   borderM:'rgba(6,182,212,0.28)',   borderH:'rgba(6,182,212,0.55)'   },
     white:  { label:'Blanco',  swatch:'#E2E8F7', accent:'#E2E8F7', d:'#C4CFDF', bg:'rgba(226,232,247,0.08)', glow:'rgba(226,232,247,0.15)', border:'rgba(226,232,247,0.10)', borderM:'rgba(226,232,247,0.22)', borderH:'rgba(226,232,247,0.45)' },
 };
-let _currentPalette = 'purple';
+let _currentPalette = 'copper';
 
 function applyPalette(name) {
     const p = ARGUS_PALETTES[name];
@@ -395,7 +396,7 @@ function showToast(message, type = 'info', scanId = null) {
         document.body.appendChild(_toastContainer);
     }
     const cfg = {
-        info:    { color: '#8B5CF6', bg: 'rgba(139,92,246,0.12)', icon: '◆' },
+        info:    { color: '#B87333', bg: 'rgba(184,115,51,0.12)', icon: '◆' },
         success: { color: '#10b981', bg: 'rgba(16,185,129,0.12)',  icon: '✓' },
         error:   { color: '#ef4444', bg: 'rgba(239,68,68,0.12)',   icon: '✗' },
     };
@@ -841,7 +842,7 @@ function _renderEnsembleVerdict(scan) {
                 ${_row('Convergencia', convSys.score||0, 4, '#818cf8')}
                 ${_row('Hash Rep.',    hashSys.score||0, 4, '#ef4444')}
                 ${_row('Temporalidad', tempSys.score||0, 4, '#38bdf8')}
-                ${_row('ML',           mlSys.score||0,   4, '#a78bfa')}
+                ${_row('ML',           mlSys.score||0,   4, '#D4915A')}
             </div>
             ${topClients ? `<div style="font-size:9px;color:var(--text-d);">Clientes: ${topClients}</div>` : ''}
         </div>`;
@@ -956,8 +957,8 @@ async function loadMonthlyChart() {
                 labels,
                 datasets: [{
                     data: values,
-                    borderColor: '#8B5CF6',
-                    backgroundColor: 'rgba(139,92,246,0.10)',
+                    borderColor: '#B87333',
+                    backgroundColor: 'rgba(184,115,51,0.10)',
                     borderWidth: 2,
                     pointRadius: 0,
                     tension: 0.4,
@@ -1149,7 +1150,7 @@ async function _loadScanHeatmap() {
                 const bg  = dv > 0
                     ? `rgba(239,68,68,${0.15 + (pct/100)*0.65})`
                     : v > 0
-                        ? `rgba(139,92,246,${0.12 + (pct/100)*0.55})`
+                        ? `rgba(184,115,51,${0.12 + (pct/100)*0.55})`
                         : 'rgba(255,255,255,0.03)';
                 const title = v > 0 ? `${day} ${h}h: ${v} scan(s)${dv>0?', '+dv+' con hacks':''}` : '';
                 html += `<td title="${title}" style="padding:1px;">
@@ -1160,7 +1161,7 @@ async function _loadScanHeatmap() {
         });
         html += '</table>';
         html += `<div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--text-d);">
-            <span><span style="display:inline-block;width:10px;height:10px;background:rgba(139,92,246,0.5);border-radius:2px;margin-right:3px;vertical-align:middle;"></span>Scan</span>
+            <span><span style="display:inline-block;width:10px;height:10px;background:rgba(184,115,51,0.5);border-radius:2px;margin-right:3px;vertical-align:middle;"></span>Scan</span>
             <span><span style="display:inline-block;width:10px;height:10px;background:rgba(239,68,68,0.5);border-radius:2px;margin-right:3px;vertical-align:middle;"></span>Con hack</span>
             <span style="margin-left:auto;">Total: ${data.total_scans} scans en 30d</span>
         </div>`;
@@ -1200,7 +1201,7 @@ async function searchMojangProfile() {
                     </div>
                 </div>
                 <button onclick="searchScansForMojang('${data.username}')"
-                    style="margin-top:8px;width:100%;padding:5px;border-radius:6px;border:1px solid rgba(139,92,246,.4);background:rgba(139,92,246,.1);color:var(--accent);font-size:11px;cursor:pointer;">
+                    style="margin-top:8px;width:100%;padding:5px;border-radius:6px;border:1px solid rgba(184,115,51,.4);background:rgba(184,115,51,.1);color:var(--accent);font-size:11px;cursor:pointer;">
                     Ver scans de ${data.username}
                 </button>
             </div>`;
@@ -1255,7 +1256,7 @@ async function loadTokens() {
                 }
                 
                 const codeDisplay = token.short_code
-                    ? `<span style="font-family:'Consolas',monospace;font-size:18px;font-weight:900;letter-spacing:4px;color:#a78bfa;">${token.short_code}</span>`
+                    ? `<span style="font-family:'Consolas',monospace;font-size:18px;font-weight:900;letter-spacing:4px;color:#D4915A;">${token.short_code}</span>`
                     : `<code style="font-size:11px;opacity:0.5;">${tokenStr.substring(0, 12)}…</code>`;
                 return `
                 <tr>
@@ -1875,12 +1876,12 @@ function renderIssuePage(container, scanId) {
         'GHOST_CLIENT':'#ef4444','HACKS':'#ef4444','FORENSE':'#8b5cf6',
         'RED':'#3b82f6','NETWORK_FORENSICS':'#3b82f6','PROCESO':'#f59e0b','PROCESSES':'#f59e0b',
         'MACRO_DETECTION':'#f59e0b','EXECUTED_FILES':'#10b981','CMD_HISTORY':'#10b981',
-        'JAVA_MEMORY':'#06b6d4','JAVA_AGENT':'#06b6d4','REGISTRY':'#a78bfa',
+        'JAVA_MEMORY':'#06b6d4','JAVA_AGENT':'#06b6d4','REGISTRY':'#D4915A',
     };
     const chips = cats.map(c => {
         const count = c === 'all' ? all.length : all.filter(r => (r.issue_category || 'Otro') === c).length;
         const active = _issuesFilter === c;
-        const accent = _catColors[c] || '#8B5CF6';
+        const accent = _catColors[c] || '#B87333';
         return `<button onclick="_setIssueFilter('${c}',${scanId})" style="
             font-size:11px;padding:4px 10px;border-radius:20px;cursor:pointer;font-weight:600;
             border:1px solid ${active ? accent : 'var(--border-m)'};
@@ -1953,8 +1954,8 @@ function renderIssuePage(container, scanId) {
                     ${instBadge}
                     ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;flex-shrink:0;white-space:nowrap;">${_getCategoryLabel(cat)}</span>` : ''}
                     <button onclick="event.stopPropagation();aiExplainFinding('${safeName}','${safeLevel}',this)" title="Explicar con IA"
-                            style="font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid rgba(124,58,237,.35);
-                                   background:rgba(124,58,237,.1);color:#a78bfa;cursor:pointer;flex-shrink:0;">🤖</button>
+                            style="font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid rgba(160,90,44,.35);
+                                   background:rgba(160,90,44,.1);color:#D4915A;cursor:pointer;flex-shrink:0;">🤖</button>
                 </div>
                 ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:3px;overflow:hidden;text-overflow:ellipsis;max-width:100%;" title="${path}">${fmtPath}${copyBtn}</div>` : ''}
                 ${confBar}
@@ -2778,7 +2779,7 @@ async function viewScanDetails(scanId) {
         if (cmdList && comandos.length > 0) {
             cmdList.innerHTML = comandos.map(r => {
                 const isSusp = r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO';
-                const accent = isSusp ? '#ef4444' : '#a78bfa';
+                const accent = isSusp ? '#ef4444' : '#D4915A';
                 return `<div style="background:rgba(${isSusp?'239,68,68':'167,139,250'},0.06);border:1px solid ${accent}33;border-radius:8px;padding:12px 14px;">
                     <div style="font-size:12px;font-weight:600;color:${accent};">💻 ${r.issue_name||'—'}</div>
                     ${r.issue_path?`<div style="font-size:11px;color:var(--text-d);margin-top:3px;">${r.issue_path}</div>`:''}
@@ -2837,7 +2838,7 @@ function _drawFileActivityTable(items) {
     const tbody = document.getElementById('file-activity-body');
     if (!tbody) return;
     if (items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="padding:30px;text-align:center;color:var(--text-d);">Sin actividad de archivos registrada en las últimas 24h.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="3" style="padding:30px;text-align:center;color:var(--text-d);">Sin actividad de archivos registrada desde el último arranque del sistema.</td></tr>';
         return;
     }
     const ACTION_CFG = {
@@ -2847,7 +2848,18 @@ function _drawFileActivityTable(items) {
         'modified':{ label: 'Modified File', bg: '#f59e0b', icon: '✏️' },
     };
     tbody.innerHTML = items.map((r, i) => {
-        const action = (r.extra && r.extra.action) || r.issue_type || 'deleted';
+        // Resolver action con fallbacks defensivos:
+        //  1. extra.action ('deleted'/'created'/'modified'/'executed')
+        //  2. issue_type empezando con 'file_' → quitar prefijo
+        //  3. issue_type literal
+        //  4. default 'deleted'
+        let action = (r.extra && r.extra.action) || '';
+        if (!action && r.issue_type) {
+            const it = String(r.issue_type).toLowerCase();
+            if (it.startsWith('file_')) action = it.slice(5);
+            else action = it;
+        }
+        if (!action) action = 'deleted';
         const cfg  = ACTION_CFG[action] || ACTION_CFG['deleted'];
         const ts   = (r.extra && r.extra.timestamp) || '';
         const path = (r.issue_path || r.issue_name || '').slice(0, 200);
@@ -3124,7 +3136,7 @@ async function loadPreviousScans(machineName) {
                         datasets: [{
                             data: scores,
                             borderColor: '#8b5cf6',
-                            backgroundColor: 'rgba(139,92,246,0.10)',
+                            backgroundColor: 'rgba(184,115,51,0.10)',
                             pointBackgroundColor: colors,
                             pointRadius: 5,
                             tension: 0.3,
@@ -3186,8 +3198,8 @@ async function loadPreviousScans(machineName) {
                             <span class="previous-scan-stat"><strong>${scan.total_files_scanned || 0}</strong> archivos</span>
                             ${scan.risk_score != null ? `<span class="previous-scan-stat" style="color:${scan.risk_score>=70?'#ef4444':scan.risk_score>=30?'#f59e0b':'#10b981'};font-weight:700;">Risk ${scan.risk_score}</span>` : ''}
                             <button onclick="event.stopPropagation();compareScanWith(${scan.id})"
-                                style="margin-left:auto;font-size:10px;padding:2px 8px;background:rgba(139,92,246,0.15);
-                                       border:1px solid rgba(139,92,246,0.4);color:var(--accent);border-radius:6px;cursor:pointer;">
+                                style="margin-left:auto;font-size:10px;padding:2px 8px;background:rgba(184,115,51,0.15);
+                                       border:1px solid rgba(184,115,51,0.4);color:var(--accent);border-radius:6px;cursor:pointer;">
                                 Comparar
                             </button>
                         </div>
@@ -4568,8 +4580,8 @@ function toggleAIChat() {
     panel.style.display = _aiChatOpen ? 'flex' : 'none';
     btn.style.transform = _aiChatOpen ? 'scale(1.1)' : 'scale(1)';
     btn.style.boxShadow = _aiChatOpen
-        ? '0 4px 28px rgba(124,58,237,.7)'
-        : '0 4px 20px rgba(124,58,237,.45)';
+        ? '0 4px 28px rgba(160,90,44,.7)'
+        : '0 4px 20px rgba(160,90,44,.45)';
     if (_aiChatOpen) {
         _updateAIChatScanBadge();
         document.getElementById('ai-chat-input').focus();
@@ -4662,7 +4674,7 @@ function _appendChatMsg(container, text, role, isTyping) {
         'line-height:1.5',
         'white-space:pre-wrap',
         'align-self:' + (isUser ? 'flex-end' : 'flex-start'),
-        'background:' + (isUser ? 'rgba(79,70,229,.35)' : 'rgba(124,58,237,.15)'),
+        'background:' + (isUser ? 'rgba(79,70,229,.35)' : 'rgba(160,90,44,.15)'),
     ].join(';');
     el.innerHTML = isTyping ? '<span class="ai-typing-dots">● ● ●</span>' : text;
     container.appendChild(el);
@@ -4684,7 +4696,7 @@ async function clearAIChat() {
     // Limpiar en servidor
     await fetch('/api/staff/chat/clear', { method: 'POST' }).catch(() => {});
     // Limpiar UI — dejar solo el mensaje de bienvenida
-    msgs.innerHTML = `<div style="background:rgba(124,58,237,.15);border-radius:12px 12px 12px 4px;
+    msgs.innerHTML = `<div style="background:rgba(160,90,44,.15);border-radius:12px 12px 12px 4px;
         padding:10px 13px;font-size:13px;color:#e2e8f0;max-width:90%">
         Conversación borrada. ¿En qué te ayudo?</div>`;
 }
@@ -4705,8 +4717,8 @@ async function _loadAIVerdictSuggestion(scanId) {
     // Mostrar estado cargando
     card.style.display = 'block';
     badge.textContent  = '⋯';
-    badge.style.background = 'rgba(124,58,237,.2)';
-    badge.style.color  = '#a78bfa';
+    badge.style.background = 'rgba(160,90,44,.2)';
+    badge.style.color  = '#D4915A';
     reasonsEl.innerHTML = '<li style="list-style:none;color:var(--text-d)">Analizando hallazgos...</li>';
     confEl.textContent  = '';
 
@@ -4753,7 +4765,7 @@ async function aiExplainFinding(name, level, btn) {
         if (!expEl) {
             expEl = document.createElement('div');
             expEl.className = 'ai-explain-text';
-            expEl.style.cssText = 'font-size:11px;color:#c4b5fd;margin-top:5px;padding:5px 8px;background:rgba(124,58,237,.1);border-radius:6px;border-left:2px solid #7c3aed;line-height:1.5;';
+            expEl.style.cssText = 'font-size:11px;color:#c4b5fd;margin-top:5px;padding:5px 8px;background:rgba(160,90,44,.1);border-radius:6px;border-left:2px solid #7c3aed;line-height:1.5;';
             if (row) row.querySelector('div[style*="flex:1"]')?.appendChild(expEl);
         }
         expEl.textContent = '🤖 ' + text;
@@ -4787,11 +4799,11 @@ async function aiScanSummary(scanId, btn) {
         if (!el) {
             el = document.createElement('div');
             el.id = containerId;
-            el.style.cssText = 'margin-top:10px;padding:10px 14px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.25);border-radius:8px;font-size:12px;line-height:1.6;color:var(--text-m);';
+            el.style.cssText = 'margin-top:10px;padding:10px 14px;background:rgba(160,90,44,.08);border:1px solid rgba(160,90,44,.25);border-radius:8px;font-size:12px;line-height:1.6;color:var(--text-m);';
             const card = document.getElementById('ai-verdict-card');
             if (card) card.appendChild(el);
         }
-        el.innerHTML = '<span style="color:#a78bfa;font-weight:600">📝 Resumen IA:</span><br>' + text;
+        el.innerHTML = '<span style="color:#D4915A;font-weight:600">📝 Resumen IA:</span><br>' + text;
         el.style.display = 'block';
     } catch(e) {
         console.error('aiScanSummary error', e);
@@ -4992,7 +5004,7 @@ async function runIocExtract() {
         const parts = [
             section('🌐 IPs públicas',    '#60a5fa', d.ips?.public  || []),
             section('🌐 Todas las IPs',   '#94a3b8', (d.ips?.all || []).filter(ip => !(d.ips?.public||[]).includes(ip))),
-            section('🔑 SHA-256',         '#a78bfa', d.hashes?.sha256 || []),
+            section('🔑 SHA-256',         '#D4915A', d.hashes?.sha256 || []),
             section('🔑 SHA-1',           '#c084fc', d.hashes?.sha1   || []),
             section('🔑 MD5',             '#e879f9', d.hashes?.md5    || []),
             section('🌍 Dominios',        '#34d399', d.domains        || []),
@@ -5081,7 +5093,7 @@ async function _renderPlayerReputation(machineName, allScans) {
                             label: 'Risk Score',
                             data: scores,
                             borderColor: '#8b5cf6',
-                            backgroundColor: 'rgba(139,92,246,0.08)',
+                            backgroundColor: 'rgba(184,115,51,0.08)',
                             pointBackgroundColor: ptColors,
                             pointRadius: 4,
                             tension: 0.3,
@@ -5135,7 +5147,7 @@ async function _renderPlayerReputation(machineName, allScans) {
                 data: {
                     labels: sLabels,
                     datasets: [{ data: sScores, borderColor: '#8b5cf6',
-                        backgroundColor: 'rgba(139,92,246,0.08)',
+                        backgroundColor: 'rgba(184,115,51,0.08)',
                         pointBackgroundColor: sColors, pointRadius: 4,
                         tension: 0.3, fill: true }]
                 },
@@ -5463,7 +5475,7 @@ function _initCustomColorPicker() {
     wrap.style.cssText = 'margin-top:10px;display:flex;align-items:center;gap:8px;';
     wrap.innerHTML = `
         <label style="font-size:11px;color:var(--text-d);">Custom:</label>
-        <input type="color" class="custom-color-input" value="#8B5CF6"
+        <input type="color" class="custom-color-input" value="#B87333"
                style="width:28px;height:28px;border:none;border-radius:6px;cursor:pointer;background:none;padding:0;"
                oninput="_applyCustomColor(this.value)">`;
     panel.appendChild(wrap);
@@ -5775,7 +5787,7 @@ document.addEventListener('keydown', e => {
     window.addEventListener('resize', resize, { passive: true });
 
     const N = 55;
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8B5CF6';
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#B87333';
 
     for (let i = 0; i < N; i++) {
         particles.push({
@@ -5791,7 +5803,7 @@ document.addEventListener('keydown', e => {
     let raf;
     function draw() {
         ctx.clearRect(0, 0, W, H);
-        const col = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8B5CF6';
+        const col = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#B87333';
         particles.forEach(p => {
             ctx.beginPath();
             ctx.arc(p.x % W, p.y % H, p.r, 0, Math.PI * 2);
@@ -5983,7 +5995,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const ti = parseInt(document.getElementById('total-issues')?.textContent) || 8;
         const um = parseInt(document.getElementById('unique-machines')?.textContent) || 15;
         const at = parseInt(document.getElementById('active-tokens')?.textContent) || 5;
-        _drawSparkline('spark-scans',    makeTrend(ts), '#8B5CF6');
+        _drawSparkline('spark-scans',    makeTrend(ts), '#B87333');
         _drawSparkline('spark-issues',   makeTrend(ti), '#f43f5e');
         _drawSparkline('spark-machines', makeTrend(um), '#06b6d4');
         _drawSparkline('spark-tokens',   makeTrend(at), '#10b981');

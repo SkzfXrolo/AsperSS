@@ -2666,13 +2666,27 @@ def _is_server_false_positive(result: dict) -> bool:
     Mejorado: normaliza paths, detecta basura binaria en cualquier campo,
     descarta confidence cero, y aplica matching robusto contra fragmentos seguros.
     """
+    # FILE_ACTIVITY (tab Logs del Explore): historial informacional
+    # de archivos creados/modificados/borrados/ejecutados desde el último boot.
+    # NUNCA aplicar el filtro de FPs aquí — pueden caer perfectamente en
+    # rutas de "fragmentos seguros" (AppData, Windows, etc.) y eso NO las
+    # convierte en FPs: son justamente lo que queremos mostrar como historial.
+    categoria = (result.get('categoria') or result.get('issue_category') or '').upper()
+    if categoria == 'FILE_ACTIVITY':
+        # Solo descartar basura binaria (parsers rotos), nada más
+        ruta_raw = result.get('ruta', '') or result.get('issue_path', '') or ''
+        nombre = (result.get('nombre', '') or result.get('archivo', '')
+                  or result.get('issue_name', '') or '')
+        if _is_garbage_string(nombre) or _is_garbage_string(ruta_raw):
+            return True
+        return False
+
     # Tipos que son FP estructural independientemente de la ruta
     tipo = (result.get('tipo') or result.get('issue_type') or '').lower().replace(' ', '_')
     if tipo in _ZERO_RISK_ISSUE_TYPES:
         return True
 
     # Categorías de EXE antiguo con parsers buggeados
-    categoria = (result.get('categoria') or result.get('issue_category') or '').upper()
     if categoria in _LEGACY_FP_CATEGORIES:
         return True
 
@@ -3180,27 +3194,57 @@ def submit_scan_results(scan_id):
                         return f / 100.0 if f > 1.0 else f
                     except (TypeError, ValueError):
                         return 0.0
+                def _extra_json(r_dict):
+                    """Serializa el campo 'extra' a JSON string, o None si no hay."""
+                    raw = r_dict.get('extra')
+                    if not raw or not isinstance(raw, dict):
+                        return None
+                    try:
+                        return json.dumps(raw, ensure_ascii=False)[:4000]
+                    except (TypeError, ValueError):
+                        return None
                 batch = [
                     (scan_id,
                      r.get('tipo', ''), r.get('nombre', '') or r.get('archivo', ''),
                      r.get('ruta', ''), r.get('categoria', ''), r.get('alerta', ''),
                      _norm_conf(r.get('confidence', 0)), json.dumps(r.get('detected_patterns', [])),
                      r.get('obfuscation', False), r.get('file_hash', ''),
-                     r.get('ai_analysis', ''), _norm_conf(r.get('ai_confidence', 0)))
+                     r.get('ai_analysis', ''), _norm_conf(r.get('ai_confidence', 0)),
+                     _extra_json(r))
                     for r in results
                 ]
                 if results:
                     print(f"[DEBUG] Primer resultado: tipo={results[0].get('tipo')}, "
                           f"nombre={results[0].get('nombre') or results[0].get('archivo')}, "
                           f"alerta={results[0].get('alerta')}")
-                cursor.executemany(
-                    f'INSERT INTO scan_results'
-                    f' (scan_id, issue_type, issue_name, issue_path, issue_category,'
-                    f'  alert_level, confidence, detected_patterns, obfuscation_detected,'
-                    f'  file_hash, ai_analysis, ai_confidence)'
-                    f' VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})',
-                    batch
-                )
+                # Intento INSERT con columna 'extra'; si la columna aún no existe en
+                # esta DB (migración pendiente), reintenta sin ella.
+                try:
+                    cursor.execute('SAVEPOINT extra_save')
+                    cursor.executemany(
+                        f'INSERT INTO scan_results'
+                        f' (scan_id, issue_type, issue_name, issue_path, issue_category,'
+                        f'  alert_level, confidence, detected_patterns, obfuscation_detected,'
+                        f'  file_hash, ai_analysis, ai_confidence, extra)'
+                        f' VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})',
+                        batch
+                    )
+                    cursor.execute('RELEASE SAVEPOINT extra_save')
+                except Exception as _e:
+                    try:
+                        cursor.execute('ROLLBACK TO SAVEPOINT extra_save')
+                    except Exception:
+                        pass
+                    print(f"[DEBUG] INSERT con extra falló ({_e}); reintentando sin columna extra")
+                    fallback_batch = [row[:-1] for row in batch]
+                    cursor.executemany(
+                        f'INSERT INTO scan_results'
+                        f' (scan_id, issue_type, issue_name, issue_path, issue_category,'
+                        f'  alert_level, confidence, detected_patterns, obfuscation_detected,'
+                        f'  file_hash, ai_analysis, ai_confidence)'
+                        f' VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})',
+                        fallback_batch
+                    )
                 print(f"[DEBUG] executemany completado")
 
             # Calcular y guardar risk_score (P3 #7 ensemble: heurístico + RF)
@@ -3630,18 +3674,46 @@ def get_scan(scan_id):
                 except Exception:
                     scan['scanned_by'] = None
 
-                # Obtener resultados (incluye feedback_status para mostrar veredicto del staff)
-                cursor.execute(f'''
-                    SELECT id, issue_type, issue_name, issue_path, issue_category,
-                           alert_level, confidence, detected_patterns, obfuscation_detected,
-                           file_hash, ai_analysis, ai_confidence, feedback_status
-                    FROM scan_results
-                    WHERE scan_id = {_PH}
-                ''', (scan_id,))
+                # Obtener resultados (incluye feedback_status para mostrar veredicto del staff
+                # y extra con la metadata adicional para FILE_ACTIVITY del tab Logs).
+                _has_extra_col = True
+                try:
+                    cursor.execute('SAVEPOINT extra_select')
+                    cursor.execute(f'''
+                        SELECT id, issue_type, issue_name, issue_path, issue_category,
+                               alert_level, confidence, detected_patterns, obfuscation_detected,
+                               file_hash, ai_analysis, ai_confidence, feedback_status, extra
+                        FROM scan_results
+                        WHERE scan_id = {_PH}
+                    ''', (scan_id,))
+                    cursor.execute('RELEASE SAVEPOINT extra_select')
+                except Exception:
+                    try:
+                        cursor.execute('ROLLBACK TO SAVEPOINT extra_select')
+                    except Exception:
+                        pass
+                    _has_extra_col = False
+                    cursor.execute(f'''
+                        SELECT id, issue_type, issue_name, issue_path, issue_category,
+                               alert_level, confidence, detected_patterns, obfuscation_detected,
+                               file_hash, ai_analysis, ai_confidence, feedback_status
+                        FROM scan_results
+                        WHERE scan_id = {_PH}
+                    ''', (scan_id,))
 
                 results = []
                 for r in cursor.fetchall():
                     raw_patterns = _row_get(r, 7, 'detected_patterns')
+                    extra_obj = {}
+                    if _has_extra_col:
+                        raw_extra = _row_get(r, 13, 'extra')
+                        if raw_extra:
+                            try:
+                                extra_obj = json.loads(raw_extra) if isinstance(raw_extra, str) else (raw_extra or {})
+                                if not isinstance(extra_obj, dict):
+                                    extra_obj = {}
+                            except (TypeError, ValueError):
+                                extra_obj = {}
                     results.append({
                         'id': _row_get(r, 0, 'id'),
                         'issue_type': _row_get(r, 1, 'issue_type'),
@@ -3656,6 +3728,7 @@ def get_scan(scan_id):
                         'ai_analysis': _row_get(r, 10, 'ai_analysis'),
                         'ai_confidence': _row_get(r, 11, 'ai_confidence'),
                         'feedback_status': _row_get(r, 12, 'feedback_status'),
+                        'extra': extra_obj,
                     })
 
                 # Saneo de display: filtrar FPs de scans antiguos al servirlos al panel

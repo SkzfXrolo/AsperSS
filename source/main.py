@@ -1966,103 +1966,14 @@ class ArgusApp:
         scan()
         return issues
     
-    def scan_deleted_files(self):
-        """Escanea archivos eliminados en las últimas 12hs via Recycle Bin + Prefetch."""
-        print("🔍 ESCANEANDO ARCHIVOS BORRADOS (últimas 12hs)...")
-        cutoff = time.time() - 43200  # 12 horas
-        found_names = set()
+    # NOTA: scan_deleted_files antiguo (90 líneas, ventana 12h, Recycle Bin + Prefetch
+    # filtrando por hack-names) FUE ELIMINADO. Era código muerto: existía una segunda
+    # definición más abajo (def scan_deleted_files: pass) que sobreescribía a esta.
+    # La detección de borrados ahora la cubre:
+    #   - scan_deleted_recycle  → detecciones (alertas) de exes/jars/hack-names
+    #   - scan_deleted_mass_event → ráfagas de borrado masivo
+    #   - scan_file_activity_log → historial completo informacional (tab Logs)
 
-        # ── 1. Recycle Bin — lee archivos $I* que contienen ruta y fecha de borrado ──
-        for drive in ['C:\\', 'D:\\', 'E:\\', 'F:\\']:
-            recycle = os.path.join(drive, '$RECYCLE.BIN')
-            if not os.path.exists(recycle):
-                continue
-            try:
-                for root, dirs, files in os.walk(recycle):
-                    for fname in files:
-                        if not fname.startswith('$I'):
-                            continue
-                        fpath = os.path.join(root, fname)
-                        try:
-                            mtime = os.path.getmtime(fpath)
-                            if mtime < cutoff:
-                                continue
-                            # Parsear $I: header 8 bytes, tamaño 8 bytes, timestamp 8 bytes, ruta UTF-16
-                            with open(fpath, 'rb') as f:
-                                data = f.read()
-                            if len(data) < 28:
-                                continue
-                            # Offset 24: ruta original en UTF-16LE (Windows 10+)
-                            orig_path = data[28:].decode('utf-16-le', errors='ignore').rstrip('\x00')
-                            if not orig_path:
-                                orig_path = fname
-                            orig_lower = orig_path.lower()
-                            base = os.path.basename(orig_path)
-                            # Siempre reportar EXEs/JARs borrados; filtrar por hack si es otro tipo
-                            ext = os.path.splitext(orig_lower)[1]
-                            is_executable = ext in ('.exe', '.jar', '.dll', '.bat', '.ps1')
-                            is_hack_name  = any(h in orig_lower for h in _DEFINITE_HACK_NAMES)
-                            if not (is_executable or is_hack_name):
-                                continue
-                            if base in found_names:
-                                continue
-                            found_names.add(base)
-                            deleted_at = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
-                            alerta = 'CRITICAL' if is_hack_name else 'SOSPECHOSO'
-                            print(f"🗑️ BORRADO RECIENTE: {base} @ {deleted_at}")
-                            self.issues_found.append({
-                                'nombre': f'Archivo borrado (últimas 24h): {base}',
-                                'ruta': orig_path[:255],
-                                'archivo': base,
-                                'tipo': 'deleted_recent',
-                                'categoria': 'DELETED_FILES',
-                                'alerta': alerta,
-                                'confidence': 80 if is_hack_name else 40,
-                                'detected_patterns': ['deleted_within_24h'],
-                                'extra': {'deleted_at': deleted_at},
-                            })
-                        except Exception:
-                            continue
-            except Exception:
-                continue
-
-        # ── 2. Prefetch — EXEs que aparecen en prefetch pero ya no existen en disco ──
-        try:
-            prefetch_dir = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Prefetch')
-            if os.path.isdir(prefetch_dir):
-                for pf in os.listdir(prefetch_dir):
-                    if not pf.endswith('.pf'):
-                        continue
-                    pf_path = os.path.join(prefetch_dir, pf)
-                    try:
-                        mtime = os.path.getmtime(pf_path)
-                        if mtime < cutoff:
-                            continue
-                        # Nombre del exe está antes del guion en el nombre del .pf
-                        exe_name = pf.split('-')[0].lower()
-                        if not any(h in exe_name for h in _DEFINITE_HACK_NAMES):
-                            continue
-                        if exe_name in found_names:
-                            continue
-                        found_names.add(exe_name)
-                        last_run = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
-                        print(f"🗑️ PREFETCH HACK BORRADO: {exe_name} @ {last_run}")
-                        self.issues_found.append({
-                            'nombre': f'Hack ejecutado recientemente (prefetch): {exe_name}',
-                            'ruta': pf_path,
-                            'archivo': exe_name,
-                            'tipo': 'deleted_prefetch_hack',
-                            'categoria': 'DELETED_FILES',
-                            'alerta': 'CRITICAL',
-                            'confidence': 85,
-                            'detected_patterns': ['prefetch_hack_deleted'],
-                            'extra': {'last_run': last_run},
-                        })
-                    except Exception:
-                        continue
-        except Exception as e:
-            print(f"Error escaneando prefetch borrados: {e}")
-    
     def scan_new_files(self):
         """Escanea archivos nuevos"""
         print("🔍 ESCANEANDO ARCHIVOS NUEVOS...")
@@ -4790,10 +4701,6 @@ class ArgusApp:
                 _run_safe(self.scan_jar_files)
                 self._set_scan_phase("📅 Archivos por fecha...")
                 _run_safe(self.scan_files_by_date)
-                self._set_scan_phase("🗑️ Archivos eliminados / renombrados...")
-                _run_safe(self.scan_deleted_files)
-                _run_safe(self.scan_created_files)
-                _run_safe(self.scan_renamed_files)
                 self._set_scan_phase("👁️ Archivos ocultos / papelera...")
                 _extend_safe(_run_safe(self.scan_hidden_files))
                 _run_safe(self.scan_deleted_recycle)
@@ -7866,18 +7773,13 @@ class ArgusApp:
         """Deshabilitado — FORFILES con patrones genéricos genera demasiados FPs."""
         pass
     
-    def scan_deleted_files(self):
-        """Cubierto por scan_deleted_recycle — no usar fsutil (requiere admin y da FPs)."""
-        pass
-    
-    def scan_created_files(self):
-        """Deshabilitado — fsutil USN requiere admin y genera FPs."""
-        pass
-    
-    def scan_renamed_files(self):
-        """Deshabilitado — fsutil USN requiere admin y genera FPs."""
-        pass
-    
+    # NOTA: scan_deleted_files, scan_created_files, scan_renamed_files (stubs `pass`)
+    # FUERON ELIMINADOS. La detección moderna se hace en:
+    #   - scan_deleted_recycle      → detecciones (alertas) de exes/jars/hack-names
+    #   - scan_deleted_mass_event   → ráfagas de borrado masivo
+    #   - scan_file_activity_log    → historial completo (deleted/created/modified/executed)
+    #                                 incluye USN Journal cuando el scanner corre con admin
+
     def scan_prefetch_jna(self):
         """Escanea prefetch para JNA"""
         try:
@@ -8905,100 +8807,463 @@ class ArgusApp:
                 continue
 
     def scan_file_activity_log(self):
-        """Recopila historial completo de actividad de archivos (últimas 24h):
-        borrados (Recycle Bin), ejecutados (Prefetch).
-        Categoria FILE_ACTIVITY — informacional, no afecta Risk Score."""
+        """Historial COMPLETO de actividad de archivos desde el último arranque del sistema.
+        Captura: borrados, ejecutados, creados, modificados, renombrados.
+        Fuentes:
+          - Recycle Bin ($I files)        → borrados (todos los drives)
+          - Prefetch (.pf files)          → ejecutados
+          - USN Journal (NTFS, fsutil)    → creados/modificados/borrados/renombrados (requiere admin)
+          - Walk de carpetas user         → creados/modificados (fallback robusto sin admin)
+        Categoría FILE_ACTIVITY — informacional, NO afecta Risk Score.
+        Alimenta el tab "Logs" del panel staff."""
         import struct
-        CUTOFF_24H = time.time() - 86400
         EPOCH_DIFF = 116444736000000000
-        USER_DIRS  = ('desktop', 'downloads', 'documents', 'appdata', 'onedrive', 'videos', 'pictures', 'music')
+        # Ventana: desde el boot del sistema (sesión actual)
+        try:
+            session_start = psutil.boot_time()
+        except Exception:
+            session_start = time.time() - 86400  # fallback 24h
+        try:
+            session_dt = datetime.fromtimestamp(session_start).strftime('%d/%m %H:%M')
+        except Exception:
+            session_dt = '?'
 
-        # ── Archivos borrados (TODOS los $I de Recycle Bin) ──
-        seen_paths = set()
+        # Detectar privilegios de administrador (necesario para USN Journal)
+        try:
+            has_admin = bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception:
+            has_admin = False
+
+        # Cap de entradas para no saturar UI/DB. Mantenemos las MÁS RECIENTES.
+        MAX_ENTRIES = 5000
+        seen_keys = set()                # (action, path_lower)
+        activity_entries = []            # acumulador local
+
+        def _add(action: str, path: str, ts: float, source: str,
+                 size: int = 0, extra_data: dict = None) -> bool:
+            if not path or not action or not ts:
+                return False
+            if ts < session_start:
+                return False
+            try:
+                path_norm = str(path)[:300]
+            except Exception:
+                return False
+            key = (action, path_norm.lower())
+            if key in seen_keys:
+                return False
+            seen_keys.add(key)
+            try:
+                ts_str = datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+            except Exception:
+                ts_str = ''
+            entry_extra = {
+                'action':    action,
+                'timestamp': ts_str,
+                'ts':        ts,
+                'source':    source,
+            }
+            if size:
+                entry_extra['size'] = size
+            if extra_data:
+                entry_extra.update(extra_data)
+            activity_entries.append({
+                'tipo':     'file_' + action,
+                'nombre':   os.path.basename(path_norm) or path_norm,
+                'ruta':     path_norm[:255],
+                'archivo':  path_norm[:255],
+                'categoria':'FILE_ACTIVITY',
+                'alerta':   'POCO_SOSPECHOSO',
+                'confidence': 0.05,
+                'detected_patterns': [f'{action}_file', f'src:{source}'],
+                'extra': entry_extra,
+            })
+            return True
+
+        rb_count = pf_count = usn_count = walk_count = 0
+
+        # ── 1. RECYCLE BIN — Borrados (todos los $I de todos los drives) ──
         for drv in 'CDEFGHIJKLMNOPQRSTUVWXYZ':
             recycle = f'{drv}:\\$RECYCLE.BIN'
             if not os.path.exists(recycle):
                 continue
             try:
-                for sid in os.listdir(recycle):
-                    sid_path = os.path.join(recycle, sid)
-                    if not os.path.isdir(sid_path):
+                sids = os.listdir(recycle)
+            except (PermissionError, OSError):
+                continue
+            for sid in sids:
+                sid_path = os.path.join(recycle, sid)
+                if not os.path.isdir(sid_path):
+                    continue
+                try:
+                    files_in_sid = os.listdir(sid_path)
+                except (PermissionError, OSError):
+                    continue
+                for fname in files_in_sid:
+                    if not fname.startswith('$I'):
                         continue
+                    i_path = os.path.join(sid_path, fname)
                     try:
-                        for fname in os.listdir(sid_path):
-                            if not fname.startswith('$I'):
-                                continue
-                            i_path = os.path.join(sid_path, fname)
-                            try:
-                                mtime = os.path.getmtime(i_path)
-                                if mtime < CUTOFF_24H:
-                                    continue
-                                with open(i_path, 'rb') as f:
-                                    data = f.read(600)
-                                if len(data) < 28:
-                                    continue
-                                ft_raw = struct.unpack_from('<Q', data, 16)[0]
-                                unix_ts = (ft_raw - EPOCH_DIFF) / 10_000_000 if ft_raw > EPOCH_DIFF else mtime
-                                if unix_ts < CUTOFF_24H:
-                                    continue
-                                try:
-                                    orig_path = data[28:].decode('utf-16-le').rstrip('\x00').split('\x00')[0]
-                                except Exception:
-                                    orig_path = ''
-                                if not orig_path or orig_path in seen_paths:
-                                    continue
-                                seen_paths.add(orig_path)
-                                del_str = datetime.fromtimestamp(unix_ts).strftime('%Y-%m-%d %H:%M')
-                                self.issues_found.append({
-                                    'tipo':     'file_deleted',
-                                    'nombre':   os.path.basename(orig_path),
-                                    'ruta':     orig_path[:255],
-                                    'archivo':  orig_path[:255],
-                                    'categoria':'FILE_ACTIVITY',
-                                    'alerta':   'POCO_SOSPECHOSO',
-                                    'confidence': 0.05,
-                                    'detected_patterns': ['deleted_file'],
-                                    'extra': {'action': 'deleted', 'timestamp': del_str, 'ts': unix_ts},
-                                })
-                            except Exception:
-                                continue
-                    except PermissionError:
+                        with open(i_path, 'rb') as f:
+                            data = f.read()  # entero (suele ser <1KB)
+                        if len(data) < 28:
+                            continue
+                        try:
+                            size_bytes = struct.unpack_from('<Q', data, 8)[0]
+                        except Exception:
+                            size_bytes = 0
+                        try:
+                            ft_raw = struct.unpack_from('<Q', data, 16)[0]
+                        except Exception:
+                            continue
+                        if ft_raw <= EPOCH_DIFF:
+                            continue
+                        unix_ts = (ft_raw - EPOCH_DIFF) / 10_000_000
+                        try:
+                            orig_path = (data[28:]
+                                         .decode('utf-16-le', errors='ignore')
+                                         .rstrip('\x00')
+                                         .split('\x00')[0])
+                        except Exception:
+                            continue
+                        if not orig_path:
+                            continue
+                        r_path = os.path.join(sid_path, fname.replace('$I', '$R', 1))
+                        still_in_bin = os.path.exists(r_path)
+                        if _add('deleted', orig_path, unix_ts,
+                                source='recycle_bin', size=size_bytes,
+                                extra_data={'still_in_bin': still_in_bin, 'drive': drv}):
+                            rb_count += 1
+                    except Exception:
                         continue
+
+        # ── 2. PREFETCH — Ejecutados ──
+        prefetch_dir = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Prefetch')
+        if os.path.isdir(prefetch_dir):
+            try:
+                pf_files = os.listdir(prefetch_dir)
+            except (PermissionError, OSError):
+                pf_files = []
+            for pf in pf_files:
+                if not pf.lower().endswith('.pf'):
+                    continue
+                pf_full = os.path.join(prefetch_dir, pf)
+                try:
+                    mtime = os.path.getmtime(pf_full)
+                except Exception:
+                    continue
+                if mtime < session_start:
+                    continue
+                # Nombre del exe es lo que va antes del primer "-" en el .pf
+                exe_name = pf.split('-')[0]
+                if _add('executed', exe_name, mtime, source='prefetch'):
+                    pf_count += 1
+
+        # ── 3. USN JOURNAL — Creados/Modificados/Borrados/Renombrados (requiere admin) ──
+        if has_admin:
+            try:
+                usn_count = self._read_usn_journal_into(
+                    activity_entries=activity_entries,
+                    seen_keys=seen_keys,
+                    add_func=_add,
+                    cutoff=session_start,
+                    max_entries=MAX_ENTRIES,
+                )
+            except Exception as e:
+                print(f"⚠️ USN Journal falló: {e}")
+
+        # ── 4. WALK DE CARPETAS USER — Creados/Modificados (siempre corre, fallback) ──
+        try:
+            walk_count = self._walk_user_folders_into(
+                add_func=_add,
+                cutoff=session_start,
+                budget_left=max(0, MAX_ENTRIES - len(activity_entries)),
+            )
+        except Exception as e:
+            print(f"⚠️ Walk de carpetas user falló: {e}")
+
+        # ── 5. Volcar al issues_found, ordenado por timestamp DESC ──
+        try:
+            activity_entries.sort(key=lambda r: r.get('extra', {}).get('ts', 0), reverse=True)
+        except Exception:
+            pass
+        # Cortar al máximo definido (preserva los más recientes)
+        if len(activity_entries) > MAX_ENTRIES:
+            activity_entries = activity_entries[:MAX_ENTRIES]
+
+        self.issues_found.extend(activity_entries)
+
+        admin_str = "admin ✓" if has_admin else "no-admin"
+        print(f"📋 Historial de archivos: {len(activity_entries)} entradas "
+              f"(boot {session_dt}, {admin_str}) | "
+              f"recycle:{rb_count} prefetch:{pf_count} usn:{usn_count} walk:{walk_count}")
+
+    # ──────────────────────────────────────────────────────────────────
+    #  Helpers para scan_file_activity_log
+    # ──────────────────────────────────────────────────────────────────
+
+    def _read_usn_journal_into(self, activity_entries, seen_keys, add_func,
+                               cutoff: float, max_entries: int) -> int:
+        """Lee USN Journal de los volúmenes NTFS vía 'fsutil usn readjournal'.
+        Retorna número de entradas añadidas a activity_entries.
+        Mapea Reasons NTFS a actions del panel:
+          FILE_CREATE        → created
+          FILE_DELETE        → deleted
+          RENAME_NEW_NAME    → created
+          RENAME_OLD_NAME    → deleted
+          DATA_OVERWRITE     → modified
+          DATA_EXTEND        → modified
+          DATA_TRUNCATION    → modified
+          BASIC_INFO_CHANGE  → modified
+          (otros mod flags)  → modified
+
+        Notas:
+          - fsutil solo da el nombre del archivo, no el path completo. Se prefija
+            con la letra del drive como "C:\\<filename>".
+          - La salida puede ser muy grande; cortamos al cap de max_entries.
+        """
+        if len(activity_entries) >= max_entries:
+            return 0
+
+        REASON_MAP = {
+            'File create':           'created',
+            'File delete':           'deleted',
+            'Rename: new name':      'created',
+            'Rename: old name':      'deleted',
+            'Data overwrite':        'modified',
+            'Data extend':           'modified',
+            'Data truncation':       'modified',
+            'Named data overwrite':  'modified',
+            'Named data extend':     'modified',
+            'Named data truncation': 'modified',
+            'Basic info change':     'modified',
+            'Object id change':      'modified',
+            'Reparse point change':  'modified',
+            'Stream change':         'modified',
+            'Hard link change':      'modified',
+            'Compression change':    'modified',
+            'Encryption change':     'modified',
+            'Security change':       'modified',
+        }
+
+        added = 0
+        # Volúmenes a inspeccionar (solo NTFS detectables como letra de drive)
+        candidate_drives = []
+        for d in 'CDEF':
+            try:
+                if os.path.exists(f'{d}:\\'):
+                    candidate_drives.append(f'{d}:')
             except Exception:
                 continue
 
-        # ── Archivos ejecutados (Prefetch — solo carpetas de usuario) ──
-        prefetch_dir = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Prefetch')
-        if os.path.isdir(prefetch_dir):
-            pf_entries = []
+        for drive in candidate_drives:
+            if len(activity_entries) >= max_entries:
+                break
             try:
-                for pf in os.listdir(prefetch_dir):
-                    if not pf.endswith('.pf'):
-                        continue
-                    try:
-                        mtime = os.path.getmtime(os.path.join(prefetch_dir, pf))
-                        if mtime >= CUTOFF_24H:
-                            pf_entries.append((mtime, pf))
-                    except Exception:
-                        continue
+                proc = subprocess.run(
+                    ['fsutil', 'usn', 'readjournal', drive],
+                    capture_output=True,
+                    timeout=45,
+                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+                )
+            except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+                continue
             except Exception:
-                pass
-            # Ordenar más reciente primero, tomar top 60
-            pf_entries.sort(reverse=True)
-            for mtime, pf in pf_entries[:60]:
-                exe_name = pf.split('-')[0]
-                run_str  = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
-                self.issues_found.append({
-                    'tipo':     'file_executed',
-                    'nombre':   exe_name,
-                    'ruta':     exe_name,
-                    'archivo':  exe_name,
-                    'categoria':'FILE_ACTIVITY',
-                    'alerta':   'POCO_SOSPECHOSO',
-                    'confidence': 0.05,
-                    'detected_patterns': ['prefetch_executed'],
-                    'extra': {'action': 'executed', 'timestamp': run_str, 'ts': mtime},
-                })
+                continue
+
+            if proc.returncode != 0:
+                continue
+
+            try:
+                output = (proc.stdout or b'').decode('utf-8', errors='ignore')
+                if not output:
+                    output = (proc.stdout or b'').decode('mbcs', errors='ignore')
+            except Exception:
+                continue
+
+            current = {}
+
+            def _flush():
+                nonlocal added
+                if not current:
+                    return
+                name   = current.get('name')
+                reason = current.get('reason', '')
+                ts     = current.get('ts', 0)
+                if not name or ts < cutoff:
+                    return
+                # Determinar action a partir de los reason flags
+                action = None
+                # Si hay delete, prevalece (file_delete > rename > data*)
+                rl = reason.lower()
+                if 'file delete' in rl or 'rename: old name' in rl:
+                    action = 'deleted'
+                elif 'file create' in rl or 'rename: new name' in rl:
+                    action = 'created'
+                else:
+                    for k, v in REASON_MAP.items():
+                        if k.lower() in rl:
+                            action = v
+                            break
+                if not action:
+                    return
+                full_path = f'{drive}\\{name}' if not (':' in name or name.startswith('\\')) else name
+                if add_func(action, full_path, ts, source='usn_journal',
+                            extra_data={'reason': reason[:100]}):
+                    added += 1
+
+            for line in output.splitlines():
+                if len(activity_entries) >= max_entries:
+                    break
+                ls = line.strip()
+                if not ls:
+                    continue
+                # Cada bloque empieza con "Usn"
+                if ls.lower().startswith('usn'):
+                    _flush()
+                    current = {}
+                    continue
+                # Parseo "Clave : Valor"
+                if ':' not in ls:
+                    continue
+                k, _, v = ls.partition(':')
+                k = k.strip().lower()
+                v = v.strip()
+                if k.startswith('file name'):
+                    current['name'] = v
+                elif k.startswith('reason'):
+                    # "0x00000200: File create" o "0x...: File create | Close"
+                    if ':' in v:
+                        v = v.split(':', 1)[1].strip()
+                    current['reason'] = v
+                elif k.startswith('time stamp') or k.startswith('timestamp'):
+                    parsed_ts = self._parse_usn_timestamp(v)
+                    if parsed_ts:
+                        current['ts'] = parsed_ts
+            # Último bloque
+            _flush()
+
+        return added
+
+    @staticmethod
+    def _parse_usn_timestamp(s: str) -> float:
+        """Intenta parsear un timestamp de fsutil USN en varios formatos comunes."""
+        if not s:
+            return 0
+        s = s.strip()
+        formats = (
+            '%m/%d/%Y %I:%M:%S %p',
+            '%m/%d/%Y %H:%M:%S',
+            '%d/%m/%Y %H:%M:%S',
+            '%d/%m/%Y %I:%M:%S %p',
+            '%Y-%m-%d %H:%M:%S',
+            '%d-%m-%Y %H:%M:%S',
+        )
+        for fmt in formats:
+            try:
+                return datetime.strptime(s, fmt).timestamp()
+            except (ValueError, OSError):
+                continue
+        return 0
+
+    def _walk_user_folders_into(self, add_func, cutoff: float, budget_left: int) -> int:
+        """Recorre carpetas del usuario actual reportando archivos creados o modificados
+        después de `cutoff`. Sin filtros: incluye AppData/Temp/Cache, hasta el cap.
+
+        Usa os.scandir recursivo (más rápido que os.walk porque cada DirEntry trae el
+        stat() del dirent ahorrando una syscall por archivo). Retorna # de entradas añadidas.
+        """
+        if budget_left <= 0:
+            return 0
+        added = 0
+        user_home = os.path.expanduser('~')
+        # Carpetas a recorrer (orden = prioridad). Evitamos solapamiento: como
+        # AppData\Roaming ya incluye .minecraft, no se lista por separado para no
+        # gastar inspections en re-deduplicar.
+        candidates = [
+            os.path.join(user_home, 'Desktop'),
+            os.path.join(user_home, 'Downloads'),
+            os.path.join(user_home, 'Documents'),
+            os.path.join(user_home, 'OneDrive'),
+            os.path.join(user_home, 'Videos'),
+            os.path.join(user_home, 'Pictures'),
+            os.path.join(user_home, 'Music'),
+            os.path.join(user_home, 'AppData', 'Roaming'),     # incluye .minecraft, configs
+            os.path.join(user_home, 'AppData', 'LocalLow'),
+            os.path.join(user_home, 'AppData', 'Local'),       # más pesado: cache de browsers
+            'C:\\Users\\Public',
+        ]
+        # Cap de archivos a inspeccionar para evitar bloquear varios minutos.
+        # 500k cubre escenarios típicos (~75-90s). Si se excede, paramos en seco.
+        MAX_FILES_INSPECTED = 500000
+        # Hard time cap (segundos) para no bloquear el scan completo
+        TIME_CAP = 90.0
+        deadline = time.time() + TIME_CAP
+
+        inspected = 0
+
+        def _scan_dir(dir_path: str) -> int:
+            """Recorre dir_path recursivamente con os.scandir. Retorna # añadidos.
+            Usa una pila local en vez de recursión para evitar StackOverflow en árboles
+            profundos (.gradle/caches puede tener 10+ niveles)."""
+            nonlocal inspected, added
+            local_added = 0
+            stack = [dir_path]
+            while stack:
+                if added >= budget_left or inspected >= MAX_FILES_INSPECTED or time.time() > deadline:
+                    break
+                cur = stack.pop()
+                try:
+                    it = os.scandir(cur)
+                except (PermissionError, FileNotFoundError, OSError):
+                    continue
+                try:
+                    for ent in it:
+                        if added >= budget_left or inspected >= MAX_FILES_INSPECTED or time.time() > deadline:
+                            break
+                        try:
+                            if ent.is_dir(follow_symlinks=False):
+                                stack.append(ent.path)
+                                continue
+                            if not ent.is_file(follow_symlinks=False):
+                                continue
+                        except (PermissionError, OSError):
+                            continue
+                        inspected += 1
+                        try:
+                            st = ent.stat(follow_symlinks=False)
+                        except (FileNotFoundError, PermissionError, OSError):
+                            continue
+                        ctime = st.st_ctime
+                        mtime = st.st_mtime
+                        size  = st.st_size
+                        # Creado en este boot → 'created'
+                        # Solo mtime reciente → 'modified'
+                        if ctime >= cutoff:
+                            if add_func('created', ent.path, ctime, source='walk', size=size):
+                                added += 1
+                                local_added += 1
+                        elif mtime >= cutoff:
+                            if add_func('modified', ent.path, mtime, source='walk', size=size):
+                                added += 1
+                                local_added += 1
+                finally:
+                    try:
+                        it.close()
+                    except Exception:
+                        pass
+            return local_added
+
+        for root_dir in candidates:
+            if added >= budget_left or inspected >= MAX_FILES_INSPECTED or time.time() > deadline:
+                break
+            if not os.path.isdir(root_dir):
+                continue
+            try:
+                _scan_dir(root_dir)
+            except (PermissionError, OSError):
+                continue
+        return added
 
     def scan_deleted_mass_event(self):
         """Detecta ráfagas de borrado: >=5 archivos eliminados en <2 minutos en la Recycle Bin.

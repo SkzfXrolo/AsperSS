@@ -53,3 +53,13 @@ web_app/diagnostico_login.html
 # Tools — credenciales del CLI inspector (nunca subir)
 tools/.argus_creds.json
 
+# Carpeta logo/ — diseños raw subidos por el usuario (SVG/PNG fuente, no se sirven)
+logo/
+
+# Artefactos de build PyInstaller en raíz (ya cubrimos source/build y source/dist arriba)
+/build/
+/dist/
+
+# Mensaje temporal de commit (workaround para PowerShell que no soporta heredoc)
+.commit_msg.txt
+

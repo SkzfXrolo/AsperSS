@@ -226,6 +226,18 @@ class DatabaseIntegration:
             }
 
             def _pre_is_fp(_iss: dict) -> bool:
+                # FILE_ACTIVITY (historial del tab Logs): no aplicar el filtro de
+                # paths "seguros" — son entradas informacionales de Recycle Bin /
+                # Prefetch / USN / walk de carpetas user, y CAEN justo en rutas
+                # como AppData/Windows que están en _PRE_SAFE_FRAGS por diseño.
+                _cat = (_iss.get('categoria') or '').upper()
+                if _cat == 'FILE_ACTIVITY':
+                    _nombre = _iss.get('nombre') or _iss.get('archivo') or ''
+                    _ruta_raw = _iss.get('ruta') or _iss.get('archivo') or ''
+                    # Solo descartar basura binaria (parsers rotos)
+                    if _pre_is_garbage(_nombre) or _pre_is_garbage(_ruta_raw):
+                        return True
+                    return False
                 _tipo = (_iss.get('tipo') or '').lower().replace(' ', '_')
                 if _tipo in _PRE_ZERO_RISK_TYPES:
                     return True
@@ -248,19 +260,46 @@ class DatabaseIntegration:
             if len(issues_found) < _before_pre:
                 print(f"🧹 Pre-filter: {_before_pre} → {len(issues_found)} ({_before_pre - len(issues_found)} FP descartados antes del envío)")
 
-            # Preparar resultados para la API — ordenar por severidad y limitar payload
+            # Preparar resultados para la API — separamos detecciones (sujetas a cap)
+            # de FILE_ACTIVITY (historial informacional, sin cap pero con su propio máx).
+            _detections   = [i for i in issues_found
+                             if (i.get('categoria') or '').upper() != 'FILE_ACTIVITY']
+            _file_history = [i for i in issues_found
+                             if (i.get('categoria') or '').upper() == 'FILE_ACTIVITY']
+
             _severity_order = {'CRITICAL': 0, 'SOSPECHOSO': 1, 'POCO_SOSPECHOSO': 2, 'NORMAL': 3}
             sorted_issues = sorted(
-                issues_found,
+                _detections,
                 key=lambda x: (_severity_order.get(x.get('alerta', 'NORMAL'), 3), -x.get('confidence', 0))
             )
             MAX_RESULTS = 200
             if len(sorted_issues) > MAX_RESULTS:
-                print(f"⚠️ Truncando resultados: {len(sorted_issues)} → {MAX_RESULTS} (por severidad)")
+                print(f"⚠️ Truncando detecciones: {len(sorted_issues)} → {MAX_RESULTS} (por severidad)")
                 sorted_issues = sorted_issues[:MAX_RESULTS]
+
+            # Cap separado para historial de archivos: hasta 5000 (preservando los más recientes)
+            MAX_FILE_HISTORY = 5000
+            if len(_file_history) > MAX_FILE_HISTORY:
+                _file_history.sort(key=lambda r: (r.get('extra') or {}).get('ts', 0), reverse=True)
+                print(f"⚠️ Truncando historial de archivos: {len(_file_history)} → {MAX_FILE_HISTORY}")
+                _file_history = _file_history[:MAX_FILE_HISTORY]
+
+            # Combinamos: detecciones primero, luego el historial de archivos
+            sorted_issues = list(sorted_issues) + list(_file_history)
 
             results = []
             for issue in sorted_issues:
+                # Sanitizar 'extra': solo claves serializables y valores cortos
+                raw_extra = issue.get('extra') or {}
+                clean_extra = {}
+                if isinstance(raw_extra, dict):
+                    for k, v in raw_extra.items():
+                        if not isinstance(k, str):
+                            continue
+                        if isinstance(v, (str, int, float, bool)) or v is None:
+                            if isinstance(v, str) and len(v) > 500:
+                                v = v[:500]
+                            clean_extra[k] = v
                 results.append({
                     'tipo': issue.get('tipo', ''),
                     'nombre': issue.get('nombre', ''),
@@ -273,7 +312,8 @@ class DatabaseIntegration:
                     'obfuscation': issue.get('obfuscation', False),
                     'file_hash': issue.get('file_hash', ''),
                     'ai_analysis': issue.get('ai_analysis', ''),
-                    'ai_confidence': issue.get('ai_confidence', 0)
+                    'ai_confidence': issue.get('ai_confidence', 0),
+                    'extra': clean_extra,
                 })
 
             # Calcular risk_score 0-100 agregando scores por severidad
@@ -292,6 +332,9 @@ class DatabaseIntegration:
                 'vertex','inertia','salhack','slinky','reflex','rage','biscuit','thunder']
             _seen_risk_clients: set = set()
             for _iss in issues_found:
+                # FILE_ACTIVITY es historial informacional puro: NO suma al risk score.
+                if (_iss.get('categoria') or '').upper() == 'FILE_ACTIVITY':
+                    continue
                 _alerta = _iss.get('alerta', 'NORMAL')
                 _conf = float(_iss.get('confidence') or 0)
                 if _conf <= 1:

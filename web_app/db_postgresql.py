@@ -154,6 +154,9 @@ def init_postgresql_db():
         cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_category TYPE TEXT")
         # feedback_status: persiste el veredicto de staff en la fila del resultado
         cursor.execute("ALTER TABLE scan_results ADD COLUMN IF NOT EXISTS feedback_status VARCHAR(20) DEFAULT NULL")
+        # extra: JSON con metadata adicional (action, timestamp, source, size, etc.)
+        # usado principalmente para el historial de FILE_ACTIVITY (tab Logs del Explore)
+        cursor.execute("ALTER TABLE scan_results ADD COLUMN IF NOT EXISTS extra TEXT DEFAULT NULL")
 
         # Tabla de historial de bans
         cursor.execute('''

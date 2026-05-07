@@ -378,9 +378,15 @@ def _init_scanner_tables_sqlite():
         file_hash TEXT,
         ai_analysis TEXT,
         ai_confidence REAL,
+        extra TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (scan_id) REFERENCES scans(id)
     )''')
+    # Migración: añadir columna extra si la tabla ya existe sin ella
+    try:
+        cursor.execute('ALTER TABLE scan_results ADD COLUMN extra TEXT')
+    except sqlite3.OperationalError:
+        pass  # ya existe
 
     cursor.execute('''CREATE TABLE IF NOT EXISTS ban_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
