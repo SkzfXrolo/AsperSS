@@ -2166,7 +2166,7 @@ def debug_last_scan():
 
 
 # Current released scanner version — update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.6.29"
+CURRENT_SCANNER_VERSION = "1.6.30"
 
 @app.route('/sw.js')
 def service_worker():
@@ -3071,6 +3071,19 @@ def submit_scan_results(scan_id):
                 )
                 cursor.execute('RELEASE SAVEPOINT ensemble_save')
                 print(f"[DEBUG] ensemble verdict={_ens['verdict']} sanctionable={_ens['sanctionable']} score={_ens['score']}")
+                # Si gate_capped (sin evidencia en instancia) ajustar risk_score para que
+                # el gauge del panel sea coherente con el veredicto SOSPECHOSO.
+                if _ens.get('gate_capped') and locals().get('risk_score', 0) > 50:
+                    _capped_rs = min(locals().get('risk_score', 0), 45)
+                    try:
+                        cursor.execute(
+                            f'UPDATE scans SET risk_score = {_PH} WHERE id = {_PH}',
+                            (_capped_rs, scan_id)
+                        )
+                        risk_score = _capped_rs
+                        print(f"[DEBUG] risk_score cappado por gate_capped → {_capped_rs}")
+                    except Exception:
+                        pass
             except Exception:
                 try:
                     cursor.execute('ROLLBACK TO SAVEPOINT ensemble_save')

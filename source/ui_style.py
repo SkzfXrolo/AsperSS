@@ -105,46 +105,63 @@ class ModernUI:
         except Exception:
             pass
 
-        # Aplicar estilos DWM (Windows 10/11) después de que la ventana tenga HWND
+        # Aplicar estilos DWM/GDI después de que la ventana tenga HWND
         root.update_idletasks()
         try:
             hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
+            if not hwnd:
+                hwnd = root.winfo_id()
 
             # 1. Mostrar en barra de tareas: quitar WS_EX_TOOLWINDOW, poner WS_EX_APPWINDOW
-            GWL_EXSTYLE     = -20
-            WS_EX_APPWINDOW = 0x00040000
-            WS_EX_TOOLWINDOW= 0x00000080
+            GWL_EXSTYLE      = -20
+            WS_EX_APPWINDOW  = 0x00040000
+            WS_EX_TOOLWINDOW = 0x00000080
             style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
             style = (style & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW
             ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
-            # Withdraw/deiconify para que el cambio tome efecto en la barra de tareas
             root.withdraw()
             root.after(15, root.deiconify)
 
-            # 2. Esquinas redondeadas via DWM (solo Win 11 build 22000+)
-            DWMWA_WINDOW_CORNER_PREFERENCE = 33
-            DWMWCP_ROUND = 2
-            pref = ctypes.c_int(DWMWCP_ROUND)
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_WINDOW_CORNER_PREFERENCE,
-                ctypes.byref(pref),
-                ctypes.sizeof(pref),
-            )
+            # 2. Esquinas redondeadas — Win 10/11 compatible via SetWindowRgn + CreateRoundRectRgn
+            #    (DWMWA_WINDOW_CORNER_PREFERENCE=33 solo funciona en Win 11 build 22000+)
+            RADIUS = 16
+            w = root.winfo_width()  or 705
+            h = root.winfo_height() or 279
+            hrgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, RADIUS * 2, RADIUS * 2)
+            if hrgn:
+                ctypes.windll.user32.SetWindowRgn(hwnd, hrgn, True)
 
-            # 3. Borde de color acento (rojo) via DWM
-            DWMWA_BORDER_COLOR = 34
-            # COLORREF BGR: #3E3EE5 → rojo en BGR = 0x003E3EE5... usamos acento rojo #E53E3E → BGR 0x003E3EE5
-            # En COLORREF: 0x00BBGGRR  → rojo E53E3E = R=0xE5 G=0x3E B=0x3E → 0x003E3EE5
-            red_colorref = ctypes.c_int(0x003E3EE5)
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_BORDER_COLOR,
-                ctypes.byref(red_colorref),
-                ctypes.sizeof(red_colorref),
-            )
+            # Intentar también via DWM por si es Win 11
+            try:
+                pref = ctypes.c_int(2)  # DWMWCP_ROUND
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(pref), ctypes.sizeof(pref))
+            except Exception:
+                pass
+
+            # 3. Borde rojo via DWM (Win 11) — en Win 10 no tiene efecto pero no falla
+            try:
+                red_colorref = ctypes.c_int(0x003E3EE5)  # #E53E3E en COLORREF BGR
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 34, ctypes.byref(red_colorref), ctypes.sizeof(red_colorref))
+            except Exception:
+                pass
+
         except Exception:
             pass
+
+        def _apply_rounded_rgn():
+            """Re-aplica la región redondeada cuando la ventana ya tiene tamaño real."""
+            try:
+                _hwnd = ctypes.windll.user32.GetParent(root.winfo_id()) or root.winfo_id()
+                _w = root.winfo_width()
+                _h = root.winfo_height()
+                if _w > 1 and _h > 1:
+                    _hrgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, _w + 1, _h + 1, 32, 32)
+                    if _hrgn:
+                        ctypes.windll.user32.SetWindowRgn(_hwnd, _hrgn, True)
+            except Exception:
+                pass
+        # Aplicar de nuevo tras 80ms cuando tkinter ya conoce el tamaño real
+        root.after(80, _apply_rounded_rgn)
 
     @staticmethod
     def _base_path():

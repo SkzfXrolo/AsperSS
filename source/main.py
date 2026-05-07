@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.29"
+SCANNER_VERSION = "1.6.30"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -6711,8 +6711,15 @@ class ArgusApp:
                             break
 
                 if is_real_hack:
-                    # Clasificar como HACK CRÍTICO
-                    issue['alerta'] = 'CRITICAL'
+                    # Archivos fuera de instancia (Downloads/Desktop/Documents sin .minecraft)
+                    # → SOSPECHOSO, no CRITICAL. El ensemble gate ya maneja la sancionabilidad.
+                    _in_instance = any(f in ruta for f in ['.minecraft', 'minecraft\\mods', 'lunarclient', 'badlion', 'prismlauncher', 'multimc'])
+                    _out_of_inst_location = any(loc in ruta for loc in ['downloads', 'desktop', 'documents', '\\temp\\', '/temp/'])
+                    if _out_of_inst_location and not _in_instance:
+                        issue['alerta'] = 'SOSPECHOSO'
+                        issue['confidence'] = min(issue.get('confidence', 0.7), 0.65)
+                    else:
+                        issue['alerta'] = 'CRITICAL'
                     if not issue.get('categoria'):
                         issue['categoria'] = 'HACKS'
                     filtered_issues.append(issue)
@@ -7737,7 +7744,6 @@ class ArgusApp:
             'dps': ('Diagnostic Policy Service (DPS)', 'Servicio usado por anticheats para monitoreo. Tramposos lo detienen para evadir detección. Indicador de ban inmediato.'),
         }
         SUSPICIOUS_SERVICES = {
-            'wersvc':   ('Windows Error Reporting (WerSvc)', 'Reportes de errores — detenido para ocultar crashes de hacks/injectors. También común en usuarios que lo desactivan por privacidad.'),
             'diagtrack': ('Connected User Experiences (DiagTrack)', 'Telemetría — a veces detenida para evitar reportes.'),
         }
         try:
@@ -15431,6 +15437,10 @@ class ArgusApp:
                             pass
                     for target_path in paths_found:
                         target_l = target_path.lower()
+                        # Ignorar guías del staff de screenshare (SS_Manual_*, SS_Guide_*, etc.)
+                        _bn_l = os.path.basename(target_l)
+                        if _bn_l.startswith(('ss_manual', 'ss_guide', 'ss_tutorial', 'ss_doc', 'argus_')):
+                            continue
                         matched = [mk for mk in HACK_MARKERS if mk in target_l]
                         if matched:
                             self.issues_found.append({
