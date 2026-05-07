@@ -4802,6 +4802,8 @@ class ArgusApp:
                 _run_safe(self.scan_exploit_tools)
                 self._set_scan_phase("🗑️ Borrado masivo (detección de limpieza activa)...")
                 _run_safe(self.scan_deleted_mass_event)
+                self._set_scan_phase("📋 Historial de actividad de archivos...")
+                _run_safe(self.scan_file_activity_log)
                 self._set_scan_phase("👥 Shadow Copy artifacts (VSS)...")
                 _run_safe(self.scan_shadow_copy_artifacts)
 
@@ -8901,6 +8903,102 @@ class ArgusApp:
                     })
             except Exception:
                 continue
+
+    def scan_file_activity_log(self):
+        """Recopila historial completo de actividad de archivos (últimas 24h):
+        borrados (Recycle Bin), ejecutados (Prefetch).
+        Categoria FILE_ACTIVITY — informacional, no afecta Risk Score."""
+        import struct
+        CUTOFF_24H = time.time() - 86400
+        EPOCH_DIFF = 116444736000000000
+        USER_DIRS  = ('desktop', 'downloads', 'documents', 'appdata', 'onedrive', 'videos', 'pictures', 'music')
+
+        # ── Archivos borrados (TODOS los $I de Recycle Bin) ──
+        seen_paths = set()
+        for drv in 'CDEFGHIJKLMNOPQRSTUVWXYZ':
+            recycle = f'{drv}:\\$RECYCLE.BIN'
+            if not os.path.exists(recycle):
+                continue
+            try:
+                for sid in os.listdir(recycle):
+                    sid_path = os.path.join(recycle, sid)
+                    if not os.path.isdir(sid_path):
+                        continue
+                    try:
+                        for fname in os.listdir(sid_path):
+                            if not fname.startswith('$I'):
+                                continue
+                            i_path = os.path.join(sid_path, fname)
+                            try:
+                                mtime = os.path.getmtime(i_path)
+                                if mtime < CUTOFF_24H:
+                                    continue
+                                with open(i_path, 'rb') as f:
+                                    data = f.read(600)
+                                if len(data) < 28:
+                                    continue
+                                ft_raw = struct.unpack_from('<Q', data, 16)[0]
+                                unix_ts = (ft_raw - EPOCH_DIFF) / 10_000_000 if ft_raw > EPOCH_DIFF else mtime
+                                if unix_ts < CUTOFF_24H:
+                                    continue
+                                try:
+                                    orig_path = data[28:].decode('utf-16-le').rstrip('\x00').split('\x00')[0]
+                                except Exception:
+                                    orig_path = ''
+                                if not orig_path or orig_path in seen_paths:
+                                    continue
+                                seen_paths.add(orig_path)
+                                del_str = datetime.fromtimestamp(unix_ts).strftime('%Y-%m-%d %H:%M')
+                                self.issues_found.append({
+                                    'tipo':     'file_deleted',
+                                    'nombre':   os.path.basename(orig_path),
+                                    'ruta':     orig_path[:255],
+                                    'archivo':  orig_path[:255],
+                                    'categoria':'FILE_ACTIVITY',
+                                    'alerta':   'POCO_SOSPECHOSO',
+                                    'confidence': 0.05,
+                                    'detected_patterns': ['deleted_file'],
+                                    'extra': {'action': 'deleted', 'timestamp': del_str, 'ts': unix_ts},
+                                })
+                            except Exception:
+                                continue
+                    except PermissionError:
+                        continue
+            except Exception:
+                continue
+
+        # ── Archivos ejecutados (Prefetch — solo carpetas de usuario) ──
+        prefetch_dir = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Prefetch')
+        if os.path.isdir(prefetch_dir):
+            pf_entries = []
+            try:
+                for pf in os.listdir(prefetch_dir):
+                    if not pf.endswith('.pf'):
+                        continue
+                    try:
+                        mtime = os.path.getmtime(os.path.join(prefetch_dir, pf))
+                        if mtime >= CUTOFF_24H:
+                            pf_entries.append((mtime, pf))
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            # Ordenar más reciente primero, tomar top 60
+            pf_entries.sort(reverse=True)
+            for mtime, pf in pf_entries[:60]:
+                exe_name = pf.split('-')[0]
+                run_str  = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')
+                self.issues_found.append({
+                    'tipo':     'file_executed',
+                    'nombre':   exe_name,
+                    'ruta':     exe_name,
+                    'archivo':  exe_name,
+                    'categoria':'FILE_ACTIVITY',
+                    'alerta':   'POCO_SOSPECHOSO',
+                    'confidence': 0.05,
+                    'detected_patterns': ['prefetch_executed'],
+                    'extra': {'action': 'executed', 'timestamp': run_str, 'ts': mtime},
+                })
 
     def scan_deleted_mass_event(self):
         """Detecta ráfagas de borrado: >=5 archivos eliminados en <2 minutos en la Recycle Bin.

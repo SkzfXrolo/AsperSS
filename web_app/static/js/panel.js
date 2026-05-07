@@ -2793,6 +2793,7 @@ async function viewScanDetails(scanId) {
         _renderTabFindings('launcher-profiles-list','subnav-launcher-profiles','launcher-badge',          allResults, ['MINECRAFT_CONFIGS', 'JAR_FILES']);
         _renderTabFindings('process-times-list',   'subnav-process-times',    'process-times-badge',     allResults, ['PROCESSES', 'BACKGROUND_PROCESSES', 'PREFETCH', 'EXECUTED_FILES', 'PROCESO']);
         _renderTabFindings('explore-list',         'subnav-explore',          'explore-badge',           allResults, ['RECENT_FILES', 'NEW_FILES', 'HIDDEN_FILES']);
+        _renderFileActivityTable(allResults);
         _renderTabFindings('utilities-list',       'subnav-utilities',        'utilities-badge',         allResults, ['AUTOCLICK', 'AUTOCLICK_TOOLS', 'HARDWARE', 'LOGITECH', 'RAZER', 'USB_DEVICES', 'SERVICES', 'MACRO']);
         _renderTabFindings('archivos-windows-list','subnav-archivos-windows', 'archivos-windows-badge',  allResults, ['TEMP_FILES', 'FORENSE', 'INYECCION', 'JAVA_INJECTION', 'JNA', 'RED', 'NETWORK_CONNECTIONS']);
         _renderTabFindings('settings-list',        'subnav-settings',         'settings-badge',          allResults, ['DATE_CHANGES', 'EVASION', 'PERSISTENCIA', 'DNS_CACHE', 'VPN']);
@@ -2801,6 +2802,90 @@ async function viewScanDetails(scanId) {
         console.error('Error cargando detalles:', error);
         alert('Error al cargar detalles del escaneo: ' + error.message);
     }
+}
+
+// ── File Activity Table (Explore > Logs tab) ────────────────────────────────
+let _fileActivityAll = [];
+
+function _renderFileActivityTable(results) {
+    const items = results.filter(r => (r.issue_category || '').toUpperCase() === 'FILE_ACTIVITY');
+    _fileActivityAll = items.slice().sort((a, b) => {
+        const ta = (a.extra && a.extra.ts) || 0;
+        const tb = (b.extra && b.extra.ts) || 0;
+        return tb - ta;
+    });
+
+    // Update explore badge to include FILE_ACTIVITY count
+    const badge = document.getElementById('explore-badge');
+    if (badge && items.length > 0) {
+        const prev = parseInt(badge.textContent) || 0;
+        // badge already set by _renderTabFindings; we only show if tab has items
+        document.getElementById('subnav-explore').style.display = '';
+    }
+    if (items.length > 0) {
+        const eb = document.getElementById('subnav-explore');
+        if (eb) eb.style.display = '';
+    }
+
+    const logsCount = document.getElementById('explore-logs-count');
+    if (logsCount) logsCount.textContent = items.length;
+
+    _drawFileActivityTable(_fileActivityAll);
+}
+
+function _drawFileActivityTable(items) {
+    const tbody = document.getElementById('file-activity-body');
+    if (!tbody) return;
+    if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="padding:30px;text-align:center;color:var(--text-d);">Sin actividad de archivos registrada en las últimas 24h.</td></tr>';
+        return;
+    }
+    const ACTION_CFG = {
+        'deleted': { label: 'Deleted File', bg: '#ef4444', icon: '🗑' },
+        'executed':{ label: 'Executed File', bg: '#8b5cf6', icon: '▶' },
+        'created': { label: 'Created File', bg: '#22c55e', icon: '📄' },
+        'modified':{ label: 'Modified File', bg: '#f59e0b', icon: '✏️' },
+    };
+    tbody.innerHTML = items.map((r, i) => {
+        const action = (r.extra && r.extra.action) || r.issue_type || 'deleted';
+        const cfg  = ACTION_CFG[action] || ACTION_CFG['deleted'];
+        const ts   = (r.extra && r.extra.timestamp) || '';
+        const path = (r.issue_path || r.issue_name || '').slice(0, 200);
+        const base = path.split(/[\\/]/).pop() || path;
+        const dir  = path.length > base.length ? path.slice(0, path.length - base.length - 1) : '';
+        const rowBg = i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg)';
+        return `<tr style="background:${rowBg};border-bottom:1px solid var(--border);" title="${path}">
+            <td style="padding:8px 14px;white-space:nowrap;">
+                <span style="display:inline-flex;align-items:center;gap:5px;background:${cfg.bg};color:#fff;border-radius:5px;padding:3px 8px;font-size:11px;font-weight:600;">
+                    ${cfg.icon} ${cfg.label}
+                </span>
+            </td>
+            <td style="padding:8px 14px;max-width:520px;overflow:hidden;">
+                <span style="color:var(--text-d);font-size:11px;">${dir ? dir + '/' : ''}</span><span style="color:var(--text);font-weight:600;font-size:12px;">${base}</span>
+            </td>
+            <td style="padding:8px 14px;text-align:right;color:var(--text-d);font-size:11px;white-space:nowrap;">${ts}</td>
+        </tr>`;
+    }).join('');
+}
+
+function filterExploreTable() {
+    const q = (document.getElementById('explore-search').value || '').toLowerCase();
+    const filtered = q ? _fileActivityAll.filter(r =>
+        (r.issue_path || '').toLowerCase().includes(q) ||
+        (r.issue_name || '').toLowerCase().includes(q) ||
+        ((r.extra && r.extra.action) || '').toLowerCase().includes(q)
+    ) : _fileActivityAll;
+    _drawFileActivityTable(filtered);
+}
+
+function switchExploreTab(tab) {
+    const isLogs = tab === 'logs';
+    document.getElementById('explore-panel-logs').style.display  = isLogs ? '' : 'none';
+    document.getElementById('explore-panel-files').style.display = isLogs ? 'none' : '';
+    const btnL = document.getElementById('explore-tab-logs');
+    const btnF = document.getElementById('explore-tab-files');
+    if (btnL) { btnL.style.background = isLogs ? 'var(--accent)' : 'var(--bg-t)'; btnL.style.color = isLogs ? '#fff' : 'var(--text-m)'; }
+    if (btnF) { btnF.style.background = isLogs ? 'var(--bg-t)' : 'var(--accent)'; btnF.style.color = isLogs ? 'var(--text-m)' : '#fff'; }
 }
 
 function _renderTabFindings(listId, btnId, badgeId, results, categories) {
