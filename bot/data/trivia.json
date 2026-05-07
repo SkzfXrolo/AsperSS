@@ -1,0 +1,33 @@
+{
+  "anticheat": [
+    {"q": "¿Que es un 'ghost client' en Minecraft?", "a": "Cliente que oculta los hacks visualmente al usuario o al staff", "options": ["Plugin oficial de Mojang", "Cliente que oculta los hacks visualmente al usuario o al staff", "Tipo de mod permitido", "Skin transparente"]},
+    {"q": "¿Que herramienta de Windows registra archivos ejecutados recientemente?", "a": "Prefetch", "options": ["Prefetch", "Registry", "PowerShell", "Defender"]},
+    {"q": "¿Que es DLL hijacking?", "a": "Inyectar codigo via DLLs cargadas por el proceso", "options": ["Robar archivos DLL", "Inyectar codigo via DLLs cargadas por el proceso", "Renombrar carpetas del juego", "Borrar drivers"]},
+    {"q": "¿Donde guarda Windows el journal de cambios en disco NTFS?", "a": "USN Journal", "options": ["MFT", "USN Journal", "Pagefile", "EventLog"]},
+    {"q": "¿Cual NO es una senal tipica de autoclicker?", "a": "Movimiento perfectamente aleatorio del raton", "options": ["CPS muy uniforme", "Clicks en intervalos exactos", "Movimiento perfectamente aleatorio del raton", "Picos de CPS sin esfuerzo"]},
+    {"q": "¿Que carpeta contiene archivos $I de items eliminados?", "a": "$Recycle.Bin", "options": ["AppData", "$Recycle.Bin", "System32", "Temp"]},
+    {"q": "¿Que es 'Java injection' en el contexto de hacks?", "a": "Modificar bytecode de Minecraft en tiempo de ejecucion", "options": ["Beber cafe mientras codeas", "Modificar bytecode de Minecraft en tiempo de ejecucion", "Compilar Java mas rapido", "Tipo de plugin de Bukkit"]},
+    {"q": "¿Cual es un metodo de bypass comun para anti-cheats client-side?", "a": "Hookear funciones nativas del cliente", "options": ["Pedirle permiso al servidor", "Hookear funciones nativas del cliente", "Cambiar de skin", "Reiniciar el PC"]},
+    {"q": "¿Que es un 'kill aura' en Minecraft?", "a": "Hack que ataca enemigos cercanos automaticamente", "options": ["Particula de muerte", "Hack que ataca enemigos cercanos automaticamente", "Plugin oficial de PvP", "Encantamiento legitimo"]},
+    {"q": "¿Que extension tienen los archivos de Prefetch?", "a": ".pf", "options": [".log", ".pf", ".prf", ".dat"]}
+  ],
+  "minecraft": [
+    {"q": "¿Cuantos bloques mide un chunk en Minecraft Java?", "a": "16x16", "options": ["8x8", "16x16", "32x32", "64x64"]},
+    {"q": "¿Cual es el bloque mas raro de obtener naturalmente?", "a": "Dragon Egg", "options": ["Diamond", "Netherite", "Dragon Egg", "Bedrock"]},
+    {"q": "¿En que version se anadio el End?", "a": "1.0", "options": ["Beta 1.8", "1.0", "1.5", "1.9"]},
+    {"q": "¿Cuantos hits aguanta un creeper sin armadura?", "a": "Depende del danio", "options": ["1", "Depende del danio", "Inmortal", "100"]},
+    {"q": "¿Que material es mas duro: netherite o diamante?", "a": "Netherite", "options": ["Diamante", "Netherite", "Iguales", "Oro"]},
+    {"q": "¿Cual es el comando para cambiar el clima a tormenta?", "a": "/weather thunder", "options": ["/storm on", "/weather thunder", "/rain heavy", "/sky storm"]},
+    {"q": "¿Cuantos puntos de experiencia da matar un Wither?", "a": "50", "options": ["10", "50", "100", "500"]},
+    {"q": "¿De que mob proviene el Eye of Ender?", "a": "Enderman + Blaze", "options": ["Solo Enderman", "Enderman + Blaze", "Solo Blaze", "Wither Skeleton"]},
+    {"q": "¿Cual NO es un bioma del Nether?", "a": "Mushroom Fields", "options": ["Crimson Forest", "Soul Sand Valley", "Mushroom Fields", "Basalt Deltas"]},
+    {"q": "¿Que altura maxima tienen los mundos en 1.18+?", "a": "320", "options": ["256", "320", "384", "1024"]}
+  ],
+  "general": [
+    {"q": "¿Cuanto es 7 x 8?", "a": "56", "options": ["48", "54", "56", "64"]},
+    {"q": "¿En que ano se fundo Mojang?", "a": "2009", "options": ["2007", "2009", "2010", "2011"]},
+    {"q": "¿Que lenguaje usa Minecraft Java?", "a": "Java", "options": ["C++", "Java", "Python", "Rust"]},
+    {"q": "¿Cuantos bytes tiene un GB?", "a": "10^9 (o 2^30)", "options": ["10^6", "10^9 (o 2^30)", "10^12", "1024"]},
+    {"q": "¿Cual NO es un protocolo de red?", "a": "JPEG", "options": ["TCP", "UDP", "HTTP", "JPEG"]}
+  ]
+}
