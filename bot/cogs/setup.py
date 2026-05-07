@@ -889,20 +889,31 @@ class ServerBuilder:
         embed = utils.brand_embed(
             title="❓ Soporte — abrí un ticket",
             description=(
-                "Para soporte privado, abrí un **ticket** usando el panel que el staff "
-                "publicará abajo (o pedíle a un staff que ejecute `/ticket-panel` aquí).\n\n"
-                "Cada categoría de ticket pingea a roles distintos:\n\n"
+                "**Elegí el motivo en el menú de abajo** para abrir un ticket privado.\n\n"
+                "Cada categoría pingea a roles distintos automáticamente:\n\n"
                 "🛠 **Soporte técnico** — Staff genérico\n"
-                "💻 **Problema con Argus Scanner** — Developers (bugs, falsos positivos)\n"
-                "💳 **Pago / Cliente Pro** — Admin (suscripciones, facturas)\n"
+                "💻 **Problema con Argus Scanner** — Developers + Staff (bugs, falsos positivos)\n"
+                "💳 **Pago / Cliente Pro** — Admin + Owner (suscripciones, facturas)\n"
                 "🚨 **Denuncia / reporte** — Senior Staff + Staff (reportes graves)\n"
                 "📋 **Otro** — Staff genérico\n\n"
                 "**Solo podés tener 1 ticket abierto a la vez.** "
-                "Cuando lo abras el bot te hace preguntas guiadas y, si tu problema es común, "
-                "te sugiere una solución antes de involucrar humanos."
+                "Cuando lo abras, el bot te hace preguntas guiadas y, si tu problema es común, "
+                "te sugiere una solución automática antes de involucrar humanos.\n\n"
+                "Dentro del ticket vas a tener 3 botones: **🔒 Cerrar**, **🙋 Reclamar (staff)** "
+                "y **📈 Escalar (IA)** — el staff puede escalar describiendo el motivo y la IA "
+                "decide a qué rol pingear."
             ),
         )
-        await self._safe(support.send(embed=embed), "enviar info soporte")
+        # Publicar embed + panel funcional con dropdown de categorias
+        try:
+            from .tickets import TicketPanelView
+            await self._safe(
+                support.send(embed=embed, view=TicketPanelView()),
+                "enviar panel de tickets",
+            )
+        except Exception:
+            log.exception("[Setup] Error importando TicketPanelView, fallback a solo embed")
+            await self._safe(support.send(embed=embed), "enviar info soporte (sin panel)")
 
     # ── orden de ejecucion ─────────────────────────────────────────────
     async def run_destructive(self) -> tuple[bool, str]:
