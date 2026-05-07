@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.30"
+SCANNER_VERSION = "1.6.31"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -8567,8 +8567,9 @@ class ArgusApp:
             '.rise', '.meteor', '.drip', '.vertex', '.azura', '.jello', '.datura',
             '.mathias', '.rusherhack', '.salhack', '.inertia', 'weaveloader',
         ]
-        INTERESTING_EXTS = {'.exe', '.jar', '.dll', '.bat', '.ps1', '.vbs', '.ahk', '.py'}
-        CUTOFF_48H  = time.time() - 172800  # 48 horas
+        INTERESTING_EXTS = {'.exe', '.jar', '.dll', '.bat', '.ps1', '.vbs', '.ahk', '.py',
+                              '.zip', '.rar', '.7z', '.tar'}  # archivos comprimidos de distribución
+        CUTOFF_48H  = time.time() - 604800  # 7 días
         EPOCH_DIFF  = 116444736000000000
 
         import struct
@@ -8634,9 +8635,13 @@ class ArgusApp:
                                 deleted_str = deleted_dt.strftime('%d/%m %H:%M')
 
                                 # Archivos borrados permanentemente (ya no están en la papelera) son más sospechosos
-                                base_alerta = 'CRITICAL' if is_hack else 'SOSPECHOSO'
-                                if not still_in_bin and is_exec:
-                                    base_alerta = 'CRITICAL'  # borrado permanente de ejecutable
+                                is_archive = ext in ('.zip', '.rar', '.7z', '.tar')
+                                if is_hack:
+                                    base_alerta = 'CRITICAL'
+                                elif not still_in_bin and is_exec and not is_archive:
+                                    base_alerta = 'CRITICAL'   # ejecutable borrado permanentemente
+                                else:
+                                    base_alerta = 'SOSPECHOSO'
 
                                 size_str = ''
                                 if file_size_bytes > 0:
@@ -8653,7 +8658,7 @@ class ArgusApp:
                                     'archivo':  base,
                                     'categoria':'DELETED_FILES',
                                     'alerta':   base_alerta,
-                                    'confidence': (0.88 if is_hack else 0.55) + (0.10 if not still_in_bin else 0),
+                                    'confidence': (0.88 if is_hack else 0.40 if is_archive else 0.55) + (0.10 if not still_in_bin else 0),
                                     'detected_patterns': [f'deleted:{ext}',
                                                           'permanently_deleted' if not still_in_bin else 'in_recycle_bin']
                                                          + [t for t in hack_terms if t in base_l][:3],

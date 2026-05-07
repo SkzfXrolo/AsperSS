@@ -2166,7 +2166,7 @@ def debug_last_scan():
 
 
 # Current released scanner version — update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.6.30"
+CURRENT_SCANNER_VERSION = "1.6.31"
 
 @app.route('/sw.js')
 def service_worker():
