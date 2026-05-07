@@ -64,3 +64,9 @@ logo/
 .commit_msg.txt
 web_app/static/img/*.bak
 
+# Bot de Discord
+bot/.env
+bot/data/transcripts/
+__pycache__/
+*.pyc
+
