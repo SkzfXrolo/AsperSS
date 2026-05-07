@@ -460,7 +460,7 @@ class ServerBuilder:
             title="📜 Reglas del servidor",
             color=0xED4245,
             description=(
-                "Al permanecer en este Discord aceptás estas reglas. Sanciones "
+                "Al permanecer en este Discord aceptas estas reglas. Sanciones "
                 "estándar: warn → mute → kick → ban según gravedad. Violaciones "
                 "graves (NSFW, doxxing, distribución de cheats) son ban directo."
             ),
@@ -515,7 +515,7 @@ class ServerBuilder:
             name="7 · Tickets para soporte",
             value=(
                 "No spamees DMs al equipo. Para soporte, dudas, contratación o denuncias, "
-                "abrí ticket en `❓・soporte`. Argus AI te recibe primero."
+                "abre un ticket en `❓・soporte`. Argus AI te recibe primero."
             ),
             inline=False,
         )
@@ -590,7 +590,7 @@ class ServerBuilder:
             value=(
                 "Posible. Argus filtra agresivamente pero ningún anti-cheat "
                 "es perfecto. Si tu cliente cree que un veredicto está mal, "
-                "abrí ticket tipo **`scanner`** con captura del scan completo "
+                "abre un ticket tipo **`scanner`** con captura del scan completo "
                 "y los devs lo revisan."
             ),
             inline=False,
@@ -633,7 +633,7 @@ class ServerBuilder:
                 f"**Link oficial:** {config.PANEL_URL}/descargar\n\n"
                 "**Plataforma:** Windows 10 / 11 · 64-bit\n"
                 "**Tamaño:** ~50 MB\n"
-                "**Versión actual:** verificá en `/stats` o en el panel"
+                "**Versión actual:** verifica en `/stats` o en el panel"
             ),
         )
         e1.set_footer(text="Solo descargá desde este link oficial. Cualquier otro link es trampa/malware.")
@@ -645,12 +645,12 @@ class ServerBuilder:
         )
         e2.add_field(
             name="1. Conseguir un token",
-            value="Pídele a un **Cliente Pro** que ejecute `/ss <vos>` en este Discord. Te llegará un DM con el token (1 uso, 30 min).",
+            value="Pídele a un **Cliente Pro** que ejecute `/ss <tú>` en este Discord. Te llegará un DM con el token (1 uso, 30 min).",
             inline=False,
         )
         e2.add_field(
             name="2. Descargar el scanner",
-            value=f"Visitá {config.PANEL_URL}/descargar y bajá `ArgusScanner.exe`.",
+            value=f"Visita {config.PANEL_URL}/descargar y descarga `ArgusScanner.exe`.",
             inline=False,
         )
         e2.add_field(
@@ -681,7 +681,7 @@ class ServerBuilder:
         )
         e3.add_field(
             name="Mi antivirus borra el .exe",
-            value="Falso positivo. Excluí el archivo del antivirus (Defender → Exclusiones), o desactivá el AV solo para el scan.",
+            value="Falso positivo. Excluye el archivo del antivirus (Defender → Exclusiones), o desactiva el AV solo para el scan.",
             inline=False,
         )
         e3.add_field(
@@ -696,7 +696,7 @@ class ServerBuilder:
         )
         e3.add_field(
             name="No abre / no responde",
-            value="Asegurate de ejecutar **como administrador**. Si igual no abre, abrí ticket tipo `scanner`.",
+            value="Asegúrate de ejecutar **como administrador**. Si igual no abre, abre un ticket tipo `scanner`.",
             inline=False,
         )
         await self._safe(downloads.send(embed=e3), "enviar troubleshooting")
@@ -785,8 +785,8 @@ class ServerBuilder:
                 "🚨 **Denuncia / reporte** → equipo Senior\n"
                 "📋 **Otro** → equipo de Soporte\n\n"
                 "**Solo 1 ticket abierto a la vez.** Te recibe **Argus AI** 👁 — "
-                "si tu caso es uno que ya resolvimos te tiro la solución al toque "
-                "y te ahorrás esperar al equipo humano.\n\n"
+                "si tu caso es uno que ya resolvimos te doy la solución al instante "
+                "y te ahorras esperar al equipo humano.\n\n"
                 "Una vez dentro del ticket vas a tener 3 botones: **🔒 Cerrar** "
                 "lo cierra, **🙋 Reclamar** es para que un miembro del equipo "
                 "se haga cargo formalmente, y **📈 Escalar** sirve para que "

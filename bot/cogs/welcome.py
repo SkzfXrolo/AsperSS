@@ -127,7 +127,7 @@ class CaptchaModal(discord.ui.Modal):
             await interaction.response.send_message(
                 embed=utils.success_embed(
                     f"Bienvenido a **{guild.name}**, {member.mention}.\n\n"
-                    "Ya tenes acceso a todos los canales publicos. "
+                    "Ya tienes acceso a todos los canales públicos. "
                     "Si necesitas soporte, abre un ticket en `❓・soporte`."
                 ),
                 ephemeral=True,

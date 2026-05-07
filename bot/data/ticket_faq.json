@@ -3,12 +3,12 @@
     {
       "keywords": ["false positive", "falso positivo", "marco como hack", "no soy hack", "esta limpio", "esta clean"],
       "title": "Posible falso positivo",
-      "answer": "Si crees que es un falso positivo:\n\n1. **Revisa el detalle del scan** en el panel — entra a `{panel}/panel`, busca tu scan_id y mira QUÉ hallazgos específicos disparó el risk score.\n2. **Subí captura del panel** acá en este ticket. Sin la captura del scan completo no podemos analizar.\n3. **Indica versión de Windows, antivirus instalado y si modificas archivos del juego** — eso ayuda a triagear.\n\nEl rol Developer va a revisar tu caso. Pueden pedirte info adicional o el archivo de log del scanner."
+      "answer": "Si crees que es un falso positivo:\n\n1. **Revisa el detalle del scan** en el panel — entra a `{panel}/panel`, busca tu scan_id y mira QUÉ hallazgos específicos dispararon el risk score.\n2. **Sube captura del panel** aquí en este ticket. Sin la captura del scan completo no podemos analizar.\n3. **Indica versión de Windows, antivirus instalado y si modificas archivos del juego** — eso ayuda a triagear.\n\nEl rol Developer va a revisar tu caso. Pueden pedirte info adicional o el archivo de log del scanner."
     },
     {
       "keywords": ["no abre", "no funciona el exe", "no inicia", "no ejecuta", "se cierra solo", "crashea"],
       "title": "El scanner no abre o se cierra solo",
-      "answer": "Los crashes al iniciar suelen ser:\n\n1. **No ejecutaste como administrador**. Click derecho → Ejecutar como administrador. Sin esto el scanner no puede acceder a Prefetch/USN Journal y crashea silencioso.\n2. **Antivirus está bloqueando partes del .exe**. Excluí `ArgusScanner.exe` del antivirus o desactivá el AV durante el scan.\n3. **Versión de Windows incompatible**. Solo Windows 10/11 64-bit. Win7/8/Server no tienen las APIs que usamos.\n4. **Archivo corrupto al descargar**. Volvé a descargar desde {panel}/descargar y verificá el tamaño.\n\nSi probaste todo lo anterior, **subí captura del error** en este ticket."
+      "answer": "Los crashes al iniciar suelen ser:\n\n1. **No lo ejecutaste como administrador**. Click derecho → Ejecutar como administrador. Sin esto el scanner no puede acceder a Prefetch/USN Journal y crashea silencioso.\n2. **Antivirus está bloqueando partes del .exe**. Excluye `ArgusScanner.exe` del antivirus o desactívalo durante el scan.\n3. **Versión de Windows incompatible**. Solo Windows 10/11 64-bit. Win7/8/Server no tienen las APIs que usamos.\n4. **Archivo corrupto al descargar**. Vuelve a descargar desde {panel}/descargar y verifica el tamaño.\n\nSi probaste todo lo anterior, **sube captura del error** en este ticket."
     },
     {
       "keywords": ["windows protected", "smartscreen", "windows defender", "no es seguro"],
@@ -18,36 +18,36 @@
     {
       "keywords": ["token", "expir", "no me reconoce el codigo", "codigo invalido", "auth"],
       "title": "Token / código de autenticación",
-      "answer": "Sobre los tokens:\n\n• **Solo duran 30 minutos** desde que se generan.\n• **Solo se pueden usar 1 vez**. Si hiciste click en 'Iniciar' y se canceló, el token ya está consumido.\n• Si pegaste mal el token (espacios extra, falta una letra), también se considera consumido.\n\n**Solución:** Pídele al mismo staff que te generó el token que ejecute `/ss <vos>` de nuevo para emitir uno nuevo. **No inventes tokens** — el bot los genera con `secrets.token_urlsafe(32)` y son random."
+      "answer": "Sobre los tokens:\n\n• **Solo duran 30 minutos** desde que se generan.\n• **Solo se pueden usar 1 vez**. Si hiciste click en 'Iniciar' y se canceló, el token ya está consumido.\n• Si pegaste mal el token (espacios extra, falta una letra), también se considera consumido.\n\n**Solución:** Pídele al mismo cliente que te generó el token que ejecute `/ss <tú>` de nuevo para emitir uno nuevo. **No inventes tokens** — el bot los genera con `secrets.token_urlsafe(32)` y son random."
     },
     {
       "keywords": ["actualiza", "version vieja", "version desactualizada", "ya no sirve", "tengo la 1."],
       "title": "Actualizar el scanner",
-      "answer": "Si tu scanner es viejo:\n\n1. Bajá la última versión desde {panel}/descargar.\n2. **Borrá la versión vieja** antes de ejecutar la nueva (no hace falta uninstall, no se 'instala' formalmente).\n3. Ejecutá la nueva como administrador.\n\nLa versión actual la podés ver con `/stats` o en el panel. Si querés mantenerte al día, fijate en `🔄・actualizaciones`, ahí se publican los releases nuevos."
+      "answer": "Si tu scanner es viejo:\n\n1. Descarga la última versión desde {panel}/descargar.\n2. **Borra la versión vieja** antes de ejecutar la nueva (no hace falta uninstall, no se 'instala' formalmente).\n3. Ejecuta la nueva como administrador.\n\nLa versión actual la puedes ver con `/stats` o en el panel. Si quieres mantenerte al día, fíjate en `🔄・actualizaciones`, ahí publicamos los releases nuevos."
     }
   ],
   "soporte": [
     {
       "keywords": ["no veo mi scan", "no aparece", "donde esta", "no se cargo"],
       "title": "El scan no aparece en el panel",
-      "answer": "Si no ves el scan que hiciste:\n\n1. **Verificá que el scanner haya terminado completamente** antes de cerrarlo. Si lo cerraste a la mitad, no se subió nada.\n2. **Confirmá la conexión a internet** durante el scan — necesita subir los datos al panel al final.\n3. **Buscá por machine_name o username**, no por nombre Discord.\n4. Si pasaron <5 minutos, **dale un refresh** al panel — a veces tarda en aparecer.\n\nSi aún no aparece después de 10 min, **subí el `panel_response.log`** (está en la misma carpeta del scanner) en este ticket."
+      "answer": "Si no ves el scan que hiciste:\n\n1. **Verifica que el scanner haya terminado completamente** antes de cerrarlo. Si lo cerraste a la mitad, no se subió nada.\n2. **Confirma la conexión a internet** durante el scan — necesita subir los datos al panel al final.\n3. **Busca por machine_name o username**, no por nombre Discord.\n4. Si pasaron <5 minutos, **actualiza la página** del panel — a veces tarda en aparecer.\n\nSi aún no aparece después de 10 min, **sube el `panel_response.log`** (está en la misma carpeta del scanner) en este ticket."
     },
     {
       "keywords": ["panel", "no entra", "login", "loguear", "olvide contrase"],
       "title": "Acceso al panel",
-      "answer": "El acceso al panel staff lo da el Owner del proyecto. Si:\n\n• **Sos staff de un server que usa Argus** y nunca tuviste acceso → habla con el Owner para que te cree una cuenta.\n• **Olvidaste tu password** → mencioná tu username y un Admin lo resetea.\n• **Te bloquearon el acceso** → eso es decisión del Owner. Discutilo con él."
+      "answer": "El acceso al panel cliente lo gestiona el equipo de Argus Projects. Si:\n\n• **Eres cliente activo** y nunca tuviste acceso → habla con un Admin para que te cree una cuenta.\n• **Olvidaste tu contraseña** → menciona tu username y un Admin la resetea.\n• **Te bloquearon el acceso** → eso es decisión del equipo. Discútelo en este ticket."
     }
   ],
   "compra": [
     {
       "keywords": ["pro", "cliente pro", "suscripcion", "pagar", "comprar", "precio", "individual", "personal"],
       "title": "Plan Cliente Pro (individual)",
-      "answer": "El plan **Cliente Pro** está pensado para clientes individuales (staff de un server, usuarios particulares):\n\n• **Beneficios:** acceso a `/ss`, cola prioritaria de scans, más SS simultáneos, soporte directo y badge en Discord.\n• **Métodos de pago:** PayPal, transferencia y crypto (BTC/ETH).\n• **Precios:** dependen del plan exacto, te los pasa nuestro equipo Comercial.\n\nUn miembro de nuestro equipo te va a contactar acá en breve para concretar el contrato y la facturación."
+      "answer": "El plan **Cliente Pro** está pensado para clientes individuales (staff de un server, usuarios particulares):\n\n• **Beneficios:** acceso a `/ss`, cola prioritaria de scans, más SS simultáneos, soporte directo y badge en Discord.\n• **Métodos de pago:** PayPal, transferencia y crypto (BTC/ETH).\n• **Precios:** dependen del plan exacto, te los pasa nuestro equipo Comercial.\n\nUn miembro de nuestro equipo te va a contactar aquí en breve para concretar el contrato y la facturación."
     },
     {
       "keywords": ["empresa", "enterprise", "corporativo", "network", "organizacion", "organización", "sla", "facturacion", "facturación", "factura electronica", "factura electrónica", "iva"],
       "title": "Plan Cliente Empresa (B2B)",
-      "answer": "El plan **Cliente Empresa** es nuestro plan corporativo para servers grandes, networks y organizaciones:\n\n• **Beneficios:** todo lo del plan Pro + SLA de respuesta, soporte prioritario via DM directo a Admin/Devs, múltiples cuentas autorizadas para `/ss`, factura electrónica.\n• **Onboarding:** charlamos primero por este ticket para entender tu caso (tamano del server, número de SS al mes esperados, integraciones), y armamos un contrato a medida.\n\nNuestro equipo Comercial te contacta acá para coordinar una llamada o seguir todo por escrito según prefieras."
+      "answer": "El plan **Cliente Empresa** es nuestro plan corporativo para servers grandes, networks y organizaciones:\n\n• **Beneficios:** todo lo del plan Pro + SLA de respuesta, soporte prioritario via DM directo a Admin/Devs, múltiples cuentas autorizadas para `/ss`, factura electrónica.\n• **Onboarding:** hablamos primero por este ticket para entender tu caso (tamaño del server, número de SS al mes esperados, integraciones), y preparamos un contrato a medida.\n\nNuestro equipo Comercial te contacta aquí para coordinar una llamada o seguir todo por escrito según prefieras."
     }
   ],
   "denuncia": [

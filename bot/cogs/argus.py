@@ -219,8 +219,8 @@ class Argus(commands.Cog):
                     "del servicio Argus Projects:\n\n"
                     "🌟 **Cliente Pro** — plan individual\n"
                     "🏢 **Cliente Empresa** — plan B2B / corporativo\n\n"
-                    "Argus Projects no tiene tier gratis. Si querés contratar el "
-                    "servicio para vos o tu organización, abrí un ticket tipo "
+                    "Argus Projects no tiene tier gratis. Si quieres contratar el "
+                    "servicio para ti o tu organización, abre un ticket tipo "
                     "**`compra`** en `❓・soporte` y nuestro equipo te atiende "
                     "con planes y métodos de pago.",
                     title="🔒 Acceso reservado a clientes",

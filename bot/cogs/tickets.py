@@ -93,7 +93,7 @@ GUIDED_QUESTIONS: dict[str, dict] = {
             "2. Si es para una empresa: nombre del proyecto/server, tamano aprox de la comunidad.",
             "3. ¿Metodo de pago preferido? (PayPal / transferencia / crypto / otro).",
             "4. Si es renovacion: ¿desde que email pagaste antes?",
-            "5. ¿Tenes alguna pregunta sobre las funciones antes de contratar?",
+            "5. ¿Tienes alguna pregunta sobre las funciones antes de contratar?",
         ],
     },
     "denuncia": {
@@ -109,7 +109,7 @@ GUIDED_QUESTIONS: dict[str, dict] = {
     "otro": {
         "title": "📋 Ticket general",
         "questions": [
-            "1. Describi tu problema o consulta con todo el detalle posible.",
+            "1. Describe tu problema o consulta con todo el detalle posible.",
             "2. Si aplica, capturas de pantalla.",
         ],
     },
@@ -350,9 +350,9 @@ class CloseTicketModal(discord.ui.Modal, title="🔒 Cerrar ticket"):
 class EscalateModal(discord.ui.Modal, title="📈 Escalar ticket"):
     """Modal donde el staff escribe el motivo. Argus AI decide a quien pingear."""
     motivo = discord.ui.TextInput(
-        label="Contame qué pasa",
+        label="Cuéntame qué pasa",
         style=discord.TextStyle.paragraph,
-        placeholder="Explicalo como se lo contarias a un companero. Argus AI lee y avisa al rol que mejor pueda ayudar.",
+        placeholder="Explícalo como se lo contarías a un compañero. Argus AI lee y avisa al rol que mejor pueda ayudar.",
         min_length=15,
         max_length=500,
         required=True,
@@ -500,9 +500,9 @@ class Tickets(commands.Cog):
                 f"Hola {interaction.user.mention}, soy **Argus AI** 👁\n\n"
                 f"Bienvenido al canal privado de tu ticket. Avisé a {ping or 'a nuestro equipo'} "
                 f"para que se hagan cargo cuando estén disponibles.\n\n"
-                f"Mientras tanto, **contame con el mayor detalle posible qué necesitás**. "
-                f"Si tu caso es uno que ya resolvimos antes, te tiro la solución al "
-                f"momento y te ahorrás la espera.\n\n"
+                f"Mientras tanto, **cuéntame con el mayor detalle posible qué necesitas**. "
+                f"Si tu caso es uno que ya resolvimos antes, te doy la solución al "
+                f"momento y te ahorras la espera.\n\n"
                 f"Los botones de abajo te permiten cerrar el ticket o escalarlo."
             ),
         )
@@ -514,8 +514,8 @@ class Tickets(commands.Cog):
             title=guide["title"],
             color=0x3498DB,
             description=(
-                "Para no hacerte ir y volver, contame esto cuando puedas "
-                "(uno por uno o todo de una):\n\n"
+                "Para no hacerte ir y volver, cuéntame esto cuando puedas "
+                "(uno por uno o todo junto):\n\n"
                 + "\n".join(guide["questions"])
             ),
         )
@@ -555,10 +555,10 @@ class Tickets(commands.Cog):
             title=f"👁 {match['title']}",
             color=0xFEE75C,
             description=(
-                f"Por lo que escribís me suena conocido, ya vi esto antes. Probá esto:\n\n"
+                f"Por lo que escribes me suena conocido, ya vi esto antes. Prueba esto:\n\n"
                 f"{answer}\n\n"
-                f"Si te resuelve, marcá ✅ abajo y cierro el ticket. "
-                f"Si no, dale a 👤 y aviso a alguien del equipo."
+                f"Si te resuelve, marca ✅ abajo y cierro el ticket. "
+                f"Si no, pulsa 👤 y aviso a alguien del equipo."
             ),
         )
         embed.set_footer(text="Argus AI")
@@ -587,8 +587,8 @@ class Tickets(commands.Cog):
                 "🚨 **Denuncia / reporte** → equipo Senior\n"
                 "📋 **Otro** → equipo de Soporte\n\n"
                 "**Solo 1 ticket abierto a la vez.** Soy **Argus AI** y te recibo "
-                "yo primero — si tu caso es uno que ya resolvimos antes te tiro "
-                "la solución al toque y te ahorrás esperar al equipo humano."
+                "yo primero — si tu caso es uno que ya resolvimos antes te doy "
+                "la solución al instante y te ahorras esperar al equipo humano."
             ),
         )
         await interaction.channel.send(embed=embed, view=TicketPanelView())
@@ -631,7 +631,7 @@ class Tickets(commands.Cog):
                     await interaction.response.send_message(
                         embed=utils.warning_embed(
                             f"Este ticket ya fue reclamado por <@{prev_id}>. "
-                            f"Si querés tomarlo igual, pedíle al claimer que use `🔒 Cerrar` o que delegue.",
+                            f"Si quieres tomarlo igual, pídele al claimer que use `🔒 Cerrar` o que delegue.",
                         ),
                         ephemeral=True,
                     )
