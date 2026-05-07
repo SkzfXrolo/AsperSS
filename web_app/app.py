@@ -3735,67 +3735,154 @@ def submit_scan_results(scan_id):
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# ENDPOINT TEMPORAL DE DIAGNOSTICO — sin login, devuelve resumen del scan.
-# Solo expone metadata + count (NO el contenido completo) para no filtrar
-# datos sensibles. Permite verificar si el backend ve los resultados o no.
+# ENDPOINT TEMPORAL DE DIAGNOSTICO — sin login, replica TODA la logica de
+# get_scan() paso a paso, devolviendo en que paso fallo si falla. Permite
+# diagnosticar 500's del endpoint real sin acceso a logs.
 # Eliminar cuando el bug este resuelto.
 # ──────────────────────────────────────────────────────────────────────────
 @app.route('/api/debug/scan/<int:scan_id>', methods=['GET'])
 def debug_scan_summary(scan_id):
+    import traceback as _tb
+    steps = []
+    def _step(name, ok, info=None, err=None):
+        steps.append({'name': name, 'ok': ok, 'info': info, 'err': err})
+
+    payload = {'scan_id': scan_id, 'argus_version': _ARGUS_VERSION,
+               'php_marker': _PH, 'steps': steps}
+
     try:
         with get_api_db_cursor() as cursor:
-            cursor.execute(
-                f"SELECT id, status, total_files_scanned, issues_found, "
-                f"started_at, completed_at, machine_name, minecraft_username "
-                f"FROM scans WHERE id = {_PH}", (scan_id,))
-            row = cursor.fetchone()
-            if not row:
-                return jsonify({'found': False, 'scan_id': scan_id}), 404
+            try:
+                cursor.execute(
+                    f"SELECT id, token_id, scan_token, started_at, completed_at, status, "
+                    f"total_files_scanned, issues_found, scan_duration, machine_id, "
+                    f"machine_name, ip_address, country, minecraft_username "
+                    f"FROM scans WHERE id = {_PH}", (scan_id,))
+                row = cursor.fetchone()
+                if not row:
+                    _step('select_scans_base', False, err='no row')
+                    payload['final'] = '404'
+                    return jsonify(payload), 404
+                _step('select_scans_base', True, info={'machine_name': _row_get(row, 10, 'machine_name')})
+            except Exception as e:
+                _step('select_scans_base', False, err=f'{type(e).__name__}: {e}')
+                payload['final'] = '500'
+                payload['traceback'] = _tb.format_exc()[:1500]
+                return jsonify(payload), 500
 
-            scan_meta = {
-                'id': _row_get(row, 0, 'id'),
-                'status': _row_get(row, 1, 'status'),
-                'total_files_scanned': _row_get(row, 2, 'total_files_scanned'),
-                'issues_found_col': _row_get(row, 3, 'issues_found'),
-                'started_at': str(_row_get(row, 4, 'started_at') or ''),
-                'completed_at': str(_row_get(row, 5, 'completed_at') or ''),
-                'machine_name': _row_get(row, 6, 'machine_name'),
-                'minecraft_username': _row_get(row, 7, 'minecraft_username'),
-            }
+            try:
+                cursor.execute('SAVEPOINT opt_cols')
+                cursor.execute(
+                    f"SELECT total_dirs_scanned, verdict, verdict_reason, verdict_by, verdict_at, "
+                    f"screenshot, mc_info, risk_score, ensemble_data "
+                    f"FROM scans WHERE id = {_PH}", (scan_id,))
+                vrow = cursor.fetchone()
+                cursor.execute('RELEASE SAVEPOINT opt_cols')
+                _step('select_scans_optional_cols', True, info={'has_vrow': vrow is not None})
+            except Exception as e:
+                _step('select_scans_optional_cols', False, err=f'{type(e).__name__}: {e}')
+                try:
+                    cursor.execute('ROLLBACK TO SAVEPOINT opt_cols')
+                except Exception:
+                    pass
 
-            cursor.execute(
-                f"SELECT COUNT(*) as c FROM scan_results WHERE scan_id = {_PH}",
-                (scan_id,))
-            cnt = _row_get(cursor.fetchone(), 0, 'c') or 0
+            try:
+                cursor.execute(
+                    f"SELECT st.created_by FROM scans s "
+                    f"LEFT JOIN scan_tokens st ON s.token_id = st.id "
+                    f"WHERE s.id = {_PH}", (scan_id,))
+                srow = cursor.fetchone()
+                _step('select_scanned_by', True, info={'scanned_by': _row_get(srow, 0, 'created_by') if srow else None})
+            except Exception as e:
+                _step('select_scanned_by', False, err=f'{type(e).__name__}: {e}')
 
-            cursor.execute(
-                f"SELECT alert_level, issue_type, issue_name "
-                f"FROM scan_results WHERE scan_id = {_PH} "
-                f"ORDER BY id DESC LIMIT 10", (scan_id,))
-            sample = []
-            for r in cursor.fetchall():
-                sample.append({
-                    'alert_level': _row_get(r, 0, 'alert_level'),
-                    'issue_type': _row_get(r, 1, 'issue_type'),
-                    'issue_name': (_row_get(r, 2, 'issue_name') or '')[:60],
-                })
+            _has_extra_col = True
+            try:
+                cursor.execute('SAVEPOINT extra_select')
+                cursor.execute(
+                    f"SELECT id, issue_type, issue_name, issue_path, issue_category, "
+                    f"alert_level, confidence, detected_patterns, obfuscation_detected, "
+                    f"file_hash, ai_analysis, ai_confidence, feedback_status, extra "
+                    f"FROM scan_results WHERE scan_id = {_PH}", (scan_id,))
+                rows = cursor.fetchall()
+                cursor.execute('RELEASE SAVEPOINT extra_select')
+                _step('select_results_with_extra', True, info={'rows': len(rows)})
+            except Exception as e:
+                _step('select_results_with_extra', False, err=f'{type(e).__name__}: {e}')
+                try:
+                    cursor.execute('ROLLBACK TO SAVEPOINT extra_select')
+                except Exception:
+                    pass
+                _has_extra_col = False
+                try:
+                    cursor.execute(
+                        f"SELECT id, issue_type, issue_name, issue_path, issue_category, "
+                        f"alert_level, confidence, detected_patterns, obfuscation_detected, "
+                        f"file_hash, ai_analysis, ai_confidence, feedback_status "
+                        f"FROM scan_results WHERE scan_id = {_PH}", (scan_id,))
+                    rows = cursor.fetchall()
+                    _step('select_results_no_extra', True, info={'rows': len(rows)})
+                except Exception as e2:
+                    _step('select_results_no_extra', False, err=f'{type(e2).__name__}: {e2}')
+                    rows = []
 
-            return jsonify({
-                'found': True,
-                'scan': scan_meta,
-                'scan_results_count_in_db': cnt,
-                'sample_first_10': sample,
-                'plugin_schema_ready': bool(globals().get('_PLUGIN_SCHEMA_READY')),
-                'php_marker': _PH,
-                'argus_version': _ARGUS_VERSION,
-            }), 200
+            # Procesar como hace get_scan
+            try:
+                results = []
+                for r in rows:
+                    raw_patterns = _row_get(r, 7, 'detected_patterns')
+                    extra_obj = {}
+                    if _has_extra_col:
+                        raw_extra = _row_get(r, 13, 'extra')
+                        if raw_extra:
+                            try:
+                                extra_obj = json.loads(raw_extra) if isinstance(raw_extra, str) else (raw_extra or {})
+                                if not isinstance(extra_obj, dict):
+                                    extra_obj = {}
+                            except (TypeError, ValueError):
+                                extra_obj = {}
+                    results.append({
+                        'id': _row_get(r, 0, 'id'),
+                        'issue_type': _row_get(r, 1, 'issue_type'),
+                        'issue_name': _row_get(r, 2, 'issue_name'),
+                        'issue_path': _row_get(r, 3, 'issue_path'),
+                        'issue_category': _row_get(r, 4, 'issue_category'),
+                        'alert_level': _row_get(r, 5, 'alert_level'),
+                        'confidence': _row_get(r, 6, 'confidence'),
+                        'detected_patterns': json.loads(raw_patterns) if raw_patterns else [],
+                        'obfuscation_detected': bool(_row_get(r, 8, 'obfuscation_detected')),
+                        'file_hash': _row_get(r, 9, 'file_hash'),
+                        'ai_analysis': _row_get(r, 10, 'ai_analysis'),
+                        'ai_confidence': _row_get(r, 11, 'ai_confidence'),
+                        'feedback_status': _row_get(r, 12, 'feedback_status'),
+                        'extra': extra_obj,
+                    })
+                _step('process_results', True, info={'processed': len(results)})
+            except Exception as e:
+                _step('process_results', False, err=f'{type(e).__name__}: {e}')
+                payload['final'] = '500'
+                payload['traceback'] = _tb.format_exc()[:1500]
+                return jsonify(payload), 500
+
+            try:
+                results2 = _scrub_results_for_display(results)
+                _step('scrub_results', True, info={'after_scrub': len(results2)})
+            except Exception as e:
+                _step('scrub_results', False, err=f'{type(e).__name__}: {e}')
+
+            try:
+                _ = json.dumps({'results': results}, default=str)
+                _step('jsonify_test', True, info={'serializable': True})
+            except Exception as e:
+                _step('jsonify_test', False, err=f'{type(e).__name__}: {e}')
+
+        payload['final'] = 'ok'
+        return jsonify(payload), 200
     except Exception as e:
-        import traceback as _tb
-        return jsonify({
-            'error': str(e),
-            'type': type(e).__name__,
-            'tb': _tb.format_exc()[:2000],
-        }), 500
+        payload['final'] = '500-outer'
+        payload['error'] = f'{type(e).__name__}: {e}'
+        payload['traceback'] = _tb.format_exc()[:2000]
+        return jsonify(payload), 500
 
 
 @app.route('/api/scans', methods=['GET'])
