@@ -2252,6 +2252,14 @@ async function viewScanDetails(scanId) {
             return;
         }
         if (!response.ok) {
+            // Intentamos extraer el detail del backend para diagnosticar rapido.
+            let detailLine = '';
+            try {
+                const errBody = await response.clone().json();
+                if (errBody && (errBody.detail || errBody.error)) {
+                    detailLine = `<div style="font-size:11px;color:var(--text-d);margin-top:8px;font-family:JetBrains Mono,monospace;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:8px 10px;text-align:left;word-break:break-word;">${(errBody.detail || errBody.error)}</div>`;
+                }
+            } catch(_) {}
             const issuesContainer = document.getElementById('issues-list-container');
             if (issuesContainer) {
                 issuesContainer.innerHTML = `
@@ -2259,6 +2267,7 @@ async function viewScanDetails(scanId) {
                         <div style="font-size:42px;margin-bottom:14px">⚠️</div>
                         <div style="font-size:15px;font-weight:700;color:var(--text-h);margin-bottom:8px">No se pudieron cargar los resultados</div>
                         <div style="font-size:13px;">Error HTTP ${response.status} al consultar /api/scans/${scanId}.</div>
+                        ${detailLine}
                         <button class="btn btn-sm" style="margin-top:18px" onclick="viewScanDetails(${scanId})">Reintentar</button>
                     </div>`;
             }

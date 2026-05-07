@@ -4373,47 +4373,43 @@ def get_scan(scan_id):
                 
                 return jsonify(scan), 200
         except Exception as e:
-            print(f"⚠️ Error accediendo BD directamente en get_scan: {e}")
-            print("🔄 Intentando vía HTTP...")
-    
-    # Fallback: usar HTTP para obtener escaneo desde la API
-    try:
-        api_url = get_api_url(f'/api/scans/{scan_id}')
-        print(f"🔄 Obteniendo escaneo {scan_id} vía HTTP desde: {api_url}")
-        
-        headers = {}
-        if API_KEY:
-            headers['X-API-Key'] = API_KEY
-        
-        response = requests.get(
-            api_url,
-            headers=headers,
-            timeout=10
-        )
-        
-        print(f"📡 Respuesta de API para scan {scan_id}: Status {response.status_code}")
-        
-        if response.status_code == 200:
-            scan = response.json()
-            results_count = len(scan.get('results', []))
-            print(f"✅ Obtenido escaneo {scan_id} con {results_count} resultados desde la API")
-            # Guardar en caché
-            _stats_cache[cache_key] = scan
-            _stats_cache_time[cache_key] = time.time()
-            return jsonify(scan), 200
-        else:
-            print(f"❌ Error obteniendo escaneo {scan_id}: {response.status_code} - {response.text[:200]}")
-            return jsonify({'error': f'Error obteniendo escaneo: {response.text}'}), response.status_code
-    except requests.exceptions.Timeout:
-        print(f"❌ Timeout al obtener escaneo {scan_id} desde la API")
-        return jsonify({'error': 'Timeout al conectar con la API'}), 504
-    except requests.exceptions.ConnectionError as e:
-        print(f"❌ Error de conexión con la API: {e}")
-        return jsonify({'error': f'No se pudo conectar con la API: {str(e)}'}), 503
-    except Exception as e:
-        print(f"❌ Error en get_scan (HTTP): {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
+            # Logueamos el traceback completo (Render lo capta) y resetamos
+            # la conexion thread-local si quedo en estado abortado para que el
+            # proximo request del mismo worker no herede la transaccion rota.
+            print(f"⚠️ Error accediendo BD directamente en get_scan({scan_id}): {type(e).__name__}: {e}")
+            print(traceback.format_exc())
+            try:
+                from db_mysql import _local as _db_local
+                if hasattr(_db_local, 'connection'):
+                    try:
+                        _db_local.connection.rollback()
+                    except Exception:
+                        pass
+                    try:
+                        _db_local.connection.close()
+                    except Exception:
+                        pass
+                    try:
+                        del _db_local.connection
+                    except Exception:
+                        pass
+                    print(f"🔁 Conexion thread-local reseteada tras error en get_scan")
+            except Exception as _re:
+                print(f"⚠️ No se pudo resetear conexion: {_re}")
+            # Devolvemos el error real al frontend (con 500) para diagnosticar
+            # rapido sin tener que mirar logs de Render. Antes esto se iba a un
+            # fallback HTTP que loopeaba contra la misma instancia.
+            return jsonify({
+                'error': 'Error interno consultando el escaneo',
+                'detail': f'{type(e).__name__}: {e}',
+                'scan_id': scan_id,
+                'argus_version': _ARGUS_VERSION,
+            }), 500
+    # Si la BD local no esta disponible, devolvemos 503 (no hacemos loop HTTP)
+    return jsonify({
+        'error': 'Backend BD no disponible',
+        'scan_id': scan_id,
+    }), 503
 
 @app.route('/api/feedback', methods=['POST'])
 @login_required
