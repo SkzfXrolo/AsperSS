@@ -1,0 +1,49 @@
+---
+description: Pasos obligatorios al subir la versión del Argus Scanner (cuando se recompila el .exe)
+alwaysApply: true
+---
+
+# Version bump checklist
+
+Cada vez que se **recompila el `.exe`** del scanner hay que actualizar la versión
+en TODAS las fuentes de verdad para que el panel staff y la página `/descargar`
+muestren el número correcto. Si solo se tocan archivos de la web (templates,
+CSS, JS) **NO** hay que tocar versiones ni recompilar.
+
+## Fuentes de verdad (mantener sincronizadas)
+
+| # | Archivo | Línea | Variable | Para qué se usa |
+|---|---------|-------|----------|-----------------|
+| 1 | `source/main.py` | ~57 | `SCANNER_VERSION = "X.Y.Z"` | Versión real del `.exe` (la única que se compila dentro del binario). El scanner la reporta al hacer scan y la usa para auto-update. |
+| 2 | `web_app/app.py` | ~32 | `_ARGUS_VERSION = 'X.Y.Z'` | Versión mostrada en el panel staff (card "Argus Scanner vX.Y.Z" + "Novedades vX.Y.Z"), `/api/health` y notificaciones de deploy a Discord. |
+| 3 | `web_app/app.py` | ~2169 | `CURRENT_SCANNER_VERSION = "X.Y.Z"` | Versión servida por `/api/version` para el auto-update del scanner instalado en clientes. Fallback si la tabla `app_versions` está vacía. |
+
+> **Nota**: el `descargar.html` público (`asperss.onrender.com/descargar`) NO
+> tiene la versión hardcodeada — la lee del registro `CURRENT_SCANNER_VERSION`
+> y de la tabla `app_versions`. Por lo tanto basta con que las 3 variables de
+> arriba estén alineadas.
+
+## Flujo correcto al recompilar
+
+```
+1. Editar source/main.py        → SCANNER_VERSION       = "X.Y.Z"
+2. Editar web_app/app.py        → _ARGUS_VERSION        = 'X.Y.Z'
+3. Editar web_app/app.py        → CURRENT_SCANNER_VERSION = "X.Y.Z"
+4. pyinstaller ... ArgusScanner.spec   (o el comando habitual)
+5. git add dist/ArgusScanner.exe source/main.py web_app/app.py
+6. git commit -m "build: ArgusScanner vX.Y.Z"
+7. git push origin main
+```
+
+Verificación rápida después del deploy:
+- `https://asperss.onrender.com/panel` → la card "Argus Scanner" debe mostrar la nueva versión.
+- `https://asperss.onrender.com/api/version` → JSON con `version: "X.Y.Z"`.
+
+## Anti-patrones
+
+- ❌ Recompilar el `.exe` y olvidar actualizar `_ARGUS_VERSION` → el panel
+  seguirá mostrando la versión vieja aunque el binario ya sea nuevo.
+- ❌ Cambiar `_ARGUS_VERSION` sin tocar `SCANNER_VERSION` → el panel mentirá:
+  dirá vX.Y.Z pero el `.exe` reporta otra.
+- ❌ Tocar templates/CSS/JS y aun así bumpear la versión → la versión solo
+  cambia cuando cambia el `.exe`.
