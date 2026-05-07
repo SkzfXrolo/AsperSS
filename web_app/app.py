@@ -313,6 +313,18 @@ def init_db_async():
         print("✅ Columna ensemble_data en scans verificada/creada")
     except Exception as _e:
         print(f"⚠️ Error migrando ensemble_data: {_e}")
+    # Migración: tablas/columnas para sistema de plugin keys (Minecraft).
+    # IMPORTANTE: ejecutar UNA SOLA VEZ al startup. Antes esto se ejecutaba
+    # on-demand desde @before_request via _plugin_schema_guard(), lo cual
+    # provocaba DEADLOCKs entre el ALTER TABLE scan_tokens (AccessExclusiveLock)
+    # y los SELECTs concurrentes con LEFT JOIN scan_tokens en /api/scans/<id>.
+    try:
+        _ensure_plugin_keys_schema()
+        global _PLUGIN_SCHEMA_READY
+        _PLUGIN_SCHEMA_READY = True
+        print("✅ Schema de plugin_keys verificado/creado")
+    except Exception as _e:
+        print(f"⚠️ Error migrando plugin_keys schema: {_e}")
     # Notificación de deploy nuevo — se dispara una sola vez por commit
     _notify_new_deploy()
 
@@ -2005,47 +2017,96 @@ def create_token():
 #  nullable mediante ALTER TABLE IF NOT EXISTS.
 # ════════════════════════════════════════════════════════════════════════════
 
-def _ensure_plugin_keys_schema():
-    """Crea/migra las tablas necesarias para el sistema de plugin keys.
-    Idempotente: se puede llamar muchas veces sin efectos secundarios."""
-    try:
-        with get_api_db_cursor() as cursor:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS company_plugin_keys (
-                    id SERIAL PRIMARY KEY,
-                    company_id INTEGER NOT NULL,
-                    api_key VARCHAR(96) UNIQUE NOT NULL,
-                    label VARCHAR(160),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    created_by VARCHAR(255),
-                    last_used_at TIMESTAMP,
-                    last_used_ip VARCHAR(64),
-                    is_active BOOLEAN DEFAULT TRUE,
-                    daily_quota INTEGER DEFAULT 200,
-                    used_today INTEGER DEFAULT 0,
-                    quota_reset_at DATE
-                )
-            """)
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_cpk_api_key ON company_plugin_keys(api_key)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_cpk_company ON company_plugin_keys(company_id)")
-
-            # Columnas adicionales en scan_tokens para tracking del plugin MC
-            cursor.execute("ALTER TABLE scan_tokens ADD COLUMN IF NOT EXISTS plugin_key_id INTEGER")
-            cursor.execute("ALTER TABLE scan_tokens ADD COLUMN IF NOT EXISTS minecraft_staff VARCHAR(160)")
-            cursor.execute("ALTER TABLE scan_tokens ADD COLUMN IF NOT EXISTS minecraft_target VARCHAR(160)")
-            cursor.execute("ALTER TABLE scan_tokens ADD COLUMN IF NOT EXISTS source VARCHAR(32) DEFAULT 'web'")
-    except Exception as e:
-        print(f"[plugin_keys] error en _ensure_plugin_keys_schema: {e}")
-
-
-# Auto-migracion al primer request a algun endpoint /api/plugin/*
 _PLUGIN_SCHEMA_READY = False
+_PLUGIN_SCHEMA_LOCK = threading.Lock() if 'threading' in globals() else None
+
+
+def _column_exists(cursor, table, column):
+    """Devuelve True si la columna existe. Usa information_schema (solo AccessShareLock)."""
+    try:
+        cursor.execute(
+            f"SELECT 1 FROM information_schema.columns "
+            f"WHERE table_name = {_PH} AND column_name = {_PH}",
+            (table, column))
+        return cursor.fetchone() is not None
+    except Exception:
+        return False
+
+
+def _ensure_plugin_keys_schema():
+    """Crea/migra las tablas para el sistema de plugin keys.
+
+    IMPORTANTE: el problema previo era que ALTER TABLE ADD COLUMN IF NOT EXISTS
+    en PostgreSQL toma AccessExclusiveLock sobre scan_tokens incluso cuando la
+    columna ya existe (es no-op pero el lock se sigue tomando). Eso causaba
+    DEADLOCK con SELECTs concurrentes que hacen LEFT JOIN scan_tokens (necesitan
+    AccessShareLock) — caso tipico: get_scan() en /api/scans/<id>.
+
+    Solucion: chequear primero con information_schema (solo share lock) y
+    ejecutar el ALTER unicamente si la columna realmente NO existe."""
+    import threading as _t
+    global _PLUGIN_SCHEMA_LOCK
+    if _PLUGIN_SCHEMA_LOCK is None:
+        _PLUGIN_SCHEMA_LOCK = _t.Lock()
+    with _PLUGIN_SCHEMA_LOCK:
+        try:
+            with get_api_db_cursor() as cursor:
+                # Tabla nueva — CREATE IF NOT EXISTS no toma locks fuertes
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS company_plugin_keys (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER NOT NULL,
+                        api_key VARCHAR(96) UNIQUE NOT NULL,
+                        label VARCHAR(160),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        created_by VARCHAR(255),
+                        last_used_at TIMESTAMP,
+                        last_used_ip VARCHAR(64),
+                        is_active BOOLEAN DEFAULT TRUE,
+                        daily_quota INTEGER DEFAULT 200,
+                        used_today INTEGER DEFAULT 0,
+                        quota_reset_at DATE
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_cpk_api_key ON company_plugin_keys(api_key)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_cpk_company ON company_plugin_keys(company_id)")
+
+                # Columnas adicionales en scan_tokens — solo ALTER si no existen
+                _migrations = [
+                    ('plugin_key_id', "ALTER TABLE scan_tokens ADD COLUMN plugin_key_id INTEGER"),
+                    ('minecraft_staff', "ALTER TABLE scan_tokens ADD COLUMN minecraft_staff VARCHAR(160)"),
+                    ('minecraft_target', "ALTER TABLE scan_tokens ADD COLUMN minecraft_target VARCHAR(160)"),
+                    ('source', "ALTER TABLE scan_tokens ADD COLUMN source VARCHAR(32) DEFAULT 'web'"),
+                ]
+                for col_name, alter_sql in _migrations:
+                    if _column_exists(cursor, 'scan_tokens', col_name):
+                        continue
+                    # Lock timeout corto: si hay un SELECT concurrente sosteniendo
+                    # share lock sobre scan_tokens, no nos quedamos esperando para
+                    # siempre y evitamos meter al request en deadlock.
+                    try:
+                        cursor.execute("SET LOCAL lock_timeout = '3s'")
+                    except Exception:
+                        pass
+                    try:
+                        cursor.execute(alter_sql)
+                    except Exception as _e_alter:
+                        print(f"[plugin_keys] no se pudo agregar columna {col_name}: {_e_alter}")
+        except Exception as e:
+            print(f"[plugin_keys] error en _ensure_plugin_keys_schema: {e}")
+
 
 def _plugin_schema_guard():
+    """Verifica que el schema de plugin keys este listo.
+
+    En produccion ya se ejecuta UNA VEZ desde init_db_async() al boot, asi que
+    aqui es solo un fallback para entornos donde init_db_async no haya corrido
+    o haya fallado. Es no-op si ya esta listo."""
     global _PLUGIN_SCHEMA_READY
-    if not _PLUGIN_SCHEMA_READY:
-        _ensure_plugin_keys_schema()
-        _PLUGIN_SCHEMA_READY = True
+    if _PLUGIN_SCHEMA_READY:
+        return
+    _ensure_plugin_keys_schema()
+    _PLUGIN_SCHEMA_READY = True
 
 
 def _resolve_company_id_for_user(user):
@@ -4220,16 +4281,28 @@ def get_scan(scan_id):
                         pass
                 
                 # Staff que hizo el scan (via token)
+                # Usamos SAVEPOINT para que un fallo (deadlock con ALTER TABLE de
+                # _ensure_plugin_keys_schema, columna inexistente, etc.) no aborte
+                # la transaccion entera y deje sin resultados al endpoint.
+                scan['scanned_by'] = None
                 try:
+                    cursor.execute('SAVEPOINT scanned_by_save')
                     cursor.execute(f'''
                         SELECT st.created_by FROM scans s
                         LEFT JOIN scan_tokens st ON s.token_id = st.id
                         WHERE s.id = {_PH}
                     ''', (scan_id,))
                     srow = cursor.fetchone()
-                    scan['scanned_by'] = srow[0] if srow and srow[0] else None
-                except Exception:
-                    scan['scanned_by'] = None
+                    if srow:
+                        # _row_get maneja tanto sqlite3.Row como RealDictCursor (PostgreSQL)
+                        scan['scanned_by'] = _row_get(srow, 0, 'created_by')
+                    cursor.execute('RELEASE SAVEPOINT scanned_by_save')
+                except Exception as _e_sb:
+                    print(f"⚠️ get_scan scanned_by query fallida (id={scan_id}): {type(_e_sb).__name__}: {_e_sb}")
+                    try:
+                        cursor.execute('ROLLBACK TO SAVEPOINT scanned_by_save')
+                    except Exception:
+                        pass
 
                 # Obtener resultados (incluye feedback_status para mostrar veredicto del staff
                 # y extra con la metadata adicional para FILE_ACTIVITY del tab Logs).
