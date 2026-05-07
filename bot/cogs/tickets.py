@@ -13,16 +13,15 @@ Flujo:
   5. on_message en el ticket: si el usuario describe el problema, el bot
      escanea contra ticket_faq.json con keywords. Si match -> postea
      respuesta automatica con botones [Resuelto / Necesito humano].
-  6. Staff puede /ticket-claim para marcarse como responsable.
-  7. /close [razon] -> transcript + cierre.
+  6. Botones persistentes en cada ticket:
+        🔒 Cerrar    -> modal con razon (opcional) -> transcript + cierre
+        🙋 Reclamar  -> el staff se marca como responsable
+        📈 Escalar   -> modal con motivo -> IA clasifica y pingea rol adecuado
 
 Comandos:
     /ticket-panel              Publica el panel publico (staff).
-    /ticket-claim              Toma el ticket actual (staff).
-    /ticket-escalate <rol>     Escala el ticket pingeando otro rol.
     /ticket-add @user          Anade alguien al ticket actual.
     /ticket-remove @user       Quita.
-    /close [razon]             Cierra el ticket (creador o staff).
     /tickets [@user]           Historial de tickets de un usuario.
 """
 from __future__ import annotations
@@ -190,6 +189,78 @@ def _faq_match(category: str, message_text: str) -> Optional[dict]:
     return best if best_score > 0 else None
 
 
+# ─── IA heuristica para escalada ────────────────────────────────────────
+# Clasifica el motivo escrito por el staff y decide a que rol pingear.
+ESCALATION_KEYWORDS: dict[str, list[str]] = {
+    "role_dev": [
+        # Tecnico / scanner / codigo
+        "bug", "exploit", "falso positivo", "false positive", "deteccion",
+        "detección", "scanner", "exe", "no abre", "no funciona", "crashea",
+        "crash", "se cierra", "no inicia", "version", "actualiza", "hash",
+        "log", "stacktrace", "traceback", "panel", "api", "endpoint",
+        "deploy", "render", "base de datos", "postgres", "sql", "migration",
+        "firewall", "antivirus bloquea", "smartscreen", "token expir",
+        "auth fall", "config", "yaml", "json invalido",
+    ],
+    "role_admin": [
+        # Pagos / negocio / suscripciones
+        "pago", "factura", "suscripcion", "suscripción", "cliente pro",
+        "cobro", "paypal", "transferencia", "refund", "reembolso", "compra",
+        "billing", "plan", "upgrade", "downgrade", "cancelar suscrip",
+        "renovar", "renovacion", "renovación", "promo", "descuento",
+        "partnership", "patrocinio", "colaboracion", "colaboración",
+    ],
+    "role_owner": [
+        # Estrategico / casos extremos / decisiones de proyecto
+        "abuso de poder", "corrupcion", "corrupción",
+        "denuncia contra staff", "denuncia contra admin",
+        "denuncia a un admin", "denuncia a admin", "leak", "filtracion",
+        "filtración", "amenaza grave", "decision importante",
+        "decisión importante", "asunto legal", "legal", "demanda",
+        "doxx confirmado", "owner", "estrategia", "vision del proyecto",
+        "visión del proyecto", "rumbo del proyecto",
+    ],
+    "role_senior": [
+        # Moderacion compleja
+        "denuncia", "reincidente", "reincidencia", "ban permanente",
+        "multiple", "múltiple", "investigacion", "investigación",
+        "caso grave", "raid", "alt account", "evasion", "evasión",
+        "discusion compleja", "discusión compleja", "moderacion delicada",
+        "moderación delicada", "screenshare conflictivo",
+    ],
+}
+
+ROLE_LABELS = {
+    "role_owner":  "👑 Owner",
+    "role_admin":  "🛡 Admin",
+    "role_dev":    "💻 Developer",
+    "role_senior": "⚖ Senior Staff",
+    "role_staff":  "🔍 Staff",
+}
+
+
+def _classify_escalation(text: str) -> tuple[str, list[str]]:
+    """Clasifica el motivo y devuelve (role_key, lista_de_keywords_detectadas).
+
+    Si no detecta nada, default = role_staff.
+    """
+    text_low = text.lower()
+    scores: dict[str, list[str]] = {}
+    for role, kws in ESCALATION_KEYWORDS.items():
+        matches = [kw for kw in kws if kw in text_low]
+        if matches:
+            scores[role] = matches
+    if not scores:
+        return ("role_staff", [])
+    # ganador: el que tenga MAS keywords matchadas. Empate -> orden de prioridad
+    priority = ["role_owner", "role_admin", "role_dev", "role_senior", "role_staff"]
+    best_role = max(
+        scores.keys(),
+        key=lambda r: (len(scores[r]), -priority.index(r) if r in priority else 0),
+    )
+    return (best_role, scores[best_role])
+
+
 # ═════════════════════════════════════════════════════════════════════════
 # Views
 # ═════════════════════════════════════════════════════════════════════════
@@ -258,23 +329,54 @@ class FAQResolutionView(discord.ui.View):
             )
 
 
+class CloseTicketModal(discord.ui.Modal, title="🔒 Cerrar ticket"):
+    """Modal opcional de razon al cerrar."""
+    razon = discord.ui.TextInput(
+        label="Razon del cierre (opcional)",
+        style=discord.TextStyle.paragraph,
+        placeholder="Resuelto, sin actividad, problema solucionado, etc...",
+        max_length=300,
+        required=False,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        cog = interaction.client.get_cog("Tickets")
+        if cog:
+            await cog._close_logic(interaction, reason=str(self.razon.value or ""))  # type: ignore[attr-defined]
+
+
+class EscalateModal(discord.ui.Modal, title="📈 Escalar ticket"):
+    """Modal donde el staff escribe el motivo. La IA decide a quien pingear."""
+    motivo = discord.ui.TextInput(
+        label="Motivo y contexto",
+        style=discord.TextStyle.paragraph,
+        placeholder="Describi el problema. La IA va a clasificarlo y elegir el rol mas adecuado a pingear...",
+        min_length=15,
+        max_length=500,
+        required=True,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        cog = interaction.client.get_cog("Tickets")
+        if cog:
+            await cog._escalate_with_ai(interaction, str(self.motivo.value))  # type: ignore[attr-defined]
+
+
 class CloseTicketView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
     @discord.ui.button(
-        label="Cerrar ticket",
+        label="Cerrar",
         style=discord.ButtonStyle.danger,
         emoji="🔒",
         custom_id="argus:ticket:close",
     )
     async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        cog = interaction.client.get_cog("Tickets")
-        if cog:
-            await cog._close_logic(interaction, reason="Cerrado por boton")  # type: ignore[attr-defined]
+        await interaction.response.send_modal(CloseTicketModal())
 
     @discord.ui.button(
-        label="Reclamar (staff)",
+        label="Reclamar",
         style=discord.ButtonStyle.primary,
         emoji="🙋",
         custom_id="argus:ticket:claim",
@@ -283,6 +385,20 @@ class CloseTicketView(discord.ui.View):
         cog = interaction.client.get_cog("Tickets")
         if cog:
             await cog._claim_logic(interaction)  # type: ignore[attr-defined]
+
+    @discord.ui.button(
+        label="Escalar (IA)",
+        style=discord.ButtonStyle.secondary,
+        emoji="📈",
+        custom_id="argus:ticket:escalate",
+    )
+    async def escalate_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not isinstance(interaction.user, discord.Member) or not utils.is_staff(interaction.user):
+            await interaction.response.send_message(
+                embed=utils.error_embed("Solo staff puede escalar."), ephemeral=True
+            )
+            return
+        await interaction.response.send_modal(EscalateModal())
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -381,7 +497,10 @@ class Tickets(commands.Cog):
             description=(
                 f"Hola {interaction.user.mention}, gracias por abrir un ticket.\n\n"
                 f"**A quien estoy avisando:** {ping or '(sin staff configurado)'}\n"
-                f"**Para cerrar:** boton `🔒 Cerrar ticket` o comando `/close [razon]`."
+                f"**Botones disponibles abajo:**\n"
+                f"🔒 **Cerrar** — cierra el ticket (modal con razon)\n"
+                f"🙋 **Reclamar** — staff se marca como responsable\n"
+                f"📈 **Escalar (IA)** — describe el motivo y la IA elige a quien tagear"
             ),
         )
         await channel.send(content=ping, embed=bienvenida, view=CloseTicketView())
@@ -470,12 +589,7 @@ class Tickets(commands.Cog):
             embed=utils.success_embed("Panel publicado."), ephemeral=True
         )
 
-    # ── /ticket-claim ──────────────────────────────────────────────────
-    @app_commands.command(name="ticket-claim", description="(Staff) Toma el ticket actual.")
-    @app_commands.default_permissions(manage_messages=True)
-    async def claim_cmd(self, interaction: discord.Interaction):
-        await self._claim_logic(interaction)
-
+    # ── Logica de Reclamar (boton) ─────────────────────────────────────
     async def _claim_logic(self, interaction: discord.Interaction):
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
             return
@@ -495,7 +609,28 @@ class Tickets(commands.Cog):
                 embed=utils.error_embed("Este canal no es un ticket activo."), ephemeral=True
             )
             return
-        # Persistir como setting del ticket
+        # Verificar si ya esta reclamado
+        prev = db.get_setting(interaction.guild.id, f"ticket_claim_{tk['id']}")
+        if prev:
+            try:
+                prev_id = int(prev)
+                if prev_id == interaction.user.id:
+                    await interaction.response.send_message(
+                        embed=utils.warning_embed("Ya reclamaste este ticket."),
+                        ephemeral=True,
+                    )
+                    return
+                else:
+                    await interaction.response.send_message(
+                        embed=utils.warning_embed(
+                            f"Este ticket ya fue reclamado por <@{prev_id}>. "
+                            f"Si querés tomarlo igual, pedíle al claimer que use `🔒 Cerrar` o que delegue.",
+                        ),
+                        ephemeral=True,
+                    )
+                    return
+            except ValueError:
+                pass
         db.set_setting(interaction.guild.id, f"ticket_claim_{tk['id']}", str(interaction.user.id))
         embed = utils.success_embed(
             f"{interaction.user.mention} se hizo cargo de este ticket. <@{tk['user_id']}>, vas a ser atendido por este staff.",
@@ -506,47 +641,19 @@ class Tickets(commands.Cog):
         except discord.InteractionResponded:
             await interaction.followup.send(embed=embed)
 
-    # ── /ticket-escalate ───────────────────────────────────────────────
-    @app_commands.command(name="ticket-escalate", description="(Staff) Escala el ticket pingeando otro rol.")
-    @app_commands.default_permissions(manage_messages=True)
-    @app_commands.choices(rol=[
-        app_commands.Choice(name="Developers", value="role_dev"),
-        app_commands.Choice(name="Admin",      value="role_admin"),
-        app_commands.Choice(name="Senior Staff", value="role_senior"),
-        app_commands.Choice(name="Owner",      value="role_owner"),
-    ])
-    async def escalate_cmd(self, interaction: discord.Interaction, rol: app_commands.Choice[str], razon: str = ""):
-        if not isinstance(interaction.user, discord.Member) or not utils.is_staff(interaction.user):
+    # ── Logica de Escalar con IA (modal) ───────────────────────────────
+    async def _escalate_with_ai(self, interaction: discord.Interaction, motivo: str):
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            return
+        if not utils.is_staff(interaction.user):
             await interaction.response.send_message(
-                embed=utils.error_embed("Solo staff."), ephemeral=True
+                embed=utils.error_embed("Solo staff puede escalar."), ephemeral=True
             )
             return
-        if not interaction.guild:
-            return
-        rid_raw = db.get_setting(interaction.guild.id, rol.value)
-        if not rid_raw:
-            await interaction.response.send_message(
-                embed=utils.error_embed(f"No hay rol configurado para `{rol.value}`."),
-                ephemeral=True,
-            )
-            return
-        await interaction.response.send_message(
-            f"<@&{rid_raw}>",
-            embed=utils.warning_embed(
-                f"Este ticket fue **escalado** a <@&{rid_raw}> por {interaction.user.mention}."
-                + (f"\n**Razon:** {razon}" if razon else ""),
-                title="📈 Escalada",
-            ),
-        )
-
-    # ── /close ─────────────────────────────────────────────────────────
-    @app_commands.command(name="close", description="Cierra el ticket actual.")
-    async def close_cmd(self, interaction: discord.Interaction, razon: str = ""):
-        if not isinstance(interaction.user, discord.Member) or not interaction.guild:
-            return
+        # Verificar que sea un ticket activo
         with db.cursor() as cur:
             cur.execute(
-                "SELECT user_id FROM bot_tickets WHERE channel_id = %s AND status = 'open'",
+                "SELECT id, category FROM bot_tickets WHERE channel_id = %s AND status = 'open'",
                 (interaction.channel.id if interaction.channel else 0,),
             )
             tk = cur.fetchone()
@@ -555,13 +662,42 @@ class Tickets(commands.Cog):
                 embed=utils.error_embed("Este canal no es un ticket activo."), ephemeral=True
             )
             return
-        if not utils.is_staff(interaction.user) and int(tk["user_id"]) != interaction.user.id:
+
+        # Clasificar con IA
+        role_key, matches = _classify_escalation(motivo)
+        rid_raw = db.get_setting(interaction.guild.id, role_key)
+        # Fallback si el rol elegido no existe en este server
+        if not rid_raw and role_key != "role_staff":
+            log.info("[Escalate] %s no configurado, fallback a role_staff", role_key)
+            role_key = "role_staff"
+            rid_raw = db.get_setting(interaction.guild.id, "role_staff")
+        if not rid_raw:
             await interaction.response.send_message(
-                embed=utils.error_embed("Solo el creador del ticket o staff pueden cerrarlo."),
+                embed=utils.error_embed("No hay rol staff configurado en este server."),
                 ephemeral=True,
             )
             return
-        await self._close_logic(interaction, reason=razon)
+
+        role_label = ROLE_LABELS.get(role_key, role_key)
+        if matches:
+            ia_explanation = (
+                f"**Análisis IA:** {role_label}\n"
+                f"**Keywords detectadas:** `{', '.join(matches[:6])}`"
+                + (f" *(y {len(matches) - 6} mas)*" if len(matches) > 6 else "")
+            )
+        else:
+            ia_explanation = (
+                f"**Análisis IA:** {role_label} *(sin keywords especificas, default por categoria)*"
+            )
+
+        embed = utils.warning_embed(
+            f"{interaction.user.mention} **escaló** este ticket.\n\n"
+            f"**Motivo:**\n>>> {motivo}\n\n"
+            f"{ia_explanation}",
+            title="📈 Ticket escalado por IA",
+        )
+        embed.set_footer(text="Argus IA · clasificacion automatica por keywords")
+        await interaction.response.send_message(content=f"<@&{rid_raw}>", embed=embed)
 
     async def _build_transcript(self, channel: discord.TextChannel) -> str:
         lines: list[str] = []
