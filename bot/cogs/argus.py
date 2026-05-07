@@ -215,11 +215,15 @@ class Argus(commands.Cog):
         if not utils.can_use_ss(interaction.user):
             await interaction.response.send_message(
                 embed=utils.error_embed(
-                    "Este comando es exclusivo para **Cliente Pro**.\n\n"
-                    "Argus Projects funciona bajo plan Cliente Pro — no hay tier gratis.\n"
-                    "Para conseguir el rol abrí un ticket tipo **`compra`** en `❓・soporte` "
-                    "y un Admin te explica precios y métodos de pago.",
-                    title="🔒 Solo Cliente Pro",
+                    "El comando `/ss` es exclusivo para **clientes activos** "
+                    "del servicio Argus Projects:\n\n"
+                    "🌟 **Cliente Pro** — plan individual\n"
+                    "🏢 **Cliente Empresa** — plan B2B / corporativo\n\n"
+                    "Argus Projects no tiene tier gratis. Si querés contratar el "
+                    "servicio para vos o tu organización, abrí un ticket tipo "
+                    "**`compra`** en `❓・soporte` y nuestro equipo te atiende "
+                    "con planes y métodos de pago.",
+                    title="🔒 Acceso reservado a clientes",
                 ),
                 ephemeral=True,
             )

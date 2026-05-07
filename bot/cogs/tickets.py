@@ -47,11 +47,11 @@ _FAQ_PATH = Path(__file__).resolve().parent.parent / "data" / "ticket_faq.json"
 
 
 TICKET_CATEGORIES = [
-    {"value": "soporte",   "label": "Soporte tecnico",        "emoji": "🛠"},
+    {"value": "soporte",   "label": "Soporte tecnico",            "emoji": "🛠"},
     {"value": "scanner",   "label": "Problema con Argus Scanner", "emoji": "💻"},
-    {"value": "compra",    "label": "Pago / Cliente Pro",     "emoji": "💳"},
-    {"value": "denuncia",  "label": "Denuncia / reporte",     "emoji": "🚨"},
-    {"value": "otro",      "label": "Otro",                   "emoji": "📋"},
+    {"value": "compra",    "label": "Contratar / pagos",          "emoji": "💳"},
+    {"value": "denuncia",  "label": "Denuncia / reporte",         "emoji": "🚨"},
+    {"value": "otro",      "label": "Otro",                       "emoji": "📋"},
 ]
 
 
@@ -87,12 +87,13 @@ GUIDED_QUESTIONS: dict[str, dict] = {
         ],
     },
     "compra": {
-        "title": "💳 Pago / Cliente Pro",
+        "title": "💳 Contratar / pagos",
         "questions": [
-            "1. ¿Que producto / suscripcion te interesa?",
-            "2. ¿Metodo de pago preferido? (PayPal / transferencia / crypto)",
-            "3. Si es renovacion: ¿desde que email pagaste antes?",
-            "4. ¿Algun descuento / promocion que te haya llegado?",
+            "1. ¿Para que tipo de cliente seria? (individual o empresa/network).",
+            "2. Si es para una empresa: nombre del proyecto/server, tamano aprox de la comunidad.",
+            "3. ¿Metodo de pago preferido? (PayPal / transferencia / crypto / otro).",
+            "4. Si es renovacion: ¿desde que email pagaste antes?",
+            "5. ¿Tenes alguna pregunta sobre las funciones antes de contratar?",
         ],
     },
     "denuncia": {
@@ -497,12 +498,12 @@ class Tickets(commands.Cog):
             title=f"{category_meta['emoji']} Ticket #{ticket_id}",
             description=(
                 f"Hola {interaction.user.mention}, soy **Argus AI** 👁\n\n"
-                f"Te ayudo mientras esperás al staff. Avisé a {ping or 'al equipo'} "
-                f"para que se hagan cargo cuando puedan.\n\n"
-                f"Mientras tanto, **contame qué pasa con el mayor detalle posible**. "
-                f"Si tu problema lo vimos antes, te tiro la solución en el momento "
-                f"y te ahorrás la espera.\n\n"
-                f"Cuando termines, los botones de abajo cierran o escalan el ticket."
+                f"Bienvenido al canal privado de tu ticket. Avisé a {ping or 'a nuestro equipo'} "
+                f"para que se hagan cargo cuando estén disponibles.\n\n"
+                f"Mientras tanto, **contame con el mayor detalle posible qué necesitás**. "
+                f"Si tu caso es uno que ya resolvimos antes, te tiro la solución al "
+                f"momento y te ahorrás la espera.\n\n"
+                f"Los botones de abajo te permiten cerrar el ticket o escalarlo."
             ),
         )
         await channel.send(content=ping, embed=bienvenida, view=CloseTicketView())
@@ -578,16 +579,16 @@ class Tickets(commands.Cog):
         embed = utils.brand_embed(
             title="🎫 Soporte",
             description=(
-                "Necesitás algo? Elegí el motivo en el menú de abajo y te abro un canal privado.\n\n"
-                "**Cada motivo va a la gente correcta:**\n"
-                "🛠 **Soporte técnico** → Staff\n"
-                "💻 **Problema con Argus Scanner** → Developers + Staff\n"
-                "💳 **Pago / Cliente Pro** → Admin + Owner\n"
-                "🚨 **Denuncia / reporte** → Senior Staff + Staff\n"
-                "📋 **Otro** → Staff\n\n"
-                "**Solo 1 ticket abierto a la vez.** Soy **Argus AI**, te recibo "
-                "yo primero — si tu problema lo vi antes te tiro la solución al "
-                "toque, así no esperás al staff."
+                "¿Necesitás algo? Elegí el motivo en el menú de abajo y te abro un canal privado.\n\n"
+                "**Cada motivo llega al equipo correcto:**\n"
+                "🛠 **Soporte técnico** → equipo de Soporte\n"
+                "💻 **Problema con Argus Scanner** → equipo de Desarrollo\n"
+                "💳 **Contratar / pagos** → equipo Comercial (planes Pro y Empresa)\n"
+                "🚨 **Denuncia / reporte** → equipo Senior\n"
+                "📋 **Otro** → equipo de Soporte\n\n"
+                "**Solo 1 ticket abierto a la vez.** Soy **Argus AI** y te recibo "
+                "yo primero — si tu caso es uno que ya resolvimos antes te tiro "
+                "la solución al toque y te ahorrás esperar al equipo humano."
             ),
         )
         await interaction.channel.send(embed=embed, view=TicketPanelView())

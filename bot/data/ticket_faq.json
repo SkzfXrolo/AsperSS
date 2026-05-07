@@ -40,9 +40,14 @@
   ],
   "compra": [
     {
-      "keywords": ["pro", "cliente pro", "suscripcion", "pagar", "comprar", "precio"],
-      "title": "Cliente Pro / suscripciones",
-      "answer": "Sobre Cliente Pro:\n\n• **Beneficios:** cola prioritaria de scans, más SS simultáneos, soporte directo via DM al Admin, badges en Discord.\n• **Precio:** depende del plan, contactá a un Admin.\n• **Métodos de pago:** PayPal, transferencia, crypto (BTC/ETH).\n\nUn Admin va a contactarte por este ticket en breve para concretar."
+      "keywords": ["pro", "cliente pro", "suscripcion", "pagar", "comprar", "precio", "individual", "personal"],
+      "title": "Plan Cliente Pro (individual)",
+      "answer": "El plan **Cliente Pro** está pensado para clientes individuales (staff de un server, usuarios particulares):\n\n• **Beneficios:** acceso a `/ss`, cola prioritaria de scans, más SS simultáneos, soporte directo y badge en Discord.\n• **Métodos de pago:** PayPal, transferencia y crypto (BTC/ETH).\n• **Precios:** dependen del plan exacto, te los pasa nuestro equipo Comercial.\n\nUn miembro de nuestro equipo te va a contactar acá en breve para concretar el contrato y la facturación."
+    },
+    {
+      "keywords": ["empresa", "enterprise", "corporativo", "network", "organizacion", "organización", "sla", "facturacion", "facturación", "factura electronica", "factura electrónica", "iva"],
+      "title": "Plan Cliente Empresa (B2B)",
+      "answer": "El plan **Cliente Empresa** es nuestro plan corporativo para servers grandes, networks y organizaciones:\n\n• **Beneficios:** todo lo del plan Pro + SLA de respuesta, soporte prioritario via DM directo a Admin/Devs, múltiples cuentas autorizadas para `/ss`, factura electrónica.\n• **Onboarding:** charlamos primero por este ticket para entender tu caso (tamano del server, número de SS al mes esperados, integraciones), y armamos un contrato a medida.\n\nNuestro equipo Comercial te contacta acá para coordinar una llamada o seguir todo por escrito según prefieras."
     }
   ],
   "denuncia": [

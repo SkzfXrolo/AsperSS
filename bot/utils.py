@@ -127,19 +127,44 @@ def is_admin(member: discord.Member) -> bool:
     return member.guild_permissions.administrator
 
 
+def is_owner(member: discord.Member) -> bool:
+    """True si es el Owner del proyecto Argus Projects.
+
+    Coincide si: es el dueno literal del Discord (guild owner), tiene rol
+    "Owner", o su id coincide con DISCORD_OWNER_ID en el .env.
+    """
+    if member.guild.owner_id == member.id:
+        return True
+    if any(r.name.lower() == "owner" for r in member.roles):
+        return True
+    if config.DISCORD_OWNER_ID and member.id == config.DISCORD_OWNER_ID:
+        return True
+    return False
+
+
 def is_pro(member: discord.Member) -> bool:
-    """True si el miembro tiene rol Cliente Pro (case-insensitive)."""
-    pro_names = {"cliente pro", "client pro", "pro", "vip"}
+    """True si el miembro es cliente activo (Pro individual o Empresa B2B).
+
+    Reconoce por nombre del rol (case-insensitive).
+    """
+    pro_names = {
+        "cliente pro", "client pro", "pro", "vip",
+        "cliente empresa", "client enterprise", "enterprise", "empresa",
+    }
     return any(r.name.lower() in pro_names for r in member.roles)
 
 
 def can_use_ss(member: discord.Member) -> bool:
-    """True si puede ejecutar /ss: Cliente Pro o staff alto del proyecto.
+    """True si puede ejecutar /ss para emitir tokens de Screen Share.
 
-    Owner/Admin del propio Argus Projects pueden hacer SS sin ser Cliente Pro
-    (uso interno). Cualquier otro caso requiere ser Cliente Pro.
+    Permitido a:
+      - Cliente Pro (individual) o Cliente Empresa (B2B).
+      - Owner del proyecto Argus Projects (excepcion para gestion interna).
+
+    El staff interno (Admin, Developer, Senior, Staff, Trainee) NO emite
+    tokens — su rol es soportar a los clientes, no consumir el servicio.
     """
-    return is_pro(member) or is_admin(member)
+    return is_pro(member) or is_owner(member)
 
 
 # ── Logging visual ───────────────────────────────────────────────────────

@@ -86,14 +86,18 @@ log = logging.getLogger("bot.cogs.setup")
 # ═════════════════════════════════════════════════════════════════════════
 
 ROLES_SPEC: list[dict] = [
+    # ─── Equipo interno de Argus Projects ─────────────────────
     {"name": "Owner",         "color": 0xFFD700, "hoist": True,  "mention": True,  "perms": "admin",   "key": "role_owner"},
     {"name": "Admin",         "color": 0xED4245, "hoist": True,  "mention": True,  "perms": "admin",   "key": "role_admin"},
     {"name": "Developer",     "color": 0x3498DB, "hoist": True,  "mention": True,  "perms": "dev",     "key": "role_dev"},
     {"name": "Senior Staff",  "color": 0xE67E22, "hoist": True,  "mention": True,  "perms": "staff",   "key": "role_senior"},
     {"name": "Staff",         "color": 0xF1C40F, "hoist": True,  "mention": True,  "perms": "staff",   "key": "role_staff"},
     {"name": "Trainee Staff", "color": 0x1ABC9C, "hoist": True,  "mention": False, "perms": "trainee", "key": "role_trainee"},
-    {"name": "Cliente Pro",   "color": 0x9B59B6, "hoist": True,  "mention": False, "perms": "member",  "key": "role_pro"},
-    {"name": "Cliente",       "color": 0x57F287, "hoist": True,  "mention": False, "perms": "member",  "key": "role_cliente"},
+    # ─── Clientes ──────────────────────────────────────────────
+    {"name": "Cliente Empresa", "color": 0x71368A, "hoist": True, "mention": True,  "perms": "member", "key": "role_enterprise"},
+    {"name": "Cliente Pro",     "color": 0x9B59B6, "hoist": True, "mention": False, "perms": "member", "key": "role_pro"},
+    {"name": "Cliente",         "color": 0x57F287, "hoist": True, "mention": False, "perms": "member", "key": "role_cliente"},
+    # ─── Otros ────────────────────────────────────────────────
     {"name": "Bot",           "color": 0x99AAB5, "hoist": True,  "mention": False, "perms": "bot",     "key": "role_botcat"},
     {"name": "Verificado",    "color": 0xBCC0C0, "hoist": False, "mention": False, "perms": "member",  "key": "role_verified"},
     {"name": "Muted",         "color": 0x4F545C, "hoist": False, "mention": False, "perms": "muted",   "key": "role_muted"},
@@ -457,19 +461,25 @@ class ServerBuilder:
             title="🛡 Bienvenido a Argus Projects",
             description=(
                 "**All-Seeing. Always Watching.**\n\n"
-                "Esta es la comunidad oficial de **Argus Projects** — el sistema de detección "
-                "avanzada anti-cheat con inteligencia artificial evolutiva para servidores de Minecraft.\n\n"
-                "**¿Qué hacemos?**\n"
-                "• Desarrollamos el scanner `ArgusScanner.exe` que detecta ghost clients, "
+                "Argus Projects es la empresa detrás del sistema de detección "
+                "avanzada anti-cheat con inteligencia artificial evolutiva para "
+                "servidores de Minecraft. Este Discord es el **punto de contacto "
+                "oficial** entre nuestro equipo y nuestros clientes.\n\n"
+                "**Qué ofrecemos:**\n"
+                "• El scanner `ArgusScanner.exe` que detecta ghost clients, "
                 "  inyección Java, DLL hijacking, macros, autoclickers y más.\n"
-                "• Damos soporte directo a staff y owners de servidores que usan Argus.\n"
-                "• Compartimos hacks atrapados como muestra educativa para la comunidad.\n"
-                "• Mejoramos continuamente la IA con cada análisis nuevo.\n\n"
-                f"🌐 **Panel:** {config.PANEL_URL}\n"
-                f"💾 **Descarga:** {config.PANEL_URL}/descargar"
+                "• Soporte técnico directo a clientes activos.\n"
+                "• Dos planes de contratación:\n"
+                "  🌟 **Cliente Pro** — individual, para staff de un server.\n"
+                "  🏢 **Cliente Empresa** — corporativo, para networks y organizaciones.\n"
+                "• Mejora continua del modelo de IA con cada análisis nuevo.\n\n"
+                f"🌐 **Web pública:** {config.PANEL_URL}\n"
+                f"💾 **Descarga del scanner:** {config.PANEL_URL}/descargar\n\n"
+                "Si querés contratar el servicio, abrí un ticket tipo "
+                "**`compra`** en `❓・soporte` y nuestro equipo te atiende."
             ),
         )
-        e1.set_footer(text="ASPERS Projects · Sistema Argus · Lee TODOS los embeds antes de participar")
+        e1.set_footer(text="Argus Projects · Lee todos los embeds antes de participar")
         await self._safe(rules.send(embed=e1), "enviar bienvenida")
 
         # ─── Embed 2: Reglas detalladas ─────────────────────────────────
@@ -577,58 +587,103 @@ class ServerBuilder:
         e2.set_footer(text="Argus Projects · Reglas v1.0 · Las reglas pueden actualizarse, vuelve aquí")
         await self._safe(rules.send(embed=e2), "enviar reglas")
 
-        # ─── Embed 3: Jerarquia de staff ────────────────────────────────
+        # ─── Embed 3: Roles del servidor ────────────────────────────────
         e3 = utils.brand_embed(
-            title="🎖 Jerarquía y responsabilidades del staff",
+            title="🎖 Roles del servidor",
             color=0xE67E22,
-            description="Si necesitás contactar staff, este es el orden y a quién acudir según el problema:",
+            description=(
+                "Este Discord agrupa a dos comunidades: el **equipo de Argus "
+                "Projects** (la empresa que desarrolla el servicio) y los "
+                "**clientes** que lo usan."
+            ),
+        )
+        # Equipo Argus
+        e3.add_field(
+            name="━━━━━ EQUIPO ARGUS PROJECTS ━━━━━",
+            value="*Empleados / colaboradores que sostienen el servicio.*",
+            inline=False,
         )
         e3.add_field(
             name="👑 Owner",
             value=(
                 "Dueño del proyecto. Decisiones estratégicas, partnerships, "
-                "negocio. **No es soporte de primera línea.**"
+                "dirección del negocio. **No es soporte de primera línea.**"
             ),
             inline=False,
         )
         e3.add_field(
             name="🛡 Admin",
             value=(
-                "Administradores del servidor. Resuelven escalaciones, decisiones de moderación importantes, "
-                "pagos/suscripciones del Cliente Pro."
+                "Administración del proyecto. Resuelven escalaciones, gestionan "
+                "pagos/contratos de clientes y aprueban decisiones importantes."
             ),
             inline=False,
         )
         e3.add_field(
             name="💻 Developer",
             value=(
-                "Desarrolladores del scanner. Atienden bugs del `.exe`, falsos positivos, "
-                "problemas técnicos del scanner, sugerencias de detección. "
-                "**Para problemas técnicos del software, se les pingea automáticamente al abrir un ticket de tipo `scanner`.**"
+                "Desarrolladores del scanner. Atienden bugs del `.exe`, falsos "
+                "positivos, problemas técnicos del software, sugerencias de "
+                "detección. **Tickets tipo `scanner` les llegan automáticamente.**"
             ),
             inline=False,
         )
         e3.add_field(
             name="⚖ Senior Staff",
             value=(
-                "Staff veterano con experiencia en SS. Atienden denuncias graves, "
-                "supervisan a staff nuevo, lideran investigaciones complejas."
+                "Staff veterano. Lideran investigaciones complejas, supervisan "
+                "casos graves de moderación y asisten a clientes con problemas "
+                "delicados."
             ),
             inline=False,
         )
         e3.add_field(
             name="🔍 Staff",
             value=(
-                "Moderadores y peritos de SS. Hacen Screen Shares, revisan veredictos, "
-                "moderan canales públicos, atienden la mayoría de tickets de soporte."
+                "Soporte de primera línea para clientes. Atienden la mayoría "
+                "de tickets, moderan canales públicos y derivan a Devs/Admin "
+                "cuando es necesario."
             ),
             inline=False,
         )
         e3.add_field(
             name="🎓 Trainee Staff",
             value=(
-                "Staff en entrenamiento. Pueden mutear/timeoutear pero no kick/ban. "
-                "Aprenden bajo supervisión de Staff/Senior."
+                "Staff en entrenamiento, bajo supervisión de Staff/Senior. "
+                "Pueden mutear/timeoutear pero no kick/ban."
+            ),
+            inline=False,
+        )
+        # Clientes
+        e3.add_field(
+            name="━━━━━━━━ CLIENTES ━━━━━━━━",
+            value="*Quienes contrataron el servicio Argus.*",
+            inline=False,
+        )
+        e3.add_field(
+            name="🏢 Cliente Empresa",
+            value=(
+                "Servidores grandes, networks o organizaciones que contrataron "
+                "Argus bajo plan corporativo. Tienen acceso a `/ss`, soporte "
+                "prioritario, SLA, y línea directa con Devs/Admin."
+            ),
+            inline=False,
+        )
+        e3.add_field(
+            name="🌟 Cliente Pro",
+            value=(
+                "Clientes individuales con plan activo. Acceso a `/ss` para "
+                "Screen Shares, cola prioritaria de scans, soporte directo "
+                "y badge en Discord."
+            ),
+            inline=False,
+        )
+        e3.add_field(
+            name="✅ Verificado",
+            value=(
+                "Miembro general del Discord, completó la verificación captcha. "
+                "Puede chatear, jugar, abrir tickets de información — pero "
+                "**no tiene acceso a `/ss`** (eso requiere ser cliente activo)."
             ),
             inline=False,
         )
@@ -636,45 +691,49 @@ class ServerBuilder:
 
         # ─── Embed 4: Cómo pedir un Screen Share ────────────────────────
         e4 = utils.brand_embed(
-            title="🔍 Cómo pedir un Screen Share",
+            title="🔍 Cómo funciona un Screen Share (SS)",
             color=0x3498DB,
             description=(
-                "Un **Screen Share (SS)** es una sesión donde Argus escanea la PC de un "
-                "sospechoso para detectar cheats. **Solo Cliente Pro** puede iniciarlos "
-                "— es uno de los beneficios principales del plan."
+                "Un **Screen Share** es una sesión donde Argus escanea la PC de "
+                "un sospechoso para detectar cheats. **Es exclusivo para clientes "
+                "activos del servicio** — es la funcionalidad principal del plan.\n\n"
+                "**Pueden emitirlos:**\n"
+                "🌟 Cliente Pro (plan individual)\n"
+                "🏢 Cliente Empresa (plan corporativo)"
             ),
         )
         e4.add_field(
-            name="Para Cliente Pro que quiere hacer un SS",
+            name="Si sos cliente y querés escanear a alguien",
             value=(
                 "1. En tu server donde está el sospechoso, pedíle que entre a este Discord.\n"
-                "2. Acá ejecutá `/ss <@usuario>`. El bot:\n"
+                "2. Acá ejecutá `/ss <@usuario>`. Argus AI:\n"
                 "   • Genera un **token único** (1 uso, expira en 30 min).\n"
                 "   • Le manda el token + link de descarga **por DM** al sospechoso.\n"
                 "   • Anuncia el SS iniciado en `📝・logs-scans`.\n"
                 "3. El sospechoso descarga `ArgusScanner.exe`, lo ejecuta como **admin**, "
                 "   pega el token, y escanea.\n"
-                "4. Cuando termina, vos revisás el resultado en el panel:\n"
+                "4. Vos revisás el resultado en el panel:\n"
                 f"   {config.PANEL_URL}/panel\n"
                 "5. Ejecutás `/veredicto <id> hack|clean <razón>` para sentenciar."
             ),
             inline=False,
         )
         e4.add_field(
-            name="¿No sos Cliente Pro todavía?",
+            name="Si todavía no contrataste el servicio",
             value=(
-                "Argus funciona bajo plan **Cliente Pro** — no hay tier gratis. "
-                "Para conseguir el rol y desbloquear `/ss`, abrí un ticket tipo "
-                "**`compra`** en `❓・soporte` y un Admin te explica los precios "
-                "y métodos de pago disponibles."
+                "Argus Projects no tiene tier gratis. Si te interesa el servicio "
+                "para tu server o tu organización, abrí un ticket tipo "
+                "**`compra`** en `❓・soporte` — nuestro equipo te atiende, "
+                "te explica los planes (individual o corporativo) y los métodos "
+                "de pago disponibles."
             ),
             inline=False,
         )
         e4.add_field(
-            name="Para sospechosos que reciben un SS",
+            name="Si te están haciendo un SS",
             value=(
-                "1. Si recibís un DM con un token de SS, **no es opcional**: si no aceptás, "
-                "   probablemente te bannean del server donde ocurre el incidente.\n"
+                "1. Si recibís un DM con un token de SS, **no es opcional**: si no "
+                "   aceptás, probablemente te bannean del server donde ocurre el incidente.\n"
                 "2. Descargá `ArgusScanner.exe` (link en el DM o en `💾・descargas`).\n"
                 "3. Ejecutalo como **administrador** (click derecho → Ejecutar como admin).\n"
                 "4. Pegá el token cuando lo pida.\n"
@@ -682,7 +741,7 @@ class ServerBuilder:
             ),
             inline=False,
         )
-        e4.set_footer(text="Tokens de SS: 1 uso · 30 min · solo Cliente Pro pueden emitirlos")
+        e4.set_footer(text="Tokens de SS: 1 uso · 30 min · solo clientes activos pueden emitirlos")
         await self._safe(rules.send(embed=e4), "enviar SS info")
 
         # ─── Embed 5: FAQ ───────────────────────────────────────────────
@@ -693,19 +752,26 @@ class ServerBuilder:
         e5.add_field(
             name="¿Cuánto cuesta usar Argus?",
             value=(
-                "Argus funciona bajo el plan **Cliente Pro** — no hay tier gratis. "
-                "Solo los Cliente Pro pueden ejecutar `/ss` para hacer Screen Shares, "
-                "tienen cola prioritaria de scans, soporte directo y badges en Discord. "
-                "Para conocer precios y métodos de pago, abrí un ticket tipo **`compra`**."
+                "Argus Projects no tiene tier gratis — manejamos dos planes "
+                "según el cliente:\n"
+                "🌟 **Cliente Pro** — plan individual, ideal para staff de un "
+                "server pequeño/mediano que quiere hacer SS.\n"
+                "🏢 **Cliente Empresa** — plan B2B para servers grandes, networks "
+                "u organizaciones, con SLA y soporte prioritario.\n\n"
+                "Ambos planes desbloquean `/ss`, cola prioritaria, soporte "
+                "directo y badge en Discord. Para precios y métodos de pago, "
+                "abrí un ticket tipo **`compra`**."
             ),
             inline=False,
         )
         e5.add_field(
-            name="¿Cómo me hago Cliente Pro?",
+            name="¿Cómo contrato el servicio?",
             value=(
-                "Abrí un ticket tipo **`compra`** y un Admin te explica los planes "
-                "y cómo concretar el pago. Una vez confirmado te asignan el rol "
-                "**Cliente Pro** y desbloqueás `/ss` y todos los demás beneficios."
+                "Abrí un ticket tipo **`compra`** en `❓・soporte`. Nuestro "
+                "equipo te atiende, te muestra los planes disponibles, te "
+                "asesora sobre cuál encaja con tu caso y te guía con el pago. "
+                "Una vez confirmado, recibís el rol correspondiente y "
+                "desbloqueás todas las funciones."
             ),
             inline=False,
         )
@@ -914,20 +980,20 @@ class ServerBuilder:
         embed = utils.brand_embed(
             title="❓ Soporte",
             description=(
-                "Necesitás algo? Elegí el motivo en el menú de abajo y te abro un canal privado.\n\n"
-                "**Cada motivo va a la gente correcta:**\n"
-                "🛠 **Soporte técnico** → Staff\n"
-                "💻 **Problema con Argus Scanner** → Developers + Staff\n"
-                "💳 **Pago / Cliente Pro** → Admin + Owner\n"
-                "🚨 **Denuncia / reporte** → Senior Staff + Staff\n"
-                "📋 **Otro** → Staff\n\n"
+                "¿Necesitás algo? Elegí el motivo en el menú de abajo y te abro un canal privado.\n\n"
+                "**Cada motivo llega al equipo correcto:**\n"
+                "🛠 **Soporte técnico** → equipo de Soporte\n"
+                "💻 **Problema con Argus Scanner** → equipo de Desarrollo\n"
+                "💳 **Contratar / pagos** → equipo Comercial (planes Pro y Empresa)\n"
+                "🚨 **Denuncia / reporte** → equipo Senior\n"
+                "📋 **Otro** → equipo de Soporte\n\n"
                 "**Solo 1 ticket abierto a la vez.** Te recibe **Argus AI** 👁 — "
-                "si tu problema lo vio antes te tira la solución al toque y "
-                "te ahorrás esperar al staff.\n\n"
-                "Adentro del ticket tenés 3 botones: **🔒 Cerrar** lo cierra, "
-                "**🙋 Reclamar** es para que un staff se haga cargo, y "
-                "**📈 Escalar** sirve para que el staff me cuente el motivo "
-                "y yo aviso al rol que mejor pueda ayudar."
+                "si tu caso es uno que ya resolvimos te tiro la solución al toque "
+                "y te ahorrás esperar al equipo humano.\n\n"
+                "Una vez dentro del ticket vas a tener 3 botones: **🔒 Cerrar** "
+                "lo cierra, **🙋 Reclamar** es para que un miembro del equipo "
+                "se haga cargo formalmente, y **📈 Escalar** sirve para que "
+                "el equipo me cuente el motivo y yo derive al área indicada."
             ),
         )
         # Publicar embed + panel funcional con dropdown de categorias
