@@ -2859,6 +2859,17 @@ async function viewScanDetails(scanId) {
 
 // ── File Activity Table (Explore > Logs tab) ────────────────────────────────
 let _fileActivityAll = [];
+let _exploreActionFilter = 'all';   // 'all' | 'deleted' | 'executed' | 'modified' | 'created'
+
+function _resolveActivityAction(r) {
+    let action = (r.extra && r.extra.action) || '';
+    if (!action && r.issue_type) {
+        const it = String(r.issue_type).toLowerCase();
+        if (it.startsWith('file_')) action = it.slice(5);
+        else action = it;
+    }
+    return action || 'deleted';
+}
 
 function _renderFileActivityTable(results) {
     const items = results.filter(r => (r.issue_category || '').toUpperCase() === 'FILE_ACTIVITY');
@@ -2868,13 +2879,6 @@ function _renderFileActivityTable(results) {
         return tb - ta;
     });
 
-    // Update explore badge to include FILE_ACTIVITY count
-    const badge = document.getElementById('explore-badge');
-    if (badge && items.length > 0) {
-        const prev = parseInt(badge.textContent) || 0;
-        // badge already set by _renderTabFindings; we only show if tab has items
-        document.getElementById('subnav-explore').style.display = '';
-    }
     if (items.length > 0) {
         const eb = document.getElementById('subnav-explore');
         if (eb) eb.style.display = '';
@@ -2883,7 +2887,42 @@ function _renderFileActivityTable(results) {
     const logsCount = document.getElementById('explore-logs-count');
     if (logsCount) logsCount.textContent = items.length;
 
-    _drawFileActivityTable(_fileActivityAll);
+    // Counts por acción para los chips
+    const counts = { all: _fileActivityAll.length, deleted: 0, executed: 0, modified: 0, created: 0 };
+    for (const r of _fileActivityAll) {
+        const a = _resolveActivityAction(r);
+        if (counts[a] !== undefined) counts[a]++;
+    }
+    for (const k of ['all', 'deleted', 'executed', 'modified', 'created']) {
+        const el = document.getElementById('chip-count-' + k);
+        if (el) el.textContent = counts[k] || 0;
+    }
+
+    // Reset filter al cargar un nuevo scan
+    _exploreActionFilter = 'all';
+    _highlightActionChip('all');
+    filterExploreTable();
+}
+
+function _highlightActionChip(action) {
+    const chips = document.querySelectorAll('#explore-action-chips .action-chip');
+    chips.forEach(btn => {
+        const isActive = btn.getAttribute('data-action') === action;
+        btn.classList.toggle('active', isActive);
+        btn.style.background = isActive ? 'var(--accent)' : 'var(--bg-t)';
+        btn.style.color      = isActive ? '#fff' : 'var(--text-m)';
+        const cnt = btn.querySelector('.chip-count');
+        if (cnt) {
+            cnt.style.background = isActive ? 'rgba(255,255,255,.25)' : 'var(--bg)';
+            cnt.style.border     = isActive ? 'none' : '1px solid var(--border)';
+        }
+    });
+}
+
+function filterExploreAction(action) {
+    _exploreActionFilter = action || 'all';
+    _highlightActionChip(_exploreActionFilter);
+    filterExploreTable();
 }
 
 function _drawFileActivityTable(items) {
@@ -2900,18 +2939,7 @@ function _drawFileActivityTable(items) {
         'modified':{ label: 'Modified File', bg: '#f59e0b', icon: '✏️' },
     };
     tbody.innerHTML = items.map((r, i) => {
-        // Resolver action con fallbacks defensivos:
-        //  1. extra.action ('deleted'/'created'/'modified'/'executed')
-        //  2. issue_type empezando con 'file_' → quitar prefijo
-        //  3. issue_type literal
-        //  4. default 'deleted'
-        let action = (r.extra && r.extra.action) || '';
-        if (!action && r.issue_type) {
-            const it = String(r.issue_type).toLowerCase();
-            if (it.startsWith('file_')) action = it.slice(5);
-            else action = it;
-        }
-        if (!action) action = 'deleted';
+        const action = _resolveActivityAction(r);
         const cfg  = ACTION_CFG[action] || ACTION_CFG['deleted'];
         const ts   = (r.extra && r.extra.timestamp) || '';
         const path = (r.issue_path || r.issue_name || '').slice(0, 200);
@@ -2933,12 +2961,17 @@ function _drawFileActivityTable(items) {
 }
 
 function filterExploreTable() {
-    const q = (document.getElementById('explore-search').value || '').toLowerCase();
-    const filtered = q ? _fileActivityAll.filter(r =>
+    const inputEl = document.getElementById('explore-search');
+    const q = (inputEl && inputEl.value || '').toLowerCase();
+    let pool = _fileActivityAll;
+    if (_exploreActionFilter && _exploreActionFilter !== 'all') {
+        pool = pool.filter(r => _resolveActivityAction(r) === _exploreActionFilter);
+    }
+    const filtered = q ? pool.filter(r =>
         (r.issue_path || '').toLowerCase().includes(q) ||
         (r.issue_name || '').toLowerCase().includes(q) ||
-        ((r.extra && r.extra.action) || '').toLowerCase().includes(q)
-    ) : _fileActivityAll;
+        _resolveActivityAction(r).toLowerCase().includes(q)
+    ) : pool;
     _drawFileActivityTable(filtered);
 }
 

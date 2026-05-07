@@ -1562,11 +1562,34 @@
 
                         <!-- Tab: Logs (historial de actividad) -->
                         <div id="explore-panel-logs">
-                            <div style="margin-bottom:12px;">
+                            <div style="margin-bottom:10px;">
                                 <span style="font-size:12px;color:var(--text-d);">Historial de archivos — desde el último arranque (creados, modificados, ejecutados, borrados)</span>
                                 <input id="explore-search" oninput="filterExploreTable()" type="text" placeholder="Buscar…"
                                     style="float:right;padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-t);color:var(--text);font-size:12px;outline:none;width:200px;">
                                 <div style="clear:both;"></div>
+                            </div>
+                            <!-- Sub-filtros por acción (chips) -->
+                            <div id="explore-action-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+                                <button class="action-chip active" data-action="all" onclick="filterExploreAction('all')"
+                                    style="padding:5px 12px;border:1px solid var(--border);border-radius:999px;background:var(--accent);color:#fff;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                                    Todo <span class="chip-count" style="background:rgba(255,255,255,.25);border-radius:8px;padding:1px 6px;font-size:10px;" id="chip-count-all">0</span>
+                                </button>
+                                <button class="action-chip" data-action="deleted" onclick="filterExploreAction('deleted')"
+                                    style="padding:5px 12px;border:1px solid var(--border);border-radius:999px;background:var(--bg-t);color:var(--text-m);font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                                    🗑 Borrados <span class="chip-count" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1px 6px;font-size:10px;" id="chip-count-deleted">0</span>
+                                </button>
+                                <button class="action-chip" data-action="executed" onclick="filterExploreAction('executed')"
+                                    style="padding:5px 12px;border:1px solid var(--border);border-radius:999px;background:var(--bg-t);color:var(--text-m);font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                                    ▶ Ejecutados <span class="chip-count" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1px 6px;font-size:10px;" id="chip-count-executed">0</span>
+                                </button>
+                                <button class="action-chip" data-action="modified" onclick="filterExploreAction('modified')"
+                                    style="padding:5px 12px;border:1px solid var(--border);border-radius:999px;background:var(--bg-t);color:var(--text-m);font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                                    ✏️ Modificados <span class="chip-count" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1px 6px;font-size:10px;" id="chip-count-modified">0</span>
+                                </button>
+                                <button class="action-chip" data-action="created" onclick="filterExploreAction('created')"
+                                    style="padding:5px 12px;border:1px solid var(--border);border-radius:999px;background:var(--bg-t);color:var(--text-m);font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+                                    📄 Creados <span class="chip-count" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1px 6px;font-size:10px;" id="chip-count-created">0</span>
+                                </button>
                             </div>
                             <div style="overflow-x:auto;border-radius:10px;border:1px solid var(--border);">
                                 <table id="file-activity-table" style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -2115,7 +2138,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=45"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=46"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────

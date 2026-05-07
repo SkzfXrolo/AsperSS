@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.32"
+SCANNER_VERSION = "1.6.33"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -8471,8 +8471,15 @@ class ArgusApp:
             '.rise', '.meteor', '.drip', '.vertex', '.azura', '.jello', '.datura',
             '.mathias', '.rusherhack', '.salhack', '.inertia', 'weaveloader',
         ]
+        # Extensiones que merecen alerta cuando aparecen borradas:
+        #   ejecutables/scripts: .exe .jar .dll .bat .ps1 .vbs .ahk .py
+        #   comprimidos (vehículo de distribución): .zip .rar .7z .tar
+        #   loaders / instaladores / accesos directos / volcados de registro:
+        #     .lnk (puede apuntar al hack), .iso/.img (mount loader), .msi (instalador),
+        #     .reg (alterar configs de Windows / persistencia)
         INTERESTING_EXTS = {'.exe', '.jar', '.dll', '.bat', '.ps1', '.vbs', '.ahk', '.py',
-                              '.zip', '.rar', '.7z', '.tar'}  # archivos comprimidos de distribución
+                              '.zip', '.rar', '.7z', '.tar',
+                              '.lnk', '.iso', '.img', '.msi', '.reg'}
         CUTOFF_48H  = time.time() - 604800  # 7 días
         EPOCH_DIFF  = 116444736000000000
 
