@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.27"
+SCANNER_VERSION = "1.6.28"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -13328,7 +13328,7 @@ class ArgusApp:
             print(f"Error en scan_weave_loader: {e}")
 
     def scan_xray_resourcepacks(self):
-        """#4 — Detecta resourcepacks de Xray con texturas transparentes para stone/dirt/ores."""
+        """#4 — Detecta resourcepacks de Xray con texturas transparentes para stone/dirt."""
         print("🔍 Buscando resourcepacks Xray en .minecraft/resourcepacks/...")
         import zipfile as _zf
         import struct as _struct
@@ -13336,40 +13336,32 @@ class ArgusApp:
         rp_dir = os.path.join(appdata, '.minecraft', 'resourcepacks')
         if not os.path.isdir(rp_dir):
             return
-        # Texturas que no deberían ser transparentes en un pack legítimo
+
+        # Bloques sólidos que los packs xray hacen transparentes para ver a través de ellos.
+        # Packs legítimos NO necesitan canal alpha en estas texturas.
         XRAY_TARGETS = {
             'stone', 'deepslate', 'dirt', 'gravel', 'sand', 'netherrack',
             'cobblestone', 'end_stone', 'soul_sand', 'soul_soil',
+            'tuff', 'calcite', 'dripstone_block', 'mud', 'packed_mud',
+            'granite', 'diorite', 'andesite', 'sandstone', 'red_sandstone',
         }
-        # ORE textures should NEVER be transparent (they're inside stone)
-        ORE_NAMES = {'coal_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'emerald_ore',
-                     'lapis_ore', 'redstone_ore', 'copper_ore', 'ancient_debris',
-                     'nether_gold_ore', 'nether_quartz_ore', 'deepslate_coal_ore',
-                     'deepslate_iron_ore', 'deepslate_gold_ore', 'deepslate_diamond_ore',
-                     'deepslate_emerald_ore', 'deepslate_lapis_ore'}
 
-        def _png_has_alpha(data: bytes) -> bool:
-            """Quick check: PNG color type 4 (grayscale+alpha) or 6 (RGBA)."""
-            if data[:8] != b'\x89PNG\r\n\x1a\n':
-                return False
-            color_type = data[25]  # byte 25 of PNG header
-            return color_type in (4, 6)
+        # Palabras en el nombre del pack que confirman xray sin análisis de texturas
+        XRAY_NAME_KW = ('xray', 'x-ray', 'xvision', 'x_ray', 'xfull', 'fullbright+x',
+                        'cave finder', 'ore finder', 'orefindr', 'see through')
 
         def _png_avg_alpha(data: bytes) -> float:
-            """Estimate average alpha from IDAT by sampling first row of pixels (heuristic)."""
+            """Devuelve el alpha promedio (0-255) de una textura PNG, o 255 si no tiene canal alpha."""
             try:
-                import zlib as _zl, io as _io
-                idat_start = data.find(b'IDAT')
-                if idat_start < 0:
+                if data[:8] != b'\x89PNG\r\n\x1a\n':
                     return 255.0
-                # width/height in IHDR
-                width  = _struct.unpack('>I', data[16:20])[0]
-                height = _struct.unpack('>I', data[20:24])[0]
                 color_type = data[25]
-                if color_type not in (4, 6):
+                if color_type not in (4, 6):  # solo grayscale+alpha o RGBA
                     return 255.0
                 channels = 4 if color_type == 6 else 2
-                # Collect all IDAT chunks
+                width  = _struct.unpack('>I', data[16:20])[0]
+                height = _struct.unpack('>I', data[20:24])[0]
+                import zlib as _zl
                 raw = b''
                 pos = 8
                 while pos + 12 <= len(data):
@@ -13384,74 +13376,89 @@ class ArgusApp:
                 decompressed = _zl.decompress(raw)
                 stride = 1 + width * channels
                 alphas = []
-                for row in range(min(height, 16)):  # sample first 16 rows only
-                    row_start = row * stride + 1  # skip filter byte
+                for row in range(min(height, 16)):
+                    row_start = row * stride + 1
                     for col in range(width):
-                        pix_start = row_start + col * channels
-                        alpha_byte = decompressed[pix_start + channels - 1]
-                        alphas.append(alpha_byte)
+                        alphas.append(decompressed[row_start + col * channels + channels - 1])
                 return sum(alphas) / len(alphas) if alphas else 255.0
             except Exception:
-                return 255.0  # can't determine → assume opaque
+                return 255.0
 
         try:
             for rp_name in os.listdir(rp_dir):
                 rp_path = os.path.join(rp_dir, rp_name)
-                # Support both .zip packs and folder packs
-                if rp_name.lower().endswith('.zip'):
+                rp_lower = rp_name.lower()
+
+                # ── Señal 1: nombre del pack contiene keyword de xray ─────────────
+                name_is_xray = any(kw in rp_lower for kw in XRAY_NAME_KW)
+
+                # ── Señal 2: análisis de texturas (solo zips) ─────────────────────
+                xray_textures_low  = []  # alpha < 30 (casi invisible)
+                xray_textures_mid  = []  # alpha 30-79 (semitransparente)
+
+                if rp_lower.endswith('.zip'):
                     try:
-                        zf = _zf.ZipFile(rp_path, 'r')
-                        entries = {n.lower(): n for n in zf.namelist()}
+                        with _zf.ZipFile(rp_path, 'r') as zf:
+                            entries = {n.lower(): n for n in zf.namelist()}
+                            for target in XRAY_TARGETS:
+                                for prefix in ('assets/minecraft/textures/block/',
+                                               'assets/minecraft/textures/blocks/'):
+                                    cp = f'{prefix}{target}.png'
+                                    if cp not in entries:
+                                        continue
+                                    try:
+                                        avg_a = _png_avg_alpha(zf.read(entries[cp]))
+                                        if avg_a < 30:
+                                            xray_textures_low.append(f'{target}({avg_a:.0f})')
+                                        elif avg_a < 80:
+                                            xray_textures_mid.append(f'{target}({avg_a:.0f})')
+                                    except Exception:
+                                        pass
+                                    break
                     except Exception:
-                        continue
+                        pass
+
+                all_xray = xray_textures_low + xray_textures_mid
+                n_low = len(xray_textures_low)
+                n_all = len(all_xray)
+
+                # ── Decisión: requiere evidencia sólida ───────────────────────────
+                # Nombre xray + cualquier textura transparente → CRITICAL
+                # Sin nombre: necesita ≥3 texturas transparentes (al menos 1 muy baja)
+                if name_is_xray and n_all >= 1:
+                    alerta, conf = 'CRITICAL', 0.95
+                elif n_low >= 3:
+                    alerta, conf = 'CRITICAL', min(0.92, 0.70 + n_low * 0.06)
+                elif n_low >= 1 and n_all >= 3:
+                    alerta, conf = 'CRITICAL', 0.82
+                elif n_all >= 5:
+                    alerta, conf = 'SOSPECHOSO', 0.65
+                elif n_all >= 3 and not name_is_xray:
+                    alerta, conf = 'POCO_SOSPECHOSO', 0.45
                 else:
-                    continue  # folder packs: skip (too complex without os.walk time budget)
+                    continue  # evidencia insuficiente — no reportar
 
-                xray_textures = []
-                try:
-                    # Solo analizar texturas de bloques sólidos (stone/dirt/etc.) — en xray
-                    # ESTAS se vuelven transparentes para ver a través. Las texturas de ores
-                    # permanecen opacas en packs xray (son el objetivo visible), no las chequeamos.
-                    for target in XRAY_TARGETS:
-                        candidate_paths = [
-                            f'assets/minecraft/textures/block/{target}.png',
-                            f'assets/minecraft/textures/blocks/{target}.png',
-                        ]
-                        for cp in candidate_paths:
-                            if cp in entries:
-                                try:
-                                    png_data = zf.read(entries[cp])
-                                    if not _png_has_alpha(png_data):
-                                        break
-                                    avg_alpha = _png_avg_alpha(png_data)
-                                    # Umbral estricto: solo alpha < 80/255 (~31%) = realmente transparente.
-                                    # Packs PvP legítimos usan efectos de alpha artísticos > 80.
-                                    if avg_alpha < 80:
-                                        xray_textures.append(f'{target} (alpha={avg_alpha:.0f}/255)')
-                                except Exception:
-                                    pass
-                                break
-                finally:
-                    zf.close()
-
-                if xray_textures:
-                    print(f"🚨 RESOURCEPACK XRAY: {rp_name} ({len(xray_textures)} texturas transparentes)")
-                    self.issues_found.append({
-                        'nombre': f'Resourcepack Xray detectado: {rp_name}',
-                        'ruta': rp_path,
-                        'archivo': rp_name,
-                        'tipo': 'ghost_client_config',
-                        'categoria': 'XRAY',
-                        'alerta': 'CRITICAL',
-                        'confidence': 0.90,
-                        'detected_patterns': [f'xray_texture:{t}' for t in xray_textures[:6]],
-                        'explicacion': (
-                            f'El resourcepack "{rp_name}" tiene {len(xray_textures)} textura(s) de bloques '
-                            f'sólidos con transparencia extrema: {", ".join(xray_textures[:3])}. '
-                            'Los packs Xray hacen casi invisibles las texturas de piedra/tierra '
-                            'para que los minerales sean visibles a través de las paredes.'
-                        ),
-                    })
+                print(f"🚨 RESOURCEPACK XRAY: {rp_name} (nombre_xray={name_is_xray}, low={n_low}, mid={len(xray_textures_mid)})")
+                self.issues_found.append({
+                    'nombre': f'Resourcepack Xray detectado: {rp_name}',
+                    'ruta': rp_path,
+                    'archivo': rp_name,
+                    'tipo': 'ghost_client_config',
+                    'categoria': 'XRAY',
+                    'alerta': alerta,
+                    'confidence': conf,
+                    'detected_patterns': (
+                        (['xray_name_keyword'] if name_is_xray else []) +
+                        [f'xray_texture:{t}' for t in all_xray[:6]]
+                    ),
+                    'explicacion': (
+                        (f'El nombre "{rp_name}" contiene keyword de Xray. ' if name_is_xray else '') +
+                        (f'{n_all} textura(s) de bloques sólidos con canal alpha anormal '
+                         f'({"muy transparente" if n_low else "semitransparente"}): '
+                         f'{", ".join(all_xray[:4])}. ' if all_xray else '') +
+                        'Los packs Xray hacen invisibles piedra/tierra para ver minerales a través de las paredes.'
+                    ),
+                })
         except Exception as e:
             print(f"Error en scan_xray_resourcepacks: {e}")
 
