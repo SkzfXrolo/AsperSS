@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.28"
+SCANNER_VERSION = "1.6.29"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -3241,12 +3241,25 @@ class ArgusApp:
                     if file_path and os.path.exists(str(file_path)):
                         content_analysis = self.analyze_file_content(str(file_path))
                         content_confidence = content_analysis.get('confidence', 0)
-                        # Si el análisis de contenido indica hack con alta confianza, es definitivamente un hack
                         if content_analysis.get('is_hack') and content_confidence >= 70:
                             item['confidence'] = content_confidence
                             item['detected_patterns'] = content_analysis.get('detected_patterns', [])
                             item['obfuscation'] = content_analysis.get('obfuscation_detected', False)
                             item['file_hash'] = content_analysis.get('file_hash')
+                            # ── Mejora 7+10: logs y .txt tienen cap de alerta ────
+                            # Un log nunca es CRITICAL solo por contenido — es evidencia indirecta
+                            if content_analysis.get('is_log_file'):
+                                if item.get('alerta') == 'CRITICAL':
+                                    item['alerta'] = 'SOSPECHOSO'
+                                # ── Mejora 9: explicación específica para logs ───
+                                log_exp = content_analysis.get('log_explanation', '')
+                                if log_exp:
+                                    item['explicacion'] = log_exp
+                                    item['tipo'] = 'log_registra_hack'
+                            elif os.path.splitext(str(file_path))[1].lower() in ('.txt', '.cfg', '.properties'):
+                                # .txt sin patrones múltiples: máximo SOSPECHOSO
+                                if item.get('alerta') == 'CRITICAL' and content_confidence < 80:
+                                    item['alerta'] = 'SOSPECHOSO'
                 except:
                     pass
             
@@ -5505,26 +5518,55 @@ class ArgusApp:
     def analyze_file_content(self, file_path):
         """Análisis avanzado del contenido del archivo - Detecta hacks por contenido, no solo nombre"""
         try:
-            # Verificar cache
             if file_path in self.file_analysis_cache:
                 return self.file_analysis_cache[file_path]
-            
+
             result = {
                 'is_hack': False,
                 'confidence': 0,
                 'detected_patterns': [],
                 'obfuscation_detected': False,
-                'file_hash': None
+                'file_hash': None,
+                'is_log_file': False,
+                'log_explanation': '',
             }
-            
+
+            filename_lower = os.path.basename(file_path).lower()
+            file_ext = os.path.splitext(filename_lower)[1]
+
+            # ── Mejora 1: Whitelist de nombres genéricos ─────────────────────────
+            # Archivos con estos nombres son demasiado genéricos para ser evidencia de hack
+            GENERIC_FILENAME_WHITELIST = {
+                'message.txt', 'messages.txt', 'readme.txt', 'readme.md',
+                'notes.txt', 'note.txt', 'info.txt', 'todo.txt', 'changelog.txt',
+                'license.txt', 'licence.txt', 'credits.txt', 'authors.txt',
+                'help.txt', 'manual.txt', 'instructions.txt', 'guide.txt',
+                'terms.txt', 'privacy.txt', 'about.txt', 'history.txt',
+                'update.txt', 'updates.txt', 'version.txt', 'versions.txt',
+                'config.txt', 'default.txt', 'sample.txt', 'example.txt',
+                'output.txt', 'result.txt', 'results.txt', 'data.txt',
+            }
+            if filename_lower in GENERIC_FILENAME_WHITELIST:
+                self.file_analysis_cache[file_path] = result
+                return result
+
+            # ── Mejora 2: Detección de archivos de log ───────────────────────────
+            # Logs registran actividad, no son el hack en sí mismo
+            LOG_NAME_PATTERNS = (
+                'launcher_log', 'latest.log', 'debug.log', 'crash.log',
+                'error.log', 'output.log', 'console.log', 'game.log',
+                'launch.log', '.log',
+            )
+            is_log = (file_ext == '.log' or
+                      any(p in filename_lower for p in LOG_NAME_PATTERNS))
+            result['is_log_file'] = is_log
+
             # Calcular hash SHA256
             try:
                 with open(file_path, 'rb') as f:
                     file_content = f.read()
                     file_hash = hashlib.sha256(file_content).hexdigest()
                     result['file_hash'] = file_hash
-                    
-                    # Verificar si el hash está en la base de datos de hacks conocidos
                     if file_hash in self.known_hack_hashes:
                         result['is_hack'] = True
                         result['confidence'] = 100
@@ -5533,16 +5575,11 @@ class ArgusApp:
                         return result
             except:
                 pass
-            
-            # Análisis de contenido para archivos de texto y JARs
-            filename_lower = os.path.basename(file_path).lower()
-            
-            # Patrones de hacks en contenido — solo nombres de clientes/hacks específicos
+
+            # ── Patrones de hacks en contenido ───────────────────────────────────
             # Excluidos a propósito: reach, velocity, fly, bypass, inject, ghost, scaffold
-            # (son términos genéricos presentes en cualquier mod legítimo de Minecraft)
             hack_content_patterns = [
-                # Clientes clásicos
-                b'vape', b'vapelite', b'vapev4',
+                b'vapelite', b'vapev4',               # vape con sufijo → más específico
                 b'entropy', b'entropyclient',
                 b'whiteout',
                 b'liquidbounce',
@@ -5554,8 +5591,7 @@ class ArgusApp:
                 b'astolfo', b'astolfoclient',
                 b'exhibition',
                 b'novoline',
-                b'dripclient',
-                # Clientes modernos (2022-2025)
+                b'dripclient',                         # drip solo es muy corto, solo con sufijo
                 b'meteorclient', b'meteor-client',
                 b'rusherhack',
                 b'aristois',
@@ -5572,27 +5608,22 @@ class ArgusApp:
                 b'weepcraft',
                 b'zeroday',
                 b'nyxclient',
-                # Módulos y herramientas
                 b'killaura', b'kill-aura',
                 b'aimbot', b'aim-bot',
                 b'triggerbot',
                 b'xray', b'fullbright',
-                b'autoclick', b'autoclicker',
+                b'autoclicker',                        # autoclick es demasiado genérico solo
                 b'clickgui',
                 b'anticheat.bypass', b'anticheat bypass',
-                b'nofall', b'no-fall',
                 b'scaffoldhack',
-                # Loaders e injectors
                 b'weaveloader', b'weave-loader',
                 b'extremeinjector',
                 b'dllinjector',
                 b'cheatengine',
-                # C2 y exfiltración
                 b'discord.com/api/webhooks/',
-                b'drip', b'phobos',
+                b'phobos',
             ]
-            # Umbrales: 1 patrón "definitivo" (nombre exacto de cliente) = hack directo
-            # 2+ patrones genéricos = hack probable
+            # Patrones que por sí solos confirman hack (nombres de cliente exclusivos)
             DEFINITE_CONTENT_PATTERNS = {
                 b'meteorclient', b'rusherhack', b'aristois', b'tenacity',
                 b'inertiaclient', b'salhack', b'jelloclient', b'daturamc',
@@ -5600,28 +5631,91 @@ class ArgusApp:
                 b'astolfoclient', b'entropyclient', b'liquidbounce', b'wurstclient',
                 b'futureclient', b'fluxclient', b'sigmaclient', b'vapelite',
                 b'pandoraclient', b'azuraclient', b'nyxclient', b'remixclient',
+                b'meteor-client',
             }
 
-            # Análisis de strings sospechosos
             try:
-                if filename_lower.endswith(('.jar', '.class', '.java', '.txt', '.lua', '.js', '.py')):
+                if file_ext in ('.jar', '.class', '.java', '.txt', '.lua', '.js', '.py', '.log',
+                                '.cfg', '.config', '.properties', '.json', '.yml', '.yaml'):
                     with open(file_path, 'rb') as f:
-                        content = f.read(1024 * 1024)  # Leer primeros 1MB
+                        content = f.read(1024 * 1024)
 
-                        # Detectar patrones de hack en contenido
-                        # Normalizar contenido para detectar homoglyphs cirílicos
-                        content_norm = _normalize(content.decode('utf-8', errors='ignore')).encode('ascii')
-                        detected_count = 0
-                        definite_hit = False
-                        for pattern in hack_content_patterns:
-                            if pattern in content or pattern in content_norm:
-                                detected_count += 1
-                                result['detected_patterns'].append(pattern.decode('utf-8', errors='ignore'))
-                                if pattern in DEFINITE_CONTENT_PATTERNS:
-                                    definite_hit = True
+                    # ── Mejora 5: Filtro de tamaño mínimo para .txt ──────────────
+                    # Archivos .txt muy pequeños con mención única no son evidencia
+                    file_size = len(content)
+                    if file_ext in ('.txt', '.log') and file_size < 200:
+                        self.file_analysis_cache[file_path] = result
+                        return result
 
+                    content_norm = _normalize(content.decode('utf-8', errors='ignore')).encode('ascii')
+                    detected_count = 0
+                    definite_hit = False
+                    definite_patterns_found = []
+
+                    for pattern in hack_content_patterns:
+                        if pattern in content or pattern in content_norm:
+                            detected_count += 1
+                            result['detected_patterns'].append(pattern.decode('utf-8', errors='ignore'))
+                            if pattern in DEFINITE_CONTENT_PATTERNS:
+                                definite_hit = True
+                                definite_patterns_found.append(pattern.decode('utf-8', errors='ignore'))
+
+                    # ── Mejora 6: Densidad de palabras clave ─────────────────────
+                    # En archivos grandes (>100KB) un solo hit tiene menos peso
+                    density_penalty = 0
+                    if file_size > 100_000 and detected_count <= 2:
+                        density_penalty = 15  # reducir confianza
+
+                    # ── Mejora 3+4: Umbrales según tipo de archivo ───────────────
+                    # .txt y .log: requieren más evidencia (son texto plano ambiguo)
+                    # .jar/.class: un patrón definitivo es suficiente (bytecode no miente)
+                    is_text_file = file_ext in ('.txt', '.log', '.cfg', '.properties',
+                                                 '.yml', '.yaml', '.json')
+
+                    if is_log:
+                        # ── Mejora 8+9: Logs necesitan 2+ patrones definitivos ───
+                        # Un log que menciona meteor-client registra su USO, no es el hack
+                        definite_count = len(definite_patterns_found)
+                        if definite_count >= 2:
+                            result['is_hack'] = True
+                            result['confidence'] = min(65, 45 + definite_count * 8) - density_penalty
+                        elif definite_count == 1 and detected_count >= 2:
+                            result['is_hack'] = True
+                            result['confidence'] = max(40, 50 - density_penalty)
+                        elif definite_count == 1:
+                            # Un solo nombre de hack en un log = registra su uso
+                            result['is_hack'] = True
+                            result['confidence'] = max(35, 40 - density_penalty)
+                        # ── Mejora 9: Explicación específica para logs ───────────
+                        if result['is_hack'] and definite_patterns_found:
+                            clients = ', '.join(definite_patterns_found[:3])
+                            result['log_explanation'] = (
+                                f'Este archivo de log registra que el cliente de hacks '
+                                f'"{clients}" fue ejecutado en este equipo. '
+                                f'No es el hack en sí, pero confirma su uso previo.'
+                            )
+                            result['detected_patterns'].append('log_registra_uso_de_hack')
+
+                    elif is_text_file:
+                        # ── Mejora 3: .txt requiere 2+ patrones para ser HACK ────
+                        if definite_hit and detected_count >= 2:
+                            result['is_hack'] = True
+                            result['confidence'] = min(80, 60 + detected_count * 5) - density_penalty
+                        elif definite_hit and detected_count == 1:
+                            # Solo 1 patrón definitivo en .txt: POCO_SOSPECHOSO, no hack
+                            result['is_hack'] = False
+                            result['confidence'] = max(20, 35 - density_penalty)
+                            result['detected_patterns'].append('single_pattern_txt_weak')
+                        elif detected_count >= 3:
+                            result['is_hack'] = True
+                            result['confidence'] = min(75, detected_count * 12) - density_penalty
+                        elif detected_count == 2:
+                            result['is_hack'] = True
+                            result['confidence'] = max(40, 50 - density_penalty)
+
+                    else:
+                        # Binarios (.jar, .class, .py, .js, .lua): lógica original más estricta
                         if definite_hit:
-                            # Un nombre exclusivo de hack client = hit directo
                             result['is_hack'] = True
                             result['confidence'] = min(95, 70 + detected_count * 5)
                         elif detected_count >= 3:
@@ -5631,11 +5725,12 @@ class ArgusApp:
                             result['is_hack'] = True
                             result['confidence'] = 55
 
-                        # Ofuscación solo relevante para archivos de texto, no binarios JARs/class
-                        if len(content) > 100 and not filename_lower.endswith(('.jar', '.class')):
-                            non_ascii_ratio = sum(1 for b in content[:1000] if b > 127) / min(1000, len(content))
-                            if non_ascii_ratio > 0.3:
-                                result['obfuscation_detected'] = True
+                    # Ofuscación solo relevante para no-binarios
+                    if len(content) > 100 and file_ext not in ('.jar', '.class'):
+                        non_ascii_ratio = sum(1 for b in content[:1000] if b > 127) / min(1000, len(content))
+                        if non_ascii_ratio > 0.3:
+                            result['obfuscation_detected'] = True
+                            if not is_log:  # logs pueden tener caracteres especiales
                                 result['confidence'] += 20
             except:
                 pass
