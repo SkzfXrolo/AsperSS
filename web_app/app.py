@@ -4101,6 +4101,7 @@ def _send_file_download(filename):
     
     # Lista de ubicaciones posibles en orden de prioridad
     possible_paths = [
+        os.path.join(project_root, 'dist', filename),
         os.path.join(project_root, 'downloads', filename),
         os.path.join(project_root, 'source', 'dist', filename),
         os.path.join(project_root, filename),
@@ -4282,7 +4283,8 @@ def descargar_exe():
     """Endpoint público permanente para descargar ArgusScanner.exe sin autenticación."""
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     possible_paths = [
-        os.path.join(project_root, 'downloads', 'ArgusScanner.exe'),
+        os.path.join(project_root, 'dist', 'ArgusScanner.exe'),          # versión compilada en git (prioridad)
+        os.path.join(project_root, 'downloads', 'ArgusScanner.exe'),      # fallback: subida manual
         os.path.join(project_root, 'source', 'dist', 'ArgusScanner.exe'),
         os.path.join(project_root, 'ArgusScanner.exe'),
     ]
