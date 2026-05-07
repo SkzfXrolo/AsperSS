@@ -26,6 +26,27 @@ from auth import (
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-production')
+
+# Sesion persistente: 30 dias (de lo contrario las cookies expiran al cerrar el navegador
+# y el usuario se queda "deslogueado" sin previo aviso, viendo todo en 0 porque los
+# endpoints /api/* devuelven 401 y el JS no valida response.ok).
+from datetime import timedelta as _td
+app.config['PERMANENT_SESSION_LIFETIME'] = _td(days=30)
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+# En produccion HTTPS forzamos cookie segura
+if os.environ.get('RENDER') or os.environ.get('FLASK_ENV') == 'production':
+    app.config['SESSION_COOKIE_SECURE'] = True
+
+
+@app.before_request
+def _make_session_permanent():
+    """Marca la sesion como permanente para que dure PERMANENT_SESSION_LIFETIME
+    en lugar de morir al cerrar el navegador."""
+    from flask import session as _s
+    _s.permanent = True
+
+
 CORS(app)
 
 # Inicializar base de datos de autenticación al iniciar (en background para no bloquear)

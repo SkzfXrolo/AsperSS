@@ -1,4 +1,4 @@
-const CACHE_NAME = 'argus-v2';
+const CACHE_NAME = 'argus-v3';
 const STATIC_URLS = [
   '/static/css/style.css',
   '/static/css/panel.css',

@@ -1460,6 +1460,20 @@ async function loadScans() {
         if (staff)    params.set('staff', staff);
 
         const response = await fetch('/api/scans?' + params.toString());
+        // Sesion expirada: avisar en la tabla en lugar de quedar en blanco
+        if (response.status === 401 || response.status === 403) {
+            if (tbody) {
+                tbody._loaded = true;
+                tbody.innerHTML = `
+                    <tr><td colspan="5" style="text-align:center;padding:50px 20px;color:var(--text-m);">
+                        <div style="font-size:38px;margin-bottom:12px">🔒</div>
+                        <div style="font-size:14px;font-weight:700;color:var(--text-h);margin-bottom:6px;">Tu sesión expiró</div>
+                        <div style="font-size:12px;margin-bottom:16px;">Inicia sesión otra vez para ver los escaneos.</div>
+                        <a href="/login" class="btn btn-primary btn-sm" style="text-decoration:none;">Iniciar sesión</a>
+                    </td></tr>`;
+            }
+            return;
+        }
         const data = await response.json();
 
         if (data.scans && data.scans.length > 0) {
@@ -2221,6 +2235,35 @@ async function viewScanDetails(scanId) {
 
     try {
         const response = await fetch(`/api/scans/${scanId}`);
+        // Si la sesion expiro (401) o no tenemos permiso (403), no podemos pintar nada;
+        // en lugar de dejar todo en cero (que es la causa del bug "no veo los resultados"),
+        // avisamos y redirigimos a /login para que el usuario reinicie sesion.
+        if (response.status === 401 || response.status === 403) {
+            const issuesContainer = document.getElementById('issues-list-container');
+            if (issuesContainer) {
+                issuesContainer.innerHTML = `
+                    <div style="text-align:center;padding:60px 20px;color:var(--text-m);">
+                        <div style="font-size:42px;margin-bottom:14px">🔒</div>
+                        <div style="font-size:15px;font-weight:700;color:var(--text-h);margin-bottom:8px">Tu sesión expiró</div>
+                        <div style="font-size:13px;margin-bottom:20px;">Por seguridad necesitas iniciar sesión otra vez para ver los resultados.</div>
+                        <a href="/login" class="btn btn-primary" style="text-decoration:none;">Iniciar sesión</a>
+                    </div>`;
+            }
+            return;
+        }
+        if (!response.ok) {
+            const issuesContainer = document.getElementById('issues-list-container');
+            if (issuesContainer) {
+                issuesContainer.innerHTML = `
+                    <div style="text-align:center;padding:60px 20px;color:var(--text-m);">
+                        <div style="font-size:42px;margin-bottom:14px">⚠️</div>
+                        <div style="font-size:15px;font-weight:700;color:var(--text-h);margin-bottom:8px">No se pudieron cargar los resultados</div>
+                        <div style="font-size:13px;">Error HTTP ${response.status} al consultar /api/scans/${scanId}.</div>
+                        <button class="btn btn-sm" style="margin-top:18px" onclick="viewScanDetails(${scanId})">Reintentar</button>
+                    </div>`;
+            }
+            return;
+        }
         const data = await response.json();
         _currentScanData = data;
 
