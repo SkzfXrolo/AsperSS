@@ -3,7 +3,7 @@
 Migra los comandos del web_app/discord_bot.py al bot standalone:
   /scan <jugador>           Ultimo scan de un jugador.
   /veredicto <id> <v> <r>   Cambia veredicto desde Discord (staff).
-  /ss <jugador>             Crea token de SS y lo manda por DM (staff).
+  /ss <jugador>             Crea token de SS y lo manda por DM (Cliente Pro o Admin).
   /stats                    Estadisticas globales del panel.
 
 Ademas: tasks.loop que cada 10s lee discord_queue (creada por el web app)
@@ -207,13 +207,21 @@ class Argus(commands.Cog):
             )
 
     # ── /ss ────────────────────────────────────────────────────────────
-    @app_commands.command(name="ss", description="(Staff) Inicia un Screen Share — crea token y lo envia por DM.")
-    @app_commands.default_permissions(moderate_members=True)
+    @app_commands.command(name="ss", description="(Cliente Pro) Inicia un Screen Share — crea token y lo envia por DM.")
     @app_commands.describe(jugador="Mention del jugador al que hacer SS")
     async def ss_cmd(self, interaction: discord.Interaction, jugador: discord.Member):
-        if not isinstance(interaction.user, discord.Member) or not utils.is_staff(interaction.user):
+        if not isinstance(interaction.user, discord.Member):
+            return
+        if not utils.can_use_ss(interaction.user):
             await interaction.response.send_message(
-                embed=utils.error_embed("Solo staff."), ephemeral=True
+                embed=utils.error_embed(
+                    "Este comando es exclusivo para **Cliente Pro**.\n\n"
+                    "Argus Projects funciona bajo plan Cliente Pro — no hay tier gratis.\n"
+                    "Para conseguir el rol abrí un ticket tipo **`compra`** en `❓・soporte` "
+                    "y un Admin te explica precios y métodos de pago.",
+                    title="🔒 Solo Cliente Pro",
+                ),
+                ephemeral=True,
             )
             return
         await interaction.response.defer(ephemeral=True)

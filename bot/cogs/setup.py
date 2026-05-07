@@ -640,11 +640,12 @@ class ServerBuilder:
             color=0x3498DB,
             description=(
                 "Un **Screen Share (SS)** es una sesión donde Argus escanea la PC de un "
-                "sospechoso para detectar cheats. Solo el staff puede iniciarlos."
+                "sospechoso para detectar cheats. **Solo Cliente Pro** puede iniciarlos "
+                "— es uno de los beneficios principales del plan."
             ),
         )
         e4.add_field(
-            name="Para staff que quiere hacer un SS",
+            name="Para Cliente Pro que quiere hacer un SS",
             value=(
                 "1. En tu server donde está el sospechoso, pedíle que entre a este Discord.\n"
                 "2. Acá ejecutá `/ss <@usuario>`. El bot:\n"
@@ -660,6 +661,16 @@ class ServerBuilder:
             inline=False,
         )
         e4.add_field(
+            name="¿No sos Cliente Pro todavía?",
+            value=(
+                "Argus funciona bajo plan **Cliente Pro** — no hay tier gratis. "
+                "Para conseguir el rol y desbloquear `/ss`, abrí un ticket tipo "
+                "**`compra`** en `❓・soporte` y un Admin te explica los precios "
+                "y métodos de pago disponibles."
+            ),
+            inline=False,
+        )
+        e4.add_field(
             name="Para sospechosos que reciben un SS",
             value=(
                 "1. Si recibís un DM con un token de SS, **no es opcional**: si no aceptás, "
@@ -671,7 +682,7 @@ class ServerBuilder:
             ),
             inline=False,
         )
-        e4.set_footer(text="Tokens de SS: 1 uso · 30 min · solo emitidos por staff")
+        e4.set_footer(text="Tokens de SS: 1 uso · 30 min · solo Cliente Pro pueden emitirlos")
         await self._safe(rules.send(embed=e4), "enviar SS info")
 
         # ─── Embed 5: FAQ ───────────────────────────────────────────────
@@ -680,8 +691,22 @@ class ServerBuilder:
             color=0x9B59B6,
         )
         e5.add_field(
-            name="¿Argus es free?",
-            value="Sí, el scanner es gratuito. Hay un plan **Cliente Pro** opcional con perks (cola prioritaria, más SS simultáneos, soporte directo).",
+            name="¿Cuánto cuesta usar Argus?",
+            value=(
+                "Argus funciona bajo el plan **Cliente Pro** — no hay tier gratis. "
+                "Solo los Cliente Pro pueden ejecutar `/ss` para hacer Screen Shares, "
+                "tienen cola prioritaria de scans, soporte directo y badges en Discord. "
+                "Para conocer precios y métodos de pago, abrí un ticket tipo **`compra`**."
+            ),
+            inline=False,
+        )
+        e5.add_field(
+            name="¿Cómo me hago Cliente Pro?",
+            value=(
+                "Abrí un ticket tipo **`compra`** y un Admin te explica los planes "
+                "y cómo concretar el pago. Una vez confirmado te asignan el rol "
+                "**Cliente Pro** y desbloqueás `/ss` y todos los demás beneficios."
+            ),
             inline=False,
         )
         e5.add_field(
@@ -757,7 +782,7 @@ class ServerBuilder:
         )
         e2.add_field(
             name="1. Conseguir un token",
-            value="Pídele a un staff que ejecute `/ss <vos>` en este Discord. Te llegará un DM con el token (1 uso, 30 min).",
+            value="Pídele a un **Cliente Pro** que ejecute `/ss <vos>` en este Discord. Te llegará un DM con el token (1 uso, 30 min).",
             inline=False,
         )
         e2.add_field(

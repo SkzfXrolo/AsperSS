@@ -127,6 +127,21 @@ def is_admin(member: discord.Member) -> bool:
     return member.guild_permissions.administrator
 
 
+def is_pro(member: discord.Member) -> bool:
+    """True si el miembro tiene rol Cliente Pro (case-insensitive)."""
+    pro_names = {"cliente pro", "client pro", "pro", "vip"}
+    return any(r.name.lower() in pro_names for r in member.roles)
+
+
+def can_use_ss(member: discord.Member) -> bool:
+    """True si puede ejecutar /ss: Cliente Pro o staff alto del proyecto.
+
+    Owner/Admin del propio Argus Projects pueden hacer SS sin ser Cliente Pro
+    (uso interno). Cualquier otro caso requiere ser Cliente Pro.
+    """
+    return is_pro(member) or is_admin(member)
+
+
 # ── Logging visual ───────────────────────────────────────────────────────
 
 def setup_logging() -> None:
