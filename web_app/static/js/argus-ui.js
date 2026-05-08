@@ -555,6 +555,18 @@
             },
         },
         {
+            id: 'repeat-offenders',
+            title: 'Top reincidentes',
+            hint:  'Jugadores con más verdicts hack en los últimos 90 días (Pack 37)',
+            keys:  ['reincidente', 'reincidentes', 'offenders', 'repeat', 'top hacks',
+                    'sancionables', 'banlist', 'top players'],
+            run:   () => {
+                if (typeof window.openRepeatOffendersModal === 'function') {
+                    window.openRepeatOffendersModal();
+                }
+            },
+        },
+        {
             id: 'sound-toggle',
             title: 'Sonido al recibir scan',
             hint:  'Habilitar / silenciar notificación de scan nuevo',

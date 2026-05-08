@@ -8211,3 +8211,113 @@ async function applyAIThresholdSuggestion(delta) {
 
 window.openAIQualityDashboard = openAIQualityDashboard;
 window.applyAIThresholdSuggestion = applyAIThresholdSuggestion;
+
+
+/* ════════════════════════════════════════════════════════════════════════
+ * Pack 37 — Top Repeat Offenders modal
+ * Lista de jugadores con >=2 verdicts hack en los últimos 90 días
+ * ════════════════════════════════════════════════════════════════════════ */
+async function openRepeatOffendersModal(opts) {
+    opts = opts || {};
+    const sinceDays = opts.since_days || 90;
+    const limit = opts.limit || 30;
+
+    let root = document.getElementById('argus-offenders-modal');
+    if (!root) {
+        root = document.createElement('div');
+        root.id = 'argus-offenders-modal';
+        root.className = 'modal';
+        root.innerHTML = `
+            <div class="modal-content" style="max-width:680px;width:96vw;max-height:90vh;overflow-y:auto;">
+                <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                    <h3 style="margin:0;display:flex;align-items:center;gap:8px;">
+                        <span aria-hidden="true">🚨</span>
+                        <span>Top reincidentes</span>
+                    </h3>
+                    <div style="display:flex;gap:6px;">
+                        <select id="argus-off-range" class="select-sm" style="padding:4px 8px;font-size:13px;background:rgba(0,0,0,.18);color:var(--text-h);border:1px solid var(--border, rgba(255,255,255,.1));border-radius:6px;">
+                            <option value="30">30 días</option>
+                            <option value="60">60 días</option>
+                            <option value="90" selected>90 días</option>
+                            <option value="180">180 días</option>
+                            <option value="365">1 año</option>
+                        </select>
+                        <button class="modal-close" type="button" onclick="document.getElementById('argus-offenders-modal').classList.remove('show')" aria-label="Cerrar">×</button>
+                    </div>
+                </div>
+                <div class="modal-body" id="argus-off-body" style="padding:14px 18px;">
+                    <div style="text-align:center;padding:30px 0;color:var(--text-d);">Cargando…</div>
+                </div>
+            </div>`;
+        document.body.appendChild(root);
+        root.addEventListener('click', (e) => { if (e.target === root) root.classList.remove('show'); });
+        root.querySelector('#argus-off-range').addEventListener('change', (e) => {
+            openRepeatOffendersModal({ since_days: parseInt(e.target.value, 10) || 90 });
+        });
+    }
+    root.querySelector('#argus-off-range').value = String(sinceDays);
+    root.classList.add('show');
+    const body = root.querySelector('#argus-off-body');
+    body.innerHTML = `<div style="text-align:center;padding:30px 0;color:var(--text-d);">Cargando…</div>`;
+
+    let data;
+    try {
+        const r = await fetch(`/api/repeat-offenders?since_days=${sinceDays}&limit=${limit}`, { credentials: 'include' });
+        data = await r.json();
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+    } catch (e) {
+        body.innerHTML = `<div style="padding:30px;text-align:center;color:#ef4444;">Error: ${(e.message || e)}</div>`;
+        return;
+    }
+
+    if (!data.available) {
+        body.innerHTML = `<div style="padding:30px;text-align:center;color:var(--text-d);">Módulo no disponible.</div>`;
+        return;
+    }
+    if (!data.rows || !data.rows.length) {
+        body.innerHTML = `<div style="padding:40px 16px;text-align:center;color:var(--text-d);">
+            <div style="font-size:32px;margin-bottom:8px;">✨</div>
+            <div>Sin reincidentes en los últimos ${sinceDays} días</div>
+        </div>`;
+        return;
+    }
+
+    const escape = (typeof _qsEscapeSafe === 'function') ? _qsEscapeSafe : (s) => String(s);
+    const rows = data.rows.map((r, i) => {
+        const dt = r.last_hack ? new Date(r.last_hack) : null;
+        const dtStr = dt && !isNaN(dt.getTime()) ? dt.toLocaleDateString('es-AR', {year:'numeric',month:'short',day:'numeric'}) : '—';
+        const rankColor = i < 3 ? '#ef4444' : i < 10 ? '#fbbf24' : 'var(--text-d)';
+        return `
+            <tr style="border-bottom:1px solid var(--border, rgba(255,255,255,.05));">
+                <td style="padding:8px 10px;font-weight:700;color:${rankColor};text-align:center;">#${i+1}</td>
+                <td style="padding:8px 10px;font-weight:600;">
+                    <a href="javascript:void(0)" onclick="if(window.openPlayerTimelineModal) openPlayerTimelineModal('${escape(r.minecraft_username)}')" style="color:var(--accent, #B87333);text-decoration:none;">${escape(r.minecraft_username || '?')}</a>
+                </td>
+                <td style="padding:8px 10px;text-align:center;color:#ef4444;font-weight:700;">${r.hacks}</td>
+                <td style="padding:8px 10px;text-align:center;font-variant-numeric:tabular-nums;">${r.max_risk}</td>
+                <td style="padding:8px 10px;color:var(--text-d);font-size:11.5px;">${escape(dtStr)}</td>
+            </tr>`;
+    }).join('');
+
+    body.innerHTML = `
+        <div style="margin-bottom:12px;font-size:13px;color:var(--text-d);">
+            <b style="color:var(--text-h);">${data.count}</b> jugadores con ≥2 verdicts hack en los últimos ${data.since_days} días.
+            Click en el username para abrir su timeline completo.
+        </div>
+        <div style="border:1px solid var(--border, rgba(255,255,255,.06));border-radius:8px;overflow:hidden;">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead style="background:rgba(0,0,0,.20);">
+                    <tr>
+                        <th style="padding:8px 10px;text-align:center;font-size:11px;color:var(--text-d);text-transform:uppercase;letter-spacing:.05em;">#</th>
+                        <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text-d);text-transform:uppercase;letter-spacing:.05em;">Jugador</th>
+                        <th style="padding:8px 10px;text-align:center;font-size:11px;color:var(--text-d);text-transform:uppercase;letter-spacing:.05em;">Hacks</th>
+                        <th style="padding:8px 10px;text-align:center;font-size:11px;color:var(--text-d);text-transform:uppercase;letter-spacing:.05em;">Max Risk</th>
+                        <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text-d);text-transform:uppercase;letter-spacing:.05em;">Último</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
+}
+
+window.openRepeatOffendersModal = openRepeatOffendersModal;

@@ -54,6 +54,16 @@ except Exception as _ai_autolearn_err:
     _AI_AUTOLEARN_AVAILABLE = False
     print(f'[boot] ai_autolearn no disponible: {_ai_autolearn_err}')
 
+# Pack 37 — Mantenimiento automático (decay, recompute, cleanup) +
+# ranking de reincidentes + sugerencias de índices DB.
+try:
+    import ai_maintenance as _ai_maint
+    _AI_MAINT_AVAILABLE = True
+except Exception as _ai_maint_err:
+    _ai_maint = None
+    _AI_MAINT_AVAILABLE = False
+    print(f'[boot] ai_maintenance no disponible: {_ai_maint_err}')
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-production')
 
@@ -10443,6 +10453,87 @@ def get_learned_hack_patterns():
                     'decay_score':          float(_row_get(r, 10, 'decay_score') or 1.0),
                 })
         return jsonify({'available': True, 'rows': out, 'count': len(out)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Pack 37 — Mantenimiento IA + ranking sancionables + index suggestions
+# ═══════════════════════════════════════════════════════════════════════
+
+@app.route('/api/admin/ai-maintenance', methods=['GET'])
+@login_required
+def get_ai_maintenance_dryrun():
+    """DRY RUN: muestra qué se haría sin tocar nada (admin only)."""
+    if not is_admin(session.get('user_id')):
+        return jsonify({'error': 'Acceso denegado'}), 403
+    if not _AI_MAINT_AVAILABLE:
+        return jsonify({'available': False}), 200
+    try:
+        with get_api_db_cursor() as cur:
+            report = _ai_maint.run_maintenance(cur, dry_run=True)
+        return jsonify({'available': True, 'report': report}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/ai-maintenance/run', methods=['POST'])
+@login_required
+def run_ai_maintenance():
+    """EJECUTA mantenimiento (decay + cleanup + recompute) — admin only."""
+    if not is_admin(session.get('user_id')):
+        return jsonify({'error': 'Acceso denegado'}), 403
+    if not _AI_MAINT_AVAILABLE:
+        return jsonify({'error': 'ai_maintenance no cargado'}), 503
+    try:
+        with get_api_db_cursor() as cur:
+            report = _ai_maint.run_maintenance(cur, dry_run=False)
+        try:
+            _log_staff_action(
+                'ai_maintenance_run',
+                detail=str(report.get('decay_hack', {})) +
+                       ' / ' + str(report.get('legit_decay', {})) +
+                       ' / ' + str(report.get('cooldown_cleanup', {}))
+            )
+        except Exception:
+            pass
+        return jsonify({'ok': True, 'report': report}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/repeat-offenders', methods=['GET'])
+@login_required
+def get_repeat_offenders():
+    """Top jugadores con >=2 verdicts hack en últimos N días.
+    Admin: global o por company; non-admin: solo su company.
+    """
+    if not _AI_MAINT_AVAILABLE:
+        return jsonify({'available': False, 'rows': []}), 200
+    user_id    = session.get('user_id')
+    company_id = session.get('company_id')
+    qs_company = request.args.get('company_id', type=int)
+    is_glob    = is_admin(user_id)
+    if qs_company and not is_glob and qs_company != company_id:
+        return jsonify({'error': 'Solo admin puede ver otras empresas'}), 403
+    target = qs_company if is_glob else company_id
+    try:
+        since = max(7, min(730, int(request.args.get('since_days', 90))))
+        limit = max(5, min(100, int(request.args.get('limit', 20))))
+    except Exception:
+        since = 90
+        limit = 20
+    try:
+        with get_api_db_cursor() as cur:
+            rows = _ai_maint.get_top_repeat_offenders(
+                cur, company_id=target, since_days=since, limit=limit
+            )
+        return jsonify({
+            'available':  True,
+            'rows':       rows,
+            'count':      len(rows),
+            'since_days': since,
+        }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
