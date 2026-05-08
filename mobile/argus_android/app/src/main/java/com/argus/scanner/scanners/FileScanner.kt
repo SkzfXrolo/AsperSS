@@ -3,6 +3,7 @@ package com.argus.scanner.scanners
 import android.content.Context
 import android.os.Environment
 import com.argus.scanner.core.HackTerms
+import com.argus.scanner.core.ScanCounters
 import com.argus.scanner.core.ScanResult
 import com.argus.scanner.core.smartHackMatch
 import java.io.File
@@ -22,7 +23,10 @@ import java.io.File
  * El cubrimiento de MediaStore IS_TRASHED via ContentResolver se deja
  * para Pack 26 (requiere persistir lifetime más largo del cursor).
  */
-class FileScanner(private val ctx: Context) {
+class FileScanner(
+    private val ctx: Context,
+    private val counters: ScanCounters? = null,
+) {
 
     private val EXTERNAL = Environment.getExternalStorageDirectory()
 
@@ -100,10 +104,15 @@ class FileScanner(private val ctx: Context) {
     private fun walk(root: File, depth: Int, out: MutableList<File>) {
         if (depth < 0) return
         val ch = root.listFiles() ?: return
+        counters?.incDir()
         for (c in ch) {
             try {
-                if (c.isDirectory) walk(c, depth - 1, out)
-                else out += c
+                if (c.isDirectory) {
+                    walk(c, depth - 1, out)
+                } else {
+                    out += c
+                    counters?.incFile()
+                }
             } catch (_: Exception) { /* SAF restrictions */ }
         }
     }

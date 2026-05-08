@@ -6,6 +6,7 @@ import android.os.Environment
 import android.os.FileObserver
 import com.argus.scanner.core.HackTerms
 import com.argus.scanner.core.LegitMods
+import com.argus.scanner.core.ScanCounters
 import com.argus.scanner.core.ScanResult
 import com.argus.scanner.core.smartHackMatch
 import kotlinx.coroutines.delay
@@ -42,7 +43,10 @@ import java.util.concurrent.ConcurrentLinkedQueue
  *    subcarpetas (mods/, addons/, behavior_packs/) montamos un observer
  *    por cada hijo importante hasta depth=2.
  */
-class FileObserverScanner(private val ctx: Context) {
+class FileObserverScanner(
+    private val ctx: Context,
+    private val counters: ScanCounters? = null,
+) {
 
     private val findings = ConcurrentLinkedQueue<ScanResult>()
     private val observers = mutableListOf<FileObserver>()
@@ -80,6 +84,11 @@ class FileObserverScanner(private val ctx: Context) {
                 val obs = build(dir)
                 obs.startWatching()
                 observers += obs
+                // Cuenta cada directorio observado + los archivos dentro
+                // (snapshot inicial; los nuevos eventos durante la ventana
+                // se cuentan en handleEvent).
+                counters?.incDir()
+                counters?.addFiles((dir.listFiles()?.size ?: 0).toLong())
             } catch (_: Throwable) { /* algunas paths fallan por SE Linux */ }
         }
 
@@ -114,6 +123,9 @@ class FileObserverScanner(private val ctx: Context) {
 
     private fun handleEvent(dir: File, event: Int, path: String?) {
         if (path.isNullOrBlank()) return
+        // Cuenta cada evento como "file scanned" (es un archivo que
+        // estamos inspeccionando en runtime).
+        counters?.incFile()
         val full = File(dir, path).absolutePath
         val lower = path.lowercase()
 

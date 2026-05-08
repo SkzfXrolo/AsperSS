@@ -2,6 +2,7 @@ package com.argus.scanner.scanners
 
 import android.content.Context
 import android.os.Environment
+import com.argus.scanner.core.ScanCounters
 import com.argus.scanner.core.ScanResult
 import java.io.File
 
@@ -13,7 +14,10 @@ import java.io.File
  * esos artefactos además de la detección por package_name (que la cubre
  * PackageScanner contra HackTerms.MEMORY_EDITOR_PACKAGES).
  */
-class MemoryEditorScanner(private val ctx: Context) {
+class MemoryEditorScanner(
+    private val ctx: Context,
+    private val counters: ScanCounters? = null,
+) {
 
     private val GG_TMP_PATHS = listOf(
         "/data/local/tmp/gg.elf",
@@ -34,6 +38,7 @@ class MemoryEditorScanner(private val ctx: Context) {
 
         for (p in GG_TMP_PATHS) {
             try {
+                counters?.incFile()
                 if (File(p).exists()) {
                     results += ScanResult(
                         tipo = "MEMORY_EDITOR_BINARY",
@@ -52,7 +57,9 @@ class MemoryEditorScanner(private val ctx: Context) {
         for (rel in GG_PUBLIC_PATHS) {
             val dir = File(ext, rel)
             if (!dir.exists() || !dir.canRead()) continue
+            counters?.incDir()
             val children = dir.listFiles() ?: continue
+            counters?.addFiles(children.size.toLong())
             // Cualquier carpeta GG con scripts adentro = evidencia clara.
             val scripts = children.filter {
                 it.isFile && (it.name.endsWith(".lua", true) ||

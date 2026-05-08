@@ -8,6 +8,7 @@ import android.os.Environment
 import com.argus.scanner.core.HackTerms
 import com.argus.scanner.core.LauncherKind
 import com.argus.scanner.core.LegitMods
+import com.argus.scanner.core.ScanCounters
 import com.argus.scanner.core.ScanResult
 import com.argus.scanner.core.smartHackMatch
 import java.io.File
@@ -27,7 +28,10 @@ import java.security.MessageDigest
  * post-Android 11 (Scoped Storage). El path público /sdcard/games/com.mojang/
  * sigue funcionando en muchos dispositivos como fallback.
  */
-class LauncherScanner(private val ctx: Context) {
+class LauncherScanner(
+    private val ctx: Context,
+    private val counters: ScanCounters? = null,
+) {
 
     // SHA-256 conocido de la firma oficial de Mojang AB Bedrock.
     // Verificable contra google.com:cert "Mojang AB". Si no matchea →
@@ -241,10 +245,15 @@ class LauncherScanner(private val ctx: Context) {
     private fun walkUpTo(root: File, depth: Int, action: (File) -> Unit) {
         if (depth < 0) return
         val children = root.listFiles() ?: return
+        counters?.incDir()
         for (c in children) {
             try {
-                if (c.isDirectory) walkUpTo(c, depth - 1, action)
-                else action(c)
+                if (c.isDirectory) {
+                    walkUpTo(c, depth - 1, action)
+                } else {
+                    counters?.incFile()
+                    action(c)
+                }
             } catch (_: Exception) { /* sandbox / I/O */ }
         }
     }

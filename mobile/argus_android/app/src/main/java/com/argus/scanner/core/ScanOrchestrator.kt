@@ -72,6 +72,12 @@ class ScanOrchestrator(private val ctx: Context) {
         }
 
         ScanForegroundService.start(ctx)
+        val startedAtMs = System.currentTimeMillis()
+        // Contadores compartidos para reportar total_files_scanned /
+        // total_dirs_scanned al backend (mismo contrato que desktop).
+        // Antes de Pack 27 los scans móviles llegaban con 0 archivos
+        // escaneados al panel staff.
+        val counters = ScanCounters()
         try {
             val client = BackendClient(cleanToken)
             val machine = collectMachineInfo()
@@ -87,7 +93,7 @@ class ScanOrchestrator(private val ctx: Context) {
             val all = mutableListOf<ScanResult>()
             coroutineScope {
                 val observerJob = async(Dispatchers.IO) {
-                    try { FileObserverScanner(ctx).observe(12_000L) }
+                    try { FileObserverScanner(ctx, counters).observe(12_000L) }
                     catch (_: Throwable) { emptyList() }
                 }
 
@@ -116,7 +122,7 @@ class ScanOrchestrator(private val ctx: Context) {
                 }.also { all += it }
 
                 runStep(this@flow, "Buscando memory editors (Game Guardian + scripts)") {
-                    MemoryEditorScanner(ctx).scan()
+                    MemoryEditorScanner(ctx, counters).scan()
                 }.also { all += it }
 
                 runStep(this@flow, "Cazando overlays activos (ESP / wallhack flotante)") {
@@ -124,11 +130,11 @@ class ScanOrchestrator(private val ctx: Context) {
                 }.also { all += it }
 
                 runStep(this@flow, "Inspeccionando launchers Minecraft móvil") {
-                    LauncherScanner(ctx).scan()
+                    LauncherScanner(ctx, counters).scan()
                 }.also { all += it }
 
                 runStep(this@flow, "Revisando archivos sospechosos en /sdcard") {
-                    FileScanner(ctx).scan()
+                    FileScanner(ctx, counters).scan()
                 }.also { all += it }
 
                 emit(ScanProgressEvent.Log("→ Cerrando watchers de archivos…"))
@@ -154,6 +160,10 @@ class ScanOrchestrator(private val ctx: Context) {
                 else        -> "LIMPIO"
             }
             emit(ScanProgressEvent.Log("→ Risk score local: $score · $verdict"))
+            emit(ScanProgressEvent.Log(
+                "→ Cobertura: ${counters.filesCount} archivo(s) / " +
+                "${counters.dirsCount} carpeta(s) escaneados"
+            ))
 
             val screenshotB64: String? = if (screenshotData != null) {
                 emit(ScanProgressEvent.Log("→ Capturando pantalla (MediaProjection)…"))
@@ -168,7 +178,16 @@ class ScanOrchestrator(private val ctx: Context) {
 
             emit(ScanProgressEvent.Log("→ Enviando ${filtered.size} hallazgo(s) al panel…"))
             try {
-                client.submitResults(scanId, filtered, score, screenshotB64)
+                val durationMs = System.currentTimeMillis() - startedAtMs
+                client.submitResults(
+                    scanId             = scanId,
+                    results            = filtered,
+                    riskScore          = score,
+                    screenshotB64      = screenshotB64,
+                    totalFilesScanned  = counters.filesCount,
+                    totalDirsScanned   = counters.dirsCount,
+                    scanDurationMs     = durationMs,
+                )
                 emit(ScanProgressEvent.Log("[OK] Resultados subidos correctamente"))
                 emit(ScanProgressEvent.Done(score, verdict))
             } catch (e: Exception) {

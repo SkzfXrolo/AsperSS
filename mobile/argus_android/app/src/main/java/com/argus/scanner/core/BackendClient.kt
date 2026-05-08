@@ -53,6 +53,9 @@ class BackendClient(
         results: List<ScanResult>,
         riskScore: Int,
         screenshotB64: String? = null,
+        totalFilesScanned: Long = 0L,
+        totalDirsScanned:  Long = 0L,
+        scanDurationMs:    Long = 0L,
     ) {
         val arr = JSONArray()
         for (r in results) {
@@ -75,6 +78,12 @@ class BackendClient(
             put("risk_score",  riskScore)
             put("status",      "completed")
             put("client_finished_at", System.currentTimeMillis() / 1000)
+            // Mismo contrato que scanner desktop (Windows/Linux). Si se
+            // omite, el panel staff muestra "0 archivos escaneados".
+            put("total_files_scanned", totalFilesScanned)
+            put("total_dirs_scanned",  totalDirsScanned)
+            put("issues_found",        results.size)
+            if (scanDurationMs > 0) put("scan_duration", scanDurationMs / 1000.0)
             if (!screenshotB64.isNullOrBlank()) put("screenshot", screenshotB64)
         }
         val resp = post("$baseUrl/api/scans/$scanId/results", body.toString())
