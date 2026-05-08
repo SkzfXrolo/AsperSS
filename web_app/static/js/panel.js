@@ -503,6 +503,58 @@ function initializeNavigation() {
             showSection(sectionMap[hash]);
         }
     }
+
+    // Visual #29: deep-link a un scan específico via ?scan=<id>.
+    // Si la URL trae el param, abrir el detalle de ese scan automáticamente.
+    try {
+        const usp = new URLSearchParams(window.location.search);
+        const wantScan = parseInt(usp.get('scan') || '', 10);
+        if (Number.isFinite(wantScan) && wantScan > 0 && typeof viewScanDetails === 'function') {
+            // Pequeño delay para que la sección 'resultados' esté lista
+            setTimeout(() => {
+                showSection('resultados');
+                viewScanDetails(wantScan);
+            }, 250);
+        }
+    } catch (_) {}
+}
+
+/**
+ * Visual #29: copiar enlace permalink al escaneo actual.
+ * Usa Clipboard API moderna con fallback a textarea hidden.
+ * Muestra toast verde de confirmación o rojo si falla.
+ */
+async function copyScanLink(scanId) {
+    if (!scanId) {
+        if (typeof showToast === 'function') {
+            showToast('No hay un escaneo abierto para copiar.', 'warning');
+        }
+        return;
+    }
+    const url = `${window.location.origin}${window.location.pathname}?scan=${scanId}`;
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(url);
+        } else {
+            // Fallback para HTTP / browsers viejos
+            const ta = document.createElement('textarea');
+            ta.value = url;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            ta.remove();
+        }
+        if (typeof showToast === 'function') {
+            showToast(`Enlace al escaneo #${scanId} copiado`, 'success', { duration: 3500 });
+        }
+    } catch (e) {
+        console.warn('copyScanLink fallo:', e);
+        if (typeof showToast === 'function') {
+            showToast('No se pudo copiar el enlace. Copialo manualmente:\n' + url, 'error');
+        }
+    }
 }
 
 function showSection(sectionName) {

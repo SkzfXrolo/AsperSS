@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=22">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel-bronze-premium.css') }}?v=1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-ui.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-ui.css') }}?v=2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -1276,6 +1276,10 @@
                                     <button id="ai-followup-btn" onclick="aiFollowupQuestions(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(16,185,129,.35);background:rgba(16,185,129,.06);color:#34d399;cursor:pointer;">❓ Preguntas</button>
                                     <button onclick="openIocExtractor()" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(96,165,250,.35);background:rgba(96,165,250,.06);color:#60a5fa;cursor:pointer;">🔎 IOCs</button>
                                     <button onclick="generateBanMessage(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.06);color:#f87171;cursor:pointer;">🔨 Msg Ban</button>
+                                    <button onclick="copyScanLink(currentScanId)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.3);background:rgba(148,163,184,.06);color:#cbd5e1;cursor:pointer;display:inline-flex;align-items:center;gap:5px;" title="Copiar enlace directo a este escaneo">
+                                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10.5a3 3 0 0 0 4.24 0l3-3a3 3 0 0 0-4.24-4.24l-.75.75"/><path d="M10 5.5a3 3 0 0 0-4.24 0l-3 3a3 3 0 0 0 4.24 4.24l.75-.75"/></svg>
+                                        Copiar enlace
+                                    </button>
                                 </div>
                                 <div id="ban-message-container" style="display:none;margin-top:8px;font-size:11px;color:#f87171;padding:8px 12px;background:rgba(239,68,68,.07);border-radius:6px;border-left:2px solid #ef4444;white-space:pre-wrap;font-family:monospace;word-break:break-word;"></div>
                                 <div id="ai-inconsistencies-container" style="display:none;margin-top:8px;font-size:11px;color:#fbbf24;padding:6px 10px;background:rgba(245,158,11,.07);border-radius:6px;border-left:2px solid #f59e0b;"></div>
@@ -2140,7 +2144,7 @@
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
     <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=47"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=48"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────

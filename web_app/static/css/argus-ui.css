@@ -240,3 +240,66 @@
     .argus-toast,
     .argus-empty { transition: none; animation: none; }
 }
+
+
+/* ── Argus Logo Hover (Visual #34) ───────────────────────────────────────── */
+/* Aplica efecto vivo al logo del sidebar al hacerle hover:
+ *  - Pulso "respiratorio" sutil de glow dorado.
+ *  - Rotación leve en idle (orbital sutil) acelerada en hover.
+ *  - Levanta levemente al pasar el mouse para dar profundidad.
+ * Solo se aplica al <img> dentro de .sidebar-header / .brand-icon
+ * para no afectar otros logos del proyecto. */
+
+.sidebar-header .brand-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+    cursor: default;
+}
+
+.sidebar-header .brand-icon img {
+    transition: filter 380ms ease, transform 540ms cubic-bezier(0.22, 1, 0.36, 1);
+    animation: argus-logo-breathe 5.4s ease-in-out infinite;
+    will-change: transform, filter;
+}
+
+.sidebar-header:hover .brand-icon {
+    transform: translateY(-1px);
+}
+
+.sidebar-header:hover .brand-icon img {
+    filter: drop-shadow(0 0 14px rgba(184,115,51,0.85))
+            drop-shadow(0 0 28px rgba(184,115,51,0.35))
+            brightness(1.08);
+    transform: rotate(8deg) scale(1.06);
+    animation-duration: 2.2s;
+}
+
+@keyframes argus-logo-breathe {
+    0%, 100% {
+        filter: drop-shadow(0 0 6px rgba(184,115,51,0.45));
+        transform: rotate(0deg) scale(1);
+    }
+    50% {
+        filter: drop-shadow(0 0 12px rgba(184,115,51,0.75));
+        transform: rotate(-2deg) scale(1.025);
+    }
+}
+
+.sidebar-header .brand-text {
+    transition: letter-spacing 380ms cubic-bezier(0.22, 1, 0.36, 1),
+                text-shadow 380ms ease;
+}
+
+.sidebar-header:hover .brand-text {
+    letter-spacing: 3px;
+    text-shadow: 0 0 14px rgba(184,115,51,0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar-header .brand-icon img,
+    .sidebar-header .brand-icon,
+    .sidebar-header .brand-text { animation: none; transition: none; }
+    .sidebar-header:hover .brand-icon img { transform: none; }
+}

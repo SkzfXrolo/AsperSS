@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.34"
+SCANNER_VERSION = "1.6.35"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -9047,8 +9047,34 @@ class ArgusApp:
             'aspers\\dist\\', 'aspers/dist/',
         )
 
+        # Filtro #45: paths del SO/Recovery que solo generan ruido — son cosas
+        # de Windows Update, restauración, puntos de recuperación, etc.
+        _RECOVERY_TOKENS = (
+            '\\$windows.~bt\\', '\\$windows.~ws\\', '\\$windows.~q\\',
+            '\\$windows.old\\',
+            '\\windows.old\\',
+            '\\recovery\\',
+            '\\system volume information\\',
+            '\\$getcurrent\\',
+            '\\perflogs\\',
+            '\\$sysreset\\',
+            # Windows Update download/staging
+            '\\softwaredistribution\\download\\',
+            '\\windowsapps\\backup\\',
+            # Servicing / WinSxS internal staging
+            '\\windows\\servicing\\lcu\\',
+            '\\windows\\winsxs\\backup\\',
+            '\\windows\\winsxs\\temp\\',
+            # Telemetría / DiagTrack
+            '\\diagnostics\\',
+            '\\eventcache\\',
+        )
+
         def _is_argus_self(p_lower: str) -> bool:
             return any(t in p_lower for t in _SELF_TOKENS)
+
+        def _is_os_recovery_noise(p_lower: str) -> bool:
+            return any(t in p_lower for t in _RECOVERY_TOKENS)
 
         def _add(action: str, path: str, ts: float, source: str,
                  size: int = 0, extra_data: dict = None) -> bool:
@@ -9062,6 +9088,8 @@ class ArgusApp:
                 return False
             path_lower = path_norm.lower()
             if _is_argus_self(path_lower):
+                return False
+            if _is_os_recovery_noise(path_lower):
                 return False
             key = (action, path_lower)
             if key in seen_keys:
@@ -9158,8 +9186,48 @@ class ArgusApp:
                 pf_files = os.listdir(prefetch_dir)
             except (PermissionError, OSError):
                 pf_files = []
+            # Filtro #50: ruido de prefetch a ignorar — son ejecuciones del SO
+            # constantes que llenan el log y no aportan valor forense.
+            _PF_NOISE_PREFIXES = (
+                'msedge.exe',           # Edge background tasks
+                'msedgewebview2.exe',
+                'identity_helper.exe',
+                'edgeupdate.exe',
+                'msmpeng.exe',          # Defender real-time engine
+                'nissrv.exe',           # Defender Network Inspection
+                'mpcmdrun.exe',
+                'securityhealthservice.exe',
+                'securityhealthsystray.exe',
+                'searchindexer.exe',    # Windows Search
+                'searchprotocolhost.exe',
+                'searchfilterhost.exe',
+                'searchapp.exe',
+                'startmenuexperiencehost.exe',
+                'shellexperiencehost.exe',
+                'runtimebroker.exe',
+                'svchost.exe',          # genérico, SO constante
+                'taskhostw.exe',
+                'wuauclt.exe',          # Windows Update
+                'usoclient.exe',
+                'compattelrunner.exe',  # Telemetría
+                'dllhost.exe',
+                'sihost.exe',
+                'ctfmon.exe',
+                'lockapp.exe',
+                'wermgr.exe',           # Error reporter
+                'audiodg.exe',
+                'fontdrvhost.exe',
+                'crashpad_handler.exe',
+                'backgroundtaskhost.exe',
+                'consent.exe',
+                'wmiprvse.exe',
+            )
             for pf in pf_files:
                 if not pf.lower().endswith('.pf'):
+                    continue
+                # Nombre del exe es lo que va antes del primer "-" en el .pf
+                exe_name = pf.split('-')[0]
+                if exe_name.lower() in _PF_NOISE_PREFIXES:
                     continue
                 pf_full = os.path.join(prefetch_dir, pf)
                 try:
@@ -9168,8 +9236,6 @@ class ArgusApp:
                     continue
                 if mtime < session_start:
                     continue
-                # Nombre del exe es lo que va antes del primer "-" en el .pf
-                exe_name = pf.split('-')[0]
                 if _add('executed', exe_name, mtime, source='prefetch'):
                     pf_count += 1
 
