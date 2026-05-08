@@ -1824,15 +1824,131 @@ function renderScreenshot(data) {
         return;
     }
     const ts = data.started_at ? new Date(data.started_at).toLocaleString() : '';
+    const dataUrl = `data:image/jpeg;base64,${b64}`;
     container.innerHTML = `
-        <div style="font-size:12px;color:var(--text-d);margin-bottom:8px;">
-            Capturado el inicio del escaneo · ${ts}
+        <div style="font-size:12px;color:var(--text-d);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
+            <span>Capturado al inicio del escaneo · ${ts}</span>
+            <button class="argus-screenshot-fullscreen-btn"
+                    style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">
+                ⛶ Pantalla completa
+            </button>
         </div>
-        <img src="data:image/jpeg;base64,${b64}"
+        <img id="argus-screenshot-thumb"
+             src="${dataUrl}"
              alt="Captura de pantalla"
-             style="max-width:100%;border-radius:10px;border:1px solid var(--border);box-shadow:0 4px 20px rgba(0,0,0,0.3);"
-             onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'none':'100%'"
-             title="Click para ver tamaño completo">`;
+             style="max-width:100%;border-radius:10px;border:1px solid var(--border);
+                    box-shadow:0 4px 20px rgba(0,0,0,0.3);cursor:zoom-in;
+                    transition:filter 200ms ease;"
+             title="Click para abrir en pantalla completa con zoom y pan">`;
+    const thumb = document.getElementById('argus-screenshot-thumb');
+    const btn   = container.querySelector('.argus-screenshot-fullscreen-btn');
+    if (thumb) thumb.addEventListener('click', () => _openScreenshotLightbox(dataUrl));
+    if (btn)   btn.addEventListener('click',   () => _openScreenshotLightbox(dataUrl));
+}
+
+// Visual #45 — Lightbox para screenshot con zoom (rueda) y pan (drag).
+// Esc o click fuera de la imagen cierra. Doble click resetea.
+function _openScreenshotLightbox(src) {
+    let modal = document.getElementById('argus-screenshot-lightbox');
+    if (modal) modal.remove();
+    modal = document.createElement('div');
+    modal.id = 'argus-screenshot-lightbox';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.style.cssText = `
+        position:fixed;inset:0;z-index:99800;
+        background:rgba(5,3,1,0.92);backdrop-filter:blur(10px);
+        display:flex;align-items:center;justify-content:center;
+        cursor:zoom-out;animation:argusFadeIn 180ms ease both;`;
+    modal.innerHTML = `
+        <button id="argus-lb-close" aria-label="Cerrar"
+            style="position:absolute;top:18px;right:22px;z-index:2;
+                   width:38px;height:38px;border-radius:50%;
+                   background:rgba(20,14,8,0.85);border:1px solid rgba(184,115,51,0.45);
+                   color:#f1e6d3;cursor:pointer;font-size:18px;line-height:1;
+                   display:flex;align-items:center;justify-content:center;">×</button>
+        <div id="argus-lb-hint"
+            style="position:absolute;bottom:18px;left:50%;transform:translateX(-50%);
+                   background:rgba(20,14,8,0.75);border:1px solid rgba(184,115,51,0.30);
+                   color:rgba(241,230,211,0.85);font-size:12px;padding:6px 14px;
+                   border-radius:20px;pointer-events:none;letter-spacing:0.2px;">
+            Rueda: zoom · Arrastrar: pan · Doble click: reset · Esc: cerrar
+        </div>
+        <img id="argus-lb-img" src="${src}" alt=""
+             draggable="false"
+             style="max-width:92vw;max-height:88vh;user-select:none;
+                    transform-origin:center center;
+                    transition:transform 100ms cubic-bezier(0.22,1,0.36,1);
+                    box-shadow:0 30px 80px -10px rgba(0,0,0,0.7),
+                               0 0 0 1px rgba(212,145,90,0.18) inset;
+                    border-radius:6px;cursor:grab;">
+    `;
+    document.body.appendChild(modal);
+    if (!document.getElementById('argus-lb-anim-style')) {
+        const st = document.createElement('style');
+        st.id = 'argus-lb-anim-style';
+        st.textContent = '@keyframes argusFadeIn{from{opacity:0}to{opacity:1}}';
+        document.head.appendChild(st);
+    }
+    const img = document.getElementById('argus-lb-img');
+    const closeBtn = document.getElementById('argus-lb-close');
+    let scale = 1, tx = 0, ty = 0;
+    let dragging = false, startX = 0, startY = 0;
+    function apply() {
+        img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    }
+    function reset() { scale = 1; tx = 0; ty = 0; apply(); }
+    function close() {
+        modal.style.opacity = '0';
+        modal.style.transition = 'opacity 160ms ease';
+        setTimeout(() => modal.remove(), 180);
+        document.removeEventListener('keydown', onKey);
+    }
+    function onKey(e) {
+        const k = (e.key || '').toLowerCase();
+        if (k === 'escape') { e.preventDefault(); close(); }
+        else if (k === '0')   { e.preventDefault(); reset(); }
+        else if (k === '+' || k === '=') { e.preventDefault(); scale = Math.min(8, scale * 1.2); apply(); }
+        else if (k === '-')   { e.preventDefault(); scale = Math.max(0.2, scale / 1.2); apply(); }
+    }
+    document.addEventListener('keydown', onKey);
+    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); close(); });
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    img.addEventListener('click', (e) => e.stopPropagation());
+    img.addEventListener('dblclick', (e) => { e.stopPropagation(); reset(); });
+    img.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+        const newScale = Math.max(0.25, Math.min(8, scale * factor));
+        // Zoom hacia el cursor
+        const rect = img.getBoundingClientRect();
+        const offX = e.clientX - rect.left - rect.width  / 2;
+        const offY = e.clientY - rect.top  - rect.height / 2;
+        tx -= offX * (newScale / scale - 1);
+        ty -= offY * (newScale / scale - 1);
+        scale = newScale;
+        apply();
+    }, { passive: false });
+    img.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        dragging = true;
+        startX = e.clientX - tx;
+        startY = e.clientY - ty;
+        img.style.cursor = 'grabbing';
+        img.style.transition = 'none';
+    });
+    window.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        tx = e.clientX - startX;
+        ty = e.clientY - startY;
+        apply();
+    });
+    window.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        img.style.cursor = 'grab';
+        img.style.transition = 'transform 100ms cubic-bezier(0.22,1,0.36,1)';
+    });
 }
 
 // Apply permission guards on page load
@@ -2586,6 +2702,15 @@ async function viewScanDetails(scanId) {
             riskBadge.textContent = riskLabel;
             riskBar.className = `risk-score-bar ${riskClass}`;
             riskBar.style.width = `${Math.min(riskScore, 100)}%`;
+            // Visual #27 — sacudida sutil cuando el veredicto es hack
+            // Permite re-disparar la animación quitándola y forzando reflow.
+            if (riskClass === 'risk-hack' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                riskBadge.classList.remove('argus-shake');
+                void riskBadge.offsetWidth;
+                riskBadge.classList.add('argus-shake');
+            } else {
+                riskBadge.classList.remove('argus-shake');
+            }
         }
 
         // V1: Render animated SVG gauge if container exists

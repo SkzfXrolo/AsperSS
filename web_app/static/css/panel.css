@@ -1530,7 +1530,21 @@ body.light-theme .sidebar {
 ══════════════════════════════════════════════ */
 .subpages-container { position: relative; }
 .subpage-content { display: none; }
-.subpage-content.active { display: block; animation: fadeIn 0.2s ease both; }
+/* Visual #14 — slide horizontal sutil al cambiar de subpage. Cubic bezier
+ * "easeOutQuint" para sensación premium, deformación mínima (8px) para
+ * no marear. Se respeta prefers-reduced-motion. */
+.subpage-content.active {
+    display: block;
+    animation: argusSubpageSlideIn 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes argusSubpageSlideIn {
+    0%   { opacity: 0; transform: translateX(12px); filter: blur(2px); }
+    60%  { opacity: 1; filter: blur(0); }
+    100% { opacity: 1; transform: translateX(0); filter: blur(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .subpage-content.active { animation: fadeIn 0.15s ease both; }
+}
 
 .subpage-placeholder {
     background: var(--bg-card);

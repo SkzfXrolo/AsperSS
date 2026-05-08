@@ -412,3 +412,28 @@
     #argus-tooltip { transition: opacity 80ms ease; transform: none; }
     #argus-tooltip.is-visible { transform: none; }
 }
+
+
+/* ── Shake en veredictos BAN/CHEAT (Visual #27) ─────────────────────────── */
+/* Aplicar la clase .argus-shake a un elemento al cambiar el veredicto a hack
+ * (ver panel.js -> riskBadge.classList.add('argus-shake')).
+ * Animación corta, sutil, no agresiva. Se respeta prefers-reduced-motion. */
+@keyframes argus-shake {
+    0%   { transform: translateX(0)       rotate(0); }
+    10%  { transform: translateX(-3px)    rotate(-0.6deg); }
+    20%  { transform: translateX(3px)     rotate(0.6deg); }
+    30%  { transform: translateX(-2.5px)  rotate(-0.4deg); }
+    40%  { transform: translateX(2.5px)   rotate(0.4deg); }
+    50%  { transform: translateX(-1.8px)  rotate(-0.3deg); }
+    60%  { transform: translateX(1.8px)   rotate(0.3deg); }
+    70%  { transform: translateX(-1.2px); }
+    80%  { transform: translateX(1.2px); }
+    100% { transform: translateX(0); }
+}
+.argus-shake {
+    animation: argus-shake 620ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+    transform-origin: center;
+}
+@media (prefers-reduced-motion: reduce) {
+    .argus-shake { animation: none !important; }
+}

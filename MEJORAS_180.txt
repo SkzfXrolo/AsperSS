@@ -508,8 +508,11 @@ NOTA DE LECTURA
         "5 scans con CLEAN", "100 scans totales", "Primera detección de
         cheat nuevo", "Cazador del mes".
 
-[ ] 14. Animación slide horizontal al cambiar de pestaña (Detalles,
+[X] 14. Animación slide horizontal al cambiar de pestaña (Detalles,
         Process Times, Explore, Utilities, Archivos de Windows).
+        DONE v1.6.38 — .subpage-content.active ahora usa keyframe
+        argusSubpageSlideIn con cubic-bezier easeOutQuint, blur leve
+        y translateX(12px). prefers-reduced-motion conserva el fadeIn.
 
 [X] 15. Sticky header en tabla de scans con drop shadow al scrollear
         para feedback visual.
@@ -522,8 +525,12 @@ NOTA DE LECTURA
         "Solo CRITICAL último día", "Mis scans pendientes", "Top FP",
         etc.
 
-[ ] 17. Quick search global con Cmd+K / Ctrl+K — abrir scan por ID,
+[X] 17. Quick search global con Cmd+K / Ctrl+K — abrir scan por ID,
         empresa, jugador.
+        DONE v1.6.38 — modal #argus-quicksearch con backdrop blur,
+        input animado, navegación ↑↓/Enter, debounce 220ms, pega
+        contra /api/scans?q= y filtra extra client-side. Soporta
+        número exacto -> abrir scan ID directo. Esc o click fuera cierra.
 
 [ ] 18. Command palette para staff (estilo VS Code):
         "Open scan #X", "Generate token", "Switch theme", "View tokens".
@@ -557,8 +564,12 @@ NOTA DE LECTURA
 [ ] 26. Confeti animado sutil al confirmar veredicto CLEAN
         (premio visual al staff por trabajo limpio).
 
-[ ] 27. Sacudida (shake) leve al confirmar veredicto BAN/CHEAT
+[X] 27. Sacudida (shake) leve al confirmar veredicto BAN/CHEAT
         — alerta visual de severidad.
+        DONE v1.6.38 — clase .argus-shake con keyframe de oscilación
+        ±3px y rotación leve, aplicada al risk-badge cuando
+        riskClass === 'risk-hack'. Re-disparable forzando reflow.
+        Respeta prefers-reduced-motion.
 
 [ ] 28. Modo "Compartir veredicto": botón que genera imagen PNG con
         resumen del scan (logo, jugador, veredicto, evidencias top)
@@ -591,8 +602,13 @@ NOTA DE LECTURA
 [ ] 35. Halo de luz dorada/bronce sutil siguiendo el cursor en el
         index hero (parallax light effect).
 
-[ ] 36. Glassmorphism en cards principales del index
+[X] 36. Glassmorphism en cards principales del index
         (backdrop-filter: blur con borders y shadows correctos).
+        DONE v1.6.38 — .feature-card / .pricing-card / .stat-item con
+        backdrop-filter blur(12px) saturate(140%), gradient con tinte
+        translúcido + spotlight superior + borde brillante. Hover
+        levantamiento + glow dorado. Fallback @supports para
+        navegadores sin backdrop-filter.
 
 [ ] 37. Parallax suave en sección hero del index — el logo y los
         elementos decorativos se mueven a velocidades distintas
@@ -604,8 +620,13 @@ NOTA DE LECTURA
         + footer fijo en panel.html con dot de status (verde/ámbar/rojo)
         que auto-refresca cada 60s.
 
-[ ] 39. Live counter de scans totales en index (incrementa al ritmo
+[X] 39. Live counter de scans totales en index (incrementa al ritmo
         del backend) — efecto "está vivo".
+        DONE v1.6.38 — endpoint /api/public_stats (cache 30s) sirve
+        scans_total / scans_24h / verdicts_total / companies_total.
+        Index reemplazó la stats-bar por 4 contadores con count-up
+        animado al entrar en viewport (IntersectionObserver) y
+        refresh cada 60s sin re-animar. Respeta reduced-motion.
 
 [ ] 40. Avatar del staff que firmó el veredicto visible en cada
         scan card (con tooltip con su nombre).
@@ -626,8 +647,12 @@ NOTA DE LECTURA
 [ ] 44. Sonido sutil al recibir un scan nuevo en el panel,
         toggleable y customizable.
 
-[ ] 45. Modal full-screen para imágenes del screenshot — zoom con
+[X] 45. Modal full-screen para imágenes del screenshot — zoom con
         rueda, pan con drag, reset con doble click.
+        DONE v1.6.38 — _openScreenshotLightbox: lightbox 92vw/88vh
+        con backdrop blur, zoom hacia el cursor con rueda, pan con
+        drag, doble click resetea, atajos +/- y 0 (reset), Esc cierra.
+        Botón "Pantalla completa" alternativo al click sobre la img.
 
 [ ] 46. Comparador lado-a-lado: "este scan vs scan anterior del
         mismo MC user" para ver progreso/regresión.
@@ -653,8 +678,13 @@ NOTA DE LECTURA
 [ ] 52. Modo accesibilidad: tamaño base configurable (14/16/18 px),
         focus rings más visibles, atajos de teclado documentados.
 
-[ ] 53. Soporte completo de teclado en navegación del panel
+[~] 53. Soporte completo de teclado en navegación del panel
         (Tab + Enter en cards, Esc cierra modales, flechas en listas).
+        PARTIAL v1.6.38 — Esc cierra cualquier .modal.active globalmente
+        (handler en argus-ui.js). Click en backdrop también cierra.
+        Quicksearch tiene navegación ↑↓/Enter/Esc completa.
+        TODO: agregar tabindex y Enter en cards de scans, flechas
+        en listas de logs. (Half-done por ahora.)
 
 [ ] 54. Respetar prefers-reduced-motion: animaciones se desactivan
         automáticamente para usuarios que lo configuran.
@@ -774,10 +804,11 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 
   Scanner ............................. 60 ítems   (detección)       6/60
   Filtro .............................. 60 ítems   (anti-FP)         7/60
-  Visual .............................. 60 ítems   (UI/UX)          10/60
+  Visual .............................. 60 ítems   (UI/UX)          16/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 0/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    23/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    29/195
+                                                  (1 visual parcial: V#53)
 
 SESIÓN DEL 07-may-2026 (4 packs en una tarde):
   Pack 1 (v1.6.34): Filtro #2 lite, #30, #38 + Visual #5, #6, #25
@@ -799,6 +830,17 @@ SESIÓN DEL 07-may-2026 (4 packs en una tarde):
                       contra ruido, FAB Discord en panel,
                       sticky-header con drop-shadow al scroll,
                       sistema global de tooltips contextuales
+  Pack 5 (v1.6.38): Visual #14, #17, #27, #36, #39, #45 + (#53 parcial)
+                    NUEVOS: endpoint /api/public_stats (cache 30s,
+                            scans/verdicts/companies/24h con tolerancia
+                            a fallos por tabla)
+                    → 6 mejoras 100% UI/UX sin tocar el .exe:
+                      slide entre subpages, quicksearch Cmd+K con
+                      navegación por teclado, shake al BAN, glassmorphism
+                      en cards del index, live counter animado con
+                      IntersectionObserver, lightbox para screenshots
+                      (zoom hacia cursor + pan + atajos), Esc cierra
+                      modales globalmente.
 
 PRIORIZACIÓN SUGERIDA (top 10 con mayor ROI inmediato)
 ──────────────────────────────────────────────────────

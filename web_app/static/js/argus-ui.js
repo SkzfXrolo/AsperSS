@@ -446,6 +446,207 @@
         _initTooltips();
     }
 
+    // ── Esc global cierra cualquier .modal.active (Visual #53) ───────────────
+    // El proyecto usa la convención `.modal.active` para abrir modales (CSS:
+    // .modal { display:none } / .modal.active { display:flex }). Esc cierra
+    // el último modal activo (LIFO) sin tocar tooltips, toasts o quicksearch
+    // (esos tienen su propio handler).
+    document.addEventListener('keydown', (e) => {
+        if ((e.key || '').toLowerCase() !== 'escape') return;
+        // No cerrar si el quicksearch está abierto — su handler ya se encarga.
+        const qs = document.getElementById('argus-quicksearch');
+        if (qs && qs.style.display === 'flex') return;
+        // No cerrar si el lightbox de screenshot está abierto.
+        if (document.getElementById('argus-screenshot-lightbox')) return;
+        const actives = Array.from(document.querySelectorAll('.modal.active'));
+        if (!actives.length) return;
+        const top = actives[actives.length - 1];
+        top.classList.remove('active');
+    });
+    // Click sobre el backdrop (la zona oscura del .modal pero no el contenido)
+    // también cierra. Algunos modales ya lo hacen, pero esto generaliza.
+    document.addEventListener('click', (e) => {
+        const t = e.target;
+        if (!(t instanceof HTMLElement)) return;
+        if (!t.classList.contains('modal') || !t.classList.contains('active')) return;
+        // Solo si el click fue sobre el backdrop, no sobre .modal-content
+        t.classList.remove('active');
+    });
+
+    // ── Quick search global Cmd+K / Ctrl+K (Visual #17) ──────────────────────
+    const QS_DEBOUNCE_MS = 220;
+    let _qsDebounce  = null;
+    let _qsItems     = [];
+    let _qsActiveIdx = 0;
+    let _qsAbort     = null;
+
+    function _qsOpen() {
+        const root = document.getElementById('argus-quicksearch');
+        if (!root) return;
+        root.style.display = 'flex';
+        const input = document.getElementById('argus-quicksearch-input');
+        if (input) {
+            input.value = '';
+            setTimeout(() => input.focus(), 30);
+        }
+        _qsItems = [];
+        _qsActiveIdx = 0;
+        _qsRender('');
+    }
+    function _qsClose() {
+        const root = document.getElementById('argus-quicksearch');
+        if (!root) return;
+        root.style.display = 'none';
+        if (_qsAbort) { try { _qsAbort.abort(); } catch(_){} _qsAbort = null; }
+    }
+    function _qsRender(query) {
+        const box = document.getElementById('argus-quicksearch-results');
+        if (!box) return;
+        if (!query) {
+            box.innerHTML = '<div style="padding:24px;text-align:center;color:rgba(241,230,211,0.5);font-size:13px;">' +
+                'Empieza a escribir para buscar…<br>' +
+                '<span style="font-size:11px;opacity:0.7;">Tip: si escribís solo un número, abre ese scan directamente.</span>' +
+                '</div>';
+            return;
+        }
+        if (!_qsItems.length) {
+            box.innerHTML = '<div style="padding:18px;text-align:center;color:rgba(241,230,211,0.55);font-size:13px;">' +
+                'Sin resultados para <b>' + _qsEscape(query) + '</b></div>';
+            return;
+        }
+        const html = _qsItems.map((s, i) => {
+            const risk = s.risk_score == null ? '—' : s.risk_score;
+            const riskColor = risk >= 70 ? '#ef4444' : risk >= 30 ? '#f59e0b' : '#10b981';
+            const player    = s.minecraft_user || s.user || s.usuario || 'Sin jugador';
+            const company   = s.empresa_name || s.company || s.empresa || '';
+            const created   = s.created_at ? new Date(s.created_at).toLocaleString() : '';
+            const active = (i === _qsActiveIdx);
+            return '<div class="argus-qs-item" data-id="' + s.id + '" data-idx="' + i + '"' +
+                   ' style="display:flex;align-items:center;gap:10px;padding:9px 16px;cursor:pointer;' +
+                   'border-left:3px solid ' + (active ? 'rgba(212,145,90,0.95)' : 'transparent') + ';' +
+                   'background:' + (active ? 'rgba(184,115,51,0.10)' : 'transparent') + ';">' +
+                       '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + riskColor + ';' +
+                            'box-shadow:0 0 6px ' + riskColor + ';flex-shrink:0;"></span>' +
+                       '<div style="flex:1;min-width:0;">' +
+                           '<div style="font-size:13px;font-weight:600;color:#f1e6d3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+                               '#' + s.id + ' &middot; ' + _qsEscape(String(player)) +
+                           '</div>' +
+                           '<div style="font-size:11px;color:rgba(241,230,211,0.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+                               (company ? _qsEscape(String(company)) + ' &middot; ' : '') + created +
+                           '</div>' +
+                       '</div>' +
+                       '<span style="font-size:11px;font-weight:700;color:' + riskColor + ';' +
+                            'background:rgba(255,255,255,0.04);padding:2px 8px;border-radius:10px;">' + risk + '</span>' +
+                   '</div>';
+        }).join('');
+        box.innerHTML = html;
+        box.querySelectorAll('.argus-qs-item').forEach(el => {
+            el.addEventListener('click', () => {
+                _qsOpenScan(parseInt(el.dataset.id, 10));
+            });
+            el.addEventListener('mouseenter', () => {
+                _qsActiveIdx = parseInt(el.dataset.idx, 10);
+                _qsRender(document.getElementById('argus-quicksearch-input').value);
+            });
+        });
+    }
+    function _qsEscape(s) {
+        return String(s).replace(/[&<>"']/g, c => ({
+            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;',
+        })[c]);
+    }
+    function _qsOpenScan(id) {
+        _qsClose();
+        if (typeof window.viewScanDetails === 'function') {
+            window.viewScanDetails(id);
+        } else {
+            window.location.href = '/staff?scan=' + id;
+        }
+    }
+    async function _qsFetch(query) {
+        if (_qsAbort) { try { _qsAbort.abort(); } catch(_){} }
+        _qsAbort = (typeof AbortController === 'function') ? new AbortController() : null;
+        try {
+            const url = '/api/scans?limit=40&q=' + encodeURIComponent(query);
+            const r = await fetch(url, _qsAbort ? { signal: _qsAbort.signal } : {});
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const d = await r.json();
+            let items = (d && d.scans) ? d.scans : (Array.isArray(d) ? d : []);
+            // Si la query es solo numérica, intentamos también que aparezca el ID exacto
+            const isNumeric = /^\d+$/.test(query);
+            if (isNumeric) {
+                const idQ = parseInt(query, 10);
+                const exact = items.find(s => s.id === idQ);
+                if (!exact) {
+                    items = [{ id: idQ, minecraft_user: '(abrir scan #' + idQ + ')', risk_score: null }, ...items];
+                }
+            } else {
+                // Filtro client-side adicional por si el backend ignora ?q=
+                const ql = query.toLowerCase();
+                items = items.filter(s => {
+                    const haystack = [
+                        s.id, s.minecraft_user, s.user, s.usuario,
+                        s.empresa_name, s.company, s.empresa,
+                    ].filter(Boolean).join(' ').toLowerCase();
+                    return haystack.includes(ql);
+                });
+            }
+            _qsItems = items.slice(0, 25);
+            _qsActiveIdx = 0;
+            _qsRender(query);
+        } catch (e) {
+            if (e && e.name === 'AbortError') return;
+            _qsItems = [];
+            _qsRender(query);
+        }
+    }
+    function _initQuickSearch() {
+        const input = document.getElementById('argus-quicksearch-input');
+        const root  = document.getElementById('argus-quicksearch');
+        if (!input || !root) return;
+        // Atajos globales: Ctrl/Cmd + K abre, Esc cierra (también click fuera)
+        document.addEventListener('keydown', (e) => {
+            const key = (e.key || '').toLowerCase();
+            if ((e.ctrlKey || e.metaKey) && key === 'k') {
+                e.preventDefault();
+                if (root.style.display === 'flex') _qsClose(); else _qsOpen();
+                return;
+            }
+            if (root.style.display !== 'flex') return;
+            if (key === 'escape') { e.preventDefault(); _qsClose(); }
+            else if (key === 'arrowdown') {
+                e.preventDefault();
+                if (_qsItems.length) {
+                    _qsActiveIdx = (_qsActiveIdx + 1) % _qsItems.length;
+                    _qsRender(input.value);
+                }
+            } else if (key === 'arrowup') {
+                e.preventDefault();
+                if (_qsItems.length) {
+                    _qsActiveIdx = (_qsActiveIdx - 1 + _qsItems.length) % _qsItems.length;
+                    _qsRender(input.value);
+                }
+            } else if (key === 'enter') {
+                e.preventDefault();
+                if (_qsItems.length) _qsOpenScan(_qsItems[_qsActiveIdx].id);
+            }
+        });
+        root.addEventListener('click', (e) => {
+            if (e.target === root) _qsClose();
+        });
+        input.addEventListener('input', () => {
+            const q = input.value.trim();
+            if (_qsDebounce) clearTimeout(_qsDebounce);
+            if (!q) { _qsItems = []; _qsRender(''); return; }
+            _qsDebounce = setTimeout(() => _qsFetch(q), QS_DEBOUNCE_MS);
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _initQuickSearch);
+    } else {
+        _initQuickSearch();
+    }
+
     // ── Sticky-header drop shadow al scrollear (Visual #15) ──────────────────
     function _initStickyHeaderShadow() {
         const header = document.querySelector('.panel-header');

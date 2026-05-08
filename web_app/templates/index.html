@@ -341,8 +341,8 @@
         }
 
         .stats-inner {
-            max-width: 1000px; margin: 0 auto;
-            display: grid; grid-template-columns: repeat(3, 1fr);
+            max-width: 1180px; margin: 0 auto;
+            display: grid; grid-template-columns: repeat(4, 1fr);
             gap: 1px;
             background: var(--border);
             border-radius: var(--radius);
@@ -912,8 +912,11 @@
             .features-grid { grid-template-columns: 1fr 1fr; }
             .steps { grid-template-columns: 1fr; }
             .pricing-grid { grid-template-columns: 1fr; }
-            .stats-inner { grid-template-columns: 1fr; }
+            .stats-inner { grid-template-columns: repeat(2, 1fr); }
             .footer-inner { flex-direction: column; text-align: center; }
+        }
+        @media (max-width: 520px) {
+            .stats-inner { grid-template-columns: 1fr; }
         }
 
         @media (max-width: 600px) {
@@ -1429,6 +1432,76 @@
                 transition-duration: 0.01ms !important;
             }
         }
+
+        /* ── Visual #36 — Glassmorphism en cards principales ────── */
+        /* Aplica un acabado vidrio (blur de fondo + tinte translúcido +
+         * borde brillante + spotlight superior) a las cards más vistas
+         * del index. No toca la estructura, solo se siente premium. */
+        .feature-card,
+        .pricing-card,
+        .stat-item {
+            position: relative;
+            backdrop-filter: blur(12px) saturate(140%);
+            -webkit-backdrop-filter: blur(12px) saturate(140%);
+            background:
+                linear-gradient(155deg,
+                    rgba(255, 245, 230, 0.04) 0%,
+                    rgba(20, 14, 8, 0.55) 60%,
+                    rgba(20, 14, 8, 0.62) 100%) !important;
+            border: 1px solid rgba(184, 115, 51, 0.18) !important;
+            box-shadow:
+                0 1px 0 rgba(255, 230, 200, 0.05) inset,
+                0 12px 28px -10px rgba(0, 0, 0, 0.55),
+                0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+            isolation: isolate;
+            overflow: hidden;
+            transition:
+                transform 380ms cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 380ms ease,
+                border-color 380ms ease;
+        }
+        .feature-card::after,
+        .pricing-card::after,
+        .stat-item::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 50%;
+            background: linear-gradient(180deg,
+                rgba(255, 215, 165, 0.08) 0%,
+                transparent 100%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        .feature-card:hover,
+        .pricing-card:hover,
+        .stat-item:hover {
+            transform: translateY(-4px);
+            border-color: rgba(212, 145, 90, 0.42) !important;
+            box-shadow:
+                0 1px 0 rgba(255, 230, 200, 0.10) inset,
+                0 24px 56px -16px rgba(0, 0, 0, 0.70),
+                0 0 0 1px rgba(212, 145, 90, 0.16) inset,
+                0 0 32px -8px rgba(184, 115, 51, 0.30);
+            background:
+                linear-gradient(155deg,
+                    rgba(255, 245, 230, 0.06) 0%,
+                    rgba(28, 20, 12, 0.62) 60%,
+                    rgba(28, 20, 12, 0.70) 100%) !important;
+        }
+        .pricing-card.featured {
+            background:
+                linear-gradient(155deg,
+                    rgba(212, 145, 90, 0.14) 0%,
+                    rgba(28, 18, 10, 0.65) 60%,
+                    rgba(20, 14, 8, 0.70) 100%) !important;
+            border-color: rgba(212, 145, 90, 0.45) !important;
+        }
+        @supports not (backdrop-filter: blur(1px)) {
+            .feature-card, .pricing-card, .stat-item {
+                background: var(--bg1) !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1503,19 +1576,116 @@
     <section class="stats-bar">
         <div class="stats-inner">
             <div class="stat-item reveal">
-                <div class="stat-value">+95%</div>
-                <div class="stat-label">Precisión de detección</div>
+                <div class="stat-value" data-argus-counter id="argus-stat-scans" data-target="0">0</div>
+                <div class="stat-label">Scans realizados</div>
             </div>
             <div class="stat-item reveal">
-                <div class="stat-value">∞</div>
-                <div class="stat-label">Patrones aprendidos</div>
+                <div class="stat-value" data-argus-counter id="argus-stat-verdicts" data-target="0">0</div>
+                <div class="stat-label">Veredictos emitidos</div>
             </div>
             <div class="stat-item reveal">
-                <div class="stat-value">0ms</div>
-                <div class="stat-label">Actualización del modelo</div>
+                <div class="stat-value" data-argus-counter id="argus-stat-companies" data-target="0">0</div>
+                <div class="stat-label">Servidores protegidos</div>
+            </div>
+            <div class="stat-item reveal">
+                <div class="stat-value">
+                    <span data-argus-counter id="argus-stat-24h" data-target="0">0</span>
+                    <span style="font-size:0.55em;font-weight:500;opacity:0.6;display:block;margin-top:4px;">últimas 24h</span>
+                </div>
+                <div class="stat-label">Actividad reciente</div>
             </div>
         </div>
     </section>
+
+    <script>
+    (function () {
+        // Visual #39 — Live counter alimentado desde /api/public_stats
+        // con count-up animado al entrar en viewport.
+        const TARGETS = {
+            'argus-stat-scans':     'scans_total',
+            'argus-stat-verdicts':  'verdicts_total',
+            'argus-stat-companies': 'companies_total',
+            'argus-stat-24h':       'scans_24h',
+        };
+        const _animated = new WeakSet();
+        function _animateTo(el, target) {
+            if (!el || _animated.has(el)) return;
+            _animated.add(el);
+            const start    = 0;
+            const duration = 1400;
+            const startTs  = performance.now();
+            const reduced  = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduced || target <= 0) {
+                el.textContent = String(target);
+                return;
+            }
+            function tick(now) {
+                const t = Math.min(1, (now - startTs) / duration);
+                const eased = 1 - Math.pow(1 - t, 3);
+                const v = Math.round(start + (target - start) * eased);
+                el.textContent = v.toLocaleString();
+                if (t < 1) requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+        }
+        async function fetchStats() {
+            try {
+                const r = await fetch('/api/public_stats', { cache: 'no-store' });
+                if (!r.ok) return;
+                const d = await r.json();
+                Object.entries(TARGETS).forEach(([id, key]) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    const v = parseInt(d[key], 10) || 0;
+                    el.dataset.target = String(v);
+                });
+                // Si no hay IntersectionObserver, animamos ya
+                if (!('IntersectionObserver' in window)) {
+                    Object.keys(TARGETS).forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) _animateTo(el, parseInt(el.dataset.target, 10) || 0);
+                    });
+                    return;
+                }
+                const io = new IntersectionObserver(entries => {
+                    entries.forEach(en => {
+                        if (en.isIntersecting) {
+                            const el = en.target;
+                            _animateTo(el, parseInt(el.dataset.target, 10) || 0);
+                            io.unobserve(el);
+                        }
+                    });
+                }, { threshold: 0.4 });
+                Object.keys(TARGETS).forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) io.observe(el);
+                });
+            } catch (_e) { /* silencioso, el index no debe romperse por esto */ }
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', fetchStats);
+        } else {
+            fetchStats();
+        }
+        // Refrescar cada 60s sin re-animar
+        setInterval(async () => {
+            try {
+                const r = await fetch('/api/public_stats', { cache: 'no-store' });
+                if (!r.ok) return;
+                const d = await r.json();
+                Object.entries(TARGETS).forEach(([id, key]) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    const v = parseInt(d[key], 10) || 0;
+                    if (parseInt(el.dataset.target, 10) !== v) {
+                        el.dataset.target = String(v);
+                        el.textContent = v.toLocaleString();
+                    }
+                });
+            } catch (_e) {}
+        }, 60000);
+    })();
+    </script>
 
     <div class="divider"></div>
 

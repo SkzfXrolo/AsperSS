@@ -50,7 +50,7 @@ def _make_session_permanent():
 CORS(app)
 
 # Inicializar base de datos de autenticación al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.37'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
+_ARGUS_VERSION = '1.6.38'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
 # URL de invitacion permanente al Discord oficial. Se inyecta en todos los
 # templates como `discord_invite` via @app.context_processor (ver mas abajo).
@@ -583,6 +583,88 @@ def api_version():
         'db_ok':         db_ok,
         'started_at':    int(_APP_START_TIME),
     })
+
+@app.route('/api/public_stats', methods=['GET'])
+def api_public_stats():
+    """Stats públicas agregadas para el live counter del index. NUNCA devuelve
+    datos privados (no nombres de jugadores, empresas, etc.) — solo totales
+    para el efecto 'Argus está vivo'.
+
+    Visual #39 — alimenta el live counter del index. Cacheado en memoria 30s
+    para no martillar la DB con cada visita.
+    """
+    global _public_stats_cache, _public_stats_cache_at
+    now = _time_mod.time()
+    try:
+        cached = _public_stats_cache
+        cached_at = _public_stats_cache_at
+    except NameError:
+        cached = None
+        cached_at = 0
+    if cached and (now - cached_at) < 30:
+        return jsonify(cached)
+    out = {
+        'scans_total':     0,
+        'scans_24h':       0,
+        'verdicts_total':  0,
+        'companies_total': 0,
+        'generated_at':    int(now),
+    }
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        # Totals defensivos: cualquier fallo individual no derriba el endpoint
+        try:
+            cur.execute('SELECT COUNT(*) FROM scans')
+            row = cur.fetchone()
+            out['scans_total'] = int(_first_value(row) or 0)
+        except Exception:
+            pass
+        try:
+            cur.execute("SELECT COUNT(*) FROM scans WHERE fecha > NOW() - INTERVAL '24 hours'")
+            row = cur.fetchone()
+            out['scans_24h'] = int(_first_value(row) or 0)
+        except Exception:
+            pass
+        try:
+            cur.execute('SELECT COUNT(*) FROM scan_verdicts')
+            row = cur.fetchone()
+            out['verdicts_total'] = int(_first_value(row) or 0)
+        except Exception:
+            pass
+        try:
+            cur.execute('SELECT COUNT(*) FROM empresas')
+            row = cur.fetchone()
+            out['companies_total'] = int(_first_value(row) or 0)
+        except Exception:
+            pass
+    except Exception:
+        pass  # fallback con todos en 0 si no hay DB
+    _public_stats_cache    = out
+    _public_stats_cache_at = now
+    resp = jsonify(out)
+    resp.headers['Cache-Control'] = 'public, max-age=30'
+    return resp
+
+
+def _first_value(row):
+    """Devuelve el primer valor de un row de cursor sin importar si es
+    RealDictCursor (dict) o cursor estándar (tuple)."""
+    if row is None:
+        return None
+    if isinstance(row, dict):
+        for v in row.values():
+            return v
+        return None
+    try:
+        return row[0]
+    except Exception:
+        return None
+
+
+_public_stats_cache    = None
+_public_stats_cache_at = 0
+
 
 @app.route('/diagnostico-login')
 def diagnostico_login():
