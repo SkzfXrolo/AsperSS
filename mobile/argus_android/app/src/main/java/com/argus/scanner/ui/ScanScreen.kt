@@ -212,10 +212,12 @@ private fun OnboardingPanel(
             Spacer(Modifier.height(12.dp))
             PermissionCard(
                 title = "Acceso al uso de apps",
-                desc = "Para detectar qué cheat clients fueron lanzados recientemente. " +
-                        "Concedelo en Ajustes ▸ Acceso especial.",
+                desc = "OPCIONAL — agrega historial de cheat clients lanzados (item A#4). " +
+                        "Si tu Honor / Huawei / Xiaomi te lo bloquea con \"Ajustes restringidos\", " +
+                        "podés saltarlo: el scan corre igual con ~80% de capacidad.",
                 granted = usageGranted,
                 onClick = onRequestUsage,
+                optional = true,
             )
             Spacer(Modifier.height(12.dp))
             PermissionCard(
@@ -227,6 +229,18 @@ private fun OnboardingPanel(
         }
 
         Column {
+            // Solo mostramos el aviso si el usuario NO concedió usage.
+            // Es informativo, no bloquea el flujo.
+            if (!usageGranted) {
+                Text(
+                    "Sin \"Acceso al uso de apps\" perdés solo 2 detecciones (historial de " +
+                            "lanzamientos + cross-check overlay/Minecraft). El resto del scan " +
+                            "—apps instaladas, archivos sospechosos, root, screenshot, mods de " +
+                            "PojavLauncher— corre completo.",
+                    color = TextDim, fontSize = 11.sp, lineHeight = 14.sp,
+                )
+                Spacer(Modifier.height(10.dp))
+            }
             TextButton(onClick = onRecheck) {
                 Text("Reverificar permisos", color = Bronze)
             }
@@ -240,10 +254,17 @@ private fun OnboardingPanel(
                     disabledContainerColor = Bronze.copy(alpha = 0.3f),
                     disabledContentColor = TextDim,
                 ),
-                enabled = storageGranted && usageGranted,
+                // Storage es el unico permiso required para el scan. UsageStats
+                // es opcional — si la ROM lo bloquea (Honor MagicOS, Huawei
+                // EMUI, MIUI con "Ajustes restringidos"), el scan sigue corriendo
+                // y reporta sus capabilities al staff.
+                enabled = storageGranted,
                 shape = RoundedCornerShape(12.dp),
             ) {
-                Text("Continuar", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(
+                    if (usageGranted) "Continuar" else "Continuar sin usage stats",
+                    fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                )
             }
         }
     }
@@ -255,8 +276,13 @@ private fun PermissionCard(
     desc: String,
     granted: Boolean,
     onClick: (() -> Unit)?,
+    optional: Boolean = false,
 ) {
-    val borderColor = if (granted) Clean.copy(alpha = 0.5f) else Bronze.copy(alpha = 0.4f)
+    val borderColor = when {
+        granted -> Clean.copy(alpha = 0.5f)
+        optional -> Bronze.copy(alpha = 0.25f)
+        else -> Bronze.copy(alpha = 0.4f)
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -266,9 +292,26 @@ private fun PermissionCard(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = BronzeLight, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, color = BronzeLight, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                if (optional && !granted) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "OPCIONAL",
+                        color = Warn,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier
+                            .background(
+                                Warn.copy(alpha = 0.15f),
+                                RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 5.dp, vertical = 2.dp),
+                    )
+                }
+            }
             Spacer(Modifier.height(2.dp))
-            Text(desc, color = TextDim, fontSize = 12.sp)
+            Text(desc, color = TextDim, fontSize = 12.sp, lineHeight = 15.sp)
         }
         Spacer(Modifier.width(8.dp))
         if (granted) {

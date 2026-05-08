@@ -95,9 +95,21 @@ class ScanOrchestrator(private val ctx: Context) {
                     PackageScanner(ctx).scan()
                 }.also { all += it }
 
-                runStep(this@flow, "Apps lanzadas recientemente (Prefetch móvil)") {
-                    UsageStatsScanner(ctx).scan()
-                }.also { all += it }
+                // UsageStats es opcional. Si la ROM lo bloquea (Honor MagicOS,
+                // Huawei EMUI, "Ajustes restringidos" en HyperOS), reportamos
+                // al log para que el staff sepa que el scan corrió en modo
+                // parcial — pero NO abortamos el scan.
+                val usageScanner = UsageStatsScanner(ctx)
+                if (usageScanner.hasPermission()) {
+                    runStep(this@flow, "Apps lanzadas recientemente (Prefetch móvil)") {
+                        usageScanner.scan()
+                    }.also { all += it }
+                } else {
+                    emit(ScanProgressEvent.Log(
+                        "[!] UsageStats deshabilitado (ROM bloquea sideload) — " +
+                        "saltando A#4. Detección por package/archivo sigue activa."
+                    ))
+                }
 
                 runStep(this@flow, "Detectando root / Magisk / LSPosed / KernelSU") {
                     RootScanner().scan()
