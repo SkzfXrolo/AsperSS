@@ -42,7 +42,7 @@ except ImportError:  # pragma: no cover
     print("[FATAL] Python 3 requerido", file=sys.stderr)
     sys.exit(2)
 
-SCANNER_VERSION = '1.6.45-linux1'
+SCANNER_VERSION = '1.6.45-linux2'
 DEFAULT_SERVER  = 'https://asperss.onrender.com'
 
 # ── Hack-name terms (sincronizados con Windows scanner) ─────────────────────
@@ -53,8 +53,8 @@ HACK_TERMS = (
     # Minecraft Java cheat clients
     'wurst', 'liquidbounce', 'meteor', 'meteorclient', 'impact', 'aristois',
     'sigma', 'sigmaclient', 'rusherhack', 'rusher', 'wolfram', 'astolfo',
-    'reflex', 'drip', 'rise', 'novetus', 'inertia', 'flux', 'trolly',
-    'vape', 'ghost client', 'pyro', 'salhack', 'baritone',
+    'reflex', 'drip',     'rise', 'novetus', 'inertia', 'flux', 'trolly',
+    'vape', 'ghost client', 'pyro', 'salhack',
     # Generic hack/cheat keywords (con boundaries en el regex de match)
     'killaura', 'aimbot', 'wallhack', 'esp client', 'xray client',
     'autoclicker', 'autoclick', 'triggerbot', 'noslow', 'nofall',
@@ -126,6 +126,35 @@ LEGIT_MC_MOD_TOKENS = (
     'origins', 'pehkui', 'trinkets', 'curios',
     'litematica', 'tweakeroo', 'malilib',
     'replaymod', 'shaderpack', 'iris-shaders',
+    'baritone', 'baritone-api', 'cabaletta',  # Baritone — pathfinding legítimo
+)
+
+# LD_PRELOAD benigno (Steam, MangoHud, fakeroot, runtime Pressure Vessel, etc.)
+_LEGIT_LD_PRELOAD_FRAGMENTS = (
+    'gameoverlayrenderer.so', 'steam', 'pressure-vessel', 'scout-', '.steam',
+    'libgamemode.so', 'libgamemauto.so', 'mangohud', 'libnss_wrapper', 'libfakeroot',
+    'libc_malloc_debug', 'libgtk3-nocsd', 'libcef.so', 'discord', 'libEGL_', 'libVkLayer',
+    'libsdl2-', 'libasan.so', 'libjsig.so', 'libjemalloc', 'libtcmalloc',
+    'libc++.so', '/tmp/.mount_', 'appimagelauncher', 'libfakeroot-tcp.so',
+    'libgtk3-nocsd.so.0', 'libpreload-', 'ld-linux', 'libc.so',
+)
+
+# Texto libre (journalctl, historial shell, apt, títulos ventana, keywords browser):
+# NO usar términos demasiado genéricos ("impact", "hack", "sigma", "wolfram"...)
+# porque generan FP masivos en logs y listados de paquetes.
+HACK_PHRASES_FREE_TEXT = (
+    'ghost client', 'impact client', 'sigma client', 'liquidbounce', 'liquid bounce',
+    'cracked minecraft', 'tlauncher crack', 'kill aura', 'x-ray client', 'xray client',
+    'wall hack', 'speed hack', 'reach hack', 'free hack', 'hack download',
+    'cheat client', 'private cheat', 'undetected cheat',
+)
+
+HACK_TERMS_FREE_TEXT = (
+    'liquidbounce', 'wurst', 'aristois', 'vape', 'killaura', 'aimbot', 'wallhack',
+    'triggerbot', 'autoclicker', 'autoclick', 'gamesense', 'onetap', 'aimware',
+    'fatality', 'neverlose', 'skeet', 'novoline', 'rusherhack', 'rusher',
+    'meteorclient', 'sigmaclient', 'futureclient', 'astolfo', 'drip',
+    'salhack', 'pyro', 'trolly',
 )
 
 # Tools de desarrollo legítimas en Linux que vienen con .jar/.deb/.AppImage etc.
@@ -161,6 +190,29 @@ def _smart_hack_match(text: str) -> str | None:
         if re.search(pattern, t):
             return term
     return None
+
+
+def _smart_hack_match_free_text(text: str) -> str | None:
+    """Match estricto para journalctl, shell history, apt, wmctrl, URLs genéricas.
+    Evita tokens que aparecen en inglés técnico / matemática / paquetes benignos."""
+    if not text:
+        return None
+    t = text.lower()
+    for phrase in HACK_PHRASES_FREE_TEXT:
+        if phrase in t:
+            return phrase.replace(' ', '_')
+    for term in HACK_TERMS_FREE_TEXT:
+        pattern = r'(?<![a-z0-9])' + re.escape(term) + r'(?![a-z0-9])'
+        if re.search(pattern, t):
+            return term
+    return None
+
+
+def _is_legit_ld_preload(val: str) -> bool:
+    if not val:
+        return True
+    v = val.lower()
+    return any(frag in v for frag in _LEGIT_LD_PRELOAD_FRAGMENTS)
 
 
 def _is_legit_mc_mod(filename: str) -> bool:
@@ -354,7 +406,7 @@ class LinuxScanner:
             matches = []
             for ln in content.splitlines():
                 ln_l = ln.lower()
-                hack = _smart_hack_match(ln_l)
+                hack = _smart_hack_match_free_text(ln_l)
                 if hack and not _is_legit_mc_mod(ln_l) and not _is_legit_devtool(ln_l):
                     matches.append((ln.strip()[:200], hack))
                 elif any(d in ln_l for d in CHEAT_DOMAINS):
@@ -396,7 +448,7 @@ class LinuxScanner:
             ln_l = ln.lower()
             if 'java' not in ln_l and 'minecraft' not in ln_l:
                 continue
-            hack = _smart_hack_match(ln_l)
+            hack = _smart_hack_match_free_text(ln_l)
             if hack:
                 suspicious_lines.append((ln.strip()[:240], hack))
         if not suspicious_lines:
@@ -444,7 +496,7 @@ class LinuxScanner:
                 for entry in env_raw.split(b'\x00'):
                     if entry.startswith(b'LD_PRELOAD='):
                         val = entry[len(b'LD_PRELOAD='):].decode('utf-8', errors='ignore')
-                        if val.strip():
+                        if val.strip() and not _is_legit_ld_preload(val):
                             ld_preload_offenders.append({
                                 'pid': int(pid), 'cmd': cmdline_raw[:200], 'preload': val[:240],
                             })
@@ -559,7 +611,7 @@ class LinuxScanner:
         sus = []
         for w in windows:
             wl = w.lower()
-            hack = _smart_hack_match(wl)
+            hack = _smart_hack_match_free_text(wl)
             if hack and not _is_legit_mc_mod(wl) and not _is_legit_devtool(wl):
                 sus.append({'title': w[:200], 'hack': hack})
         for s in sus[:10]:
@@ -737,7 +789,7 @@ class LinuxScanner:
                     kw = d
                     break
             if not kw:
-                hack = _smart_hack_match(haystack)
+                hack = _smart_hack_match_free_text(haystack)
                 if hack:
                     kw = hack
             if kw:
@@ -748,10 +800,11 @@ class LinuxScanner:
     def scan_installed_packages(self) -> None:
         _print('📦 Paquetes instalados (apt/dnf/pacman/flatpak)...')
         managers = []
-        if _which('apt'):
-            managers.append(('apt', ['apt', 'list', '--installed']))
+        # Debian/Ubuntu: usar solo dpkg O apt — ambos duplican y multiplican FPs.
         if _which('dpkg'):
             managers.append(('dpkg', ['dpkg', '-l']))
+        elif _which('apt'):
+            managers.append(('apt', ['apt', 'list', '--installed']))
         if _which('rpm'):
             managers.append(('rpm', ['rpm', '-qa']))
         if _which('pacman'):
@@ -768,7 +821,7 @@ class LinuxScanner:
             sus = []
             for ln in out.splitlines():
                 ln_l = ln.lower()
-                hack = _smart_hack_match(ln_l)
+                hack = _smart_hack_match_free_text(ln_l)
                 if hack and not _is_legit_devtool(ln_l) and not _is_legit_mc_mod(ln_l):
                     sus.append({'pkg': ln.strip()[:160], 'hack': hack})
             if sus:

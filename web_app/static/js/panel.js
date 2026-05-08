@@ -1513,6 +1513,25 @@ window.deleteToken = deleteToken;
 // ESCANEOS Y RESULTADOS
 // ============================================================
 
+/** SO / scanner: Linux vs Windows (columna scans.os + scanner_platform en detalle). */
+function _scanPlatformLabel(scan) {
+    const raw = String(scan?.os_name || scan?.os || '').trim();
+    const plat = String(scan?.scanner_platform || '').toLowerCase();
+    const low = raw.toLowerCase();
+    if (plat === 'linux' || low.startsWith('linux'))
+        return { key: 'linux', label: 'Linux', bg: 'rgba(34,197,94,0.14)', fg: '#86efac', bd: 'rgba(34,197,94,0.38)' };
+    if (plat === 'windows' || /\bwindows\b|win\s*10|win\s*11|microsoft\s+windows/i.test(raw))
+        return { key: 'windows', label: 'Windows', bg: 'rgba(59,130,246,0.14)', fg: '#93c5fd', bd: 'rgba(59,130,246,0.38)' };
+    if (raw)
+        return { key: 'other', label: 'Otro', bg: 'rgba(148,163,184,0.12)', fg: '#cbd5e1', bd: 'rgba(148,163,184,0.30)' };
+    return { key: 'legacy', label: 'Windows', bg: 'rgba(59,130,246,0.10)', fg: '#93c5fd', bd: 'rgba(59,130,246,0.28)' };
+}
+
+function _scanPlatformChipHtml(scan) {
+    const p = _scanPlatformLabel(scan);
+    return `<span class="scan-platform-chip" data-platform="${p.key}" title="Cliente scanner: ${p.label}" style="display:inline-flex;align-items:center;margin-left:6px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:0.35px;text-transform:uppercase;background:${p.bg};color:${p.fg};border:1px solid ${p.bd};vertical-align:middle;">${p.label}</span>`;
+}
+
 async function loadScans() {
     const tbody = document.getElementById('results-table-body');
     // V18: Skeleton loading
@@ -1612,9 +1631,10 @@ async function loadScans() {
                 const trendArrow = trend === 'up' ? `<span style="color:#ef4444;font-size:11px;" title="Tendencia empeorando">↑</span>`
                     : trend === 'down' ? `<span style="color:#10b981;font-size:11px;" title="Tendencia mejorando">↓</span>` : '';
 
-                // V17: OS icon
+                // V17: OS icon + chip Linux/Windows (columna scans.os desde API)
                 const osStr = (scan.os_name || scan.os || '').toLowerCase();
-                const osIcon = osStr.includes('linux') ? '🐧' : osStr.includes('mac') ? '🍎' : osStr.includes('win') ? '🪟' : '';
+                const osIcon = osStr.includes('linux') ? '🐧' : osStr.includes('mac') ? '🍎' : (osStr.includes('win') || !osStr) ? '🪟' : '';
+                const platChip = _scanPlatformChipHtml(scan);
 
                 const machineName = _hl(scan.machine_name || 'N/A');
 
@@ -1634,9 +1654,9 @@ async function loadScans() {
                         </div>
                     </td>
                     <td>
-                        <span class="game-badge">
+                        <span class="game-badge" style="flex-wrap:wrap;">
                             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="1" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M4 6H8M6 4V8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-                            Minecraft${osIcon ? ` <span>${osIcon}</span>` : ''}
+                            Minecraft${osIcon ? ` <span>${osIcon}</span>` : ''}${platChip}
                         </span>
                     </td>
                     <td>${_resultBadge(scan)}</td>
@@ -2809,7 +2829,11 @@ async function viewScanDetails(scanId) {
         if (scanIdEl) scanIdEl.textContent = scanId;
         
         const osEl = document.getElementById('detail-os');
-        if (osEl) osEl.textContent = data.os || data.operating_system || 'Windows';
+        if (osEl) {
+            const osRaw = data.os || data.os_name || data.operating_system || '';
+            const safeOs = escapeHtml(osRaw.trim() || '—');
+            osEl.innerHTML = `${safeOs}${_scanPlatformChipHtml(data)}`;
+        }
         
         const machineEl = document.getElementById('detail-machine-name');
         if (machineEl) {

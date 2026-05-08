@@ -50,7 +50,7 @@ def _make_session_permanent():
 CORS(app)
 
 # Inicializar base de datos de autenticación al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.46'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
+_ARGUS_VERSION = '1.6.47'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
 # URL de invitacion permanente al Discord oficial. Se inyecta en todos los
 # templates como `discord_invite` via @app.context_processor (ver mas abajo).
@@ -2752,7 +2752,7 @@ def debug_last_scan():
 
 
 # Current released scanner version — update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.6.46"
+CURRENT_SCANNER_VERSION = "1.6.47"
 
 @app.route('/sw.js')
 def service_worker():
@@ -4139,7 +4139,7 @@ def list_scans():
                     SELECT s.id, s.scan_token, s.started_at, s.completed_at, s.status,
                            s.total_files_scanned, s.issues_found, s.scan_duration, s.machine_name,
                            s.minecraft_username, s.ip_address, s.country,
-                           st.created_by AS scanned_by, s.risk_score, s.verdict
+                           st.created_by AS scanned_by, s.risk_score, s.verdict, s.os
                     FROM scans s
                     LEFT JOIN scan_tokens st ON s.token_id = st.id
                     {where}
@@ -4152,6 +4152,17 @@ def list_scans():
                 for row in cursor.fetchall():
                     scan_id = _row_get(row, 0, 'id')
                     scan_ids.append(scan_id)
+                    _os_raw = _row_get(row, 15, 'os')
+                    _os_str = (str(_os_raw).strip() if _os_raw is not None else '') or ''
+                    _los = _os_str.lower()
+                    if _los.startswith('linux'):
+                        _plat = 'linux'
+                    elif 'windows' in _los or _los.startswith('win'):
+                        _plat = 'windows'
+                    elif _os_str:
+                        _plat = 'other'
+                    else:
+                        _plat = 'windows'
                     scans.append({
                         'id': scan_id,
                         'scan_token': _row_get(row, 1, 'scan_token'),
@@ -4168,6 +4179,9 @@ def list_scans():
                         'scanned_by': _row_get(row, 12, 'scanned_by') or '',
                         'risk_score': int(_row_get(row, 13, 'risk_score') or 0),
                         'verdict': _row_get(row, 14, 'verdict') or 'pending',
+                        'os': _os_str,
+                        'os_name': _os_str,
+                        'scanner_platform': _plat,
                     })
                 
                 print(f"📊 Escaneos encontrados en BD local: {len(scans)}")
@@ -4353,6 +4367,9 @@ def get_scan(scan_id):
                     'ip_address': _row_get(row, 11, 'ip_address'),
                     'country': _row_get(row, 12, 'country'),
                     'minecraft_username': _row_get(row, 13, 'minecraft_username'),
+                    'os': None,
+                    'os_name': None,
+                    'scanner_platform': None,
                     'verdict': None, 'verdict_reason': None,
                     'verdict_by': None, 'verdict_at': '',
                 }
@@ -4367,7 +4384,7 @@ def get_scan(scan_id):
                     cursor.execute('SAVEPOINT opt_cols')
                     cursor.execute(f'''
                         SELECT total_dirs_scanned, verdict, verdict_reason, verdict_by, verdict_at,
-                               screenshot, mc_info, risk_score, ensemble_data
+                               screenshot, mc_info, risk_score, ensemble_data, os
                         FROM scans WHERE id = {_PH}
                     ''', (scan_id,))
                     vrow = cursor.fetchone()
@@ -4392,6 +4409,19 @@ def get_scan(scan_id):
                                 scan['ensemble_data'] = json.loads(raw_ens)
                             except Exception:
                                 scan['ensemble_data'] = None
+                        _os_v = _row_get(vrow, 9, 'os')
+                        _os_s = (str(_os_v).strip() if _os_v is not None else '') or ''
+                        scan['os'] = _os_s or None
+                        scan['os_name'] = scan['os']
+                        lowos = (_os_s or '').lower()
+                        if lowos.startswith('linux'):
+                            scan['scanner_platform'] = 'linux'
+                        elif 'windows' in lowos or lowos.startswith('win'):
+                            scan['scanner_platform'] = 'windows'
+                        elif lowos:
+                            scan['scanner_platform'] = 'other'
+                        else:
+                            scan['scanner_platform'] = 'windows'
                     cursor.execute('RELEASE SAVEPOINT opt_cols')
                 except Exception:
                     try:
