@@ -36,44 +36,53 @@ class UpdateChecker(
     /**
      * Bloquea ~5s. Llamar desde Dispatchers.IO. Devuelve null si no hay
      * red, el backend falla, o no hay actualización disponible.
+     *
+     * Body en bloque (no expression body) porque adentro hay `return null`
+     * early-exits — Kotlin no permite returns en funciones con expression
+     * body (`= try { ... }`).
      */
-    fun check(): UpdateInfo? = try {
-        val url = URL("$baseUrl/api/android-version?current=$currentCommit")
-        val conn = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod  = "GET"
-            connectTimeout = 4_000
-            readTimeout    = 5_000
-            setRequestProperty("User-Agent",
-                "Argus-Android/${BuildConfig.VERSION_NAME} (Android ${Build.VERSION.RELEASE})")
+    fun check(): UpdateInfo? {
+        return try {
+            val url = URL("$baseUrl/api/android-version?current=$currentCommit")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod  = "GET"
+                connectTimeout = 4_000
+                readTimeout    = 5_000
+                setRequestProperty("User-Agent",
+                    "Argus-Android/${BuildConfig.VERSION_NAME} (Android ${Build.VERSION.RELEASE})")
+            }
+            try {
+                val code = conn.responseCode
+                if (code !in 200..299) return null
+                val raw = conn.inputStream.bufferedReader(StandardCharsets.UTF_8)
+                    .use { it.readText() }
+                val json = JSONObject(raw)
+                val updateAvailable = json.optBoolean("update_available", false)
+                val apkUrl = json.optString("apk_url", "")
+                    .takeIf { it.isNotBlank() } ?: return null
+                val shortCommit = json.optString("short_commit", "")
+                    .takeIf { it.isNotBlank() }
+                val publishedAt = json.optString("published_at", "")
+                    .takeIf { it.isNotBlank() }
+                val releaseNotes = json.optString("release_notes", "")
+                    .takeIf { it.isNotBlank() }
+                // Si current es "dev" (build local) no notificamos: el dev
+                // sabe qué tiene. Solo notifica cuando la app es build firmada.
+                if (currentCommit == "dev") return null
+                if (!updateAvailable) return null
+                UpdateInfo(
+                    latestCommit  = shortCommit,
+                    apkUrl        = apkUrl,
+                    publishedAt   = publishedAt,
+                    releaseNotes  = releaseNotes,
+                    currentCommit = currentCommit,
+                )
+            } finally {
+                conn.disconnect()
+            }
+        } catch (_: Exception) {
+            null
         }
-        try {
-            val code = conn.responseCode
-            if (code !in 200..299) return null
-            val raw = conn.inputStream.bufferedReader(StandardCharsets.UTF_8)
-                .use { it.readText() }
-            val json = JSONObject(raw)
-            val updateAvailable = json.optBoolean("update_available", false)
-            val apkUrl = json.optString("apk_url", "").takeIf { it.isNotBlank() }
-                ?: return null
-            val shortCommit = json.optString("short_commit", "").takeIf { it.isNotBlank() }
-            val publishedAt = json.optString("published_at", "").takeIf { it.isNotBlank() }
-            val releaseNotes = json.optString("release_notes", "").takeIf { it.isNotBlank() }
-            // Si current es "dev" (build local) no notificamos: el dev sabe
-            // qué tiene.  Solo notifica cuando la app es una build firmada.
-            if (currentCommit == "dev") return null
-            if (!updateAvailable) return null
-            UpdateInfo(
-                latestCommit = shortCommit,
-                apkUrl       = apkUrl,
-                publishedAt  = publishedAt,
-                releaseNotes = releaseNotes,
-                currentCommit = currentCommit,
-            )
-        } finally {
-            conn.disconnect()
-        }
-    } catch (_: Exception) {
-        null
     }
 }
 
