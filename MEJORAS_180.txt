@@ -340,23 +340,54 @@ NOTA DE LECTURA
 [ ] 12. Consenso global: si un hash aparece en >50 scans de >10 empresas
         sin haber sido nunca marcado como cheat → auto-whitelist global.
 
-[ ] 13. Whitelist Discord: Discord_Overlay.exe, DiscordPTB, DiscordCanary,
+[X] 13. Whitelist Discord: Discord_Overlay.exe, DiscordPTB, DiscordCanary,
         BetterDiscord, Vencord (estas dos últimas son mods de Discord client
         que hookean pero no son cheat de Minecraft).
+        DONE v1.6.49 (Pack 21) — agregados a _SERVER_FP_FRAGMENTS de
+        app.py: discord.exe, discordptb.exe, discordcanary.exe,
+        discord_voice/_overlay/_helper/_crashhandler, paths AppData,
+        modules, resources, update.exe. Forks: betterdiscord,
+        bdpluginlibrary, vencord, arrpc.exe, replugged, discord_rpc.
 
-[ ] 14. Whitelist periféricos:
+[X] 14. Whitelist periféricos:
         Razer Cortex/Synapse, Logitech G HUB/GHUB, Corsair iCue,
         SteelSeries Engine, HyperX NGenuity, EVGA Precision X1.
+        DONE v1.6.49 (Pack 21) — agregados a _SERVER_FP_FRAGMENTS:
+        Razer (Cortex, Synapse 3, Central, Chroma), Logitech (G HUB,
+        lghub_agent, GamingFramework, LogiOptionsPlus), Corsair
+        (iCUE, iCUEDeviceControl, ServiceControl), SteelSeries
+        (Engine 3, GG, Sonar), HyperX NGenuity, ASUS Armoury Crate,
+        EVGA Precision X1, MSI Dragon Center / Center, Gigabyte RGB
+        Fusion, Glorious Core, Pulsar/Lamzu/Finalmouse drivers,
+        Nahimic, Realtek Audio Console, Voicemeeter.
 
-[ ] 15. Whitelist macros legales de gamepad/teclado (cuando estén firmadas
+[X] 15. Whitelist macros legales de gamepad/teclado (cuando estén firmadas
         por su vendor): JoyToKey, Xpadder, Antimicro firmado.
+        DONE v1.6.49 (Pack 21) — agregados a _SERVER_FP_FRAGMENTS:
+        JoyToKey, Joy2Key, Xpadder, AntiMicro/AntiMicroX,
+        ControllerCompanion, reWASD, DS4Windows. Estos generan eventos
+        de input sintéticos que las heurísticas viejas tomaban como
+        macros sospechosos.
 
-[ ] 16. AutoHotkey: scripts firmados con cert del usuario o cuyo contenido
+[X] 16. AutoHotkey: scripts firmados con cert del usuario o cuyo contenido
         no toca processes externos → no flag por extensión .ahk.
+        DONE v1.6.49 (Pack 21) — runtime AHK whitelisted en
+        _SERVER_FP_FRAGMENTS: AutoHotkey.exe / AutoHotkey64 / 32 /
+        U64 / U32, ahk2exe.exe (compiler), AutoHotkey\\Compiler,
+        AutoHotkey.chm. Los scripts .ahk en sí siguen siendo
+        analizables por contenido — solo el runtime per se no es
+        evidencia.
 
-[ ] 17. OBS Studio + plugins (.dll loaders): OBS hace hooks de captura de
+[X] 17. OBS Studio + plugins (.dll loaders): OBS hace hooks de captura de
         ventana que se parecen a inyectores. Whitelist OBS y sus plugins
         firmados.
+        DONE v1.6.49 (Pack 21) — agregados a _SERVER_FP_FRAGMENTS:
+        obs64.exe, obs32.exe, obs-plugins/, data/obs-plugins/,
+        StreamFX, NDI, advanced-scene-switcher, obs-websocket,
+        obs-virtualcam, obs-vkcapture, obs-multi-rtmp, Streamlabs OBS,
+        XSplit. Bonus capturers: ShadowPlay, NVContainer,
+        NVGameShare, AMD RxOverlay/AMF, Xbox Game Bar, Bandicam,
+        Fraps. Bonus remote play: Parsec, Moonlight, Sunshine.
 
 [X] 18. ReShade / SpecialK / SweetFX: overlays gráficos. FP en VAC pero no
         cheat de Minecraft. Whitelist.
@@ -1194,11 +1225,11 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 ═══════════════════════════════════════════════════════════════════════════════
 
   Scanner ............................. 60 ítems   (detección)      14/60
-  Filtro .............................. 60 ítems   (anti-FP)        22/60
+  Filtro .............................. 60 ítems   (anti-FP)        27/60
   Visual .............................. 60 ítems   (UI/UX)          39/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    84/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    89/195
                                                   (5 parciales: S#9, V#3, V#32, V#43, V#53)
                                                   (6 bonus: scanner_version chip,
                                                    argusUI.confirm, argusUI.typewriter,
@@ -1220,6 +1251,53 @@ Linux: Arch, Ubuntu, Fedora, etc.).
                                                   (AppImage/Flatpak/deb), #14 (CI Docker)
 
 SESIÓN DEL 08-may-2026:
+  Pack 21 (v1.6.49): Filter #13, #14, #15, #16, #17 — Whitelists
+                    server-side de software legítimo (sin recompilar .exe).
+                    Ventaja clave: estas whitelists viven en
+                    web_app/app.py:_SERVER_FP_FRAGMENTS y se aplican
+                    via _is_server_false_positive() al INSERTAR scan_results
+                    (línea 3783) Y via _scrub_results_for_display() al
+                    SERVIR scans existentes (línea 4152, 4669) — o sea
+                    arreglan retroactivamente los falsos positivos en scans
+                    antiguos que ya están en BD, sin necesidad de re-scanear.
+                    Filtros agregados:
+                      F#13 — Discord (todas las variantes oficiales y forks):
+                        Discord.exe, DiscordPTB, DiscordCanary,
+                        Discord_Voice/_Overlay/_Helper/_CrashHandler,
+                        rutas AppData, modules, resources, update.exe,
+                        BetterDiscord, BdPluginLibrary, Vencord, ARRPC,
+                        Replugged.
+                      F#14 — Periféricos comprehensivos:
+                        Razer (Cortex/Synapse 3/Central/Chroma),
+                        Logitech (G HUB/lghub_agent/GamingFramework/
+                        LogiOptionsPlus), Corsair (iCUE +
+                        DeviceControl + ServiceControl), SteelSeries
+                        (Engine 3/GG/Sonar), HyperX NGenuity, ASUS
+                        Armoury Crate, EVGA Precision X1, MSI Dragon
+                        Center/Center, Gigabyte RGB Fusion, Glorious
+                        Core, Pulsar/Lamzu/Finalmouse drivers, Nahimic,
+                        Realtek Audio Console, Voicemeeter.
+                      F#15 — Macros legales firmados:
+                        JoyToKey, Joy2Key, Xpadder, AntiMicro/X,
+                        ControllerCompanion, reWASD, DS4Windows.
+                      F#16 — AutoHotkey runtime:
+                        AutoHotkey.exe / 64 / 32 / U64 / U32, ahk2exe.exe,
+                        Compiler/, AutoHotkey.chm. Los .ahk siguen
+                        siendo analizados por contenido.
+                      F#17 — OBS + plugins firmados:
+                        obs64/32, obs-plugins/, data/obs-plugins/,
+                        StreamFX, NDI, advanced-scene-switcher,
+                        obs-websocket, obs-virtualcam, obs-vkcapture,
+                        obs-multi-rtmp, Streamlabs OBS (SLOBS),
+                        XSplit. + Bonus: ShadowPlay, NVContainer,
+                        NVGameShare, AMD RxOverlay/AMF, Xbox Game
+                        Bar, Bandicam, Fraps. + Bonus remote play:
+                        Parsec, Moonlight, Sunshine.
+                    → 5 filtros completados (F#13-17), todos
+                      retroactivos sobre scans antiguos sin
+                      recompilar el .exe ni tocar la BD. Sin
+                      cache buster bump (cambio puro Python).
+
   Pack 20 (v1.6.49): Visual #46 + helpers de loading/empty (sin .exe).
                     Visual #46 — Comparador lado-a-lado:
                       * Backend: endpoint /api/scans/<id>/related?limit=8

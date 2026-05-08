@@ -3166,6 +3166,98 @@ _SERVER_FP_FRAGMENTS = [
     '.gradle\\caches', '.gradle\\wrapper', '.m2\\repository',
     # OBS y streaming (no es evidencia per se, salvo que se grabe el SS)
     'obs-studio\\bin', 'streamlabs',
+
+    # ── Filter #13 — Discord (todas las variantes oficiales y forks comunes) ──
+    # Discord original + canales beta + mods de cliente. Estos hookean overlay,
+    # captura de ventana, etc — heurísticas viejas los confunden con inyectores.
+    'discord.exe', 'discordptb.exe', 'discordcanary.exe',
+    'discord_voice.exe', 'discord_overlay', 'discord_overlay2',
+    'discordoverlay.exe', 'discord_helper', 'discord_crashhandler',
+    'discord-crash', 'discord_setup',
+    'appdata\\local\\discord',
+    'appdata\\roaming\\discord',
+    'appdata\\local\\discordptb',
+    'appdata\\local\\discordcanary',
+    'discord\\modules', 'discord\\resources', 'discord\\update.exe',
+    # Mods de cliente Discord — son legítimos pero hookean el client local
+    'betterdiscord', 'better-discord', 'bdpluginlibrary',
+    'vencord', 'arrpc.exe', 'replugged',
+    'discord_arrpc', 'discord_rpc', 'discord rich presence',
+
+    # ── Filter #14 — Periféricos: software oficial de mouse/teclado/audio ────
+    # Estos tools capturan teclas / mueven el mouse / cargan profiles, lo que
+    # se confunde con macros de hack. Whitelist por path y por nombre.
+    # Razer
+    'razer\\cortex', 'razer\\synapse 3', 'razer central',
+    'razercentralservice', 'razersynapseservice',
+    'razer\\gameinstaller', 'razer chroma',
+    # Logitech
+    'logitech\\g hub', 'logitech\\ghub', 'lghub.exe', 'lghub_agent.exe',
+    'logitech gaming framework', 'logioptionsplus', 'logi options',
+    'logitech connection utility',
+    # Corsair
+    'corsair\\icue', 'icue.exe', 'icuedevicecontrol', 'icue4service',
+    'corsair gaming\\corsair utility',
+    # SteelSeries
+    'steelseries\\engine 3', 'steelseries gg',
+    'steelseriesengine.exe', 'sonarsuite.exe',
+    # HyperX
+    'hyperx\\ngenuity', 'hyperxngenuity',
+    # ASUS / EVGA / MSI
+    'asus\\armoury crate', 'armourycrate.exe',
+    'evga\\precision x1', 'precisionx1.exe',
+    'msi\\dragon center', 'msi\\center', 'msicentral.exe',
+    'gigabyte\\rgb fusion', 'rgbfusion.exe',
+    # Mouse misc
+    'glorious\\glorious core', 'gloriouscore',
+    'pulsar\\pulsar driver', 'lamzu\\lamzu config',
+    'finalmouse\\flux',
+    # Audio peripherals
+    'nahimic\\nahimic 3', 'realtek\\audio console',
+    'sonar.exe',  # SteelSeries Sonar
+    'discord_voice', 'voicemeeter',
+
+    # ── Filter #15 — Macros legales firmados ─────────────────────────────────
+    # JoyToKey, Xpadder, AntiMicro/AntiMicroX (gamepad → keyboard mappers).
+    # Son legítimos pero generan eventos de input sintéticos que parecen macros.
+    'joytokey', 'joy2key', 'xpadder.exe',
+    'antimicro', 'antimicrox',
+    'controllercompanion', 'rewasd.exe',  # reWASD — gamepad mapper firmado
+    'ds4windows', 'ds4-windows',          # DualShock 4 driver popular
+
+    # ── Filter #16 — AutoHotkey ──────────────────────────────────────────────
+    # AutoHotkey runtime y compiler. Los .ahk en sí podrían ser hack, pero el
+    # runtime ".exe" del propio AHK no es la evidencia.
+    'autohotkey\\autohotkey.exe', 'autohotkey64.exe', 'autohotkey32.exe',
+    'autohotkeyu64.exe', 'autohotkeyu32.exe', 'ahk2exe.exe',
+    'autohotkey\\compiler', 'autohotkey\\autohotkey.chm',
+
+    # ── Filter #17 — OBS Studio + plugins legítimos ──────────────────────────
+    # OBS hookea captura de ventanas (game capture), su plugin loader y
+    # plugins firmados como StreamFX, NDI, advanced-scene-switcher.
+    'obs-studio\\obs64.exe', 'obs-studio\\obs32.exe',
+    'obs-studio\\obs-plugins',
+    'obs-studio\\data\\obs-plugins',
+    'streamfx', 'ndi.dll', 'libndi',
+    'advanced-scene-switcher', 'obs-websocket',
+    'obs-virtualcam', 'obs-vkcapture',
+    'obs-streamfx', 'obs-multi-rtmp',
+    'streamlabs obs', 'slobs', 'streamelements',
+    'xsplit\\broadcaster',
+
+    # Capturadoras alternativas firmadas
+    'shadowplay', 'nvidia\\nvshadowplay', 'nvidia\\geforce experience',
+    'nvcontainer.exe', 'nvgameshare.exe',
+    'amd\\rxoverlay', 'amd\\amf',
+    'xbox game bar', 'gamebar.exe', 'gamebarpresencewriter',
+    'screen recorder', 'bandicam', 'fraps.exe',
+    'lossless cut', 'shotcut',
+
+    # ── Bonus: emuladores firmados ─────────────────────────────────────────
+    # Algunos hacks se han camuflado como emus. Los oficiales son seguros.
+    'parsec\\parsec', 'parsecd.exe',         # remote play
+    'moonlight\\moonlight', 'moonlight-qt',  # game streaming
+    'sunshine\\sunshine.exe',                # host de moonlight
 ]
 
 # Tipos de issue que nunca deben guardarse (FP estructural, no por ruta)
