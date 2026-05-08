@@ -1,0 +1,739 @@
+═══════════════════════════════════════════════════════════════════════════════
+                  ARGUS PROJECTS — 195 MEJORAS PROPUESTAS
+                  Distribución: 60 Scanner · 60 Filtro · 60 Visual
+                                + 15 Plataforma (Linux)
+                  Estado: Backlog priorizable
+                  Fecha: 2026-05-07 · Versión base: 1.6.33
+═══════════════════════════════════════════════════════════════════════════════
+
+NOTA DE LECTURA
+───────────────
+- "Scanner": capacidad técnica de DETECCIÓN (qué buscamos y cómo).
+- "Filtro": lógica anti-falso-positivo (cómo distinguimos hack real de ruido).
+- "Visual": UI/UX del panel staff, /descargar, index, scanner Tkinter, plugin MC.
+- Cada ítem es independiente y se puede priorizar por separado.
+- Marcar con [X] al completar; con [WIP] mientras se implementa.
+
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PARTE 1/3 — SCANNER (DETECCIÓN)                                       60 ítems
+═══════════════════════════════════════════════════════════════════════════════
+
+[ ]  1. ETW (Event Tracing for Windows) en tiempo real durante el scan para
+        capturar ProcessStart, ImageLoad y FileIO de los últimos 30s aunque el
+        proceso ya se haya cerrado antes de que el staff abra el scanner.
+
+[ ]  2. Hash SHA-256 de cada $R presente en Recycle Bin contra base local de
+        hashes conocidos de hacks (Vape, Liquid, Salhack, Inertia, Meteor,
+        Wurst, Impact, Future, Sigma, Astolfo, Rise, Drip).
+
+[ ]  3. Comparar timestamps $SI vs $FN del MFT — divergencia >5min indica
+        timestamp tampering (técnica clásica de cheats para ocultarse).
+
+[ ]  4. Parsear Amcache.hve (C:\Windows\AppCompat\Programs\Amcache.hve):
+        historial de TODOS los .exe ejecutados en los últimos 30+ días, incluso
+        si Prefetch fue limpiado.
+
+[ ]  5. SRUM (System Resource Usage Monitor) — DB con uso de red/CPU/disco
+        por proceso por hora. Detecta procesos que se borraron pero dejaron
+        huella de tráfico.
+
+[ ]  6. UserAssist en HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\
+        UserAssist — programas ejecutados desde Explorer (rot13 decoded).
+
+[ ]  7. ShimCache (AppCompatCache en SYSTEM hive) — registra programas que
+        existieron incluso después del delete.
+
+[ ]  8. BAM (Background Activity Moderator) y DAM — timestamps precisos de
+        ejecución por SID en ControlSet001\Services\bam\State\UserSettings.
+
+[ ]  9. JumpLists (AutomaticDestinations-ms y CustomDestinations-ms) —
+        archivos abiertos recientemente por aplicación, sobreviven a wipes.
+
+[ ] 10. Thumbcache (thumbcache_*.db) — miniaturas de imágenes y ejecutables
+        ya borrados; algunas aún contienen metadatos del binario original.
+
+[ ] 11. Lectura del USN Journal sin requerir admin vía DeviceIoControl
+        directo con FSCTL_READ_USN_JOURNAL en handles read-only del volumen.
+
+[ ] 12. Volume Shadow Copies (VSS) — escanear copias antiguas del filesystem
+        para detectar evidencia ya borrada del estado actual.
+
+[ ] 13. Detección de procesos con PEB unlinked (ocultos a Task Manager) usando
+        NtQuerySystemInformation con SystemProcessInformation.
+
+[ ] 14. Cross-check de procesos: WMI vs CreateToolhelp32Snapshot vs
+        NtQuerySystemInformation. Mismatch en alguno = posible rootkit.
+
+[ ] 15. Enumerar SetWindowsHookEx hooks activos y verificar firma de las DLLs
+        que los implementan. Hook sin firma sobre todos los procesos = autoclicker.
+
+[ ] 16. Detectar polling de GetAsyncKeyState desde proceso externo a javaw.exe
+        (firma típica de killaura/aim-assist no inyectados).
+
+[ ] 17. Análisis estático de cada .jar nuevo: descomprimir y buscar referencias
+        a net.minecraft.client.Minecraft + patrones de obfuscation
+        (pro-guard, allatori, transformers Mixin sospechosos).
+
+[ ] 18. Hash de cada .jar contra Modrinth/CurseForge API de mods limpios para
+        confirmar legitimidad antes de flaguearlo.
+
+[ ] 19. Detectar Java agents en command line (-javaagent:): vector típico de
+        Weave Loader, Vanilla+ Injector, JLoader.
+
+[ ] 20. Inspeccionar JNI runtime: leer libpath de la JVM activa y listar
+        DLLs cargadas en javaw.exe — DLLs sin firma o con nombre extraño = flag.
+
+[ ] 21. Detectar drivers de kernel sin firma cargados (vulnerable drivers
+        usados por DMA cheats: RTCore64.sys, dbutil_2_3.sys, gdrv.sys,
+        AsrDrv101.sys, capcom.sys).
+
+[ ] 22. Strings sweep en \\.\PhysicalMemory y firmware UEFI dumps en busca de
+        signatures de hardware DMA cheats (PCILeech, CaptainDMA, EclipseDMA).
+
+[ ] 23. Procesar logs de Sysmon si está instalado (Microsoft-Windows-Sysmon/
+        Operational): Process Create, Image Load, Network Connect.
+
+[ ] 24. Leer logs de Defender ASR rules
+        (Microsoft-Windows-Windows Defender/Operational): Event ID 1121/1122
+        registran ejecuciones bloqueadas previamente.
+
+[ ] 25. Inspección de Defender Quarantine (C:\ProgramData\Microsoft\Windows
+        Defender\Quarantine) — los hacks borrados por el AV quedan ahí.
+
+[ ] 26. SmartScreen log (Microsoft-Windows-AppLocker/EXE and DLL y
+        SmartScreen.evtx) — ejecutables bloqueados por reputación.
+
+[ ] 27. AppLocker / WDAC blocked logs — empresa pro con políticas activas.
+
+[ ] 28. Reglas custom del Firewall — un cheat suele agregarse a la whitelist.
+        Listar reglas creadas por usuario en últimas 72h.
+
+[ ] 29. Modificaciones recientes a hosts file (C:\Windows\System32\drivers\etc\
+        hosts) — bypasses de licencias de cheat (vape.cc → 127.0.0.1).
+
+[ ] 30. Detectar procesos huérfanos: PPID apunta a proceso ya muerto, pero el
+        hijo sigue vivo con handles de javaw.exe abiertos.
+
+[ ] 31. Detección de inyección DLL avanzada: SetWindowsHookEx,
+        NtCreateThreadEx, QueueUserAPC, AtomBombing, Process Doppelgänging,
+        Process Herpaderping, Process Ghosting.
+
+[ ] 32. Enumerar handles abiertos a javaw.exe desde procesos no-relacionados
+        (cheat externo escribiendo memoria de Minecraft via WriteProcessMemory).
+
+[ ] 33. Detectar virtual joysticks (vJoy, ViGEm), macro recorders (ReWASD,
+        X-Mouse Button Control con macros activas).
+
+[ ] 34. Verificar Authenticode de TODOS los .exe en Prefetch — los cheats casi
+        nunca firman; ratio firmados/no-firmados ejecutados es señal fuerte.
+
+[ ] 35. Heurística de ratio: si el % de binarios sin firma ejecutados en la
+        última hora supera el baseline del usuario, score++.
+
+[ ] 36. Detectar tarjetas Wi-Fi/USB en modo monitor o promiscuo (señal de
+        herramientas de packet capture/manipulation, raras en gaming).
+
+[ ] 37. DNS cache reciente (Get-DnsClientCache) — lookups a dominios tipo
+        vape.cc, azura.gg, moon-client.com, salhack.io, novoline.cc.
+
+[ ] 38. Conexiones TCP/UDP recientes (Get-NetTCPConnection / netstat -ano)
+        cruzadas con procesos: IPs/puertos sospechosos por proceso.
+
+[ ] 39. Event ID 4688 (Process Creation) en Security log si auditing
+        habilitado — cubre 7-90 días según política.
+
+[ ] 40. Process Hollowing / Module Stomping detection: comparar memoria de
+        sección .text mapeada vs imagen en disco para procesos sospechosos.
+
+[ ] 41. Manifest tampering: validar que el digest declarado en el Authenticode
+        coincida con el binario actual (defensa contra resigning).
+
+[ ] 42. Bundle de YARA rules embebido (~150 reglas) para los hacks más comunes
+        de Minecraft: Wurst, Meteor, Impact, Salhack, Inertia, Future, Sigma,
+        Astolfo, Drip, Rise, Vape, Liquid, RusherHack, Ares.
+
+[ ] 43. CAPA capabilities matrix sobre binarios sospechosos: anti-debug,
+        anti-VM, persistence, code injection, network discovery.
+
+[ ] 44. Time forensics: drift entre RTC, NTP y reloj de sistema. Drift >5min
+        es señal de manipulación temporal (hacks que falsean timestamps).
+
+[ ] 45. PowerShell history (ConsoleHost_history.txt en cada user) — comandos
+        Invoke-WebRequest / iwr / curl a dominios de cheat.
+
+[ ] 46. cmd doskey history y bash_history (si WSL está instalado).
+
+[ ] 47. Logs de RDP, TeamViewer, AnyDesk, Parsec — terceros remotos durante el
+        timeframe del scan (un amigo "ayudando" a hackear).
+
+[ ] 48. SecurityHealthService logs: Defender disabled events, exclusions
+        agregadas en últimas 72h.
+
+[ ] 49. Service installations recientes (HKLM\System\CurrentControlSet\Services
+        creadas en últimas 72h) — drivers de cheat se persisten así.
+
+[ ] 50. Scheduled tasks creadas en últimas 24h con triggers OnLogon, OnIdle,
+        AtStartup. Apuntan a binarios fuera de Program Files = sospechoso.
+
+[ ] 51. Persistencia clásica: Startup folders (CurrentUser y AllUsers), Run/
+        RunOnce keys, UserInitMprLogonScript, Winlogon\Userinit.
+
+[ ] 52. WMI Event Subscriptions (root\subscription) — persistencia avanzada
+        usada por hack loaders modernos.
+
+[ ] 53. COM hijacking detection: enumerar CLSIDs en HKCU que sobrescriben
+        HKLM (técnica de persistencia/loader).
+
+[ ] 54. AppInit_DLLs, KnownDLLs, SafeBoot drivers, AlternateShell — vectores
+        antiguos pero todavía explotados.
+
+[ ] 55. Browser history sweep (Edge, Chrome, Firefox, Brave, Opera) últimas
+        72h con keywords: "minecraft cheat", "killaura", nombres de hacks
+        conocidos, tutoriales de bypass.
+
+[ ] 56. Discord cache local: indexar archivos .jar/.zip recibidos en últimas
+        72h (CachedImages, Code Cache contiene metadata de attachments).
+
+[ ] 57. Telegram Desktop / WhatsApp Desktop downloads folders.
+
+[ ] 58. Detectar overlays inyectados en javaw.exe: Steam, Epic, Battle.net
+        Overlay (legítimo PERO también vector de hide para cheats).
+
+[ ] 59. Sesiones activas: WinRM, SSH, VNC, AnyDesk durante el scan — alguien
+        externo conectado mientras se hace el SS.
+
+[ ] 60. Crash dumps recientes (.dmp en %localappdata%\CrashDumps y
+        Windows\Minidump) — los cheats mal implementados crashean Minecraft;
+        el dump apunta al módulo culpable.
+
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PARTE 2/3 — FILTRO (ANTI-FALSO POSITIVO)                              60 ítems
+═══════════════════════════════════════════════════════════════════════════════
+
+[ ]  1. Whitelist por SHA-256 de instaladores legítimos comunes:
+        NVIDIA Experience, AMD Adrenalin, Intel ARC, Steam, Epic Games,
+        Discord, Spotify, OBS Studio, Streamlabs.
+
+[ ]  2. Whitelist por publisher Authenticode válido:
+        NVIDIA Corp, AMD Inc, Microsoft, Mojang, Epic Games, Valve, Discord
+        Inc → reduce score automáticamente sin importar otras señales.
+
+[ ]  3. Distinguir "killaura" como nombre de archivo legítimo
+        (skin pack llamado killaura.png o textura) vs ejecutable malicioso
+        (.exe/.jar/.dll). Match estricto por extensión.
+
+[ ]  4. Whitelist específica de mods legítimos de Minecraft Java:
+        OptiFine, Sodium, Iris, Lithium, Phosphor, Starlight, Lunar Client,
+        Badlion, Feather, Forge, Fabric, NeoForge, Quilt, Mod Menu, JEI/REI.
+
+[ ]  5. Whitelist de launchers oficiales y third-party legítimos:
+        Lunar Launcher, Badlion Client, Feather Client, ATLauncher, MultiMC,
+        Prism Launcher, GDLauncher, MCLauncher, Modrinth App.
+
+[ ]  6. Diferenciar CheatBreaker (deprecated) de Lunar Client (sucesor) —
+        son el mismo binario renombrado, no doble flag.
+
+[ ]  7. Reputación por path: archivos en C:\Program Files\WindowsApps\,
+        C:\Windows\System32\, C:\Windows\SysWOW64\, C:\Windows\WinSxS\
+        → probabilidad de hack casi nula.
+
+[ ]  8. Pre-cachear hashes de DLLs comunes de C:\Windows\System32 al inicio
+        del scan; si aparece como sospechosa pero el hash matchea, descartar.
+
+[ ]  9. Edad del archivo > 1 año + sin modificación reciente = baja
+        probabilidad de hack (los hacks rotan rápido, las versiones viven días).
+
+[ ] 10. Detectar patrones "test", "prueba", "demo", "ejemplo" en filename
+        + extensión inocua (.txt, .docx) → no flag.
+
+[ ] 11. Aprendizaje incremental por feedback: si staff marca un FP, guardar
+        (filename_pattern, extension, parent_hash) y aplicar en futuros scans
+        de la misma empresa.
+
+[ ] 12. Consenso global: si un hash aparece en >50 scans de >10 empresas
+        sin haber sido nunca marcado como cheat → auto-whitelist global.
+
+[ ] 13. Whitelist Discord: Discord_Overlay.exe, DiscordPTB, DiscordCanary,
+        BetterDiscord, Vencord (estas dos últimas son mods de Discord client
+        que hookean pero no son cheat de Minecraft).
+
+[ ] 14. Whitelist periféricos:
+        Razer Cortex/Synapse, Logitech G HUB/GHUB, Corsair iCue,
+        SteelSeries Engine, HyperX NGenuity, EVGA Precision X1.
+
+[ ] 15. Whitelist macros legales de gamepad/teclado (cuando estén firmadas
+        por su vendor): JoyToKey, Xpadder, Antimicro firmado.
+
+[ ] 16. AutoHotkey: scripts firmados con cert del usuario o cuyo contenido
+        no toca processes externos → no flag por extensión .ahk.
+
+[ ] 17. OBS Studio + plugins (.dll loaders): OBS hace hooks de captura de
+        ventana que se parecen a inyectores. Whitelist OBS y sus plugins
+        firmados.
+
+[ ] 18. ReShade / SpecialK / SweetFX: overlays gráficos. FP en VAC pero no
+        cheat de Minecraft. Whitelist.
+
+[ ] 19. MSI Afterburner / RivaTuner Statistics Server (RTSS) — overlay con
+        DLL injection legítimo. Whitelist por publisher.
+
+[ ] 20. Procesos antivirus en background:
+        Avast, Kaspersky, Bitdefender, Norton, McAfee, ESET, Sophos, Malware-
+        bytes — sus binarios inyectan en otros procesos, es legítimo.
+
+[ ] 21. Microsoft Defender (MsMpEng.exe, NisSrv.exe, SecurityHealthService) —
+        whitelist absoluta, son SO esencial.
+
+[ ] 22. Filtrar binarios en %WINDIR%\WinSxS, %ProgramFiles%\Common Files\
+        Microsoft Shared, %SystemRoot%\Servicing, %WINDIR%\assembly.
+
+[ ] 23. Lista de paquetes UWP/MSIX firmados por Microsoft Store
+        (HKLM\Software\Classes\Local Settings\Software\Microsoft\Windows\
+        CurrentVersion\AppModel) → trust automático.
+
+[ ] 24. Validar cadena completa de certificados Authenticode (no solo
+        "tiene firma"). Cert revocado o cadena rota = flag.
+
+[ ] 25. Blacklist de certs robados/revocados conocidos (CRL públicas
+        + DigiCert/Sectigo revocation lists para los últimos 12 meses).
+
+[ ] 26. Si el .exe está firmado pero el subject CN está en lista negra
+        (ej. "Beijing Kunlun Tech", o publishers de mineros conocidos)
+        → score++ aunque la firma sea válida.
+
+[ ] 27. Bayesian filter sobre filename: tokens como "loader", "injector",
+        "client" + Minecraft-related → score++; tokens como "setup",
+        "installer", "update", "uninstaller" → score--.
+
+[ ] 28. Filtro por idioma del SO: en es-AR/es-MX/es-ES ciertos paths cambian
+        (Mis Documentos vs My Documents). Adaptar reglas.
+
+[ ] 29. Filtro contextual TLauncher: en zonas de bajo poder adquisitivo,
+        TLauncher es FP recurrente. Marcar como advisory pero no banear.
+
+[ ] 30. Filtrar el screenshotter del propio Argus para no detectarse a sí
+        mismo (ArgusScanner.exe, MinecraftSSTool.exe, sus hijos PowerShell).
+
+[ ] 31. Filtros custom por empresa: cada cliente puede sumar paths/hashes
+        a su whitelist privada (ej. herramientas internas de admin).
+
+[ ] 32. Filtro de prefetch inteligente: si el .pf existe pero el .exe original
+        sigue presente con firma válida y en Program Files, no flag.
+
+[ ] 33. Excluir archivos en ruta de OneDrive sincronizado para reducir noise
+        de cosas del trabajo / personales del staff.
+
+[ ] 34. Excluir mods en folder de instancias de TLauncher/Lunar/Badlion
+        cuando el .jar tiene hash conocido en Modrinth/CurseForge.
+
+[ ] 35. Excluir cache de modpacks de CurseForge (%appdata%\.minecraft\mods
+        y descargas oficiales) si el hash matchea el manifest del modpack.
+
+[ ] 36. Excluir archivos del Recycle Bin que provienen de procesos de
+        actualización (filename con sufijos "old", "backup", "_v1", "~tmp").
+
+[ ] 37. Diferenciar ".rise" como extensión de archivo (raro) vs ".rise"
+        como folder (Rise client config folder). Solo flagear .rise si es ext.
+
+[ ] 38. Smart match en hack_terms: solo flag si el término es palabra
+        completa (regex \bvertex\b), no substring. Evita FP en
+        "vertexshader.frag", "matrix-multiply.bat", etc.
+
+[ ] 39. Filtro contextual temporal: si un .exe sospechoso fue ejecutado AL
+        MISMO TIEMPO que javaw.exe → score++. Si fue ejecutado el día
+        anterior y nunca más → score--.
+
+[ ] 40. Filtro de red: si el archivo abre conexiones SOLO a 192.168.x.x,
+        10.x.x.x, 127.0.0.1 → tool de LAN/dev, baja sospecha.
+
+[ ] 41. Filtro de tamaño: hacks típicos pesan entre 1-50 MB (.exe) o
+        100 KB-5 MB (.jar). Fuera de estos rangos, score--.
+
+[ ] 42. Heurística "primera vez visto" segura: si el hash NUNCA fue visto
+        en la base global de Argus, NO banear automáticamente — marcar para
+        revisión humana primero (evita ser zero-day-paranoid).
+
+[ ] 43. Threshold dinámico de risk score por empresa: cliente premium
+        configura "estricto/normal/permisivo" según política del server.
+
+[ ] 44. Modo "torneo" más estricto vs modo "casual" más permisivo:
+        threshold y peso de heurísticas distinto por flag del scan.
+
+[ ] 45. Excluir paths de recovery de Windows: C:\Recovery, C:\$WINDOWS.~BT,
+        C:\$WINDOWS.~WS, C:\$Windows.~Q, C:\PerfLogs.
+
+[ ] 46. Detectar si el host es Windows Server y bajar peso de heurísticas
+        que asumen entorno desktop (un staff puede correr el scanner desde
+        un VPS).
+
+[ ] 47. Excluir archivos que son parte de una Steam Workshop subscription
+        (filename matching con manifests de %steam%\steamapps\workshop).
+
+[ ] 48. Excluir game pass / Xbox UWP titles
+        (C:\Program Files\WindowsApps\<package>) — están firmados por MS.
+
+[ ] 49. Mejor parser de USN Journal: ignorar transactions de Windows Update
+        (TrustedInstaller, wuauclt) y System Restore.
+
+[ ] 50. Mejor parser de Prefetch: ignorar PF files de Microsoft Edge,
+        Defender, Windows Search Indexer (basura común que no aporta).
+
+[ ] 51. Filtrar entradas de scan_file_activity_log que sean del propio
+        Argus (su propio log, screenshot, json output, dist/ArgusScanner.exe).
+
+[ ] 52. Detectar reinstalaciones legítimas: mismo binario, mismo hash, ruta
+        canonical, intervalo razonable → no doble flag.
+
+[ ] 53. Detectar mod updaters (CurseForge launcher, Modrinth app) que
+        copian/borran .jar como parte de updates → no FP de "ráfaga de
+        borrado masivo".
+
+[ ] 54. Confianza modulada por antigüedad y reputación del staff: staff con
+        >100 veredictos correctos tiene más peso al marcar FP.
+
+[ ] 55. Confidence ensemble con factor humano:
+        AI_score + heuristic_score + historical_feedback → score consolidado
+        ponderado en lugar de simple OR.
+
+[ ] 56. Filtrar logs/screenshots de software de soporte legítimo:
+        TeamViewer en sesiones del propio staff (no en ajenas), AnyDesk
+        autorizado por la empresa.
+
+[ ] 57. Detectar tools de desarrollo legítimas: Visual Studio Code, Cursor,
+        IntelliJ, NetBeans, Sublime — no flag aunque parezcan inyectores.
+
+[ ] 58. Filtro de Java agents legítimos: profilers (YourKit, JProfiler,
+        VisualVM), debuggers, build tools (Gradle agents).
+
+[ ] 59. Excluir archivos creados/modificados durante updates conocidos
+        de Windows (cruzando timestamps con WindowsUpdate.log).
+
+[ ] 60. "Penalty cooldown": si una empresa ya marcó X hashes como FP en las
+        últimas 48h, subir threshold dinámicamente para esa empresa hasta
+        que se ajusten heurísticas — evita lluvia de FPs idénticos.
+
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PARTE 3/3 — VISUAL (PÁGINA, PANEL Y APLICACIÓN)                       60 ítems
+═══════════════════════════════════════════════════════════════════════════════
+
+[ ]  1. Toggle modo claro/oscuro con persistencia en localStorage
+        (default: dark con bronce, alternativo: light con bronce suave).
+
+[ ]  2. Tema "torneo" alternativo más serio (gris/negro neutral, sin
+        gradientes) para entornos competitivos formales.
+
+[ ]  3. Tema "minimalista" sin animaciones para PCs lentas — accessibility
+        y rendimiento.
+
+[ ]  4. Animación staggered fade-in al cargar resultados de un scan
+        (cada card aparece con delay incremental).
+
+[ ]  5. Skeleton loaders en cards mientras llega data del backend
+        (en lugar de "Cargando…" plano).
+
+[ ]  6. Sistema de toasts elegante con stacking, auto-dismiss y action
+        button (en lugar de alert() del browser).
+
+[ ]  7. Modal de confirmación con backdrop blur consistente entre
+        veredictos, eliminación de tokens, etc.
+
+[ ]  8. Tooltips con ayuda contextual (?) en cada label crítico del scan
+        (Risk Score, Verdict, AI confidence, etc.).
+
+[ ]  9. Iconos lucide-react / heroicons consistentes en todo el panel
+        en lugar de emojis dispersos.
+
+[ ] 10. Gráfica de risk score histórico del staff (line chart) en su
+        sub-perfil del panel.
+
+[ ] 11. Heatmap GitHub-style de actividad por día/hora del staff
+        (cuándo scannea más).
+
+[ ] 12. Avatar generado a partir del nombre (initials con color hash
+        determinístico) cuando no hay PFP configurado.
+
+[ ] 13. Sistema de logros/streaks gamificado opcional:
+        "5 scans con CLEAN", "100 scans totales", "Primera detección de
+        cheat nuevo", "Cazador del mes".
+
+[ ] 14. Animación slide horizontal al cambiar de pestaña (Detalles,
+        Process Times, Explore, Utilities, Archivos de Windows).
+
+[ ] 15. Sticky header en tabla de scans con drop shadow al scrollear
+        para feedback visual.
+
+[ ] 16. Filtros guardados como presets nombrados:
+        "Solo CRITICAL último día", "Mis scans pendientes", "Top FP",
+        etc.
+
+[ ] 17. Quick search global con Cmd+K / Ctrl+K — abrir scan por ID,
+        empresa, jugador.
+
+[ ] 18. Command palette para staff (estilo VS Code):
+        "Open scan #X", "Generate token", "Switch theme", "View tokens".
+
+[ ] 19. Drag & drop de archivos directo en zona del scanner Tkinter
+        para análisis manual de un .jar/.exe específico.
+
+[ ] 20. Soporte multi-monitor en scanner: detectar segundo monitor y
+        capturar screenshot de TODOS los displays activos.
+
+[ ] 21. Indicador en tiempo real del progreso del scan en el scanner:
+        steps con porcentaje (Detectando procesos 25%, Leyendo papelera
+        50%, Analizando Prefetch 75%, Generando reporte 90%).
+
+[ ] 22. Animación de "pulso" del indicador online del scanner mientras
+        corre (dot verde latiendo).
+
+[ ] 23. Splash screen del scanner con logo grande, versión y nombre
+        de la empresa que generó el token.
+
+[ ] 24. Splash sonoro opcional (toggleable) al finalizar scan
+        (notify.wav suave).
+
+[ ] 25. Empty states ilustrados (SVG custom) cuando no hay scans, no
+        hay tokens, no hay actividad — en lugar de texto gris plano.
+
+[ ] 26. Confeti animado sutil al confirmar veredicto CLEAN
+        (premio visual al staff por trabajo limpio).
+
+[ ] 27. Sacudida (shake) leve al confirmar veredicto BAN/CHEAT
+        — alerta visual de severidad.
+
+[ ] 28. Modo "Compartir veredicto": botón que genera imagen PNG con
+        resumen del scan (logo, jugador, veredicto, evidencias top)
+        para postear directo en Discord.
+
+[ ] 29. Botón "Copiar enlace al scan" con feedback visual
+        (toast verde "Copiado!" + ícono check temporal).
+
+[ ] 30. QR code del enlace al scan en el modal de share, para abrir
+        en otro device sin tipear URL.
+
+[ ] 31. Sidebar colapsable (icon-only mode) para más espacio horizontal
+        en monitores ultrawide.
+
+[ ] 32. Vista de tarjetas vs lista vs tabla en historial de scans
+        (toggle persistente).
+
+[ ] 33. Densidad ajustable: cómoda / normal / compacta — staff con
+        muchos scans/día prefiere compacta.
+
+[ ] 34. Animación del logo Argus en hover: rotación suave del aro
+        (orbital ring) y respiración del centro.
+
+[ ] 35. Halo de luz dorada/bronce sutil siguiendo el cursor en el
+        index hero (parallax light effect).
+
+[ ] 36. Glassmorphism en cards principales del index
+        (backdrop-filter: blur con borders y shadows correctos).
+
+[ ] 37. Parallax suave en sección hero del index — el logo y los
+        elementos decorativos se mueven a velocidades distintas
+        al scrollear.
+
+[ ] 38. Footer con SLA / uptime: "99.9% uptime — last 30 days",
+        actualizado desde el endpoint /health.
+
+[ ] 39. Live counter de scans totales en index (incrementa al ritmo
+        del backend) — efecto "está vivo".
+
+[ ] 40. Avatar del staff que firmó el veredicto visible en cada
+        scan card (con tooltip con su nombre).
+
+[ ] 41. Animación de "typing" en el AI analysis (texto que aparece
+        carácter a carácter como GPT pensando).
+
+[ ] 42. Botón flotante de Discord siempre visible (esquina inferior
+        derecha) con burbuja de notificación cuando hay anuncios.
+
+[ ] 43. Web Push notifications (con permiso explícito) cuando entra
+        un scan nuevo del server propio del staff.
+
+[ ] 44. Sonido sutil al recibir un scan nuevo en el panel,
+        toggleable y customizable.
+
+[ ] 45. Modal full-screen para imágenes del screenshot — zoom con
+        rueda, pan con drag, reset con doble click.
+
+[ ] 46. Comparador lado-a-lado: "este scan vs scan anterior del
+        mismo MC user" para ver progreso/regresión.
+
+[ ] 47. Timeline visual de actividad del jugador en el server:
+        last seen, last scan, last verdict, total scans (requiere
+        tabla nueva en BD).
+
+[ ] 48. Mejor jerarquía tipográfica: H1 más grande y dramático,
+        subtítulos con accent color bronce, body con line-height
+        generoso.
+
+[ ] 49. Tipografía dual: serif elegante (Playfair / Cormorant) para
+        titulares grandes, sans-serif (Inter / Geist) para data y UI.
+
+[ ] 50. Activar font-feature-settings para ligaduras estilísticas
+        y números tabulares (alineación perfecta de columnas
+        numéricas en tablas).
+
+[ ] 51. Auditoría WCAG AA: subir contraste de var(--text-d) en
+        backgrounds claros — ahora roza el límite de legibilidad.
+
+[ ] 52. Modo accesibilidad: tamaño base configurable (14/16/18 px),
+        focus rings más visibles, atajos de teclado documentados.
+
+[ ] 53. Soporte completo de teclado en navegación del panel
+        (Tab + Enter en cards, Esc cierra modales, flechas en listas).
+
+[ ] 54. Respetar prefers-reduced-motion: animaciones se desactivan
+        automáticamente para usuarios que lo configuran.
+
+[ ] 55. PWA instalable del panel staff: manifest, icons, service
+        worker offline-first para vista de scans cacheados.
+
+[ ] 56. Página /descargar con video loop del scanner en acción
+        (autoplay muted, ~10s).
+
+[ ] 57. Comparativa "Antes/Después" de instalación del scanner —
+        slider antes-después tipo housing remodel.
+
+[ ] 58. Sección de testimonios reales con avatares de servers que
+        ya usan Argus (con consentimiento), formato carrusel.
+
+[ ] 59. Stats animadas (counter from 0 to N) en el index al
+        scrollear hasta esa sección — scans totales, bans confirmados,
+        empresas activas, uptime.
+
+[ ] 60. Roadmap público en página tipo Trello/Linear: cards de
+        "Now / Next / Future" para que la comunidad vea el progreso
+        y vote prioridades.
+
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PARTE 4/4 — PLATAFORMA / VERSIÓN LINUX                                15 ítems
+═══════════════════════════════════════════════════════════════════════════════
+
+CONTEXTO
+────────
+El scanner actual es Windows-only por diseño: depende de winreg, ctypes.windll,
+$RECYCLE.BIN, Prefetch, USN Journal, Amcache, etc. Llevarlo a Linux NO es
+recompilar — requiere refactor en módulos por plataforma y reemplazar las
+fuentes de evidencia. Esta sección agrupa el trabajo necesario para una
+variante "ArgusScanner Linux" (jugadores de Minecraft Java en escritorio
+Linux: Arch, Ubuntu, Fedora, etc.).
+
+[ ]  1. Refactor del proyecto a estructura por plataforma:
+        source/scanner_core/        (lógica común: hashes, hack-names, upload)
+        source/scanner_windows/     (winreg, prefetch, recycle, usn, amcache)
+        source/scanner_linux/       (proc, journal, trash, dotfiles, lsof)
+        Inyectar el backend correcto según sys.platform en runtime.
+
+[ ]  2. Aislar TODOS los `import winreg` y `import ctypes.wintypes` detrás de
+        un wrapper `platform_api` con stubs no-op para Linux/Mac.
+
+[ ]  3. Equivalente Linux de la papelera: parsear
+        `~/.local/share/Trash/info/*.trashinfo` (estándar XDG) + cruzar con
+        `~/.local/share/Trash/files/`. Reemplaza el parser de $RECYCLE.BIN.
+
+[ ]  4. Equivalente Linux de Prefetch / "ejecutados":
+          - systemd-journald: `journalctl --user _COMM=java -o json`
+          - bash/zsh history (~/.bash_history, ~/.zsh_history) con timestamps
+          - shell-snapshots de fish (~/.local/share/fish/fish_history)
+          - timestamps de acceso (atime) de binarios en ~/.local/bin, ~/.cache.
+
+[ ]  5. Equivalente Linux de USN Journal: usar `auditd` si está habilitado
+        + `inotifywait` durante el scan (snapshot 30s de creaciones/borrados
+        en HOME). Documentar que sin auditd la cobertura histórica es menor.
+
+[ ]  6. Detección de procesos sospechosos en Linux:
+          - psutil (ya cross-platform) + lectura directa de /proc/<pid>/cmdline
+          - /proc/<pid>/maps para listar bibliotecas cargadas en `java`
+          - `lsof -p <pid>` para handles abiertos
+          - Detectar LD_PRELOAD activo (vector clásico de inyección Linux).
+
+[ ]  7. Equivalente de "ventanas abiertas" (EnumWindows):
+          - X11: `wmctrl -lp` o `xdotool search --onlyvisible`
+          - Wayland: protocolos de window-management dependen del compositor;
+            soportar al menos GNOME (gdbus) y KDE (qdbus) para listar ventanas.
+
+[ ]  8. Soporte de los launchers de Minecraft más usados en Linux:
+        oficial (~/.minecraft), Prism (~/.local/share/PrismLauncher),
+        MultiMC, ATLauncher, GDLauncher, Modrinth App, PolyMC, Flatpak
+        (~/.var/app/<id>/.minecraft).
+
+[ ]  9. Captura de screenshot multi-display en Linux:
+          - X11: `import` (ImageMagick) o pyautogui sobre Xlib
+          - Wayland: `grim` (wlroots: Hyprland, Sway) o portal XDG
+            (org.freedesktop.portal.Screenshot) para GNOME/KDE.
+        Detectar el servidor gráfico y elegir backend automáticamente.
+
+[ ] 10. Empaquetado: AppImage como formato principal (un solo archivo,
+        ejecutable, no requiere instalación). Build con
+        `python-appimage` o `appimage-builder`.
+
+[ ] 11. Empaquetado secundario: Flatpak en Flathub (org.argusprojects.Scanner)
+        — distribución oficial, auto-update, sandbox. Requiere manifest
+        + permisos explícitos (filesystem=home, network).
+
+[ ] 12. Empaquetado tercero: paquetes nativos
+          - .deb para Debian/Ubuntu (con `dpkg-deb`)
+          - .rpm para Fedora/openSUSE (con `rpmbuild`)
+          - PKGBUILD en AUR para Arch/Manjaro.
+        Pipeline GitHub Actions que genere los 3 + AppImage en cada release.
+
+[ ] 13. Endpoint backend `/descargar/linux` y `/descargar/linux/<format>`:
+        servir la build correcta según el header `User-Agent` o selección
+        manual del usuario en /descargar (botón con tabs Windows/Linux).
+
+[ ] 14. Tests E2E en CI sobre 3 distros con Docker:
+        ubuntu:24.04, fedora:40, archlinux:latest. Smoke test:
+        instalar AppImage, correr `--scan-self`, verificar JSON output.
+
+[ ] 15. Documentación para el cliente Pro y Discord:
+        - Tabla "qué se puede detectar en cada plataforma" (paridad honesta).
+        - Marcar las heurísticas Windows-only como "no aplica" en reportes
+          generados desde Linux para no asustar al staff con campos vacíos.
+
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  RESUMEN
+═══════════════════════════════════════════════════════════════════════════════
+
+  Scanner ............................. 60 ítems   (detección)
+  Filtro .............................. 60 ítems   (anti-FP)
+  Visual .............................. 60 ítems   (UI/UX)
+  Plataforma (Linux) .................. 15 ítems   (multiplataforma)
+  ───────────────────────────────────────────────
+  TOTAL ............................... 195 ítems
+
+PRIORIZACIÓN SUGERIDA (top 10 con mayor ROI inmediato)
+──────────────────────────────────────────────────────
+  Scanner    #4   Amcache.hve parsing (cubre wipes de Prefetch)
+  Scanner    #7   ShimCache parsing (sobrevive a delete)
+  Scanner    #25  Defender Quarantine sweep
+  Scanner    #50  Scheduled tasks recientes
+  Filtro     #2   Whitelist por publisher Authenticode
+  Filtro     #11  Aprendizaje incremental por feedback
+  Filtro     #38  Smart match en hack_terms (palabra completa)
+  Filtro     #42  "Primera vez visto" → revisión humana
+  Visual     #5   Skeleton loaders + #6 toasts
+  Visual     #25  Empty states ilustrados (mejora percibida fuerte)
+
+PLATAFORMA — ORDEN RECOMENDADO PARA "ARGUS LINUX"
+─────────────────────────────────────────────────
+  1. Plataforma #1   Refactor por plataforma (base obligatoria)
+  2. Plataforma #2   Aislar APIs Windows con wrapper / stubs
+  3. Plataforma #6   Procesos + /proc + LD_PRELOAD
+  4. Plataforma #3   Trash XDG (papelera Linux)
+  5. Plataforma #8   Soporte de launchers Minecraft Linux
+  6. Plataforma #9   Screenshot X11/Wayland
+  7. Plataforma #10  AppImage (primer entregable instalable)
+  8. Plataforma #15  Documentación de paridad de detección
+
+═══════════════════════════════════════════════════════════════════════════════

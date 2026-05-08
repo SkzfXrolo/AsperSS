@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.33"
+SCANNER_VERSION = "1.6.34"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -146,6 +146,186 @@ _DEFINITE_HACK_NAMES = {
 # 'crack'/'cracked' eliminados — son demasiado genéricos y flagean software pirata
 # no relacionado con Minecraft. Las variantes MC-específicas están en _DEFINITE_HACK_NAMES.
 _WORD_BOUNDARY_HACK_WORDS = ['hack', 'cheat', 'bypass']
+
+
+# ── Smart Hack-Term Matcher (Filtro #38) ─────────────────────────────────────
+#
+# El matching antiguo (`any(term in text for term in hack_terms)`) generaba
+# falsos positivos en nombres legítimos:
+#   "vertexshader.frag"      → matcheaba 'vertex'
+#   "sunrise_wallpaper.jpg"  → matcheaba 'rise'
+#   "matrixhack.bat"         → matcheaba 'hack' (incluso correcto, pero igual)
+#   "ghostwire-tokyo.exe"    → matcheaba 'ghost'
+#   "weaverloom.jar"         → matcheaba 'weave'
+#
+# La solución es exigir que el término aparezca como palabra/segmento aislado:
+#   - Términos "palabra" (killaura, vape, vertex):  \b TERM \b
+#   - Términos "dotted" (.rise, .meteor):           \. TERM (?!\w)
+#       (matchea ".rise" en "C:\Users\bob\.rise\config.json" pero NO en
+#       "sunrise.exe" porque ahí no hay punto antes de "rise").
+#
+# Los regex se compilan UNA sola vez y se reusan; coste ~constante por scan.
+
+import re as _re_smart  # alias para evitar shadow de imports posteriores
+
+def _build_smart_hack_regex(terms):
+    """Compila dos regex (word-terms y dotted-terms) a partir de una lista
+    de términos. Devuelve (word_re, dot_re) — cualquiera puede ser None si
+    la lista correspondiente está vacía.
+
+    Nota: usamos look-arounds [a-z0-9] en lugar de \\b/\\w porque en filenames
+    reales el underscore es separador habitual ('my_hack.exe', 'killaura_v2'),
+    y \\w incluiría '_' rompiendo el boundary."""
+    word_terms = []
+    dot_terms  = []
+    for t in terms:
+        if not t:
+            continue
+        if t.startswith('.'):
+            dot_terms.append(_re_smart.escape(t[1:]))  # quitar el . para usar \. en el regex
+        else:
+            word_terms.append(_re_smart.escape(t))
+    word_re = _re_smart.compile(
+        r'(?<![a-z0-9])(?:' + '|'.join(word_terms) + r')(?![a-z0-9])',
+        _re_smart.IGNORECASE,
+    ) if word_terms else None
+    dot_re = _re_smart.compile(
+        r'\.(?:' + '|'.join(dot_terms) + r')(?![a-z0-9])',
+        _re_smart.IGNORECASE,
+    ) if dot_terms else None
+    return word_re, dot_re
+
+
+def smart_hack_match(text, terms_or_regex):
+    """Devuelve True si `text` contiene alguno de los términos de hack
+    en contexto válido (palabra completa o segmento dotted).
+
+    Args:
+        text: string a inspeccionar (case insensitive).
+        terms_or_regex: lista de strings (se compila al vuelo con cache lru)
+                        o tupla (word_re, dot_re) ya compilada.
+    """
+    if not text:
+        return False
+    if isinstance(terms_or_regex, tuple) and len(terms_or_regex) == 2:
+        word_re, dot_re = terms_or_regex
+    else:
+        word_re, dot_re = _build_smart_hack_regex(tuple(terms_or_regex))
+    if word_re and word_re.search(text):
+        return True
+    if dot_re and dot_re.search(text):
+        return True
+    return False
+
+
+@functools.lru_cache(maxsize=8)
+def _smart_hack_regex_cached(terms_tuple):
+    """Versión cacheada de _build_smart_hack_regex para listas estáticas."""
+    return _build_smart_hack_regex(terms_tuple)
+
+
+# ── Authenticode Publisher Whitelist (Filtro #2 lite) ────────────────────────
+#
+# Si un binario está firmado por un publisher de la whitelist abajo, su
+# probabilidad de ser hack es prácticamente nula. Esto permite descartar
+# rápidamente FPs en software legítimo (drivers, antivirus, antitrampas).
+#
+# La verificación se hace con PowerShell `Get-AuthenticodeSignature` lo cual
+# es lento (~150-300ms por archivo). Por eso:
+#   - Se cachea por SHA-256 del path (lru_cache)
+#   - Solo se llama cuando ya hay sospecha — no se firma TODO el filesystem.
+#   - Si PowerShell falla / el archivo no existe / no tiene firma, devuelve
+#     None. NUNCA hace que el scan caiga.
+
+_TRUSTED_PUBLISHERS = (
+    # Microsoft (Windows, Defender, Office, .NET, etc.)
+    'microsoft corporation', 'microsoft windows',
+    'microsoft windows hardware compatibility publisher',
+    'microsoft windows publisher',
+    # Mojang / Minecraft oficial
+    'mojang ab', 'mojang synergies ab', 'microsoft corporation',
+    # Java
+    'oracle america, inc.', 'oracle corporation', 'oracle america',
+    'azul systems, inc.', 'eclipse adoptium', 'amazon corretto',
+    # GPU
+    'nvidia corporation', 'advanced micro devices, inc.', 'amd inc',
+    'intel corporation', 'intel(r) corporation',
+    # Comunicación
+    'discord inc.', 'discord inc',
+    # Plataformas de juegos
+    'valve corp.', 'valve corporation',
+    'epic games inc.', 'epic games, inc.',
+    # Periféricos
+    'razer inc.', 'razer usa ltd.',
+    'logitech', 'logitech inc.',
+    'corsair memory, inc.', 'corsair components, inc.',
+    'steelseries aps', 'steelseries',
+    'kingston technology company, inc.',
+    # Antivirus / Seguridad
+    'avast software s.r.o.', 'avast software',
+    'malwarebytes corporation', 'malwarebytes inc',
+    'bitdefender srl', 'bitdefender',
+    'kaspersky lab',
+    'eset, spol. s r.o.',
+    # Navegadores
+    'google llc', 'google inc',
+    'mozilla corporation',
+    'opera norway as', 'opera software as',
+    'brave software, inc.',
+    # Lunar / Badlion (clientes legítimos de MC)
+    'moonsworth, llc', 'moonsworth llc', 'lunar client',
+    'badlion network ltd', 'badlion network',
+    # Streaming / Captura
+    'obs studio contributors', 'streamlabs llc',
+    # Anti-cheats reconocidos
+    'easy anti-cheat oy', 'easy anti-cheat',
+    'battleye innovations', 'battleye',
+    'kakao games europe b.v.',
+)
+
+
+@functools.lru_cache(maxsize=4096)
+def _get_authenticode_publisher(file_path: str):
+    """Devuelve el subject CN del publisher Authenticode (lowercase, stripped)
+    o None si: no hay firma, archivo no existe, PowerShell falló, o el sistema
+    no es Windows.
+
+    Usa subprocess con timeout 5s para no colgar el scan."""
+    try:
+        if not file_path or not os.path.exists(file_path):
+            return None
+        # Solo Windows: PowerShell expone Get-AuthenticodeSignature
+        if sys.platform != 'win32':
+            return None
+        cmd = [
+            'powershell.exe', '-NoProfile', '-Command',
+            f"(Get-AuthenticodeSignature -LiteralPath '{file_path}').SignerCertificate.Subject",
+        ]
+        result = subprocess.run(
+            cmd,
+            capture_output=True, text=True, timeout=5,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+        )
+        out = (result.stdout or '').strip()
+        if not out:
+            return None
+        # subject típico: "CN=Microsoft Corporation, O=Microsoft Corporation, ..."
+        for chunk in out.split(','):
+            chunk = chunk.strip()
+            if chunk.upper().startswith('CN='):
+                return chunk[3:].strip().strip('"').lower()
+        return None
+    except Exception:
+        return None
+
+
+def is_trusted_publisher(file_path: str) -> bool:
+    """True si el archivo está firmado por un publisher de la whitelist.
+    Usar para descartar FPs (Filtro #2). Falla silenciosamente — nunca rompe."""
+    pub = _get_authenticode_publisher(file_path)
+    if not pub:
+        return False
+    return any(trusted in pub for trusted in _TRUSTED_PUBLISHERS)
 
 # Rutas de software legítimo — si el root las contiene, ignorar la carpeta
 _SAFE_ROOT_FRAGMENTS = {
@@ -8423,7 +8603,7 @@ class ArgusApp:
 
                     name_lower = pf_file.lower()
                     is_legit = any(l in name_lower for l in legit_names)
-                    is_hack = any(h in name_lower for h in hack_names)
+                    is_hack = smart_hack_match(name_lower, _smart_hack_regex_cached(tuple(hack_names)))
 
                     if is_hack and not is_legit:
                         suspicious_executed.append({
@@ -8526,7 +8706,8 @@ class ArgusApp:
                                 base_l  = base.lower()
                                 ext     = os.path.splitext(base_l)[1]
                                 is_exec = ext in INTERESTING_EXTS
-                                is_hack = any(h in base_l or h in orig_path.lower() for h in hack_terms)
+                                is_hack = (smart_hack_match(base_l, _smart_hack_regex_cached(tuple(hack_terms)))
+                                           or smart_hack_match(orig_path.lower(), _smart_hack_regex_cached(tuple(hack_terms))))
 
                                 if not (is_exec or is_hack):
                                     continue
@@ -8535,6 +8716,15 @@ class ArgusApp:
                                 r_name  = fname.replace('$I', '$R', 1)
                                 r_path  = os.path.join(sid_path, r_name)
                                 still_in_bin = os.path.exists(r_path)
+
+                                # Filtro #2 lite: si el binario sigue presente
+                                # y está firmado por un publisher confiable
+                                # (Microsoft, NVIDIA, Discord, Mojang, etc.),
+                                # descartar la alerta. Evita FPs por nombres
+                                # desafortunados de software legítimo borrado.
+                                if still_in_bin and ext in {'.exe', '.dll', '.msi'}:
+                                    if is_trusted_publisher(r_path):
+                                        continue
 
                                 deleted_dt = datetime.fromtimestamp(unix_ts)
                                 now_dt     = datetime.now()
@@ -8846,6 +9036,20 @@ class ArgusApp:
         seen_keys = set()                # (action, path_lower)
         activity_entries = []            # acumulador local
 
+        # Filtro #30: paths/nombres del propio Argus que NO deben aparecer
+        # como actividad de archivos en el reporte (autorreferencia ruidosa).
+        _SELF_TOKENS = (
+            'asperssprojects', 'aspersprojectsss',  # carpeta de logs en %appdata%
+            'argusscanner', 'argusscanner.exe',     # binario y derivados
+            'minecraftsstool', 'minecraftsstool.exe',
+            'argus_screenshot', 'argus_report',
+            '\\argus\\', '/argus/',                 # carpetas dev locales
+            'aspers\\dist\\', 'aspers/dist/',
+        )
+
+        def _is_argus_self(p_lower: str) -> bool:
+            return any(t in p_lower for t in _SELF_TOKENS)
+
         def _add(action: str, path: str, ts: float, source: str,
                  size: int = 0, extra_data: dict = None) -> bool:
             if not path or not action or not ts:
@@ -8856,7 +9060,10 @@ class ArgusApp:
                 path_norm = str(path)[:300]
             except Exception:
                 return False
-            key = (action, path_norm.lower())
+            path_lower = path_norm.lower()
+            if _is_argus_self(path_lower):
+                return False
+            key = (action, path_lower)
             if key in seen_keys:
                 return False
             seen_keys.add(key)

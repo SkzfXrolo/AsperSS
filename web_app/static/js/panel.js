@@ -1548,7 +1548,28 @@ async function loadScans() {
             }).join('');
         } else {
             if (tbody) tbody._loaded = false;
-            tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No hay escaneos</td></tr>';
+            // Empty state ilustrado (Visual #25)
+            const hasFilters = !!(search || verdict || dateFrom || dateTo || country || risk || os || staff);
+            const title = hasFilters ? 'No hay escaneos para esos filtros' : 'Aún no hay escaneos registrados';
+            const desc  = hasFilters
+                ? 'Probá ajustar los filtros o limpiarlos para ver todos los escaneos.'
+                : 'Cuando un cliente corra el scanner con un token de tu empresa, vas a verlo acá automáticamente.';
+            const actionLabel = hasFilters ? 'Limpiar filtros' : null;
+            tbody.innerHTML = `
+                <tr><td colspan="5" style="padding:0;">
+                    <div class="argus-empty">
+                        <div class="argus-empty__art">
+                            <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">
+                                <path d="M8 22h48l-4-12H12L8 22z"/>
+                                <path d="M8 22v28a4 4 0 0 0 4 4h40a4 4 0 0 0 4-4V22"/>
+                                <path d="M22 32h20"/>
+                            </svg>
+                        </div>
+                        <div class="argus-empty__title">${title}</div>
+                        <div class="argus-empty__desc">${desc}</div>
+                        ${actionLabel ? `<button class="argus-empty__action" onclick="clearFilters()">${actionLabel}</button>` : ''}
+                    </div>
+                </td></tr>`;
         }
     } catch (error) {
         console.error('Error cargando escaneos:', error);
@@ -2929,7 +2950,19 @@ function _drawFileActivityTable(items) {
     const tbody = document.getElementById('file-activity-body');
     if (!tbody) return;
     if (items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="padding:30px;text-align:center;color:var(--text-d);">Sin actividad de archivos registrada desde el último arranque del sistema.</td></tr>';
+        tbody.innerHTML = `
+            <tr><td colspan="3" style="padding:0;">
+                <div class="argus-empty">
+                    <div class="argus-empty__art">
+                        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">
+                            <circle cx="32" cy="32" r="24"/>
+                            <path d="M32 18v14l10 6"/>
+                        </svg>
+                    </div>
+                    <div class="argus-empty__title">Sin actividad de archivos</div>
+                    <div class="argus-empty__desc">No se registró actividad desde el último arranque del sistema. Si el scan se hizo justo después de reiniciar, esto es esperado.</div>
+                </div>
+            </td></tr>`;
         return;
     }
     const ACTION_CFG = {
