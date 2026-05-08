@@ -1,0 +1,6 @@
+"""Permite correr el scanner como `python3 -m argus_linux`."""
+from .scanner import main
+import sys
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -228,6 +228,89 @@
             position: relative;
             z-index: 1;
         }
+        /* Plataforma switch (Windows / Linux) — Plataforma #13 */
+        .platform-switch {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+            padding: 4px;
+            background: rgba(0,0,0,0.40);
+            border: 1px solid rgba(184,115,51,0.22);
+            border-radius: 12px;
+            position: relative;
+            z-index: 2;
+        }
+        .plat-tab {
+            flex: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: transparent;
+            color: rgba(255,255,255,0.55);
+            border: none;
+            border-radius: 9px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            transition: background 180ms ease, color 180ms ease, transform 180ms ease;
+        }
+        .plat-tab:hover { color: rgba(255,255,255,0.85); }
+        .plat-tab.active {
+            background: linear-gradient(135deg, rgba(212,145,90,0.85), rgba(184,115,51,0.78));
+            color: #fff;
+            box-shadow: 0 4px 14px rgba(184,115,51,0.35);
+        }
+        .plat-tab .plat-badge {
+            display: inline-block;
+            margin-left: 4px;
+            padding: 2px 6px;
+            background: rgba(245,158,11,0.20);
+            color: #fbbf24;
+            border-radius: 999px;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.6px;
+        }
+        .plat-tab.active .plat-badge {
+            background: rgba(0,0,0,0.30);
+            color: #ffe082;
+        }
+        .plat-pane { animation: platFadeIn 220ms ease both; }
+        .plat-pane[hidden] { display: none; }
+        @keyframes platFadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        /* Inline code inside steps for the Linux pane */
+        .inline-code {
+            display: inline-block;
+            padding: 2px 7px;
+            background: rgba(0,0,0,0.55);
+            border: 1px solid rgba(184,115,51,0.30);
+            color: #f1d6b8;
+            border-radius: 5px;
+            font-family: 'JetBrains Mono','Fira Code',Consolas,monospace;
+            font-size: 12px;
+        }
+        .inline-code-block {
+            display: block;
+            margin-top: 8px;
+            padding: 10px 12px;
+            background: rgba(0,0,0,0.55);
+            border: 1px solid rgba(184,115,51,0.30);
+            color: #f1d6b8;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono','Fira Code',Consolas,monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            overflow-x: auto;
+            white-space: pre;
+        }
         .version-tag {
             display: inline-flex;
             align-items: center;
@@ -623,64 +706,166 @@
 
         <div class="release-card reveal">
 
-            <div class="version-row">
-                <div class="version-tag">
-                    <span>VERSION</span>
-                    <span class="v-number">v{{ argus_version }}</span>
+            <!-- Plataforma switch: Windows / Linux (BETA) — Plataforma #13 -->
+            <div class="platform-switch" role="tablist" aria-label="Selecciona tu plataforma">
+                <button type="button"
+                        class="plat-tab active"
+                        id="plat-tab-win"
+                        role="tab"
+                        aria-selected="true"
+                        aria-controls="plat-pane-win"
+                        onclick="switchPlatform('win')">
+                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                        <path fill="currentColor" d="M3 5l8-1v8H3V5zm9-1l9-1.4V12h-9V4zM3 13h8v7l-8-1.1V13zm9 0h9v9.4L12 21v-8z"/>
+                    </svg>
+                    Windows
+                </button>
+                <button type="button"
+                        class="plat-tab"
+                        id="plat-tab-lin"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="plat-pane-lin"
+                        onclick="switchPlatform('lin')">
+                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                        <path fill="currentColor" d="M12.5 2c-1.6 0-3 1.4-3 3v3.4c-.9.6-1.6 1.4-2.1 2.4-.7 1.4-1.2 3-1.5 4.4-.2.7-.6 1.4-1.1 1.9-.4.5-.8 1.1-.8 1.9 0 .8.4 1.5 1.1 1.9.7.4 1.5.5 2.4.5 1 0 2-.2 3-.6.5-.2 1-.5 1.6-.5h.6c.6 0 1.1.3 1.6.5 1 .4 2 .6 3 .6.9 0 1.7-.1 2.4-.5.7-.4 1.1-1.1 1.1-1.9 0-.8-.4-1.4-.8-1.9-.5-.5-.9-1.2-1.1-1.9-.3-1.4-.8-3-1.5-4.4-.5-1-1.2-1.8-2.1-2.4V5c0-1.6-1.4-3-3-3h-1zM11 5.5c.3 0 .5.2.5.5s-.2.5-.5.5-.5-.2-.5-.5.2-.5.5-.5zm3 0c.3 0 .5.2.5.5s-.2.5-.5.5-.5-.2-.5-.5.2-.5.5-.5z"/>
+                    </svg>
+                    Linux
+                    <span class="plat-badge">BETA</span>
+                </button>
+            </div>
+
+            <!-- ───────────── Pane Windows ───────────── -->
+            <div id="plat-pane-win" class="plat-pane active" role="tabpanel" aria-labelledby="plat-tab-win">
+                <div class="version-row">
+                    <div class="version-tag">
+                        <span>VERSION</span>
+                        <span class="v-number">v{{ argus_version }}</span>
+                    </div>
+                    <div class="build-meta">
+                        <span><span class="label">PLATFORM</span> WIN 10/11 x64</span>
+                        {% if exe_size_mb %}
+                        <span><span class="label">SIZE</span> {{ exe_size_mb }} MB</span>
+                        {% endif %}
+                        <span><span class="label">SIGNED</span> SHA-256</span>
+                    </div>
                 </div>
-                <div class="build-meta">
-                    <span><span class="label">PLATFORM</span> WIN 10/11 x64</span>
+
+                <a href="{{ exe_url }}" class="download-btn" id="dl-btn">
+                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                        <path d="M11 3v11M11 14l-4-4M11 14l4-4M3 19h16" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>Descargar ArgusScanner.exe</span>
+                </a>
+
+                <div class="file-info">
+                    <span>ArgusScanner.exe</span>
+                    <span class="pin"></span>
+                    <span>Windows 10 / 11</span>
+                    <span class="pin"></span>
+                    <span>64-bit</span>
                     {% if exe_size_mb %}
-                    <span><span class="label">SIZE</span> {{ exe_size_mb }} MB</span>
+                    <span class="pin"></span>
+                    <span>{{ exe_size_mb }} MB</span>
                     {% endif %}
-                    <span><span class="label">SIGNED</span> SHA-256</span>
                 </div>
-            </div>
 
-            <a href="{{ exe_url }}" class="download-btn" id="dl-btn">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                    <path d="M11 3v11M11 14l-4-4M11 14l4-4M3 19h16" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <span>Descargar ArgusScanner.exe</span>
-            </a>
-
-            <div class="file-info">
-                <span>ArgusScanner.exe</span>
-                <span class="pin"></span>
-                <span>Windows 10 / 11</span>
-                <span class="pin"></span>
-                <span>64-bit</span>
-                {% if exe_size_mb %}
-                <span class="pin"></span>
-                <span>{{ exe_size_mb }} MB</span>
+                {% if exe_sha256 %}
+                <div class="hash-row">
+                    <span class="label">SHA-256</span>
+                    <span class="value" id="sha-value">{{ exe_sha256 }}</span>
+                    <button type="button" onclick="copyHash()" id="copy-btn">COPIAR</button>
+                </div>
                 {% endif %}
+
+                <div class="steps-title">CÓMO USARLO</div>
+                <div class="steps">
+                    <div class="step">
+                        <div class="step-num">1</div>
+                        <div>Descarga y ejecuta <strong>ArgusScanner.exe</strong> como administrador.</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-num">2</div>
+                        <div>Ingresa el <strong>código de 6 caracteres</strong> que tu staff te proporcionó.</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-num">3</div>
+                        <div>Haz clic en <strong>Autenticar</strong> y deja al scanner trabajar; el análisis tarda menos de 60 segundos.</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-num">4</div>
+                        <div>El staff revisará el veredicto en el panel. Mantén el programa abierto hasta que te indiquen.</div>
+                    </div>
+                </div>
             </div>
 
-            {% if exe_sha256 %}
-            <div class="hash-row">
-                <span class="label">SHA-256</span>
-                <span class="value" id="sha-value">{{ exe_sha256 }}</span>
-                <button type="button" onclick="copyHash()" id="copy-btn">COPIAR</button>
-            </div>
-            {% endif %}
+            <!-- ───────────── Pane Linux (BETA) ───────────── -->
+            <div id="plat-pane-lin" class="plat-pane" role="tabpanel" aria-labelledby="plat-tab-lin" hidden>
+                <div class="version-row">
+                    <div class="version-tag">
+                        <span>VERSION</span>
+                        <span class="v-number">v{{ argus_version }}-linux1</span>
+                    </div>
+                    <div class="build-meta">
+                        <span><span class="label">PLATFORM</span> ARCH · UBUNTU · FEDORA · DEBIAN</span>
+                        <span><span class="label">FORMATO</span> tar.gz (Python 3.9+)</span>
+                        <span><span class="label">DEPS</span> stdlib only</span>
+                    </div>
+                </div>
 
-            <div class="steps-title">CÓMO USARLO</div>
-            <div class="steps">
-                <div class="step">
-                    <div class="step-num">1</div>
-                    <div>Descarga y ejecuta <strong>ArgusScanner.exe</strong> como administrador.</div>
+                <a href="/descargar/linux" class="download-btn" id="dl-btn-lin">
+                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                        <path d="M11 3v11M11 14l-4-4M11 14l4-4M3 19h16" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>Descargar argus-linux.tar.gz</span>
+                </a>
+
+                <div class="file-info">
+                    <span>argus-linux.tar.gz</span>
+                    <span class="pin"></span>
+                    <span>X11 / Wayland</span>
+                    <span class="pin"></span>
+                    <span>x86_64 / aarch64</span>
+                    <span class="pin"></span>
+                    <span>sin pip</span>
                 </div>
-                <div class="step">
-                    <div class="step-num">2</div>
-                    <div>Ingresa el <strong>código de 6 caracteres</strong> que tu staff te proporcionó.</div>
+
+                <div class="hash-row" style="background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.30);">
+                    <span class="label" style="color:#fbbf24;">BETA</span>
+                    <span class="value" style="color:#fcd34d;font-family:inherit;font-size:12px;">
+                        Versión inicial — paridad parcial con Windows. Tu feedback ayuda a mejorarla.
+                    </span>
                 </div>
-                <div class="step">
-                    <div class="step-num">3</div>
-                    <div>Haz clic en <strong>Autenticar</strong> y deja al scanner trabajar; el análisis tarda menos de 60 segundos.</div>
-                </div>
-                <div class="step">
-                    <div class="step-num">4</div>
-                    <div>El staff revisará el veredicto en el panel. Mantén el programa abierto hasta que te indiquen.</div>
+
+                <div class="steps-title">CÓMO USARLO EN LINUX</div>
+                <div class="steps">
+                    <div class="step">
+                        <div class="step-num">1</div>
+                        <div>Descarga el <code class="inline-code">argus-linux.tar.gz</code> y extraelo:
+                            <code class="inline-code-block">tar -xzf argus-linux.tar.gz &amp;&amp; cd argus_linux</code>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-num">2</div>
+                        <div>Pídele al staff el <strong>código de 6 caracteres</strong>.</div>
+                    </div>
+                    <div class="step">
+                        <div class="step-num">3</div>
+                        <div>Lanzá el scanner como <strong>usuario normal</strong> (NO sudo):
+                            <code class="inline-code-block">chmod +x run-argus.sh &amp;&amp; ./run-argus.sh TU_TOKEN</code>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-num">4</div>
+                        <div>Para captura de pantalla, instalá UNA tool según tu setup:
+                            <code class="inline-code-block">grim (Wayland wlroots) · gnome-screenshot · spectacle (KDE) · scrot (X11) · imagemagick</code>
+                            Si no tenés ninguna, podés saltarla con <code class="inline-code">--no-screenshot</code>.
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-num">5</div>
+                        <div>Ver paridad técnica honesta vs Windows en el README incluido en el paquete.</div>
+                    </div>
                 </div>
             </div>
 
@@ -724,7 +909,41 @@
             reveals.forEach((el, i) => {
                 setTimeout(() => el.classList.add('visible'), 80 + i * 90);
             });
+
+            // Plataforma #13 — auto-detectar Linux y preseleccionar tab
+            try {
+                const ua = (navigator.userAgent || '').toLowerCase();
+                const isLinux = ua.includes('linux') && !ua.includes('android');
+                const override = new URLSearchParams(location.search).get('plat');
+                if (override === 'lin' || (isLinux && override !== 'win')) {
+                    switchPlatform('lin');
+                }
+            } catch (_e) { /* ignore */ }
         });
+
+        // Plataforma #13 — alterna entre tabs Windows/Linux
+        function switchPlatform(target) {
+            const isLin = target === 'lin';
+            const tabWin = document.getElementById('plat-tab-win');
+            const tabLin = document.getElementById('plat-tab-lin');
+            const paneWin = document.getElementById('plat-pane-win');
+            const paneLin = document.getElementById('plat-pane-lin');
+            if (!tabWin || !tabLin || !paneWin || !paneLin) return;
+            tabWin.classList.toggle('active', !isLin);
+            tabLin.classList.toggle('active',  isLin);
+            tabWin.setAttribute('aria-selected', !isLin);
+            tabLin.setAttribute('aria-selected',  isLin);
+            paneWin.hidden = isLin;
+            paneLin.hidden = !isLin;
+            paneWin.classList.toggle('active', !isLin);
+            paneLin.classList.toggle('active',  isLin);
+            // URL sticky para que el link sea compartible
+            try {
+                const url = new URL(location.href);
+                url.searchParams.set('plat', isLin ? 'lin' : 'win');
+                history.replaceState({}, '', url);
+            } catch (_e) { /* ignore */ }
+        }
 
         // Copiar SHA-256
         function copyHash() {

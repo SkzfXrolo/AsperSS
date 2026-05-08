@@ -50,7 +50,7 @@ def _make_session_permanent():
 CORS(app)
 
 # Inicializar base de datos de autenticación al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.45'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
+_ARGUS_VERSION = '1.6.46'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
 # URL de invitacion permanente al Discord oficial. Se inyecta en todos los
 # templates como `discord_invite` via @app.context_processor (ver mas abajo).
@@ -2752,7 +2752,7 @@ def debug_last_scan():
 
 
 # Current released scanner version — update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.6.45"
+CURRENT_SCANNER_VERSION = "1.6.46"
 
 @app.route('/sw.js')
 def service_worker():
@@ -5331,6 +5331,57 @@ def descargar_exe():
         if os.path.exists(path):
             return send_file(path, as_attachment=True, download_name='ArgusScanner.exe')
     return jsonify({'error': 'Ejecutable no disponible aún. Contacta a un administrador.'}), 404
+
+
+@app.route('/descargar/linux')
+def descargar_linux():
+    """Plataforma Linux #13 — sirve el paquete `argus_linux/` como tar.gz.
+
+    Empaqueta on-the-fly el directorio source/argus_linux/ con scanner.py,
+    run-argus.sh, README, etc. El tester solo tiene que extraer y correr:
+        tar -xzf argus-linux.tar.gz
+        chmod +x argus_linux/run-argus.sh
+        ./argus_linux/run-argus.sh TOKEN
+    """
+    import io
+    import tarfile
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    src_dir = os.path.join(project_root, 'source', 'argus_linux')
+    if not os.path.isdir(src_dir):
+        return jsonify({'error': 'Paquete Linux no disponible aún en el servidor.'}), 404
+
+    # Construir tar.gz en memoria — el directorio es pequeño (<50KB), no
+    # vale la pena cachear en disco. Si crece a >1MB conviene refactor.
+    buf = io.BytesIO()
+    excluded_names = {'__pycache__', '.pytest_cache', '.mypy_cache'}
+    excluded_suffixes = ('.pyc', '.pyo')
+    try:
+        with tarfile.open(fileobj=buf, mode='w:gz', compresslevel=6) as tar:
+            for dirpath, dirnames, filenames in os.walk(src_dir):
+                dirnames[:] = [d for d in dirnames if d not in excluded_names]
+                for fn in filenames:
+                    if fn.endswith(excluded_suffixes):
+                        continue
+                    full = os.path.join(dirpath, fn)
+                    arc = os.path.join('argus_linux',
+                                        os.path.relpath(full, src_dir)).replace(os.sep, '/')
+                    # Marcar el .sh como ejecutable dentro del tar
+                    info = tar.gettarinfo(full, arcname=arc)
+                    if fn.endswith('.sh') or fn == 'scanner.py':
+                        info.mode = 0o755
+                    with open(full, 'rb') as f:
+                        tar.addfile(info, f)
+    except Exception as e:
+        return jsonify({'error': f'Error empaquetando: {e}'}), 500
+
+    buf.seek(0)
+    return send_file(
+        buf,
+        mimetype='application/gzip',
+        as_attachment=True,
+        download_name='argus-linux.tar.gz',
+    )
 
 
 @app.route('/api/scans/<int:scan_id>/report-html', methods=['GET'])

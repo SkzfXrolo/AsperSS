@@ -1,0 +1,20 @@
+# ArgusScanner Linux — dependencies
+#
+# El scanner está intencionalmente diseñado para correr SIN dependencias
+# externas en la mayoría de distros: usa stdlib (urllib, sqlite3, hashlib,
+# subprocess, os, json) y comandos del sistema (journalctl, wmctrl, grim,
+# scrot, ipconfig, lsof, ip, etc).
+#
+# Si en una distro mínima falta algo, instalá el system package
+# correspondiente — NO pip install — para tener integración nativa:
+#
+#   - python3                  (>= 3.9)        → todas las distros
+#   - sqlite3 module            (suele venir)  → debian: python3-pysqlite2 (opcional)
+#   - grim                     (Wayland wlroots, Hyprland/Sway)
+#   - scrot OR imagemagick     (X11 fallback)
+#   - gnome-screenshot         (GNOME Wayland)
+#   - kde-spectacle            (KDE)
+#   - wmctrl                   (X11 listado de ventanas)
+#   - lsof                     (handles abiertos)
+#
+# Si tu setup ya tiene esas tools, NO necesitás instalar nada con pip.

@@ -902,77 +902,104 @@ fuentes de evidencia. Esta sección agrupa el trabajo necesario para una
 variante "ArgusScanner Linux" (jugadores de Minecraft Java en escritorio
 Linux: Arch, Ubuntu, Fedora, etc.).
 
-[ ]  1. Refactor del proyecto a estructura por plataforma:
-        source/scanner_core/        (lógica común: hashes, hack-names, upload)
-        source/scanner_windows/     (winreg, prefetch, recycle, usn, amcache)
-        source/scanner_linux/       (proc, journal, trash, dotfiles, lsof)
-        Inyectar el backend correcto según sys.platform en runtime.
+[X] DONE  1. Refactor del proyecto a estructura por plataforma:  → v1.6.46
+        Pack 13: paquete separado `source/argus_linux/` que NO toca al .exe
+        Windows. Estructura: __init__.py, __main__.py, scanner.py (~770 líneas
+        monolíticas), run-argus.sh wrapper, requirements.txt (notas), README.md.
+        Compatible con `python3 -m argus_linux --token XXX` o ./run-argus.sh XXX.
+        Sin dependencias pip. Comparte el mismo contrato API con el backend
+        (POST /api/scans + POST /api/scans/<id>/results) que el .exe Windows.
 
-[ ]  2. Aislar TODOS los `import winreg` y `import ctypes.wintypes` detrás de
-        un wrapper `platform_api` con stubs no-op para Linux/Mac.
+[X] DONE  2. Aislar TODOS los `import winreg` y `import ctypes.wintypes`...  → v1.6.46
+        Pack 13: el paquete argus_linux usa SOLO stdlib (urllib, sqlite3,
+        hashlib, subprocess, os, json, re, struct, tempfile). Cero imports
+        Windows-specific. La separación es por paquete, no por wrapper.
 
-[ ]  3. Equivalente Linux de la papelera: parsear
-        `~/.local/share/Trash/info/*.trashinfo` (estándar XDG) + cruzar con
-        `~/.local/share/Trash/files/`. Reemplaza el parser de $RECYCLE.BIN.
+[X] DONE  3. Equivalente Linux de la papelera: parsear .trashinfo...  → v1.6.46
+        Pack 13: scan_xdg_trash() parsea ~/.local/share/Trash/info/*.trashinfo
+        + cruza con files/. Además recorre /proc/mounts y verifica
+        `.Trash-$UID` en cada partición montada (Trash en NAS, drives externos).
 
-[ ]  4. Equivalente Linux de Prefetch / "ejecutados":
-          - systemd-journald: `journalctl --user _COMM=java -o json`
-          - bash/zsh history (~/.bash_history, ~/.zsh_history) con timestamps
-          - shell-snapshots de fish (~/.local/share/fish/fish_history)
-          - timestamps de acceso (atime) de binarios en ~/.local/bin, ~/.cache.
+[X] DONE  4. Equivalente Linux de Prefetch / "ejecutados":  → v1.6.46
+        Pack 13: scan_shell_history() lee ~/.bash_history, ~/.zsh_history y
+        ~/.local/share/fish/fish_history → matchea hack-terms con boundaries.
+        scan_journalctl_java() corre `journalctl --user --since "72 hours ago"`
+        y filtra líneas con "java"/"minecraft" + smart_hack_match.
 
-[ ]  5. Equivalente Linux de USN Journal: usar `auditd` si está habilitado
-        + `inotifywait` durante el scan (snapshot 30s de creaciones/borrados
-        en HOME). Documentar que sin auditd la cobertura histórica es menor.
+[ ]  5. Equivalente Linux de USN Journal: auditd + inotifywait — DEFERRED.
+        Razón: requiere config root (auditd) o instalar inotify-tools, lo cual
+        rompe el principio "deps stdlib only" del v1. Documentado en README
+        como TODO honesto. Si el tester pide auditoría histórica completa,
+        habilitar auditd manualmente.
 
-[ ]  6. Detección de procesos sospechosos en Linux:
-          - psutil (ya cross-platform) + lectura directa de /proc/<pid>/cmdline
-          - /proc/<pid>/maps para listar bibliotecas cargadas en `java`
-          - `lsof -p <pid>` para handles abiertos
-          - Detectar LD_PRELOAD activo (vector clásico de inyección Linux).
+[X] DONE  6. Detección de procesos sospechosos en Linux:  → v1.6.46
+        Pack 13: scan_proc_processes() recorre /proc/<pid>/ y verifica:
+          - cmdline con smart_hack_match (boundaries reales)
+          - environ con LD_PRELOAD activo (vector clásico de inyección Linux)
+          - Si es java: lee /proc/<pid>/maps y busca .jar/.so cargados con
+            hack-term (excluyendo mods legítimos: optifine/sodium/forge/etc).
+        Detecta PID sin necesidad de root para procesos del usuario actual.
 
-[ ]  7. Equivalente de "ventanas abiertas" (EnumWindows):
-          - X11: `wmctrl -lp` o `xdotool search --onlyvisible`
-          - Wayland: protocolos de window-management dependen del compositor;
-            soportar al menos GNOME (gdbus) y KDE (qdbus) para listar ventanas.
+[X] DONE  7. Equivalente de "ventanas abiertas" (EnumWindows):  → v1.6.46
+        Pack 13: scan_open_windows() detecta servidor gráfico:
+          - X11: `wmctrl -l` (si DISPLAY+wmctrl disponibles)
+          - Wayland GNOME: gdbus call → org.gnome.Shell.Eval con
+            global.get_window_actors().map(...title)
+          - Wayland KDE: TODO (qdbus no expone titles fácil sin scripts kwin)
+        Matchea títulos con hack-terms con anti-FP de devtools/mods legítimos.
 
-[ ]  8. Soporte de los launchers de Minecraft más usados en Linux:
-        oficial (~/.minecraft), Prism (~/.local/share/PrismLauncher),
-        MultiMC, ATLauncher, GDLauncher, Modrinth App, PolyMC, Flatpak
-        (~/.var/app/<id>/.minecraft).
+[X] DONE  8. Soporte de los launchers de Minecraft más usados en Linux:  → v1.6.46
+        Pack 13: scan_minecraft_launchers() recorre 9 paths:
+          ~/.minecraft, ~/.local/share/multimc, ~/.local/share/PrismLauncher,
+          ~/.local/share/atlauncher, ~/.local/share/gdlauncher_carbon,
+          Flatpak (~/.var/app/org.prismlauncher.PrismLauncher/...,
+          org.polymc.PolyMC, com.mojang.Minecraft), Snap (~/snap/minecraft-...).
+          Para cada .jar: SHA256 + smart_hack_match con anti-FP de mods conocidos
+          (optifine/sodium/lithium/fabric/forge/jei/rei/mod-menu/architectury/...).
 
-[ ]  9. Captura de screenshot multi-display en Linux:
-          - X11: `import` (ImageMagick) o pyautogui sobre Xlib
-          - Wayland: `grim` (wlroots: Hyprland, Sway) o portal XDG
-            (org.freedesktop.portal.Screenshot) para GNOME/KDE.
-        Detectar el servidor gráfico y elegir backend automáticamente.
+[X] DONE  9. Captura de screenshot multi-display en Linux:  → v1.6.46
+        Pack 13: take_screenshot() detecta WAYLAND_DISPLAY/DISPLAY y prueba
+        en orden: grim (wlroots: Hyprland/Sway) → gnome-screenshot → spectacle
+        (KDE) → scrot (X11) → import (ImageMagick) → maim. Si ninguna está
+        disponible, sigue corriendo y solo omite la captura (mensaje claro).
+        Output base64 PNG → mismo campo `screenshot` que el .exe Windows.
 
-[ ] 10. Empaquetado: AppImage como formato principal (un solo archivo,
-        ejecutable, no requiere instalación). Build con
-        `python-appimage` o `appimage-builder`.
+[ ] 10. Empaquetado AppImage — DEFERRED.
+        Razón: requiere build dedicado en CI Linux. De momento se distribuye
+        como tar.gz (16KB) servido por /descargar/linux que el tester extrae
+        y corre directo. Plan: Pack futuro con python-appimage o
+        appimage-builder cuando el tester confirme que el flujo funciona.
 
-[ ] 11. Empaquetado secundario: Flatpak en Flathub (org.argusprojects.Scanner)
-        — distribución oficial, auto-update, sandbox. Requiere manifest
-        + permisos explícitos (filesystem=home, network).
+[ ] 11. Empaquetado Flatpak — DEFERRED.
+        Misma razón que #10. Flathub publication requiere manifest + review
+        que va más allá del MVP del Pack 13.
 
-[ ] 12. Empaquetado tercero: paquetes nativos
-          - .deb para Debian/Ubuntu (con `dpkg-deb`)
-          - .rpm para Fedora/openSUSE (con `rpmbuild`)
-          - PKGBUILD en AUR para Arch/Manjaro.
-        Pipeline GitHub Actions que genere los 3 + AppImage en cada release.
+[ ] 12. Empaquetado .deb / .rpm / AUR — DEFERRED.
+        Misma razón que #10/#11. Pipeline GH Actions queda como work item.
 
-[ ] 13. Endpoint backend `/descargar/linux` y `/descargar/linux/<format>`:
-        servir la build correcta según el header `User-Agent` o selección
-        manual del usuario en /descargar (botón con tabs Windows/Linux).
+[X] DONE 13. Endpoint backend `/descargar/linux` + tabs UI:  → v1.6.46
+        Pack 13:
+          - Endpoint /descargar/linux empaqueta source/argus_linux/ on-the-fly
+            como tar.gz en memoria (~16KB), excluye __pycache__/.pyc, marca
+            scanner.py y *.sh como ejecutable (mode 0o755 dentro del tar).
+          - templates/descargar.html: nuevo platform-switch (tabs Windows/Linux)
+            con badge "BETA", panel completo con steps específicos de Linux
+            (tar -xzf / chmod +x / install grim/scrot / etc).
+          - JS auto-detecta Linux por User-Agent y preselecciona el tab.
+          - URL sticky `?plat=lin` para links compartibles.
 
-[ ] 14. Tests E2E en CI sobre 3 distros con Docker:
-        ubuntu:24.04, fedora:40, archlinux:latest. Smoke test:
-        instalar AppImage, correr `--scan-self`, verificar JSON output.
+[ ] 14. Tests E2E en CI sobre 3 distros con Docker — DEFERRED.
+        Ahora que el código está, próximo Pack puede agregar GH Actions con
+        ubuntu:24.04 / fedora:40 / archlinux:latest corriendo --scan-self.
 
-[ ] 15. Documentación para el cliente Pro y Discord:
-        - Tabla "qué se puede detectar en cada plataforma" (paridad honesta).
-        - Marcar las heurísticas Windows-only como "no aplica" en reportes
-          generados desde Linux para no asustar al staff con campos vacíos.
+[X] DONE 15. Documentación para el cliente Pro y Discord:  → v1.6.46
+        Pack 13: README.md del paquete tiene:
+          - Tabla items #1-#15 con estado real (✅/🟡)
+          - Quickstart de 3 pasos para el tester
+          - Tabla "Diferencias honestas vs Windows" listando lo que NO cubre
+            (Prefetch/Amcache/USN/Defender) y lo que SÍ (LD_PRELOAD,
+            /proc/maps, Trash multi-mount, Flatpak browsers)
+          - Modo --scan-self / --offline para smoke tests sin token válido.
 
 
 
@@ -983,12 +1010,16 @@ Linux: Arch, Ubuntu, Fedora, etc.).
   Scanner ............................. 60 ítems   (detección)      14/60
   Filtro .............................. 60 ítems   (anti-FP)        17/60
   Visual .............................. 60 ítems   (UI/UX)          28/60
-  Plataforma (Linux) .................. 15 ítems   (multiplataforma) 0/15
+  Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    59/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    68/195
                                                   (4 parciales: S#9, V#32, V#43, V#53)
                                                   + 3 BONUS Pack 11 (Stream-friendly,
                                                   CompanyTag color, Why-this-score modal)
+                                                  Pack 13 (Linux MVP): #1, #2, #3, #4,
+                                                  #6, #7, #8, #9, #13, #15 ✓ — DEFERRED
+                                                  honestos: #5 (auditd), #10/#11/#12
+                                                  (AppImage/Flatpak/deb), #14 (CI Docker)
 
 SESIÓN DEL 07-may-2026 (9 packs en una tarde):
   Pack 1 (v1.6.34): Filtro #2 lite, #30, #38 + Visual #5, #6, #25
