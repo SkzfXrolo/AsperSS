@@ -7758,3 +7758,209 @@ if (_origViewScan) {
         if (localStorage.getItem('argus_focus') === '1') document.body.classList.add('focus-mode');
     };
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════
+ * Pack 33 — V#47 Timeline visual del jugador
+ * Muestra todos los eventos del jugador (scans, verdict changes, notas)
+ * ordenados cronológicamente. Modal full-height con timeline vertical.
+ * ════════════════════════════════════════════════════════════════════════ */
+async function openPlayerTimelineModal(username, opts) {
+    if (!username) return;
+    opts = opts || {};
+    const sinceDays = opts.since_days || 180;
+    const limit     = opts.limit || 80;
+
+    // Modal mount
+    let root = document.getElementById('argus-timeline-modal');
+    if (!root) {
+        root = document.createElement('div');
+        root.id = 'argus-timeline-modal';
+        root.className = 'modal';
+        root.innerHTML = `
+            <div class="modal-content" style="max-width:780px; width:96vw; max-height:90vh; overflow-y:auto;">
+                <div class="modal-header" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                    <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                        <span aria-hidden="true">📍</span>
+                        <span id="argus-timeline-title">Timeline del jugador</span>
+                    </h3>
+                    <div style="display:flex; gap:6px;">
+                        <select id="argus-timeline-range"
+                                class="select-sm"
+                                style="padding:4px 8px; font-size:13px; background:rgba(0,0,0,.18); color:var(--text-h); border:1px solid var(--border, rgba(255,255,255,.1)); border-radius:6px;">
+                            <option value="30">30 días</option>
+                            <option value="90">90 días</option>
+                            <option value="180" selected>180 días</option>
+                            <option value="365">1 año</option>
+                            <option value="730">2 años</option>
+                        </select>
+                        <button class="modal-close" type="button"
+                                onclick="document.getElementById('argus-timeline-modal').classList.remove('show')"
+                                aria-label="Cerrar">×</button>
+                    </div>
+                </div>
+                <div class="modal-body" id="argus-timeline-body" style="padding:14px 18px;">
+                    <div style="text-align:center; padding:40px 0; color:var(--text-d);">
+                        Cargando timeline…
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(root);
+        // Click fuera cierra
+        root.addEventListener('click', (e) => {
+            if (e.target === root) root.classList.remove('show');
+        });
+        // Cambio de rango refrescar
+        root.querySelector('#argus-timeline-range').addEventListener('change', (e) => {
+            openPlayerTimelineModal(root.dataset.username, {
+                since_days: parseInt(e.target.value, 10) || 180,
+                limit
+            });
+        });
+    }
+    root.dataset.username = username;
+    root.querySelector('#argus-timeline-title').textContent = `Timeline · ${username}`;
+    root.querySelector('#argus-timeline-range').value = String(sinceDays);
+    root.classList.add('show');
+
+    const body = root.querySelector('#argus-timeline-body');
+    body.innerHTML = `
+        <div style="text-align:center; padding:40px 0; color:var(--text-d);">
+            Cargando timeline…
+        </div>`;
+
+    let data;
+    try {
+        const r = await fetch(
+            `/api/players/${encodeURIComponent(username)}/timeline?` +
+            `limit=${limit}&since_days=${sinceDays}`,
+            { credentials: 'include' }
+        );
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        data = await r.json();
+    } catch (e) {
+        body.innerHTML = `
+            <div style="text-align:center; padding:40px 16px; color:#ef4444;">
+                <div style="font-size:32px; margin-bottom:8px;">⚠️</div>
+                <div>Error cargando timeline: ${_qsEscapeSafe(e.message || e)}</div>
+            </div>`;
+        return;
+    }
+
+    const events = (data.events || []);
+    if (!events.length) {
+        body.innerHTML = `
+            <div style="text-align:center; padding:40px 16px; color:var(--text-d);">
+                <div style="font-size:32px; margin-bottom:8px;">📭</div>
+                <div>Sin actividad para <b>${_qsEscapeSafe(username)}</b> en los últimos ${sinceDays} días</div>
+            </div>`;
+        return;
+    }
+
+    // Stats header
+    const statsRow = `
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; padding:10px 12px;
+                    background:rgba(184,115,51,.08); border:1px solid var(--border, rgba(255,255,255,.08));
+                    border-radius:8px; font-size:13px;">
+            <div><b>${data.scans_total || 0}</b> scan${data.scans_total === 1 ? '' : 's'}</div>
+            ${data.hacks    ? `<div style="color:#ef4444;"><b>${data.hacks}</b> hack${data.hacks === 1 ? '' : 's'}</div>` : ''}
+            ${data.cleans   ? `<div style="color:#22c55e;"><b>${data.cleans}</b> clean${data.cleans === 1 ? '' : 's'}</div>` : ''}
+            ${data.pendings ? `<div style="color:#fbbf24;"><b>${data.pendings}</b> pending</div>` : ''}
+            ${data.avg_risk !== null && data.avg_risk !== undefined
+                ? `<div>risk avg: <b>${data.avg_risk}</b></div>` : ''}
+        </div>`;
+
+    // Timeline items
+    const items = events.map(ev => _renderTimelineEvent(ev)).join('');
+
+    body.innerHTML = `
+        ${statsRow}
+        <div class="argus-timeline" style="position:relative; padding-left:36px;">
+            <div style="position:absolute; left:13px; top:6px; bottom:6px; width:2px;
+                        background:linear-gradient(180deg, rgba(184,115,51,.5), rgba(184,115,51,.05));"></div>
+            ${items}
+        </div>`;
+}
+
+function _renderTimelineEvent(ev) {
+    const ts = ev.ts ? new Date(ev.ts) : null;
+    const tsStr = ts && !isNaN(ts.getTime())
+        ? ts.toLocaleString('es-AR', {
+            year:'numeric', month:'short', day:'numeric',
+            hour:'2-digit', minute:'2-digit'
+        })
+        : '—';
+
+    const escape = (typeof _qsEscapeSafe === 'function')
+        ? _qsEscapeSafe
+        : (s) => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    let icon = '📌';
+    let color = 'var(--accent, #B87333)';
+    let title = '';
+    let body  = '';
+    let cta   = '';
+
+    if (ev.kind === 'scan') {
+        const v = (ev.verdict || '').toLowerCase();
+        if (v === 'hack')   { icon = '🔴'; color = '#ef4444'; }
+        else if (v === 'clean')  { icon = '🟢'; color = '#22c55e'; }
+        else if (v === 'pending'){ icon = '🟡'; color = '#fbbf24'; }
+        else                     { icon = '🔵'; color = '#60a5fa'; }
+        title = `Scan #${ev.scan_id}`;
+        const parts = [];
+        if (ev.risk_score !== null && ev.risk_score !== undefined) {
+            parts.push(`risk <b>${ev.risk_score}</b>`);
+        }
+        if (ev.criticals) parts.push(`<span style="color:#ef4444;">${ev.criticals} crítico${ev.criticals === 1 ? '' : 's'}</span>`);
+        if (ev.issues)    parts.push(`${ev.issues} hallazgo${ev.issues === 1 ? '' : 's'}`);
+        if (ev.files)     parts.push(`${ev.files.toLocaleString('es-AR')} archivos`);
+        if (ev.duration_ms) parts.push(`${(ev.duration_ms/1000).toFixed(1)}s`);
+        if (ev.machine)   parts.push(`<span style="opacity:.7;">${escape(ev.machine)}</span>`);
+        if (ev.country)   parts.push(`${escape(ev.country)}`);
+        body = parts.join(' · ');
+        cta = `<a href="javascript:void(0)" onclick="if(window.openScanDetail) window.openScanDetail(${ev.scan_id})"
+                  style="font-size:12px; color:var(--accent, #B87333); text-decoration:none;">Abrir scan →</a>`;
+    } else if (ev.kind === 'verdict_change') {
+        icon = '⚖️';
+        color = '#8b5cf6';
+        title = `Veredicto cambiado a "${escape(ev.verdict || '?')}"`;
+        body = ev.reason
+            ? `<div style="font-style:italic; opacity:.85;">"${escape(ev.reason)}"</div>` +
+              (ev.changed_by ? `<div style="font-size:11px; opacity:.6;">por ${escape(ev.changed_by)}</div>` : '')
+            : (ev.changed_by ? `por ${escape(ev.changed_by)}` : '');
+        cta = `<a href="javascript:void(0)" onclick="if(window.openScanDetail) window.openScanDetail(${ev.scan_id})"
+                  style="font-size:12px; color:#8b5cf6; text-decoration:none;">Ver scan →</a>`;
+    } else if (ev.kind === 'note') {
+        icon = '📝';
+        color = '#06b6d4';
+        title = `Nota de ${escape(ev.author || 'staff')}`;
+        body = `<div style="opacity:.9;">${escape(ev.body || '')}</div>`;
+        cta = `<a href="javascript:void(0)" onclick="if(window.openScanDetail) window.openScanDetail(${ev.scan_id})"
+                  style="font-size:12px; color:#06b6d4; text-decoration:none;">Ver scan →</a>`;
+    } else {
+        title = ev.kind || 'evento';
+        body = '';
+    }
+
+    return `
+        <div class="argus-timeline-item" style="position:relative; margin-bottom:14px; padding:10px 12px;
+              background:rgba(255,255,255,.02); border:1px solid var(--border, rgba(255,255,255,.06));
+              border-radius:8px;">
+            <div style="position:absolute; left:-32px; top:8px; width:26px; height:26px;
+                        border-radius:50%; background:rgba(20,18,28,.95);
+                        border:2px solid ${color}; display:flex; align-items:center; justify-content:center;
+                        font-size:13px; box-shadow:0 0 10px ${color}88;">
+                ${icon}
+            </div>
+            <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start; margin-bottom:4px;">
+                <div style="font-weight:600; font-size:14px;">${escape(title)}</div>
+                <div style="font-size:11px; opacity:.6; white-space:nowrap;">${escape(tsStr)}</div>
+            </div>
+            <div style="font-size:13px; line-height:1.5; opacity:.92;">${body}</div>
+            ${cta ? `<div style="margin-top:6px; text-align:right;">${cta}</div>` : ''}
+        </div>`;
+}
+
+window.openPlayerTimelineModal = openPlayerTimelineModal;

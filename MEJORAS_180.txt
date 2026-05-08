@@ -1572,12 +1572,24 @@ NOTA DE LECTURA
         "Abrir scan anterior →" (cambia a viewScanDetails) y "Copiar
         enlace al anterior".
 
-[-] 47. Timeline visual de actividad del jugador en el server:
+[X] 47. Timeline visual de actividad del jugador en el server:
         last seen, last scan, last verdict, total scans (requiere
         tabla nueva en BD).
-        DEFERRED (Pack 31) — requiere recompilación del scanner .exe
-        Tkinter/Win32 desktop o scope grande no priorizado para
-        cierre de lista. Roadmap post-MVP.
+        DONE v1.6.49 (Pack 33) — endpoint nuevo
+        GET /api/players/<username>/timeline?limit=50&since_days=180
+        que agrega scans + verdict_history + scan_notes ordenados desc
+        por timestamp. Respeta aislamiento empresa (solo admin ve cross-
+        company). Devuelve stats agregadas: scans_total, hacks, cleans,
+        pendings, avg_risk. Frontend: openPlayerTimelineModal(username)
+        en panel.js renderiza modal full-height con timeline vertical
+        con linea conectora gradient bronce, items con icono+color por
+        tipo (scan rojo/verde/amarillo/azul, verdict_change violeta,
+        nota cyan), CTA "Abrir scan", selector de rango (30/90/180/365/
+        730 días). Botón "Timeline" agregado en scan detail al lado de
+        "Comparar". Comando 'timeline' en quicksearch (Cmd+K) que pide
+        username con prompt(). Cache busters: panel.js?v=66,
+        argus-ui.js?v=15. NO requiere tabla nueva en BD — usa scans +
+        verdict_history + scan_notes existentes.
 
 [X] 48. Mejor jerarquía tipográfica: H1 más grande y dramático,
         subtítulos con accent color bronce, body con line-height

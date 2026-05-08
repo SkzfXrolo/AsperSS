@@ -10433,6 +10433,202 @@ def get_related_scans(scan_id):
         return jsonify({'error': str(e)}), 500
 
 
+# ════════════════════════════════════════════════════════════════════════
+# Pack 33 — V#47 Timeline visual del jugador
+# ════════════════════════════════════════════════════════════════════════
+# Devuelve eventos cronológicos del jugador (scans + verdict changes +
+# notas + first-seen evidencia + overturns) ordenados desc. El frontend
+# los pinta como timeline vertical con icono+timestamp+resumen+CTA.
+#
+# Endpoint: GET /api/players/<username>/timeline?limit=50&since_days=180
+#
+# Aislamiento: respeta company_id (no-admin solo ve eventos de su empresa).
+@app.route('/api/players/<path:username>/timeline', methods=['GET'])
+@login_required
+def get_player_timeline(username):
+    if not username or len(username) < 1:
+        return jsonify({'error': 'username requerido'}), 400
+    username = username.strip()[:64]
+    try:
+        limit = max(5, min(200, int(request.args.get('limit', 50))))
+    except Exception:
+        limit = 50
+    try:
+        since_days = max(1, min(730, int(request.args.get('since_days', 180))))
+    except Exception:
+        since_days = 180
+
+    user_id    = session.get('user_id')
+    company_id = session.get('company_id')
+    is_global  = False
+    try:
+        is_global = is_admin(user_id)
+    except Exception:
+        is_global = False
+
+    events = []
+    try:
+        with get_api_db_cursor() as cur:
+            extra_where = ''
+            extra_params = []
+            if not is_global and company_id:
+                extra_where = f' AND s.company_id = {_PH}'
+                extra_params.append(company_id)
+
+            # 1) Scans del jugador (case-insensitive match)
+            try:
+                q_scans = (
+                    'SELECT s.id, s.started_at, s.created_at, '
+                    '       s.machine_name, s.risk_score, s.verdict, '
+                    '       s.country, s.issues_found, s.issues_critical, '
+                    '       s.total_files_scanned, s.scan_duration_ms '
+                    'FROM scans s '
+                    f"WHERE LOWER(s.minecraft_username) = {_PH}"
+                    f"{extra_where} "
+                    f"  AND COALESCE(s.created_at, s.started_at) >= "
+                    f"      CURRENT_TIMESTAMP - INTERVAL '{int(since_days)} days' "
+                    f'ORDER BY COALESCE(s.started_at, s.created_at) DESC '
+                    f'LIMIT {_PH}'
+                )
+                cur.execute(q_scans,
+                            [username.lower()] + extra_params + [limit])
+                rows = cur.fetchall() or []
+            except Exception:
+                # Fallback SQLite (no INTERVAL).
+                q_scans = (
+                    'SELECT s.id, s.started_at, s.created_at, '
+                    '       s.machine_name, s.risk_score, s.verdict, '
+                    '       s.country, s.issues_found, s.issues_critical, '
+                    '       s.total_files_scanned, s.scan_duration_ms '
+                    'FROM scans s '
+                    f"WHERE LOWER(s.minecraft_username) = {_PH}"
+                    f"{extra_where} "
+                    f"  AND COALESCE(s.created_at, s.started_at) >= "
+                    f"      datetime('now', '-{int(since_days)} days') "
+                    f'ORDER BY COALESCE(s.started_at, s.created_at) DESC '
+                    f'LIMIT {_PH}'
+                )
+                cur.execute(q_scans,
+                            [username.lower()] + extra_params + [limit])
+                rows = cur.fetchall() or []
+
+            for r in rows:
+                sid       = _row_get(r, 0, 'id')
+                started   = _row_get(r, 1, 'started_at')
+                created   = _row_get(r, 2, 'created_at')
+                machine   = _row_get(r, 3, 'machine_name')
+                rs        = _row_get(r, 4, 'risk_score')
+                verdict   = _row_get(r, 5, 'verdict')
+                country   = _row_get(r, 6, 'country')
+                issues    = _row_get(r, 7, 'issues_found')
+                criticals = _row_get(r, 8, 'issues_critical')
+                files     = _row_get(r, 9, 'total_files_scanned')
+                durms     = _row_get(r, 10, 'scan_duration_ms')
+                ts = started or created
+                events.append({
+                    'kind':       'scan',
+                    'ts':         str(ts) if ts else None,
+                    'scan_id':    sid,
+                    'verdict':    verdict,
+                    'risk_score': int(rs) if rs is not None else None,
+                    'machine':    machine,
+                    'country':    country,
+                    'issues':     int(issues) if issues is not None else None,
+                    'criticals':  int(criticals) if criticals is not None else None,
+                    'files':      int(files) if files is not None else None,
+                    'duration_ms': int(durms) if durms is not None else None,
+                })
+
+            # 2) Verdict history changes del jugador
+            try:
+                q_vh = (
+                    'SELECT vh.scan_id, vh.verdict, vh.reason, '
+                    '       vh.changed_by, vh.changed_at '
+                    'FROM verdict_history vh JOIN scans s ON vh.scan_id = s.id '
+                    f"WHERE LOWER(s.minecraft_username) = {_PH}"
+                    f"{extra_where} "
+                    f'ORDER BY vh.changed_at DESC LIMIT {_PH}'
+                )
+                cur.execute(q_vh,
+                            [username.lower()] + extra_params + [limit])
+                vh_rows = cur.fetchall() or []
+            except Exception:
+                vh_rows = []
+            for r in vh_rows:
+                sid     = _row_get(r, 0, 'scan_id')
+                verdict = _row_get(r, 1, 'verdict')
+                reason  = _row_get(r, 2, 'reason')
+                changed_by = _row_get(r, 3, 'changed_by')
+                changed_at = _row_get(r, 4, 'changed_at')
+                events.append({
+                    'kind':       'verdict_change',
+                    'ts':         str(changed_at) if changed_at else None,
+                    'scan_id':    sid,
+                    'verdict':    verdict,
+                    'reason':     reason,
+                    'changed_by': changed_by,
+                })
+
+            # 3) Notas de scan (si existe la tabla scan_notes)
+            try:
+                q_notes = (
+                    'SELECT sn.scan_id, sn.author, sn.body, sn.created_at '
+                    'FROM scan_notes sn JOIN scans s ON sn.scan_id = s.id '
+                    f"WHERE LOWER(s.minecraft_username) = {_PH}"
+                    f"{extra_where} "
+                    f'ORDER BY sn.created_at DESC LIMIT {_PH}'
+                )
+                cur.execute(q_notes,
+                            [username.lower()] + extra_params + [limit])
+                note_rows = cur.fetchall() or []
+            except Exception:
+                note_rows = []
+            for r in note_rows:
+                sid     = _row_get(r, 0, 'scan_id')
+                author  = _row_get(r, 1, 'author')
+                body    = _row_get(r, 2, 'body')
+                created = _row_get(r, 3, 'created_at')
+                events.append({
+                    'kind':    'note',
+                    'ts':      str(created) if created else None,
+                    'scan_id': sid,
+                    'author':  author,
+                    'body':    (body or '')[:280],  # cap para timeline
+                })
+
+        # Ordenar todo por timestamp desc, fechas inválidas al final
+        def _ts_key(ev):
+            ts = ev.get('ts') or ''
+            return ts
+        events.sort(key=_ts_key, reverse=True)
+        events = events[:limit]
+
+        # Stats agregadas para header
+        scan_evs = [e for e in events if e['kind'] == 'scan']
+        verdicts = [e.get('verdict') for e in scan_evs]
+        hacks    = sum(1 for v in verdicts if (v or '').lower() == 'hack')
+        cleans   = sum(1 for v in verdicts if (v or '').lower() == 'clean')
+        pendings = sum(1 for v in verdicts if (v or '').lower() == 'pending')
+        avg_rs   = None
+        rss = [e['risk_score'] for e in scan_evs if e.get('risk_score') is not None]
+        if rss:
+            avg_rs = round(sum(rss) / len(rss), 1)
+
+        return jsonify({
+            'username':    username,
+            'events':      events,
+            'count':       len(events),
+            'scans_total': len(scan_evs),
+            'hacks':       hacks,
+            'cleans':      cleans,
+            'pendings':    pendings,
+            'avg_risk':    avg_rs,
+            'since_days':  since_days,
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ── Visual #11 — Staff activity heatmap (GitHub-style) ──────────────────────
 # Devuelve la actividad del staff loggeado durante los últimos N días (default
 # 365). Cuenta dos cosas en paralelo:

@@ -531,6 +531,18 @@
             run:   () => setTournamentMode(!_isTournamentMode()),
         },
         {
+            id: 'player-timeline',
+            title: 'Timeline de un jugador',
+            hint:  'Buscá un MC username y abrí su timeline (V#47)',
+            keys:  ['timeline', 'jugador', 'player', 'historial', 'cronologia', 'cronología'],
+            run:   () => {
+                const username = window.prompt('Minecraft username del jugador:');
+                if (username && username.trim() && typeof window.openPlayerTimelineModal === 'function') {
+                    window.openPlayerTimelineModal(username.trim());
+                }
+            },
+        },
+        {
             id: 'sound-toggle',
             title: 'Sonido al recibir scan',
             hint:  'Habilitar / silenciar notificación de scan nuevo',

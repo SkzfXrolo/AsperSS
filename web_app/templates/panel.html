@@ -1429,6 +1429,17 @@
                                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h5M9 8h5"/><path d="M5 5L2 8l3 3M11 5l3 3-3 3"/></svg>
                                         Comparar
                                     </button>
+                                    <button onclick="(function(){
+                                        const u = (typeof _currentScanData !== 'undefined' && _currentScanData && _currentScanData.minecraft_username) || (document.getElementById('scan-detail-username') && document.getElementById('scan-detail-username').textContent.trim());
+                                        if (u && typeof window.openPlayerTimelineModal === 'function') {
+                                            window.openPlayerTimelineModal(u);
+                                        } else if (typeof window.showToast === 'function') {
+                                            window.showToast('No hay username disponible para timeline', 'warn');
+                                        }
+                                    })()" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(139,92,246,.45);background:rgba(139,92,246,.08);color:#a78bfa;cursor:pointer;display:inline-flex;align-items:center;gap:5px;" title="Ver historial completo del jugador (V#47)">
+                                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v3.7l2.2 1.3"/></svg>
+                                        Timeline
+                                    </button>
                                 </div>
                                 <div id="ban-message-container" style="display:none;margin-top:8px;font-size:11px;color:#f87171;padding:8px 12px;background:rgba(239,68,68,.07);border-radius:6px;border-left:2px solid #ef4444;white-space:pre-wrap;font-family:monospace;word-break:break-word;"></div>
                                 <div id="ai-inconsistencies-container" style="display:none;margin-top:8px;font-size:11px;color:#fbbf24;padding:6px 10px;background:rgba(245,158,11,.07);border-radius:6px;border-left:2px solid #f59e0b;"></div>
@@ -2412,8 +2423,8 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=14"></script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=65"></script>
+    <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=15"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=66"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────
