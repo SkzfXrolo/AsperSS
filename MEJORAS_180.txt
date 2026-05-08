@@ -70,8 +70,14 @@ NOTA DE LECTURA
 [ ] 13. Detección de procesos con PEB unlinked (ocultos a Task Manager) usando
         NtQuerySystemInformation con SystemProcessInformation.
 
-[ ] 14. Cross-check de procesos: WMI vs CreateToolhelp32Snapshot vs
+[X] 14. Cross-check de procesos: WMI vs CreateToolhelp32Snapshot vs
         NtQuerySystemInformation. Mismatch en alguno = posible rootkit.
+        DONE v1.6.45 — scan_process_crosscheck() compara psutil
+        (CreateToolhelp32) vs Get-CimInstance Win32_Process (WMI) vs
+        tasklist. Solo flagear si seen>=2 fuentes y NO en una específica
+        (tolerancia anti-FP por procesos system inicializando).
+        Excluye PIDs system (0/4/8, csrss, registry, etc). Reporta
+        agrupado por fuente fantasma como CRITICAL conf 0.72.
 
 [ ] 15. Enumerar SetWindowsHookEx hooks activos y verificar firma de las DLLs
         que los implementan. Hook sin firma sobre todos los procesos = autoclicker.
@@ -225,8 +231,16 @@ NOTA DE LECTURA
         0.50 si solo company unknown. Filtro #51 aplicado para no
         auto-detectarse.
 
-[ ] 52. WMI Event Subscriptions (root\subscription) — persistencia avanzada
+[X] 52. WMI Event Subscriptions (root\subscription) — persistencia avanzada
         usada por hack loaders modernos.
+        DONE v1.6.45 — scan_wmi_event_subscriptions() consulta
+        CommandLineEventConsumer + ActiveScriptEventConsumer en
+        root\subscription via Get-WmiObject. Whitelist suave (SCM,
+        MS Office, SCCM, Sophos, Defender). Heurísticas: suspicious_
+        path (AppData/Temp/Public), encoded_powershell (-enc/
+        FromBase64), script_engine_abuse (mshta/wscript/cscript),
+        hack_term. CRITICAL 0.85 si hits, SOSPECHOSO 0.55 si no
+        (todo subscription custom merece review humano).
 
 [ ] 53. COM hijacking detection: enumerar CLSIDs en HKCU que sobrescriben
         HKLM (técnica de persistencia/loader).
@@ -234,9 +248,17 @@ NOTA DE LECTURA
 [ ] 54. AppInit_DLLs, KnownDLLs, SafeBoot drivers, AlternateShell — vectores
         antiguos pero todavía explotados.
 
-[ ] 55. Browser history sweep (Edge, Chrome, Firefox, Brave, Opera) últimas
+[X] 55. Browser history sweep (Edge, Chrome, Firefox, Brave, Opera) últimas
         72h con keywords: "minecraft cheat", "killaura", nombres de hacks
         conocidos, tutoriales de bypass.
+        DONE v1.6.45 — scan_browser_history_cheats() lee la SQLite de
+        history de 7 browsers chromium (Chrome/Edge/Brave/Opera/Opera GX/
+        Vivaldi/Yandex) + Firefox places.sqlite por profile. Copia al
+        TEMP del scanner para evitar locks si el browser está abierto.
+        Busca contra ~25 dominios cheat conocidos + ~12 keywords
+        genéricos en URL y title (últimas 1000 visitas por DB).
+        Reporta agrupado por browser con 5 samples como CRITICAL
+        conf 0.85.
 
 [ ] 56. Discord cache local: indexar archivos .jar/.zip recibidos en últimas
         72h (CachedImages, Code Cache contiene metadata de attachments).
@@ -489,9 +511,15 @@ NOTA DE LECTURA
 [ ] 52. Detectar reinstalaciones legítimas: mismo binario, mismo hash, ruta
         canonical, intervalo razonable → no doble flag.
 
-[ ] 53. Detectar mod updaters (CurseForge launcher, Modrinth app) que
+[X] 53. Detectar mod updaters (CurseForge launcher, Modrinth app) que
         copian/borran .jar como parte de updates → no FP de "ráfaga de
         borrado masivo".
+        DONE v1.6.45 — is_mod_updater_path() detecta paths bajo
+        CurseForge/Overwolf/Modrinth/MultiMC/PrismLauncher/GDLauncher/
+        ATLauncher/Technic/FTBApp/packwiz + carpetas estándar de
+        .minecraft (mods/versions/resourcepacks/shaderpacks). Aplicado
+        en scan_deleted_recycle y scan_messaging_downloads: si un
+        path es de un launcher y NO es hack-name explícito → skip.
 
 [ ] 54. Confianza modulada por antigüedad y reputación del staff: staff con
         >100 veredictos correctos tiene más peso al marcar FP.
@@ -952,12 +980,12 @@ Linux: Arch, Ubuntu, Fedora, etc.).
   RESUMEN
 ═══════════════════════════════════════════════════════════════════════════════
 
-  Scanner ............................. 60 ítems   (detección)      11/60
-  Filtro .............................. 60 ítems   (anti-FP)        16/60
+  Scanner ............................. 60 ítems   (detección)      14/60
+  Filtro .............................. 60 ítems   (anti-FP)        17/60
   Visual .............................. 60 ítems   (UI/UX)          28/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 0/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    55/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    59/195
                                                   (4 parciales: S#9, V#32, V#43, V#53)
                                                   + 3 BONUS Pack 11 (Stream-friendly,
                                                   CompanyTag color, Why-this-score modal)
@@ -1035,6 +1063,25 @@ SESIÓN DEL 07-may-2026 (9 packs en una tarde):
                     → 2 detecciones nuevas + 3 filtros anti-FP críticos.
                       Recompila el .exe a 1.6.41 — los clientes con
                       versiones <1.6.41 verán "actualización disponible".
+  Pack 12 (v1.6.45): Scanner #14, #52, #55 + Filtro #53.
+                    NUEVOS: scan_browser_history_cheats (7 chromium
+                            browsers + Firefox profiles, ~25 dominios
+                            cheat + ~12 keywords),
+                            scan_process_crosscheck (psutil vs WMI vs
+                            tasklist, hidden processes detection con
+                            tolerancia anti-FP a procesos system),
+                            scan_wmi_event_subscriptions (Command-
+                            LineEventConsumer + ActiveScriptEvent-
+                            Consumer en root\subscription),
+                            is_mod_updater_path() helper (CurseForge/
+                            Modrinth/MultiMC/Prism/GDLauncher/AT/
+                            Technic/FTB/packwiz/.minecraft).
+                    → 3 detecciones avanzadas anti-rootkit/anti-
+                      persistencia + 1 filtro anti-FP crítico para
+                      mod updaters legítimos. Recompila el .exe a
+                      1.6.45 — clientes con <1.6.45 verán
+                      "actualización disponible".
+
   Pack 11 (v1.6.44): Visual #40, #54 + 3 BONUS sin tocar el .exe.
                     NUEVOS: argusUI.setStreamFriendly / isStreamFriendly /
                             companyTag / companyColor;

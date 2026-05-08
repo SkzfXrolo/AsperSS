@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.43"
+SCANNER_VERSION = "1.6.45"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -396,6 +396,48 @@ def is_argus_own_artifact(path_or_name: str) -> bool:
     if base in _ARGUS_OWN_NAMES:
         return True
     return any(('\\' + n + '\\') in s for n in _ARGUS_OWN_FOLDERS)
+
+
+# ── Filtro #53: Detectar mod updaters / launchers legítimos ──────────────────
+# Si vemos artefactos creados/modificados por CurseForge, Modrinth App,
+# Prism Launcher, GDLauncher, etc., el contexto es legítimo y descartamos
+# falsos positivos en sus paths (a menos que el nombre del archivo sea
+# explícitamente un hack-name).
+_MOD_UPDATER_PATH_FRAGMENTS = (
+    # CurseForge
+    r'\curseforge\\',
+    r'\overwolf\app\curseforge\\',
+    r'\curseforgeapp\\',
+    r'\curse\\',
+    # Modrinth App
+    r'\modrinth-app\\',
+    r'\modrinth\\',
+    r'\com.modrinth.theseus\\',
+    # Launchers third-party
+    r'\multimc\\',
+    r'\prismlauncher\\',
+    r'\gdlauncher\\',
+    r'\atlauncher\\',
+    r'\technic\\',
+    r'\ftbapp\\',
+    r'\technicminecraftlauncher\\',
+    # Mod sites donde se descargan packs legitimos
+    r'\packwiz\\',
+    r'\modpacks.ch\\',
+    # Native MC launcher subdirs típicos
+    r'\.minecraft\\mods\\',
+    r'\.minecraft\\versions\\',
+    r'\.minecraft\\resourcepacks\\',
+    r'\.minecraft\\shaderpacks\\',
+)
+def is_mod_updater_path(path: str) -> bool:
+    """True si el path está dentro de una instancia gestionada por un
+    mod-updater/launcher legítimo (CurseForge, Modrinth, MultiMC,
+    Prism, GDLauncher, ATLauncher, etc.). Filtro #53."""
+    if not path:
+        return False
+    p = str(path).lower().replace('/', '\\')
+    return any(frag in p for frag in _MOD_UPDATER_PATH_FRAGMENTS)
 
 
 # ── Smart Hack-Term Matcher (Filtro #38) ─────────────────────────────────────
@@ -5234,6 +5276,12 @@ class ArgusApp:
                 _run_safe(self.scan_dns_cache_recent)
                 self._set_scan_phase("📂 RecentDocs (registry)...")
                 _run_safe(self.scan_recent_docs_registry)
+                self._set_scan_phase("🌍 Historial de browsers (cheat keywords)...")
+                _run_safe(self.scan_browser_history_cheats)
+                self._set_scan_phase("🔬 Cross-check de procesos (psutil/WMI/tasklist)...")
+                _run_safe(self.scan_process_crosscheck)
+                self._set_scan_phase("🪤 WMI Event Subscriptions (persistencia avanzada)...")
+                _run_safe(self.scan_wmi_event_subscriptions)
                 self._set_scan_phase("🔥 Reglas custom de Firewall...")
                 _run_safe(self.scan_recent_firewall_rules)
                 self._set_scan_phase("💥 Crash dumps recientes (.dmp)...")
@@ -9073,6 +9121,13 @@ class ArgusApp:
                                 # no debe auto-detectarse.
                                 if is_argus_own_artifact(orig_path) or is_argus_own_artifact(base_l):
                                     continue
+                                # Filtro #53: mod updaters legítimos
+                                # (CurseForge/Modrinth/MultiMC/Prism/etc).
+                                # Si el path es de un launcher/updater
+                                # legítimo y NO es hack-name explícito,
+                                # bajamos severidad descartando.
+                                if not is_hack and is_mod_updater_path(orig_path):
+                                    continue
                                 # Filtro #41: tamaños fuera del rango típico
                                 # de hacks. Hacks .exe pesan 1-50 MB,
                                 # .jar 100 KB - 5 MB. Si está MUY chico
@@ -11780,6 +11835,8 @@ class ArgusApp:
                                 continue
                             if is_windows_update_path(full):
                                 continue
+                            if is_mod_updater_path(full):
+                                continue
                             if is_backup_suffix(base_l):
                                 continue
                             try:
@@ -11943,6 +12000,396 @@ class ArgusApp:
             print("⚠ Timeout leyendo eventos Defender (skip)")
         except Exception as e:
             print(f"Error en scan_defender_asr_events: {e}")
+
+
+    def scan_browser_history_cheats(self):
+        r"""Scanner #55 — Browser history sweep en busca de cheat keywords/dominios.
+        Lee la DB SQLite de history/cookies de Chrome/Edge/Brave/Opera/Firefox
+        y busca matches contra dominios/keywords cheat conocidos.
+
+        DBs típicas:
+          Chrome:   %LOCALAPPDATA%\Google\Chrome\User Data\Default\History
+          Edge:     %LOCALAPPDATA%\Microsoft\Edge\User Data\Default\History
+          Brave:    %LOCALAPPDATA%\BraveSoftware\Brave-Browser\User Data\Default\History
+          Opera:    %APPDATA%\Opera Software\Opera Stable\History
+          Firefox:  %APPDATA%\Mozilla\Firefox\Profiles\<rand>\places.sqlite
+
+        Si el browser está abierto la DB suele estar lockeada — copiamos al
+        TEMP del scanner y leemos desde ahí.
+        """
+        print("🔍 Escaneando historial de browsers en busca de cheat keywords...")
+        try:
+            import sqlite3
+            import shutil
+            import tempfile
+
+            cheat_keywords = (
+                # Mismos dominios de DNS cache + algunos keywords genéricos
+                'gamesense.pub', 'onetap.com', 'onetap.su', 'aimware.net',
+                'fatality.win', 'neverlose.cc', 'aim4ck.com', 'skeet.cc',
+                'osiris.cc', 'hyper.gg', 'ragebot.fun', 'popflash.gg',
+                'wurstclient.net', 'liquidbounce.net', 'sigma-jello.com',
+                'sigmaclient.net', 'rusherhack.org', 'meteorclient.com',
+                'impactclient.net', 'futureclient.net', 'novetus.org',
+                'inertia.club', 'flux.lol', 'trolly.gg',
+                # Keywords genéricos en URL/título
+                'minecraft hack download', 'minecraft cheat client',
+                'csgo cheat', 'cs2 cheat', 'valorant cheat', 'rust cheat',
+                'apex cheat', 'fortnite cheat',
+                'killaura', 'aimbot', 'wallhack', 'esp client',
+                'xray client', 'baritone', 'noslow',
+                'undetected cheat', 'private cheat',
+            )
+
+            user = os.environ.get('USERPROFILE') or os.path.expanduser('~')
+            local = os.environ.get('LOCALAPPDATA') or os.path.join(user, 'AppData', 'Local')
+            roaming = os.environ.get('APPDATA') or os.path.join(user, 'AppData', 'Roaming')
+
+            chromium_targets = [
+                ('Chrome',          os.path.join(local, 'Google', 'Chrome', 'User Data', 'Default', 'History')),
+                ('Edge',            os.path.join(local, 'Microsoft', 'Edge', 'User Data', 'Default', 'History')),
+                ('Brave',           os.path.join(local, 'BraveSoftware', 'Brave-Browser', 'User Data', 'Default', 'History')),
+                ('Opera',           os.path.join(roaming, 'Opera Software', 'Opera Stable', 'History')),
+                ('OperaGX',         os.path.join(roaming, 'Opera Software', 'Opera GX Stable', 'History')),
+                ('Vivaldi',         os.path.join(local, 'Vivaldi', 'User Data', 'Default', 'History')),
+                ('Yandex',          os.path.join(local, 'Yandex', 'YandexBrowser', 'User Data', 'Default', 'History')),
+            ]
+
+            firefox_profiles_root = os.path.join(roaming, 'Mozilla', 'Firefox', 'Profiles')
+
+            tmpdir = tempfile.mkdtemp(prefix='argus_hist_')
+            total_matches = 0
+            try:
+                for browser_name, hist_path in chromium_targets:
+                    if not os.path.exists(hist_path):
+                        continue
+                    try:
+                        copy_path = os.path.join(tmpdir, f'{browser_name}_history.db')
+                        shutil.copy2(hist_path, copy_path)
+                    except Exception:
+                        continue
+                    try:
+                        conn = sqlite3.connect(f'file:{copy_path}?mode=ro', uri=True, timeout=4)
+                        cur  = conn.cursor()
+                        # Limitamos a últimas 1000 visitas para no demorar
+                        cur.execute(
+                            "SELECT url, title, last_visit_time FROM urls "
+                            "ORDER BY last_visit_time DESC LIMIT 1000"
+                        )
+                        rows = cur.fetchall()
+                        conn.close()
+                    except Exception:
+                        continue
+                    matches = []
+                    for url, title, ts in rows:
+                        haystack = (str(url or '') + ' ' + str(title or '')).lower()
+                        for kw in cheat_keywords:
+                            if kw in haystack:
+                                matches.append({
+                                    'url': str(url or '')[:240],
+                                    'title': str(title or '')[:120],
+                                    'kw': kw,
+                                })
+                                break
+                    if not matches:
+                        continue
+                    total_matches += len(matches)
+                    # Reportar agrupado por browser (evita 50 issues por uno solo)
+                    sample = matches[:5]
+                    self.issues_found.append({
+                        'tipo':       'browser_history_cheat',
+                        'nombre':     f'{browser_name}: {len(matches)} visita(s) a páginas de cheats',
+                        'ruta':       hist_path,
+                        'archivo':    f'{browser_name} History',
+                        'categoria':  'NETWORK',
+                        'alerta':     'CRITICAL',
+                        'confidence': 0.85,
+                        'detected_patterns': ['browser_history', 'cheat_keyword', browser_name.lower()],
+                        'extra': {
+                            'browser':     browser_name,
+                            'match_count': len(matches),
+                            'samples':     sample,
+                        },
+                    })
+
+                # Firefox (places.sqlite por profile)
+                if os.path.isdir(firefox_profiles_root):
+                    try:
+                        for prof in os.listdir(firefox_profiles_root):
+                            places = os.path.join(firefox_profiles_root, prof, 'places.sqlite')
+                            if not os.path.exists(places):
+                                continue
+                            try:
+                                copy_path = os.path.join(tmpdir, f'firefox_{prof[:8]}.db')
+                                shutil.copy2(places, copy_path)
+                                conn = sqlite3.connect(f'file:{copy_path}?mode=ro', uri=True, timeout=4)
+                                cur  = conn.cursor()
+                                cur.execute(
+                                    "SELECT url, title FROM moz_places "
+                                    "ORDER BY last_visit_date DESC LIMIT 1000"
+                                )
+                                rows = cur.fetchall()
+                                conn.close()
+                            except Exception:
+                                continue
+                            matches = []
+                            for url, title in rows:
+                                haystack = (str(url or '') + ' ' + str(title or '')).lower()
+                                for kw in cheat_keywords:
+                                    if kw in haystack:
+                                        matches.append({
+                                            'url': str(url or '')[:240],
+                                            'title': str(title or '')[:120],
+                                            'kw': kw,
+                                        })
+                                        break
+                            if not matches:
+                                continue
+                            total_matches += len(matches)
+                            self.issues_found.append({
+                                'tipo':       'browser_history_cheat',
+                                'nombre':     f'Firefox ({prof[:12]}): {len(matches)} visita(s) a páginas de cheats',
+                                'ruta':       places,
+                                'archivo':    'Firefox places.sqlite',
+                                'categoria':  'NETWORK',
+                                'alerta':     'CRITICAL',
+                                'confidence': 0.85,
+                                'detected_patterns': ['browser_history', 'cheat_keyword', 'firefox'],
+                                'extra': {
+                                    'browser':     'Firefox',
+                                    'profile':     prof,
+                                    'match_count': len(matches),
+                                    'samples':     matches[:5],
+                                },
+                            })
+                    except Exception:
+                        pass
+            finally:
+                try: shutil.rmtree(tmpdir, ignore_errors=True)
+                except Exception: pass
+            print(f"  · {total_matches} match(es) en historial de browsers")
+        except Exception as e:
+            print(f"Error en scan_browser_history_cheats: {e}")
+
+
+    def scan_process_crosscheck(self):
+        """Scanner #14 — Cross-check de procesos: comparar listado psutil vs
+        WMI vs tasklist. Si un PID aparece en uno y NO en otro → proceso
+        oculto (rootkit clásico, hooks de DLL, hollowing).
+
+        psutil usa CreateToolhelp32Snapshot por defecto. WMI usa
+        Win32_Process. tasklist usa GetExtendedProcessIdInfo. Cualquier
+        cheat que solo se oculta de UN método queda expuesto al cruzar.
+        """
+        print("🔍 Cross-checking listado de procesos (psutil vs WMI vs tasklist)...")
+        try:
+            psutil_pids = set()
+            try:
+                for p in psutil.process_iter(['pid']):
+                    try:
+                        psutil_pids.add(int(p.info['pid']))
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+            wmi_pids = set()
+            try:
+                ps = "Get-CimInstance Win32_Process | Select-Object -ExpandProperty ProcessId"
+                r = subprocess.run(
+                    ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', ps],
+                    capture_output=True, text=True, timeout=15,
+                )
+                for line in (r.stdout or '').splitlines():
+                    line = line.strip()
+                    if line.isdigit():
+                        wmi_pids.add(int(line))
+            except Exception:
+                pass
+
+            tasklist_pids = set()
+            tasklist_info = {}  # pid -> name
+            try:
+                r = subprocess.run(
+                    ['tasklist', '/FO', 'CSV', '/NH'],
+                    capture_output=True, text=True, timeout=15,
+                )
+                for line in (r.stdout or '').splitlines():
+                    parts = [p.strip().strip('"') for p in line.split(',')]
+                    if len(parts) >= 2 and parts[1].isdigit():
+                        pid = int(parts[1])
+                        tasklist_pids.add(pid)
+                        tasklist_info[pid] = parts[0]
+            except Exception:
+                pass
+
+            if not psutil_pids and not wmi_pids and not tasklist_pids:
+                print("⚠ No se pudo obtener ningún listado de procesos (skip)")
+                return
+
+            # Solo reporta divergencias si tenemos AL MENOS 2 fuentes válidas
+            sources_with_data = sum(1 for s in (psutil_pids, wmi_pids, tasklist_pids) if s)
+            if sources_with_data < 2:
+                print("  · Solo 1 fuente válida — skip cross-check")
+                return
+
+            # Hidden = visible en una fuente pero NO en otra
+            # Pero excluir los que pueden estar legítimamente en una sola
+            # (procesos system inicializando, etc) → tolerancia: solo flag
+            # si está en EXACTAMENTE una fuente, no en 2/3.
+            all_pids = psutil_pids | wmi_pids | tasklist_pids
+            hidden_in_psutil  = []
+            hidden_in_wmi     = []
+            hidden_in_tasklist = []
+            for pid in all_pids:
+                in_ps  = pid in psutil_pids
+                in_wmi = pid in wmi_pids
+                in_tl  = pid in tasklist_pids
+                seen   = sum((in_ps, in_wmi, in_tl))
+                if seen >= 2 and not in_ps and psutil_pids:
+                    hidden_in_psutil.append(pid)
+                if seen >= 2 and not in_wmi and wmi_pids:
+                    hidden_in_wmi.append(pid)
+                if seen >= 2 and not in_tl and tasklist_pids:
+                    hidden_in_tasklist.append(pid)
+
+            # Filtrar PIDs muy bajos (system idle/csrss/etc) que pueden no
+            # aparecer en tasklist sin admin → no son cheats.
+            def _looks_like_system(pid):
+                return pid in (0, 4, 8) or (tasklist_info.get(pid, '').lower() in
+                    ('system', 'system idle process', 'registry', 'memory compression', 'secure system'))
+
+            hidden_in_psutil   = [p for p in hidden_in_psutil   if not _looks_like_system(p)]
+            hidden_in_wmi      = [p for p in hidden_in_wmi      if not _looks_like_system(p)]
+            hidden_in_tasklist = [p for p in hidden_in_tasklist if not _looks_like_system(p)]
+
+            for which, pids in (('psutil', hidden_in_psutil),
+                                ('WMI',    hidden_in_wmi),
+                                ('tasklist', hidden_in_tasklist)):
+                if not pids:
+                    continue
+                # Reportar agrupado para no spamear
+                samples = []
+                for pid in pids[:8]:
+                    name = tasklist_info.get(pid, '?')
+                    samples.append(f'PID {pid} ({name})')
+                self.issues_found.append({
+                    'tipo':       'process_hidden_from_source',
+                    'nombre':     f'{len(pids)} proceso(s) NO visibles desde {which} pero sí desde otras fuentes',
+                    'ruta':       'cross-check psutil/WMI/tasklist',
+                    'archivo':    f'hidden_from_{which}',
+                    'categoria':  'EVASION',
+                    'alerta':     'CRITICAL',
+                    'confidence': 0.72,
+                    'detected_patterns': ['process_hiding', 'rootkit_indicator', f'hidden_from_{which}'],
+                    'extra': {
+                        'hidden_count': len(pids),
+                        'hidden_from':  which,
+                        'samples':      samples,
+                        'all_pids':     pids[:32],
+                    },
+                })
+            total_hidden = len(hidden_in_psutil) + len(hidden_in_wmi) + len(hidden_in_tasklist)
+            print(f"  · psutil={len(psutil_pids)} wmi={len(wmi_pids)} tasklist={len(tasklist_pids)}, hidden={total_hidden}")
+        except Exception as e:
+            print(f"Error en scan_process_crosscheck: {e}")
+
+
+    def scan_wmi_event_subscriptions(self):
+        """Scanner #52 — WMI Event Subscriptions persistentes. Es una de las
+        técnicas más usadas por malware/cheats sofisticados para sobrevivir
+        reboots SIN tocar registry Run/Startup folders ni Scheduled Tasks.
+
+        Componentes:
+          - __EventFilter   (qué evento dispara la persistencia)
+          - __EventConsumer (qué se ejecuta — generalmente CommandLineEventConsumer)
+          - __FilterToConsumerBinding (relaciona ambos)
+
+        Cualquier subscription con consumer ActiveScript / CommandLine
+        que apunte a paths sospechosos (TEMP, APPDATA, ofuscados) → CRITICAL.
+        """
+        print("🔍 Escaneando WMI Event Subscriptions (persistencia avanzada)...")
+        try:
+            ps = (
+                "$out=@();"
+                "try{$cs=Get-WmiObject -Namespace root\\subscription -Class CommandLineEventConsumer -ErrorAction SilentlyContinue;"
+                "foreach($c in $cs){$out += [ordered]@{Type='CommandLine';Name=$c.Name;Cmd=$c.CommandLineTemplate;Path=$c.ExecutablePath}}}catch{};"
+                "try{$as=Get-WmiObject -Namespace root\\subscription -Class ActiveScriptEventConsumer -ErrorAction SilentlyContinue;"
+                "foreach($a in $as){$out += [ordered]@{Type='ActiveScript';Name=$a.Name;Cmd=$a.ScriptText;Path=$a.ScriptingEngine}}}catch{};"
+                "$out | ForEach-Object { ConvertTo-Json -InputObject $_ -Compress }"
+            )
+            r = subprocess.run(
+                ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', ps],
+                capture_output=True, text=True, timeout=25,
+            )
+            out = (r.stdout or '').strip()
+            if not out:
+                print("  · Sin WMI subscriptions custom (limpio)")
+                return
+            import json as _json
+            consumers = []
+            for line in out.splitlines():
+                line = line.strip()
+                if not line.startswith('{'):
+                    continue
+                try:
+                    consumers.append(_json.loads(line))
+                except Exception:
+                    continue
+            if not consumers:
+                print("  · WMI subs no parseables (skip)")
+                return
+            # Whitelist suave: SCM Event Log Consumer (default), MS Office,
+            # Sophos/Defender management, etc.
+            legit_substrings = (
+                'scm event log',
+                'microsoft\\office',
+                'sccm', 'configmgr',
+                'sophos', 'defender',
+            )
+            suspicious = 0
+            for c in consumers:
+                name = (c.get('Name') or '').lower()
+                cmd  = (c.get('Cmd')  or '').lower()
+                if any(s in name or s in cmd for s in legit_substrings):
+                    continue
+                hits = []
+                if r'\\appdata\\' in cmd or r'\\temp\\' in cmd or r'\\users\\public\\' in cmd:
+                    hits.append('suspicious_path')
+                if ' -enc ' in cmd or ' -encodedcommand ' in cmd or 'frombase64string' in cmd:
+                    hits.append('encoded_powershell')
+                if 'mshta' in cmd or 'rundll32 javascript' in cmd or 'wscript' in cmd or 'cscript' in cmd:
+                    hits.append('script_engine_abuse')
+                if smart_hack_match(cmd) or smart_hack_match(name):
+                    hits.append('hack_term')
+                if 'is_argus_own_artifact' in globals() and is_argus_own_artifact(cmd):
+                    continue
+                # Para los unknown sin hits específicos: aún es WORTH reportar
+                # como SOSPECHOSO (todo subs custom merece review humano).
+                alerta = 'CRITICAL' if hits else 'SOSPECHOSO'
+                conf   = 0.85 if hits else 0.55
+                suspicious += 1
+                self.issues_found.append({
+                    'tipo':       'wmi_event_subscription',
+                    'nombre':     f'WMI {c.get("Type","?")} Consumer: "{c.get("Name","?")[:60]}"',
+                    'ruta':       r'root\subscription',
+                    'archivo':    (c.get('Cmd') or '')[:240],
+                    'categoria':  'PERSISTENCIA',
+                    'alerta':     alerta,
+                    'confidence': conf,
+                    'detected_patterns': ['wmi_persistence'] + hits,
+                    'extra': {
+                        'consumer_type': c.get('Type'),
+                        'consumer_name': c.get('Name'),
+                        'cmd_excerpt':   (c.get('Cmd') or '')[:300],
+                        'hits':          hits,
+                    },
+                })
+            print(f"  · {len(consumers)} WMI consumer(s) inspeccionados, {suspicious} reportados")
+        except subprocess.TimeoutExpired:
+            print("⚠ Timeout consultando WMI subscriptions (skip)")
+        except Exception as e:
+            print(f"Error en scan_wmi_event_subscriptions: {e}")
 
 
     def scan_registry_run_persistence(self):
