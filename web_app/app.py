@@ -44,6 +44,16 @@ except Exception as _ai_quality_err:
     _AI_QUALITY_AVAILABLE = False
     print(f'[boot] ai_quality no disponible: {_ai_quality_err}')
 
+# Pack 36 — Auto-learn de patterns de hack desde verdicts confirmados
+# por staff con alto trust + Player Risk Profile.
+try:
+    import ai_autolearn as _ai_autolearn
+    _AI_AUTOLEARN_AVAILABLE = True
+except Exception as _ai_autolearn_err:
+    _ai_autolearn = None
+    _AI_AUTOLEARN_AVAILABLE = False
+    print(f'[boot] ai_autolearn no disponible: {_ai_autolearn_err}')
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-production')
 
@@ -4160,6 +4170,19 @@ def _calculate_risk_score(results, return_breakdown=False):
             score += alert_pts
             breakdown.append({'source': nombre, 'points': alert_pts, 'reason': f'Nivel de alerta: {alerta}'})
 
+        # Pack 36 — Autolearn boost: si el result matchea un pattern
+        # confirmado por staff con alto trust (Pack 36), suma puntos
+        # extra escalados por la confidence del pattern (max +30).
+        boost = float(r.get('_autolearn_boost') or 0.0)
+        if boost > 0:
+            extra = min(30, int(round(boost * 30)))
+            score += extra
+            breakdown.append({
+                'source': nombre,
+                'points': extra,
+                'reason': f'Auto-aprendido (confidence {boost:.0%}, kind={r.get("_autolearn_kind")})'
+            })
+
     final_score = min(score, 100)
     if return_breakdown:
         # Sort by points desc, only keep top contributors
@@ -4559,6 +4582,23 @@ def submit_scan_results(scan_id):
             results = [r for r in results if not _is_server_false_positive(r)]
             if len(results) < before:
                 print(f"[DEBUG] FP filter: {before} → {len(results)} resultados ({before - len(results)} descartados)")
+            # Pack 36 — Boost results con learned_hack_patterns (autolearn).
+            # Inyecta `_autolearn_boost` en results que matchean patterns
+            # confirmados por staff con alto trust. _calculate_risk_score
+            # los considera para subir confidence efectivo.
+            if _AI_AUTOLEARN_AVAILABLE:
+                try:
+                    cursor.execute('SAVEPOINT autolearn_boost_save')
+                    _boosted = _ai_autolearn.boost_results_with_patterns(cursor, results)
+                    if _boosted:
+                        print(f'[DEBUG] autolearn boost: {_boosted}/{len(results)} results matched patterns aprendidos')
+                    cursor.execute('RELEASE SAVEPOINT autolearn_boost_save')
+                except Exception as _b_e:
+                    try:
+                        cursor.execute('ROLLBACK TO SAVEPOINT autolearn_boost_save')
+                    except Exception:
+                        pass
+                    print(f'[DEBUG] autolearn boost falló: {_b_e}')
             # Filter #42 — Upsert evidence_fingerprints para tracking "first-seen"
             # Tolera fallos: si la tabla aún no existe, simplemente no se decora.
             try:
@@ -7438,6 +7478,38 @@ def set_scan_verdict(scan_id):
                     except Exception:
                         pass
 
+            # Pack 36 — Auto-learn de patterns desde verdict='hack' por
+            # staff con alto trust. Solo si tenemos ai_autolearn + el
+            # staff llegó a >=65 trust en F#54.
+            if (_AI_AUTOLEARN_AVAILABLE and verdict == 'hack' and
+                user_id and _AI_TRUST_AVAILABLE):
+                try:
+                    cursor.execute('SAVEPOINT autolearn_save')
+                    trust_data = _ai_trust.get_staff_trust(cursor, user_id)
+                    trust_score = float(trust_data.get('trust_score') or 50.0)
+                    learn_stats = _ai_autolearn.auto_learn_from_hack_verdict(
+                        cursor,
+                        scan_id=scan_id,
+                        staff_user_id=user_id,
+                        staff_trust_score=trust_score,
+                        results=None,  # autolearn los lee del scan
+                    )
+                    if learn_stats.get('learned', 0) > 0:
+                        try:
+                            _log_staff_action(
+                                'ai_autolearn',
+                                detail=f'scan_id={scan_id} learned={learn_stats["learned"]}/{learn_stats["scanned"]}'
+                            )
+                        except Exception:
+                            pass
+                    cursor.execute('RELEASE SAVEPOINT autolearn_save')
+                except Exception as _e_al:
+                    try:
+                        cursor.execute('ROLLBACK TO SAVEPOINT autolearn_save')
+                    except Exception:
+                        pass
+                    print(f'[set_verdict.autolearn] {_e_al}')
+
             # Pack 32 F#60 — Si el verdict actual es 'clean' y el prior
             # era 'hack' (o el ensemble decía hack), incrementar
             # overturn cooldown de la empresa.
@@ -10303,6 +10375,94 @@ def ai_quality_learn_fp_suggestions():
                 cur, company_id=target_company, limit=limit
             )
         return jsonify({'available': True, 'rows': rows, 'count': len(rows)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# Pack 36 — Player Risk Profile (histórico)
+@app.route('/api/players/<path:username>/risk-profile', methods=['GET'])
+@login_required
+def get_player_risk_profile(username):
+    """Perfil histórico de risk del jugador: avg, min, max, recent,
+    trend (rising/stable/falling), regression alert si era clean
+    histórico y ahora hack reciente.
+    Pack 36."""
+    if not _AI_AUTOLEARN_AVAILABLE:
+        return jsonify({'available': False}), 200
+    if not username:
+        return jsonify({'error': 'username requerido'}), 400
+    username = username.strip()[:64]
+    try:
+        since_days = max(7, min(730, int(request.args.get('since_days', 365))))
+    except Exception:
+        since_days = 365
+    try:
+        with get_api_db_cursor() as cur:
+            profile = _ai_autolearn.get_player_risk_profile(
+                cur, username, since_days=since_days
+            )
+        return jsonify({'available': True, **profile}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/learned-hack-patterns', methods=['GET'])
+@login_required
+def get_learned_hack_patterns():
+    """Lista de patterns de hack auto-aprendidos. Admin / company-admin."""
+    if not _AI_AUTOLEARN_AVAILABLE:
+        return jsonify({'available': False, 'rows': []}), 200
+    user_id    = session.get('user_id')
+    company_id = session.get('company_id')
+    if not (is_admin(user_id) or is_company_admin(user_id, company_id)):
+        return jsonify({'error': 'Acceso denegado'}), 403
+    try:
+        with get_api_db_cursor() as cur:
+            _ai_autolearn.ensure_autolearn_table(cur)
+            cur.execute(
+                'SELECT id, pattern_kind, pattern_value, confidence, '
+                'hit_count, confirmed_count, learned_from_scan_id, '
+                'learned_by, learned_at, last_hit_at, decay_score '
+                'FROM learned_hack_patterns '
+                'ORDER BY confidence DESC, confirmed_count DESC LIMIT 200'
+            )
+            rows = cur.fetchall() or []
+            out = []
+            for r in rows:
+                out.append({
+                    'id':                   _row_get(r, 0, 'id'),
+                    'pattern_kind':         _row_get(r, 1, 'pattern_kind'),
+                    'pattern_value':        _row_get(r, 2, 'pattern_value'),
+                    'confidence':           float(_row_get(r, 3, 'confidence') or 0.0),
+                    'hit_count':            int(_row_get(r, 4, 'hit_count') or 0),
+                    'confirmed_count':      int(_row_get(r, 5, 'confirmed_count') or 0),
+                    'learned_from_scan_id': _row_get(r, 6, 'learned_from_scan_id'),
+                    'learned_by':           _row_get(r, 7, 'learned_by'),
+                    'learned_at':           str(_row_get(r, 8, 'learned_at') or ''),
+                    'last_hit_at':          str(_row_get(r, 9, 'last_hit_at') or ''),
+                    'decay_score':          float(_row_get(r, 10, 'decay_score') or 1.0),
+                })
+        return jsonify({'available': True, 'rows': out, 'count': len(out)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/learned-hack-patterns/<int:pid>', methods=['DELETE'])
+@login_required
+def delete_learned_hack_pattern(pid):
+    """Borrar un pattern aprendido (si fue mal aprendido). Admin only."""
+    if not is_admin(session.get('user_id')):
+        return jsonify({'error': 'Acceso denegado'}), 403
+    if not _AI_AUTOLEARN_AVAILABLE:
+        return jsonify({'error': 'ai_autolearn no cargado'}), 503
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(f'DELETE FROM learned_hack_patterns WHERE id = {_PH}', (pid,))
+        try:
+            _log_staff_action('autolearn_delete', detail=f'pattern_id={pid}')
+        except Exception:
+            pass
+        return jsonify({'ok': True}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

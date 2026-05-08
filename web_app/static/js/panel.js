@@ -7859,7 +7859,7 @@ async function openPlayerTimelineModal(username, opts) {
 
     // Stats header
     const statsRow = `
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; padding:10px 12px;
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; padding:10px 12px;
                     background:rgba(184,115,51,.08); border:1px solid var(--border, rgba(255,255,255,.08));
                     border-radius:8px; font-size:13px;">
             <div><b>${data.scans_total || 0}</b> scan${data.scans_total === 1 ? '' : 's'}</div>
@@ -7868,7 +7868,8 @@ async function openPlayerTimelineModal(username, opts) {
             ${data.pendings ? `<div style="color:#fbbf24;"><b>${data.pendings}</b> pending</div>` : ''}
             ${data.avg_risk !== null && data.avg_risk !== undefined
                 ? `<div>risk avg: <b>${data.avg_risk}</b></div>` : ''}
-        </div>`;
+        </div>
+        <div id="argus-timeline-risk-profile" style="margin-bottom:12px;"></div>`;
 
     // Timeline items
     const items = events.map(ev => _renderTimelineEvent(ev)).join('');
@@ -7879,6 +7880,56 @@ async function openPlayerTimelineModal(username, opts) {
             <div style="position:absolute; left:13px; top:6px; bottom:6px; width:2px;
                         background:linear-gradient(180deg, rgba(184,115,51,.5), rgba(184,115,51,.05));"></div>
             ${items}
+        </div>`;
+
+    // Pack 36 — Inyectar Player Risk Profile asíncrono
+    try {
+        const profileRes = await fetch(
+            `/api/players/${encodeURIComponent(username)}/risk-profile?since_days=${Math.max(sinceDays, 365)}`,
+            { credentials: 'include' }
+        );
+        if (profileRes.ok) {
+            const prof = await profileRes.json();
+            if (prof && prof.available !== false && prof.total_scans > 0) {
+                _renderTimelineRiskProfile(body.querySelector('#argus-timeline-risk-profile'), prof);
+            }
+        }
+    } catch (_e) { /* silently */ }
+}
+
+function _renderTimelineRiskProfile(container, prof) {
+    if (!container || !prof) return;
+    const trendIcon = prof.trend === 'rising' ? '📈' :
+                      prof.trend === 'falling' ? '📉' :
+                      prof.trend === 'stable' ? '➡️' : '❓';
+    const trendColor = prof.trend === 'rising' ? '#ef4444' :
+                       prof.trend === 'falling' ? '#22c55e' :
+                       prof.trend === 'stable' ? '#60a5fa' : 'var(--text-d)';
+    const trendLabel = prof.trend === 'rising' ? 'subiendo' :
+                       prof.trend === 'falling' ? 'bajando' :
+                       prof.trend === 'stable' ? 'estable' : 'datos insuficientes';
+
+    let alertBox = '';
+    if (prof.regression_alert) {
+        const escape = (typeof _qsEscapeSafe === 'function') ? _qsEscapeSafe : (s) => String(s);
+        alertBox = `
+            <div style="margin-top:8px;padding:8px 10px;background:rgba(239,68,68,.10);border:1px solid #ef4444;border-radius:6px;font-size:12.5px;color:#fca5a5;">
+                ⚠️ <b>Regresión detectada</b>: ${escape(prof.regression_reason || '')}
+            </div>`;
+    }
+
+    container.innerHTML = `
+        <div style="padding:10px 12px;background:rgba(96,165,250,.06);border:1px solid var(--border, rgba(96,165,250,.2));border-radius:8px;font-size:12.5px;">
+            <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+                <div><span style="color:var(--text-d);">Risk avg:</span> <b>${prof.risk_avg ?? '—'}</b></div>
+                <div><span style="color:var(--text-d);">Min:</span> <b>${prof.risk_min ?? '—'}</b></div>
+                <div><span style="color:var(--text-d);">Max:</span> <b>${prof.risk_max ?? '—'}</b></div>
+                <div style="color:${trendColor};">${trendIcon} <b>${trendLabel}</b></div>
+                ${prof.risk_recent && prof.risk_recent.length
+                    ? `<div style="color:var(--text-d);font-size:11.5px;">Últimos: ${prof.risk_recent.join(', ')}</div>`
+                    : ''}
+            </div>
+            ${alertBox}
         </div>`;
 }
 
