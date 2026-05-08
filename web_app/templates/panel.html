@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=22">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel-bronze-premium.css') }}?v=1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-ui.css') }}?v=6">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-ui.css') }}?v=7">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -166,6 +166,37 @@
             </button>
             <h1 class="panel-title" id="section-title">Dashboard</h1>
             <div class="header-actions">
+                <!-- Visual #17 trigger: search bar visible que abre el quicksearch -->
+                <button id="argus-quicksearch-trigger"
+                        type="button"
+                        title="Búsqueda rápida — Ctrl+K (o Cmd+K en Mac)"
+                        aria-label="Abrir búsqueda rápida"
+                        onclick="if(window.argusUI&&typeof window.argusUI.openQuickSearch==='function'){window.argusUI.openQuickSearch();}else{document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true}));}"
+                        style="
+                            display:flex;align-items:center;gap:9px;
+                            background:linear-gradient(135deg, rgba(184,115,51,0.10), rgba(20,14,8,0.40));
+                            border:1px solid rgba(184,115,51,0.32);
+                            border-radius:var(--radius-sm);
+                            color:rgba(241,230,211,0.72);
+                            height:36px;padding:0 12px;
+                            font-size:12.5px;font-weight:500;letter-spacing:0.2px;
+                            cursor:pointer;transition:var(--trans);
+                            min-width:230px;
+                        "
+                        onmouseover="this.style.background='linear-gradient(135deg, rgba(184,115,51,0.20), rgba(20,14,8,0.55))';this.style.borderColor='rgba(212,145,90,0.55)';this.style.color='#f3e0c5';"
+                        onmouseout="this.style.background='linear-gradient(135deg, rgba(184,115,51,0.10), rgba(20,14,8,0.40))';this.style.borderColor='rgba(184,115,51,0.32)';this.style.color='rgba(241,230,211,0.72)';">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="11" cy="11" r="7"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <span style="flex:1;text-align:left;opacity:0.85;">Buscar scans, jugadores…</span>
+                    <kbd style="background:rgba(184,115,51,0.18);border:1px solid rgba(184,115,51,0.35);
+                                color:#f3e0c5;border-radius:4px;padding:1px 6px;font-size:10.5px;
+                                font-family:ui-monospace,Consolas,monospace;font-weight:600;letter-spacing:0.4px;">
+                        Ctrl K
+                    </kbd>
+                </button>
                 <!-- Discord -->
                 <a href="{{ discord_invite }}" target="_blank" rel="noopener" title="Servidor de Discord" style="
                     background: linear-gradient(135deg, rgba(88,101,242,0.18), rgba(88,101,242,0.06));
@@ -2218,17 +2249,21 @@
         </div>
     </div>
 
-    <!-- Visual #42: botón flotante de Discord (oficial / soporte / comunidad) -->
+    <!-- Visual #42: botón flotante de Discord (oficial / soporte / comunidad)
+         NOTA: El FAB ya está duplicado en el header (.header-actions) como
+         icono pequeño, así que en el panel staff lo escondemos para evitar
+         superposición con avatares/widgets de la esquina inferior derecha.
+         En páginas que NO sean el panel sigue siendo útil como FAB. -->
     <a id="argus-discord-fab"
        href="{{ discord_invite }}"
        target="_blank"
        rel="noopener noreferrer"
        title="Comunidad Discord — soporte, novedades y colaboración"
        aria-label="Unirse al Discord de Argus Projects"
-       style="position:fixed;bottom:50px;right:22px;z-index:80;
-              width:52px;height:52px;border-radius:50%;
+       style="position:fixed;bottom:88px;right:22px;z-index:60;
+              width:48px;height:48px;border-radius:50%;
               background:linear-gradient(135deg,#5865F2,#4752c4);
-              display:flex;align-items:center;justify-content:center;
+              display:none;align-items:center;justify-content:center;
               box-shadow:0 8px 24px -6px rgba(88,101,242,0.55),
                          0 0 0 1px rgba(255,255,255,0.06) inset;
               text-decoration:none;color:#fff;
@@ -2290,8 +2325,8 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=5"></script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=51"></script>
+    <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=52"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────

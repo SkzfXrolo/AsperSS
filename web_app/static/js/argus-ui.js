@@ -773,6 +773,8 @@
         getScansView: _getScansView,
         markScanRunning,
         markScanFinished,
+        openQuickSearch:  _qsOpen,
+        closeQuickSearch: _qsClose,
     };
 
     // Re-aplicar la vista guardada cuando se haya cargado el DOM
