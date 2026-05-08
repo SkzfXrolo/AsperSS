@@ -350,7 +350,10 @@ private fun InputPanel(
         Button(
             onClick = onStart,
             modifier = Modifier.fillMaxWidth().height(54.dp),
-            enabled = token.length >= 8,
+            // Tokens del backend Argus son de 6 chars (panel staff). Antes
+            // requería >= 8 → botón siempre disabled. La validación final
+            // la hace el backend al POST /api/scans.
+            enabled = token.trim().length >= 4,
             colors = ButtonDefaults.buttonColors(
                 containerColor = Bronze,
                 contentColor = BgDark,

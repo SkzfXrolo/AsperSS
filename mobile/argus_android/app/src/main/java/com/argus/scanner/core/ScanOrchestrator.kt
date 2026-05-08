@@ -62,14 +62,18 @@ class ScanOrchestrator(private val ctx: Context) {
         screenshotData: Intent? = null,
     ): Flow<ScanProgressEvent> = flow {
         emit(ScanProgressEvent.Log("→ Argus Android · v1.6.49 (Pack 26)"))
-        if (token.length < 8) {
+        // Validación mínima — el backend Argus rechaza tokens inválidos al
+        // crear el scan. Tokens del staff son típicamente 6 chars, pero
+        // dejamos margen para 4-12 por compatibilidad con futuros formatos.
+        val cleanToken = token.trim()
+        if (cleanToken.length < 4) {
             emit(ScanProgressEvent.Failed("Token inválido o demasiado corto"))
             return@flow
         }
 
         ScanForegroundService.start(ctx)
         try {
-            val client = BackendClient(token)
+            val client = BackendClient(cleanToken)
             val machine = collectMachineInfo()
             emit(ScanProgressEvent.Log("→ Subiendo handshake al backend…"))
             val scanId = try { client.startScan(machine) }
