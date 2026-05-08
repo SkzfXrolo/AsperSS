@@ -607,17 +607,32 @@ NOTA DE LECTURA
   PARTE 3/3 — VISUAL (PÁGINA, PANEL Y APLICACIÓN)                       60 ítems
 ═══════════════════════════════════════════════════════════════════════════════
 
-[ ]  1. Toggle modo claro/oscuro con persistencia en localStorage
+[X]  1. Toggle modo claro/oscuro con persistencia en localStorage
         (default: dark con bronce, alternativo: light con bronce suave).
+        DONE (verified Pack 16) — toggleTheme() en panel.html con icono
+        ☀/🌙 en header (#theme-toggle), persiste 'aurora-theme' en LS.
+        body.light-theme con paleta completa (bg/border/accent/text/shadow)
+        en panel.css cubriendo todos los CSS variables. Ya estaba operativo,
+        solo faltaba marcar el item.
 
 [ ]  2. Tema "torneo" alternativo más serio (gris/negro neutral, sin
         gradientes) para entornos competitivos formales.
 
-[ ]  3. Tema "minimalista" sin animaciones para PCs lentas — accessibility
+[~]  3. Tema "minimalista" sin animaciones para PCs lentas — accessibility
         y rendimiento.
+        PARTIAL (Pack 11) — auditoría reduced-motion global en CSS apaga
+        todas las animaciones/transiciones si el SO lo pide
+        (prefers-reduced-motion: reduce). Falta el toggle manual independiente
+        del SO para "modo low-motion" voluntario.
 
-[ ]  4. Animación staggered fade-in al cargar resultados de un scan
+[X]  4. Animación staggered fade-in al cargar resultados de un scan
         (cada card aparece con delay incremental).
+        DONE v1.6.49 (Pack 16) — argusUI.staggerIn(container, opts) en
+        argus-ui.js + keyframe argusStaggerIn en argus-ui.css (opacity 0→1,
+        translateY 8px→0, 380ms ease-out). Aplicado en renderIssuePage()
+        (results de un scan, step=35ms, max=22) y en loadScans() (filas
+        de la tabla principal, step=28ms, max=18). prefers-reduced-motion
+        fuerza animation-duration 0.001ms.
 
 [X]  5. Skeleton loaders en cards mientras llega data del backend
         (en lugar de "Cargando…" plano).
@@ -720,8 +735,17 @@ NOTA DE LECTURA
         Aplicado en listado de scans (con CTA "Limpiar filtros" si hay
         filtros aplicados) y en historial de actividad de archivos.
 
-[ ] 26. Confeti animado sutil al confirmar veredicto CLEAN
+[X] 26. Confeti animado sutil al confirmar veredicto CLEAN
         (premio visual al staff por trabajo limpio).
+        DONE v1.6.49 (Pack 16) — argusUI.celebrate(opts) en argus-ui.js
+        es un canvas vanilla (sin libs externas): ~110 partículas que caen
+        con gravedad y rotación durante ~1.9s, paleta verde+bronce+blanco,
+        fade-out en el último 30% del tiempo. Honra prefers-reduced-motion
+        (no-op si está activo). En panel.js, _confirmVerdictWithReason() ya
+        usaba un confetti() global de lib externa cuando estaba presente —
+        ahora prefiere argusUI.celebrate() y deja el confetti() global como
+        fallback para builds antiguas. Try/catch para nunca bloquear el
+        veredicto si la animación falla.
 
 [X] 27. Sacudida (shake) leve al confirmar veredicto BAN/CHEAT
         — alerta visual de severidad.
@@ -1048,11 +1072,11 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 
   Scanner ............................. 60 ítems   (detección)      14/60
   Filtro .............................. 60 ítems   (anti-FP)        22/60
-  Visual .............................. 60 ítems   (UI/UX)          28/60
+  Visual .............................. 60 ítems   (UI/UX)          30/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    73/195
-                                                  (4 parciales: S#9, V#32, V#43, V#53)
+  TOTAL ............................... 195 ítems  COMPLETADOS:    75/195
+                                                  (5 parciales: S#9, V#3, V#32, V#43, V#53)
                                                   + 3 BONUS Pack 11 (Stream-friendly,
                                                   CompanyTag color, Why-this-score modal)
                                                   + 1 BONUS Pack 14 (Inspector de metadata
@@ -1069,6 +1093,39 @@ Linux: Arch, Ubuntu, Fedora, etc.).
                                                   (AppImage/Flatpak/deb), #14 (CI Docker)
 
 SESIÓN DEL 08-may-2026:
+  Pack 16 (v1.6.49): Visual #1, #4, #26 (sin recompilar .exe).
+                    NUEVOS en argus-ui.js:
+                      * staggerIn(container, opts) — aplica clase
+                        .argus-stagger-item con --argus-stagger-delay
+                        inline a cada hijo del container, encadenando
+                        keyframe argusStaggerIn (opacity+translateY).
+                      * celebrate(opts) — canvas confetti vanilla:
+                        ~110 partículas con gravedad/rotación, paleta
+                        verde+bronce+blanco, fade-out en el último 30%.
+                        Sin dependencias externas. Honra
+                        prefers-reduced-motion.
+                    NUEVOS en argus-ui.css:
+                      * @keyframes argusStaggerIn (380ms cubic-bezier
+                        out-quint) + .argus-stagger-in .argus-stagger-item
+                        que mappea --argus-stagger-delay → animation-delay.
+                      * Media query reduced-motion fuerza duration 0.001ms.
+                    INTEGRACIONES en panel.js:
+                      * loadScans() — anima las filas tras tbody.innerHTML
+                        (step=28ms, max=18 filas).
+                      * renderIssuePage() — wrapper .issues-stagger-host
+                        para los hallazgos (step=35ms, max=22 cards).
+                      * _confirmVerdictWithReason() — al CLEAN ahora
+                        prefiere argusUI.celebrate() sobre el confetti()
+                        global anterior (que dejamos como fallback).
+                    MARCADO #1 (toggle theme) — ya estaba operativo en
+                      panel.html con toggleTheme() + body.light-theme,
+                      solo faltaba registrarlo en este doc.
+                    panel.html: argus-ui.js v=9 / argus-ui.css v=10 /
+                      panel.js v=58 (cache busters).
+                    → 3 visuales completados (V#1, V#4, V#26) + 1 parcial
+                      nuevo (V#3 reduced-motion auditoría). Sin recompilar
+                      el .exe — Pack 16 es 100% web/UI polish.
+
   Pack 15 (v1.6.49): Filtros #21, #22, #27, #46, #58 (Windows) + BONUS Visual.
                     NUEVOS en source/main.py:
                       * is_microsoft_defender() — whitelist absoluta para

@@ -1769,6 +1769,16 @@ async function loadScans() {
                     </td>
                 </tr>`;
             }).join('');
+            // Visual #4 — staggered fade-in en filas de la tabla de scans.
+            // Solo aplica al primer load (tbody._loaded marca la transición
+            // de skeleton a contenido real). Re-render por filtros también
+            // se anima — confirma visualmente que la lista se actualizó.
+            try {
+                if (tbody && window.argusUI && typeof window.argusUI.staggerIn === 'function') {
+                    window.argusUI.staggerIn(tbody, { selector: ':scope > tr', step: 28, max: 18 });
+                }
+                if (tbody) tbody._loaded = true;
+            } catch (_e) { /* never block render */ }
         } else {
             if (tbody) tbody._loaded = false;
             // Empty state ilustrado (Visual #25)
@@ -2438,8 +2448,17 @@ function renderIssuePage(container, scanId) {
 
     container.innerHTML = `
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border);">${chips}</div>
-        <div style="display:flex;flex-direction:column;gap:6px;">${rows || '<div style="padding:20px;text-align:center;color:var(--text-d);font-size:12px;">Sin hallazgos en esta categoría.</div>'}</div>
+        <div class="issues-stagger-host" style="display:flex;flex-direction:column;gap:6px;">${rows || '<div style="padding:20px;text-align:center;color:var(--text-d);font-size:12px;">Sin hallazgos en esta categoría.</div>'}</div>
         ${loadMoreBtn}`;
+    // Visual #4 — staggered fade-in en results recién renderizados.
+    // Solo se aplica a la primera página; al "Cargar más" la página suma
+    // sin re-render, así que también la animamos para consistencia visual.
+    try {
+        const host = container.querySelector('.issues-stagger-host');
+        if (host && window.argusUI && typeof window.argusUI.staggerIn === 'function') {
+            window.argusUI.staggerIn(host, { selector: ':scope > *', step: 35, max: 22 });
+        }
+    } catch (_e) { /* nunca bloquear render por animación */ }
 }
 
 // V47: click to select/deselect a finding
@@ -2537,10 +2556,22 @@ async function confirmVerdict() {
             });
             openHackSelection();
         } else {
-            // V42: confetti on clean verdict
-            if (typeof confetti === 'function') {
-                confetti({ particleCount: 90, spread: 70, origin: { y: 0.5 }, colors: ['#10b981','#34d399','#6ee7b7','#fff'] });
-            }
+            // Visual #26 — confetti sutil al confirmar veredicto CLEAN.
+            // Preferir argusUI.celebrate (vanilla canvas, sin dependencias);
+            // fallback al confetti() global si está cargado en alguna build vieja.
+            try {
+                if (window.argusUI && typeof window.argusUI.celebrate === 'function') {
+                    window.argusUI.celebrate({
+                        palette: ['#10b981','#34d399','#6ee7b7','#B87333','#fbbf24','#FFFFFF'],
+                        count: 110,
+                        duration: 1900,
+                        originY: 0.30,
+                    });
+                } else if (typeof confetti === 'function') {
+                    confetti({ particleCount: 90, spread: 70, origin: { y: 0.5 },
+                               colors: ['#10b981','#34d399','#6ee7b7','#fff'] });
+                }
+            } catch (_e) { /* never block verdict on confetti errors */ }
             await submitVerdictClean(reason);
         }
 

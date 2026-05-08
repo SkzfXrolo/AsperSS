@@ -914,6 +914,111 @@
     }
     setInterval(_slowScansTick, 30 * 1000);
 
+    // ── Visual #4 — Staggered fade-in helper ─────────────────────────────────
+    // Aplica argusStaggerIn keyframe con delay incremental por hijo directo.
+    // Uso: argusUI.staggerIn(containerEl, { selector: '> *', step: 40, max: 28 }).
+    // Respeta prefers-reduced-motion (queda como simple fadeIn instantáneo).
+    function staggerIn(container, opts) {
+        if (!container) return;
+        const o = opts || {};
+        const sel  = o.selector || ':scope > *';
+        const step = o.step || 40;          // ms entre cada hijo
+        const max  = o.max  || 28;          // tope: a partir de aquí, todos juntos
+        let nodes;
+        try { nodes = container.querySelectorAll(sel); }
+        catch (_e) { return; }
+        const reduce = window.matchMedia &&
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        nodes.forEach((el, i) => {
+            const idx = Math.min(i, max);
+            el.style.setProperty('--argus-stagger-idx', idx);
+            el.style.setProperty('--argus-stagger-delay', (idx * step) + 'ms');
+            el.classList.add('argus-stagger-item');
+            if (reduce) {
+                el.style.animationDuration = '0.001ms';
+                el.style.animationDelay = '0ms';
+            }
+        });
+        container.classList.add('argus-stagger-in');
+    }
+
+
+    // ── Visual #26 — Confeti sutil al confirmar veredicto CLEAN ──────────────
+    // Implementación canvas vanilla, sin libs externas. ~80 partículas que
+    // caen con gravedad y rotación durante ~1.6s. Auto-removible. Honra
+    // prefers-reduced-motion (no-op si está activo). Colores configurables.
+    function celebrate(opts) {
+        const reduce = window.matchMedia &&
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduce) return;
+        const o = opts || {};
+        const palette = o.palette || ['#10b981', '#34d399', '#6ee7b7', '#B87333', '#fbbf24', '#FFFFFF'];
+        const count   = Math.max(30, Math.min(180, o.count || 90));
+        const duration = Math.max(700, Math.min(3500, o.duration || 1800));
+        const originX = (o.originX != null ? o.originX : 0.5) * window.innerWidth;
+        const originY = (o.originY != null ? o.originY : 0.18) * window.innerHeight;
+
+        const canvas = document.createElement('canvas');
+        canvas.style.cssText = 'position:fixed;inset:0;z-index:99998;pointer-events:none;';
+        canvas.width  = window.innerWidth;
+        canvas.height = window.innerHeight;
+        document.body.appendChild(canvas);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { canvas.remove(); return; }
+
+        const parts = [];
+        for (let i = 0; i < count; i++) {
+            const angle = (-Math.PI / 2) + (Math.random() - 0.5) * (Math.PI * 0.6);
+            const speed = 6 + Math.random() * 7;
+            parts.push({
+                x: originX + (Math.random() - 0.5) * 24,
+                y: originY,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                size: 5 + Math.random() * 6,
+                color: palette[(Math.random() * palette.length) | 0],
+                rot: Math.random() * Math.PI * 2,
+                vrot: (Math.random() - 0.5) * 0.3,
+                shape: Math.random() < 0.6 ? 'rect' : 'circ',
+            });
+        }
+        const tStart = performance.now();
+        function frame(now) {
+            const elapsed = now - tStart;
+            if (elapsed > duration) {
+                canvas.remove();
+                return;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const fadeAlpha = elapsed > duration * 0.7
+                ? 1 - ((elapsed - duration * 0.7) / (duration * 0.3))
+                : 1;
+            for (const p of parts) {
+                p.vy += 0.22;             // gravedad
+                p.vx *= 0.995;
+                p.x  += p.vx;
+                p.y  += p.vy;
+                p.rot += p.vrot;
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, fadeAlpha);
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.rot);
+                ctx.fillStyle = p.color;
+                if (p.shape === 'rect') {
+                    ctx.fillRect(-p.size / 2, -p.size / 3, p.size, p.size / 1.5);
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+            requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+    }
+
+
     // ── Export ───────────────────────────────────────────────────────────────
     window.showToast        = showToast;
     window.renderEmptyState = renderEmptyState;
@@ -940,6 +1045,8 @@
         isStreamFriendly: _isStreamFriendly,
         companyColor,
         companyTag,
+        staggerIn,
+        celebrate,
     };
 
     // Re-aplicar la vista guardada cuando se haya cargado el DOM
