@@ -69,14 +69,27 @@ android {
                 storePassword = keystorePassEnv
                 keyAlias      = keyAliasEnv
                 keyPassword   = keyPassEnv
+                // v1+v2+v3 schemes habilitados explícitamente. Algunos OEM
+                // (Honor MagicOS, Huawei EMUI, Xiaomi MIUI) rechazan APKs
+                // firmados solo con v3 con el genérico "el paquete no es
+                // válido" durante el sideload. Con v1+v2 garantizamos
+                // compat con Android 7+ side-load workflows.
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled    = true
-            isShrinkResources  = true
+            // Pack 27 hotfix — minify+shrink desactivado para descartar R8
+            // como causa de "el paquete no es válido". Costo: APK pasa de
+            // ~1.3 MB a ~3-4 MB, aceptable para ahorrarnos un round de
+            // bug-hunting de proguard rules de Compose. Re-habilitamos
+            // selectivamente cuando el flow esté validado en producción.
+            isMinifyEnabled    = false
+            isShrinkResources  = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
