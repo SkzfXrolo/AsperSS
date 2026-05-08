@@ -1327,3 +1327,75 @@ body.tournament-mode .stat-card .number {
     -webkit-text-fill-color: #e2e8f0 !important;
 }
 
+
+/* ════════════════════════════════════════════════════════════════════════
+   PACK 34 — V#32: Vista cards / list / table del historial.
+   Aplicado al contenedor con clase .scans-view-host (o id #scans-section).
+   Por defecto el HTML es <table>, así que:
+   - .scans-view-table  → mostrar tabla normal (no override)
+   - .scans-view-list   → la tabla pasa a "lista" compacta de filas finas
+   - .scans-view-cards  → cada <tr> se renderea como tarjeta flotante
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* LIST mode: rows finas, sin bordes verticales, hover suave */
+.scans-view-host.scans-view-list .results-table thead {
+    display: none;
+}
+.scans-view-host.scans-view-list .results-table tbody tr {
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    transition: background-color 120ms ease;
+}
+.scans-view-host.scans-view-list .results-table tbody tr:hover {
+    background: rgba(184, 115, 51, 0.05);
+}
+.scans-view-host.scans-view-list .results-table td {
+    padding: 8px 10px !important;
+    font-size: 12.5px;
+    border: 0;
+}
+.scans-view-host.scans-view-list .results-table tbody tr td:nth-child(2),
+.scans-view-host.scans-view-list .results-table tbody tr td:nth-child(4) {
+    /* en list mode ocultamos columnas secundarias (Juego, Indicaciones) */
+    display: none;
+}
+
+/* CARDS mode: cada row es una tarjeta separada con sombra suave */
+.scans-view-host.scans-view-cards .results-table {
+    border-collapse: separate;
+    border-spacing: 0 10px;
+}
+.scans-view-host.scans-view-cards .results-table thead {
+    display: none;
+}
+.scans-view-host.scans-view-cards .results-table tbody tr {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(0, 0, 0, 0.04));
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    border-radius: 10px;
+    overflow: hidden;
+    transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+.scans-view-host.scans-view-cards .results-table tbody tr:hover {
+    transform: translateY(-1px);
+    border-color: rgba(184, 115, 51, 0.35);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(184, 115, 51, 0.20);
+}
+.scans-view-host.scans-view-cards .results-table td {
+    border: 0 !important;
+    padding: 12px 14px !important;
+    vertical-align: middle;
+}
+.scans-view-host.scans-view-cards .results-table tbody tr td:first-child {
+    border-left: 3px solid var(--accent, #B87333);
+}
+
+/* Toggle button hover (independiente del estado activo) */
+#scans-view-toggle .scans-view-btn:not([aria-pressed="true"]):hover {
+    background: rgba(184, 115, 51, 0.08) !important;
+}
+@media (max-width: 600px) {
+    #scans-view-toggle .scans-view-label {
+        display: none; /* solo iconos en mobile */
+    }
+}
+

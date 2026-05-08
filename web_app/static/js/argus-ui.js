@@ -1092,27 +1092,131 @@
     _applyDensity(_getDensity());
 
     // ── Toggle vista cards/lista/tabla en historial (Visual #32) ─────────────
+    // Pack 34 — UI integrada en el header del historial (#scans-view-toggle)
+    // y resolución de contenedor mejorada para encontrar la <section> que
+    // contiene la tabla de scans aunque no tenga id="scans-section".
     const VIEW_KEY = 'argus_scans_view';
     const VIEW_VALID = ['cards', 'list', 'table'];
+    function _resolveScansContainer() {
+        // Prioridad: section explícito → host class → padre del tbody.
+        const explicit = document.getElementById('scans-section') ||
+                         document.getElementById('historial') ||
+                         document.querySelector('[data-scans-container]') ||
+                         document.querySelector('.scans-view-host');
+        if (explicit) return explicit;
+        const tbody = document.getElementById('results-table-body');
+        if (tbody) {
+            const sec = tbody.closest('section') || tbody.closest('.results-table-container');
+            if (sec) return sec;
+        }
+        return null;
+    }
     function _applyScansView(v) {
-        if (!VIEW_VALID.includes(v)) v = 'cards';
-        const sec = document.getElementById('scans-section') ||
-                    document.getElementById('historial') ||
-                    document.querySelector('[data-scans-container]');
-        if (!sec) return;
-        VIEW_VALID.forEach(x => sec.classList.remove('scans-view-' + x));
-        sec.classList.add('scans-view-' + v);
-        // Update toggle UI si existe
+        if (!VIEW_VALID.includes(v)) v = 'table';
+        const sec = _resolveScansContainer();
+        if (sec) {
+            VIEW_VALID.forEach(x => sec.classList.remove('scans-view-' + x));
+            sec.classList.add('scans-view-' + v);
+        }
+        // Update toggle UI legacy (.scans-view-toggle)
         document.querySelectorAll('.scans-view-toggle button').forEach(btn => {
             btn.classList.toggle('is-active', btn.dataset.view === v);
+        });
+        // Update toggle UI Pack 34 (#scans-view-toggle .scans-view-btn)
+        document.querySelectorAll('#scans-view-toggle .scans-view-btn').forEach(btn => {
+            const active = btn.dataset.scansView === v;
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+            btn.style.background = active ? 'rgba(184,115,51,.18)' : 'transparent';
+            btn.style.color      = active ? 'var(--accent, #B87333)' : 'var(--text-h)';
+            btn.style.fontWeight = active ? '600' : '400';
         });
         try { localStorage.setItem(VIEW_KEY, v); } catch (_e) {}
     }
     function _getScansView() {
-        try { return localStorage.getItem(VIEW_KEY) || 'cards'; }
-        catch (_e) { return 'cards'; }
+        try { return localStorage.getItem(VIEW_KEY) || 'table'; }
+        catch (_e) { return 'table'; }
     }
     function setScansView(v) { _applyScansView(v); }
+
+
+    // ── Pack 34 V#53 — Soporte teclado en filas del historial ────────────
+    // Hace cada <tr> del #results-table-body focusable (tabindex=0) y
+    // captura Enter/Space para "click" en la fila. Flechas ↑↓ navegan
+    // entre filas. Home/End van al primero/último. Esc desfocusea.
+    // Se aplica con MutationObserver para que las filas insertadas
+    // dinámicamente por panel.js queden cubiertas automáticamente.
+    function _enhanceScansRowsKeyboard() {
+        const tbody = document.getElementById('results-table-body');
+        if (!tbody) return;
+
+        const _setupRow = (row) => {
+            if (row.dataset.argusKbd === '1') return;
+            // Skip rows-loading que tienen colspan
+            if (row.querySelector('td[colspan]')) return;
+            row.dataset.argusKbd = '1';
+            row.setAttribute('tabindex', '0');
+            row.setAttribute('role', 'button');
+            row.style.outline = 'none';
+            row.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    // Buscamos un button/<a> "Ver detalles" en la fila
+                    const cta = row.querySelector(
+                        'button[onclick*="openScanDetail"], a[onclick*="openScanDetail"], button.action-btn-primary, .ver-btn'
+                    );
+                    if (cta) cta.click();
+                    else row.click();
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    const next = row.nextElementSibling;
+                    if (next && next.dataset.argusKbd === '1') next.focus();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    const prev = row.previousElementSibling;
+                    if (prev && prev.dataset.argusKbd === '1') prev.focus();
+                } else if (e.key === 'Home') {
+                    e.preventDefault();
+                    const first = tbody.querySelector('tr[data-argus-kbd="1"]');
+                    if (first) first.focus();
+                } else if (e.key === 'End') {
+                    e.preventDefault();
+                    const rows = tbody.querySelectorAll('tr[data-argus-kbd="1"]');
+                    if (rows.length) rows[rows.length - 1].focus();
+                } else if (e.key === 'Escape') {
+                    row.blur();
+                }
+            });
+            // Focus visible (ring bronce coherente con el resto)
+            row.addEventListener('focus', () => {
+                row.style.boxShadow = '0 0 0 2px rgba(184,115,51,.6)';
+                row.style.zIndex = '5';
+                row.style.position = 'relative';
+            });
+            row.addEventListener('blur', () => {
+                row.style.boxShadow = '';
+                row.style.zIndex = '';
+                row.style.position = '';
+            });
+        };
+
+        Array.from(tbody.querySelectorAll('tr')).forEach(_setupRow);
+
+        try {
+            const obs = new MutationObserver(muts => {
+                for (const m of muts) {
+                    m.addedNodes.forEach(n => {
+                        if (n.nodeType === 1 && n.tagName === 'TR') _setupRow(n);
+                    });
+                }
+            });
+            obs.observe(tbody, { childList: true });
+        } catch (_e) { /* ignore */ }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _enhanceScansRowsKeyboard);
+    } else {
+        _enhanceScansRowsKeyboard();
+    }
 
     // ── Toast si un scan tarda demasiado (Visual #43) ────────────────────────
     // Mantiene un mapa { scanId: epoch_ms } de "running scans" reportados

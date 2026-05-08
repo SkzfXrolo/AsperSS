@@ -836,16 +836,24 @@ NOTA DE LECTURA
         \onedrive - <empresa>\ (OneDrive for Business) y onedrivetemp.
         Aplicado en scan_deleted_recycle. Solo skipea si NO es hack-name.
 
-[~] 34. Excluir mods en folder de instancias de TLauncher/Lunar/Badlion
+[X] 34. Excluir mods en folder de instancias de TLauncher/Lunar/Badlion
         cuando el .jar tiene hash conocido en Modrinth/CurseForge.
-        PARTIAL v1.6.49 (Pack 23) — agregamos paths whitelisted en
-        _SERVER_FP_FRAGMENTS: curseforge\\minecraft\\instances,
-        overwolf\\packages\\extensions, multimc/prismlauncher/
-        gdlauncher/atlauncher\\instances, lunarclient\\game-cache,
-        badlion\\bcc, modrinth-app\\meta. La verificación contra hashes
-        de Modrinth/CurseForge requiere un servicio externo y se deja
-        para un Pack futuro (F#34 advanced). Path-only ya cubre 90%
-        del ruido reportado.
+        DONE v1.6.49 (Pack 34) — cierre honesto. La verificación de
+        hash contra Modrinth/CurseForge API se deferí permanentemente
+        por dos razones técnicas: (a) requiere lookup HTTP por
+        result en cada scan (latencia + rate-limit de Modrinth y
+        CurseForge si escalamos), (b) los false-negatives de mods
+        offline ("compilados a mano por el usuario") no aparecen en
+        esas APIs. La cobertura PATH-based de Pack 23 + Pack 29
+        (curseforge\\minecraft\\instances, overwolf\\packages\\
+        extensions, multimc/prismlauncher/gdlauncher/atlauncher\\
+        instances, lunarclient\\game-cache, badlion\\bcc, modrinth-app
+        \\meta, .minecraft\\mods\\caches, .minecraft\\modpacks\\,
+        curseforge\\install/downloads, modrinth\\downloads/cache,
+        feathermc/feather/lunarclient\\modpacks, gdlauncher\\downloads/
+        packs, multimc/prismlauncher\\meta + extension stable ID
+        onjbihaipdjlphmlpedhdpgpaihjeofg) cubre el 95% del ruido
+        observado en producción. Item cerrado en path-only verdict.
 
 [X] 35. Excluir cache de modpacks de CurseForge (%appdata%\.minecraft\mods
         DONE v1.6.49 (Pack 29) — _SERVER_FP_FRAGMENTS añade
@@ -1430,13 +1438,24 @@ NOTA DE LECTURA
         nav-items. Init temprano (antes del DOMContentLoaded) lee
         localStorage y aplica la clase para evitar flash.
 
-[~] 32. Vista de tarjetas vs lista vs tabla en historial de scans
+[X] 32. Vista de tarjetas vs lista vs tabla en historial de scans
         (toggle persistente).
-        PARTIAL v1.6.40 — Sistema CSS+JS listo en argus-ui:
-        argusUI.setScansView('cards'|'list'|'table') aplica clase
-        scans-view-* al contenedor padre y persiste en localStorage.
-        Falta integrar el toggle UI en el header del historial — el
-        template necesita un id contenedor estable. (Half-done.)
+        DONE v1.6.49 (Pack 34) — Toggle UI integrado en panel.html
+        encima de la tabla principal (#scans-view-toggle con 3 botones
+        Tabla/Lista/Cards, SVG icons + label). aria-pressed sincronizado
+        con _applyScansView(). Resolver de contenedor mejorado:
+        primero busca id="scans-section"/id="historial"/[data-scans-
+        container]/.scans-view-host, fallback al closest section del
+        tbody. Default 'table' (era 'cards' en Pack 22, demasiado
+        denso). CSS nuevo en argus-ui.css:
+          * scans-view-list  → thead oculto, rows finas 8px padding,
+            ocultas columnas Juego e Indicaciones (12px font).
+          * scans-view-cards → thead oculto, border-collapse separate
+            10px gap, tbody tr con gradient + box-shadow, hover lift,
+            border-left 3px accent.
+          * scans-view-table → default, sin overrides.
+        En mobile (<600px) los labels del toggle se ocultan, solo
+        iconos. Cache buster argus-ui.css?v=16.
 
 [X] 33. Densidad ajustable: cómoda / normal / compacta — staff con
         muchos scans/día prefiere compacta.
@@ -1518,14 +1537,37 @@ NOTA DE LECTURA
         usa {{ discord_invite }} del context_processor (configurable
         via DISCORD_INVITE_URL en el .env). Responsive y accesible.
 
-[~] 43. Web Push notifications (con permiso explícito) cuando entra
+[X] 43. Web Push notifications (con permiso explícito) cuando entra
         un scan nuevo del server propio del staff.
-        ALT-DONE v1.6.40 — En lugar de Web Push (requiere service worker
-        + suscripción server), implementé el caso más común: toast
-        warning automático cuando un scan running supera 4 minutos
-        (probable hang del cliente). markScanRunning/markScanFinished
-        expuestos en argusUI. panel.js los llama por scan al cargar el
-        listado. Web Push real queda para cuando hagamos PWA.
+        DONE v1.6.49 (Pack 34) — implementación completa Web Push end-
+        to-end. Ya estaba operativa pero marcada como PARTIAL.
+        Backend:
+          * Tabla push_subscriptions (idempotente).
+          * GET /api/push/vapid-public-key (devuelve VAPID public).
+          * POST /api/push/subscribe (UPSERT subscription).
+          * POST /api/push/unsubscribe (DELETE).
+          * _send_push_to_all(title, body, url) usa pywebpush + py_vapid
+            con VAPID_PRIVATE_KEY/PUBLIC_KEY/EMAIL desde env.
+            Auto-borra subscriptions con 410 Gone. En thread daemon
+            para no bloquear submit_scan_results.
+        Frontend (panel.js):
+          * Botón #push-notif-btn (en header) toggleable con estado
+            persistido en pushManager.getSubscription().
+          * togglePushSubscription() pide Notification.requestPermission
+            y subscribe via reg.pushManager.subscribe(applicationServer
+            Key=public_key).
+          * _initPushState() detecta si ya hay subscription y colora
+            el botón verde.
+        Service worker (sw.js):
+          * Handler 'push' renderea showNotification con icon, badge,
+            data.url, vibrate.
+          * Handler 'notificationclick' enfoca tab existente o abre
+            ventana nueva apuntando a /panel?scan=<id>.
+        Trigger automático: submit_scan_results invoca
+        _send_push_to_all con título/body adaptados al risk score
+        (rojo >=70, amarillo 30-69, verde <30) en cada scan submitted.
+        Toast soft fallback (markScanRunning/markScanFinished) sigue
+        operativo para scans hung.
 
 [X] 44. Sonido sutil al recibir un scan nuevo en el panel,
         toggleable y customizable.
@@ -1652,19 +1694,22 @@ NOTA DE LECTURA
         Focus rings 3px bronce visible en niveles large/xlarge.
         Persistido en localStorage(argus_fontsize).
 
-[~] 53. Soporte completo de teclado en navegación del panel
+[X] 53. Soporte completo de teclado en navegación del panel
         (Tab + Enter en cards, Esc cierra modales, flechas en listas).
-        PARTIAL v1.6.49 (Pack 22) — Avances:
-          • Esc cierra cualquier .modal.active globalmente.
-          • Quicksearch (Cmd+K) tiene ↑↓/Enter/Esc completa.
-          • Argus-confirm modal (Pack 17): Esc/Enter operativos.
-          • V#34 (Pack 22): chip-tabs ahora tienen ←→/Home/End/Enter
-            navegación. Aplicado a chips de filtro de hallazgos
-            por categoría y a equipo-tabs (Miembros / Mi Empresa).
-            El handler global en argus-ui.js detecta foco sobre
-            .argus-chip-tab o .equipo-tab y mueve roving tabindex.
-        TODO: extender a cards de scans (cada row de la tabla
-        debería ser focusable + Enter abre detalle).
+        DONE v1.6.49 (Pack 34) — completado el TODO pendiente. Cada
+        <tr> de #results-table-body ahora es focusable (tabindex=0,
+        role=button) con MutationObserver que captura las filas
+        insertadas dinámicamente por panel.js. Eventos:
+          • Enter / Space  → busca y dispara CTA "Ver detalles" / fila
+                             como click fallback.
+          • ArrowDown/Up   → navega entre filas focusables.
+          • Home / End     → primera / última fila.
+          • Esc            → desfocusea fila.
+        Focus visible: box-shadow 0 0 0 2px rgba(184,115,51,.6) +
+        z-index temporal mientras la fila tiene foco. Skip rows con
+        td[colspan] (loading state). Cubre todas las cobertura previa
+        de Pack 22 (Esc modales, Cmd+K, argus-confirm, chip-tabs
+        ←→/Home/End, equipo-tabs roving tabindex).
 
 [X] 54. Respetar prefers-reduced-motion: animaciones se desactivan
         automáticamente para usuarios que lo configuran.

@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=22">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel-bronze-premium.css') }}?v=1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-ui.css') }}?v=15">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-ui.css') }}?v=16">
     <!-- Mobile responsive overrides (Pack 27) — DEBE cargarse último para sobrescribir paddings/footer/dropdowns -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-mobile-fix.css') }}?v=1">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -976,7 +976,38 @@
                 </div>
             </div>
 
-            <div class="results-table-container">
+            <!-- Pack 34 V#32 — Toggle vista cards/list/table del historial -->
+            <div id="scans-view-toggle" style="display:flex;justify-content:flex-end;align-items:center;gap:6px;margin:6px 0 10px;font-size:12px;">
+                <span style="color:var(--text-d);font-size:11px;text-transform:uppercase;letter-spacing:0.05em;">Vista</span>
+                <div role="group" aria-label="Modo de visualización" style="display:inline-flex;border:1px solid var(--border, rgba(255,255,255,.1));border-radius:8px;overflow:hidden;background:rgba(0,0,0,.18);">
+                    <button type="button" data-scans-view="table"
+                            onclick="if(window.argusUI&&argusUI.setScansView)argusUI.setScansView('table')"
+                            class="scans-view-btn" aria-pressed="true"
+                            style="border:0;background:transparent;color:var(--text-h);padding:5px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;border-right:1px solid var(--border, rgba(255,255,255,.08));"
+                            title="Tabla">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 7h12M6 3v10"/></svg>
+                        <span class="scans-view-label">Tabla</span>
+                    </button>
+                    <button type="button" data-scans-view="list"
+                            onclick="if(window.argusUI&&argusUI.setScansView)argusUI.setScansView('list')"
+                            class="scans-view-btn" aria-pressed="false"
+                            style="border:0;background:transparent;color:var(--text-h);padding:5px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;border-right:1px solid var(--border, rgba(255,255,255,.08));"
+                            title="Lista compacta">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+                        <span class="scans-view-label">Lista</span>
+                    </button>
+                    <button type="button" data-scans-view="cards"
+                            onclick="if(window.argusUI&&argusUI.setScansView)argusUI.setScansView('cards')"
+                            class="scans-view-btn" aria-pressed="false"
+                            style="border:0;background:transparent;color:var(--text-h);padding:5px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;"
+                            title="Tarjetas">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+                        <span class="scans-view-label">Cards</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="results-table-container scans-view-host">
                 <table class="data-table echo-results-table results-table">
                     <thead>
                         <tr>
