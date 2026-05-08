@@ -1,20 +1,19 @@
 name: Android APK Build
 
 # Item Android #12 — pipeline CI para compilar el APK debug en cada push
-# que toque mobile/argus_android/. Sube el APK como artifact (para devs)
-# Y como GitHub Release rolling tag "android-latest" (para usuarios finales)
-# de modo que /descargar/android en Render redirija a una URL pública estable
-# sin necesidad de token ni de re-deployar Render.
+# que toque mobile/argus_android/. Sube el APK como artifact (devs) Y como
+# GitHub Release rolling tag "android-latest" (usuarios finales) de modo
+# que /descargar/android en Render redirija a una URL pública estable
+# sin token ni redeploy.
 #
 # Se ejecuta:
 #  - En push a main que cambia mobile/argus_android/** o este workflow
 #  - En PR que toca esos paths (sin publicar release, solo artifact)
-#  - Manualmente vía workflow_dispatch (botón "Run workflow" en GH)
+#  - Manualmente vía workflow_dispatch
 #
 # Output:
-#  - app-debug.apk como artifact (válido 30 días, debug build)
-#  - argus-android.apk en release "android-latest" (URL pública estable
-#    https://github.com/<owner>/<repo>/releases/download/android-latest/argus-android.apk)
+#  - argus-android-debug-<sha>.zip como artifact (válido 30 días)
+#  - argus-android.apk en release "android-latest" (URL pública estable)
 
 on:
   push:
@@ -27,9 +26,6 @@ on:
       - 'mobile/argus_android/**'
   workflow_dispatch:
 
-# Necesario para que softprops/action-gh-release pueda crear/actualizar
-# el release y subir el asset. NO da escritura al código fuente, solo
-# a releases (= GITHUB_TOKEN scoped).
 permissions:
   contents: write
 
@@ -37,7 +33,7 @@ jobs:
   build-debug:
     name: Build debug APK
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -51,30 +47,24 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('mobile/argus_android/**/*.gradle*', 'mobile/argus_android/gradle.properties') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
+          accept-android-sdk-licenses: true
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
 
-      - name: Generate Gradle wrapper if missing
-        working-directory: mobile/argus_android
-        run: |
-          if [ ! -f gradlew ]; then
-            gradle wrapper --gradle-version 8.5
-            chmod +x gradlew
-          fi
+      # gradle/actions/setup-gradle@v4 instala una versión específica de
+      # Gradle (no usa la del runner, que puede ser Gradle 9.x e incompatible
+      # con AGP 8.2.2) y maneja caché de dependencias automáticamente.
+      # Esto reemplaza al "gradle wrapper" + actions/cache manual del workflow
+      # anterior, que era frágil porque dependía del Gradle preinstalado.
+      - name: Setup Gradle 8.5
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.5"
+          cache-read-only: false
 
       - name: Build debug APK
         working-directory: mobile/argus_android
-        run: |
-          chmod +x gradlew || true
-          ./gradlew --no-daemon assembleDebug
+        run: gradle --no-daemon --stacktrace assembleDebug
 
       - name: Locate APK and report size
         id: locate
@@ -85,8 +75,7 @@ jobs:
             echo "::error::No se encontró el APK"
             exit 1
           fi
-          # Copiamos el APK con nombre estable para release/asset.
-          # El original (app-debug.apk) lo dejamos para artifact (devs).
+          # Copia con nombre estable para release/asset.
           cp "$APK" app/build/outputs/apk/debug/argus-android.apk
           SIZE_KB=$(du -k "$APK" | cut -f1)
           echo "apk=$APK" >> "$GITHUB_OUTPUT"
@@ -104,8 +93,8 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      # Solo publicar release en push a main (no en PRs ni dispatch a otra rama)
-      # — el release "android-latest" siempre apunta al último commit de main.
+      # Solo publicar release en push a main (no en PRs ni dispatch a otra rama).
+      # El release "android-latest" siempre apunta al último commit de main.
       - name: Publish to GitHub Release (rolling tag android-latest)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
