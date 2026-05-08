@@ -2440,8 +2440,164 @@ function refreshCurrentVerdictBanner(scanData) {
                      pending: { bg: 'rgba(107,114,128,0.1)', border: 'rgba(107,114,128,0.2)', text: '#9ca3af' } };
     const c = colors[scanData.verdict] || colors.pending;
     const label = scanData.verdict === 'clean' ? 'LIMPIO' : scanData.verdict === 'hack' ? 'CON HACKS' : 'PENDIENTE';
-    banner.style.cssText = `display:block;background:${c.bg};border:1px solid ${c.border};border-radius:10px;padding:12px 16px;margin-bottom:4px;font-size:13px;`;
-    banner.innerHTML = `<span style="font-weight:700;color:${c.text};">Veredicto: ${label}</span>${scanData.verdict_reason ? ` — <span style="color:var(--text-s);">${scanData.verdict_reason}</span>` : ''}${scanData.verdict_by ? `<span style="color:var(--text-d);font-size:11px;margin-left:8px;">por ${scanData.verdict_by}</span>` : ''}`;
+    banner.style.cssText = `display:block;background:${c.bg};border:1px solid ${c.border};border-radius:10px;padding:12px 16px;margin-bottom:4px;font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;`;
+    let html = `<span style="font-weight:700;color:${c.text};">Veredicto: ${label}</span>`;
+    if (scanData.verdict_reason) html += ` <span style="color:var(--text-s);">— ${escapeHtml(scanData.verdict_reason)}</span>`;
+    if (scanData.verdict_by) {
+        // Visual #40 — avatar circular del staff que firmó el veredicto
+        const staffName = String(scanData.verdict_by);
+        const initial   = (staffName.match(/[a-zA-Z0-9]/) || ['?'])[0].toUpperCase();
+        const hue       = _staffHue(staffName);
+        const avatarHtml = `<span title="Firmado por: ${escapeHtml(staffName)}"
+            style="display:inline-flex;align-items:center;justify-content:center;
+                   width:22px;height:22px;border-radius:50%;
+                   background:linear-gradient(135deg, hsl(${hue},70%,50%), hsl(${(hue+30)%360},70%,38%));
+                   color:#fff;font-size:11px;font-weight:700;
+                   box-shadow:0 0 0 1.5px rgba(255,255,255,0.10), 0 2px 6px rgba(0,0,0,0.30);
+                   font-family:ui-sans-serif,system-ui,sans-serif;letter-spacing:0;
+                   margin-left:6px;flex-shrink:0;">${initial}</span>`;
+        html += `<span style="color:var(--text-d);font-size:11px;display:inline-flex;align-items:center;">por ${escapeHtml(staffName)}${avatarHtml}</span>`;
+    }
+    banner.innerHTML = html;
+}
+
+// Visual #18 — Modal "¿Por qué este score?"
+// Calcula breakdown agregando issues por (categoria, alerta) y estima
+// el peso de cada bucket sobre el score total.
+function _openRiskBreakdownModal(scanData, riskScore, riskClass) {
+    // Cerrar modal previo si existe
+    document.getElementById('argus-risk-breakdown-modal')?.remove();
+
+    // Preferir issues del scanData si vinieron en el payload
+    let issues = scanData?.issues_list || scanData?.issues || [];
+    if (!Array.isArray(issues) || !issues.length) {
+        // Fallback: extraer desde el DOM
+        const cards = document.querySelectorAll('#issues-list-container [data-result-id], #issues-list-container .issue-card, #issues-list-container .result-row');
+        issues = Array.from(cards).map(el => ({
+            categoria: (el.dataset.categoria || el.dataset.category || 'OTROS').toUpperCase(),
+            alerta:    (el.dataset.alerta || el.dataset.severity || 'SOSPECHOSO').toUpperCase(),
+            nombre:    (el.dataset.nombre || el.querySelector('.issue-name')?.textContent || '').trim(),
+        }));
+    }
+
+    // Agregar por (alerta) total
+    const counts = { CRITICAL: 0, SOSPECHOSO: 0, NORMAL: 0, OTHER: 0 };
+    const byCategory = {};
+    issues.forEach(i => {
+        const a = (i.alerta || i.severity || 'SOSPECHOSO').toUpperCase();
+        if (a === 'CRITICAL' || a === 'CRÍTICO' || a === 'CRITICO') counts.CRITICAL++;
+        else if (a === 'SOSPECHOSO') counts.SOSPECHOSO++;
+        else if (a === 'NORMAL' || a === 'INFO') counts.NORMAL++;
+        else counts.OTHER++;
+        const c = (i.categoria || i.category || 'OTROS').toUpperCase();
+        if (!byCategory[c]) byCategory[c] = { c: 0, s: 0, n: 0, total: 0 };
+        if (a === 'CRITICAL' || a === 'CRÍTICO' || a === 'CRITICO') byCategory[c].c++;
+        else if (a === 'SOSPECHOSO') byCategory[c].s++;
+        else byCategory[c].n++;
+        byCategory[c].total++;
+    });
+
+    // Estimación de contribución al score (peso aproximado del scanner real:
+    // CRITICAL ~15pts, SOSPECHOSO ~5pts, NORMAL ~1pt — capped a 100)
+    const W = { CRITICAL: 15, SOSPECHOSO: 5, NORMAL: 1, OTHER: 2 };
+    const estPts = counts.CRITICAL * W.CRITICAL + counts.SOSPECHOSO * W.SOSPECHOSO
+                 + counts.NORMAL * W.NORMAL    + counts.OTHER * W.OTHER;
+
+    const verdict = (scanData?.verdict || '').toLowerCase();
+    const ai = scanData?.ai_analysis || scanData?.ai_summary || '';
+
+    const colorClass = riskClass || (riskScore >= 70 ? 'risk-hack' : riskScore >= 30 ? 'risk-suspicious' : 'risk-clean');
+    const accentColor = riskScore >= 70 ? '#ef4444' : riskScore >= 30 ? '#fbbf24' : '#10b981';
+
+    // Sort categorías por contribución estimada
+    const catRows = Object.entries(byCategory)
+        .map(([c, v]) => {
+            const pts = v.c * W.CRITICAL + v.s * W.SOSPECHOSO + v.n * W.NORMAL;
+            return { c, v, pts, pct: estPts ? Math.round(pts / estPts * 100) : 0 };
+        })
+        .sort((a, b) => b.pts - a.pts);
+
+    const catHtml = catRows.length ? catRows.map(r => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--border);">
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:13px;color:var(--text);">${escapeHtml(r.c)}</div>
+                <div style="font-size:11px;color:var(--text-d);margin-top:2px;">
+                    ${r.v.c ? `<span style="color:#ef4444;">●</span> ${r.v.c} críticos · ` : ''}
+                    ${r.v.s ? `<span style="color:#fbbf24;">●</span> ${r.v.s} sospechosos · ` : ''}
+                    ${r.v.n ? `<span style="color:#9ca3af;">●</span> ${r.v.n} normales` : ''}
+                </div>
+            </div>
+            <div style="min-width:130px;">
+                <div style="background:var(--bg-3);height:8px;border-radius:4px;overflow:hidden;">
+                    <div style="width:${Math.min(100, r.pct)}%;height:100%;background:linear-gradient(90deg, ${accentColor}aa, ${accentColor});transition:width 600ms cubic-bezier(0.22,1,0.36,1);"></div>
+                </div>
+                <div style="font-size:10.5px;color:var(--text-d);margin-top:3px;text-align:right;font-feature-settings:'tnum' 1;">~${r.pts} pts (${r.pct}%)</div>
+            </div>
+        </div>
+    `).join('') : `<div style="text-align:center;color:var(--text-d);padding:30px;font-size:13px;">Sin issues detectadas — score derivado solo del análisis IA.</div>`;
+
+    const modal = document.createElement('div');
+    modal.id = 'argus-risk-breakdown-modal';
+    modal.className = 'modal active';
+    modal.style.cssText = 'display:flex;align-items:center;justify-content:center;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.65);backdrop-filter:blur(8px);animation:fadeIn 200ms ease;';
+    modal.innerHTML = `
+        <div role="dialog" aria-labelledby="risk-bd-title" style="background:var(--bg-2);color:var(--text);width:min(560px, 92vw);max-height:88vh;overflow-y:auto;border-radius:14px;border:1px solid var(--border-m);box-shadow:0 20px 60px rgba(0,0,0,0.5);padding:0;">
+            <header style="padding:18px 22px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                <h2 id="risk-bd-title" style="margin:0;font-size:15px;font-weight:700;letter-spacing:0.3px;">¿Por qué este score?</h2>
+                <button id="risk-bd-close" type="button" aria-label="Cerrar" style="background:transparent;border:1px solid var(--border-m);color:var(--text-m);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:16px;line-height:1;">×</button>
+            </header>
+            <div style="padding:22px;">
+                <div style="display:flex;align-items:center;gap:18px;margin-bottom:18px;">
+                    <div style="font-size:42px;font-weight:800;color:${accentColor};font-feature-settings:'tnum' 1;line-height:1;">${riskScore}</div>
+                    <div style="flex:1;">
+                        <div style="font-size:13px;color:var(--text-m);margin-bottom:4px;">${riskScore >= 70 ? 'HACK detectado' : riskScore >= 30 ? 'Sospechoso — requiere review humano' : 'Limpio según heurísticas'}</div>
+                        <div style="font-size:11px;color:var(--text-d);">El score es la suma de contribuciones por severidad y categoría, capeado a 100. La IA puede ajustarlo según contexto.</div>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px;">
+                    <div style="text-align:center;padding:10px 6px;background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.25);border-radius:8px;">
+                        <div style="font-size:18px;font-weight:800;color:#ef4444;font-feature-settings:'tnum' 1;">${counts.CRITICAL}</div>
+                        <div style="font-size:10.5px;color:var(--text-d);margin-top:2px;">críticos · ${W.CRITICAL}pt c/u</div>
+                    </div>
+                    <div style="text-align:center;padding:10px 6px;background:rgba(251,191,36,0.10);border:1px solid rgba(251,191,36,0.25);border-radius:8px;">
+                        <div style="font-size:18px;font-weight:800;color:#fbbf24;font-feature-settings:'tnum' 1;">${counts.SOSPECHOSO}</div>
+                        <div style="font-size:10.5px;color:var(--text-d);margin-top:2px;">sospechosos · ${W.SOSPECHOSO}pts</div>
+                    </div>
+                    <div style="text-align:center;padding:10px 6px;background:rgba(156,163,175,0.10);border:1px solid rgba(156,163,175,0.25);border-radius:8px;">
+                        <div style="font-size:18px;font-weight:800;color:#9ca3af;font-feature-settings:'tnum' 1;">${counts.NORMAL}</div>
+                        <div style="font-size:10.5px;color:var(--text-d);margin-top:2px;">normales · ${W.NORMAL}pt</div>
+                    </div>
+                </div>
+                <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-d);margin:0 0 8px;">Contribución por categoría</h3>
+                ${catHtml}
+                ${ai ? `<details style="margin-top:18px;"><summary style="cursor:pointer;color:var(--accent);font-size:12px;font-weight:600;">Análisis de la IA</summary><div style="font-size:12.5px;line-height:1.55;color:var(--text-m);margin-top:8px;padding:10px 12px;background:var(--bg-3);border-radius:8px;border-left:3px solid ${accentColor};white-space:pre-wrap;">${escapeHtml(typeof ai === 'string' ? ai : JSON.stringify(ai, null, 2))}</div></details>` : ''}
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.querySelector('#risk-bd-close').onclick = () => modal.remove();
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+}
+
+
+// Visual #40 — color hash determinístico para avatares de staff
+function _staffHue(name) {
+    if (!name) return 30;
+    let h = 0;
+    const s = String(name);
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return Math.abs(h) % 360;
+}
+
+// Helper para escapar HTML cuando no exista ya una versión global
+function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 async function loadVerdictHistory() {
@@ -2788,7 +2944,11 @@ async function viewScanDetails(scanId) {
             const riskClass = riskScore >= 70 ? 'risk-hack' : riskScore >= 30 ? 'risk-suspicious' : 'risk-clean';
             const riskLabel = riskScore >= 70 ? `${riskScore} — HACK` : riskScore >= 30 ? `${riskScore} — Sospechoso` : `${riskScore} — Limpio`;
             riskBadge.className = `risk-score-badge ${riskClass}`;
-            riskBadge.textContent = riskLabel;
+            // Visual #18 — botón "Por qué este score" (interrogante junto al texto)
+            riskBadge.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">${escapeHtml(riskLabel)}<span class="risk-why-btn" title="¿Por qué este score? — Click para ver el breakdown" role="button" tabindex="0" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,0.15);font-size:11px;font-weight:700;cursor:pointer;line-height:1;">?</span></span>`;
+            riskBadge.style.cursor = 'pointer';
+            riskBadge.title = 'Click para ver el breakdown del score';
+            riskBadge.onclick = () => _openRiskBreakdownModal(data, riskScore, riskClass);
             riskBar.className = `risk-score-bar ${riskClass}`;
             riskBar.style.width = `${Math.min(riskScore, 100)}%`;
             // Visual #27 — sacudida sutil cuando el veredicto es hack

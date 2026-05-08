@@ -439,6 +439,110 @@
 }
 
 
+/* ── Modo Stream-friendly (Visual #22) ─────────────────────────────────────
+ * Para staff que está en stream/grabando: oculta nombres de jugadores
+ * (machine_name) y otros datos personales con un blur ligero que se quita
+ * al hover. Útil para hacer demos públicas sin doxear users.
+ * Activable con argusUI.setStreamFriendly(true|false). Persiste en LS. */
+html.argus-stream-friendly .machine-name,
+html.argus-stream-friendly .scan-machine,
+html.argus-stream-friendly .scan-machine-name,
+html.argus-stream-friendly .scan-card-machine,
+html.argus-stream-friendly .player-name,
+html.argus-stream-friendly [data-stream-blur],
+html.argus-stream-friendly .scans-table td.col-machine,
+html.argus-stream-friendly .detail-machine-name,
+html.argus-stream-friendly #scan-machine-name,
+html.argus-stream-friendly .ip-cell,
+html.argus-stream-friendly .uuid-cell {
+    filter: blur(7px);
+    transition: filter 180ms ease;
+    cursor: help;
+}
+html.argus-stream-friendly .machine-name:hover,
+html.argus-stream-friendly .scan-machine:hover,
+html.argus-stream-friendly .scan-machine-name:hover,
+html.argus-stream-friendly .scan-card-machine:hover,
+html.argus-stream-friendly .player-name:hover,
+html.argus-stream-friendly [data-stream-blur]:hover,
+html.argus-stream-friendly .scans-table td.col-machine:hover,
+html.argus-stream-friendly .detail-machine-name:hover,
+html.argus-stream-friendly #scan-machine-name:hover,
+html.argus-stream-friendly .ip-cell:hover,
+html.argus-stream-friendly .uuid-cell:hover {
+    filter: blur(0);
+}
+html.argus-stream-friendly::before {
+    content: 'STREAM MODE';
+    position: fixed;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #ef4444, #b91c1c);
+    color: #fff;
+    padding: 3px 12px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.4px;
+    z-index: 9999;
+    box-shadow: 0 2px 10px rgba(239,68,68,0.40);
+    pointer-events: none;
+}
+
+/* ── Tag color por empresa (Visual #41) ──────────────────────────────────── */
+.argus-company-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 999px;
+    line-height: 1.2;
+    border: 1px solid currentColor;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    white-space: nowrap;
+    transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.argus-company-tag::before {
+    content: '';
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 8px currentColor;
+    flex-shrink: 0;
+}
+.argus-company-tag:hover {
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 4px 14px color-mix(in srgb, currentColor 35%, transparent);
+}
+@supports not (background: color-mix(in srgb, red 50%, transparent)) {
+    .argus-company-tag {
+        background: rgba(184,115,51,0.10);
+    }
+}
+
+/* ── Auditoría prefers-reduced-motion global (Visual #54) ──────────────────
+ * Cualquier elemento con animación o transición se neutraliza si el SO/
+ * navegador pide reducir movimiento. Es exhaustivo y NO altera estilos
+ * estáticos: solo apaga los keyframes y rampas. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+        animation-delay: 0ms !important;
+        transition-delay: 0ms !important;
+    }
+    /* Honor a estos casos especiales: el shake del badge y los pulsos del
+     * FAB Discord ya respetan reduced-motion en sus media queries propias.
+     * No duplicar overrides. */
+}
+
+
 /* ── Modo accesibilidad: font-size base configurable (Visual #52) ────────── */
 /* Aplica zoom global al body para que TODO escale (incluyendo medidas hard-
  * coded en px). Ajustable desde argusUI.setFontSize('small'|'normal'|'large').

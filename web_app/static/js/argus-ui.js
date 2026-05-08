@@ -677,6 +677,68 @@
         _initStickyHeaderShadow();
     }
 
+    // ── Modo Stream-friendly (Visual #22) ────────────────────────────────────
+    // Toggleable via argusUI.setStreamFriendly(true|false). Persiste en LS.
+    // Aplica html.argus-stream-friendly y el CSS hace el blur en columnas
+    // de machine_name/IP/UUID. Hover quita el blur localmente.
+    const SF_KEY = 'argus_stream_friendly';
+    function _isStreamFriendly() {
+        try { return localStorage.getItem(SF_KEY) === '1'; }
+        catch (_e) { return false; }
+    }
+    function _applyStreamFriendly(b) {
+        document.documentElement.classList.toggle('argus-stream-friendly', !!b);
+        try { localStorage.setItem(SF_KEY, b ? '1' : '0'); } catch (_e) {}
+    }
+    function setStreamFriendly(b) {
+        _applyStreamFriendly(!!b);
+        if (typeof window.showToast === 'function') {
+            window.showToast(
+                b ? '🎥 Modo stream activado: nombres de jugadores con blur (hover para ver)'
+                  : '👁 Modo stream desactivado',
+                b ? 'success' : 'info',
+                { duration: 2400 }
+            );
+        }
+    }
+    _applyStreamFriendly(_isStreamFriendly());
+
+
+    // ── Tag color determinístico por empresa (Visual #41) ────────────────────
+    // Hash de empresa → color HSL estable (mismo company siempre = mismo color).
+    // argusUI.companyTag(name) devuelve un <span> listo para insertar.
+    // argusUI.companyColor(name) devuelve {hue, color, bg, border}.
+    function _hashStrToHue(s) {
+        if (!s) return 0;
+        let h = 0;
+        const str = String(s);
+        for (let i = 0; i < str.length; i++) {
+            h = (h * 31 + str.charCodeAt(i)) | 0;
+        }
+        return Math.abs(h) % 360;
+    }
+    function companyColor(name) {
+        const hue = _hashStrToHue(name || 'unknown');
+        // Saturación y luminosidad templadas para que no salten naranjas chillones
+        return {
+            hue:    hue,
+            color:  'hsl(' + hue + ', 70%, 70%)',
+            bg:     'hsl(' + hue + ', 65%, 18%)',
+            border: 'hsl(' + hue + ', 65%, 45%)',
+        };
+    }
+    function companyTag(name) {
+        const safeName = (name == null || name === '') ? 'Sin empresa' : String(name);
+        const c = companyColor(safeName);
+        const span = document.createElement('span');
+        span.className = 'argus-company-tag';
+        span.style.color = c.color;
+        span.title = 'Empresa: ' + safeName;
+        span.textContent = safeName;
+        return span;
+    }
+
+
     // ── Sonido sutil al recibir scan nuevo (Visual #44) ──────────────────────
     // No requiere assets: genera un "ding" suave con WebAudio API.
     // Toggleable via argusUI.setSoundEnabled(true|false) y persiste en LS.
@@ -874,6 +936,10 @@
         setSoundEnabled,
         isSoundEnabled: _isSoundEnabled,
         playScanDing,
+        setStreamFriendly,
+        isStreamFriendly: _isStreamFriendly,
+        companyColor,
+        companyTag,
     };
 
     // Re-aplicar la vista guardada cuando se haya cargado el DOM

@@ -739,8 +739,13 @@ NOTA DE LECTURA
         animado al entrar en viewport (IntersectionObserver) y
         refresh cada 60s sin re-animar. Respeta reduced-motion.
 
-[ ] 40. Avatar del staff que firmó el veredicto visible en cada
+[X] 40. Avatar del staff que firmó el veredicto visible en cada
         scan card (con tooltip con su nombre).
+        DONE v1.6.44 — refreshCurrentVerdictBanner ahora renderiza
+        un avatar circular 22px junto al "por <staff>". Color HSL
+        derivado del hash del nombre via _staffHue() (mismo staff
+        siempre = mismo color). Inicial mayúscula del nombre,
+        gradient + shadow. Tooltip "Firmado por: <nombre>".
 
 [ ] 41. Animación de "typing" en el AI analysis (texto que aparece
         carácter a carácter como GPT pensando).
@@ -825,8 +830,14 @@ NOTA DE LECTURA
         TODO: agregar tabindex y Enter en cards de scans, flechas
         en listas de logs. (Half-done por ahora.)
 
-[ ] 54. Respetar prefers-reduced-motion: animaciones se desactivan
+[X] 54. Respetar prefers-reduced-motion: animaciones se desactivan
         automáticamente para usuarios que lo configuran.
+        DONE v1.6.44 — auditoria global en argus-ui.css con regla
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after }
+        que pone animation-duration: 0.001ms !important, transition-
+        duration: 0.001ms !important, scroll-behavior: auto !important.
+        Refuerza overrides puntuales que ya existían (shake, pulse,
+        slide subpages, halo cursor, parallax hero).
 
 [ ] 55. PWA instalable del panel staff: manifest, icons, service
         worker offline-first para vista de scans cacheados.
@@ -943,11 +954,13 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 
   Scanner ............................. 60 ítems   (detección)      11/60
   Filtro .............................. 60 ítems   (anti-FP)        16/60
-  Visual .............................. 60 ítems   (UI/UX)          26/60
+  Visual .............................. 60 ítems   (UI/UX)          28/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 0/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    53/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    55/195
                                                   (4 parciales: S#9, V#32, V#43, V#53)
+                                                  + 3 BONUS Pack 11 (Stream-friendly,
+                                                  CompanyTag color, Why-this-score modal)
 
 SESIÓN DEL 07-may-2026 (9 packs en una tarde):
   Pack 1 (v1.6.34): Filtro #2 lite, #30, #38 + Visual #5, #6, #25
@@ -1022,6 +1035,33 @@ SESIÓN DEL 07-may-2026 (9 packs en una tarde):
                     → 2 detecciones nuevas + 3 filtros anti-FP críticos.
                       Recompila el .exe a 1.6.41 — los clientes con
                       versiones <1.6.41 verán "actualización disponible".
+  Pack 11 (v1.6.44): Visual #40, #54 + 3 BONUS sin tocar el .exe.
+                    NUEVOS: argusUI.setStreamFriendly / isStreamFriendly /
+                            companyTag / companyColor;
+                            _openRiskBreakdownModal / _staffHue / escapeHtml;
+                            CSS argus-stream-friendly + argus-company-tag.
+                    → 5 mejoras UI:
+                      * V#40 — Avatar circular del staff que firmó el
+                        veredicto en el banner de "Veredicto" (HSL
+                        determinístico por hash del nombre, gradient).
+                      * V#54 — Auditoría reduced-motion global en CSS
+                        (apaga TODAS las animaciones/transiciones de
+                        cualquier *::before/::after si el SO lo pide).
+                      * BONUS — Modo Stream-friendly: blur 7px en
+                        machine_name/IP/UUID con hover para revelar
+                        + badge "STREAM MODE" rojo arriba. Toggle en
+                        header del panel (🎥). Persiste en LS.
+                      * BONUS — Tag color por empresa: hash → HSL
+                        estable, mismo company siempre = mismo color.
+                        Helpers companyTag / companyColor expuestos
+                        en argusUI para integración futura en cards.
+                      * BONUS — Modal "¿Por qué este score?": al
+                        clickear el badge de risk score se abre un
+                        modal con breakdown por categoría (críticos
+                        x15pts, sospechosos x5pts, normales x1pt),
+                        contadores grandes y barra de contribución
+                        por categoría. Si hay análisis IA, expandible.
+
   Pack 10 (v1.6.43): Scanner #37, #51 + Filtros #51, #59 + (S#9 parcial)
                     NUEVOS: scan_registry_run_persistence (5 hives
                             HKCU/HKLM Run/RunOnce con whitelist suave
