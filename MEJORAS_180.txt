@@ -532,8 +532,14 @@ NOTA DE LECTURA
         descarta si NO es hack-name. Aplicado en scan_deleted_recycle y
         en scan_messaging_downloads.
 
-[ ] 37. Diferenciar ".rise" como extensión de archivo (raro) vs ".rise"
+[X] 37. Diferenciar ".rise" como extensión de archivo (raro) vs ".rise"
         como folder (Rise client config folder). Solo flagear .rise si es ext.
+        DONE v1.6.49 (Pack 24) — en _is_server_false_positive (web_app/
+        app.py) detecta segmentos de path '.rise/' o '.rise\\' como
+        carpetas de config (Rise/Vape config legítima dejada tras
+        desinstalar) y descarta como FP. Solo conserva como evidencia
+        si el filename TERMINA en .rise como extensión real (foo.rise),
+        que es el caso raro de archivo con nombre completo del cheat.
 
 [X] 38. Smart match en hack_terms: solo flag si el término es palabra
         completa (regex \bvertex\b), no substring. Evita FP en
@@ -728,12 +734,14 @@ NOTA DE LECTURA
 [ ]  2. Tema "torneo" alternativo más serio (gris/negro neutral, sin
         gradientes) para entornos competitivos formales.
 
-[~]  3. Tema "minimalista" sin animaciones para PCs lentas — accessibility
+[X]  3. Tema "minimalista" sin animaciones para PCs lentas — accessibility
         y rendimiento.
-        PARTIAL (Pack 11) — auditoría reduced-motion global en CSS apaga
-        todas las animaciones/transiciones si el SO lo pide
-        (prefers-reduced-motion: reduce). Falta el toggle manual independiente
-        del SO para "modo low-motion" voluntario.
+        DONE v1.6.49 (Pack 24) — además del prefers-reduced-motion del SO
+        (Pack 11), ahora hay toggle manual independiente:
+        argusUI.setLowMotion(true|false) aplica clase .argus-lowmotion al
+        <html>. CSS desactiva animation-duration/transition-duration a
+        0.001ms !important globalmente. Persistido en localStorage
+        ('argus_lowmotion'). Aplicado early antes del DOMContentLoaded.
 
 [X]  4. Animación staggered fade-in al cargar resultados de un scan
         (cada card aparece con delay incremental).
@@ -780,8 +788,23 @@ NOTA DE LECTURA
 [ ]  9. Iconos lucide-react / heroicons consistentes en todo el panel
         en lugar de emojis dispersos.
 
-[ ] 10. Gráfica de risk score histórico del staff (line chart) en su
+[X] 10. Gráfica de risk score histórico del staff (line chart) en su
         sub-perfil del panel.
+        DONE v1.6.49 (Pack 24) — Backend: nuevo endpoint GET
+        /api/staff/my-stats devuelve {verdicts_total, clean_count,
+        hack_count, sus_count, days_active, streak, best_streak,
+        avg_risk_30d, history[]}. history es array {date, value, label}
+        del risk score promedio diario los últimos 30 días. Cache 60s
+        in-memory por user_id en _staff_stats_cache.
+        Frontend: argusUI.renderLineChart(target, data, opts) — SVG
+        vanilla con curva Catmull-Rom→Bezier suave, area-under-curve
+        con gradient bronce, dots coloreados por umbral (rojo/ámbar/
+        verde), animación stroke-dashoffset 1.8s al draw, ejes Y (0-100
+        con grid sutil) y X (máx 6 fechas). Honra reduced-motion.
+        Integrado en el modal de "Mi actividad" (panel.js): nueva tab
+        "Risk score" con 5 stat cards (Veredictos, Limpios, Sospechosos,
+        Hacks, Risk avg 30d) + line chart abajo. Empty state ilustrado
+        si aún no hay histórico.
 
 [X] 11. Heatmap GitHub-style de actividad por día/hora del staff
         (cuándo scannea más).
@@ -810,9 +833,22 @@ NOTA DE LECTURA
         (av-detected/suspicious/clean) — solo se aplica cuando no hay
         clase de severidad asignada.
 
-[ ] 13. Sistema de logros/streaks gamificado opcional:
+[X] 13. Sistema de logros/streaks gamificado opcional:
         "5 scans con CLEAN", "100 scans totales", "Primera detección de
         cheat nuevo", "Cazador del mes".
+        DONE v1.6.49 (Pack 24) — argusUI.evaluateAchievements(stats) y
+        argusUI.renderAchievements(target, stats) en argus-ui.js con
+        catálogo de 15 logros agrupados por categoría:
+          • Volumen (6): Primer scan, 10/50/100/500/1000.
+          • Streaks (4): 3/7/30 días seguidos + mejor racha 14+.
+          • Distribución (3): 50+ Limpios, 20+ Hacks, 20+ Sospechosos.
+          • Días activos (2): 30/100 días distintos.
+        Cards con icono emoji, label, desc, badge ✓ (unlocked) o lock 🔒.
+        Barra de progreso global "X/15 logros". Estilo en argus-ui.css:
+        cards con tinte bronce gradient cuando is-unlocked, hover lift,
+        light-theme tweaks. Integrado en el modal "Mi actividad" como
+        tercera tab. Stats merged de heatmap + my-stats (streak,
+        days_active, verdicts_total, clean/hack/sus).
 
 [X] 14. Animación slide horizontal al cambiar de pestaña (Detalles,
         Process Times, Explore, Utilities, Archivos de Windows).
@@ -1117,8 +1153,16 @@ NOTA DE LECTURA
         solo se modificó el CSS via !important para sobreescribir
         rules de panel.css.
 
-[ ] 49. Tipografía dual: serif elegante (Playfair / Cormorant) para
+[X] 49. Tipografía dual: serif elegante (Playfair / Cormorant) para
         titulares grandes, sans-serif (Inter / Geist) para data y UI.
+        DONE v1.6.49 (Pack 24) — Cargado Playfair Display (700/800/900)
+        desde Google Fonts en panel.html junto con Inter (300-700).
+        argus-ui.css aplica Playfair via !important a .panel-title,
+        .section-title, .scan-page-title y h1.argus-display. Body y data
+        siguen con Inter/system. Conserva font-feature-settings 'lnum'
+        'kern' 'liga' (números proporcionales y ligaduras) y forzando
+        'tnum' (tabular-nums) cuando el header tiene [data-argus-counter]
+        para mantener alineación de números.
 
 [X] 50. Activar font-feature-settings para ligaduras estilísticas
         y números tabulares (alineación perfecta de columnas
@@ -1310,12 +1354,12 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 ═══════════════════════════════════════════════════════════════════════════════
 
   Scanner ............................. 60 ítems   (detección)      14/60
-  Filtro .............................. 60 ítems   (anti-FP)        34/60
-  Visual .............................. 60 ítems   (UI/UX)          39/60
+  Filtro .............................. 60 ítems   (anti-FP)        35/60
+  Visual .............................. 60 ítems   (UI/UX)          43/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    96/195
-                                                  (6 parciales: S#9, V#3, V#32, V#43, V#53, F#34)
+  TOTAL ............................... 195 ítems  COMPLETADOS:   101/195
+                                                  (5 parciales: S#9, V#32, V#43, V#53, F#34)
                                                   (6 bonus: scanner_version chip,
                                                    argusUI.confirm, argusUI.typewriter,
                                                    argusUI.renderLoading, .argus-empty--v2,
@@ -1336,6 +1380,63 @@ Linux: Arch, Ubuntu, Fedora, etc.).
                                                   (AppImage/Flatpak/deb), #14 (CI Docker)
 
 SESIÓN DEL 08-may-2026:
+  Pack 24 (v1.6.49): F#37 + V#3 (de PARTIAL a DONE) + V#10 + V#13 + V#49.
+                    Push fuerte de UI personal del staff + tipografía
+                    + filtro Rise.
+
+                    F#37 — `.rise` extensión vs folder:
+                      _is_server_false_positive detecta segmentos de
+                      ruta '.rise/' o '.rise\\' como carpetas de config
+                      legítimas (Rise/Vape config dejada tras desinstalar)
+                      y descarta. Solo conserva como evidencia si el
+                      filename termina en .rise (nombre.rise).
+
+                    V#3 — Modo low-motion manual:
+                      argusUI.setLowMotion(true|false) aplica clase
+                      .argus-lowmotion a <html>. CSS desactiva todas
+                      las animations/transitions a 0.001ms !important.
+                      Persistido en localStorage('argus_lowmotion').
+                      Independiente del prefers-reduced-motion del SO.
+
+                    V#10 — Risk score histórico (line chart):
+                      Backend: GET /api/staff/my-stats devuelve
+                      verdicts_total, clean/hack/sus_count, days_active,
+                      streak, best_streak, avg_risk_30d, history[].
+                      history es promedio diario los últimos 30 días.
+                      Cache 60s in-memory por user.
+                      Frontend: argusUI.renderLineChart(target, data,
+                      opts) — SVG vanilla, curva Catmull-Rom→Bezier
+                      suave, area-under-curve gradient bronce, dots
+                      coloreados por umbral, animación stroke-dashoffset
+                      1.8s, ejes Y (0-100 con grid) y X (máx 6 fechas).
+                      Honra reduced-motion. Empty state ilustrado.
+
+                    V#13 — Sistema de logros gamificado:
+                      argusUI.renderAchievements + evaluateAchievements
+                      con catálogo de 15 logros (volumen, streaks,
+                      distribución, días activos). Cards con icono,
+                      label, desc, badge ✓/lock 🔒. Barra de progreso
+                      global. CSS gradient bronce cuando unlocked,
+                      hover lift, light-theme tweaks.
+
+                    V#49 — Tipografía dual:
+                      Cargado Playfair Display (700/800/900) en
+                      panel.html. argus-ui.css aplica Playfair vía
+                      !important a .panel-title, .section-title,
+                      .scan-page-title y h1.argus-display. Body queda
+                      con Inter. Conserva 'lnum' 'kern' 'liga' y
+                      'tnum' cuando el header tiene counters.
+
+                    Modal "Mi actividad" reescrito con 3 tabs (Heatmap
+                    / Risk score / Logros). Carga heatmap + my-stats
+                    en paralelo con Promise.allSettled. Tab switching
+                    con argus-chip-tabs (V#34 keyboard nav aplica).
+
+                    panel.html: argus-ui.css v=14, argus-ui.js v=13,
+                    panel.js v=64. Playfair cargado junto a Inter.
+                    → 1 filtro (F#37) + 4 visuales (V#3, V#10, V#13,
+                      V#49). V#3 sale de PARTIAL.
+
   Pack 23 (v1.6.49): Filter #23, #29, #34 PARTIAL, #43, #44, #47, #56.
                     Big push de whitelists server-side (web_app/app.py)
                     + settings dinámicos por empresa.

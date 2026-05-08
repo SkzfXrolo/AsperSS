@@ -231,6 +231,8 @@
         folder: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M6 16a4 4 0 0 1 4-4h14l6 6h24a4 4 0 0 1 4 4v28a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4V16z"/></svg>',
         // Sparkles — para estados positivos
         sparkles: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M32 6v12M32 46v12M6 32h12M46 32h12M14 14l8 8M42 42l8 8M50 14l-8 8M14 50l8-8"/></svg>',
+        // Line chart — para "sin histórico"
+        chart: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%"><path d="M8 52h48M12 44l10-12 10 8 12-18 10 12"/><circle cx="22" cy="32" r="2"/><circle cx="32" cy="40" r="2"/><circle cx="44" cy="22" r="2"/><circle cx="54" cy="34" r="2"/></svg>',
     };
 
     function _resolveIcon(spec) {
@@ -1403,6 +1405,187 @@
     }
 
 
+    // ── Visual #3 — Modo low-motion manual (independiente del SO) ───────────
+    // Aplica clase .argus-lowmotion a <html>. CSS en argus-ui.css desactiva
+    // todas las animaciones/transiciones cuando esa clase está presente.
+    // Persiste en localStorage('argus_lowmotion').
+    const LM_KEY = 'argus_lowmotion';
+    function _applyLowMotion(b) {
+        const html = document.documentElement;
+        if (b) html.classList.add('argus-lowmotion');
+        else   html.classList.remove('argus-lowmotion');
+        try { localStorage.setItem(LM_KEY, b ? '1' : '0'); } catch (_e) {}
+    }
+    function _getLowMotion() {
+        try { return localStorage.getItem(LM_KEY) === '1'; }
+        catch (_e) { return false; }
+    }
+    function setLowMotion(b) { _applyLowMotion(!!b); }
+    _applyLowMotion(_getLowMotion());
+
+
+    // ── Visual #10 — Line chart SVG vanilla para risk score histórico ───────
+    // Sin libs externas. Recibe target (selector | element) y data: array
+    // de {date: 'YYYY-MM-DD', value: number}. Dibuja un SVG con línea suave
+    // (cubic Bezier), área bajo la curva con gradient bronce, dots en cada
+    // punto, ejes X (fechas espaciadas) e Y (0-100), tooltip on hover.
+    // Honra prefers-reduced-motion (no anima la línea).
+    function renderLineChart(target, data, opts) {
+        const t = (typeof target === 'string') ? document.querySelector(target) : target;
+        if (!t) return;
+        const o = opts || {};
+        const w = o.width || t.clientWidth || 720;
+        const h = o.height || 200;
+        const pad = { top: 16, right: 14, bottom: 28, left: 36 };
+        const innerW = w - pad.left - pad.right;
+        const innerH = h - pad.top - pad.bottom;
+        const yMin = 0;
+        const yMax = o.yMax || 100;
+        const reduce = window.matchMedia &&
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!data || !data.length) {
+            t.innerHTML = '';
+            renderEmptyState(t, {
+                icon: 'chart',
+                title: 'Sin datos históricos',
+                description: 'Cuando este staff confirme veredictos, aparecerán acá.',
+            });
+            return;
+        }
+        const n = data.length;
+        const xAt = (i) => pad.left + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
+        const yAt = (v) => pad.top + innerH - ((Math.max(yMin, Math.min(yMax, v)) - yMin) / (yMax - yMin)) * innerH;
+        const points = data.map((d, i) => [xAt(i), yAt(d.value)]);
+        // Path con curvas Catmull-Rom → Bezier
+        let line = '';
+        for (let i = 0; i < points.length; i++) {
+            const [x, y] = points[i];
+            if (i === 0) { line += `M ${x.toFixed(1)} ${y.toFixed(1)}`; continue; }
+            const [px, py] = points[i - 1];
+            const cx1 = px + (x - px) * 0.45;
+            const cy1 = py;
+            const cx2 = x  - (x - px) * 0.45;
+            const cy2 = y;
+            line += ` C ${cx1.toFixed(1)} ${cy1.toFixed(1)}, ${cx2.toFixed(1)} ${cy2.toFixed(1)}, ${x.toFixed(1)} ${y.toFixed(1)}`;
+        }
+        const baseY = pad.top + innerH;
+        const area = line + ` L ${points[points.length - 1][0].toFixed(1)} ${baseY} L ${points[0][0].toFixed(1)} ${baseY} Z`;
+        // Y-axis ticks: 0, 25, 50, 75, 100 (o lo que dicte yMax)
+        const yTicks = [0, 25, 50, 75, 100].filter(v => v >= yMin && v <= yMax);
+        const yTickHtml = yTicks.map(v => {
+            const yy = yAt(v);
+            return `<line x1="${pad.left}" x2="${w - pad.right}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="2,4"/>` +
+                   `<text x="${pad.left - 6}" y="${(yy + 4).toFixed(1)}" text-anchor="end" fill="rgba(234,216,192,0.5)" font-size="10" font-family="ui-monospace,monospace">${v}</text>`;
+        }).join('');
+        // X-axis labels — máximo 6 etiquetas equiespaciadas
+        const xLabelStep = Math.max(1, Math.floor(n / 6));
+        const xLabelHtml = data.map((d, i) => {
+            if (i % xLabelStep !== 0 && i !== n - 1) return '';
+            const xx = xAt(i);
+            const lbl = (d.label || (d.date ? d.date.slice(5) : ''));
+            return `<text x="${xx.toFixed(1)}" y="${(h - 8).toFixed(1)}" text-anchor="middle" fill="rgba(234,216,192,0.45)" font-size="10" font-family="ui-monospace,monospace">${lbl}</text>`;
+        }).join('');
+        const dotsHtml = points.map(([x, y], i) => {
+            const v = data[i].value;
+            const color = v >= 70 ? '#FF6B6B' : v >= 30 ? '#FFB86B' : '#5BC180';
+            return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.5" fill="${color}" stroke="#1a1410" stroke-width="1.5">` +
+                   `<title>${data[i].label || data[i].date || ''}: ${v}</title></circle>`;
+        }).join('');
+        const gradId = 'argusLineGrad_' + Math.random().toString(36).slice(2, 7);
+        const animAttr = reduce ? '' :
+            ' style="stroke-dasharray:1500;stroke-dashoffset:1500;animation:argusLineDraw 1.8s 0.1s ease-out forwards"';
+        t.innerHTML = `
+        <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Risk score histórico">
+            <defs>
+                <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stop-color="#EAD8C0" stop-opacity="0.32"/>
+                    <stop offset="100%" stop-color="#EAD8C0" stop-opacity="0"/>
+                </linearGradient>
+            </defs>
+            ${yTickHtml}
+            <path d="${area}" fill="url(#${gradId})"/>
+            <path d="${line}" fill="none" stroke="#EAD8C0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"${animAttr}/>
+            ${dotsHtml}
+            ${xLabelHtml}
+        </svg>`;
+    }
+
+    // Re-export el helper para que panel.js pueda llamarlo
+    function renderLineChartPublic(target, data, opts) {
+        return renderLineChart(target, data, opts);
+    }
+
+
+    // ── Visual #13 — Sistema de logros / streaks gamificado ─────────────────
+    // Catálogo client-side de achievements. Recibe stats {scans_total,
+    // verdicts_total, days_active, streak, best_streak, clean_count,
+    // hack_count, sus_count} y devuelve array de logros calificados.
+    const ACHIEVEMENTS = [
+        // Volumen
+        { id: 'first_scan',   icon: '🎯', label: 'Primer scan',           desc: 'Confirmaste tu primer veredicto',       check: s => (s.verdicts_total || 0) >= 1 },
+        { id: 'ten_scans',    icon: '🔟', label: '10 scans',               desc: 'Confirmaste 10 veredictos',             check: s => (s.verdicts_total || 0) >= 10 },
+        { id: 'fifty_scans',  icon: '🚀', label: '50 scans',               desc: 'Confirmaste 50 veredictos',             check: s => (s.verdicts_total || 0) >= 50 },
+        { id: 'hundred',      icon: '💯', label: 'Centenario',             desc: 'Confirmaste 100 veredictos',            check: s => (s.verdicts_total || 0) >= 100 },
+        { id: 'half_grand',   icon: '🏛️', label: '500 veredictos',         desc: 'Llegaste a 500 confirmaciones',         check: s => (s.verdicts_total || 0) >= 500 },
+        { id: 'grand',        icon: '👑', label: 'Mil scans',              desc: 'Mil veredictos confirmados',            check: s => (s.verdicts_total || 0) >= 1000 },
+        // Streaks
+        { id: 'streak_3',     icon: '🔥', label: 'Racha de 3 días',        desc: '3 días seguidos activo',                check: s => (s.streak || 0) >= 3 },
+        { id: 'streak_7',     icon: '⚡', label: 'Una semana al hilo',    desc: '7 días seguidos confirmando',          check: s => (s.streak || 0) >= 7 },
+        { id: 'streak_30',    icon: '🌙', label: 'Mes de constancia',     desc: '30 días seguidos activo',               check: s => (s.streak || 0) >= 30 },
+        { id: 'streak_best',  icon: '🏆', label: 'Mejor racha 14+',       desc: 'Tu mejor racha llegó a 14 días',        check: s => (s.best_streak || 0) >= 14 },
+        // Distribución
+        { id: 'clean_keeper', icon: '🟩', label: 'Cuidador',                desc: '50+ veredictos LIMPIO confirmados',     check: s => (s.clean_count || 0) >= 50 },
+        { id: 'cazador',      icon: '🎯', label: 'Cazador',                 desc: '20+ veredictos HACK confirmados',       check: s => (s.hack_count || 0) >= 20 },
+        { id: 'detective',    icon: '🔎', label: 'Detective',               desc: '20+ veredictos SOSPECHOSO',             check: s => (s.sus_count || 0) >= 20 },
+        // Días activos
+        { id: 'active_30',    icon: '📅', label: '30 días activos',         desc: 'Activo en 30 días distintos',           check: s => (s.days_active || 0) >= 30 },
+        { id: 'active_100',   icon: '🗓️', label: '100 días activos',        desc: 'Activo en 100 días distintos',          check: s => (s.days_active || 0) >= 100 },
+    ];
+
+    function evaluateAchievements(stats) {
+        const s = stats || {};
+        return ACHIEVEMENTS.map(a => ({
+            id: a.id, icon: a.icon, label: a.label,
+            description: a.desc,
+            unlocked: !!(a.check && a.check(s)),
+        }));
+    }
+
+    function renderAchievements(target, stats) {
+        const t = (typeof target === 'string') ? document.querySelector(target) : target;
+        if (!t) return;
+        const list = evaluateAchievements(stats);
+        const unlocked = list.filter(x => x.unlocked).length;
+        const total = list.length;
+        const pct = Math.round(unlocked / total * 100);
+        const html = `
+        <div class="argus-achievement-grid">
+            <div class="argus-achievement-summary">
+                <div class="argus-achievement-progress">
+                    <div class="argus-achievement-progress-bar" style="width:${pct}%"></div>
+                </div>
+                <div class="argus-achievement-count">${unlocked}<span>/${total} logros</span></div>
+            </div>
+            <div class="argus-achievement-cards">
+                ${list.map(a => `
+                    <div class="argus-achievement-card${a.unlocked ? ' is-unlocked' : ''}" title="${a.description.replace(/"/g, '&quot;')}">
+                        <div class="argus-achievement-icon">${a.icon}</div>
+                        <div class="argus-achievement-text">
+                            <div class="argus-achievement-label">${a.label}</div>
+                            <div class="argus-achievement-desc">${a.description}</div>
+                        </div>
+                        ${a.unlocked
+                            ? '<div class="argus-achievement-badge">✓</div>'
+                            : '<div class="argus-achievement-lock">🔒</div>'
+                        }
+                    </div>
+                `).join('')}
+            </div>
+        </div>`;
+        t.innerHTML = html;
+    }
+
+
     // ── Export ───────────────────────────────────────────────────────────────
     window.showToast        = showToast;
     window.renderEmptyState = renderEmptyState;
@@ -1434,6 +1617,11 @@
         confirm: confirmModal,
         typewriter,
         renderLoading,
+        setLowMotion,
+        getLowMotion: _getLowMotion,
+        renderLineChart: renderLineChartPublic,
+        renderAchievements,
+        evaluateAchievements,
     };
 
     // Re-aplicar la vista guardada cuando se haya cargado el DOM

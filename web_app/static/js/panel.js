@@ -811,10 +811,15 @@ async function openMyActivityHeatmap() {
             <div style="padding:18px 22px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--border);">
                 <div>
                     <span class="argus-eyebrow">Tu actividad</span>
-                    <h2 id="argus-activity-title" class="section-title" style="margin:6px 0 0;">Heatmap · últimos 365 días</h2>
+                    <h2 id="argus-activity-title" class="section-title" style="margin:6px 0 0;">Mi panel personal</h2>
                 </div>
                 <button id="argus-activity-close" type="button" aria-label="Cerrar"
                     style="background:transparent;border:1px solid var(--border-m);color:var(--text-m);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0;">×</button>
+            </div>
+            <div class="argus-chip-tabs" role="tablist" aria-label="Secciones de mi actividad" style="display:flex;gap:6px;padding:14px 22px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+                <button class="argus-chip-tab" role="tab" aria-selected="true" tabindex="0" data-myact-tab="heatmap" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-m,rgba(184,115,51,0.28));background:rgba(180,138,98,0.18);color:var(--text);font-weight:700;font-size:12.5px;cursor:pointer;letter-spacing:0.3px;">Heatmap</button>
+                <button class="argus-chip-tab" role="tab" aria-selected="false" tabindex="-1" data-myact-tab="risk" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-m,rgba(184,115,51,0.28));background:transparent;color:var(--text-m);font-weight:700;font-size:12.5px;cursor:pointer;letter-spacing:0.3px;">Risk score</button>
+                <button class="argus-chip-tab" role="tab" aria-selected="false" tabindex="-1" data-myact-tab="achievements" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-m,rgba(184,115,51,0.28));background:transparent;color:var(--text-m);font-weight:700;font-size:12.5px;cursor:pointer;letter-spacing:0.3px;">Logros</button>
             </div>
             <div id="argus-activity-body" style="padding:22px;">
                 <div style="display:flex;align-items:center;justify-content:center;padding:60px 0;color:var(--text-d);font-size:13px;">Cargando actividad…</div>
@@ -832,18 +837,113 @@ async function openMyActivityHeatmap() {
     root.querySelector('#argus-activity-close').addEventListener('click', close);
     root.addEventListener('click', (e) => { if (e.target === root) close(); });
 
-    let data;
-    try {
-        const r = await fetch('/api/staff/my-activity-heatmap?days=365');
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        data = await r.json();
-    } catch (e) {
-        const body = root.querySelector('#argus-activity-body');
-        if (body) body.innerHTML = `<div style="color:#f87171;text-align:center;padding:40px;font-size:13px;">No se pudo cargar la actividad: ${e.message || e}</div>`;
+    // Cargar ambos endpoints en paralelo
+    const body = root.querySelector('#argus-activity-body');
+    const [heatmapRes, statsRes] = await Promise.allSettled([
+        fetch('/api/staff/my-activity-heatmap?days=365').then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))),
+        fetch('/api/staff/my-stats').then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))),
+    ]);
+    const heatmapData = heatmapRes.status === 'fulfilled' ? heatmapRes.value : null;
+    const statsData   = statsRes.status   === 'fulfilled' ? statsRes.value   : {};
+
+    if (!heatmapData) {
+        const errMsg = heatmapRes.reason && heatmapRes.reason.message;
+        body.innerHTML = `<div style="color:#f87171;text-align:center;padding:40px;font-size:13px;">No se pudo cargar la actividad: ${errMsg || 'error'}</div>`;
         return;
     }
 
-    _renderActivityHeatmap(root.querySelector('#argus-activity-body'), data);
+    // Renderizar tab inicial: heatmap
+    function renderTab(tab) {
+        if (tab === 'heatmap') {
+            _renderActivityHeatmap(body, heatmapData);
+        } else if (tab === 'risk') {
+            _renderRiskTab(body, statsData);
+        } else if (tab === 'achievements') {
+            // Mergear datos de heatmap (streak, days_active) con stats
+            const merged = Object.assign({}, statsData, {
+                streak:       heatmapData.streak       || statsData.streak || 0,
+                best_streak:  heatmapData.best_streak  || statsData.best_streak || 0,
+                days_active:  Math.max(heatmapData.days_active || 0, statsData.days_active || 0),
+                scans_total:  heatmapData.total_count || 0,
+            });
+            _renderAchievementsTab(body, merged);
+        }
+    }
+    renderTab('heatmap');
+
+    // Tab switching
+    root.querySelectorAll('[data-myact-tab]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tab = btn.getAttribute('data-myact-tab');
+            root.querySelectorAll('[data-myact-tab]').forEach(b => {
+                const isActive = b === btn;
+                b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                b.setAttribute('tabindex', isActive ? '0' : '-1');
+                b.style.background = isActive ? 'rgba(180,138,98,0.18)' : 'transparent';
+                b.style.color = isActive ? 'var(--text)' : 'var(--text-m)';
+            });
+            renderTab(tab);
+        });
+    });
+}
+
+function _renderRiskTab(container, stats) {
+    const history = (stats && stats.history) || [];
+    const avg30 = stats && stats.avg_risk_30d || 0;
+    const total = stats && stats.verdicts_total || 0;
+    const clean = stats && stats.clean_count || 0;
+    const hack  = stats && stats.hack_count  || 0;
+    const sus   = stats && stats.sus_count   || 0;
+    container.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px;">
+            <div style="padding:14px;border-radius:10px;border:1px solid var(--border-m);background:rgba(255,255,255,0.02);">
+                <div style="font-size:11px;color:var(--text-d);text-transform:uppercase;letter-spacing:0.6px;">Veredictos</div>
+                <div style="font-size:24px;font-weight:800;color:var(--text);font-feature-settings:'tnum';">${total}</div>
+            </div>
+            <div style="padding:14px;border-radius:10px;border:1px solid var(--border-m);background:rgba(91,193,128,0.06);">
+                <div style="font-size:11px;color:var(--text-d);text-transform:uppercase;letter-spacing:0.6px;">Limpios</div>
+                <div style="font-size:24px;font-weight:800;color:#5BC180;font-feature-settings:'tnum';">${clean}</div>
+            </div>
+            <div style="padding:14px;border-radius:10px;border:1px solid var(--border-m);background:rgba(255,184,107,0.06);">
+                <div style="font-size:11px;color:var(--text-d);text-transform:uppercase;letter-spacing:0.6px;">Sospechosos</div>
+                <div style="font-size:24px;font-weight:800;color:#FFB86B;font-feature-settings:'tnum';">${sus}</div>
+            </div>
+            <div style="padding:14px;border-radius:10px;border:1px solid var(--border-m);background:rgba(255,107,107,0.06);">
+                <div style="font-size:11px;color:var(--text-d);text-transform:uppercase;letter-spacing:0.6px;">Hacks</div>
+                <div style="font-size:24px;font-weight:800;color:#FF6B6B;font-feature-settings:'tnum';">${hack}</div>
+            </div>
+            <div style="padding:14px;border-radius:10px;border:1px solid var(--border-m);background:rgba(255,255,255,0.02);">
+                <div style="font-size:11px;color:var(--text-d);text-transform:uppercase;letter-spacing:0.6px;">Risk avg 30d</div>
+                <div style="font-size:24px;font-weight:800;color:var(--text);font-feature-settings:'tnum';">${avg30}</div>
+            </div>
+        </div>
+        <div style="border:1px solid var(--border-m);border-radius:12px;padding:16px;background:rgba(255,255,255,0.02);">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+                <span class="argus-eyebrow">Histórico · 30 días</span>
+                <span style="font-size:11px;color:var(--text-d);">Risk score promedio diario</span>
+            </div>
+            <div id="argus-myact-chart" style="min-height:200px;"></div>
+        </div>
+    `;
+    if (history.length && window.argusUI && argusUI.renderLineChart) {
+        argusUI.renderLineChart('#argus-myact-chart', history);
+    } else {
+        const chart = container.querySelector('#argus-myact-chart');
+        if (chart) {
+            argusUI.renderEmptyState(chart, {
+                icon: 'chart',
+                title: 'Aún no hay histórico',
+                description: 'Tras confirmar veredictos, vas a ver tu evolución acá.',
+            });
+        }
+    }
+}
+
+function _renderAchievementsTab(container, mergedStats) {
+    container.innerHTML = `<div id="argus-myact-achievements"></div>`;
+    if (window.argusUI && argusUI.renderAchievements) {
+        argusUI.renderAchievements('#argus-myact-achievements', mergedStats);
+    }
 }
 window.openMyActivityHeatmap = openMyActivityHeatmap;
 

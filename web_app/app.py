@@ -3611,6 +3611,31 @@ def _is_server_false_positive(result: dict) -> bool:
     if any(frag in combined for frag in _SERVER_FP_FRAGMENTS):
         return True
 
+    # Filter #37 — `.rise` extensión vs folder.
+    # Rise client tiene su carpeta de config en %appdata%\.rise (o similar).
+    # Si el path es una CARPETA `.rise\` (no termina en .rise como extensión
+    # real de archivo), descartar — solo el archivo con extensión .rise
+    # cuenta como evidencia (raro de ver fuera del cheat real).
+    # Heurística: si '.rise' aparece como segmento de directorio (con
+    # separador después), es config folder; si es la extensión final del
+    # archivo (nombre.rise) o nombre completo, sigue evaluándose.
+    try:
+        # Nombre de archivo (último segmento de la ruta)
+        last_seg = (nombre or '').lower().strip()
+        # Si es CARPETA .rise (típico de Rise/Vape config legítima del propio
+        # usuario que ya desinstaló y solo dejó la config) → soft FP.
+        # Solo skipea si el filename NO termina en .rise como extensión
+        # real (último .rise antes del fin del string).
+        is_rise_folder_path = (
+            ('\\.rise\\' in combined) or ('/.rise/' in combined) or
+            ('\\.rise/' in combined) or ('/.rise\\' in combined)
+        )
+        ends_in_rise_ext = last_seg.endswith('.rise') and last_seg != '.rise'
+        if is_rise_folder_path and not ends_in_rise_ext:
+            return True
+    except Exception:
+        pass
+
     # Filter #11 — Aprendizaje incremental por feedback. Las rutas marcadas
     # como 'legitimate_path' por el staff (vía learned_patterns) se aplican
     # ahora retroactivamente a TODOS los scans servidos. La función ya
@@ -9583,6 +9608,122 @@ def get_my_activity_heatmap():
             'days_back':    days_back,
             'today':        str(today),
         }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── Visual #13 — Stats agregados del staff (achievements + line chart) ────────
+# Devuelve métricas que alimentan tanto el sistema de logros como el line chart
+# de risk score histórico. Combina staff_audit_log + scans (verdict_by).
+# Cache lite por usuario, 60s.
+_staff_stats_cache = {}
+_STAFF_STATS_TTL = 60.0
+
+@app.route('/api/staff/my-stats', methods=['GET'])
+@login_required
+def get_my_stats():
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'No session'}), 401
+    import time as _t
+    cached = _staff_stats_cache.get(uid)
+    if cached and (_t.time() - cached[1]) < _STAFF_STATS_TTL:
+        return jsonify(cached[0]), 200
+
+    stats = {
+        'verdicts_total': 0,
+        'clean_count':    0,
+        'hack_count':     0,
+        'sus_count':      0,
+        'days_active':    0,
+        'streak':         0,
+        'best_streak':    0,
+        'avg_risk_30d':   0,
+        'history':        [],   # [{date, value}] — risk score promedio por día
+    }
+    try:
+        from datetime import date, timedelta, datetime as _dt
+        today = date.today()
+        with get_api_db_cursor() as cur:
+            # Username de este staff
+            cur.execute(f'SELECT username FROM users WHERE id = {_PH}', (uid,))
+            _u = cur.fetchone()
+            if not _u:
+                return jsonify(stats), 200
+            username = (_u[0] if not isinstance(_u, dict) else _u.get('username'))
+            if not username:
+                return jsonify(stats), 200
+
+            # Veredictos confirmados por este staff (todos los tiempos)
+            try:
+                cur.execute(f'''
+                    SELECT verdict, risk_score, DATE(verdict_at) AS d
+                      FROM scans
+                     WHERE verdict_by = {_PH} AND verdict_at IS NOT NULL
+                ''', (username,))
+                rows = cur.fetchall() or []
+                day_buckets = {}      # {date_str: {sum_risk, count}}
+                seen_days = set()
+                for r in rows:
+                    if isinstance(r, dict):
+                        v  = (r.get('verdict') or '').lower()
+                        rs = r.get('risk_score') or 0
+                        d  = r.get('d')
+                    else:
+                        v, rs, d = (r[0] or '').lower(), (r[1] or 0), r[2]
+                    stats['verdicts_total'] += 1
+                    if 'clean' in v or 'limpio' in v:
+                        stats['clean_count'] += 1
+                    elif 'hack' in v or 'cheat' in v or 'ban' in v:
+                        stats['hack_count'] += 1
+                    elif 'sospech' in v or 'suspicious' in v or 'sus' in v:
+                        stats['sus_count'] += 1
+                    if d:
+                        seen_days.add(str(d))
+                        b = day_buckets.setdefault(str(d), {'sum': 0, 'n': 0})
+                        try: b['sum'] += int(rs); b['n'] += 1
+                        except Exception: pass
+                stats['days_active'] = len(seen_days)
+                # Streak actual
+                streak = 0
+                cur_d = today
+                while str(cur_d) in seen_days:
+                    streak += 1
+                    cur_d = cur_d - timedelta(days=1)
+                stats['streak'] = streak
+                # Mejor streak histórico
+                if seen_days:
+                    sorted_days = sorted(_dt.strptime(s, '%Y-%m-%d').date()
+                                         for s in seen_days)
+                    best = run = 1
+                    prev = sorted_days[0]
+                    for d2 in sorted_days[1:]:
+                        if (d2 - prev).days == 1:
+                            run += 1
+                        else:
+                            run = 1
+                        best = max(best, run)
+                        prev = d2
+                    stats['best_streak'] = best
+                # Histórico últimos 30 días — risk score promedio diario
+                history = []
+                sum30, count30 = 0, 0
+                for i in range(29, -1, -1):
+                    dd = today - timedelta(days=i)
+                    b = day_buckets.get(str(dd))
+                    if b and b['n']:
+                        avg = round(b['sum'] / b['n'])
+                        history.append({'date': str(dd), 'value': avg, 'label': dd.strftime('%d/%m')})
+                        sum30 += avg; count30 += 1
+                    # Si no hay datos ese día, no se incluye en history pero
+                    # tampoco rompe la línea (el chart conecta los puntos
+                    # disponibles).
+                stats['history'] = history
+                stats['avg_risk_30d'] = round(sum30 / count30) if count30 else 0
+            except Exception as e:
+                print(f'[my-stats] scans agg: {e}')
+        _staff_stats_cache[uid] = (stats, _t.time())
+        return jsonify(stats), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
