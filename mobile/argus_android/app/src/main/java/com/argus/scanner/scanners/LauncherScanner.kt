@@ -249,17 +249,22 @@ class LauncherScanner(private val ctx: Context) {
         }
     }
 
-    private fun sha256Of(file: File): String? = try {
-        if (!file.canRead() || file.length() > 200L * 1024 * 1024) return null
-        val md = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { ins ->
-            val buf = ByteArray(8192)
-            while (true) {
-                val n = ins.read(buf)
-                if (n <= 0) break
-                md.update(buf, 0, n)
+    private fun sha256Of(file: File): String? {
+        // Block body en lugar de expression body porque adentro hay un
+        // `return null` early-exit (`if (... > 200MB) return null`).
+        // Kotlin no permite `return` dentro de expression body fns.
+        return try {
+            if (!file.canRead() || file.length() > 200L * 1024 * 1024) return null
+            val md = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { ins ->
+                val buf = ByteArray(8192)
+                while (true) {
+                    val n = ins.read(buf)
+                    if (n <= 0) break
+                    md.update(buf, 0, n)
+                }
             }
-        }
-        md.digest().joinToString("") { "%02x".format(it) }
-    } catch (_: Exception) { null }
+            md.digest().joinToString("") { "%02x".format(it) }
+        } catch (_: Exception) { null }
+    }
 }
