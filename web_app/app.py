@@ -57,7 +57,7 @@ _ARGUS_VERSION = '1.6.44'  # sincronizar con SCANNER_VERSION en main.py y CURREN
 # Se puede sobreescribir desde .env / Render con la variable DISCORD_INVITE_URL.
 DISCORD_INVITE_URL = os.environ.get(
     'DISCORD_INVITE_URL',
-    'https://discord.gg/argusprojects',  # placeholder hasta que se confirme la invitacion final
+    'https://discord.gg/aMRJhbgNUZ',  # invitacion permanente oficial Argus Projects
 ).strip()
 
 
