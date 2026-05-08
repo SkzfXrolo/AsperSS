@@ -793,3 +793,115 @@ html.argus-density-compact .stat-value { font-size: calc(28px * var(--argus-text
     0%, 49%   { opacity: 0.85; }
     50%, 100% { opacity: 0;    }
 }
+
+
+/* ── Visual #48 — Mejor jerarquía tipográfica ─────────────────────────────
+   El panel tenía .panel-title a 18px y .section-subtitle también a 15px,
+   visualmente plano. Aquí refuerzo la escala (eyebrow → title → subtitle →
+   description) y le doy carácter a los headings principales. Compatible
+   con el bronze theme (var(--accent)) y ambos modos (dark / light). */
+
+/* Refuerza el título sticky del header del panel — más impactante pero
+   aún compacto para no romper el layout existente. */
+.panel-title {
+    font-size: 21px !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.4px !important;
+    line-height: 1.1 !important;
+    background: linear-gradient(135deg, var(--text, #EAD8C0) 0%, var(--text-m, #A89578) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent !important;
+    -webkit-text-fill-color: transparent;
+    text-shadow: none;
+}
+body.light-theme .panel-title {
+    background: linear-gradient(135deg, #2a1f15 0%, #6b5240 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent !important;
+}
+
+/* Headings genéricos de sección (ej. Administración / Mi Empresa).
+   Antes: 22-24px sin acento. Ahora: 30px peso 800 + barrita lateral
+   bronce que actúa como subrayado visual sin agregar borders. */
+.section-title {
+    font-size: 30px !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.7px !important;
+    line-height: 1.05 !important;
+    color: var(--text, #EAD8C0);
+    margin-bottom: 6px;
+    position: relative;
+    padding-left: 14px;
+    display: inline-block;
+}
+.section-title::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8%;
+    bottom: 14%;
+    width: 4px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, var(--accent, #B87333), var(--accent-d, #7A4824));
+    box-shadow: 0 0 12px rgba(184, 115, 51, 0.45);
+}
+@media (max-width: 700px) {
+    .section-title { font-size: 24px !important; }
+}
+
+/* Eyebrow opcional — chip diminuto en bronce arriba del título.
+   Usar como: <span class="argus-eyebrow">Sección</span><h2 class="section-title">…</h2> */
+.argus-eyebrow {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+    color: var(--accent, #B87333);
+    background: var(--accent-bg, rgba(184,115,51,0.10));
+    padding: 3px 10px 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-m, rgba(184,115,51,0.28));
+    margin-bottom: 10px;
+}
+.argus-eyebrow + .section-title,
+.argus-eyebrow + .scan-page-title {
+    display: block;
+    margin-top: 4px;
+}
+
+/* Refuerza .section-description: más legible debajo del title grande. */
+.section-description {
+    font-size: 14.5px !important;
+    line-height: 1.7 !important;
+    color: var(--text-m, #A89578) !important;
+    max-width: 720px;
+    margin-top: 4px;
+    margin-bottom: 26px !important;
+}
+
+/* Heading de la página de detalle del scan — más dramático para que
+   compita con la verdict-banner y se sienta una página propia. */
+.scan-page-title {
+    font-size: 28px !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.6px !important;
+    line-height: 1.1 !important;
+    color: var(--text, #EAD8C0);
+    margin: 0 0 4px;
+}
+@media (max-width: 700px) {
+    .scan-page-title { font-size: 22px !important; }
+}
+
+/* Refuerza .section-subtitle (era 15px, casi igual que body — confuso).
+   Subo a 18px y agrego acento amarillento sutil. */
+.section-subtitle {
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.2px !important;
+    color: var(--text, #EAD8C0) !important;
+}

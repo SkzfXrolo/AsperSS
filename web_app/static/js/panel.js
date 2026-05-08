@@ -530,6 +530,263 @@ function initializeNavigation() {
  * Usa Clipboard API moderna con fallback a textarea hidden.
  * Muestra toast verde de confirmación o rojo si falla.
  */
+/**
+ * Visual #28 + #30 — Modal "Compartir veredicto":
+ *  - Genera tarjeta PNG del veredicto (canvas vanilla — sin html2canvas)
+ *    con avatar, jugador, veredicto, risk score, top categorías, branding.
+ *  - Incluye QR code del enlace al scan (api.qrserver.com, sin libs).
+ *  - Permite descargar como PNG y/o copiar el enlace.
+ */
+async function openShareVerdictModal(scanId) {
+    if (!scanId) {
+        if (window.showToast) showToast('No hay escaneo abierto.', 'warning');
+        return;
+    }
+
+    document.getElementById('argus-share-modal')?.remove();
+
+    // Snapshot del DOM actual del scan abierto (mucho más rápido que volver a fetchear)
+    const machine = document.getElementById('scan-machine-name')?.textContent?.trim() || '—';
+    const player  = document.getElementById('detail-mc-username')?.textContent?.trim()
+                 || document.getElementById('scan-mc-username')?.textContent?.trim() || '—';
+    const verdictRaw = document.querySelector('#current-verdict-banner span')?.textContent?.trim() || '';
+    const verdictMatch = verdictRaw.match(/Veredicto:\s*([^—]+)/i);
+    const verdictLabel = (verdictMatch ? verdictMatch[1].trim() : 'PENDIENTE').toUpperCase();
+    const verdictKind = verdictLabel.includes('LIMP') ? 'clean'
+                     : verdictLabel.includes('HACK') ? 'hack'
+                     : 'pending';
+    const riskTxt = document.getElementById('risk-score-value')?.textContent?.trim() || '';
+    const risk = parseInt(riskTxt, 10);
+    const country = document.getElementById('scan-country')?.textContent?.trim() || '';
+    const startedTxt = document.getElementById('scan-started-at')?.textContent?.trim() || '';
+
+    // Counters de severidad — leemos directo del DOM o de currentIssuesList si existe
+    let nCrit = 0, nSusp = 0;
+    if (Array.isArray(window.currentIssuesList)) {
+        for (const r of window.currentIssuesList) {
+            if (r.alert_level === 'CRITICAL') nCrit++;
+            else if (r.alert_level === 'SOSPECHOSO' || r.alert_level === 'HACKS') nSusp++;
+        }
+    }
+
+    const url = `${window.location.origin}${window.location.pathname}?scan=${scanId}`;
+    const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=8&color=EAD8C0&bgcolor=15110A&data=' + encodeURIComponent(url);
+
+    // Construir canvas de la tarjeta (1080x600 — buena ratio para Discord/WhatsApp)
+    const W = 1080, H = 600;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    const palette = verdictKind === 'clean'
+        ? { bg: '#0E2A1E', accent: '#10b981', accentSoft: 'rgba(16,185,129,0.16)', stripe: '#34d399', text: '#EAD8C0' }
+        : verdictKind === 'hack'
+        ? { bg: '#2A0E10', accent: '#ef4444', accentSoft: 'rgba(239,68,68,0.16)', stripe: '#fca5a5', text: '#EAD8C0' }
+        : { bg: '#1A140C', accent: '#B87333', accentSoft: 'rgba(184,115,51,0.18)', stripe: '#D4915A', text: '#EAD8C0' };
+
+    // Background con gradiente diagonal
+    const grd = ctx.createLinearGradient(0, 0, W, H);
+    grd.addColorStop(0,   palette.bg);
+    grd.addColorStop(0.6, '#15110A');
+    grd.addColorStop(1,   palette.bg);
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, W, H);
+
+    // Stripe lateral izquierda
+    ctx.fillStyle = palette.accent;
+    ctx.fillRect(0, 0, 8, H);
+
+    // Branding header
+    ctx.fillStyle = '#B87333';
+    ctx.font = 'bold 16px "JetBrains Mono", monospace';
+    ctx.textBaseline = 'top';
+    ctx.fillText('ARGUS · ALL-SEEING', 40, 36);
+    ctx.fillStyle = 'rgba(234,216,192,0.50)';
+    ctx.font = '12px "JetBrains Mono", monospace';
+    ctx.fillText('argusprojects.com', 40, 58);
+
+    // Scan ID arriba derecha
+    ctx.fillStyle = 'rgba(234,216,192,0.45)';
+    ctx.font = '13px "JetBrains Mono", monospace';
+    const scanLabel = `SCAN #${scanId}`;
+    const scanLabelW = ctx.measureText(scanLabel).width;
+    ctx.fillText(scanLabel, W - 40 - scanLabelW, 38);
+
+    // Verdict big label
+    ctx.fillStyle = palette.text;
+    ctx.font = 'bold 60px "Inter", system-ui, sans-serif';
+    ctx.fillText('Veredicto', 40, 110);
+    ctx.fillStyle = palette.accent;
+    ctx.font = 'bold 96px "Inter", system-ui, sans-serif';
+    ctx.fillText(verdictLabel, 40, 175);
+
+    // Risk score badge (derecha)
+    if (!isNaN(risk)) {
+        const cx = W - 180, cy = 230, rad = 86;
+        ctx.beginPath();
+        ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+        ctx.fillStyle = palette.accentSoft;
+        ctx.fill();
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = palette.accent;
+        ctx.stroke();
+
+        ctx.fillStyle = palette.text;
+        ctx.font = 'bold 11px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('RISK SCORE', cx, cy - 38);
+        ctx.fillStyle = palette.accent;
+        ctx.font = 'bold 56px "Inter", system-ui, sans-serif';
+        ctx.fillText(String(risk), cx, cy - 20);
+        ctx.fillStyle = 'rgba(234,216,192,0.55)';
+        ctx.font = '12px "Inter", system-ui, sans-serif';
+        ctx.fillText('/ 100', cx, cy + 38);
+        ctx.textAlign = 'left';
+    }
+
+    // Líneas de info: jugador, máquina, hallazgos, fecha
+    const infoY0 = 320;
+    const lineH = 36;
+    const drawInfo = (i, label, value) => {
+        const y = infoY0 + i * lineH;
+        ctx.fillStyle = 'rgba(234,216,192,0.45)';
+        ctx.font = 'bold 11px "JetBrains Mono", monospace';
+        ctx.fillText(label.toUpperCase(), 40, y);
+        ctx.fillStyle = palette.text;
+        ctx.font = '20px "Inter", system-ui, sans-serif';
+        const v = value && String(value).length > 38 ? String(value).slice(0, 36) + '…' : (value || '—');
+        ctx.fillText(v, 40, y + 14);
+    };
+    drawInfo(0, 'Jugador',  player);
+    drawInfo(1, 'Máquina',  machine);
+    drawInfo(2, 'Hallazgos', `${nCrit} críticos · ${nSusp} sospechosos`);
+    drawInfo(3, 'Fecha',    startedTxt + (country ? ` · ${country}` : ''));
+
+    // Footer brand
+    ctx.fillStyle = 'rgba(234,216,192,0.30)';
+    ctx.font = '11px "JetBrains Mono", monospace';
+    ctx.fillText('Generado por Argus Projects · ' + new Date().toLocaleString(), 40, H - 32);
+
+    // Espacio reservado para el QR (lo cargamos asíncrono y reemplazamos)
+    const qrPad = ctx.createLinearGradient(W - 240, H - 240, W, H);
+    qrPad.addColorStop(0, 'rgba(184,115,51,0.10)');
+    qrPad.addColorStop(1, 'rgba(184,115,51,0.04)');
+    ctx.fillStyle = qrPad;
+    ctx.fillRect(W - 240, H - 240, 200, 200);
+    ctx.strokeStyle = palette.accent;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(W - 240, H - 240, 200, 200);
+    ctx.fillStyle = 'rgba(234,216,192,0.5)';
+    ctx.font = '11px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Generando QR…', W - 140, H - 130);
+    ctx.textAlign = 'left';
+
+    // Imagen PNG inicial (sin QR todavía)
+    const initialPng = canvas.toDataURL('image/png');
+
+    // Modal
+    const root = document.createElement('div');
+    root.id = 'argus-share-modal';
+    root.style.cssText = 'position:fixed;inset:0;z-index:99996;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(8,6,4,0.62);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);animation:argusConfirmFadeIn 180ms ease;';
+    root.innerHTML = `
+        <div role="dialog" aria-modal="true" aria-labelledby="argus-share-title"
+             style="background:var(--bg-2,#15110A);color:var(--text,#EAD8C0);
+                    border:1px solid var(--border-m,rgba(184,115,51,0.28));
+                    border-radius:14px;width:min(720px,94vw);max-height:92vh;overflow:auto;
+                    box-shadow:0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04) inset;
+                    animation:argusConfirmPop 220ms cubic-bezier(0.22,1,0.36,1);">
+            <div style="padding:18px 22px 10px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--border);">
+                <h2 id="argus-share-title" style="margin:0;font-size:15px;font-weight:700;">Compartir veredicto del scan #${scanId}</h2>
+                <button id="argus-share-close" type="button" aria-label="Cerrar"
+                    style="background:transparent;border:1px solid var(--border-m);color:var(--text-m);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;">×</button>
+            </div>
+            <div style="padding:18px 22px;display:flex;flex-direction:column;gap:14px;">
+                <img id="argus-share-preview" src="${initialPng}" alt="Tarjeta de veredicto"
+                     style="width:100%;border-radius:10px;border:1px solid var(--border-m);box-shadow:0 10px 30px rgba(0,0,0,0.4);background:#000;" />
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                    <button id="argus-share-download" type="button"
+                        style="font-size:12.5px;font-weight:700;padding:9px 16px;border-radius:8px;border:none;cursor:pointer;
+                               color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-d));
+                               box-shadow:0 6px 18px -6px rgba(184,115,51,0.4);">⬇ Descargar PNG</button>
+                    <button id="argus-share-copy-link" type="button"
+                        style="font-size:12.5px;font-weight:600;padding:9px 16px;border-radius:8px;cursor:pointer;
+                               background:transparent;color:var(--text-m);border:1px solid var(--border-m);">🔗 Copiar enlace</button>
+                    <span style="font-size:11.5px;color:var(--text-d);font-family:'JetBrains Mono',monospace;flex:1;min-width:200px;text-align:right;">
+                        ${url.length > 60 ? url.slice(0, 58) + '…' : url}
+                    </span>
+                </div>
+                <div style="font-size:11.5px;color:var(--text-d);line-height:1.5;">
+                    El QR del enlace se genera vía api.qrserver.com (sin tracking). La imagen incluye solo
+                    datos no sensibles del scan: jugador (Minecraft username), máquina, veredicto y conteo
+                    de hallazgos. La IP no se incluye.
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(root);
+
+    const closeBtn = root.querySelector('#argus-share-close');
+    const close = () => {
+        document.removeEventListener('keydown', onKey, true);
+        root.style.animation = 'argusConfirmFadeOut 140ms ease';
+        setTimeout(() => root.remove(), 130);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+    document.addEventListener('keydown', onKey, true);
+    closeBtn.addEventListener('click', close);
+    root.addEventListener('click', (e) => { if (e.target === root) close(); });
+
+    // Cargar QR async y redibujar
+    const qrImg = new Image();
+    qrImg.crossOrigin = 'anonymous';
+    qrImg.onload = () => {
+        try {
+            // Limpiar el placeholder y dibujar el QR real (con borde claro)
+            ctx.fillStyle = '#15110A';
+            ctx.fillRect(W - 240, H - 240, 200, 200);
+            ctx.drawImage(qrImg, W - 230, H - 230, 180, 180);
+            ctx.strokeStyle = palette.accent;
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(W - 240, H - 240, 200, 200);
+            // Label "ESCANEAR" arriba del QR
+            ctx.fillStyle = 'rgba(234,216,192,0.55)';
+            ctx.font = 'bold 10px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('ESCANEÁ PARA ABRIR', W - 140, H - 252);
+            ctx.textAlign = 'left';
+
+            const finalPng = canvas.toDataURL('image/png');
+            const previewEl = document.getElementById('argus-share-preview');
+            if (previewEl) previewEl.src = finalPng;
+            // Setea el href del download al PNG final
+            const dlBtn = document.getElementById('argus-share-download');
+            if (dlBtn) dlBtn._finalPng = finalPng;
+        } catch (_e) { /* el QR no es crítico */ }
+    };
+    qrImg.onerror = () => {
+        // Sin red / bloqueo CORS — dejar placeholder
+        const dlBtn = document.getElementById('argus-share-download');
+        if (dlBtn) dlBtn._finalPng = initialPng;
+    };
+    qrImg.src = qrUrl;
+
+    // Botones de acción
+    root.querySelector('#argus-share-download').addEventListener('click', (e) => {
+        const png = e.currentTarget._finalPng || initialPng;
+        const a = document.createElement('a');
+        a.href = png;
+        a.download = `argus-scan-${scanId}-${verdictKind}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        if (window.showToast) showToast('Imagen descargada', 'success', { duration: 2200 });
+    });
+    root.querySelector('#argus-share-copy-link').addEventListener('click', () => {
+        copyScanLink(scanId);
+    });
+}
+window.openShareVerdictModal = openShareVerdictModal;
+
 async function copyScanLink(scanId) {
     if (!scanId) {
         if (typeof showToast === 'function') {

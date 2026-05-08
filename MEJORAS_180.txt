@@ -773,9 +773,21 @@ NOTA DE LECTURA
         riskClass === 'risk-hack'. Re-disparable forzando reflow.
         Respeta prefers-reduced-motion.
 
-[ ] 28. Modo "Compartir veredicto": botón que genera imagen PNG con
+[X] 28. Modo "Compartir veredicto": botón que genera imagen PNG con
         resumen del scan (logo, jugador, veredicto, evidencias top)
         para postear directo en Discord.
+        DONE v1.6.49 (Pack 18) — Botón "Compartir" agregado junto a
+        "Copiar enlace" en panel.html. openShareVerdictModal(scanId)
+        en panel.js construye un canvas 1080x600 (proporción ideal
+        para Discord/WhatsApp/Twitter): paleta dinámica según veredicto
+        (verde clean / rojo hack / bronce pendiente), gradiente diagonal,
+        stripe lateral, branding header "ARGUS · ALL-SEEING" + url,
+        veredicto BIG label (96px), risk score badge circular con borde,
+        info lines (Jugador, Máquina, Hallazgos críticos+sospechosos,
+        Fecha+país), footer con timestamp. Datos extraídos del DOM
+        del scan abierto. Botones: ⬇ Descargar PNG (download attr) y
+        🔗 Copiar enlace (reutiliza copyScanLink). NO incluye IP/datos
+        sensibles. Sin libs externas (canvas vanilla).
 
 [X] 29. Botón "Copiar enlace al scan" con feedback visual
         (toast verde "Copiado!" + ícono check temporal).
@@ -783,8 +795,17 @@ NOTA DE LECTURA
         usando Clipboard API con fallback. Bonus: deep-link automático
         via ?scan=<id> en la URL (bookmarkeable / compartible).
 
-[ ] 30. QR code del enlace al scan en el modal de share, para abrir
+[X] 30. QR code del enlace al scan en el modal de share, para abrir
         en otro device sin tipear URL.
+        DONE v1.6.49 (Pack 18) — Generación vía api.qrserver.com (sin
+        libs JS adicionales, sin tracking, gratis y sin auth). Tamaño
+        180x180px con margin 8px, color EAD8C0 sobre fondo 15110A para
+        respetar la paleta bronce. El QR se carga async (Image() con
+        crossOrigin='anonymous'); mientras llega, se muestra un placeholder
+        "Generando QR…". Al cargar, ctx.drawImage() lo inserta en la
+        esquina inferior derecha de la tarjeta canvas con label
+        "ESCANEÁ PARA ABRIR" arriba. Si falla la red o CORS, el modal
+        sigue funcionando con la imagen sin QR (graceful degradation).
 
 [ ] 31. Sidebar colapsable (icon-only mode) para más espacio horizontal
         en monitores ultrawide.
@@ -909,9 +930,29 @@ NOTA DE LECTURA
         last seen, last scan, last verdict, total scans (requiere
         tabla nueva en BD).
 
-[ ] 48. Mejor jerarquía tipográfica: H1 más grande y dramático,
+[X] 48. Mejor jerarquía tipográfica: H1 más grande y dramático,
         subtítulos con accent color bronce, body con line-height
         generoso.
+        DONE v1.6.49 (Pack 18) — Reescritura de la jerarquía en
+        argus-ui.css:
+          • .panel-title: 18px → 21px peso 800 + gradient text fill
+            (bronce sobre cobre) compatible con dark/light theme.
+          • .section-title: nuevo, 30px peso 800 letter-spacing -0.7px
+            con BARRITA LATERAL bronce (::before, gradient + glow).
+            Responsive: 24px en <700px.
+          • .scan-page-title: 28px peso 800, tighter tracking, separa
+            visualmente la página del scan de la del listado.
+          • .section-subtitle: 15px → 18px peso 700.
+          • .section-description: 13.5px → 14.5px line-height 1.7,
+            max-width 720ch para mejor legibilidad.
+          • .argus-eyebrow: nueva utility — chip diminuto bronce con
+            border (text-transform uppercase + tracking 1.6px) que
+            antecede a un section-title para crear ritmo
+            EYEBROW → TITLE → DESCRIPTION (la triple jerarquía
+            clásica de magazines).
+        Sin tocar HTML — los selectores existentes ya aplicaban,
+        solo se modificó el CSS via !important para sobreescribir
+        rules de panel.css.
 
 [ ] 49. Tipografía dual: serif elegante (Playfair / Cormorant) para
         titulares grandes, sans-serif (Inter / Geist) para data y UI.
@@ -1101,10 +1142,10 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 
   Scanner ............................. 60 ítems   (detección)      14/60
   Filtro .............................. 60 ítems   (anti-FP)        22/60
-  Visual .............................. 60 ítems   (UI/UX)          33/60
+  Visual .............................. 60 ítems   (UI/UX)          36/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    78/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    81/195
                                                   (5 parciales: S#9, V#3, V#32, V#43, V#53)
                                                   + 3 BONUS Pack 11 (Stream-friendly,
                                                   CompanyTag color, Why-this-score modal)
@@ -1122,6 +1163,39 @@ Linux: Arch, Ubuntu, Fedora, etc.).
                                                   (AppImage/Flatpak/deb), #14 (CI Docker)
 
 SESIÓN DEL 08-may-2026:
+  Pack 18 (v1.6.49): Visual #28, #30, #48 — Share verdict + jerarquía
+                    (sin recompilar .exe).
+                    Visual #28 + #30 — Modal Compartir veredicto:
+                      * Botón "Compartir" en panel.html junto al "Copiar enlace".
+                      * openShareVerdictModal(scanId) en panel.js construye
+                        canvas 1080x600 con paleta dinámica según veredicto:
+                        clean=verde, hack=rojo, pending=bronce. Branding
+                        header, veredicto BIG label 96px, risk score badge
+                        circular, info lines (Jugador, Máquina, Hallazgos,
+                        Fecha+país), footer timestamp.
+                      * QR code 180x180 generado vía api.qrserver.com (sin
+                        libs JS), color EAD8C0/15110A, async con placeholder
+                        "Generando QR…", fallback graceful si falla red/CORS.
+                      * Botones: ⬇ Descargar PNG (download attr), 🔗 Copiar
+                        enlace (reutiliza copyScanLink). Sin datos sensibles
+                        (IP no se incluye).
+                    Visual #48 — Jerarquía tipográfica:
+                      * argus-ui.css: nueva escala EYEBROW → TITLE →
+                        SUBTITLE → DESCRIPTION.
+                      * .panel-title: 18→21px peso 800 + gradient text bronze.
+                      * .section-title: nuevo, 30px peso 800 con barrita
+                        lateral bronce (::before gradient + glow). 24px
+                        responsive en mobile.
+                      * .scan-page-title: 28px peso 800, separa visualmente
+                        la página de detalle del listado.
+                      * .section-subtitle: 15→18px. .section-description:
+                        13.5→14.5px line-height 1.7 max-width 720.
+                      * .argus-eyebrow: chip diminuto bronce uppercase
+                        tracking 1.6px (utility para mete arriba de
+                        section-title creando ritmo magazine-like).
+                    panel.html: argus-ui.css v=12, panel.js v=60.
+                    → 3 visuales completados (V#28, V#30, V#48).
+
   Pack 17 (v1.6.49): Visual #7, #18, #41 — Power UI features (sin .exe).
                     NUEVOS en argus-ui.js:
                       * confirmModal(opts) — argusUI.confirm() devuelve

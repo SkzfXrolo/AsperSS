@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=22">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel-bronze-premium.css') }}?v=1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-ui.css') }}?v=11">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-ui.css') }}?v=12">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -1403,6 +1403,10 @@
                                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10.5a3 3 0 0 0 4.24 0l3-3a3 3 0 0 0-4.24-4.24l-.75.75"/><path d="M10 5.5a3 3 0 0 0-4.24 0l-3 3a3 3 0 0 0 4.24 4.24l.75-.75"/></svg>
                                         Copiar enlace
                                     </button>
+                                    <button onclick="openShareVerdictModal(currentScanId)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(184,115,51,.45);background:rgba(184,115,51,.10);color:#D4915A;cursor:pointer;display:inline-flex;align-items:center;gap:5px;" title="Compartir veredicto: imagen PNG + QR + enlace">
+                                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="8" r="2"/><circle cx="12" cy="3" r="2"/><circle cx="12" cy="13" r="2"/><path d="M5.7 7l4.6-2.7M5.7 9l4.6 2.7"/></svg>
+                                        Compartir
+                                    </button>
                                 </div>
                                 <div id="ban-message-container" style="display:none;margin-top:8px;font-size:11px;color:#f87171;padding:8px 12px;background:rgba(239,68,68,.07);border-radius:6px;border-left:2px solid #ef4444;white-space:pre-wrap;font-family:monospace;word-break:break-word;"></div>
                                 <div id="ai-inconsistencies-container" style="display:none;margin-top:8px;font-size:11px;color:#fbbf24;padding:6px 10px;background:rgba(245,158,11,.07);border-radius:6px;border-left:2px solid #f59e0b;"></div>
@@ -2385,7 +2389,7 @@
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
     <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=10"></script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=59"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=60"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────
