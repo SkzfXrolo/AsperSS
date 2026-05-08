@@ -95,9 +95,16 @@ NOTA DE LECTURA
 [ ] 23. Procesar logs de Sysmon si está instalado (Microsoft-Windows-Sysmon/
         Operational): Process Create, Image Load, Network Connect.
 
-[ ] 24. Leer logs de Defender ASR rules
+[X] 24. Leer logs de Defender ASR rules
         (Microsoft-Windows-Windows Defender/Operational): Event ID 1121/1122
         registran ejecuciones bloqueadas previamente.
+        DONE v1.6.41 — scan_defender_asr_events lee EventIDs
+        1006 (malware detected), 1116 (behavior detected),
+        1117 (behavior remediated), 1121 (ASR blocked),
+        1122 (ASR audited) en últimas 72h via PowerShell
+        Get-WinEvent. Agrupa por ID, severidad por tipo
+        (1006/1117/1121=CRITICAL, 1116=SOSPECHOSO 0.60,
+        1122=SOSPECHOSO 0.45). Timeout 30s, fail-safe.
 
 [X] 25. Inspección de Defender Quarantine (C:\ProgramData\Microsoft\Windows
         Defender\Quarantine) — los hacks borrados por el AV quedan ahí.
@@ -214,7 +221,15 @@ NOTA DE LECTURA
 [ ] 56. Discord cache local: indexar archivos .jar/.zip recibidos en últimas
         72h (CachedImages, Code Cache contiene metadata de attachments).
 
-[ ] 57. Telegram Desktop / WhatsApp Desktop downloads folders.
+[X] 57. Telegram Desktop / WhatsApp Desktop downloads folders.
+        DONE v1.6.41 — scan_messaging_downloads recorre las carpetas
+        canónicas de Telegram (%USERPROFILE%\Downloads\Telegram Desktop,
+        %APPDATA%\Telegram Desktop\tdata\Downloads) y WhatsApp
+        (%USERPROFILE%\Downloads\WhatsApp, Documents\WhatsApp,
+        %APPDATA%\WhatsApp), 72h ventana, exts ejecutables/comprimidos.
+        Aplica todos los filtros anti-FP (mc_mod, overlay, devtool,
+        backup_suffix, tamaño 5KB-500MB). Hack-name match → CRITICAL,
+        resto → SOSPECHOSO. Cap de 25 items.
 
 [ ] 58. Detectar overlays inyectados en javaw.exe: Steam, Epic, Battle.net
         Overlay (legítimo PERO también vector de hide para cheats).
@@ -362,8 +377,11 @@ NOTA DE LECTURA
 [ ] 32. Filtro de prefetch inteligente: si el .pf existe pero el .exe original
         sigue presente con firma válida y en Program Files, no flag.
 
-[ ] 33. Excluir archivos en ruta de OneDrive sincronizado para reducir noise
+[X] 33. Excluir archivos en ruta de OneDrive sincronizado para reducir noise
         de cosas del trabajo / personales del staff.
+        DONE v1.6.41 — is_onedrive_path() detecta \onedrive\,
+        \onedrive - <empresa>\ (OneDrive for Business) y onedrivetemp.
+        Aplicado en scan_deleted_recycle. Solo skipea si NO es hack-name.
 
 [ ] 34. Excluir mods en folder de instancias de TLauncher/Lunar/Badlion
         cuando el .jar tiene hash conocido en Modrinth/CurseForge.
@@ -371,8 +389,13 @@ NOTA DE LECTURA
 [ ] 35. Excluir cache de modpacks de CurseForge (%appdata%\.minecraft\mods
         y descargas oficiales) si el hash matchea el manifest del modpack.
 
-[ ] 36. Excluir archivos del Recycle Bin que provienen de procesos de
+[X] 36. Excluir archivos del Recycle Bin que provienen de procesos de
         actualización (filename con sufijos "old", "backup", "_v1", "~tmp").
+        DONE v1.6.41 — is_backup_suffix() con regex que cubre .old/.bak/
+        .backup/.orig/.prev/.tmp/.temp/.swp/.swo/.delete/.rotated, sufijos
+        _old1/_backup2, ~tmp, _v1.exe, foo.2024-05-12.exe (rotated). Solo
+        descarta si NO es hack-name. Aplicado en scan_deleted_recycle y
+        en scan_messaging_downloads.
 
 [ ] 37. Diferenciar ".rise" como extensión de archivo (raro) vs ".rise"
         como folder (Rise client config folder). Solo flagear .rise si es ext.
@@ -455,8 +478,17 @@ NOTA DE LECTURA
         TeamViewer en sesiones del propio staff (no en ajenas), AnyDesk
         autorizado por la empresa.
 
-[ ] 57. Detectar tools de desarrollo legítimas: Visual Studio Code, Cursor,
+[X] 57. Detectar tools de desarrollo legítimas: Visual Studio Code, Cursor,
         IntelliJ, NetBeans, Sublime — no flag aunque parezcan inyectores.
+        DONE v1.6.41 — _LEGIT_DEVTOOL_TERMS + is_legit_devtool() con
+        smart_hack_match. Cubre Code/Cursor/Windsurf/Sublime/JetBrains
+        (IntelliJ/PyCharm/WebStorm/Rider/CLion/...), VS (devenv/MSBuild),
+        terminales (wt/wezterm/alacritty), build tools (gradle/maven/cargo/
+        npm/yarn/python/dotnet), containers (docker/kubectl/vagrant), Git
+        GUIs (gitkraken/sourcetree/github-desktop/tortoisegit/fork), API
+        testers (postman/insomnia/bruno), DB tools (dbeaver/pgadmin),
+        Wireshark/Fiddler/ngrok. Aplicado en scan_deleted_recycle y
+        scan_messaging_downloads.
 
 [ ] 58. Filtro de Java agents legítimos: profilers (YourKit, JProfiler,
         VisualVM), debuggers, build tools (Gradle agents).
@@ -851,12 +883,12 @@ Linux: Arch, Ubuntu, Fedora, etc.).
   RESUMEN
 ═══════════════════════════════════════════════════════════════════════════════
 
-  Scanner ............................. 60 ítems   (detección)       7/60
-  Filtro .............................. 60 ítems   (anti-FP)        11/60
+  Scanner ............................. 60 ítems   (detección)       9/60
+  Filtro .............................. 60 ítems   (anti-FP)        14/60
   Visual .............................. 60 ítems   (UI/UX)          21/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 0/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    39/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    44/195
                                                   (3 parciales: V#32, V#43, V#53)
 
 SESIÓN DEL 07-may-2026 (4 packs en una tarde):
@@ -919,6 +951,19 @@ SESIÓN DEL 07-may-2026 (4 packs en una tarde):
                         automático si un scan running >4min.
                       * framework CSS+JS para vista cards/list/table
                         listo (UI toggle pendiente de integración).
+  Pack 8 (v1.6.41): Scanner #24, #57 + Filtros #33, #36, #57
+                    NUEVOS: scan_messaging_downloads (Telegram +
+                            WhatsApp, 72h, con todos los filtros
+                            anti-FP: mc_mod, overlay, devtool,
+                            backup_suffix, tamaño 5KB-500MB),
+                            scan_defender_asr_events (EventIDs
+                            1006/1116/1117/1121/1122 últimas 72h
+                            via Get-WinEvent),
+                            is_onedrive_path / is_legit_devtool /
+                            is_backup_suffix
+                    → 2 detecciones nuevas + 3 filtros anti-FP críticos.
+                      Recompila el .exe a 1.6.41 — los clientes con
+                      versiones <1.6.41 verán "actualización disponible".
 
 PRIORIZACIÓN SUGERIDA (top 10 con mayor ROI inmediato)
 ──────────────────────────────────────────────────────

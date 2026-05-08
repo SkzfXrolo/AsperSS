@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.39"
+SCANNER_VERSION = "1.6.41"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -231,6 +231,113 @@ def is_legit_overlay(filename_or_path: str) -> bool:
     if not filename_or_path:
         return False
     return smart_hack_match(filename_or_path.lower(), _legit_overlay_regex())
+
+
+# ── Tools de desarrollo legítimas (Filtro #57) ──────────────────────────────
+#
+# Editores/IDEs/SDKs que podrían parecer inyectores por su comportamiento
+# (compilers, debuggers, build tools que tocan procesos externos, plugins
+# que cargan DLLs). Cualquiera de estos termfilenames borrado/ejecutado en
+# las últimas 72h es legítimo, NO es señal de cheat.
+_LEGIT_DEVTOOL_TERMS = (
+    # Editores
+    'code', 'code-insiders', 'vscode', 'visual-studio-code',
+    'cursor', 'windsurf',
+    'sublime_text', 'sublime-text', 'sublime',
+    'notepad++', 'notepadpp', 'notepad-plus-plus',
+    'atom',
+    # JetBrains
+    'intellij', 'idea64', 'idea', 'pycharm', 'pycharm64',
+    'webstorm', 'webstorm64', 'phpstorm', 'rider', 'rider64',
+    'clion', 'clion64', 'goland', 'rubymine', 'datagrip', 'androidstudio',
+    'jetbrains-toolbox',
+    # Visual Studio (Microsoft) — devenv.exe y MSBuild ya cubiertos por publisher
+    'devenv', 'msbuild', 'msvsmon', 'vshost',
+    # NetBeans / Eclipse
+    'netbeans', 'netbeans64',
+    'eclipse',
+    # Terminales de dev
+    'powershell_ise', 'wt', 'windowsterminal',
+    'wezterm', 'alacritty', 'tabby',
+    # Build tools / package managers
+    'gradle', 'maven', 'mvn', 'sbt', 'cargo', 'rustc',
+    'npm', 'yarn', 'pnpm', 'node', 'nodejs',
+    'python', 'python3', 'pythonw', 'pip',
+    'go', 'godoc',
+    'dotnet', 'nuget',
+    # Containers / VMs
+    'docker', 'docker-compose', 'docker-desktop',
+    'podman', 'minikube', 'kubectl',
+    'vagrant', 'vboxmanage',
+    # Git GUIs
+    'gitkraken', 'sourcetree', 'github-desktop', 'githubdesktop',
+    'tortoisegit', 'fork',
+    # API testing / DB tools
+    'postman', 'insomnia', 'bruno',
+    'dbeaver', 'pgadmin4', 'pgadmin', 'mysql-workbench', 'mysqlworkbench',
+    # Otras herramientas dev legítimas
+    'wireshark', 'fiddler', 'fiddlerproxy',
+    'ngrok', 'cloudflared',
+)
+
+@functools.lru_cache(maxsize=1)
+def _legit_devtool_regex():
+    return _build_smart_hack_regex(_LEGIT_DEVTOOL_TERMS)
+
+def is_legit_devtool(filename_or_path: str) -> bool:
+    """True si el filename matchea una tool de desarrollo legítima
+    (VSCode, Cursor, IntelliJ, etc.) — Filtro #57."""
+    if not filename_or_path:
+        return False
+    return smart_hack_match(filename_or_path.lower(), _legit_devtool_regex())
+
+
+# ── OneDrive sincronizado (Filtro #33) ──────────────────────────────────────
+#
+# Los staffs suelen tener OneDrive corriendo y archivos del trabajo o del
+# personal sincronizados. Ese folder no debe generar ruido.
+def is_onedrive_path(path: str) -> bool:
+    """True si el path está dentro de cualquier carpeta de OneDrive
+    sincronizada (personal, business, OneDrive for Business)."""
+    if not path:
+        return False
+    p = str(path).lower().replace('/', '\\')
+    return (
+        '\\onedrive\\' in p or
+        '\\onedrive - ' in p or               # OneDrive for Business
+        '\\onedrivetemp\\' in p or
+        p.endswith('\\onedrive')
+    )
+
+
+# ── Sufijos backup/old/_v1/_tmp (Filtro #36) ────────────────────────────────
+#
+# Updaters legítimos (Adobe, Office, NVIDIA, browsers) renombran binarios
+# antiguos como `program.old`, `app_v1.exe`, `app.bak`, `installer~tmp.exe`
+# y los borran al terminar el upgrade. Esos artifacts NO son cheats.
+import re as _re_backup
+_BACKUP_SUFFIX_RE = _re_backup.compile(
+    r'(?:'
+    r'\.(?:old|bak|backup|orig|prev|tmp|temp|delete|rotated|deleted|swp|swo)(?:\.[a-z0-9]{1,4})?$'
+    r'|'
+    r'(?:[._-](?:old|bak|backup|prev|tmp|temp|deleted|rotated)\d*)\.[a-z0-9]{1,4}$'
+    r'|'
+    r'~?[._-]?(?:tmp|temp|copy)\.[a-z0-9]{1,4}$'
+    r'|'
+    r'_v\d+\.[a-z0-9]{1,4}$'                 # foo_v1.exe, bar_v23.dll
+    r'|'
+    r'\.\d{4}-\d{2}-\d{2}\.[a-z0-9]{1,4}$'   # foo.2024-05-12.exe (rotated)
+    r')',
+    _re_backup.IGNORECASE,
+)
+
+def is_backup_suffix(filename: str) -> bool:
+    """True si el filename tiene un sufijo típico de backup/rotación
+    (Filtro #36): .old, .bak, .backup, .orig, .prev, _tmp, _v1, etc."""
+    if not filename:
+        return False
+    base = os.path.basename(str(filename)).lower()
+    return bool(_BACKUP_SUFFIX_RE.search(base))
 
 
 # ── Smart Hack-Term Matcher (Filtro #38) ─────────────────────────────────────
@@ -5059,6 +5166,10 @@ class ArgusApp:
                 _run_safe(self.scan_defender_exclusions)
                 self._set_scan_phase("🦠 Cuarentena de Defender...")
                 _run_safe(self.scan_defender_quarantine)
+                self._set_scan_phase("📜 Eventos ASR / Defender (72h)...")
+                _run_safe(self.scan_defender_asr_events)
+                self._set_scan_phase("💬 Downloads de Telegram/WhatsApp/Discord...")
+                _run_safe(self.scan_messaging_downloads)
                 self._set_scan_phase("🔥 Reglas custom de Firewall...")
                 _run_safe(self.scan_recent_firewall_rules)
                 self._set_scan_phase("💥 Crash dumps recientes (.dmp)...")
@@ -8872,6 +8983,24 @@ class ArgusApp:
                                 orig_lower = (orig_path or '').lower()
                                 if not is_hack and ('\\windowsapps\\' in orig_lower or '/windowsapps/' in orig_lower):
                                     continue
+                                # Filtro #33: archivos sincronizados desde
+                                # OneDrive del staff (personal o for Business)
+                                # son archivos del trabajo o personales — no
+                                # cheat. Solo descartar si NO match hack.
+                                if not is_hack and is_onedrive_path(orig_path):
+                                    continue
+                                # Filtro #57: tools de desarrollo legítimas
+                                # (VSCode, Cursor, IntelliJ, Postman, Docker,
+                                # Wireshark, etc.) borradas durante updates
+                                # / cleanup no son cheats.
+                                if not is_hack and is_exec and is_legit_devtool(base_l):
+                                    continue
+                                # Filtro #36: artefactos de updaters con sufijos
+                                # típicos de backup/rotación (.old, .bak, _v1,
+                                # ~tmp, app.2024-05-12.exe). Esos quedan en
+                                # la papelera al actualizar Adobe/Office/Chrome.
+                                if not is_hack and is_backup_suffix(base_l):
+                                    continue
                                 # Filtro #41: tamaños fuera del rango típico
                                 # de hacks. Hacks .exe pesan 1-50 MB,
                                 # .jar 100 KB - 5 MB. Si está MUY chico
@@ -11502,6 +11631,243 @@ class ArgusApp:
                 print("✓ Sin exclusiones custom en Defender (limpio)")
         except Exception as e:
             print(f"Error en scan_defender_exclusions: {e}")
+
+    def scan_messaging_downloads(self):
+        """Scanner #57 — Downloads recientes de Telegram / WhatsApp / Discord.
+
+        Telegram, WhatsApp Desktop, Discord guardan archivos recibidos en
+        carpetas conocidas. Si en las últimas 72h llegó un .jar/.exe/.zip
+        con nombre de cheat o un instalador sospechoso, es señal de que
+        alguien le pasó el hack al cliente por mensaje privado.
+
+        Carpetas inspeccionadas (todas existen / se hidratan dinámicamente):
+          %USERPROFILE%\\Downloads\\Telegram Desktop
+          %APPDATA%\\Telegram Desktop\\tdata\\Downloads
+          %USERPROFILE%\\Downloads\\WhatsApp
+          %USERPROFILE%\\Documents\\WhatsApp\\Media
+          %APPDATA%\\WhatsApp\\Cache (si hay)
+          %APPDATA%\\discord\\Cache (referencia, no vamos a parsear archivos
+                                     binarios cifrados, solo listamos .jar/.exe
+                                     que aparezcan tal cual)
+        """
+        print("🔍 Escaneando Downloads de Telegram / WhatsApp / Discord (72h)...")
+        try:
+            cutoff = time.time() - 72 * 3600
+            home    = os.environ.get('USERPROFILE', '')
+            appdata = os.environ.get('APPDATA',     '')
+            ldata   = os.environ.get('LOCALAPPDATA',  '')
+
+            roots = []
+            if home:
+                roots += [
+                    (os.path.join(home, 'Downloads', 'Telegram Desktop'), 'Telegram'),
+                    (os.path.join(home, 'Downloads', 'WhatsApp'),         'WhatsApp'),
+                    (os.path.join(home, 'Documents', 'WhatsApp'),         'WhatsApp'),
+                ]
+            if appdata:
+                roots += [
+                    (os.path.join(appdata, 'Telegram Desktop', 'tdata', 'Downloads'), 'Telegram'),
+                    (os.path.join(appdata, 'WhatsApp'),    'WhatsApp'),
+                ]
+            if ldata:
+                roots += [
+                    (os.path.join(ldata,   'WhatsApp'),    'WhatsApp'),
+                ]
+
+            INTERESTING_EXTS = {
+                '.exe', '.jar', '.dll', '.bat', '.ps1', '.vbs', '.ahk', '.py',
+                '.zip', '.rar', '.7z', '.tar', '.msi', '.lnk', '.iso',
+            }
+
+            findings = []
+            seen_paths = set()
+            for root, source in roots:
+                if not os.path.isdir(root):
+                    continue
+                try:
+                    for dirpath, _dirs, files in os.walk(root):
+                        for f in files:
+                            full = os.path.join(dirpath, f)
+                            if full.lower() in seen_paths:
+                                continue
+                            seen_paths.add(full.lower())
+                            ext = os.path.splitext(f)[1].lower()
+                            if ext not in INTERESTING_EXTS:
+                                continue
+                            try:
+                                mt = os.path.getmtime(full)
+                            except (OSError, PermissionError):
+                                continue
+                            if mt < cutoff:
+                                continue
+                            base_l = f.lower()
+                            # Aplicar filtros anti-FP estándar
+                            if is_legit_mc_mod(base_l) or is_legit_overlay(base_l) or is_legit_devtool(base_l):
+                                continue
+                            if is_backup_suffix(base_l):
+                                continue
+                            try:
+                                size_b = os.path.getsize(full)
+                            except (OSError, PermissionError):
+                                size_b = 0
+                            # Hack-name match: usar el set definitivo + términos del recycle scan
+                            hack_terms_local = list(_DEFINITE_HACK_NAMES) + [
+                                'killaura', 'aimbot', 'autoclick', 'clicker',
+                                'dllinjector', 'extremeinjector', 'cheatengine', 'xenos',
+                                '.rise', '.meteor', '.drip', '.vertex', '.azura', '.jello',
+                                '.datura', '.mathias', '.rusherhack', '.salhack', '.inertia',
+                                'weaveloader', 'vape', 'wurst',
+                            ]
+                            is_hack = smart_hack_match(base_l, _smart_hack_regex_cached(tuple(hack_terms_local)))
+                            # Solo flagear ejecutables con tamaño razonable o hack-name
+                            if not is_hack:
+                                if size_b > 0 and (size_b < 5 * 1024 or size_b > 500 * 1024 * 1024):
+                                    continue
+                            findings.append({
+                                'path':       full,
+                                'name':       f,
+                                'mtime':      mt,
+                                'size':       size_b,
+                                'source':     source,
+                                'is_hack':    is_hack,
+                            })
+                except (PermissionError, OSError):
+                    continue
+
+            if not findings:
+                print("✓ Sin descargas sospechosas en mensajería (72h)")
+                return
+
+            # Reportar agrupado: 1 issue por archivo (fáciles de ver en panel)
+            findings.sort(key=lambda x: (not x['is_hack'], -x['mtime']))
+            for it in findings[:25]:  # cap de 25 para no inundar
+                size_kb = max(1, it['size'] // 1024)
+                size_str = f"{size_kb} KB" if size_kb < 1024 else f"{size_kb / 1024:.1f} MB"
+                age_min = int((time.time() - it['mtime']) / 60)
+                age_str = f'{age_min}m' if age_min < 60 else f'{age_min // 60}h{age_min % 60:02d}m'
+                if it['is_hack']:
+                    alerta = 'CRITICAL'
+                    conf   = 0.85
+                    titulo = f"⚠️ {it['source']}: {it['name']} (hack-term, {size_str}, hace {age_str})"
+                else:
+                    alerta = 'SOSPECHOSO'
+                    conf   = 0.55
+                    titulo = f"{it['source']}: {it['name']} ({size_str}, hace {age_str})"
+                self.issues_found.append({
+                    'tipo':       'messaging_download',
+                    'nombre':     titulo,
+                    'ruta':       it['path'],
+                    'archivo':    it['name'],
+                    'categoria':  'EXECUTED_FILES',
+                    'alerta':     alerta,
+                    'confidence': conf,
+                    'detected_patterns': ['msg_dl_' + it['source'].lower()],
+                    'extra': {
+                        'source':   it['source'],
+                        'mtime':    int(it['mtime']),
+                        'size':     it['size'],
+                        'is_hack':  it['is_hack'],
+                    },
+                })
+            print(f"  · {len(findings)} archivo(s) recientes en mensajería (mostrados {min(25, len(findings))})")
+        except Exception as e:
+            print(f"Error en scan_messaging_downloads: {e}")
+
+
+    def scan_defender_asr_events(self):
+        """Scanner #24 — Eventos de Microsoft Defender ASR (Attack Surface
+        Reduction). Si Defender bloqueó/auditó comportamientos sospechosos
+        en las últimas 72h: posible cheat intentando ejecutarse.
+
+        Eventos clave (canal Microsoft-Windows-Windows Defender/Operational):
+          1006 — Malware detected
+          1116 — Behavior detected
+          1117 — Behavior remediated
+          1121 — ASR rule blocked
+          1122 — ASR rule audited (warn-only)
+          5007 — Configuration changed (alguien tocó Defender — ya cubierto)
+        """
+        print("🔍 Escaneando eventos recientes de Defender (1006/1116/1117/1121/1122)...")
+        try:
+            ps = (
+                "$cutoff=(Get-Date).AddHours(-72);"
+                "try{$ev=Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Windows Defender/Operational';"
+                "ID=1006,1116,1117,1121,1122;StartTime=$cutoff} -MaxEvents 60 -ErrorAction Stop;"
+                "$ev|ForEach-Object{[ordered]@{Id=$_.Id;Time=$_.TimeCreated.ToString('o');"
+                "Msg=($_.Message -replace '\\s+',' ').Substring(0,[Math]::Min(220,$_.Message.Length))}|"
+                "ConvertTo-Json -Compress}}catch{Write-Output ''}"
+            )
+            r = subprocess.run(
+                ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', ps],
+                capture_output=True, text=True, timeout=30,
+            )
+            out = (r.stdout or '').strip()
+            if not out:
+                print("✓ Sin eventos ASR/Defender recientes (o sin permiso al log)")
+                return
+
+            import json as _json
+            events = []
+            for line in out.splitlines():
+                line = line.strip()
+                if not line or not line.startswith('{'):
+                    continue
+                try:
+                    events.append(_json.loads(line))
+                except Exception:
+                    continue
+            if not events:
+                print("✓ Eventos ASR sin parsing válido")
+                return
+
+            # Agregamos por tipo
+            by_id = {}
+            for ev in events:
+                eid = str(ev.get('Id', '?'))
+                by_id.setdefault(eid, []).append(ev)
+
+            id_label = {
+                '1006': ('malware_detected',  'Malware detectado'),
+                '1116': ('behavior_detected', 'Comportamiento sospechoso'),
+                '1117': ('behavior_blocked',  'Comportamiento bloqueado'),
+                '1121': ('asr_blocked',       'ASR rule BLOQUEÓ acción'),
+                '1122': ('asr_audited',       'ASR rule AUDITÓ acción'),
+            }
+            for eid, lst in by_id.items():
+                tag, human = id_label.get(eid, ('defender_event', f'Defender ev {eid}'))
+                count = len(lst)
+                latest = max(lst, key=lambda e: e.get('Time', ''))
+                latest_msg = (latest.get('Msg') or '')[:200]
+                if eid in ('1006', '1117', '1121'):
+                    alerta = 'CRITICAL'
+                    conf   = 0.78
+                elif eid == '1122':
+                    alerta = 'SOSPECHOSO'
+                    conf   = 0.45
+                else:
+                    alerta = 'SOSPECHOSO'
+                    conf   = 0.60
+                self.issues_found.append({
+                    'tipo':       'defender_event',
+                    'nombre':     f'{human}: {count} evento(s) en últimas 72h (último: {latest.get("Time","")[:19]})',
+                    'ruta':       'Microsoft-Windows-Windows Defender/Operational',
+                    'archivo':    f'EventID {eid}',
+                    'categoria':  'EVASION',
+                    'alerta':     alerta,
+                    'confidence': conf,
+                    'detected_patterns': [tag],
+                    'extra': {
+                        'event_id':  eid,
+                        'count_72h': count,
+                        'latest_msg': latest_msg,
+                    },
+                })
+            print(f"  · {len(events)} eventos parseados ({len(by_id)} tipos)")
+        except subprocess.TimeoutExpired:
+            print("⚠ Timeout leyendo eventos Defender (skip)")
+        except Exception as e:
+            print(f"Error en scan_defender_asr_events: {e}")
+
 
     def scan_defender_quarantine(self):
         """Scanner #25 — Inventario de cuarentena de Microsoft Defender.
