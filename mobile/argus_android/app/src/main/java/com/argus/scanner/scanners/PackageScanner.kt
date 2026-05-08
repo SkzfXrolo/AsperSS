@@ -50,7 +50,13 @@ class PackageScanner(private val ctx: Context) {
 
         for (info in pkgs) {
             val name  = info.packageName ?: continue
-            val label = try { pm.getApplicationLabel(info.applicationInfo).toString() } catch (_: Exception) { name }
+            // compileSdk 34 expone PackageInfo.applicationInfo como @Nullable.
+            // Necesitamos capturar a local val para que el smart-cast funcione,
+            // y caer a packageName si por alguna razón es null.
+            val appInfo = info.applicationInfo
+            val label = if (appInfo != null) {
+                try { pm.getApplicationLabel(appInfo).toString() } catch (_: Exception) { name }
+            } else name
             val verName = info.versionName ?: ""
 
             // 1) Blacklist directa por package name

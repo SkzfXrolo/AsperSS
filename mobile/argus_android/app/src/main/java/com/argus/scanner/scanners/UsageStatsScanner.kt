@@ -73,10 +73,13 @@ class UsageStatsScanner(private val ctx: Context) {
             val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, begin, now)
                 ?: emptyList()
             for (us in stats) {
-                if (us.packageName.isNullOrBlank()) continue
-                val prev = lastUsedByPkg[us.packageName] ?: 0L
-                if (us.lastTimeUsed > prev) lastUsedByPkg[us.packageName] = us.lastTimeUsed
-                totalTimeByPkg.merge(us.packageName, us.totalTimeInForeground) { a, b -> a + b }
+                // UsageStats.packageName en compileSdk 34 es String? (Java
+                // getter, no smart-castea como property). Capturamos a local.
+                val pkg = us.packageName ?: continue
+                if (pkg.isBlank()) continue
+                val prev = lastUsedByPkg[pkg] ?: 0L
+                if (us.lastTimeUsed > prev) lastUsedByPkg[pkg] = us.lastTimeUsed
+                totalTimeByPkg.merge(pkg, us.totalTimeInForeground) { a, b -> a + b }
             }
         } catch (_: Exception) { /* devuelve vacío silencioso */ }
 
