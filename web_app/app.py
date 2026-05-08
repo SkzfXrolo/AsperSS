@@ -5808,6 +5808,84 @@ def descargar_linux():
     )
 
 
+# ── Plataforma Android #13 — endpoint de descarga ────────────────────────────
+@app.route('/descargar/android')
+def descargar_android():
+    """Plataforma Android #13 — sirve el APK Argus Android.
+
+    Busca el APK compilado en `web_app/static/dist/argus-android.apk`. Si
+    no existe (build aún no realizado), devuelve 503 con mensaje claro y
+    un link al endpoint de código fuente. Para Pack 25 el APK puede
+    publicarse vía GH Actions o build manual del proyecto Android Studio.
+    """
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    apk_path = os.path.join(project_root, 'web_app', 'static', 'dist',
+                            'argus-android.apk')
+    if not os.path.isfile(apk_path):
+        return jsonify({
+            'error': 'APK aún no compilado en este servidor.',
+            'note': ('La APK Argus Android está en MVP. El código fuente '
+                     'está en mobile/argus_android/. Cualquiera puede '
+                     'compilarla con Android Studio / Gradle. Una vez '
+                     'compilada, copiala a web_app/static/dist/'
+                     'argus-android.apk y este endpoint la servirá.'),
+            'source_url': '/descargar/android-source',
+            'github': 'https://github.com/SkzfXrolo/AsperSS/tree/main/mobile/argus_android',
+        }), 503
+
+    return send_file(
+        apk_path,
+        mimetype='application/vnd.android.package-archive',
+        as_attachment=True,
+        download_name='argus-android.apk',
+    )
+
+
+@app.route('/descargar/android-source')
+def descargar_android_source():
+    """Plataforma Android #13 — empaqueta el proyecto Android como tar.gz.
+
+    Útil para que devs / CI / contributors lo compilen localmente. Excluye
+    build/, .gradle/, *.iml, .DS_Store.
+    """
+    import io
+    import tarfile
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    src_dir = os.path.join(project_root, 'mobile', 'argus_android')
+    if not os.path.isdir(src_dir):
+        return jsonify({'error': 'Proyecto Android no disponible.'}), 404
+
+    buf = io.BytesIO()
+    excluded_dirs = {'.gradle', 'build', '.idea', '__pycache__', 'captures'}
+    excluded_suffixes = ('.iml', '.apk', '.aab', '.jks', '.keystore', '.pyc')
+    try:
+        with tarfile.open(fileobj=buf, mode='w:gz', compresslevel=6) as tar:
+            for dirpath, dirnames, filenames in os.walk(src_dir):
+                dirnames[:] = [d for d in dirnames if d not in excluded_dirs]
+                for fn in filenames:
+                    if fn.endswith(excluded_suffixes):
+                        continue
+                    full = os.path.join(dirpath, fn)
+                    arc = os.path.join('argus_android',
+                                        os.path.relpath(full, src_dir)).replace(os.sep, '/')
+                    info = tar.gettarinfo(full, arcname=arc)
+                    if fn.endswith('.sh') or fn == 'gradlew':
+                        info.mode = 0o755
+                    with open(full, 'rb') as f:
+                        tar.addfile(info, f)
+    except Exception as e:
+        return jsonify({'error': f'Error empaquetando: {e}'}), 500
+
+    buf.seek(0)
+    return send_file(
+        buf,
+        mimetype='application/gzip',
+        as_attachment=True,
+        download_name='argus-android-source.tar.gz',
+    )
+
+
 @app.route('/api/scans/<int:scan_id>/report-html', methods=['GET'])
 @login_required
 def get_scan_report_html(scan_id):

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Paleta bronce Argus, sincronizada con argus-ui.css del panel web. -->
+    <color name="argus_bronze">#B48A62</color>
+    <color name="argus_bronze_light">#EAD8C0</color>
+    <color name="argus_bronze_dark">#7E6952</color>
+    <color name="argus_bg_dark">#15110A</color>
+    <color name="argus_bg_card">#1F1810</color>
+    <color name="argus_text">#EAD8C0</color>
+    <color name="argus_text_dim">#8E7B65</color>
+    <color name="argus_clean">#5BC180</color>
+    <color name="argus_warn">#FFB86B</color>
+    <color name="argus_danger">#FF6B6B</color>
+</resources>

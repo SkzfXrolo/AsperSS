@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">Argus Scanner</string>
+    <string name="argus_subtitle">All-Seeing · Always Watching</string>
+
+    <string name="onboarding_title">Permisos requeridos</string>
+    <string name="onboarding_intro">Argus necesita estos permisos para escanear tu dispositivo. NO pedimos contactos, mic, cámara, ubicación ni SMS.</string>
+
+    <string name="perm_storage_title">Acceso a archivos</string>
+    <string name="perm_storage_desc">Para revisar carpetas de Minecraft Bedrock y de PojavLauncher en /sdcard.</string>
+
+    <string name="perm_usage_title">Uso de aplicaciones</string>
+    <string name="perm_usage_desc">Para detectar qué cheat clients fueron lanzados recientemente. Se concede en Ajustes &gt; Acceso especial.</string>
+
+    <string name="perm_packages_title">Apps instaladas</string>
+    <string name="perm_packages_desc">Para listar paquetes contra la blacklist de cheat clients y memory editors.</string>
+
+    <string name="grant_storage">Conceder acceso a archivos</string>
+    <string name="grant_usage">Conceder acceso a uso</string>
+    <string name="continue_btn">Continuar</string>
+
+    <string name="scan_token_label">Token del staff</string>
+    <string name="scan_token_hint">Pegá el token que te dio el staff…</string>
+    <string name="scan_start">Iniciar scan</string>
+    <string name="scan_running">Escaneando…</string>
+    <string name="scan_done">Scan completado · subido al panel</string>
+    <string name="scan_error">Error: %1$s</string>
+
+    <string name="fgs_channel_id">argus_scan_channel</string>
+    <string name="fgs_channel_name">Scan en progreso</string>
+    <string name="fgs_notif_title">Argus está escaneando</string>
+    <string name="fgs_notif_text">Revisando archivos y apps del dispositivo…</string>
+</resources>

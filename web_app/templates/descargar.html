@@ -733,6 +733,19 @@
                     Linux
                     <span class="plat-badge">BETA</span>
                 </button>
+                <button type="button"
+                        class="plat-tab"
+                        id="plat-tab-android"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="plat-pane-android"
+                        onclick="switchPlatform('android')">
+                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                        <path fill="currentColor" d="M5 8c0-3.86 3.14-7 7-7s7 3.14 7 7v8H5V8zm-2 9h18v2c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2v-2zm9-13.5c-.83 0-1.5.67-1.5 1.5h3c0-.83-.67-1.5-1.5-1.5zM8.5 5C8.22 5 8 5.22 8 5.5s.22.5.5.5.5-.22.5-.5-.22-.5-.5-.5zm7 0c-.28 0-.5.22-.5.5s.22.5.5.5.5-.22.5-.5-.22-.5-.5-.5z"/>
+                    </svg>
+                    Android
+                    <span class="plat-badge">BETA</span>
+                </button>
             </div>
 
             <!-- ───────────── Pane Windows ───────────── -->
@@ -869,6 +882,94 @@
                 </div>
             </div>
 
+            <!-- ───────────── Pane Android (BETA) ───────────── -->
+            <div id="plat-pane-android" class="plat-pane" role="tabpanel" aria-labelledby="plat-tab-android" hidden>
+                <div class="version-row">
+                    <div class="version-tag">
+                        <span>VERSION</span>
+                        <span class="v-number">v{{ argus_version }}-android1</span>
+                    </div>
+                    <div class="build-meta">
+                        <span><span class="label">PLATFORM</span> ANDROID 8.0+</span>
+                        <span><span class="label">FORMATO</span> APK universal</span>
+                        <span><span class="label">SOPORTA</span> BEDROCK · POJAV · BOARDWALK</span>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr auto;gap:18px;align-items:center;margin:10px 0 18px;">
+                    <div>
+                        <a href="/descargar/android" class="download-btn" id="dl-btn-android" style="margin-bottom:8px;">
+                            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                                <path d="M11 3v11M11 14l-4-4M11 14l4-4M3 19h16" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>Descargar argus-android.apk</span>
+                        </a>
+                        <div class="file-info" style="justify-content:flex-start;">
+                            <span>argus-android.apk</span>
+                            <span class="pin"></span>
+                            <span>Android 8+</span>
+                            <span class="pin"></span>
+                            <span>arm64 / armv7 / x86_64</span>
+                        </div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;background:rgba(255,255,255,0.04);padding:10px;border-radius:10px;border:1px solid rgba(184,115,51,0.25);">
+                        <img id="android-qr"
+                             src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=8&color=EAD8C0&bgcolor=15110A&data="
+                             alt="QR para descargar APK"
+                             width="140" height="140"
+                             style="border-radius:6px;background:#15110A;">
+                        <span style="font-size:10px;letter-spacing:1.4px;color:#B48A62;font-weight:700;text-transform:uppercase;">Escaneá desde el móvil</span>
+                    </div>
+                </div>
+
+                <div class="hash-row" style="background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.30);">
+                    <span class="label" style="color:#fbbf24;">BETA</span>
+                    <span class="value" style="color:#fcd34d;font-family:inherit;font-size:12px;">
+                        APK Argus Android — soporta Bedrock oficial, PojavLauncher, Boardwalk y más. MVP en pruebas.
+                    </span>
+                </div>
+
+                <div class="steps-title">CÓMO USARLO EN ANDROID</div>
+                <div class="steps">
+                    <div class="step">
+                        <div class="step-num">1</div>
+                        <div>Activá <strong>"Apps de orígenes desconocidos"</strong> para tu navegador en
+                            <em>Ajustes ▸ Apps ▸ Acceso especial ▸ Instalar apps desconocidas</em>.
+                            Es necesario porque el APK se distribuye fuera de Play Store (sideload directo).
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-num">2</div>
+                        <div>Descargá el <code class="inline-code">argus-android.apk</code> al móvil
+                            (escaneá el QR o tocá el botón) e instalalo.
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-num">3</div>
+                        <div>Concedé los <strong>3 permisos minimum-necessary</strong> que la app pide:
+                            <code class="inline-code">acceso a archivos</code>,
+                            <code class="inline-code">uso de apps</code> (Ajustes ▸ Acceso especial),
+                            <code class="inline-code">apps instaladas</code> (automático).
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-num">4</div>
+                        <div>Pídele al staff el <strong>código de 6 caracteres</strong>, pegalo y tocá
+                            <strong>Iniciar scan</strong>. Tarda ~30 segundos.
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-num">5</div>
+                        <div>Cubrimos: <strong>Bedrock oficial</strong> (com.mojang.minecraftpe),
+                            <strong>PojavLauncher</strong>, <strong>Boardwalk Beta</strong>,
+                            <strong>MCPE Master</strong>, <strong>BlockLauncher</strong>,
+                            <strong>HMCL Android</strong>. Detecta cheat clients (Toolbox, Horion, Latite,
+                            Husky, Exodus, Prestige…), Game Guardian, Magisk/LSPosed/Xposed.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="warning">
                 <span style="flex-shrink:0;">⚠</span>
                 <span>El código de acceso es de <strong>1 solo uso</strong> y expira a los <strong>30 minutos</strong>. Si no tienes uno, pídelo al staff de tu servidor o entra a nuestro Discord antes de descargar.</span>
@@ -910,37 +1011,50 @@
                 setTimeout(() => el.classList.add('visible'), 80 + i * 90);
             });
 
-            // Plataforma #13 — auto-detectar Linux y preseleccionar tab
+            // Plataforma #13 — auto-detectar SO y preseleccionar tab
             try {
                 const ua = (navigator.userAgent || '').toLowerCase();
-                const isLinux = ua.includes('linux') && !ua.includes('android');
-                const override = new URLSearchParams(location.search).get('plat');
-                if (override === 'lin' || (isLinux && override !== 'win')) {
+                const isAndroid = ua.includes('android');
+                const isLinux   = ua.includes('linux') && !isAndroid;
+                const override  = new URLSearchParams(location.search).get('plat');
+                if (override === 'android' || (isAndroid && !override)) {
+                    switchPlatform('android');
+                } else if (override === 'lin' || (isLinux && override !== 'win')) {
                     switchPlatform('lin');
+                }
+            } catch (_e) { /* ignore */ }
+
+            // Generar QR de Android con la URL absoluta del APK (para que
+            // funcione cuando se escanea desde otro móvil).
+            try {
+                const qr = document.getElementById('android-qr');
+                if (qr) {
+                    const target = location.origin + '/descargar/android?plat=android';
+                    qr.src = 'https://api.qrserver.com/v1/create-qr-code/'
+                           + '?size=140x140&margin=8&color=EAD8C0&bgcolor=15110A'
+                           + '&data=' + encodeURIComponent(target);
                 }
             } catch (_e) { /* ignore */ }
         });
 
-        // Plataforma #13 — alterna entre tabs Windows/Linux
+        // Plataforma — alterna entre tabs Windows/Linux/Android
         function switchPlatform(target) {
-            const isLin = target === 'lin';
-            const tabWin = document.getElementById('plat-tab-win');
-            const tabLin = document.getElementById('plat-tab-lin');
-            const paneWin = document.getElementById('plat-pane-win');
-            const paneLin = document.getElementById('plat-pane-lin');
-            if (!tabWin || !tabLin || !paneWin || !paneLin) return;
-            tabWin.classList.toggle('active', !isLin);
-            tabLin.classList.toggle('active',  isLin);
-            tabWin.setAttribute('aria-selected', !isLin);
-            tabLin.setAttribute('aria-selected',  isLin);
-            paneWin.hidden = isLin;
-            paneLin.hidden = !isLin;
-            paneWin.classList.toggle('active', !isLin);
-            paneLin.classList.toggle('active',  isLin);
+            const all = ['win', 'lin', 'android'];
+            const valid = all.includes(target) ? target : 'win';
+            for (const k of all) {
+                const tab  = document.getElementById('plat-tab-' + k);
+                const pane = document.getElementById('plat-pane-' + k);
+                if (!tab || !pane) continue;
+                const isActive = (k === valid);
+                tab.classList.toggle('active', isActive);
+                tab.setAttribute('aria-selected', isActive);
+                pane.hidden = !isActive;
+                pane.classList.toggle('active', isActive);
+            }
             // URL sticky para que el link sea compartible
             try {
                 const url = new URL(location.href);
-                url.searchParams.set('plat', isLin ? 'lin' : 'win');
+                url.searchParams.set('plat', valid);
                 history.replaceState({}, '', url);
             } catch (_e) { /* ignore */ }
         }

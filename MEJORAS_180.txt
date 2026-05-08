@@ -1388,7 +1388,7 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
   • No leemos los archivos privados de OTRA app (com.mojang.minecraftpe
     /data/data/...) — sí su carpeta pública en /sdcard/Android/data/.
 
-[ ]  1. Refactor del proyecto a paquete Android nativo:
+[X]  1. Refactor del proyecto a paquete Android nativo:
         Estructura nueva `mobile/argus_android/` con proyecto Gradle
         (Kotlin + Jetpack Compose para UI sencilla). NO toca al
         scanner Windows ni al paquete argus_linux. Comparte el contrato
@@ -1396,8 +1396,16 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
         results). minSdk = 26 (Android 8) por API mínima de
         UsageStatsManager confiable; targetSdk = 34 (Android 14).
         Build genera APK universal sideload-friendly.
+        DONE v1.6.49 (Pack 25) — proyecto Gradle Kotlin DSL completo:
+        settings.gradle.kts, build.gradle.kts (root + app), gradle.properties,
+        proguard-rules.pro, .gitignore. AGP 8.2.2 + Kotlin 1.9.22 +
+        Compose BOM 2024.02. Namespace com.argus.scanner. versionCode 1,
+        versionName "1.6.49". buildConfigField ARGUS_API_BASE para
+        override por build type. Sin OkHttp/Gson — solo HttpURLConnection
+        + org.json para mantener APK <8MB. Estructura jerárquica:
+        core/ + scanners/ + ui/.
 
-[ ]  2. Aislar TODOS los imports Windows/Linux:
+[X]  2. Aislar TODOS los imports Windows/Linux:
         El paquete argus_android usa SOLO APIs Android estándar
         (Context, PackageManager, ApplicationInfo, UsageStatsManager,
         Environment, MediaStore, FileObserver, MediaProjectionManager,
@@ -1406,8 +1414,15 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
         Compartir solo la lista de hack-terms y mod-whitelist con el
         scanner desktop vía un endpoint backend `/api/scanner-rules`
         (JSON descargable al iniciar el scan, cacheado 24h).
+        DONE v1.6.49 (Pack 25) — paquete usa SOLO APIs Android oficiales
+        (PackageManager, AppOpsManager, Environment, Settings,
+        Build) + java.net.HttpURLConnection + org.json (built-in).
+        Cero deps de OkHttp/Gson para mantener APK <8MB. Cero
+        imports winreg/ctypes/wmctrl. HackTerms.kt + LegitMods.kt
+        embebidos client-side (endpoint /api/scanner-rules deferred
+        a Pack 26).
 
-[ ]  3. Equivalente Android de la papelera ("borrados"):
+[~]  3. Equivalente Android de la papelera ("borrados"):
         En Android no hay una sola "papelera global". Aproximación:
           - MediaStore con flag IS_TRASHED = 1 (Android 11+ Scoped Storage):
             archivos marcados como borrados pero aún recuperables.
@@ -1421,6 +1436,14 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
             a paths borrados con hack-name match.
         Listado de archivos potencialmente borrados con hack-term
         match → CRITICAL.
+        PARTIAL v1.6.49 (Pack 25) — FileScanner.kt cubre las carpetas
+        de file managers (.recycle, .recyclebin, RecycleBin, Trash,
+        .MIRecycleBin de Mi File Manager, .SE_Recycle de Solid
+        Explorer, CXFileExplorer/Recycle) + /sdcard/Download +
+        /sdcard/AppPacks (Toolbox addons) + /sdcard/games/com.mojang
+        (Bedrock public). Walk recursivo depth=4 con smart_hack_match
+        sobre .apk/.jar/.zip/.dex/.mcpack/.mcaddon/.mcworld/.js.
+        TODO Pack 26: MediaStore IS_TRASHED via ContentResolver query.
 
 [ ]  4. Equivalente Android de "ejecutados" recientemente (Prefetch):
         UsageStatsManager con permiso PACKAGE_USAGE_STATS (settings
@@ -1450,40 +1473,26 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
         única durante el scan window (~30s). Combinar con stat() para
         last_modified de cada candidate.
 
-[ ]  6. Detección de apps sospechosas instaladas (Bedrock + Java móvil):
-        PackageManager.getInstalledPackages(MATCH_UNINSTALLED_PACKAGES)
-        contra blacklist por categoría:
-          a) Cheat clients Bedrock (cheat-as-app — el .apk ES el cheat):
-             - com.toolbox.box, com.tbox.box (Toolbox for MCPE)
-             - me.kotmen.horion (Horion launcher)
-             - club.latite.mobile (Latite Mobile)
-             - dev.husky.client, com.husky.client (Husky)
-             - me.exodus.exodus, com.exodus.client (Exodus)
-             - com.mcprestige.client (Prestige)
-             - com.catalysm, com.rebellion, com.flarehcf (PvP cheats)
-             - com.mcprohvh.* (ProHvH variants)
-             - com.moonclient.* (Moon Client)
-             - com.zephyrhcf.* (Zephyr)
-          b) Cheat clients Java vía Pojav (mods .jar dentro del
-             launcher — ver #8 para inspección de archivos):
-             - net.kdt.pojavlaunch / net.kdt.pojavlauncher: legítimos,
-               pero bandera amarilla. Inspeccionar mods/ y versions/.
-          c) Memory editors / hack tools:
-             - com.MGGS, catch_.me_.if_you_can (Game Guardian + forks)
-             - com.cih.gamecih2, com.cih.game_cih (GameCIH)
-             - bin.mt.plus (MT Manager — APK editor, FP frecuente)
-             - com.lc.lockplus (Lucky Patcher)
-             - io.va.exposed (VirtualXposed)
-             - com.parallel.intl.arm64 (Parallel Space — multi-instance)
-             - com.lbe.parallel (Parallel Space alt)
-          d) Root managers:
-             - com.topjohnwu.magisk (Magisk)
-             - org.lsposed.manager (LSPosed)
-             - de.robv.android.xposed.installer (Xposed Installer)
-             - me.weishu.kernelsu.manager (KernelSU)
-        Cada hit reporta: package_name, app_name, version, install_source
-        (PackageInstaller.SessionInfo.installerPackage), firstInstallTime,
-        signing_cert_sha256.
+[X]  6. Detección de apps sospechosas instaladas (Bedrock + Java móvil):
+        DONE v1.6.49 (Pack 25) — PackageScanner.kt + HackTerms.kt:
+        BEDROCK_CHEAT_PACKAGES (15 paquetes): Toolbox, Horion, Latite
+        Mobile, Husky, Exodus, Prestige, Catalysm, Rebellion,
+        FlareHCF, ProHvH, Moon Client, Zephyr HCF, Fracture, Phantom.
+        MEMORY_EDITOR_PACKAGES (11 paquetes): Game Guardian + forks,
+        GameCIH, MT Manager, Lucky Patcher, VirtualXposed, Parallel
+        Space (3 variantes), CreditEdit.
+        ROOT_MANAGER_PACKAGES (10 paquetes): Magisk, KingoRoot,
+        SuperSU, Superuser, LSPosed (+ alt), Xposed Installer,
+        EdXposed, KernelSU Manager, iRoot.
+        Para cada hit reporta: package_name, app_name, versionName,
+        installerPackageName (Play Store / Aurora / sideload),
+        firstInstallTime, signing_cert_sha256 (truncado en
+        descripcion, completo en file_hash). Build con
+        signingFlags() compatible API < 28 / >= 28. Reporta como
+        CRITICAL (cheat/memhack) o SOSPECHOSO (root manager).
+        Heurística adicional: smartHackMatch sobre el LABEL de
+        cada app contra HACK_TERMS para detectar forks rebrandeados
+        (ej. "Horion 2024 Edition" sin package match).
 
 [ ]  7. Equivalente "ventanas abiertas" (foreground / overlays activos):
         Combinación:
@@ -1499,35 +1508,37 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
             foreground fue minecraftpe → CRITICAL (probable hack
             externo dibujando ESP).
 
-[ ]  8. Soporte de launchers de Minecraft móvil:
-        Detección y inspección de TODAS las variantes:
-          • com.mojang.minecraftpe       (Bedrock oficial Play Store)
-          • com.mojang.minecraftedu      (Education Edition)
-          • com.mojang.minecrafttrialpe  (versión trial)
-          • net.kdt.pojavlaunch          (PojavLauncher — Java oficial)
-          • net.kdt.pojavlauncher        (variante typo histórico)
-          • com.kdt.pojavlauncher        (fork antiguo)
-          • com.boardwalk.boardwalk      (Boardwalk Beta — Java forked)
-          • org.boardwalk.merge          (Boardwalk-merge)
-          • com.mcpemaster.mcpe          (MCPE Master — launcher mod)
-          • net.zhuoweizhang.mcpelauncher (BlockLauncher — legacy)
-          • com.tbox.box                 (Toolbox launcher mode)
-          • org.jackhuang.hmcl           (HMCL Android)
-          • com.mclauncher.lithium       (Lithium Launch)
-        Para cada launcher detectado:
-          - Listado de su carpeta de archivos (.minecraft/, games/com.mojang/,
-            mods/, addons/, behavior_packs/, resource_packs/).
-          - SHA256 de cada .jar/.mcpack/.mcaddon + smart_hack_match
-            con anti-FP de mods conocidos legítimos (sodium-android,
-            iris, zink, fabric-android, optifine-mcpe, jei, rei,
-            world-edit-bedrock, addons oficiales del Marketplace).
-          - Si el launcher es PojavLauncher: revisar también
-            `net.kdt.pojavlaunch/files/.minecraft/versions/*.json` por
-            inheritsFrom apuntando a versions modificadas (ej. "Forge"
-            con hash que no matchea ForgeMaven).
-          - Verificar firma del APK del launcher: si com.mojang.minecraftpe
-            está firmado por algo que NO sea "CN=Mojang AB" → APK pirateada
-            o con cheat inyectado → CRITICAL automático.
+[X]  8. Soporte de launchers de Minecraft móvil:
+        DONE v1.6.49 (Pack 25) — LauncherScanner.kt + HackTerms.kt
+        MC_LAUNCHER_PACKAGES con LauncherKind enum
+        (BEDROCK_OFFICIAL / BEDROCK_MOD_LAUNCHER / JAVA_POJAV /
+        JAVA_BOARDWALK / JAVA_OTHER). Cubre los 13 packages de la
+        lista. Por cada launcher detectado:
+        • Reporta presencia como categoria=INFO (no flag, solo
+          contexto para el panel).
+        • BEDROCK_OFFICIAL: verifica firma del APK contra Mojang
+          AB. Si NO coincide → BEDROCK_TAMPERED_APK CRITICAL
+          confidence 0.95. (En MVP la verificación es soft —
+          compara que existan signing certs; Pack 26 endurecerá
+          contra SHA-256 publicado de Mojang.) Escanea
+          /sdcard/Android/data/<pkg>/files/games/com.mojang/ y
+          /sdcard/games/com.mojang/ buscando .mcpack/.mcaddon/
+          .mcworld/.mctemplate con hack-terms (smartHackMatch
+          word-boundary), excluyendo whitelist Marketplace
+          (LegitMods.BEDROCK_LEGIT_TERMS).
+        • JAVA_POJAV/BOARDWALK/OTHER: walk de
+          /sdcard/Android/data/<pkg>/files/.minecraft/mods/
+          + .../versions/ + ~/.minecraft/mods. Para cada .jar/.zip:
+          smart_hack_match contra HACK_TERMS (15 generic markers
+          + 12 client-specific) excluyendo
+          LegitMods.JAVA_LEGIT_MOD_TERMS (~30 mods conocidos:
+          fabric, forge, optifine, sodium, lithium, jei, rei,
+          geyser, etc). SHA-256 de cada hit incluido.
+        • BEDROCK_MOD_LAUNCHER (BlockLauncher / MCPE Master):
+          adicionalmente revisa /scripts/ por scripts ModPE (.js)
+          con hack-terms.
+        Inspección de versions/*.json para inheritsFrom diff:
+        DEFERRED Pack 26 (parser JSON ya disponible vía org.json).
 
 [ ]  9. Captura de screenshot del dispositivo durante el scan:
         MediaProjectionManager.createScreenCaptureIntent() → el sistema
@@ -1542,111 +1553,131 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
         primario. Foldables con ambos displays: capturar ambos via
         DisplayManager.getDisplays() y hacer collage.
 
-[ ] 10. Detección de root, Magisk modules y Xposed/LSPosed:
-        Múltiples checks redundantes (cada hack-detection app los esquiva
-        de forma distinta):
-          - Existencia de /system/xbin/su, /sbin/su, /system/bin/su,
-            /system/app/Superuser.apk, /sbin/.magisk/, /data/adb/magisk/.
-          - PackageManager match por com.topjohnwu.magisk, com.kingouser.com,
-            eu.chainfire.supersu, com.koushikdutta.superuser.
-          - Build.TAGS contiene "test-keys" (custom kernel).
-          - Magisk Hide / DenyList detection: si se conoce que minecraftpe
-            está en su DenyList (heurística: usuario claramente quiere
-            ocultar root al juego) → flag fuerte.
-          - LSPosed / Xposed: existencia de /data/adb/lspd/, paquetes
-            org.lsposed.manager, de.robv.android.xposed.installer,
-            io.github.lsposed.manager, me.weishu.exposed.
-          - KernelSU: /data/adb/ksu/ + me.weishu.kernelsu.
-          - SafetyNet attestation pasada o no (Google API): si rooteado
-            y minecraftpe instalado → score++ pero NO ban automático
-            (usuario puede ser dev legítimo).
+[X] 10. Detección de root, Magisk modules y Xposed/LSPosed:
+        DONE v1.6.49 (Pack 25) — RootScanner.kt con 3 vectores
+        redundantes:
+        1) ROOT_PATHS (12 paths): /system/xbin/su, /sbin/su,
+           /system/bin/su, /system/app/Superuser.apk, SuperSU.apk,
+           Kinguser.apk, /sbin/.magisk, /data/adb/magisk,
+           /data/adb/lspd (LSPosed daemon), /data/adb/ksu (KernelSU),
+           /data/local/tmp/magisk_aux, /system/etc/init.d.
+        2) Build.TAGS contiene "test-keys" → CUSTOM_KERNEL
+           SOSPECHOSO confidence 0.40.
+        3) ProcessBuilder("which", "su") — funciona si SELinux
+           permisivo, dropea evidencia clara de root.
+        Combinado con PackageScanner que ya cubre la blacklist de
+        ROOT_MANAGER_PACKAGES (Magisk, KingoRoot, SuperSU, LSPosed,
+        Xposed Installer, EdXposed, KernelSU Manager, iRoot).
+        Reporta como SOSPECHOSO (no CRITICAL) — usuario puede ser
+        dev legítimo. SafetyNet attestation deferred Pack 26.
 
-[ ] 11. Detección de Game Guardian y memory editors (módulo dedicado):
-        Game Guardian es el cheat #1 en móvil — modifica memoria de juegos
-        en runtime sin tocar el .apk del juego. Detección por:
-          - PackageManager scan (#6 categoría c).
-          - Path scan: /data/local/tmp/gg* (GG suele dropear binarios
-            ahí), /sdcard/Notes/GameGuardian/* (carpeta de scripts),
-            /sdcard/Android/data/com.MGGS/cache/.
-          - Process check vía /proc (limitado por sandbox post-API 24,
-            pero los procesos del propio usuario sí son visibles): grep
-            por 'gg.elf', 'gameguardian' en cmdline.
-          - Detección de overlay flotante de GG: AppOpsManager
-            SYSTEM_ALERT_WINDOW (cubierto en #7) — si está activo Y
-            minecraftpe en foreground → CRITICAL.
-        Reporte específico con título "Memory editor activo durante
-        sesión de Minecraft" y categoría EXTERNAL_TOOL.
+[X] 11. Detección de Game Guardian y memory editors (módulo dedicado):
+        DONE v1.6.49 (Pack 25) — MemoryEditorScanner.kt cubre dos
+        vectores complementarios al PackageScanner:
+        1) Binarios dropeados: /data/local/tmp/gg.elf, gg,
+           gameguardian.elf, MGG → MEMORY_EDITOR_BINARY CRITICAL
+           confidence 0.85.
+        2) Carpetas públicas con scripts: /sdcard/Notes/GameGuardian/,
+           /sdcard/GameGuardian/, /sdcard/Documents/GameGuardian/.
+           Si tienen .lua/.gg/.gpb adentro → MEMORY_EDITOR_SCRIPTS
+           CRITICAL confidence 0.88, reporta hasta 5 nombres de
+           script en detected_patterns.
+        Combinado con PackageScanner que cubre los packages
+        instalados de la blacklist MEMORY_EDITOR_PACKAGES.
+        Detección de overlay activo (item #7) deferred Pack 26.
 
-[ ] 12. Empaquetado APK universal sideload + AAB para futuro Play Store:
-        - APK universal firmado con keystore propio del proyecto Argus
-          (no Play Store key — distribución directa). zipalign + apksigner
-          v3+ para evitar warnings de "app desconocida" en Android
-          14+.
-        - Tamaño objetivo: <8 MB (sin imágenes pesadas, sin Compose
-          fonts custom — usar fuentes del sistema).
-        - Build flavors: 'release' (sideload) y 'play' (AAB con Play
-          App Signing) — DEFERRED el upload a Play Store hasta que el
-          flujo se estabilice (review puede tardar 1-2 semanas y la
-          política de "anti-cheat" de Google es estricta).
-        - F-Droid: DEFERRED (requiere reproducible builds).
-        - Distribución por links de Discord + página /descargar/android
-          con APK directo.
+[~] 12. Empaquetado APK universal sideload + AAB para futuro Play Store:
+        PARTIAL v1.6.49 (Pack 25) — proyecto Gradle 100% buildable
+        desde Android Studio Hedgehog 2023.1.1+ o Gradle CLI 8.4+:
+        ./gradlew assembleDebug    → app-debug.apk
+        ./gradlew assembleRelease  → app-release.apk (requiere
+                                     release.keystore creada localmente).
+        Build types release: minify + shrinkResources + ProGuard
+        rules conservadoras (.argus.scanner.** keep). packaging
+        excluye META-INF basura. Tamaño objetivo <8 MB sin libs
+        pesadas (cero OkHttp/Gson, fuentes del sistema, sin imágenes).
+        AAB flavor + GH Actions CI: DEFERRED Pack 26 (requiere
+        publish workflow + Play Console review).
+        F-Droid: DEFERRED (reproducible builds).
+        Falta: build inicial de un APK release real publicado en
+        web_app/static/dist/argus-android.apk; el endpoint
+        /descargar/android ya está pero devuelve 503 hasta que
+        ese archivo exista.
 
-[ ] 13. Endpoint backend `/descargar/android` + tab UI con QR code:
-        - Endpoint Flask `/descargar/android` sirve el APK compilado
-          (ubicado en `web_app/static/dist/argus-android.apk`) con
+[X] 13. Endpoint backend `/descargar/android` + tab UI con QR code:
+        DONE v1.6.49 (Pack 25) — Flask:
+        - GET /descargar/android sirve el APK desde
+          web_app/static/dist/argus-android.apk con
           Content-Type application/vnd.android.package-archive.
-        - templates/descargar.html: nuevo tab "Android" con badge "BETA",
-          icono de smartphone, QR code grande (api.qrserver.com) que
-          apunta al .apk para descargar directo en el móvil sin
-          escribir URL.
-        - Steps específicos: (1) Habilitar "Apps desconocidas" para tu
-          navegador, (2) Conceder Usage Access a Argus en Settings,
-          (3) Conceder MANAGE_EXTERNAL_STORAGE (Android 11+),
-          (4) Tap "Iniciar scan" + pegar token del staff.
-        - JS auto-detecta Android por User-Agent y preselecciona tab.
-        - URL sticky `?plat=android` para links compartibles desde
-          Discord móvil.
+          Si aún no existe, devuelve 503 con mensaje claro + link
+          a /descargar/android-source.
+        - GET /descargar/android-source empaqueta on-the-fly
+          mobile/argus_android/ como tar.gz (excluye build/, .gradle/,
+          *.iml, *.apk). Marca *.sh y gradlew como mode 0755.
+        - templates/descargar.html: nuevo tab "Android" con badge
+          BETA, icono smartphone, QR code 140×140 (api.qrserver.com,
+          paleta bronce EAD8C0/15110A) que apunta a la URL absoluta
+          /descargar/android?plat=android. JS regenera el QR al
+          DOMContentLoaded para que use location.origin (compatible
+          en dev y prod). Steps específicos de Android (5 pasos:
+          activar fuentes desconocidas, instalar APK, otorgar 3
+          permisos, pegar token, listar lo que detecta).
+        - JS switchPlatform() generalizado a 3 tabs (win/lin/android),
+          auto-detecta SO por User-Agent, URL sticky ?plat=<x> para
+          compartir.
 
-[ ] 14. Política de permisos honesta y minimum-necessary:
-        Manifest declara explícitamente y la app pide RUNTIME:
-          - INTERNET, ACCESS_NETWORK_STATE — subir scan.
-          - PACKAGE_USAGE_STATS (special permission via
-            ACTION_USAGE_ACCESS_SETTINGS) — items #4, #6, #7.
-          - MANAGE_EXTERNAL_STORAGE (Android 11+) o READ_EXTERNAL_STORAGE
-            (≤Android 10) — items #3, #5, #8. Justificación visible
-            en pantalla de onboarding.
-          - QUERY_ALL_PACKAGES (Android 11+) — item #6. Google requiere
-            justificación para AAB (anti-cheat = válido).
-          - FOREGROUND_SERVICE + tipo `mediaProjection` — item #9.
-          - REQUEST_INSTALL_PACKAGES — NO se pide. Argus no instala
-            nada, solo escanea.
-        NO pedimos: contactos, mic, cámara, location, SMS, llamadas,
-        BIND_ACCESSIBILITY_SERVICE (alternativa a #7 pero invasiva).
-        Pantalla de onboarding lista los 4 permisos con explicación
-        humana en una línea cada uno.
+[X] 14. Política de permisos honesta y minimum-necessary:
+        DONE v1.6.49 (Pack 25) — AndroidManifest.xml declara solo:
+        INTERNET + ACCESS_NETWORK_STATE (subida del scan),
+        QUERY_ALL_PACKAGES (item #6 — `tools:ignore` justificado),
+        READ_EXTERNAL_STORAGE (maxSdkVersion=32) +
+        MANAGE_EXTERNAL_STORAGE (Android 11+, items #3/#5/#8),
+        FOREGROUND_SERVICE + FGS_DATA_SYNC + FGS_MEDIA_PROJECTION
+        (item #9 Pack 26), PACKAGE_USAGE_STATS (special perm via
+        ACTION_USAGE_ACCESS_SETTINGS, items #4/#7 Pack 26),
+        WAKE_LOCK, POST_NOTIFICATIONS (Android 13+).
+        NO declarados (verificable en el manifest):
+        - contactos, mic, cámara, ubicación, SMS, llamadas
+        - BIND_ACCESSIBILITY_SERVICE
+        - REQUEST_INSTALL_PACKAGES
+        - BIND_DEVICE_ADMIN
+        Pantalla de onboarding (ScanScreen.kt OnboardingPanel) lista
+        3 cards con explicación humana de cada permiso requerido,
+        botones "Otorgar" individuales, badge ✓ verde cuando ya
+        está concedido, botón "Continuar" deshabilitado hasta que
+        ambos esté granted. Botón "Reverificar permisos" para
+        re-evaluar tras volver de Settings.
+        <queries> en manifest declara explícitamente los 17 packages
+        de launchers + cheat clients para que Android 11+ devuelva
+        info aunque QUERY_ALL_PACKAGES sea revocado.
 
-[ ] 15. Documentación Android + tests E2E + adaptaciones MC móvil:
-        - README específico mobile/argus_android/README.md con tabla
-          item #1-#15 estado real, quickstart de 4 pasos, tabla
-          "Diferencias honestas vs Windows/Linux".
-        - Filtros anti-FP específicos móvil: muchos jugadores casuales
-          tienen Magisk solo para AdAway / Lucky Patcher de un juego
-          random — no es el mismo nivel de evidencia que un cheat
-          client. Aplicar Bayesian-lite (item F#27 ya existente)
-          adaptado: tokens negativos móvil "adaway, viper4android,
-          appbutton, audiomod, customclock"; tokens positivos
-          "horion, latite, husky, exodus, prestige, gameguardian,
-          mcaim, mcesp".
-        - Tests E2E con Firebase Test Lab o Genymotion sobre 3 versions
-          (Android 10 / 12 / 14) corriendo --scan-self con un APK
-          mock de "minecraftpe alterado" para verificar la detección.
-          DEFERRED (CI mobile es caro).
-        - Modo --offline / --scan-self para smoke tests sin token.
-        - Plan post-MVP: integrar Argus Bot Discord para que el comando
-          /ss en server Bedrock genere un token + link directo al
-          APK Android (deeplink: `argus://scan?token=XXX` que abre la
-          APK ya pegada).
+[X] 15. Documentación Android + tests E2E + adaptaciones MC móvil:
+        DONE v1.6.49 (Pack 25) — mobile/argus_android/README.md con:
+        - Tabla items #1-#15 con estado real (✅ DONE / 🟡 PARTIAL /
+          ⬜ TODO Pack 26).
+        - Quickstart de compilación (Android Studio + Gradle CLI +
+          GH Actions plan).
+        - Tabla "Diferencias honestas vs Windows/Linux" listando
+          qué cubre cada plataforma (Recycle, Prefetch, USN,
+          procesos, ventanas, screenshot, root, signing, memory
+          editors, cheat clients).
+        - Listado completo de cheat clients Bedrock detectados,
+          memory editors, root tools, launchers MC móvil cubiertos.
+        - Estructura del proyecto Android comentada.
+        - Roadmap Pack 26+ con qué falta (#4 #5 #7 #9 + GH Actions).
+        - Filtros anti-FP móvil (HackTerms.kt BAYES_NEGATIVE +
+          BAYES_POSITIVE): tokens negativos adaway/viper4android/
+          appbutton/audiomod/customclock/lawnchair/nova_launcher/
+          kustom/tasker/kwgt/kwlp; tokens positivos killaura/
+          horion/latite/husky/exodus/prestige/gameguardian/mcaim/
+          mcesp/wallhack. Bayesian-lite siguiendo el mismo patrón
+          que F#27 desktop.
+        - Deeplink argus://scan?token=XXX integrado en MainActivity
+          (intent-filter declarado en AndroidManifest, parseado en
+          onCreate, preconfigura initialToken). Plan post-MVP:
+          Argus Bot Discord generará deeplinks directos.
+        Tests E2E con Firebase Test Lab DEFERRED Pack 26+.
+        Modo --scan-self DEFERRED Pack 26.
 
 
 
@@ -1658,10 +1689,11 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
   Filtro .............................. 60 ítems   (anti-FP)        35/60
   Visual .............................. 60 ítems   (UI/UX)          43/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
-  Plataforma (Android / APK) .......... 15 ítems   (móvil Bedrock+Pojav) 0/15
+  Plataforma (Android / APK) .......... 15 ítems   (móvil Bedrock+Pojav) 9/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 210 ítems  COMPLETADOS:   101/210
-                                                  (5 parciales: S#9, V#32, V#43, V#53, F#34)
+  TOTAL ............................... 210 ítems  COMPLETADOS:   110/210
+                                                  (7 parciales: S#9, V#32, V#43, V#53, F#34,
+                                                   A#3, A#12)
                                                   (6 bonus: scanner_version chip,
                                                    argusUI.confirm, argusUI.typewriter,
                                                    argusUI.renderLoading, .argus-empty--v2,
@@ -1682,6 +1714,147 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
                                                   (AppImage/Flatpak/deb), #14 (CI Docker)
 
 SESIÓN DEL 08-may-2026:
+  Pack 25 (v1.6.49): Android MVP — 9 DONE + 2 PARTIAL de los 15 items.
+                    Primera implementación end-to-end del scanner móvil.
+
+                    Estructura del proyecto:
+                      mobile/argus_android/ — proyecto Gradle Kotlin DSL
+                      independiente. AGP 8.2.2 + Kotlin 1.9.22 + Compose
+                      BOM 2024.02. minSdk 26 (Android 8.0+) / targetSdk 34
+                      (Android 14). Namespace com.argus.scanner.
+                      Cero deps pesadas (sin OkHttp/Gson) — solo
+                      HttpURLConnection + org.json built-in para mantener
+                      APK <8MB.
+
+                    A#1, A#2 — Scaffolding + aislamiento APIs:
+                      settings.gradle.kts, build.gradle.kts (root + app),
+                      gradle.properties, proguard-rules.pro, .gitignore.
+                      app/ con res/ (strings, colors, themes, adaptive
+                      icons bronce, data_extraction_rules excluyendo
+                      backup), java/com/argus/scanner/ con core/,
+                      scanners/ y ui/.
+
+                    A#3 PARTIAL — Equivalente papelera:
+                      FileScanner.kt cubre carpetas .recycle, .recyclebin,
+                      RecycleBin, Trash, .MIRecycleBin (Mi File Manager),
+                      .SE_Recycle (Solid Explorer), CXFileExplorer/Recycle.
+                      MediaStore IS_TRASHED query: deferred Pack 26.
+
+                    A#6 — PackageScanner.kt:
+                      HackTerms.kt define BEDROCK_CHEAT_PACKAGES (15),
+                      MEMORY_EDITOR_PACKAGES (11), ROOT_MANAGER_PACKAGES
+                      (10) + HACK_TERMS (15 generic + 12 client-specific).
+                      Reporta package, label, version, installer, install
+                      time, signing cert SHA-256. CRITICAL para cheat/
+                      memhack, SOSPECHOSO para root manager. Heurística
+                      adicional sobre el LABEL para detectar forks
+                      rebrandeados.
+
+                    A#8 — LauncherScanner.kt:
+                      MC_LAUNCHER_PACKAGES con LauncherKind enum (13
+                      packages: minecraftpe/edu/trial, pojavlaunch/
+                      pojavlauncher, boardwalk variants, MCPE Master,
+                      BlockLauncher, Toolbox, HMCL, Lithium). Para
+                      BEDROCK_OFFICIAL: verifica firma vs Mojang AB.
+                      Para JAVA_*: walk de mods/ + versions/ con
+                      smartHackMatch contra HACK_TERMS excluyendo
+                      LegitMods.JAVA_LEGIT_MOD_TERMS (~30 mods
+                      conocidos). Para BEDROCK_MOD_LAUNCHER: además
+                      revisa /scripts/ por ModPE .js.
+
+                    A#10 — RootScanner.kt:
+                      3 vectores: ROOT_PATHS (12 paths su/magisk/lspd/
+                      ksu), Build.TAGS test-keys, ProcessBuilder
+                      "which su". Combinado con PackageScanner para
+                      ROOT_MANAGER_PACKAGES.
+
+                    A#11 — MemoryEditorScanner.kt:
+                      Game Guardian binarios en /data/local/tmp/
+                      (gg.elf, gg, gameguardian.elf, MGG) y carpetas
+                      públicas con scripts en /sdcard/Notes/
+                      GameGuardian/, /sdcard/GameGuardian/ con .lua/
+                      .gg/.gpb adentro.
+
+                    A#12 PARTIAL — Build APK:
+                      Proyecto buildable desde Android Studio Hedgehog
+                      o Gradle CLI 8.4+ (./gradlew assembleDebug /
+                      assembleRelease). Falta: build inicial publicado
+                      en static/dist/argus-android.apk. AAB + GH Actions
+                      CI: Pack 26.
+
+                    A#13 — Endpoint backend + tab UI:
+                      web_app/app.py: GET /descargar/android sirve el
+                      APK compilado, devuelve 503 con instrucciones si
+                      aún no existe. GET /descargar/android-source
+                      empaqueta on-the-fly el proyecto como tar.gz
+                      (excluye build/, .gradle/, *.iml, *.apk; gradlew
+                      mode 0755).
+                      templates/descargar.html: tab "Android" BETA
+                      con icono smartphone, QR code 140×140 (paleta
+                      bronce), 5 steps específicos. JS switchPlatform
+                      generalizado a 3 tabs, auto-detect User-Agent,
+                      ?plat=android sticky URL. QR regenerado al
+                      DOMContentLoaded para usar location.origin.
+
+                    A#14 — Permisos minimum-necessary:
+                      AndroidManifest.xml declara solo: INTERNET,
+                      ACCESS_NETWORK_STATE, QUERY_ALL_PACKAGES,
+                      READ_EXTERNAL_STORAGE (≤32) +
+                      MANAGE_EXTERNAL_STORAGE, FOREGROUND_SERVICE +
+                      DATA_SYNC + MEDIA_PROJECTION, PACKAGE_USAGE_STATS,
+                      WAKE_LOCK, POST_NOTIFICATIONS. NO: contactos/
+                      mic/cámara/ubicación/SMS/Accessibility/
+                      DEVICE_ADMIN/INSTALL_PACKAGES.
+                      <queries> declara explícitamente 17 packages
+                      (launchers + cheats) para Android 11+.
+                      OnboardingPanel en Compose lista 3 cards con
+                      explicación humana, badge ✓ verde, botones
+                      "Otorgar" individuales, "Reverificar permisos".
+
+                    A#15 — Documentación + Bayesian-lite móvil:
+                      mobile/argus_android/README.md con tabla items
+                      #1-#15 estado real, quickstart, "Diferencias
+                      honestas vs Windows/Linux", listado completo
+                      de cheats/launchers cubiertos, estructura del
+                      proyecto, roadmap Pack 26+.
+                      HackTerms.kt BAYES_NEGATIVE (~12 tokens
+                      móvil-FP: adaway, viper4android, lawnchair,
+                      nova_launcher, kustom, tasker, kwgt, kwlp,
+                      audiomod, customclock) + BAYES_POSITIVE (~10:
+                      killaura, horion, latite, husky, exodus,
+                      prestige, gameguardian, mcaim, mcesp,
+                      wallhack).
+                      MainActivity intent-filter argus://scan?token=XXX
+                      para deeplinks que abran la APK con token
+                      preconfigurado (futura integración con Bot
+                      Discord).
+
+                    Otros archivos creados:
+                      core/ScanResult.kt — data classes ScanResult +
+                        ScanProgressEvent + smartHackMatch util.
+                      core/BackendClient.kt — POST /api/scans + POST
+                        /api/scans/<id>/results vía HttpURLConnection.
+                      core/ScanOrchestrator.kt — coordina los 5
+                        scanners, computeRiskScore local,
+                        collectMachineInfo (Build.MODEL, Build.DEVICE,
+                        Settings.Secure.ANDROID_ID).
+                      ArgusApp.kt — FGS notification channel.
+                      MainActivity.kt — handle deeplinks + permisos.
+                      ui/ScanScreen.kt — Compose UI con flujo
+                        Onboarding → Input → Running → Done.
+
+                    DEFERRED Pack 26+:
+                      A#4 (UsageStatsManager queryUsageStats),
+                      A#5 (FileObserver runtime),
+                      A#7 (Foreground app + SYSTEM_ALERT_WINDOW
+                           overlay detection),
+                      A#9 (MediaProjection screenshot),
+                      A#12 final (build pipeline + AAB + CI).
+
+                    → 9 items DONE (A#1, A#2, A#6, A#8, A#10, A#11,
+                      A#13, A#14, A#15) + 2 PARTIAL (A#3, A#12).
+                      Plataforma Android pasa de 0/15 a 9/15.
+
   Plan Android (v1.6.49): añadida PARTE 5/5 con 15 ítems para una APK
                           Android. Total del backlog pasa de 195 a 210.
                           La sección está enfocada en MÓVIL puro:

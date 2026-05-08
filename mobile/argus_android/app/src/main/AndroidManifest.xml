@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        Argus Android — permisos minimum-necessary (item #14 del plan).
+        NO pedimos: contactos, mic, cámara, location, SMS, llamadas,
+        Accessibility, REQUEST_INSTALL_PACKAGES, BIND_DEVICE_ADMIN.
+    -->
+
+    <!-- Red para subir scan al backend Argus -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Listar paquetes instalados (item #6: detección de hack apps).
+         Android 11+ requiere QUERY_ALL_PACKAGES por política de Google.
+         Justificación: anti-cheat necesita ver TODAS las apps. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
+    <!-- Storage: lectura de /sdcard para items #3, #5, #8.
+         Android 11+: MANAGE_EXTERNAL_STORAGE pedido en runtime.
+         Android 10 y abajo: READ_EXTERNAL_STORAGE clásico. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+
+    <!-- Foreground service para el scan largo (item #9 screenshot via
+         MediaProjection requiere FGS especificamente tipo mediaProjection). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
+    <!-- UsageStatsManager (item #4 / #7) — special permission via Settings. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- Wake lock para que el scan no se duerma a mitad. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Notificaciones del FGS post-Android 13. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <queries>
+        <!-- Items #6 + #8: launchers Minecraft + cheat clients.
+             Listamos los packages por nombre para que Android 11+ los
+             devuelva sin requerir solo QUERY_ALL_PACKAGES. -->
+        <package android:name="com.mojang.minecraftpe" />
+        <package android:name="com.mojang.minecraftedu" />
+        <package android:name="com.mojang.minecrafttrialpe" />
+        <package android:name="net.kdt.pojavlaunch" />
+        <package android:name="net.kdt.pojavlauncher" />
+        <package android:name="com.kdt.pojavlauncher" />
+        <package android:name="com.boardwalk.boardwalk" />
+        <package android:name="org.boardwalk.merge" />
+        <package android:name="com.mcpemaster.mcpe" />
+        <package android:name="net.zhuoweizhang.mcpelauncher" />
+        <package android:name="com.tbox.box" />
+        <package android:name="com.toolbox.box" />
+        <package android:name="org.jackhuang.hmcl" />
+        <package android:name="com.MGGS" />
+        <package android:name="com.topjohnwu.magisk" />
+        <package android:name="org.lsposed.manager" />
+        <package android:name="de.robv.android.xposed.installer" />
+    </queries>
+
+    <application
+        android:name=".ArgusApp"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.Argus"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="false"
+        tools:targetApi="33">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:configChanges="uiMode|orientation|screenSize|keyboardHidden">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Deeplink argus://scan?token=XXX para integración futura
+                 con el bot de Discord (item #15 plan post-MVP). -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="argus" android:host="scan" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
