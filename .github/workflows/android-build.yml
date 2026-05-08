@@ -150,7 +150,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-      - name: Locate APK and report size
+      - name: Locate APK
         id: locate
         working-directory: mobile/argus_android
         run: |
@@ -160,29 +160,68 @@ jobs:
             exit 1
           fi
           cp "$APK" app/build/outputs/apk/release/argus-android.apk
-          SIZE_KB=$(du -k "$APK" | cut -f1)
-          echo "apk=$APK" >> "$GITHUB_OUTPUT"
-          echo "release_apk=mobile/argus_android/app/build/outputs/apk/release/argus-android.apk" >> "$GITHUB_OUTPUT"
-          echo "size_kb=$SIZE_KB" >> "$GITHUB_OUTPUT"
-          echo "## APK Build Result" >> "$GITHUB_STEP_SUMMARY"
-          echo "- APK: \`$APK\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Tamaño: ${SIZE_KB} KB" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Commit: \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "apk=app/build/outputs/apk/release/argus-android.apk" >> "$GITHUB_OUTPUT"
 
-      - name: Verify APK signature
+      # Pack 27 hotfix — re-firma manual con apksigner garantizando v1+v2+v3.
+      # AGP 8.2.2 con signingConfig+enableV1Signing tuvo que generar v1, pero
+      # el APK descargado seguía sin META-INF/CERT.SF. Forzamos manualmente
+      # para descartar todo riesgo: zipalign primero (mandatorio antes de
+      # apksigner) + sign con los 3 schemes habilitados explícitamente.
+      - name: Zipalign + re-sign APK (v1+v2+v3 failsafe)
+        working-directory: mobile/argus_android
+        env:
+          KS_PASS: argus_release_keystore_v1
+        run: |
+          set -e
+          ZIPALIGN=$(find "$ANDROID_HOME/build-tools" -name zipalign  | sort -V | tail -n1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n1)
+          echo "zipalign:  $ZIPALIGN"
+          echo "apksigner: $APKSIGNER"
+          IN=app/build/outputs/apk/release/argus-android.apk
+          OUT=app/build/outputs/apk/release/argus-android-aligned.apk
+          "$ZIPALIGN" -p -f 4 "$IN" "$OUT"
+          mv "$OUT" "$IN"
+          "$APKSIGNER" sign \
+            --ks signing/argus-release.jks \
+            --ks-pass "pass:$KS_PASS" \
+            --ks-key-alias argus \
+            --key-pass "pass:$KS_PASS" \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            "$IN"
+
+      - name: Verify APK signature (must include v1+v2+v3)
+        id: verify
         working-directory: mobile/argus_android
         run: |
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | head -n1)
-          if [ -n "$APKSIGNER" ]; then
-            "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/argus-android.apk \
-              | tee >(grep -i "subject\|sha256" >> "$GITHUB_STEP_SUMMARY") || true
+          set -e
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n1)
+          OUT=$("$APKSIGNER" verify --verbose --print-certs \
+            app/build/outputs/apk/release/argus-android.apk)
+          echo "$OUT"
+          echo "## APKsigner verify" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$OUT" | head -n 30 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if ! echo "$OUT" | grep -q "Verified using v1 scheme.*true"; then
+            echo "::error::APK NO está firmado con v1 (jar) — Honor/Huawei/Xiaomi rechazarán"
+            exit 1
           fi
+          if ! echo "$OUT" | grep -q "Verified using v2 scheme.*true"; then
+            echo "::error::APK NO está firmado con v2"
+            exit 1
+          fi
+          # v3 es opcional según el dispositivo; lo logueamos pero no fallamos.
+          SIZE_KB=$(du -k app/build/outputs/apk/release/argus-android.apk | cut -f1)
+          echo "size_kb=$SIZE_KB" >> "$GITHUB_OUTPUT"
+          echo "- APK final: ${SIZE_KB} KB · v1+v2 OK ✓" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APK artifact (per-commit, 30 day retention)
         uses: actions/upload-artifact@v4
         with:
           name: argus-android-release-${{ github.sha }}
-          path: mobile/argus_android/${{ steps.locate.outputs.apk }}
+          path: mobile/argus_android/app/build/outputs/apk/release/argus-android.apk
           retention-days: 30
           if-no-files-found: error
 
@@ -201,7 +240,7 @@ jobs:
             **Descarga directa**: el botón "Descargar APK" de
             https://asperss.onrender.com/descargar te trae acá automáticamente.
 
-            Tamaño aproximado: ${{ steps.locate.outputs.size_kb }} KB.
+            Tamaño aproximado: ${{ steps.verify.outputs.size_kb }} KB.
 
             > Build release firmado con keystore self-signed propio
             > (item Android #15). La firma es **estable** entre builds, así que
