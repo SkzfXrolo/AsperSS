@@ -847,6 +847,266 @@ async function openMyActivityHeatmap() {
 }
 window.openMyActivityHeatmap = openMyActivityHeatmap;
 
+
+/**
+ * Visual #46 — Comparador lado-a-lado: scan actual vs scan anterior
+ * del mismo MC user / misma máquina. Muestra diff de risk score,
+ * verdict, conteo de issues y archivos escaneados, con flechas ↗↘=
+ * y porcentaje de cambio para cada métrica.
+ */
+async function openCompareScansModal(scanId) {
+    if (!scanId) {
+        if (window.showToast) showToast('No hay escaneo abierto.', 'warning');
+        return;
+    }
+    document.getElementById('argus-compare-modal')?.remove();
+
+    const root = document.createElement('div');
+    root.id = 'argus-compare-modal';
+    root.style.cssText = 'position:fixed;inset:0;z-index:99996;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(8,6,4,0.62);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);animation:argusConfirmFadeIn 180ms ease;';
+    root.innerHTML = `
+        <div role="dialog" aria-modal="true" aria-labelledby="argus-compare-title"
+             style="background:var(--bg-2,#15110A);color:var(--text,#EAD8C0);
+                    border:1px solid var(--border-m,rgba(184,115,51,0.28));
+                    border-radius:14px;width:min(960px,96vw);max-height:92vh;overflow:auto;
+                    box-shadow:0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04) inset;
+                    animation:argusConfirmPop 220ms cubic-bezier(0.22,1,0.36,1);">
+            <div style="padding:18px 22px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--border);">
+                <div>
+                    <span class="argus-eyebrow">Comparador</span>
+                    <h2 id="argus-compare-title" class="section-title" style="margin:6px 0 0;">Scan #${scanId} vs anteriores</h2>
+                </div>
+                <button id="argus-compare-close" type="button" aria-label="Cerrar"
+                    style="background:transparent;border:1px solid var(--border-m);color:var(--text-m);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0;">×</button>
+            </div>
+            <div id="argus-compare-body" style="padding:22px;">
+                <div style="display:flex;align-items:center;justify-content:center;padding:60px 0;color:var(--text-d);font-size:13px;">
+                    <span class="argus-pulse-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:10px;animation:argusPulse 1.4s ease infinite;"></span>
+                    Buscando scans del mismo jugador…
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(root);
+
+    const close = () => {
+        document.removeEventListener('keydown', onKey, true);
+        root.style.animation = 'argusConfirmFadeOut 140ms ease';
+        setTimeout(() => root.remove(), 130);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+    document.addEventListener('keydown', onKey, true);
+    root.querySelector('#argus-compare-close').addEventListener('click', close);
+    root.addEventListener('click', (e) => { if (e.target === root) close(); });
+
+    let related;
+    try {
+        const r = await fetch(`/api/scans/${scanId}/related?limit=8`);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        related = await r.json();
+    } catch (e) {
+        const body = root.querySelector('#argus-compare-body');
+        if (body) body.innerHTML = `<div style="color:#f87171;text-align:center;padding:40px;font-size:13px;">No se pudieron cargar scans relacionados: ${e.message || e}</div>`;
+        return;
+    }
+
+    const others = Array.isArray(related?.scans) ? related.scans : [];
+    const anchorUser = related?.anchor_user || '';
+
+    if (!others.length) {
+        const body = root.querySelector('#argus-compare-body');
+        if (body) {
+            body.innerHTML = `
+                <div style="text-align:center;padding:60px 20px;">
+                    <div style="font-size:54px;margin-bottom:14px;opacity:0.55;">🔍</div>
+                    <div style="font-size:15px;font-weight:700;color:var(--text-h);margin-bottom:8px;">No hay scans previos</div>
+                    <div style="font-size:13px;color:var(--text-m);max-width:420px;margin:0 auto;line-height:1.6;">
+                        Este es el primer scan registrado para
+                        <b>${anchorUser ? _qsEscapeSafe(anchorUser) : 'este jugador'}</b>
+                        en tu empresa. Cuando vuelva a scanearse, podrás comparar la evolución del risk score, veredicto y hallazgos lado-a-lado.
+                    </div>
+                </div>`;
+        }
+        return;
+    }
+
+    // El "current" lo armamos a partir de _currentScanData (ya cargado en
+    // viewScanDetails) — evita un segundo fetch.
+    const cur = window._currentScanData || {};
+    const current = {
+        id:              scanId,
+        minecraft_user:  cur.minecraft_username || cur.minecraft_user || anchorUser || '—',
+        machine_name:    cur.machine_name || '—',
+        started_at:      cur.started_at || cur.created_at || '',
+        risk_score:      cur.risk_score,
+        verdict:         cur.verdict || '',
+        country:         cur.country || '',
+        issues_found:    cur.issues_found || (cur.results ? cur.results.length : 0),
+        issues_critical: (cur.results || []).filter(x => x.alert_level === 'CRITICAL').length || cur.issues_critical || 0,
+        total_files_scanned: cur.total_files_scanned || 0,
+    };
+
+    _renderCompareScansBody(root.querySelector('#argus-compare-body'), current, others);
+}
+window.openCompareScansModal = openCompareScansModal;
+
+function _qsEscapeSafe(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;',
+    })[c]);
+}
+
+function _verdictChip(v) {
+    const t = String(v || '').toLowerCase();
+    if (t.includes('limp') || t === 'clean')
+        return '<span style="display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:0.5px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.14);color:#34d399;border:1px solid rgba(16,185,129,0.32);">CLEAN</span>';
+    if (t.includes('hack'))
+        return '<span style="display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:0.5px;padding:2px 8px;border-radius:999px;background:rgba(239,68,68,0.14);color:#f87171;border:1px solid rgba(239,68,68,0.32);">HACK</span>';
+    return '<span style="display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:0.5px;padding:2px 8px;border-radius:999px;background:rgba(184,115,51,0.10);color:var(--text-m);border:1px solid var(--border-m);">PENDIENTE</span>';
+}
+
+function _renderCompareScansBody(container, current, others) {
+    if (!container) return;
+
+    // Selector dropdown si hay >1
+    const opts = others.map((o, i) =>
+        `<option value="${o.id}" ${i === 0 ? 'selected' : ''}>#${o.id} — ${(o.started_at || '').slice(0, 16)} · risk ${o.risk_score == null ? '—' : o.risk_score}</option>`
+    ).join('');
+
+    const headerHtml = `
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;">
+            <div style="font-size:12px;color:var(--text-m);">Comparando contra:</div>
+            <select id="argus-compare-pick"
+                style="background:var(--bg-3);color:var(--text);border:1px solid var(--border-m);
+                       border-radius:6px;padding:6px 10px;font-size:12px;font-family:'JetBrains Mono', monospace;
+                       cursor:pointer;">
+                ${opts}
+            </select>
+            <span style="font-size:11.5px;color:var(--text-d);">${others.length} scan(s) anteriores encontrados</span>
+        </div>
+        <div id="argus-compare-grid"></div>`;
+    container.innerHTML = headerHtml;
+
+    const grid = container.querySelector('#argus-compare-grid');
+    const select = container.querySelector('#argus-compare-pick');
+    const draw = () => {
+        const id = parseInt(select.value, 10);
+        const other = others.find(o => o.id === id) || others[0];
+        grid.innerHTML = _buildCompareGridHtml(current, other);
+    };
+    select.addEventListener('change', draw);
+    draw();
+}
+
+function _buildCompareGridHtml(a, b) {
+    // a = scan actual, b = scan previo
+    const fmt = (v) => v == null || v === '' ? '—' : v;
+    const num = (v) => typeof v === 'number' ? v : (parseInt(v, 10) || 0);
+    const arrow = (delta, invert = false) => {
+        // invert=true: aumentar es bueno (ej: total_files_scanned).
+        // Para risk_score / issues, BAJAR es bueno → flecha hacia abajo verde.
+        if (delta === 0) return '<span style="color:var(--text-d);">=</span>';
+        const up = delta > 0;
+        const good = invert ? up : !up;
+        const color = good ? '#10b981' : '#ef4444';
+        const sym = up ? '↗' : '↘';
+        return `<span style="color:${color};font-weight:800;font-size:14px;">${sym} ${Math.abs(delta)}</span>`;
+    };
+    const pctDelta = (curV, prevV) => {
+        const c = num(curV), p = num(prevV);
+        if (!p) return c ? '+∞' : '0%';
+        return ((c - p) / p * 100).toFixed(0) + '%';
+    };
+
+    const card = (title, value, subtitle = '', accent = 'var(--text)') => `
+        <div style="padding:14px 16px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;flex:1;min-width:140px;">
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-d);">${title}</div>
+            <div style="font-size:22px;font-weight:800;color:${accent};margin-top:4px;font-feature-settings:'tnum' 1;">${value}</div>
+            ${subtitle ? `<div style="font-size:11.5px;color:var(--text-m);margin-top:3px;">${subtitle}</div>` : ''}
+        </div>`;
+
+    const colCss = `display:grid;grid-template-columns:1fr 1fr;gap:12px;`;
+    const colHeaderCss = `padding:10px 14px;border-radius:8px;font-size:13px;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;`;
+    const aHeader = `<div style="${colHeaderCss}background:rgba(184,115,51,0.10);border:1px solid rgba(184,115,51,0.30);color:var(--accent);">
+        <span>Actual · #${a.id}</span><span style="font-size:11px;color:var(--text-d);font-family:JetBrains Mono,monospace;">${(a.started_at || '').slice(0, 16)}</span>
+    </div>`;
+    const bHeader = `<div style="${colHeaderCss}background:rgba(96,165,250,0.10);border:1px solid rgba(96,165,250,0.32);color:#60a5fa;">
+        <span>Anterior · #${b.id}</span><span style="font-size:11px;color:var(--text-d);font-family:JetBrains Mono,monospace;">${(b.started_at || '').slice(0, 16)}</span>
+    </div>`;
+
+    // Risk score con coloración por umbral
+    const riskA = num(a.risk_score), riskB = num(b.risk_score);
+    const riskColor = (s) => s >= 70 ? '#ef4444' : s >= 30 ? '#fbbf24' : '#10b981';
+
+    // Diffs row
+    const diffRiskCard = `
+        <div style="padding:14px 16px;background:linear-gradient(135deg, rgba(184,115,51,0.06), rgba(96,165,250,0.06));border:1px dashed var(--border-m);border-radius:10px;flex:1;min-width:160px;">
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-d);">Δ Risk Score</div>
+            <div style="font-size:22px;font-weight:800;margin-top:4px;display:flex;align-items:center;gap:10px;">
+                ${arrow(riskA - riskB)}
+                <span style="font-size:13px;color:var(--text-m);font-weight:600;">${pctDelta(riskA, riskB)}</span>
+            </div>
+            <div style="font-size:11.5px;color:var(--text-m);margin-top:3px;">${riskA - riskB === 0 ? 'Mismo score' : (riskA - riskB > 0 ? 'Empeoró' : 'Mejoró')}</div>
+        </div>`;
+
+    const issA = num(a.issues_found), issB = num(b.issues_found);
+    const critA = num(a.issues_critical), critB = num(b.issues_critical);
+    const filesA = num(a.total_files_scanned), filesB = num(b.total_files_scanned);
+    const diffIssuesCard = `
+        <div style="padding:14px 16px;background:linear-gradient(135deg, rgba(184,115,51,0.06), rgba(96,165,250,0.06));border:1px dashed var(--border-m);border-radius:10px;flex:1;min-width:160px;">
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-d);">Δ Issues</div>
+            <div style="font-size:22px;font-weight:800;margin-top:4px;display:flex;align-items:center;gap:10px;">${arrow(issA - issB)}</div>
+            <div style="font-size:11.5px;color:var(--text-m);margin-top:3px;">Críticos: ${arrow(critA - critB)}</div>
+        </div>`;
+    const diffFilesCard = `
+        <div style="padding:14px 16px;background:linear-gradient(135deg, rgba(184,115,51,0.06), rgba(96,165,250,0.06));border:1px dashed var(--border-m);border-radius:10px;flex:1;min-width:160px;">
+            <div style="font-size:10.5px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-d);">Δ Archivos escaneados</div>
+            <div style="font-size:22px;font-weight:800;margin-top:4px;display:flex;align-items:center;gap:10px;">${arrow(filesA - filesB, true)}</div>
+            <div style="font-size:11.5px;color:var(--text-m);margin-top:3px;">${pctDelta(filesA, filesB)} variación</div>
+        </div>`;
+
+    return `
+        <div style="${colCss}">
+            ${aHeader}
+            ${bHeader}
+        </div>
+        <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;">
+            ${card('Risk score', `<span style="color:${riskColor(riskA)}">${fmt(a.risk_score)}</span>`, _verdictChip(a.verdict))}
+            ${card('Risk score', `<span style="color:${riskColor(riskB)}">${fmt(b.risk_score)}</span>`, _verdictChip(b.verdict))}
+        </div>
+        <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;">
+            ${card('Hallazgos', `${fmt(a.issues_found)}`, `${fmt(a.issues_critical)} críticos`)}
+            ${card('Hallazgos', `${fmt(b.issues_found)}`, `${fmt(b.issues_critical)} críticos`)}
+        </div>
+        <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;">
+            ${card('Archivos escaneados', filesA.toLocaleString(), '')}
+            ${card('Archivos escaneados', filesB.toLocaleString(), '')}
+        </div>
+        <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;">
+            ${card('Máquina', _qsEscapeSafe(fmt(a.machine_name)), `${_qsEscapeSafe(fmt(a.country))}`)}
+            ${card('Máquina', _qsEscapeSafe(fmt(b.machine_name)), `${_qsEscapeSafe(fmt(b.country))}`)}
+        </div>
+
+        <div style="margin-top:22px;padding-top:16px;border-top:1px solid var(--border);">
+            <div style="font-size:11px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-d);margin-bottom:10px;">Resumen del cambio</div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                ${diffRiskCard}
+                ${diffIssuesCard}
+                ${diffFilesCard}
+            </div>
+        </div>
+
+        <div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button onclick="viewScanDetails(${b.id});document.getElementById('argus-compare-modal')?.remove();"
+                style="font-size:12px;padding:8px 14px;border-radius:8px;cursor:pointer;border:1px solid rgba(96,165,250,0.4);background:rgba(96,165,250,0.06);color:#60a5fa;">
+                Abrir scan anterior →
+            </button>
+            <button onclick="copyScanLink(${b.id})"
+                style="font-size:12px;padding:8px 14px;border-radius:8px;cursor:pointer;border:1px solid var(--border-m);background:transparent;color:var(--text-m);">
+                Copiar enlace al anterior
+            </button>
+        </div>`;
+}
+
 function _renderActivityHeatmap(container, data) {
     if (!container) return;
     const days = Array.isArray(data?.days) ? data.days : [];
@@ -3340,7 +3600,17 @@ async function viewScanDetails(scanId) {
         if (el) el.textContent = '0';
     });
     const issuesContainerReset = document.getElementById('issues-list-container');
-    if (issuesContainerReset) issuesContainerReset.innerHTML = '<div class="loading-cell">Cargando...</div>';
+    if (issuesContainerReset) {
+        if (window.argusUI?.renderLoading) {
+            window.argusUI.renderLoading(issuesContainerReset, {
+                title: 'Cargando resultados del scan…',
+                sub: 'Recuperando hallazgos, metadatos del cliente y veredictos previos.',
+                size: 'lg',
+            });
+        } else {
+            issuesContainerReset.innerHTML = '<div class="loading-cell">Cargando...</div>';
+        }
+    }
 
     // Actualizar navegación
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
@@ -4433,7 +4703,12 @@ async function loadPreviousScans(machineName) {
                     </div>`;
             }).join('');
         } else {
-            container.innerHTML = '<div class="loading-cell">Primer escaneo de esta máquina.</div>';
+            container.innerHTML = `
+                <div class="argus-empty argus-empty--v2">
+                    <div class="argus-empty-art">🆕</div>
+                    <div class="argus-empty-title">Primer escaneo de esta máquina</div>
+                    <div class="argus-empty-msg">No hay escaneos anteriores registrados para este machine_id. Los próximos scans aparecerán aquí para comparar evolución.</div>
+                </div>`;
         }
     } catch (error) {
         console.error('Error cargando escaneos previos:', error);
@@ -4812,7 +5087,12 @@ async function loadLearnedPatterns() {
                 </div>
             `).join('');
         } else {
-            container.innerHTML = '<div class="loading-cell">No hay patrones aprendidos aún. Marca resultados como hack para que ASPERS Projects aprenda.</div>';
+            container.innerHTML = `
+                <div class="argus-empty argus-empty--v2">
+                    <div class="argus-empty-art">🧠</div>
+                    <div class="argus-empty-title">Sin patrones aprendidos todavía</div>
+                    <div class="argus-empty-msg">Argus AI aún no tiene datos para inferir patrones de hack. Marca resultados como <b>HACK</b> en los veredictos para que el modelo aprenda y refine sus heurísticas.</div>
+                </div>`;
         }
     } catch (error) {
         console.error('Error cargando patrones:', error);

@@ -795,6 +795,173 @@ html.argus-density-compact .stat-value { font-size: calc(28px * var(--argus-text
 }
 
 
+/* ── Visual #22 — Loading states más informativos ────────────────────────
+   Reemplaza el clásico "Cargando…" plano por un sistema reusable:
+     • argus-loading: contenedor con spinner + texto + sub-texto opcional.
+     • argus-spinner-ring: anillo bronce con rotación continua.
+     • argus-pulse-dot: punto que respira (ya usado en compare modal).
+     • argus-skel-shimmer: shimmer que se mueve sobre la skeleton.
+   Todos honran prefers-reduced-motion (estáticos).
+*/
+@keyframes argusPulse {
+    0%, 100% { transform: scale(1);    opacity: 0.85; }
+    50%      { transform: scale(1.45); opacity: 0.35; }
+}
+@keyframes argusSpin {
+    to { transform: rotate(360deg); }
+}
+@keyframes argusShimmer {
+    from { background-position: -120% 0; }
+    to   { background-position:  220% 0; }
+}
+
+.argus-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 50px 24px;
+    color: var(--text-m, #A89578);
+    text-align: center;
+    min-height: 160px;
+}
+.argus-loading-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text, #EAD8C0);
+    letter-spacing: 0.2px;
+}
+.argus-loading-sub {
+    font-size: 12px;
+    color: var(--text-d);
+    max-width: 360px;
+    line-height: 1.55;
+}
+
+.argus-spinner-ring {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 3px solid rgba(184, 115, 51, 0.12);
+    border-top-color: var(--accent, #B87333);
+    border-right-color: var(--accent, #B87333);
+    animation: argusSpin 850ms linear infinite;
+    box-shadow: 0 0 18px rgba(184, 115, 51, 0.18);
+}
+.argus-spinner-ring.sm { width: 22px; height: 22px; border-width: 2px; }
+.argus-spinner-ring.lg { width: 52px; height: 52px; border-width: 4px; }
+
+.argus-pulse-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent, #B87333);
+    box-shadow: 0 0 14px var(--accent, #B87333);
+    animation: argusPulse 1.4s ease infinite;
+}
+
+.argus-skel-shimmer {
+    position: relative;
+    overflow: hidden;
+    background: rgba(184, 115, 51, 0.06);
+    border-radius: 6px;
+}
+.argus-skel-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(184, 115, 51, 0.10) 45%,
+        rgba(212, 145, 90, 0.20) 50%,
+        rgba(184, 115, 51, 0.10) 55%,
+        transparent 100%
+    );
+    background-size: 220% 100%;
+    animation: argusShimmer 1.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .argus-spinner-ring,
+    .argus-pulse-dot,
+    .argus-skel-shimmer::after {
+        animation: none !important;
+    }
+}
+
+
+/* ── Visual #42 — Empty states ilustrados ────────────────────────────────
+   Variante "v2" del empty state — circular bronce con float animation +
+   tipografía más fuerte. Convive con el sistema BEM legacy (.argus-empty__*)
+   sin pisarlo. Usar como:
+     <div class="argus-empty argus-empty--v2">
+       <div class="argus-empty-art">🔎</div>
+       <div class="argus-empty-title">Sin resultados</div>
+       <div class="argus-empty-msg">…</div>
+       <button class="argus-empty-cta">Acción</button>
+     </div>
+*/
+.argus-empty--v2 { gap: 12px; padding: 56px 28px; }
+.argus-empty-art {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 30% 25%,
+        rgba(184, 115, 51, 0.20) 0%,
+        rgba(184, 115, 51, 0.08) 55%,
+        transparent 80%);
+    border: 1px solid rgba(184, 115, 51, 0.28);
+    font-size: 44px;
+    line-height: 1;
+    box-shadow: 0 0 0 6px rgba(184, 115, 51, 0.06),
+                inset 0 0 24px rgba(184, 115, 51, 0.10);
+    animation: argusEmptyFloat 4.8s ease-in-out infinite;
+}
+@keyframes argusEmptyFloat {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-4px); }
+}
+.argus-empty-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--text, #EAD8C0);
+    letter-spacing: -0.2px;
+    margin-top: 6px;
+}
+.argus-empty-msg {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text-m);
+    max-width: 460px;
+}
+.argus-empty-cta {
+    margin-top: 6px;
+    font-size: 12.5px;
+    font-weight: 700;
+    padding: 9px 18px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent, #B87333), var(--accent-d, #7A4824));
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 6px 18px -6px rgba(184, 115, 51, 0.45);
+    transition: transform 160ms ease, filter 160ms ease;
+}
+.argus-empty-cta:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.10);
+}
+@media (prefers-reduced-motion: reduce) {
+    .argus-empty-art { animation: none !important; }
+}
+
+
 /* ── Visual #48 — Mejor jerarquía tipográfica ─────────────────────────────
    El panel tenía .panel-title a 18px y .section-subtitle también a 15px,
    visualmente plano. Aquí refuerzo la escala (eyebrow → title → subtitle →

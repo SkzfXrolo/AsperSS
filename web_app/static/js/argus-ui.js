@@ -1202,6 +1202,27 @@
     }
 
 
+    // ── Visual #22 — Loading states más informativos ─────────────────────────
+    // argusUI.renderLoading(target, {title, sub, size}) renderiza un bloque
+    // <div.argus-loading> con anillo bronce giratorio + título + subtitulo.
+    // Reemplaza el clásico textContent='Cargando…' por feedback con contexto
+    // (qué se está cargando) y una sugerencia opcional.
+    function renderLoading(target, opts) {
+        const el = (typeof target === 'string') ? document.querySelector(target) : target;
+        if (!el) return;
+        const o = opts || {};
+        const sizeClass = o.size === 'sm' ? ' sm' : (o.size === 'lg' ? ' lg' : '');
+        const title = o.title || 'Cargando…';
+        const sub   = o.sub || '';
+        el.innerHTML =
+            '<div class="argus-loading">' +
+                '<div class="argus-spinner-ring' + sizeClass + '" role="progressbar" aria-label="Cargando"></div>' +
+                '<div class="argus-loading-title">' + String(title).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>' +
+                (sub ? '<div class="argus-loading-sub">' + String(sub).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>' : '') +
+            '</div>';
+    }
+
+
     // ── Visual #7 — Modal de confirmación unificado ──────────────────────────
     // Reemplaza el confirm() del browser (que en Chrome muestra el ugly diálogo
     // nativo y bloquea TODO el thread). API: argusUI.confirm({title, body, ok,
@@ -1373,6 +1394,7 @@
         celebrate,
         confirm: confirmModal,
         typewriter,
+        renderLoading,
     };
 
     // Re-aplicar la vista guardada cuando se haya cargado el DOM

@@ -8997,6 +8997,91 @@ def get_staff_audit_log():
         return jsonify({'error': str(e)}), 500
 
 
+# ── Visual #46 — Comparador lado-a-lado: scans del mismo jugador ────────────
+# Devuelve scans anteriores al `scan_id` actual del MISMO MC username (y/o
+# machine_id), ordenados desc. Pensado para el comparador lado-a-lado del
+# panel: el JS pide los anteriores y arma el diff. NO trae results detallados,
+# solo metadata + conteos para el comparador rápido.
+@app.route('/api/scans/<int:scan_id>/related', methods=['GET'])
+@login_required
+def get_related_scans(scan_id):
+    try:
+        limit = max(1, min(20, int(request.args.get('limit', 6))))
+    except Exception:
+        limit = 6
+    try:
+        with get_api_db_cursor() as cur:
+            # 1) Resolver el scan actual: tomamos minecraft_username y machine_id
+            cur.execute(
+                'SELECT minecraft_username, machine_id, machine_name, started_at '
+                f'FROM scans WHERE id = {_PH}',
+                (scan_id,)
+            )
+            anchor = cur.fetchone()
+            if not anchor:
+                return jsonify({'error': 'Scan no encontrado'}), 404
+            if isinstance(anchor, dict):
+                mc_user   = anchor.get('minecraft_username')
+                machine_id = anchor.get('machine_id')
+            else:
+                mc_user, machine_id = anchor[0], anchor[1]
+            if not mc_user and not machine_id:
+                return jsonify({'scans': [], 'anchor_id': scan_id}), 200
+
+            # 2) Buscar otros scans del mismo MC user O misma máquina
+            #    excluyendo el actual. Ordenamos por created_at DESC.
+            conditions, params = [], []
+            if mc_user:
+                conditions.append(f'minecraft_username = {_PH}'); params.append(mc_user)
+            if machine_id:
+                conditions.append(f'machine_id = {_PH}'); params.append(machine_id)
+            where = '(' + ' OR '.join(conditions) + ')' if conditions else 'FALSE'
+
+            # Empresa: respetar el aislamiento. Solo scans de la(s) misma(s)
+            # company_id que el staff. Para staff global (admin), no filtrar.
+            user_id = session.get('user_id')
+            company_id = session.get('company_id')
+            extra_where = ''
+            extra_params = []
+            try:
+                if not is_admin(user_id):
+                    if company_id:
+                        extra_where = f' AND company_id = {_PH}'
+                        extra_params.append(company_id)
+            except Exception:
+                pass
+
+            q = (
+                'SELECT id, minecraft_username, machine_name, started_at, '
+                '       risk_score, verdict, country, issues_found, issues_critical, '
+                '       total_files_scanned '
+                f'FROM scans WHERE {where} AND id != {_PH}{extra_where} '
+                f'ORDER BY COALESCE(started_at, created_at) DESC LIMIT {_PH}'
+            )
+            cur.execute(q, params + [scan_id] + extra_params + [limit])
+            rows = cur.fetchall() or []
+        out = []
+        for r in rows:
+            if isinstance(r, dict):
+                out.append(r)
+            else:
+                out.append({
+                    'id':              r[0],
+                    'minecraft_user':  r[1],
+                    'machine_name':    r[2],
+                    'started_at':      str(r[3]) if r[3] else None,
+                    'risk_score':      r[4],
+                    'verdict':         r[5],
+                    'country':         r[6],
+                    'issues_found':    r[7],
+                    'issues_critical': r[8],
+                    'total_files_scanned': r[9],
+                })
+        return jsonify({'scans': out, 'anchor_id': scan_id, 'anchor_user': mc_user}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ── Visual #11 — Staff activity heatmap (GitHub-style) ──────────────────────
 # Devuelve la actividad del staff loggeado durante los últimos N días (default
 # 365). Cuenta dos cosas en paralelo:

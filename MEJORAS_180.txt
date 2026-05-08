@@ -950,8 +950,34 @@ NOTA DE LECTURA
         drag, doble click resetea, atajos +/- y 0 (reset), Esc cierra.
         Botón "Pantalla completa" alternativo al click sobre la img.
 
-[ ] 46. Comparador lado-a-lado: "este scan vs scan anterior del
+[X] 46. Comparador lado-a-lado: "este scan vs scan anterior del
         mismo MC user" para ver progreso/regresión.
+        DONE v1.6.49 (Pack 20) — Backend: nuevo endpoint
+        /api/scans/<id>/related?limit=8 en app.py. Resuelve el scan
+        ancla (minecraft_username + machine_id) y busca otros scans con
+        el mismo MC user O la misma máquina, excluyendo el actual.
+        Respeta el aislamiento de empresa (no-admin solo ve scans de su
+        company_id). Devuelve {scans:[{id, mc, machine, started_at,
+        risk_score, verdict, country, issues, critical, files}],
+        anchor_id, anchor_user}.
+        Frontend: botón azul "Comparar" agregado junto a "Compartir" en
+        panel.html. openCompareScansModal(scanId) en panel.js abre
+        modal 960px con eyebrow + section-title. Loading state usa
+        argusUI renderLoading. Si no hay scans previos, empty-state
+        ilustrado con CTA mencionando que aparecerán futuros scans.
+        Selector dropdown si hay >1, rebusca el "other" sin re-fetch.
+        Grid lado-a-lado:
+          • Headers Actual (bronce) vs Anterior (azul) con fecha.
+          • Risk score con color por umbral (rojo/amarillo/verde) +
+            verdict chip CLEAN/HACK/PENDIENTE.
+          • Hallazgos totales y críticos.
+          • Total de archivos escaneados.
+          • Máquina + país.
+        Resumen del cambio: cards Δ Risk Score, Δ Issues, Δ Archivos
+        con flechas ↗↘= coloreadas por dirección "buena/mala" (bajar
+        risk = verde) + porcentaje de variación. Botones inferiores:
+        "Abrir scan anterior →" (cambia a viewScanDetails) y "Copiar
+        enlace al anterior".
 
 [ ] 47. Timeline visual de actividad del jugador en el server:
         last seen, last scan, last verdict, total scans (requiere
@@ -1169,11 +1195,15 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 
   Scanner ............................. 60 ítems   (detección)      14/60
   Filtro .............................. 60 ítems   (anti-FP)        22/60
-  Visual .............................. 60 ítems   (UI/UX)          38/60
+  Visual .............................. 60 ítems   (UI/UX)          39/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    83/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    84/195
                                                   (5 parciales: S#9, V#3, V#32, V#43, V#53)
+                                                  (6 bonus: scanner_version chip,
+                                                   argusUI.confirm, argusUI.typewriter,
+                                                   argusUI.renderLoading, .argus-empty--v2,
+                                                   .argus-eyebrow utility class)
                                                   + 3 BONUS Pack 11 (Stream-friendly,
                                                   CompanyTag color, Why-this-score modal)
                                                   + 1 BONUS Pack 14 (Inspector de metadata
@@ -1190,6 +1220,43 @@ Linux: Arch, Ubuntu, Fedora, etc.).
                                                   (AppImage/Flatpak/deb), #14 (CI Docker)
 
 SESIÓN DEL 08-may-2026:
+  Pack 20 (v1.6.49): Visual #46 + helpers de loading/empty (sin .exe).
+                    Visual #46 — Comparador lado-a-lado:
+                      * Backend: endpoint /api/scans/<id>/related?limit=8
+                        que cruza minecraft_username + machine_id y
+                        respeta aislamiento de empresa.
+                      * Frontend: botón azul "Comparar" en el detalle
+                        del scan. openCompareScansModal() abre modal
+                        960px con eyebrow + section-title, loading
+                        state argusUI.renderLoading, empty state
+                        ilustrado si no hay anteriores.
+                      * Grid 2 columnas: Actual vs Anterior con headers
+                        bronce/azul, risk score color-by-threshold +
+                        verdict chip CLEAN/HACK/PENDIENTE, hallazgos
+                        totales y críticos, total archivos, máquina+país.
+                      * Cards de resumen Δ con flechas ↗↘= coloreadas
+                        por dirección "buena/mala" (bajar risk = verde).
+                      * Botones "Abrir scan anterior →" y "Copiar enlace".
+                    BONUS — Sistema de loading states (Visual #22-like):
+                      * argusUI.renderLoading(target, {title, sub, size})
+                        con spinner anillo bronce + texto. Aplicado al
+                        detalle del scan (era 'Cargando...' pelado).
+                      * .argus-spinner-ring (3 sizes), .argus-pulse-dot,
+                        .argus-skel-shimmer en argus-ui.css con
+                        @keyframes argusSpin / argusPulse / argusShimmer.
+                      * Honra prefers-reduced-motion.
+                    BONUS — Empty states v2 (Visual #42-like):
+                      * .argus-empty--v2 modifier sobre el sistema BEM
+                        legacy: ilustración circular bronce con float
+                        animation + título 17px peso 800 + msg 13px
+                        line-height 1.65 + CTA gradient.
+                      * Aplicado a "Primer escaneo de esta máquina" y
+                        "Sin patrones aprendidos" (eran loading-cell
+                        plano).
+                    panel.html: argus-ui.css v=13, argus-ui.js v=11,
+                      panel.js v=62.
+                    → 1 visual completado (V#46) + 2 bonus systems.
+
   Pack 19 (v1.6.49): Visual #11, #31 — Heatmap actividad + sidebar
                     collapsable (sin recompilar .exe).
                     Visual #11 — Heatmap GitHub-style del staff:
