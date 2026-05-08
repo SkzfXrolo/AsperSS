@@ -47,8 +47,13 @@ class BackendClient(
         }
     }
 
-    /** POST /api/scans/<id>/results. */
-    fun submitResults(scanId: Long, results: List<ScanResult>, riskScore: Int) {
+    /** POST /api/scans/<id>/results. screenshotB64 opcional (item #9). */
+    fun submitResults(
+        scanId: Long,
+        results: List<ScanResult>,
+        riskScore: Int,
+        screenshotB64: String? = null,
+    ) {
         val arr = JSONArray()
         for (r in results) {
             arr.put(JSONObject().apply {
@@ -70,6 +75,7 @@ class BackendClient(
             put("risk_score",  riskScore)
             put("status",      "completed")
             put("client_finished_at", System.currentTimeMillis() / 1000)
+            if (!screenshotB64.isNullOrBlank()) put("screenshot", screenshotB64)
         }
         val resp = post("$baseUrl/api/scans/$scanId/results", body.toString())
         val json = JSONObject(resp)

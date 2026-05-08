@@ -37,3 +37,60 @@ fun smartHackMatch(text: String, term: String): Boolean {
     val isWord = { c: Char? -> c != null && (c.isLetterOrDigit()) }
     return !isWord(before) && !isWord(after)
 }
+
+/**
+ * Bayesian-lite móvil — devuelve un multiplier para confidence ajustado
+ * por la presencia de tokens NEG (apps casuales falsamente confundibles
+ * con cheats) o POS (clientes/cheats inequívocos).
+ *
+ * Referencia: F#27 desktop. Adaptado al ecosistema móvil donde el
+ * filename suele ser corto (label de app) y los tokens NEG son apps
+ * casuales (Lawnchair, Tasker, AdAway).
+ *
+ * Output:
+ *   1.0   neutro (no aplica)
+ *   0.50  factor anti-FP fuerte (token NEG presente, sin POS)
+ *   1.15  refuerzo (token POS presente)
+ *
+ * Si conviven NEG + POS, gana POS (cheats con disfraz no son comunes
+ * en móvil; preferimos ser estrictos).
+ */
+fun bayesianLiteMultiplier(text: String): Double {
+    if (text.isBlank()) return 1.0
+    val lower = text.lowercase()
+    val hasNeg = HackTerms.BAYES_NEGATIVE.any { lower.contains(it) }
+    val hasPos = HackTerms.BAYES_POSITIVE.any { lower.contains(it) }
+    return when {
+        hasPos                 -> 1.15
+        hasNeg && !hasPos      -> 0.50
+        else                   -> 1.0
+    }
+}
+
+/**
+ * Aplica el multiplier al ScanResult. Si el resultado quedaría con
+ * confidence < 0.35 lo degrada a SOSPECHOSO (de CRITICAL) o lo descarta
+ * (de SOSPECHOSO). Devuelve null si el resultado debe descartarse por
+ * el filtro Bayesian-lite móvil.
+ */
+fun applyBayesianFilter(r: ScanResult): ScanResult? {
+    val text = "${r.nombre} ${r.ruta} ${r.descripcion}"
+    val mult = bayesianLiteMultiplier(text)
+    if (mult == 1.0) return r
+    val newConf = (r.confidence * mult).coerceIn(0.0, 1.0)
+    val newAlerta = when {
+        r.alerta == "CRITICAL" && newConf < 0.55 -> "SOSPECHOSO"
+        r.alerta == "SOSPECHOSO" && newConf < 0.35 -> return null
+        else -> r.alerta
+    }
+    val newCat = if (newAlerta == "CRITICAL") "CRITICAL"
+                 else if (newAlerta == "SOSPECHOSO") "SOSPECHOSO"
+                 else r.categoria
+    val patternTag = if (mult < 1.0) "bayes:fp_filter" else "bayes:reinforced"
+    return r.copy(
+        confidence = newConf,
+        alerta = newAlerta,
+        categoria = newCat,
+        detected_patterns = r.detected_patterns + patternTag,
+    )
+}

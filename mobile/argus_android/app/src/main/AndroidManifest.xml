@@ -98,5 +98,13 @@
                 <data android:scheme="argus" android:host="scan" />
             </intent-filter>
         </activity>
+
+        <!-- Foreground service para sostener el scan + MediaProjection
+             (items #9 y #12). Tipo combinado dataSync|mediaProjection
+             porque Android 14+ obliga a declarar el tipo en startForeground. -->
+        <service
+            android:name=".service.ScanForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync|mediaProjection" />
     </application>
 </manifest>

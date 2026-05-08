@@ -18,7 +18,7 @@ class ArgusApp : Application() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             val ch = NotificationChannel(
-                getString(R.string.fgs_channel_id),
+                SCAN_CHANNEL_ID,
                 getString(R.string.fgs_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
@@ -27,5 +27,9 @@ class ArgusApp : Application() {
             }
             nm.createNotificationChannel(ch)
         }
+    }
+
+    companion object {
+        const val SCAN_CHANNEL_ID = "argus_scan_channel"
     }
 }

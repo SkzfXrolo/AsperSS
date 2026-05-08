@@ -5,6 +5,7 @@ import android.app.AppOpsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -13,25 +14,40 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.argus.scanner.ui.ScanScreen
 
 /**
  * MainActivity — entrada de la APK Argus Android.
  *
- * UI minimalista en Compose (item #1):
+ * Pack 25:
  *   1) Onboarding con permisos minimum-necessary (item #14).
  *   2) Input de token + botón "Iniciar scan".
  *   3) Pantalla de progreso con log en vivo de scanners.
  *   4) Resultado final con risk score + botón "Ver en panel".
  *
- * Soporta deeplink argus://scan?token=XXX (preconfigura el token desde un
- * link compartido por Discord/Telegram).
+ * Pack 26:
+ *   - Pide consent de MediaProjection al iniciar scan (item #9).
+ *     Si el usuario lo niega, el scan sigue pero sin screenshot.
+ *   - Soporta deeplink argus://scan?token=XXX para auto-fill desde
+ *     bot Discord / link compartido.
  */
 class MainActivity : ComponentActivity() {
 
     private var initialToken: String = ""
+
+    /** Resultados de MediaProjection consent. Se pasan al orchestrator. */
+    private var pendingScreenshotResultCode: Int = 0
+    private var pendingScreenshotData: Intent? = null
+    private var screenshotConsentCallback: ((Int, Intent?) -> Unit)? = null
+
+    private val mediaProjectionLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            pendingScreenshotResultCode = result.resultCode
+            pendingScreenshotData = result.data
+            screenshotConsentCallback?.invoke(result.resultCode, result.data)
+            screenshotConsentCallback = null
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +66,12 @@ class MainActivity : ComponentActivity() {
                 hasUsage     = ::hasUsageStatsPermission,
                 requestStorage = ::requestStoragePermission,
                 requestUsage   = ::requestUsageStatsPermission,
+                requestScreenshotConsent = ::requestScreenshotConsent,
+                getPendingScreenshot = { pendingScreenshotResultCode to pendingScreenshotData },
+                clearScreenshot = {
+                    pendingScreenshotResultCode = 0
+                    pendingScreenshotData = null
+                },
             )
         }
     }
@@ -57,7 +79,6 @@ class MainActivity : ComponentActivity() {
     // ── Storage permission ────────────────────────────────────────────────
     private fun hasStoragePermission(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Android 11+: MANAGE_EXTERNAL_STORAGE (special permission).
             return Environment.isExternalStorageManager()
         }
         return ContextCompat.checkSelfPermission(
@@ -82,9 +103,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // ── UsageStats permission (item #4 / #7) ──────────────────────────────
-    // Es un AppOps permission, no runtime — el usuario lo concede en
-    // Settings > Apps > Special access > Usage access.
+    // ── UsageStats permission ──────────────────────────────────────────────
     private fun hasUsageStatsPermission(): Boolean {
         val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -106,8 +125,25 @@ class MainActivity : ComponentActivity() {
         try {
             startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
         } catch (_: Exception) {
-            // Algunas ROMs no exponen el intent — fallback al settings principal.
             startActivity(Intent(Settings.ACTION_SETTINGS))
+        }
+    }
+
+    // ── MediaProjection consent (item #9) ──────────────────────────────────
+    /**
+     * Lanza el consent dialog del SO. callback recibe (resultCode, data).
+     * Si el usuario acepta resultCode=Activity.RESULT_OK y data != null.
+     * Si lo niega, data == null. El scan en cualquier caso sigue.
+     */
+    private fun requestScreenshotConsent(callback: (Int, Intent?) -> Unit) {
+        screenshotConsentCallback = callback
+        try {
+            val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+                    as MediaProjectionManager
+            mediaProjectionLauncher.launch(mpm.createScreenCaptureIntent())
+        } catch (_: Throwable) {
+            callback(0, null)
+            screenshotConsentCallback = null
         }
     }
 }

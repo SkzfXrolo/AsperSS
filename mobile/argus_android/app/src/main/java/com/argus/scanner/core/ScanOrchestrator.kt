@@ -1,122 +1,183 @@
 package com.argus.scanner.core
 
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.provider.Settings
+import com.argus.scanner.scanners.FileObserverScanner
 import com.argus.scanner.scanners.FileScanner
 import com.argus.scanner.scanners.LauncherScanner
 import com.argus.scanner.scanners.MemoryEditorScanner
+import com.argus.scanner.scanners.OverlayScanner
 import com.argus.scanner.scanners.PackageScanner
 import com.argus.scanner.scanners.RootScanner
+import com.argus.scanner.scanners.ScreenshotCapture
+import com.argus.scanner.scanners.UsageStatsScanner
+import com.argus.scanner.service.ScanForegroundService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 
 /**
- * ScanOrchestrator — corre los 5 scanners del MVP en orden, agrega los
- * resultados, calcula risk score y los sube al backend Argus.
+ * ScanOrchestrator — corre todos los scanners móviles en orden, agrega
+ * los resultados, aplica el filtro Bayesian-lite móvil, calcula risk
+ * score y los sube al backend Argus.
  *
- * Risk scoring (mapea con la convención del scanner desktop):
- *   CRITICAL hits  → +25 cada uno (cap +60)
- *   SOSPECHOSO     → +6  cada uno (cap +20)
- *   INFO           → +0
+ * Orden Pack 26:
+ *   FileObserverScanner se lanza en paralelo (12s window) al inicio.
+ *   1) PackageScanner          — items #6, #11
+ *   2) UsageStatsScanner       — item #4 (Prefetch móvil)
+ *   3) RootScanner             — item #10
+ *   4) MemoryEditorScanner     — item #11
+ *   5) OverlayScanner          — item #7 (overlays + cross-check MC)
+ *   6) LauncherScanner         — item #8
+ *   7) FileScanner             — items #3, #5 estático
+ *   8) Esperar FileObserver    — item #5 runtime
  *
- * Verdict derivado:
- *   ≥ 70 HACK
+ * El screenshot (item #9) se captura tras los scanners si la activity
+ * obtuvo el consent de MediaProjection.
+ *
+ * Risk scoring (mismo que desktop):
+ *   CRITICAL → +25 cada uno (cap +60)
+ *   SOSPECHOSO → +6 cada uno (cap +20)
+ *   INFO → +0
+ *
+ * Verdict:
+ *   ≥ 70 HACK_DETECTADO
  *   ≥ 30 SOSPECHOSO
  *   else LIMPIO
  *
- * El backend recalcula con su propio ensemble (RF + heuristic + AI), así
- * que este score local es solo para mostrar al usuario antes del round-trip.
+ * El backend recalcula con su propio ensemble (RF + heuristic + AI),
+ * así que este score local es solo display previo al round-trip.
  */
 class ScanOrchestrator(private val ctx: Context) {
 
-    fun run(token: String): Flow<ScanProgressEvent> = flow {
-        emit(ScanProgressEvent.Log("→ Argus Android · v1.6.49"))
+    fun run(
+        token: String,
+        screenshotResultCode: Int = 0,
+        screenshotData: Intent? = null,
+    ): Flow<ScanProgressEvent> = flow {
+        emit(ScanProgressEvent.Log("→ Argus Android · v1.6.49 (Pack 26)"))
         if (token.length < 8) {
             emit(ScanProgressEvent.Failed("Token inválido o demasiado corto"))
             return@flow
         }
 
-        // 1) BackendClient — crear scan
-        val client = BackendClient(token)
-        val machine = collectMachineInfo()
-        emit(ScanProgressEvent.Log("→ Subiendo handshake al backend…"))
-        val scanId = try { client.startScan(machine) }
-                     catch (e: Exception) {
-                         emit(ScanProgressEvent.Failed("No se pudo iniciar scan: ${e.message}"))
-                         return@flow
-                     }
-        emit(ScanProgressEvent.ScanCreated(scanId))
-        emit(ScanProgressEvent.Log("[OK] Scan #$scanId creado"))
-
-        val all = mutableListOf<ScanResult>()
-
-        // 2) PackageScanner (item #6 + #11)
-        emit(ScanProgressEvent.Log("→ Revisando apps instaladas…"))
-        val pkgs = try { PackageScanner(ctx).scan() } catch (e: Exception) {
-            emit(ScanProgressEvent.Log("[!] PackageScanner falló: ${e.message}"))
-            emptyList()
-        }
-        all += pkgs
-        emit(ScanProgressEvent.Log("[OK] ${pkgs.size} hallazgo(s) en apps instaladas"))
-
-        // 3) RootScanner (item #10)
-        emit(ScanProgressEvent.Log("→ Detectando root / Magisk / Xposed…"))
-        val root = try { RootScanner().scan() } catch (e: Exception) {
-            emit(ScanProgressEvent.Log("[!] RootScanner falló: ${e.message}"))
-            emptyList()
-        }
-        all += root
-        emit(ScanProgressEvent.Log("[OK] ${root.size} signal(es) de root"))
-
-        // 4) MemoryEditorScanner (item #11)
-        emit(ScanProgressEvent.Log("→ Buscando memory editors / Game Guardian…"))
-        val mem = try { MemoryEditorScanner(ctx).scan() } catch (e: Exception) {
-            emit(ScanProgressEvent.Log("[!] MemoryEditorScanner falló: ${e.message}"))
-            emptyList()
-        }
-        all += mem
-        emit(ScanProgressEvent.Log("[OK] ${mem.size} hallazgo(s) en memory editors"))
-
-        // 5) LauncherScanner (item #8)
-        emit(ScanProgressEvent.Log("→ Inspeccionando launchers Minecraft móvil…"))
-        val lnch = try { LauncherScanner(ctx).scan() } catch (e: Exception) {
-            emit(ScanProgressEvent.Log("[!] LauncherScanner falló: ${e.message}"))
-            emptyList()
-        }
-        all += lnch
-        emit(ScanProgressEvent.Log("[OK] ${lnch.size} hallazgo(s) en launchers"))
-
-        // 6) FileScanner (item #3 + #5 parcial)
-        emit(ScanProgressEvent.Log("→ Revisando archivos sospechosos en /sdcard…"))
-        val files = try { FileScanner(ctx).scan() } catch (e: Exception) {
-            emit(ScanProgressEvent.Log("[!] FileScanner falló: ${e.message}"))
-            emptyList()
-        }
-        all += files
-        emit(ScanProgressEvent.Log("[OK] ${files.size} archivo(s) sospechoso(s)"))
-
-        // 7) Score local (puro indicativo)
-        val score = computeRiskScore(all)
-        val verdict = when {
-            score >= 70 -> "HACK_DETECTADO"
-            score >= 30 -> "SOSPECHOSO"
-            else        -> "LIMPIO"
-        }
-        emit(ScanProgressEvent.Log("→ Risk score local: $score · $verdict"))
-
-        // 8) Subir al backend
-        emit(ScanProgressEvent.Log("→ Enviando ${all.size} hallazgo(s) al panel…"))
+        ScanForegroundService.start(ctx)
         try {
-            client.submitResults(scanId, all, score)
-            emit(ScanProgressEvent.Log("[OK] Resultados subidos correctamente"))
-            emit(ScanProgressEvent.Done(score, verdict))
-        } catch (e: Exception) {
-            emit(ScanProgressEvent.Failed("Error subiendo resultados: ${e.message}"))
+            val client = BackendClient(token)
+            val machine = collectMachineInfo()
+            emit(ScanProgressEvent.Log("→ Subiendo handshake al backend…"))
+            val scanId = try { client.startScan(machine) }
+            catch (e: Exception) {
+                emit(ScanProgressEvent.Failed("No se pudo iniciar scan: ${e.message}"))
+                return@flow
+            }
+            emit(ScanProgressEvent.ScanCreated(scanId))
+            emit(ScanProgressEvent.Log("[OK] Scan #$scanId creado"))
+
+            val all = mutableListOf<ScanResult>()
+            coroutineScope {
+                val observerJob = async(Dispatchers.IO) {
+                    try { FileObserverScanner(ctx).observe(12_000L) }
+                    catch (_: Throwable) { emptyList() }
+                }
+
+                runStep(this@flow, "Revisando apps instaladas (cheats / memhacks / root)") {
+                    PackageScanner(ctx).scan()
+                }.also { all += it }
+
+                runStep(this@flow, "Apps lanzadas recientemente (Prefetch móvil)") {
+                    UsageStatsScanner(ctx).scan()
+                }.also { all += it }
+
+                runStep(this@flow, "Detectando root / Magisk / LSPosed / KernelSU") {
+                    RootScanner().scan()
+                }.also { all += it }
+
+                runStep(this@flow, "Buscando memory editors (Game Guardian + scripts)") {
+                    MemoryEditorScanner(ctx).scan()
+                }.also { all += it }
+
+                runStep(this@flow, "Cazando overlays activos (ESP / wallhack flotante)") {
+                    OverlayScanner(ctx).scan()
+                }.also { all += it }
+
+                runStep(this@flow, "Inspeccionando launchers Minecraft móvil") {
+                    LauncherScanner(ctx).scan()
+                }.also { all += it }
+
+                runStep(this@flow, "Revisando archivos sospechosos en /sdcard") {
+                    FileScanner(ctx).scan()
+                }.also { all += it }
+
+                emit(ScanProgressEvent.Log("→ Cerrando watchers de archivos…"))
+                val live = try { observerJob.await() } catch (_: Throwable) { emptyList() }
+                emit(ScanProgressEvent.Log("[OK] ${live.size} actividad(es) en vivo"))
+                all += live
+            }
+
+            // Filtro Bayesian-lite móvil
+            val filtered = mutableListOf<ScanResult>()
+            var dropped = 0
+            for (r in all) {
+                val keep = applyBayesianFilter(r)
+                if (keep != null) filtered += keep else dropped++
+            }
+            if (dropped > 0)
+                emit(ScanProgressEvent.Log("[OK] Bayesian-lite descartó $dropped FP"))
+
+            val score = computeRiskScore(filtered)
+            val verdict = when {
+                score >= 70 -> "HACK_DETECTADO"
+                score >= 30 -> "SOSPECHOSO"
+                else        -> "LIMPIO"
+            }
+            emit(ScanProgressEvent.Log("→ Risk score local: $score · $verdict"))
+
+            val screenshotB64: String? = if (screenshotData != null) {
+                emit(ScanProgressEvent.Log("→ Capturando pantalla (MediaProjection)…"))
+                try { ScreenshotCapture(ctx).captureToBase64(screenshotResultCode, screenshotData) }
+                catch (e: Exception) {
+                    emit(ScanProgressEvent.Log("[!] Screenshot falló: ${e.message}"))
+                    null
+                }
+            } else null
+            if (!screenshotB64.isNullOrBlank())
+                emit(ScanProgressEvent.Log("[OK] Screenshot: ${screenshotB64.length} chars b64"))
+
+            emit(ScanProgressEvent.Log("→ Enviando ${filtered.size} hallazgo(s) al panel…"))
+            try {
+                client.submitResults(scanId, filtered, score, screenshotB64)
+                emit(ScanProgressEvent.Log("[OK] Resultados subidos correctamente"))
+                emit(ScanProgressEvent.Done(score, verdict))
+            } catch (e: Exception) {
+                emit(ScanProgressEvent.Failed("Error subiendo resultados: ${e.message}"))
+            }
+        } finally {
+            ScanForegroundService.stop(ctx)
         }
     }.flowOn(Dispatchers.IO)
+
+    private suspend inline fun runStep(
+        collector: FlowCollector<ScanProgressEvent>,
+        message: String,
+        block: () -> List<ScanResult>,
+    ): List<ScanResult> {
+        collector.emit(ScanProgressEvent.Log("→ $message"))
+        return try {
+            val r = block()
+            collector.emit(ScanProgressEvent.Log("[OK] ${r.size} hallazgo(s)"))
+            r
+        } catch (e: Throwable) {
+            collector.emit(ScanProgressEvent.Log("[!] falló: ${e.message}"))
+            emptyList()
+        }
+    }
 
     private fun computeRiskScore(results: List<ScanResult>): Int {
         var score = 0
@@ -151,4 +212,5 @@ class ScanOrchestrator(private val ctx: Context) {
             minecraftHint = "",
         )
     }
+
 }

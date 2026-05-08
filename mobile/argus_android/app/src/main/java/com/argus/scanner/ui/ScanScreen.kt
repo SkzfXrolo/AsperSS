@@ -1,7 +1,9 @@
 package com.argus.scanner.ui
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -52,6 +54,9 @@ fun ScanScreen(
     hasUsage: () -> Boolean,
     requestStorage: () -> Unit,
     requestUsage: () -> Unit,
+    requestScreenshotConsent: ((Int, Intent?) -> Unit) -> Unit = { it(0, null) },
+    getPendingScreenshot: () -> Pair<Int, Intent?> = { 0 to null },
+    clearScreenshot: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -63,6 +68,7 @@ fun ScanScreen(
     var verdict by rememberSaveable { mutableStateOf("") }
     var scanId by rememberSaveable { mutableStateOf(0L) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
+    var screenshotEnabled by rememberSaveable { mutableStateOf(true) }
 
     // Re-evaluar permisos cuando volvamos al foreground.
     var storageGranted by remember { mutableStateOf(hasStorage()) }
@@ -70,6 +76,39 @@ fun ScanScreen(
     LaunchedEffect(phase) {
         storageGranted = hasStorage()
         usageGranted   = hasUsage()
+    }
+
+    fun launchScan(includeScreenshot: Boolean) {
+        error = null
+        log.clear()
+        phase = "running"
+        val orch = ScanOrchestrator(ctx)
+        val (rc, data) = if (includeScreenshot) getPendingScreenshot() else (0 to null)
+        scope.launch {
+            try {
+                orch.run(token, rc, data).collectLatest { ev ->
+                    when (ev) {
+                        is ScanProgressEvent.Log -> log.add(ev.line)
+                        is ScanProgressEvent.ScanCreated -> scanId = ev.scanId
+                        is ScanProgressEvent.Done -> {
+                            riskScore = ev.riskScore
+                            verdict = ev.verdict
+                            phase = "done"
+                            clearScreenshot()
+                        }
+                        is ScanProgressEvent.Failed -> {
+                            error = ev.message
+                            phase = "input"
+                            clearScreenshot()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                error = e.message ?: "Error desconocido"
+                phase = "input"
+                clearScreenshot()
+            }
+        }
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = BgDark) {
@@ -88,32 +127,19 @@ fun ScanScreen(
             "input" -> InputPanel(
                 token = token,
                 onTokenChange = { token = it },
+                screenshotEnabled = screenshotEnabled,
+                onScreenshotToggle = { screenshotEnabled = it },
                 onStart = {
-                    error = null
-                    log.clear()
-                    phase = "running"
-                    val orch = ScanOrchestrator(ctx)
-                    scope.launch {
-                        try {
-                            orch.run(token).collectLatest { ev ->
-                                when (ev) {
-                                    is ScanProgressEvent.Log -> log.add(ev.line)
-                                    is ScanProgressEvent.ScanCreated -> scanId = ev.scanId
-                                    is ScanProgressEvent.Done -> {
-                                        riskScore = ev.riskScore
-                                        verdict = ev.verdict
-                                        phase = "done"
-                                    }
-                                    is ScanProgressEvent.Failed -> {
-                                        error = ev.message
-                                        phase = "input"
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-                            error = e.message ?: "Error desconocido"
-                            phase = "input"
+                    if (screenshotEnabled) {
+                        // Pedir consent y luego arrancar (con screenshot si OK).
+                        requestScreenshotConsent { rc, data ->
+                            // El callback ya guardó el resultado en MainActivity;
+                            // launch usa getPendingScreenshot que ahora tiene
+                            // los valores correctos.
+                            launchScan(includeScreenshot = (data != null))
                         }
+                    } else {
+                        launchScan(includeScreenshot = false)
                     }
                 },
                 error = error
@@ -267,6 +293,8 @@ private fun PermissionCard(
 private fun InputPanel(
     token: String,
     onTokenChange: (String) -> Unit,
+    screenshotEnabled: Boolean,
+    onScreenshotToggle: (Boolean) -> Unit,
     onStart: () -> Unit,
     error: String?,
 ) {
@@ -311,6 +339,12 @@ private fun InputPanel(
                 Spacer(Modifier.height(10.dp))
                 Text(error, color = Danger, fontSize = 12.sp)
             }
+
+            Spacer(Modifier.height(20.dp))
+            ScreenshotToggleRow(
+                enabled = screenshotEnabled,
+                onToggle = onScreenshotToggle,
+            )
         }
 
         Button(
@@ -327,6 +361,49 @@ private fun InputPanel(
         ) {
             Text("Iniciar scan", fontWeight = FontWeight.Black, fontSize = 16.sp)
         }
+    }
+}
+
+@Composable
+private fun ScreenshotToggleRow(
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(BgCard, RoundedCornerShape(12.dp))
+            .border(1.dp, Bronze.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+            .clickable { onToggle(!enabled) }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Adjuntar screenshot",
+                color = BronzeLight, fontWeight = FontWeight.Bold, fontSize = 14.sp,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                if (enabled)
+                    "Argus pedirá permiso para capturar pantalla al iniciar."
+                else
+                    "Solo se subirán los hallazgos de archivos y apps.",
+                color = TextDim, fontSize = 12.sp,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Switch(
+            checked = enabled,
+            onCheckedChange = onToggle,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = BronzeLight,
+                checkedTrackColor = Bronze,
+                uncheckedThumbColor = TextDim,
+                uncheckedTrackColor = BgCard,
+                uncheckedBorderColor = Bronze.copy(alpha = 0.5f),
+            ),
+        )
     }
 }
 

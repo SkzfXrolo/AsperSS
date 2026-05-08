@@ -1,40 +1,81 @@
-# Argus Android (APK) — Pack 25 MVP
+# Argus Android (APK) — Pack 26: completo
 
 Versión móvil del scanner anti-cheat Argus para **Minecraft Bedrock Edition**
 y **Minecraft Java vía PojavLauncher / Boardwalk**. Comparte el contrato API
 con el backend Argus (los mismos `POST /api/scans` y
 `POST /api/scans/<id>/results` que usan los scanners Windows y Linux).
 
-> Versión: **1.6.49-android1**
+> Versión: **1.6.49-android2**
 > Min SDK: 26 (Android 8.0)
 > Target SDK: 34 (Android 14)
 > Lenguaje: Kotlin · UI: Jetpack Compose
 
 ---
 
-## Estado actual (Pack 25)
+## Estado actual (Pack 26)
 
 | # | Item del plan                                              | Estado |
 |---|------------------------------------------------------------|--------|
 | 1 | Refactor a paquete Android nativo (Gradle Kotlin)          | ✅ DONE |
 | 2 | Aislar imports Windows/Linux                               | ✅ DONE |
-| 3 | Equivalente Android de papelera (carpetas .recycle / Trash)| 🟡 PARTIAL — MediaStore IS_TRASHED queda Pack 26 |
-| 4 | UsageStatsManager (apps lanzadas)                          | ⬜ TODO Pack 26 |
-| 5 | FileObserver runtime (item USN)                            | ⬜ TODO Pack 26 |
+| 3 | Equivalente Android de papelera (carpetas .recycle / Trash)| 🟡 PARTIAL — MediaStore IS_TRASHED queda Pack 27 |
+| 4 | UsageStatsManager (apps lanzadas)                          | ✅ DONE (Pack 26) |
+| 5 | FileObserver runtime (item USN)                            | ✅ DONE (Pack 26) |
 | 6 | Detección de apps sospechosas (blacklist Bedrock+Java)     | ✅ DONE |
-| 7 | Foreground app + overlays (SYSTEM_ALERT_WINDOW)            | ⬜ TODO Pack 26 |
+| 7 | Foreground app + overlays (SYSTEM_ALERT_WINDOW)            | ✅ DONE (Pack 26) |
 | 8 | Soporte launchers MC móvil (Bedrock, Pojav, Boardwalk…)    | ✅ DONE |
-| 9 | Captura de screenshot (MediaProjection)                    | ⬜ TODO Pack 26 |
+| 9 | Captura de screenshot (MediaProjection)                    | ✅ DONE (Pack 26) |
 | 10| Detección de root / Magisk / LSPosed / KernelSU            | ✅ DONE |
 | 11| Game Guardian + memory editors                             | ✅ DONE |
-| 12| Empaquetado APK universal sideload (zipalign + apksigner)  | 🟡 PARTIAL — proyecto build-ready, falta GH Actions |
+| 12| Empaquetado APK universal sideload + GH Actions CI         | ✅ DONE (Pack 26) |
 | 13| Endpoint `/descargar/android` + tab UI con QR              | ✅ DONE (web_app) |
 | 14| Política de permisos minimum-necessary                     | ✅ DONE |
-| 15| Documentación + filtros honestos móvil                     | ✅ DONE |
+| 15| Documentación + filtros honestos móvil + Bayesian-lite     | ✅ DONE |
 
-**Pack 25 cubre 8/15 ítems explícitamente, 2 PARTIAL.** Pack 26 atacará los
-que requieren más superficie de UI (UsageStats consent, MediaProjection,
-overlays, FileObserver runtime).
+**Pack 26 cierra 13/15 ítems DONE + 1 PARTIAL.** Solo queda 1 item
+parcialmente cubierto (#3 papelera vía MediaStore IS_TRASHED) que es
+opcional por baja superficie de evidencia móvil.
+
+### Nuevas capacidades en Pack 26
+
+- **`UsageStatsScanner`**: detecta cheat clients/memory editors/root managers
+  que fueron LANZADOS en los últimos 30 días con `queryUsageStats` +
+  `queryEvents`. Reporta cantidad de launches, tiempo en foreground, último
+  uso. Solo "instalado" → SOSPECHOSO, "instalado + lanzado" → CRITICAL.
+  Bonus: histórico de sesiones de Minecraft Bedrock/Pojav como contexto
+  INFO para el panel ("vino cheateando hace 10min vs hace 3 días").
+- **`FileObserverScanner`**: monta watchers en runtime sobre las carpetas
+  Mojang/Pojav/Download/AppPacks/Movies durante 12 segundos. Cualquier
+  CREATE/MODIFY/DELETE/MOVE de un archivo con hack-term match durante el
+  scan window se reporta como CRITICAL "actividad sospechosa durante el
+  scan" (delata a alguien que intenta limpiar evidencia mientras corre el
+  scanner).
+- **`OverlayScanner`**: lista todas las apps con `OP_SYSTEM_ALERT_WINDOW`
+  concedido. Si una app de la blacklist (Toolbox, Game Guardian) o con
+  hack-term match en el label tiene overlay activo → reporta. Si encima
+  Minecraft estuvo en foreground en la última hora → CRITICAL automático
+  con confidence 0.97 (ESP/wallhack flotante en plena sesión). Whitelista
+  apps benignas (Discord chathead, Twitch chat, Messenger, Maps).
+- **`ScreenshotCapture`**: captura un frame del display con MediaProjection,
+  comprime a PNG 70% y sube en base64 al backend en el mismo campo
+  `screenshot` que Windows/Linux. Requiere consent dialog del SO en cada
+  scan (no se puede skipear ni cachear). Toggle en la UI: el usuario puede
+  desactivar el screenshot y el scan corre sin él.
+- **`ScanForegroundService`**: notificación persistente "Argus está
+  escaneando" mientras corre el flow. Tipo `dataSync|mediaProjection`
+  combinado, requerido por Android 14+ para poder lanzar
+  `MediaProjectionManager.getMediaProjection`. Garantiza que el scan no
+  muere si el usuario manda Argus a background.
+- **Bayesian-lite móvil**: `applyBayesianFilter()` en `ScanResult.kt`
+  ajusta el confidence de cada hit por presencia de tokens NEG (`adaway`,
+  `viper4android`, `lawnchair`, `tasker`, `kwgt`…) o POS (`killaura`,
+  `horion`, `gameguardian`, `wallhack`…). Si el hit cae bajo umbrales se
+  degrada CRITICAL→SOSPECHOSO o se descarta. Mismo patrón que F#27 desktop.
+- **GH Actions CI**: `.github/workflows/android-build.yml` builda
+  automáticamente `app-debug.apk` en cada push que toque
+  `mobile/argus_android/**`. El APK queda como artifact descargable
+  durante 30 días desde el run de Actions, sin necesidad de tener Android
+  Studio instalado.
 
 ---
 
@@ -165,15 +206,17 @@ boundaries — mismo concepto que el scanner desktop).
 | Capacidad                      | Windows | Linux | Android |
 |--------------------------------|:-:|:-:|:-:|
 | Recycle Bin global             | ✅ ($Recycle.Bin) | ✅ (XDG Trash multi-mount) | 🟡 file-managers carpetas privadas |
-| Prefetch / Amcache             | ✅ | ❌ | 🟡 UsageStatsManager (Pack 26) |
-| USN Journal histórico          | ✅ | ❌ | ❌ (FileObserver runtime-only) |
+| Prefetch / Amcache             | ✅ | ❌ | ✅ UsageStatsManager (Pack 26) |
+| USN Journal histórico          | ✅ | ❌ | 🟡 FileObserver runtime-only (12s window, Pack 26) |
 | Procesos en memoria            | ✅ (WMI + ETW) | ✅ (/proc/maps) | 🟡 sandbox post-API 24 |
-| Ventanas abiertas              | ✅ EnumWindows | ✅ wmctrl/Wayland | 🟡 UsageStats foreground |
-| Screenshot multi-display       | ✅ ImageGrab | ✅ grim/scrot/spectacle | 🟡 MediaProjection (Pack 26) |
+| Ventanas abiertas              | ✅ EnumWindows | ✅ wmctrl/Wayland | ✅ UsageStats foreground (Pack 26) |
+| Overlays activos (ESP móvil)   | n/a | n/a | ✅ AppOps OP_SYSTEM_ALERT_WINDOW (Pack 26) |
+| Screenshot                     | ✅ ImageGrab | ✅ grim/scrot/spectacle | ✅ MediaProjection (Pack 26) |
 | Detección de root              | n/a | n/a | ✅ |
 | Verificación de firma del APK  | ✅ Authenticode | ✅ rpm/dpkg | ✅ PackageManager |
 | Memory editors (Game Guardian) | n/a | n/a | ✅ |
 | Cheat clients oficiales        | ✅ desktop | ✅ desktop | ✅ Bedrock + Java móvil |
+| Bayesian-lite anti-FP          | ✅ F#27 | ✅ F#27 | ✅ móvil-specific (Pack 26) |
 
 ---
 
@@ -194,36 +237,101 @@ mobile/argus_android/
         ├── res/                # strings, colors, themes, iconos vector
         └── java/com/argus/scanner/
             ├── ArgusApp.kt
-            ├── MainActivity.kt
+            ├── MainActivity.kt                # Permisos + screenshot consent
             ├── ui/
-            │   └── ScanScreen.kt          # Compose UI: 4 fases
+            │   └── ScanScreen.kt              # Compose UI: 4 fases + toggle
+            ├── service/
+            │   └── ScanForegroundService.kt   # FGS dataSync|mediaProjection
             ├── core/
-            │   ├── BackendClient.kt       # HTTP al backend Argus
-            │   ├── HackTerms.kt           # Blacklists Bedrock + Java móvil
-            │   ├── LegitMods.kt           # Whitelist mods legítimos
-            │   ├── ScanOrchestrator.kt    # Coordina los 5 scanners
-            │   └── ScanResult.kt          # Modelos + smartHackMatch
+            │   ├── BackendClient.kt           # HTTP + screenshot upload
+            │   ├── HackTerms.kt               # Blacklists Bedrock + Java móvil
+            │   ├── LegitMods.kt               # Whitelist mods legítimos
+            │   ├── ScanOrchestrator.kt        # Coordina los 9 scanners
+            │   └── ScanResult.kt              # Modelos + smartHackMatch + Bayesian-lite
             └── scanners/
-                ├── PackageScanner.kt      # #6 + #11 (cheat apps + memhack)
-                ├── LauncherScanner.kt     # #8 (Bedrock/Pojav/Boardwalk)
-                ├── FileScanner.kt         # #3 + #5 parcial
-                ├── RootScanner.kt         # #10
-                └── MemoryEditorScanner.kt # #11 (GG binarios + scripts)
+                ├── PackageScanner.kt          # #6 + #11 (cheat apps + memhack)
+                ├── UsageStatsScanner.kt       # #4 (Prefetch móvil)
+                ├── LauncherScanner.kt         # #8 (Bedrock/Pojav/Boardwalk)
+                ├── FileScanner.kt             # #3 + #5 estático
+                ├── FileObserverScanner.kt     # #5 runtime (12s)
+                ├── OverlayScanner.kt          # #7 (overlay + cross-check MC)
+                ├── RootScanner.kt             # #10
+                ├── MemoryEditorScanner.kt     # #11 (GG binarios + scripts)
+                └── ScreenshotCapture.kt       # #9 (MediaProjection + base64 PNG)
 ```
 
 ---
 
-## Roadmap Pack 26+ (próximas iteraciones)
+## Cómo conseguir el APK sin tener Android Studio
 
-- **#4 UsageStatsManager**: pantalla de consent + listado de apps lanzadas.
-- **#5 FileObserver**: watch en runtime de carpetas Mojang/Pojav durante
-  el scan window.
-- **#7 Overlays activos**: cruzar foreground app con `SYSTEM_ALERT_WINDOW`
-  para detectar ESP/wallhack overlay durante sesión de Minecraft.
-- **#9 MediaProjection**: screenshot del dispositivo con consent dialog.
-- **#12 GH Actions**: matrix CI con build automatizado y release nightly.
-- **Anti-FP móvil**: integrar Bayesian-lite con tokens NEG `adaway/viper4android`
-  vs POS `killaura/horion/gameguardian` (item #15).
+Tres caminos:
+
+### Camino A — GitHub Actions (más rápido, sin instalar nada)
+
+1. Andá a https://github.com/SkzfXrolo/AsperSS/actions/workflows/android-build.yml
+2. Esperá a que termine el último run (verde, ~3 min después de cada push
+   que toque `mobile/argus_android/**`).
+3. Click en el run → bajá hasta **"Artifacts"** → descargá
+   `argus-android-debug-<sha>.zip`.
+4. Descomprimís → tenés `app-debug.apk` listo para sideload en cualquier
+   Android 8.0+.
+
+### Camino B — Compilarlo local (si querés modificar código)
+
+```bash
+cd mobile/argus_android
+./gradlew assembleDebug              # 2-3 min en hardware decente
+# APK en app/build/outputs/apk/debug/app-debug.apk
+```
+
+Requiere JDK 17 y Android SDK con build-tools 34.
+
+### Camino C — Servirlo desde tu instancia Argus
+
+Después de obtener el APK por A o B, copialo a:
+```
+web_app/static/dist/argus-android.apk
+```
+
+Y `https://tu-dominio/descargar/android` lo va a servir directamente con
+QR escaneable desde el móvil.
+
+---
+
+## Instalación en el teléfono (sideload)
+
+1. **Habilitar fuentes desconocidas**: Ajustes ▸ Apps ▸ Tu navegador o
+   gestor de archivos ▸ "Permitir instalar apps desconocidas".
+2. Abrir el `.apk` en el móvil → "Instalar".
+3. Lanzar Argus Scanner.
+4. **Onboarding**:
+   - Otorgar "Acceso a archivos" (te lleva a Ajustes especiales).
+   - Otorgar "Acceso al uso de apps" (te lleva a Ajustes ▸ Acceso especial).
+5. **Iniciar scan**:
+   - Pegar el token que te dio el staff.
+   - Toggle "Adjuntar screenshot" (default ON — pide consent al SO).
+   - Tap "Iniciar scan" → consent dialog de captura → scan corre ~30s.
+   - Resultado en pantalla + subido al panel automáticamente.
+
+> Si tenés el bot Discord, podés saltarte el paso del token usando un
+> link `argus://scan?token=XXX` que abre la app con el token ya pegado.
+
+---
+
+## Roadmap Pack 27+ (próximas iteraciones, baja prioridad)
+
+- **#3 MediaStore IS_TRASHED**: query del provider de media para listar
+  archivos en papelera del SO (Android 11+). Complementa la cobertura
+  de carpetas .recycle de file managers que ya está.
+- **APK release firmada**: build pipeline con keystore en GitHub Secrets
+  + auto-publish en GitHub Releases nightly. Hoy solo tenemos debug.
+- **Play Store AAB**: opcional, requiere review de Google con descripción
+  detallada de PACKAGE_USAGE_STATS y QUERY_ALL_PACKAGES (políticas
+  estrictas de anti-cheat).
+- **Modo --scan-self**: smoke test sin token contra mock backend.
+- **Refresh dinámico de hack-terms**: descargar `/api/scanner-rules`
+  desde el backend para que cuando aparezca un cheat client nuevo no
+  haya que recompilar la APK.
 
 ---
 
