@@ -218,9 +218,11 @@ NOTA DE LECTURA
         NVIDIA Experience, AMD Adrenalin, Intel ARC, Steam, Epic Games,
         Discord, Spotify, OBS Studio, Streamlabs.
 
-[ ]  2. Whitelist por publisher Authenticode válido:
+[X]  2. Whitelist por publisher Authenticode válido:
         NVIDIA Corp, AMD Inc, Microsoft, Mojang, Epic Games, Valve, Discord
         Inc → reduce score automáticamente sin importar otras señales.
+        ✓ DONE (lite) v1.6.34 — _TRUSTED_PUBLISHERS + is_trusted_publisher()
+        + integrado en scan_deleted_recycle (descarta FP si firmado).
 
 [ ]  3. Distinguir "killaura" como nombre de archivo legítimo
         (skin pack llamado killaura.png o textura) vs ejecutable malicioso
@@ -315,8 +317,9 @@ NOTA DE LECTURA
 [ ] 29. Filtro contextual TLauncher: en zonas de bajo poder adquisitivo,
         TLauncher es FP recurrente. Marcar como advisory pero no banear.
 
-[ ] 30. Filtrar el screenshotter del propio Argus para no detectarse a sí
+[X] 30. Filtrar el screenshotter del propio Argus para no detectarse a sí
         mismo (ArgusScanner.exe, MinecraftSSTool.exe, sus hijos PowerShell).
+        ✓ DONE v1.6.34 — _SELF_TOKENS + _is_argus_self() en scan_file_activity_log.
 
 [ ] 31. Filtros custom por empresa: cada cliente puede sumar paths/hashes
         a su whitelist privada (ej. herramientas internas de admin).
@@ -339,9 +342,12 @@ NOTA DE LECTURA
 [ ] 37. Diferenciar ".rise" como extensión de archivo (raro) vs ".rise"
         como folder (Rise client config folder). Solo flagear .rise si es ext.
 
-[ ] 38. Smart match en hack_terms: solo flag si el término es palabra
+[X] 38. Smart match en hack_terms: solo flag si el término es palabra
         completa (regex \bvertex\b), no substring. Evita FP en
         "vertexshader.frag", "matrix-multiply.bat", etc.
+        ✓ DONE v1.6.34 — smart_hack_match() con (?<![a-z0-9])TERM(?![a-z0-9])
+        + variante \.TERM para nombres dotted. Aplicado en scan_deleted_recycle
+        y scan_prefetch_all. 12/12 casos en smoke test.
 
 [ ] 39. Filtro contextual temporal: si un .exe sospechoso fue ejecutado AL
         MISMO TIEMPO que javaw.exe → score++. Si fue ejecutado el día
@@ -363,8 +369,10 @@ NOTA DE LECTURA
 [ ] 44. Modo "torneo" más estricto vs modo "casual" más permisivo:
         threshold y peso de heurísticas distinto por flag del scan.
 
-[ ] 45. Excluir paths de recovery de Windows: C:\Recovery, C:\$WINDOWS.~BT,
+[X] 45. Excluir paths de recovery de Windows: C:\Recovery, C:\$WINDOWS.~BT,
         C:\$WINDOWS.~WS, C:\$Windows.~Q, C:\PerfLogs.
+        ✓ DONE v1.6.35 — _RECOVERY_TOKENS + _is_os_recovery_noise() en
+        scan_file_activity_log (incluye DiagTrack, EventCache, $Sysreset).
 
 [ ] 46. Detectar si el host es Windows Server y bajar peso de heurísticas
         que asumen entorno desktop (un staff puede correr el scanner desde
@@ -379,8 +387,9 @@ NOTA DE LECTURA
 [ ] 49. Mejor parser de USN Journal: ignorar transactions de Windows Update
         (TrustedInstaller, wuauclt) y System Restore.
 
-[ ] 50. Mejor parser de Prefetch: ignorar PF files de Microsoft Edge,
+[X] 50. Mejor parser de Prefetch: ignorar PF files de Microsoft Edge,
         Defender, Windows Search Indexer (basura común que no aporta).
+        ✓ DONE v1.6.35 — _PF_NOISE_PREFIXES con ~25 binarios del SO.
 
 [ ] 51. Filtrar entradas de scan_file_activity_log que sean del propio
         Argus (su propio log, screenshot, json output, dist/ArgusScanner.exe).
@@ -434,11 +443,17 @@ NOTA DE LECTURA
 [ ]  4. Animación staggered fade-in al cargar resultados de un scan
         (cada card aparece con delay incremental).
 
-[ ]  5. Skeleton loaders en cards mientras llega data del backend
+[X]  5. Skeleton loaders en cards mientras llega data del backend
         (en lugar de "Cargando…" plano).
+        ✓ DONE v1.6.34 — argus-ui.js renderSkeleton() reusable + CSS
+        .argus-skel con shimmer animation. Loader de tabla scans ya existía,
+        ahora hay helper unificado para el resto del panel.
 
-[ ]  6. Sistema de toasts elegante con stacking, auto-dismiss y action
+[X]  6. Sistema de toasts elegante con stacking, auto-dismiss y action
         button (en lugar de alert() del browser).
+        ✓ DONE v1.6.34 — argus-ui.js showToast() + override de window.alert
+        que detecta tipo (success/warning/error/info) por prefijo emoji.
+        Sustitución global automática de las 25+ llamadas alert() existentes.
 
 [ ]  7. Modal de confirmación con backdrop blur consistente entre
         veredictos, eliminación de tokens, etc.
@@ -497,8 +512,12 @@ NOTA DE LECTURA
 [ ] 24. Splash sonoro opcional (toggleable) al finalizar scan
         (notify.wav suave).
 
-[ ] 25. Empty states ilustrados (SVG custom) cuando no hay scans, no
+[X] 25. Empty states ilustrados (SVG custom) cuando no hay scans, no
         hay tokens, no hay actividad — en lugar de texto gris plano.
+        ✓ DONE v1.6.34 — argus-ui.js renderEmptyState() + 8 iconos SVG
+        (box, search, shield, file, clock, plug, folder, sparkles).
+        Aplicado en listado de scans (con CTA "Limpiar filtros" si hay
+        filtros aplicados) y en historial de actividad de archivos.
 
 [ ] 26. Confeti animado sutil al confirmar veredicto CLEAN
         (premio visual al staff por trabajo limpio).
@@ -510,8 +529,11 @@ NOTA DE LECTURA
         resumen del scan (logo, jugador, veredicto, evidencias top)
         para postear directo en Discord.
 
-[ ] 29. Botón "Copiar enlace al scan" con feedback visual
+[X] 29. Botón "Copiar enlace al scan" con feedback visual
         (toast verde "Copiado!" + ícono check temporal).
+        ✓ DONE v1.6.35 — botón en panel de detalles + copyScanLink()
+        usando Clipboard API con fallback. Bonus: deep-link automático
+        via ?scan=<id> en la URL (bookmarkeable / compartible).
 
 [ ] 30. QR code del enlace al scan en el modal de share, para abrir
         en otro device sin tipear URL.
@@ -525,8 +547,11 @@ NOTA DE LECTURA
 [ ] 33. Densidad ajustable: cómoda / normal / compacta — staff con
         muchos scans/día prefiere compacta.
 
-[ ] 34. Animación del logo Argus en hover: rotación suave del aro
+[X] 34. Animación del logo Argus en hover: rotación suave del aro
         (orbital ring) y respiración del centro.
+        ✓ DONE v1.6.35 — argus-logo-breathe (idle 5.4s) que se acelera
+        a 2.2s en hover + lift + glow dorado intenso + letter-spacing
+        del texto. Respeta prefers-reduced-motion.
 
 [ ] 35. Halo de luz dorada/bronce sutil siguiendo el cursor en el
         index hero (parallax light effect).
@@ -705,12 +730,17 @@ Linux: Arch, Ubuntu, Fedora, etc.).
   RESUMEN
 ═══════════════════════════════════════════════════════════════════════════════
 
-  Scanner ............................. 60 ítems   (detección)
-  Filtro .............................. 60 ítems   (anti-FP)
-  Visual .............................. 60 ítems   (UI/UX)
-  Plataforma (Linux) .................. 15 ítems   (multiplataforma)
+  Scanner ............................. 60 ítems   (detección)       0/60
+  Filtro .............................. 60 ítems   (anti-FP)         5/60
+  Visual .............................. 60 ítems   (UI/UX)           5/60
+  Plataforma (Linux) .................. 15 ítems   (multiplataforma) 0/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems
+  TOTAL ............................... 195 ítems  COMPLETADOS:    10/195
+
+ÚLTIMA SESIÓN (07-may-2026)
+  Filtro #2 lite, #30, #38, #45, #50
+  Visual #5, #6, #25, #29, #34
+  → 2 commits, 2 builds (1.6.34 y 1.6.35), todos en producción.
 
 PRIORIZACIÓN SUGERIDA (top 10 con mayor ROI inmediato)
 ──────────────────────────────────────────────────────
