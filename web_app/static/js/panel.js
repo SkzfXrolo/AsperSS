@@ -3090,7 +3090,7 @@ function renderIssuePage(container, scanId) {
         const count = c === 'all' ? all.length : all.filter(r => (r.issue_category || 'Otro') === c).length;
         const active = _issuesFilter === c;
         const accent = _catColors[c] || '#B87333';
-        return `<button onclick="_setIssueFilter('${c}',${scanId})" style="
+        return `<button class="argus-chip-tab" role="tab" aria-selected="${active}" tabindex="${active ? '0' : '-1'}" onclick="_setIssueFilter('${c}',${scanId})" style="
             font-size:11px;padding:4px 10px;border-radius:20px;cursor:pointer;font-weight:600;
             border:1px solid ${active ? accent : 'var(--border-m)'};
             background:${active ? accent + '22' : 'var(--bg-t)'};
@@ -3200,7 +3200,7 @@ function renderIssuePage(container, scanId) {
         </div>` : filtered.length > 0 ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--text-d);">— ${filtered.length} hallazgo(s) total —</div>` : '';
 
     container.innerHTML = `
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border);">${chips}</div>
+        <div class="argus-chip-tabs" role="tablist" aria-label="Filtrar hallazgos por categoría" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border);">${chips}</div>
         <div class="issues-stagger-host" style="display:flex;flex-direction:column;gap:6px;">${rows || '<div style="padding:20px;text-align:center;color:var(--text-d);font-size:12px;">Sin hallazgos en esta categoría.</div>'}</div>
         ${loadMoreBtn}`;
     // Visual #4 — staggered fade-in en results recién renderizados.

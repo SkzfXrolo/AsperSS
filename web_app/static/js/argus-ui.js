@@ -1202,6 +1202,45 @@
     }
 
 
+    // ── Visual #34 — Keyboard navigation en chip-tabs ────────────────────────
+    // Cualquier contenedor con class "argus-chip-tabs" gana navegación por
+    // teclado: ←/→ mueven el foco entre tabs, Home/End van al primero/último,
+    // Enter/Space activan la tab focalizada (delegado a click()). Patrón
+    // ARIA standard: solo el tab activo tiene tabindex=0; el resto -1, así
+    // Tab del browser entra y sale del tablist completo.
+    document.addEventListener('keydown', function (e) {
+        const t = e.target;
+        if (!(t instanceof HTMLElement)) return;
+        const tab = t.classList && t.classList.contains('argus-chip-tab') ? t
+                  : (t.classList && t.classList.contains('equipo-tab') ? t : null);
+        if (!tab) return;
+        const list = tab.closest('.argus-chip-tabs');
+        if (!list) return;
+        const items = Array.from(list.querySelectorAll('.argus-chip-tab, .equipo-tab'))
+            .filter(el => !el.disabled);
+        if (!items.length) return;
+        const idx = items.indexOf(tab);
+        let next = -1;
+        const k = (e.key || '').toLowerCase();
+        if (k === 'arrowright' || k === 'arrowdown') next = (idx + 1) % items.length;
+        else if (k === 'arrowleft' || k === 'arrowup') next = (idx - 1 + items.length) % items.length;
+        else if (k === 'home') next = 0;
+        else if (k === 'end')  next = items.length - 1;
+        else if (k === 'enter' || k === ' ') {
+            e.preventDefault();
+            tab.click();
+            return;
+        }
+        if (next >= 0) {
+            e.preventDefault();
+            // Solo reasignamos foco; la activación ocurre con Enter (no con
+            // las flechas) para no disparar fetches involuntarios.
+            items.forEach((el, i) => { el.setAttribute('tabindex', i === next ? '0' : '-1'); });
+            items[next].focus();
+        }
+    });
+
+
     // ── Visual #22 — Loading states más informativos ─────────────────────────
     // argusUI.renderLoading(target, {title, sub, size}) renderiza un bloque
     // <div.argus-loading> con anillo bronce giratorio + título + subtitulo.

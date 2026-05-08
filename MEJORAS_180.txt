@@ -333,9 +333,28 @@ NOTA DE LECTURA
 [ ] 10. Detectar patrones "test", "prueba", "demo", "ejemplo" en filename
         + extensión inocua (.txt, .docx) → no flag.
 
-[ ] 11. Aprendizaje incremental por feedback: si staff marca un FP, guardar
+[X] 11. Aprendizaje incremental por feedback: si staff marca un FP, guardar
         (filename_pattern, extension, parent_hash) y aplicar en futuros scans
         de la misma empresa.
+        DONE v1.6.49 (Pack 22) — La tabla learned_patterns existía y
+        _get_learned_legit_paths() la leía con cache 5min, pero NO se
+        estaba usando en _is_server_false_positive. Ahora se aplica:
+          • Integración en _is_server_false_positive: si el path/nombre
+            del result contiene cualquier learned legit path → FP.
+            Aplica retroactivamente a scans existentes via
+            _scrub_results_for_display.
+          • Endpoint POST /api/staff/learn-fp: recibe {path, name,
+            fragment} y guarda en learned_patterns con type=
+            'legitimate_path' y category='manual_fp'. Auto-deriva el
+            fragmento (últimos 2 componentes del path) si no se manda.
+            Si ya existe el patrón, incrementa learned_from_count.
+            Invalida la caché in-memory para que aplique inmediato.
+            Restringido a admin/company-admin. Auditado en
+            staff_audit_log con action='learn_fp'.
+        Nota: la tabla learned_patterns NO tiene company_id, así que
+        los patrones aprendidos son globales (intencional para
+        cross-empresa learning rápido). El audit log queda con quién
+        lo enseñó.
 
 [ ] 12. Consenso global: si un hash aparece en >50 scans de >10 empresas
         sin haber sido nunca marcado como cheat → auto-whitelist global.
@@ -1069,11 +1088,17 @@ NOTA DE LECTURA
 
 [~] 53. Soporte completo de teclado en navegación del panel
         (Tab + Enter en cards, Esc cierra modales, flechas en listas).
-        PARTIAL v1.6.38 — Esc cierra cualquier .modal.active globalmente
-        (handler en argus-ui.js). Click en backdrop también cierra.
-        Quicksearch tiene navegación ↑↓/Enter/Esc completa.
-        TODO: agregar tabindex y Enter en cards de scans, flechas
-        en listas de logs. (Half-done por ahora.)
+        PARTIAL v1.6.49 (Pack 22) — Avances:
+          • Esc cierra cualquier .modal.active globalmente.
+          • Quicksearch (Cmd+K) tiene ↑↓/Enter/Esc completa.
+          • Argus-confirm modal (Pack 17): Esc/Enter operativos.
+          • V#34 (Pack 22): chip-tabs ahora tienen ←→/Home/End/Enter
+            navegación. Aplicado a chips de filtro de hallazgos
+            por categoría y a equipo-tabs (Miembros / Mi Empresa).
+            El handler global en argus-ui.js detecta foco sobre
+            .argus-chip-tab o .equipo-tab y mueve roving tabindex.
+        TODO: extender a cards de scans (cada row de la tabla
+        debería ser focusable + Enter abre detalle).
 
 [X] 54. Respetar prefers-reduced-motion: animaciones se desactivan
         automáticamente para usuarios que lo configuran.
@@ -1225,11 +1250,11 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 ═══════════════════════════════════════════════════════════════════════════════
 
   Scanner ............................. 60 ítems   (detección)      14/60
-  Filtro .............................. 60 ítems   (anti-FP)        27/60
+  Filtro .............................. 60 ítems   (anti-FP)        28/60
   Visual .............................. 60 ítems   (UI/UX)          39/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    89/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    90/195
                                                   (5 parciales: S#9, V#3, V#32, V#43, V#53)
                                                   (6 bonus: scanner_version chip,
                                                    argusUI.confirm, argusUI.typewriter,
@@ -1251,6 +1276,38 @@ Linux: Arch, Ubuntu, Fedora, etc.).
                                                   (AppImage/Flatpak/deb), #14 (CI Docker)
 
 SESIÓN DEL 08-may-2026:
+  Pack 22 (v1.6.49): Filter #11 + Visual #34 (V#53 PARTIAL avanzado).
+                    Filter #11 — Aprendizaje incremental:
+                      * _get_learned_legit_paths() existía con cache
+                        5min pero NO se estaba aplicando en
+                        _is_server_false_positive. Ahora SÍ — los paths
+                        marcados como legítimos por staff filtran
+                        retroactivamente todos los scans (vía
+                        _scrub_results_for_display).
+                      * Endpoint POST /api/staff/learn-fp recibe
+                        {path, name, fragment}; auto-deriva fragmento
+                        (últimos 2 components) si no viene; incrementa
+                        learned_from_count si ya existe; invalida la
+                        caché in-memory; auditado en staff_audit_log
+                        action='learn_fp'. Restringido a admin/
+                        company-admin.
+                    Visual #34 — Keyboard nav en chip-tabs:
+                      * Handler global en argus-ui.js detecta foco
+                        sobre .argus-chip-tab o .equipo-tab y aplica
+                        ←/→ Home/End/Enter. Roving tabindex (solo el
+                        tab activo tiene tabindex=0).
+                      * Aplicado a:
+                        - Chips de filtro de hallazgos por categoría
+                          (panel.js renderIssuePage): added role="tab",
+                          aria-selected, tabindex y class
+                          .argus-chip-tab. Container con role="tablist"
+                          aria-label.
+                        - Equipo-tabs en panel.html: agregada class
+                          .argus-chip-tabs y role="tablist".
+                    panel.html: argus-ui.js v=12, panel.js v=63.
+                    → 1 visual completado (V#34) + 1 filtro (F#11)
+                      + V#53 avanzado de PARTIAL.
+
   Pack 21 (v1.6.49): Filter #13, #14, #15, #16, #17 — Whitelists
                     server-side de software legítimo (sin recompilar .exe).
                     Ventaja clave: estas whitelists viven en

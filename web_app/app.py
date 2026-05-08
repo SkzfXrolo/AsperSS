@@ -3414,6 +3414,19 @@ def _is_server_false_positive(result: dict) -> bool:
 
     if any(frag in combined for frag in _SERVER_FP_FRAGMENTS):
         return True
+
+    # Filter #11 — Aprendizaje incremental por feedback. Las rutas marcadas
+    # como 'legitimate_path' por el staff (vía learned_patterns) se aplican
+    # ahora retroactivamente a TODOS los scans servidos. La función ya
+    # existía pero no se llamaba. Cache de 5 min en _get_learned_legit_paths
+    # evita el round-trip a BD por cada result.
+    try:
+        learned = _get_learned_legit_paths()
+        if learned and any(frag in combined for frag in learned):
+            return True
+    except Exception:
+        pass
+
     return False
 
 
@@ -9085,6 +9098,87 @@ def get_staff_audit_log():
                     'ip': r[6], 'created_at': str(r[7]) if r[7] else None,
                 })
         return jsonify({'entries': entries, 'total': total, 'page': page, 'per_page': per_page}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ── Filter #11 — Aprendizaje incremental: enseñar un path como FP ──────────
+# El staff abre un scan, ve un FP claro (ej: "Game.exe" en
+# "C:\Apps\MiAppLegit\bin\Game.exe") y lo marca como FP. El backend guarda
+# un fragmento del path (la carpeta padre normalizada) en learned_patterns
+# con type='legitimate_path'. _is_server_false_positive() lo aplicará a
+# TODOS los scans futuros y a los actuales via _scrub_results_for_display.
+# Cache de _get_learned_legit_paths se invalida automáticamente en 5 min.
+@app.route('/api/staff/learn-fp', methods=['POST'])
+@login_required
+def learn_fp_path():
+    if not is_admin(session.get('user_id')) and \
+       not is_company_admin(session.get('user_id'), session.get('company_id')):
+        return jsonify({'error': 'Acceso denegado'}), 403
+    data = request.get_json(silent=True) or {}
+    raw_path = (data.get('path') or '').strip()
+    raw_name = (data.get('name') or '').strip()
+    fragment = (data.get('fragment') or '').strip().lower()
+    if not fragment:
+        # Auto-deriva el fragmento: tomamos el último directorio del path
+        # y el nombre del archivo, p.ej "lunarclient\\game.exe".
+        src = (raw_path or raw_name).replace('/', '\\').lower()
+        if not src:
+            return jsonify({'error': 'Falta path/name/fragment'}), 400
+        parts = src.split('\\')
+        # Tomamos los últimos 2 componentes (carpeta + archivo) para tener
+        # un fragmento descriptivo pero específico.
+        fragment = '\\'.join(parts[-2:]) if len(parts) >= 2 else parts[-1]
+    if len(fragment) < 4:
+        return jsonify({'error': 'Fragmento demasiado corto (mín 4 chars)'}), 400
+    fragment = fragment[:255]
+    try:
+        with get_api_db_cursor() as cur:
+            # Schema: learned_patterns sin company_id, así que el patrón es
+            # global. Esto es intencional para acelerar el aprendizaje
+            # cross-empresa, pero lo registramos quien lo enseñó vía
+            # staff_audit_log para auditabilidad.
+            cur.execute(
+                "SELECT id FROM learned_patterns WHERE pattern_type = 'legitimate_path' "
+                f"AND lower(pattern_value) = {_PH}",
+                (fragment,)
+            )
+            existing = cur.fetchone()
+            if existing:
+                # Ya existe: incrementamos learned_from_count y reactivamos
+                eid = existing[0] if not isinstance(existing, dict) else existing.get('id')
+                cur.execute(
+                    "UPDATE learned_patterns SET learned_from_count = learned_from_count + 1, "
+                    f"last_updated_at = NOW(), is_active = TRUE WHERE id = {_PH}",
+                    (eid,)
+                )
+                action = 'incremented'
+            else:
+                cur.execute(
+                    "INSERT INTO learned_patterns "
+                    "(pattern_type, pattern_value, pattern_category, confidence, is_active) "
+                    f"VALUES ('legitimate_path', {_PH}, 'manual_fp', 1.0, TRUE)",
+                    (fragment,)
+                )
+                action = 'inserted'
+
+        # Invalidar caché in-memory para que aplique YA al próximo scan
+        try:
+            _lp_cache['ts'] = 0.0
+        except Exception:
+            pass
+
+        try:
+            _log_staff_action('learn_fp', detail=f"path_fragment={fragment} action={action}")
+        except Exception:
+            pass
+
+        return jsonify({
+            'ok': True,
+            'fragment': fragment,
+            'action': action,
+            'note': 'Aplicará a scans futuros y se filtrará retroactivamente al servirlos.',
+        }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

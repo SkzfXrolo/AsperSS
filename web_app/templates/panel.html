@@ -722,8 +722,8 @@
 
         <!-- Equipo Section (Staff + Empresa unificados) -->
         <section class="panel-section" id="equipo-section">
-            <!-- Tabs de navegación -->
-            <div class="equipo-tabs" id="equipo-tabs">
+            <!-- Tabs de navegación · V#34 keyboard nav (argus-chip-tabs) -->
+            <div class="equipo-tabs argus-chip-tabs" id="equipo-tabs" role="tablist" aria-label="Secciones de equipo">
                 {% if staff_role in ('admin','owner') %}
                 <button class="equipo-tab active" data-equipo-tab="miembros" onclick="showEquipoTab('miembros')">
                     <svg width="15" height="15" viewBox="0 0 18 18" fill="none">
@@ -2406,8 +2406,8 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=11"></script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=62"></script>
+    <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=12"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=63"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────
