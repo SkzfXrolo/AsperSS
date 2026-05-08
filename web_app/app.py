@@ -10480,24 +10480,58 @@ def get_ai_maintenance_dryrun():
 @app.route('/api/admin/ai-maintenance/run', methods=['POST'])
 @login_required
 def run_ai_maintenance():
-    """EJECUTA mantenimiento (decay + cleanup + recompute) — admin only."""
+    """EJECUTA mantenimiento (decay + cleanup + recompute) — admin only.
+    body opcional: {notify_discord: true, include_metrics: true}
+    """
     if not is_admin(session.get('user_id')):
         return jsonify({'error': 'Acceso denegado'}), 403
     if not _AI_MAINT_AVAILABLE:
         return jsonify({'error': 'ai_maintenance no cargado'}), 503
+    body = request.get_json(silent=True) or {}
+    notify_discord  = bool(body.get('notify_discord', False))
+    include_metrics = bool(body.get('include_metrics', True))
     try:
         with get_api_db_cursor() as cur:
             report = _ai_maint.run_maintenance(cur, dry_run=False)
+            metrics_block = None
+            if include_metrics and _AI_QUALITY_AVAILABLE:
+                try:
+                    metrics_block = {
+                        'metrics':    _ai_quality.get_quality_metrics(cur, since_days=90),
+                        'suggestion': None,
+                        'retrain':    None,
+                    }
+                    metrics_block['suggestion'] = _ai_quality.suggest_threshold_adjustment(metrics_block['metrics'])
+                    cur.execute("SELECT COUNT(*) FROM scans WHERE verdict IN ('clean','hack') AND ensemble_data IS NOT NULL")
+                    vrow = cur.fetchone()
+                    vsince = int(_row_get(vrow, 0, 'count') or 0)
+                    metrics_block['retrain'] = _ai_quality.should_retrain_rf(
+                        metrics_block['metrics'], last_train_at=None, verdicts_since_train=vsince
+                    )
+                except Exception:
+                    metrics_block = None
+
+        webhook_status = None
+        if notify_discord:
+            try:
+                webhook_status = _ai_maint.send_health_webhook(report, metrics=metrics_block)
+            except Exception as _e_w:
+                webhook_status = {'sent': False, 'error': str(_e_w)}
+
         try:
             _log_staff_action(
                 'ai_maintenance_run',
                 detail=str(report.get('decay_hack', {})) +
                        ' / ' + str(report.get('legit_decay', {})) +
-                       ' / ' + str(report.get('cooldown_cleanup', {}))
+                       ' / ' + str(report.get('cooldown_cleanup', {})) +
+                       (f' / discord={webhook_status.get("sent")}' if webhook_status else '')
             )
         except Exception:
             pass
-        return jsonify({'ok': True, 'report': report}), 200
+        out = {'ok': True, 'report': report}
+        if metrics_block:    out['metrics'] = metrics_block
+        if webhook_status:   out['webhook'] = webhook_status
+        return jsonify(out), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

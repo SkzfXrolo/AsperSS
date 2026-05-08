@@ -359,3 +359,101 @@ def run_maintenance(cursor, dry_run: bool = False) -> dict:
         'index_suggestions': suggest_db_indexes(cursor),
     }
     return report
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Discord webhook helper — envía un embed con el reporte de salud de
+# la IA. Pack 38. Usa DISCORD_DEPLOY_WEBHOOK como canal por defecto
+# (se puede sobreescribir con DISCORD_AI_HEALTH_WEBHOOK).
+# ──────────────────────────────────────────────────────────────────────
+def send_health_webhook(report: dict, metrics: Optional[dict] = None,
+                         webhook_url: Optional[str] = None) -> dict:
+    """Envía un embed Discord con resumen de salud IA.
+    Retorna {sent: bool, status: int, error: str}.
+    """
+    import os
+    import json as _json
+    out = {'sent': False, 'status': 0, 'error': ''}
+    url = webhook_url or os.environ.get('DISCORD_AI_HEALTH_WEBHOOK', '').strip() \
+                       or os.environ.get('DISCORD_DEPLOY_WEBHOOK', '').strip()
+    if not url:
+        out['error'] = 'No webhook URL set (DISCORD_AI_HEALTH_WEBHOOK / DISCORD_DEPLOY_WEBHOOK)'
+        return out
+
+    # Construir embed
+    fields = []
+    dh = report.get('decay_hack', {}) or {}
+    fields.append({
+        'name':  '🧹 Decay learned_hack_patterns',
+        'value': f"30d: {dh.get('decayed_30d', 0)} · 90d: {dh.get('decayed_90d', 0)} · "
+                 f"deactivated: {dh.get('deactivated', 0)}",
+        'inline': False,
+    })
+    ld = report.get('legit_decay', {}) or {}
+    fields.append({
+        'name':  '🌿 Legit patterns desactivados',
+        'value': f"{ld.get('deactivated', 0)} (>120d sin uso, count<=2)",
+        'inline': True,
+    })
+    tr = report.get('trust_recompute', {}) or {}
+    fields.append({
+        'name':  '⚖️ staff_trust recompute',
+        'value': f"{tr.get('updated', 0)} rows",
+        'inline': True,
+    })
+    cc = report.get('cooldown_cleanup', {}) or {}
+    fields.append({
+        'name':  '❄️ Cooldowns reseteados',
+        'value': f"{cc.get('reset', 0)} empresas (>24h sin event)",
+        'inline': True,
+    })
+    if metrics:
+        m = metrics.get('metrics', {}) or {}
+        precision = m.get('precision'); recall = m.get('recall')
+        f1 = m.get('f1'); drift = m.get('drift_score')
+        pct = lambda v: f'{v*100:.1f}%' if v is not None else '—'
+        fields.append({
+            'name':  '📊 Calidad ensemble (último período)',
+            'value': f"P={pct(precision)} · R={pct(recall)} · F1={pct(f1)} · "
+                     f"drift={pct(drift)} · n={m.get('total_evaluated', 0)}",
+            'inline': False,
+        })
+        retr = metrics.get('retrain', {}) or {}
+        if retr.get('should_retrain'):
+            fields.append({
+                'name':  '🔄 Retrain RF recomendado',
+                'value': f"Urgency: **{retr.get('urgency', 'low')}**\n" +
+                         '\n'.join('• ' + r for r in (retr.get('reasons') or [])),
+                'inline': False,
+            })
+
+    color = 0x22c55e  # verde por defecto
+    if metrics:
+        drift = (metrics.get('metrics', {}) or {}).get('drift_score')
+        if drift is not None and drift > 0.30:
+            color = 0xef4444  # rojo
+        elif drift is not None and drift > 0.20:
+            color = 0xfbbf24  # amarillo
+
+    payload = {
+        'username':   'Argus AI Health',
+        'avatar_url': 'https://asperss.onrender.com/static/img/logo.png',
+        'embeds': [{
+            'title':       '🧠 Argus AI · Reporte de mantenimiento',
+            'description': ('Modo: ' + ('🧪 dry-run' if report.get('dry_run') else '✅ aplicado'))
+                            + '\nAcción ejecutada por staff admin.',
+            'color':       color,
+            'fields':      fields,
+            'footer': {'text': 'Pack 32-38 · Trust + Quality + Autolearn + Maintenance'},
+        }]
+    }
+    try:
+        import requests as _rq
+        r = _rq.post(url, json=payload, timeout=10)
+        out['status'] = r.status_code
+        out['sent']   = (200 <= r.status_code < 300)
+        if not out['sent']:
+            out['error'] = f'HTTP {r.status_code}: {r.text[:200]}'
+    except Exception as e:
+        out['error'] = str(e)
+    return out

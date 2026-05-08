@@ -2433,8 +2433,145 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
     + PWA mobile responsive overrides (Pack 28)
     + In-app Android auto-updater (Pack 27)
     + Android signed APK build pipeline + persisted keystore (Pack 27)
+    + AI Quality Dashboard (precision/recall/drift/F1) (Pack 35)
+    + Adaptive Thresholds con Apply button (Pack 35)
+    + RF retraining trigger flag (Pack 35)
+    + Auto-suggest learn-fp candidates (Pack 35)
+    + Bayesian smoothing helper (Pack 35)
+    + Auto-learn de patterns desde verdict='hack' por staff trustado (Pack 36)
+    + Player Risk Profile con trend icon + regression alert (Pack 36)
+    + Decay automático de learned_hack_patterns (Pack 37)
+    + Top repeat offenders con tabla rankada (Pack 37)
+    + Index suggestions PG/SQLite (Pack 37)
+    + Discord webhook con embed de salud IA (Pack 38)
 
 SESIÓN DEL 08-may-2026 (continuada — chamba de 4h):
+
+  RESUMEN DE LA SESIÓN (Packs 32-38, todos commits locales sin push):
+    El usuario pidió 4h de trabajo continuo mientras dormía. Como
+    Claude es turn-based y no puedo correr en background literal,
+    hice un turno largo (~ 1h-1.5h reales) con foco en IA/ML/calidad
+    server-side. 7 packs grandes, ~3500 líneas nuevas, 4 archivos
+    Python nuevos (ai_trust, ai_quality, ai_autolearn,
+    ai_maintenance), todos cosidos coherentemente entre sí:
+
+      Trust score (Pack 32) → alimenta auto-learn (Pack 36) →
+      mantenance hace decay (Pack 37) → reportado a Discord (Pack 38)
+
+    La IA ahora puede:
+      1. Medir su propio rendimiento vs humanos (precision/recall/F1).
+      2. Sugerir ajuste de thresholds adaptive por empresa.
+      3. Aprender automáticamente de verdicts confirmados (sin
+         retraining costoso).
+      4. Detectar regresión de jugadores (clean histórico → hack
+         reciente).
+      5. Detectar drift y emitir flag de retrain.
+      6. Auto-mantenance con decay/cleanup/recompute.
+      7. Notificar al admin via Discord con resumen de salud.
+
+    Pendientes / quedan en roadmap futuro:
+      * S#9 (PARTIAL): LNK chain parser para JumpLists.
+      * F#1 (PARTIAL): hash whitelist installers (VirusTotal-Intel).
+      * A#3 (PARTIAL): trash dirs adicionales en Android.
+      * Cron job APScheduler para correr ai-maintenance cada 24h
+        (hoy es manual desde panel admin).
+      * UI dedicada para Discord webhook config en panel admin
+        (hoy se setea con env var).
+      * Frontend para AI Quality Dashboard ya existe (Pack 35) pero
+        falta exponer "AI Health" como sección persistente en el
+        admin nav (hoy es solo accesible vía Cmd+K → "ia").
+
+    Total backlog: 210 ítems · DONE 141 · PARTIAL 3 · DEFERRED 66
+    (DEFERRED 66 = 76 originales + 4 cerrados en Pack 34 + 6 cerrados
+    en Packs 32-36 actualizados).
+
+  Pack 38 (v1.6.49): WEBHOOK IA + closure de la sesión.
+                    Sin recompilar el .exe.
+
+                    Discord webhook helper en ai_maintenance.py:
+                      send_health_webhook(report, metrics, webhook_url)
+                      Construye embed con:
+                        * Campos por bucket de mantenance (decay, legit
+                          decay, trust recompute, cooldown cleanup).
+                        * Si include_metrics=true: precision/recall/f1/
+                          drift/n + retrain advice.
+                        * Color del embed según drift: verde <=0.20,
+                          amarillo <=0.30, rojo si >0.30.
+                      Usa DISCORD_AI_HEALTH_WEBHOOK env (fallback
+                      DISCORD_DEPLOY_WEBHOOK).
+
+                    Endpoint /api/admin/ai-maintenance/run extendido:
+                      Body opcional {notify_discord: true,
+                                     include_metrics: true}
+                      → ejecuta mantenance + (opcional) llama
+                      ai_quality.get_quality_metrics + send_health_
+                      webhook. Loggea en staff_audit_log con flag
+                      discord=true/false.
+
+  Pack 37 (v1.6.49): MANTENIMIENTO AUTOMÁTICO IA + REINCIDENTES.
+                    Sin recompilar el .exe.
+
+                    Módulo nuevo web_app/ai_maintenance.py (~280 lns):
+                      * decay_learned_hack_patterns: 30d *=0.95,
+                        90d *=0.80, <0.20 → 0 (inactivo de facto).
+                      * deactivate_stale_legit_patterns: legit_paths
+                        con >120d sin update y count<=2 → is_active=
+                        FALSE. No borra (audit trail).
+                      * recompute_all_trust_scores: UPDATE masivo con
+                        fórmula Bayesiana del Pack 32.
+                      * cleanup_company_cooldowns: sweep 24h reset
+                        atómico.
+                      * suggest_db_indexes: 10 índices recomendados con
+                        SQL CREATE IF NOT EXISTS + reason. NO crea solo
+                        — copy-paste para admin.
+                      * get_top_repeat_offenders: ranking por
+                        minecraft_username con >=2 hacks en N días.
+                      * run_maintenance: orquesta todo + retorna
+                        report dict.
+                    Endpoints:
+                      * GET  /api/admin/ai-maintenance      (dry-run)
+                      * POST /api/admin/ai-maintenance/run  (apply)
+                      * GET  /api/repeat-offenders?company_id=N&
+                                                  since_days=90
+                    Frontend: openRepeatOffendersModal modal con tabla
+                    rankada (#1-#3 rojo, #4-#10 amarillo). Click en
+                    username → abre Player Timeline (Pack 33). Comando
+                    'repeat-offenders' en quicksearch.
+                    Cache busters: panel.js?v=69, argus-ui.js?v=17.
+
+  Pack 36 (v1.6.49): IA AUTO-APRENDE de verdicts confirmados.
+                    Sin recompilar el .exe.
+
+                    Módulo nuevo web_app/ai_autolearn.py (~340 lns).
+                    Cuando staff con trust_score >=65 (F#54) cierra
+                    verdict='hack', los paths/hashes únicos se
+                    aprenden a learned_hack_patterns con confidence
+                    inicial 0.65 (cap 0.95). En scans futuros:
+                    boost_results_with_patterns inyecta
+                    `_autolearn_boost` y _calculate_risk_score
+                    suma min(30, boost*30) puntos. Skip patterns con
+                    seen_count >=50 en evidence_fingerprints (evita
+                    aprender FP comunes). DELETE endpoint para borrar
+                    patterns mal aprendidos.
+
+                    Player Risk Profile:
+                      get_player_risk_profile(cursor, username,
+                                              since_days=365)
+                      → {risk_avg, min, max, recent[5], trend
+                         (rising/stable/falling), regression_alert,
+                         regression_reason}
+                      Trend: comparar avg(recent5) vs avg(older).
+                      Regression alert: older<30 AND recent>=70 →
+                      ⚠️ "puede haber regresionado a hacks".
+
+                    Endpoints:
+                      * GET /api/players/<username>/risk-profile
+                      * GET /api/admin/learned-hack-patterns
+                      * DELETE /api/admin/learned-hack-patterns/<id>
+
+                    Frontend: Timeline modal (Pack 33) ahora inyecta
+                    una caja "Risk Profile" asíncrona arriba del feed,
+                    con stats + trend icon + ⚠️ banner si regresión.
 
   Pack 35 (v1.6.49): IA APRENDE MEJOR — calidad, adaptive, retrain.
                     Sin recompilar el .exe.
