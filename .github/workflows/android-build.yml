@@ -1,17 +1,20 @@
 name: Android APK Build
 
 # Item Android #12 — pipeline CI para compilar el APK debug en cada push
-# que toque mobile/argus_android/. Sube el APK como artifact para que el
-# staff lo descargue desde el run de GH Actions sin tener Android Studio.
+# que toque mobile/argus_android/. Sube el APK como artifact (para devs)
+# Y como GitHub Release rolling tag "android-latest" (para usuarios finales)
+# de modo que /descargar/android en Render redirija a una URL pública estable
+# sin necesidad de token ni de re-deployar Render.
 #
 # Se ejecuta:
 #  - En push a main que cambia mobile/argus_android/** o este workflow
-#  - En PR que toca esos paths
+#  - En PR que toca esos paths (sin publicar release, solo artifact)
 #  - Manualmente vía workflow_dispatch (botón "Run workflow" en GH)
 #
 # Output:
-#  - app-debug.apk como artifact (válido 30 días)
-#  - Log de gradle build con tamaño del APK
+#  - app-debug.apk como artifact (válido 30 días, debug build)
+#  - argus-android.apk en release "android-latest" (URL pública estable
+#    https://github.com/<owner>/<repo>/releases/download/android-latest/argus-android.apk)
 
 on:
   push:
@@ -24,8 +27,11 @@ on:
       - 'mobile/argus_android/**'
   workflow_dispatch:
 
+# Necesario para que softprops/action-gh-release pueda crear/actualizar
+# el release y subir el asset. NO da escritura al código fuente, solo
+# a releases (= GITHUB_TOKEN scoped).
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-debug:
@@ -79,17 +85,45 @@ jobs:
             echo "::error::No se encontró el APK"
             exit 1
           fi
+          # Copiamos el APK con nombre estable para release/asset.
+          # El original (app-debug.apk) lo dejamos para artifact (devs).
+          cp "$APK" app/build/outputs/apk/debug/argus-android.apk
           SIZE_KB=$(du -k "$APK" | cut -f1)
           echo "apk=$APK" >> "$GITHUB_OUTPUT"
+          echo "release_apk=mobile/argus_android/app/build/outputs/apk/debug/argus-android.apk" >> "$GITHUB_OUTPUT"
           echo "size_kb=$SIZE_KB" >> "$GITHUB_OUTPUT"
           echo "## APK Build Result" >> "$GITHUB_STEP_SUMMARY"
           echo "- APK: \`$APK\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tamaño: ${SIZE_KB} KB" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload APK artifact
+      - name: Upload APK artifact (per-commit, 30 day retention)
         uses: actions/upload-artifact@v4
         with:
           name: argus-android-debug-${{ github.sha }}
           path: mobile/argus_android/${{ steps.locate.outputs.apk }}
           retention-days: 30
           if-no-files-found: error
+
+      # Solo publicar release en push a main (no en PRs ni dispatch a otra rama)
+      # — el release "android-latest" siempre apunta al último commit de main.
+      - name: Publish to GitHub Release (rolling tag android-latest)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: "Argus Android — Last build (${{ github.sha }})"
+          body: |
+            APK Argus Android compilado automáticamente desde el commit
+            `${{ github.sha }}` de `main`.
+
+            **Descarga directa**: el botón "Descargar APK" de
+            https://asperss.onrender.com/descargar te trae acá automáticamente.
+
+            Tamaño aproximado: ${{ steps.locate.outputs.size_kb }} KB.
+
+            > Build debug — sin firmar con keystore de release. Para
+            > distribución masiva habría que firmarlo (item Android #15).
+          prerelease: true
+          make_latest: false
+          files: mobile/argus_android/app/build/outputs/apk/debug/argus-android.apk
+          fail_on_unmatched_files: true

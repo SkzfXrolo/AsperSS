@@ -5827,36 +5827,52 @@ def descargar_linux():
 
 
 # ── Plataforma Android #13 — endpoint de descarga ────────────────────────────
+# Tag rolling del release de GitHub que el workflow .github/workflows/
+# android-build.yml mantiene actualizado en cada push a main. La URL del
+# asset es estable y pública (no requiere token), por lo que podemos
+# redirigir aquí sin gastar bandwidth de Render.
+ANDROID_RELEASE_TAG = 'android-latest'
+ANDROID_RELEASE_ASSET = 'argus-android.apk'
+ANDROID_RELEASE_URL = (
+    f'https://github.com/SkzfXrolo/AsperSS/releases/download/'
+    f'{ANDROID_RELEASE_TAG}/{ANDROID_RELEASE_ASSET}'
+)
+
+
 @app.route('/descargar/android')
 def descargar_android():
     """Plataforma Android #13 — sirve el APK Argus Android.
 
-    Busca el APK compilado en `web_app/static/dist/argus-android.apk`. Si
-    no existe (build aún no realizado), devuelve 503 con mensaje claro y
-    un link al endpoint de código fuente. Para Pack 25 el APK puede
-    publicarse vía GH Actions o build manual del proyecto Android Studio.
+    Estrategia de servidos en cascada:
+      1) Si el operador del servidor copió manualmente un APK firmado a
+         `web_app/static/dist/argus-android.apk`, lo servimos directo
+         (use case: dev local, on-prem, o release firmado con keystore).
+      2) Si no, redirigimos 302 al asset estable de GitHub Releases
+         (rolling tag `android-latest`) que el workflow CI mantiene al
+         día con cada push a `main`. Esto cubre el caso por defecto de
+         Render: GH Actions buildea → publica release → este endpoint
+         redirige sin necesidad de redeploy.
+
+    El parámetro `?direct=1` permite forzar la URL absoluta del release
+    (útil para QR / chat apps que no toleran redirects).
     """
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     apk_path = os.path.join(project_root, 'web_app', 'static', 'dist',
                             'argus-android.apk')
-    if not os.path.isfile(apk_path):
-        return jsonify({
-            'error': 'APK aún no compilado en este servidor.',
-            'note': ('La APK Argus Android está en MVP. El código fuente '
-                     'está en mobile/argus_android/. Cualquiera puede '
-                     'compilarla con Android Studio / Gradle. Una vez '
-                     'compilada, copiala a web_app/static/dist/'
-                     'argus-android.apk y este endpoint la servirá.'),
-            'source_url': '/descargar/android-source',
-            'github': 'https://github.com/SkzfXrolo/AsperSS/tree/main/mobile/argus_android',
-        }), 503
 
-    return send_file(
-        apk_path,
-        mimetype='application/vnd.android.package-archive',
-        as_attachment=True,
-        download_name='argus-android.apk',
-    )
+    if os.path.isfile(apk_path):
+        return send_file(
+            apk_path,
+            mimetype='application/vnd.android.package-archive',
+            as_attachment=True,
+            download_name='argus-android.apk',
+        )
+
+    # Fallback: redirect al release público de GitHub. 302 (Found) con
+    # ?direct=1 da la URL "as-is" para clientes que no siguen redirects.
+    if request.args.get('direct') == '1':
+        return jsonify({'url': ANDROID_RELEASE_URL}), 200
+    return redirect(ANDROID_RELEASE_URL, code=302)
 
 
 @app.route('/descargar/android-source')
