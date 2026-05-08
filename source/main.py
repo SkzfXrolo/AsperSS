@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.36"
+SCANNER_VERSION = "1.6.37"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -4980,6 +4980,10 @@ class ArgusApp:
                 _run_safe(self.scan_defender_exclusions)
                 self._set_scan_phase("🔥 Reglas custom de Firewall...")
                 _run_safe(self.scan_recent_firewall_rules)
+                self._set_scan_phase("💥 Crash dumps recientes (.dmp)...")
+                _run_safe(self.scan_crash_dumps)
+                self._set_scan_phase("🛰️ Acceso remoto activo (RDP/TeamViewer/AnyDesk)...")
+                _run_safe(self.scan_remote_access_tools)
                 self._set_scan_phase("🖥️ Comandos Run (Win+R)...")
                 _run_safe(self.scan_run_mru)
                 self._set_scan_phase("📁 Rutas escritas en Explorer...")
@@ -8772,6 +8776,19 @@ class ArgusApp:
                                 # no flagear aunque la extensión lo permita.
                                 if not is_hack and is_exec and is_legit_mc_mod(base_l):
                                     continue
+                                # Filtro #41: tamaños fuera del rango típico
+                                # de hacks. Hacks .exe pesan 1-50 MB,
+                                # .jar 100 KB - 5 MB. Si está MUY chico
+                                # (<5 KB, probablemente stub vacío) o MUY
+                                # grande (>500 MB, probablemente instalador
+                                # legítimo o ISO/imagen) → no flagear por
+                                # extensión. Si is_hack=True (nombre exacto
+                                # de hack) sí lo dejamos pasar igual.
+                                if not is_hack and is_exec and file_size_bytes > 0:
+                                    if file_size_bytes < 5 * 1024:
+                                        continue  # <5 KB, ruido
+                                    if file_size_bytes > 500 * 1024 * 1024:
+                                        continue  # >500 MB, probablemente legit
 
                                 if not (is_exec or is_hack):
                                     continue
@@ -11389,6 +11406,174 @@ class ArgusApp:
                 print("✓ Sin exclusiones custom en Defender (limpio)")
         except Exception as e:
             print(f"Error en scan_defender_exclusions: {e}")
+
+    def scan_crash_dumps(self):
+        """Detecta crash dumps recientes (.dmp) en ubicaciones estándar.
+        Los cheats mal implementados crashean Minecraft y dejan minidumps que
+        pueden delatar el módulo culpable. Reporta los .dmp creados desde el
+        último arranque del sistema, priorizando los relacionados con
+        javaw.exe / Minecraft.
+        """
+        print("🔍 Escaneando crash dumps (.dmp) recientes...")
+        try:
+            session_start = psutil.boot_time()
+        except Exception:
+            session_start = time.time() - 86400  # fallback 24h
+        dump_dirs = []
+        try:
+            local_appdata = os.environ.get('LOCALAPPDATA', '')
+            if local_appdata:
+                dump_dirs.append(os.path.join(local_appdata, 'CrashDumps'))
+            windir = os.environ.get('WINDIR', 'C:\\Windows')
+            dump_dirs.append(os.path.join(windir, 'Minidump'))
+            dump_dirs.append(os.path.join(windir, 'LiveKernelReports'))
+            # Discord también deja .dmp cuando crashea — pero lo filtramos
+            # porque no nos interesa para este check
+        except Exception:
+            pass
+        # Filtros de filename
+        # Reportamos TODOS los .dmp recientes pero ELEVAMOS los que apuntan
+        # a procesos sospechosos.
+        SUSPECT_HINTS = ('java', 'javaw', 'minecraft', 'launcher',
+                         'killaura', 'aimbot', 'inject', 'dll', 'cheat',
+                         'vape', 'wurst', 'meteor', 'liquid', 'sigma',
+                         'ghost', 'flux', 'astolfo', 'salhack')
+        BENIGN_HINTS  = ('discord', 'msedge', 'chrome', 'firefox', 'spotify',
+                         'opera', 'brave', 'svchost', 'systemsettings',
+                         'searchapp', 'msmpeng')
+        total = 0
+        for ddir in dump_dirs:
+            if not ddir or not os.path.isdir(ddir):
+                continue
+            try:
+                files = os.listdir(ddir)
+            except (PermissionError, OSError):
+                continue
+            for fname in files:
+                if not fname.lower().endswith('.dmp'):
+                    continue
+                full = os.path.join(ddir, fname)
+                try:
+                    mtime = os.path.getmtime(full)
+                    size  = os.path.getsize(full)
+                except Exception:
+                    continue
+                if mtime < session_start:
+                    continue  # solo de la sesión actual del SO
+                fname_l = fname.lower()
+                is_benign  = any(b in fname_l for b in BENIGN_HINTS)
+                is_suspect = any(s in fname_l for s in SUSPECT_HINTS)
+                # Skip benign sin sospecha (no aporta)
+                if is_benign and not is_suspect:
+                    continue
+                rel_age_h = int((time.time() - mtime) / 3600)
+                size_mb = max(0.01, round(size / 1048576, 2))
+                alert = 'CRITICAL' if is_suspect else 'SOSPECHOSO'
+                conf  = 0.78 if is_suspect else 0.40
+                self.issues_found.append({
+                    'tipo':     'crash_dump',
+                    'nombre':   f'Crash dump reciente ({size_mb} MB, hace {rel_age_h}h): {fname}',
+                    'ruta':     full[:255],
+                    'archivo':  fname[:120],
+                    'categoria': 'EVASION',
+                    'alerta':   alert,
+                    'confidence': conf,
+                    'detected_patterns': ['crash_dump'] +
+                                         (['target_java_minecraft'] if is_suspect else []),
+                    'extra': {
+                        'dump_path':  full,
+                        'size_mb':    size_mb,
+                        'age_hours':  rel_age_h,
+                    },
+                })
+                total += 1
+                print(f"  · DMP: {fname} ({size_mb} MB, hace {rel_age_h}h)")
+        if total == 0:
+            print("✓ Sin crash dumps recientes relevantes")
+
+    def scan_remote_access_tools(self):
+        """Detecta tools de acceso remoto activos durante el scan: TeamViewer,
+        AnyDesk, Parsec, Chrome Remote Desktop, RDP. Si alguien externo está
+        conectado mientras se hace el SS, eso compromete la integridad del
+        scan (un amigo podría estar 'ayudando' a hackear remoto)."""
+        print("🔍 Escaneando herramientas de acceso remoto activas...")
+        TOOLS = {
+            'teamviewer.exe':   ('TeamViewer',   0.55),
+            'anydesk.exe':      ('AnyDesk',      0.55),
+            'parsec.exe':       ('Parsec',       0.55),
+            'parsecd.exe':      ('Parsec',       0.55),
+            'chrome_remote_desktop_host.exe': ('Chrome Remote Desktop', 0.55),
+            'mstsc.exe':        ('RDP Client',   0.40),
+            'mremoteng.exe':    ('mRemoteNG',    0.55),
+            'rustdesk.exe':     ('RustDesk',     0.55),
+            'splashtop.exe':    ('Splashtop',    0.50),
+            'logmein.exe':      ('LogMeIn',      0.50),
+            'vncviewer.exe':    ('VNC Viewer',   0.50),
+            'tightvnc.exe':     ('TightVNC',     0.50),
+            'realvnc.exe':      ('RealVNC',      0.50),
+            'screenconnect.exe':('ScreenConnect',0.55),
+            'connectwisecontrol.exe':('ConnectWise Control', 0.55),
+        }
+        try:
+            seen_running = []
+            for proc in psutil.process_iter(['pid', 'name', 'exe']):
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                except Exception:
+                    continue
+                if pname in TOOLS:
+                    label, conf = TOOLS[pname]
+                    seen_running.append((label, pname, proc.info.get('pid'),
+                                         proc.info.get('exe') or ''))
+            for label, pname, pid, exe in seen_running:
+                self.issues_found.append({
+                    'tipo':     'remote_access_active',
+                    'nombre':   f'{label} corriendo durante el scan (pid {pid})',
+                    'ruta':     str(exe)[:255],
+                    'archivo':  pname,
+                    'categoria': 'EVASION',
+                    'alerta':   'SOSPECHOSO',
+                    'confidence': TOOLS[pname][1],
+                    'detected_patterns': ['remote_access_tool', f'tool:{label.lower().replace(" ","_")}'],
+                    'extra': {
+                        'tool': label,
+                        'pid':  pid,
+                        'exe':  str(exe),
+                    },
+                })
+                print(f"  · {label} activo (pid {pid}) — el scan puede estar comprometido")
+            # Adicional: detectar sesiones RDP entrantes activas
+            try:
+                if sys.platform == 'win32':
+                    res = subprocess.run(
+                        ['quser'],
+                        capture_output=True, text=True, timeout=5,
+                        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+                    )
+                    out = (res.stdout or '').strip()
+                    if out:
+                        # quser muestra una línea por sesión activa, headers en línea 0
+                        rdp_lines = [l for l in out.splitlines()[1:]
+                                     if 'rdp-tcp' in l.lower()]
+                        for line in rdp_lines:
+                            self.issues_found.append({
+                                'tipo':     'rdp_session_active',
+                                'nombre':   f'Sesión RDP entrante activa: {line.strip()[:120]}',
+                                'ruta':     'session-manager',
+                                'archivo':  'rdp',
+                                'categoria': 'EVASION',
+                                'alerta':   'CRITICAL',
+                                'confidence': 0.80,
+                                'detected_patterns': ['rdp_inbound_session'],
+                                'extra': {'quser_line': line.strip()},
+                            })
+                            print(f"  · ⚠️ Sesión RDP entrante: {line.strip()}")
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass  # quser puede no estar disponible en Home editions
+            if not seen_running:
+                print("✓ Sin herramientas de acceso remoto activas")
+        except Exception as e:
+            print(f"Error en scan_remote_access_tools: {e}")
 
     def scan_recent_firewall_rules(self):
         """Detecta reglas de Windows Firewall creadas/modificadas en últimas

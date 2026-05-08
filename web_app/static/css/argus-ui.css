@@ -303,3 +303,112 @@
     .sidebar-header .brand-text { animation: none; transition: none; }
     .sidebar-header:hover .brand-icon img { transform: none; }
 }
+
+
+/* ── Tooltips contextuales (Visual #8) ───────────────────────────────────── */
+/* Aplicar con  data-argus-tip="texto explicativo"  y opcional
+ *   data-argus-tip-pos="top|bottom|left|right" (default top).
+ * El JS de argus-ui posiciona dinámicamente sobre el elemento.
+ * También se puede activar en cualquier elemento con el atributo HTML
+ * estándar  title="..."  (ver _initTooltips en argus-ui.js). */
+
+.argus-tip-trigger {
+    position: relative;
+    cursor: help;
+    border-bottom: 1px dotted rgba(212,145,90,0.45);
+    padding-bottom: 1px;
+    transition: border-color 220ms ease;
+}
+.argus-tip-trigger:hover { border-color: rgba(212,145,90,0.85); }
+
+#argus-tooltip {
+    position: fixed;
+    z-index: 100000;
+    pointer-events: none;
+    max-width: 320px;
+    padding: 10px 13px;
+    border-radius: 9px;
+    background: rgba(20, 14, 8, 0.96);
+    color: #f1e6d3;
+    border: 1px solid rgba(184,115,51,0.45);
+    box-shadow:
+        0 16px 38px -10px rgba(0,0,0,0.65),
+        0 0 0 1px rgba(255,255,255,0.04) inset,
+        0 0 14px -4px rgba(184,115,51,0.30);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1.5;
+    letter-spacing: 0.1px;
+    white-space: pre-line;
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+    transform-origin: top center;
+    transition:
+        opacity 180ms cubic-bezier(0.22, 1, 0.36, 1),
+        transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+#argus-tooltip.is-visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+#argus-tooltip[data-pos="bottom"] { transform-origin: bottom center; }
+#argus-tooltip[data-pos="left"]   { transform-origin: center right; }
+#argus-tooltip[data-pos="right"]  { transform-origin: center left; }
+
+#argus-tooltip::before {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: rgba(20, 14, 8, 0.96);
+    border: 1px solid rgba(184,115,51,0.45);
+    transform: rotate(45deg);
+    border-top: none;
+    border-left: none;
+}
+#argus-tooltip[data-pos="top"]::before {
+    bottom: -5px;
+    left: 50%;
+    margin-left: -4px;
+}
+#argus-tooltip[data-pos="bottom"]::before {
+    top: -5px;
+    left: 50%;
+    margin-left: -4px;
+    border: 1px solid rgba(184,115,51,0.45);
+    border-bottom: none;
+    border-right: none;
+}
+#argus-tooltip[data-pos="left"]::before {
+    right: -5px;
+    top: 50%;
+    margin-top: -4px;
+    border: 1px solid rgba(184,115,51,0.45);
+    border-left: none;
+    border-bottom: none;
+}
+#argus-tooltip[data-pos="right"]::before {
+    left: -5px;
+    top: 50%;
+    margin-top: -4px;
+    border: 1px solid rgba(184,115,51,0.45);
+    border-right: none;
+    border-top: none;
+}
+
+#argus-tooltip kbd {
+    background: rgba(184,115,51,0.18);
+    border: 1px solid rgba(184,115,51,0.35);
+    color: #f3e0c5;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Consolas, monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #argus-tooltip { transition: opacity 80ms ease; transform: none; }
+    #argus-tooltip.is-visible { transform: none; }
+}

@@ -317,6 +317,165 @@
     }
     setInterval(_refreshFooter, 60000);
 
+    // ── Tooltips contextuales (Visual #8) ────────────────────────────────────
+    // Aplica a cualquier elemento con data-argus-tip="texto".
+    // También se puede configurar  data-argus-tip-pos="top|bottom|left|right".
+    // Si el elemento es un .argus-help (chip de ayuda dorado), también recibe
+    // estilos especiales. La accesibilidad: aria-describedby se conecta al tip.
+
+    let _tipEl = null;
+    let _tipShowTimer = null;
+
+    function _ensureTooltipNode() {
+        if (_tipEl) return _tipEl;
+        _tipEl = document.createElement('div');
+        _tipEl.id = 'argus-tooltip';
+        _tipEl.setAttribute('role', 'tooltip');
+        _tipEl.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(_tipEl);
+        return _tipEl;
+    }
+
+    function _positionTip(target, pos) {
+        const tip = _ensureTooltipNode();
+        const r = target.getBoundingClientRect();
+        const tr = tip.getBoundingClientRect();
+        const margin = 10;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        let top = 0, left = 0;
+        let actualPos = pos || 'top';
+
+        if (actualPos === 'top' && r.top - tr.height - margin < 4) actualPos = 'bottom';
+        if (actualPos === 'bottom' && r.bottom + tr.height + margin > vh - 4) actualPos = 'top';
+
+        switch (actualPos) {
+            case 'bottom':
+                top  = r.bottom + margin;
+                left = r.left + (r.width - tr.width) / 2;
+                break;
+            case 'left':
+                top  = r.top + (r.height - tr.height) / 2;
+                left = r.left - tr.width - margin;
+                break;
+            case 'right':
+                top  = r.top + (r.height - tr.height) / 2;
+                left = r.right + margin;
+                break;
+            case 'top':
+            default:
+                top  = r.top - tr.height - margin;
+                left = r.left + (r.width - tr.width) / 2;
+                break;
+        }
+        // Clamp horizontal a viewport
+        if (left < 6) left = 6;
+        if (left + tr.width > vw - 6) left = vw - tr.width - 6;
+        if (top  < 6) top  = 6;
+
+        tip.style.top  = `${Math.round(top)}px`;
+        tip.style.left = `${Math.round(left)}px`;
+        tip.setAttribute('data-pos', actualPos);
+    }
+
+    function _showTip(target) {
+        const text = target.getAttribute('data-argus-tip');
+        if (!text) return;
+        const pos = target.getAttribute('data-argus-tip-pos') || 'top';
+        const tip = _ensureTooltipNode();
+        tip.innerHTML = text; // permite <kbd>, <b>, <br>
+        tip.setAttribute('aria-hidden', 'false');
+        // primer paint para medir
+        tip.style.opacity = '0';
+        tip.classList.add('is-visible');
+        // tras layout, posicionar
+        requestAnimationFrame(() => {
+            _positionTip(target, pos);
+            tip.style.opacity = '';
+        });
+    }
+
+    function _hideTip() {
+        if (_tipShowTimer) { clearTimeout(_tipShowTimer); _tipShowTimer = null; }
+        if (!_tipEl) return;
+        _tipEl.classList.remove('is-visible');
+        _tipEl.setAttribute('aria-hidden', 'true');
+    }
+
+    function _bindTip(el) {
+        if (el.__argusTipBound) return;
+        el.__argusTipBound = true;
+        // Quitar title nativo si existe, para evitar tooltip duplicado del SO
+        const nativeTitle = el.getAttribute('title');
+        if (nativeTitle && !el.getAttribute('data-argus-tip')) {
+            el.setAttribute('data-argus-tip', nativeTitle);
+            el.removeAttribute('title');
+        }
+        el.addEventListener('mouseenter', () => {
+            if (_tipShowTimer) clearTimeout(_tipShowTimer);
+            _tipShowTimer = setTimeout(() => _showTip(el), 220);
+        });
+        el.addEventListener('mouseleave', _hideTip);
+        el.addEventListener('focus', () => _showTip(el));
+        el.addEventListener('blur',  _hideTip);
+        // Cerrar al scrollear
+        window.addEventListener('scroll', _hideTip, { passive: true, once: true });
+    }
+
+    function _initTooltips() {
+        document.querySelectorAll('[data-argus-tip]').forEach(_bindTip);
+        // MutationObserver para enganchar tips de elementos nuevos
+        try {
+            const obs = new MutationObserver(muts => {
+                for (const m of muts) {
+                    for (const node of m.addedNodes) {
+                        if (node.nodeType !== 1) continue;
+                        if (node.matches && node.matches('[data-argus-tip]')) _bindTip(node);
+                        if (node.querySelectorAll) {
+                            node.querySelectorAll('[data-argus-tip]').forEach(_bindTip);
+                        }
+                    }
+                }
+            });
+            obs.observe(document.body, { childList: true, subtree: true });
+        } catch (_e) { /* no soportado, da igual */ }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _initTooltips);
+    } else {
+        _initTooltips();
+    }
+
+    // ── Sticky-header drop shadow al scrollear (Visual #15) ──────────────────
+    function _initStickyHeaderShadow() {
+        const header = document.querySelector('.panel-header');
+        if (!header) return;
+        let ticking = false;
+        const SCROLL_THRESHOLD = 6; // px desde el top
+        function update() {
+            const y = window.scrollY || document.documentElement.scrollTop || 0;
+            const should = y > SCROLL_THRESHOLD;
+            if (should !== header.classList.contains('scrolled')) {
+                header.classList.toggle('scrolled', should);
+            }
+            ticking = false;
+        }
+        function onScroll() {
+            if (!ticking) {
+                window.requestAnimationFrame(update);
+                ticking = true;
+            }
+        }
+        window.addEventListener('scroll', onScroll, { passive: true });
+        // Inicial — por si la página carga ya scrolleada
+        update();
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _initStickyHeaderShadow);
+    } else {
+        _initStickyHeaderShadow();
+    }
+
     // ── Export ───────────────────────────────────────────────────────────────
     window.showToast        = showToast;
     window.renderEmptyState = renderEmptyState;

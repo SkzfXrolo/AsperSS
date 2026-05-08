@@ -171,8 +171,11 @@ NOTA DE LECTURA
 
 [ ] 46. cmd doskey history y bash_history (si WSL está instalado).
 
-[ ] 47. Logs de RDP, TeamViewer, AnyDesk, Parsec — terceros remotos durante el
+[X] 47. Logs de RDP, TeamViewer, AnyDesk, Parsec — terceros remotos durante el
         timeframe del scan (un amigo "ayudando" a hackear).
+        DONE v1.6.37 — scan_remote_access_tools detecta procesos
+        TeamViewer/AnyDesk/Parsec/Chrome RD/RustDesk/VNC/etc. corriendo
+        durante el scan (CRITICAL si hay sesión RDP entrante via quser).
 
 [ ] 48. SecurityHealthService logs: Defender disabled events, exclusions
         agregadas en últimas 72h.
@@ -213,9 +216,12 @@ NOTA DE LECTURA
 [ ] 59. Sesiones activas: WinRM, SSH, VNC, AnyDesk durante el scan — alguien
         externo conectado mientras se hace el SS.
 
-[ ] 60. Crash dumps recientes (.dmp en %localappdata%\CrashDumps y
+[X] 60. Crash dumps recientes (.dmp en %localappdata%\CrashDumps y
         Windows\Minidump) — los cheats mal implementados crashean Minecraft;
         el dump apunta al módulo culpable.
+        DONE v1.6.37 — scan_crash_dumps recoge .dmp de %LOCALAPPDATA%\
+        CrashDumps + Windows\Minidump + LiveKernelReports desde el último
+        boot, eleva a CRITICAL si filename apunta a javaw/Minecraft/cheat.
 
 
 
@@ -368,8 +374,12 @@ NOTA DE LECTURA
 [ ] 40. Filtro de red: si el archivo abre conexiones SOLO a 192.168.x.x,
         10.x.x.x, 127.0.0.1 → tool de LAN/dev, baja sospecha.
 
-[ ] 41. Filtro de tamaño: hacks típicos pesan entre 1-50 MB (.exe) o
+[X] 41. Filtro de tamaño: hacks típicos pesan entre 1-50 MB (.exe) o
         100 KB-5 MB (.jar). Fuera de estos rangos, score--.
+        DONE v1.6.37 — scan_deleted_recycle descarta archivos <5KB
+        (stubs vacíos) y >500MB (instaladores/ISOs legit) cuando NO
+        hay match de hack-term. Si el nombre coincide con hack, igual
+        se reporta (no se arriesga falso negativo).
 
 [ ] 42. Heurística "primera vez visto" segura: si el hash NUNCA fue visto
         en la base global de Argus, NO banear automáticamente — marcar para
@@ -470,8 +480,13 @@ NOTA DE LECTURA
 [ ]  7. Modal de confirmación con backdrop blur consistente entre
         veredictos, eliminación de tokens, etc.
 
-[ ]  8. Tooltips con ayuda contextual (?) en cada label crítico del scan
+[X]  8. Tooltips con ayuda contextual (?) en cada label crítico del scan
         (Risk Score, Verdict, AI confidence, etc.).
+        DONE v1.6.37 — sistema global con [data-argus-tip] + posicionado
+        dinámico (top/bottom/left/right con flip automático), bound vía
+        MutationObserver para elementos creados dinámicamente, animado
+        con cubic-bezier y respetando prefers-reduced-motion. Aplicado
+        en Risk Score, Veredicto, sugerencia IA, RF/Isolation Forest.
 
 [ ]  9. Iconos lucide-react / heroicons consistentes en todo el panel
         en lugar de emojis dispersos.
@@ -496,8 +511,12 @@ NOTA DE LECTURA
 [ ] 14. Animación slide horizontal al cambiar de pestaña (Detalles,
         Process Times, Explore, Utilities, Archivos de Windows).
 
-[ ] 15. Sticky header en tabla de scans con drop shadow al scrollear
+[X] 15. Sticky header en tabla de scans con drop shadow al scrollear
         para feedback visual.
+        DONE v1.6.37 — .panel-header con position:sticky;top:0; +
+        clase .scrolled toggleada por _initStickyHeaderShadow() vía
+        rAF (passive scroll). Drop-shadow profundo + glow dorado al
+        scrollear >6px. Respeta prefers-reduced-motion.
 
 [ ] 16. Filtros guardados como presets nombrados:
         "Solo CRITICAL último día", "Mis scans pendientes", "Top FP",
@@ -594,8 +613,12 @@ NOTA DE LECTURA
 [ ] 41. Animación de "typing" en el AI analysis (texto que aparece
         carácter a carácter como GPT pensando).
 
-[ ] 42. Botón flotante de Discord siempre visible (esquina inferior
+[X] 42. Botón flotante de Discord siempre visible (esquina inferior
         derecha) con burbuja de notificación cuando hay anuncios.
+        DONE v1.6.37 — FAB redondo 52px en bottom-right del panel,
+        gradient Discord brand, anillo pulse perpetuo, hover lift+glow,
+        usa {{ discord_invite }} del context_processor (configurable
+        via DISCORD_INVITE_URL en el .env). Responsive y accesible.
 
 [ ] 43. Web Push notifications (con permiso explícito) cuando entra
         un scan nuevo del server propio del staff.
@@ -749,14 +772,14 @@ Linux: Arch, Ubuntu, Fedora, etc.).
   RESUMEN
 ═══════════════════════════════════════════════════════════════════════════════
 
-  Scanner ............................. 60 ítems   (detección)       4/60
-  Filtro .............................. 60 ítems   (anti-FP)         6/60
-  Visual .............................. 60 ítems   (UI/UX)           7/60
+  Scanner ............................. 60 ítems   (detección)       6/60
+  Filtro .............................. 60 ítems   (anti-FP)         7/60
+  Visual .............................. 60 ítems   (UI/UX)          10/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 0/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    17/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    23/195
 
-SESIÓN DEL 07-may-2026 (3 packs en una tarde):
+SESIÓN DEL 07-may-2026 (4 packs en una tarde):
   Pack 1 (v1.6.34): Filtro #2 lite, #30, #38 + Visual #5, #6, #25
   Pack 2 (v1.6.35): Filtro #45, #50 + Visual #29, #34
   Pack 3 (v1.6.36): Scanner #28, #29, #45, #50 + Filtro #4
@@ -765,6 +788,17 @@ SESIÓN DEL 07-may-2026 (3 packs en una tarde):
                             scan_defender_exclusions,
                             scan_recent_firewall_rules
                     → 3 detecciones forenses inéditas + endpoint /api/version
+  Pack 4 (v1.6.37): Scanner #47, #60 + Filtro #41
+                    + Visual #8, #15, #42
+                    NUEVOS: scan_crash_dumps (.dmp recientes con
+                            bias hacia javaw/Minecraft),
+                            scan_remote_access_tools (TeamViewer/
+                            AnyDesk/Parsec/Chrome RD/RustDesk +
+                            sesiones RDP entrantes via quser)
+                    → +2 detecciones, filtro de tamaño (5KB–500MB)
+                      contra ruido, FAB Discord en panel,
+                      sticky-header con drop-shadow al scroll,
+                      sistema global de tooltips contextuales
 
 PRIORIZACIÓN SUGERIDA (top 10 con mayor ROI inmediato)
 ──────────────────────────────────────────────────────

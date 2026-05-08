@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=22">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel-bronze-premium.css') }}?v=1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-ui.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-ui.css') }}?v=3">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -580,10 +580,13 @@
                         <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 9l4 4 8-8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </div>
                     <div class="ga2-stat-body">
-                        <span class="ga2-stat-val ga-ai-status" id="ga-ai-status-val" style="font-size:13px">—</span>
-                        <span class="ga2-stat-lbl">Modelo RF</span>
+                        <span class="ga2-stat-val ga-ai-status argus-tip-trigger" id="ga-ai-status-val" style="font-size:13px;border-bottom:none;"
+                              data-argus-tip="Estado del modelo Random Forest entrenado con los veredictos previos del staff. Reentrenamiento automático cuando hay nuevos veredictos.">—</span>
+                        <span class="ga2-stat-lbl argus-tip-trigger"
+                              data-argus-tip="<b>Random Forest</b><br>Clasificador supervisado que aprende de los veredictos confirmados por staff. Predice CLEAN vs CHEAT en base a las features de cada scan.">Modelo RF</span>
                     </div>
-                    <div class="ga2-stat-trend" id="ga-iso-status">Isolation Forest</div>
+                    <div class="ga2-stat-trend argus-tip-trigger" id="ga-iso-status"
+                         data-argus-tip="<b>Isolation Forest</b><br>Modelo de detección de anomalías. Detecta scans 'raros' que no encajan con los patrones normales — útil para cazar cheats nuevos que aún no están en la blacklist.">Isolation Forest</div>
                 </div>
             </div>
 
@@ -1171,8 +1174,10 @@
                                     <!-- V1: Animated SVG gauge -->
                                     <div id="risk-gauge-container" style="margin:4px 0;"></div>
                                     <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;width:100%;">
-                                        <span style="color:var(--text-d);">Risk Score</span>
-                                        <span id="detail-risk-score-badge" class="risk-score-badge risk-clean" style="font-size:11px;padding:3px 10px;">—</span>
+                                        <span class="argus-tip-trigger" style="color:var(--text-d);"
+                                              data-argus-tip="<b>Risk Score</b><br>Puntuación 0–100 calculada por Argus combinando:<br>• Severidad de cada hallazgo<br>• Patrones de evasión (cleaners, anti-forensics)<br>• Coincidencias en Prefetch / USN / Papelera<br><br>Bandas:<br>• <b>0–29</b> CLEAN — sin riesgo<br>• <b>30–59</b> WATCH — sospechoso<br>• <b>60–79</b> SUSPECT — alto riesgo<br>• <b>80–100</b> CHEAT — banear">Risk Score</span>
+                                        <span id="detail-risk-score-badge" class="risk-score-badge risk-clean argus-tip-trigger" style="font-size:11px;padding:3px 10px;border-bottom:none;"
+                                              data-argus-tip="Score numérico 0–100 derivado de los hallazgos del scan. Cuanto más alto, mayor probabilidad de cheat.">—</span>
                                     </div>
                                     <div class="risk-score-bar-wrap" style="width:100%;">
                                         <div id="detail-risk-score-bar" class="risk-score-bar risk-clean" style="width:0%"></div>
@@ -1264,11 +1269,14 @@
                             <!-- Sugerencia de veredicto por IA (Parte 3 item 22) -->
                             <div id="ai-verdict-card" style="display:none;border-radius:10px;padding:12px 14px;margin-bottom:6px;border:1px solid rgba(160,90,44,.3);background:rgba(160,90,44,.07);font-size:12px;">
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                                    <span style="font-weight:700;color:#D4915A;font-size:12px;">🤖 Sugerencia IA</span>
-                                    <span id="ai-verdict-badge" style="font-size:11px;font-weight:800;padding:2px 10px;border-radius:20px;"></span>
+                                    <span class="argus-tip-trigger" style="font-weight:700;color:#D4915A;font-size:12px;border-bottom-color:rgba(212,145,90,0.55);"
+                                          data-argus-tip="<b>🤖 Sugerencia de Argus AI</b><br>Análisis automático del scan que combina todas las heurísticas, el historial del jugador y patrones aprendidos de veredictos anteriores.<br><br><b>Importante:</b> es solo una sugerencia. La decisión final siempre la tomas vos como staff.">🤖 Sugerencia IA</span>
+                                    <span id="ai-verdict-badge" class="argus-tip-trigger" style="font-size:11px;font-weight:800;padding:2px 10px;border-radius:20px;border-bottom:none;"
+                                          data-argus-tip="Veredicto sugerido por la IA: <b>CLEAN</b> (limpio), <b>WATCH</b> (sospechoso), <b>SUSPECT</b> (alto riesgo) o <b>CHEAT</b> (banear)."></span>
                                 </div>
                                 <ul id="ai-verdict-reasons" style="margin:0 0 0 14px;padding:0;color:var(--text-m);line-height:1.6;"></ul>
-                                <div id="ai-verdict-confidence" style="margin-top:6px;font-size:11px;color:var(--text-d);"></div>
+                                <div id="ai-verdict-confidence" class="argus-tip-trigger" style="margin-top:6px;font-size:11px;color:var(--text-d);border-bottom-color:rgba(160,90,44,0.30);"
+                                     data-argus-tip="<b>Confianza de la IA</b><br>Qué tan segura está Argus de su sugerencia (0–100%).<br><br>• <b>≥85%</b> alta confianza, fiable<br>• <b>60–84%</b> moderada, revisar manualmente<br>• <b>&lt;60%</b> baja, no decidir solo con esto"></div>
                                 <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
                                     <button id="ai-summary-btn" onclick="aiScanSummary(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(160,90,44,.4);background:rgba(160,90,44,.1);color:#D4915A;cursor:pointer;">📝 Resumen IA</button>
                                     <button id="ai-inconsist-btn" onclick="aiShowInconsistencies(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(245,158,11,.35);background:rgba(245,158,11,.08);color:#fbbf24;cursor:pointer;">⚠️ Inconsistencias</button>
@@ -1287,12 +1295,14 @@
                             </div>
 
                             <div id="bulk-actions-bar" style="display:none;background:var(--bg-s);border:1px solid var(--border-m);border-radius:10px;padding:14px 16px;flex-direction:column;gap:10px;">
-                                <div style="font-size:13px;font-weight:600;color:var(--text-h);">Veredicto del escaneo</div>
+                                <div style="font-size:13px;font-weight:600;color:var(--text-h);display:flex;align-items:center;gap:6px;">
+                                    <span class="argus-tip-trigger" data-argus-tip="<b>Veredicto humano</b><br>Tu decisión final como staff sobre el caso. Argus aprende de cada veredicto: las heurísticas y la IA se calibran con tus aciertos para reducir falsos positivos en futuros scans.<br><br>El veredicto queda registrado en el historial del jugador y de la empresa.">Veredicto del escaneo</span>
+                                </div>
                                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                                    <button onclick="openVerdictModal('clean')" style="font-size:12px;font-weight:700;padding:8px 18px;border-radius:7px;border:none;background:#059669;color:white;cursor:pointer;">Usuario Limpio</button>
-                                    <button onclick="openVerdictModal('hack')" style="font-size:12px;font-weight:700;padding:8px 18px;border-radius:7px;border:none;background:#dc2626;color:white;cursor:pointer;">Usuario Con Hacks</button>
-                                    <button onclick="skipVerdict()" style="font-size:12px;padding:8px 16px;border-radius:7px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">Omitir</button>
-                                    <button onclick="loadVerdictHistory()" style="font-size:12px;padding:8px 16px;border-radius:7px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">Historial</button>
+                                    <button onclick="openVerdictModal('clean')" data-argus-tip="Marcar como limpio. Argus penalizará patrones que llevaron a este falso positivo." style="font-size:12px;font-weight:700;padding:8px 18px;border-radius:7px;border:none;background:#059669;color:white;cursor:pointer;">Usuario Limpio</button>
+                                    <button onclick="openVerdictModal('hack')" data-argus-tip="Marcar como cheater. Argus reforzará los patrones que detectó este caso." style="font-size:12px;font-weight:700;padding:8px 18px;border-radius:7px;border:none;background:#dc2626;color:white;cursor:pointer;">Usuario Con Hacks</button>
+                                    <button onclick="skipVerdict()" data-argus-tip="Omitir si no estás seguro. No afecta al aprendizaje." style="font-size:12px;padding:8px 16px;border-radius:7px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">Omitir</button>
+                                    <button onclick="loadVerdictHistory()" data-argus-tip="Ver veredictos previos del staff sobre este jugador." style="font-size:12px;padding:8px 16px;border-radius:7px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">Historial</button>
                                 </div>
                                 <div id="verdict-history-panel" style="display:none;margin-top:6px;font-size:12px;color:var(--text-s);"></div>
                             </div>
@@ -2136,6 +2146,54 @@
         </div>
     </div>
 
+    <!-- Visual #42: botón flotante de Discord (oficial / soporte / comunidad) -->
+    <a id="argus-discord-fab"
+       href="{{ discord_invite }}"
+       target="_blank"
+       rel="noopener noreferrer"
+       title="Comunidad Discord — soporte, novedades y colaboración"
+       aria-label="Unirse al Discord de Argus Projects"
+       style="position:fixed;bottom:50px;right:22px;z-index:80;
+              width:52px;height:52px;border-radius:50%;
+              background:linear-gradient(135deg,#5865F2,#4752c4);
+              display:flex;align-items:center;justify-content:center;
+              box-shadow:0 8px 24px -6px rgba(88,101,242,0.55),
+                         0 0 0 1px rgba(255,255,255,0.06) inset;
+              text-decoration:none;color:#fff;
+              transition:transform 220ms cubic-bezier(0.22,1,0.36,1),
+                         box-shadow 220ms ease, filter 220ms ease;
+              cursor:pointer;">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.075.075 0 0 0-.079.037c-.21.375-.444.864-.608 1.249a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.036A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.873-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+        </svg>
+        <span id="argus-discord-fab-pulse" aria-hidden="true"
+              style="position:absolute;inset:-4px;border-radius:50%;
+                     border:2px solid rgba(88,101,242,0.45);
+                     animation:argus-discord-pulse 2.4s ease-out infinite;
+                     pointer-events:none;"></span>
+    </a>
+    <style>
+        #argus-discord-fab:hover {
+            transform: translateY(-3px) scale(1.06);
+            box-shadow: 0 14px 32px -6px rgba(88,101,242,0.85),
+                        0 0 0 1px rgba(255,255,255,0.08) inset;
+            filter: brightness(1.08);
+        }
+        @keyframes argus-discord-pulse {
+            0%   { transform: scale(1);   opacity: 0.55; }
+            70%  { transform: scale(1.6); opacity: 0; }
+            100% { transform: scale(1.6); opacity: 0; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #argus-discord-fab,
+            #argus-discord-fab-pulse { animation: none; transition: none; }
+        }
+        @media (max-width: 700px) {
+            #argus-discord-fab { bottom: 36px; right: 14px; width: 46px; height: 46px; }
+            #argus-discord-fab svg { width: 22px; height: 22px; }
+        }
+    </style>
+
     <!-- Visual #38: footer con version + uptime + estado backend -->
     <div id="argus-footer" style="position:fixed;bottom:0;left:240px;right:0;
          z-index:50;display:flex;align-items:center;justify-content:center;gap:14px;
@@ -2160,7 +2218,7 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=3"></script>
     <script src="{{ url_for('static', filename='js/panel.js') }}?v=49"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
