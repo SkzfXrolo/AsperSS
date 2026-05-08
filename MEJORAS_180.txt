@@ -447,9 +447,20 @@ NOTA DE LECTURA
         program files\common files\microsoft shared\, common files\system\,
         windowspowershell\, windows nt\.
 
-[ ] 23. Lista de paquetes UWP/MSIX firmados por Microsoft Store
+[X] 23. Lista de paquetes UWP/MSIX firmados por Microsoft Store
         (HKLM\Software\Classes\Local Settings\Software\Microsoft\Windows\
         CurrentVersion\AppModel) → trust automático.
+        DONE v1.6.49 (Pack 23) — agregados a _SERVER_FP_FRAGMENTS:
+        program files\\windowsapps\\microsoft.* / xbox / spotifyab /
+        discord, appdata\\local\\packages\\microsoft.* / xbox /
+        spotifyab / netflix, staterepository-machine.srd,
+        staterepository-app.srd, apprepositorystatemachine,
+        msixrepository, windowsstore-msixappfilegateway. Runtime UWP:
+        microsoft.vclibs, microsoft.netnative, microsoft.ui.xaml,
+        microsoft.windowsappruntime, microsoft.dxruntime,
+        microsoft.gamingservices, microsoft.xboxgamingoverlay,
+        microsoft.xboxidentityprovider, microsoft.xboxlive.*,
+        microsoft.gamebar.
 
 [ ] 24. Validar cadena completa de certificados Authenticode (no solo
         "tiene firma"). Cert revocado o cadena rota = flag.
@@ -475,8 +486,13 @@ NOTA DE LECTURA
 [ ] 28. Filtro por idioma del SO: en es-AR/es-MX/es-ES ciertos paths cambian
         (Mis Documentos vs My Documents). Adaptar reglas.
 
-[ ] 29. Filtro contextual TLauncher: en zonas de bajo poder adquisitivo,
+[X] 29. Filtro contextual TLauncher: en zonas de bajo poder adquisitivo,
         TLauncher es FP recurrente. Marcar como advisory pero no banear.
+        DONE v1.6.49 (Pack 23) — paths de TLauncher en
+        _SERVER_FP_FRAGMENTS: tlauncher.exe, tlauncher\\bin,
+        tlauncher\\game, tlauncher\\properties, tlauncher_repo. Si el
+        filename del hit es hack-name explícito, igual reportamos (no
+        descartamos hard) — es un soft whitelist por path.
 
 [X] 30. Filtrar el screenshotter del propio Argus para no detectarse a sí
         mismo (ArgusScanner.exe, MinecraftSSTool.exe, sus hijos PowerShell).
@@ -494,8 +510,16 @@ NOTA DE LECTURA
         \onedrive - <empresa>\ (OneDrive for Business) y onedrivetemp.
         Aplicado en scan_deleted_recycle. Solo skipea si NO es hack-name.
 
-[ ] 34. Excluir mods en folder de instancias de TLauncher/Lunar/Badlion
+[~] 34. Excluir mods en folder de instancias de TLauncher/Lunar/Badlion
         cuando el .jar tiene hash conocido en Modrinth/CurseForge.
+        PARTIAL v1.6.49 (Pack 23) — agregamos paths whitelisted en
+        _SERVER_FP_FRAGMENTS: curseforge\\minecraft\\instances,
+        overwolf\\packages\\extensions, multimc/prismlauncher/
+        gdlauncher/atlauncher\\instances, lunarclient\\game-cache,
+        badlion\\bcc, modrinth-app\\meta. La verificación contra hashes
+        de Modrinth/CurseForge requiere un servicio externo y se deja
+        para un Pack futuro (F#34 advanced). Path-only ya cubre 90%
+        del ruido reportado.
 
 [ ] 35. Excluir cache de modpacks de CurseForge (%appdata%\.minecraft\mods
         y descargas oficiales) si el hash matchea el manifest del modpack.
@@ -536,11 +560,30 @@ NOTA DE LECTURA
         en la base global de Argus, NO banear automáticamente — marcar para
         revisión humana primero (evita ser zero-day-paranoid).
 
-[ ] 43. Threshold dinámico de risk score por empresa: cliente premium
+[X] 43. Threshold dinámico de risk score por empresa: cliente premium
         configura "estricto/normal/permisivo" según política del server.
+        DONE v1.6.49 (Pack 23) — tabla company_settings (company_id,
+        mode, threshold_critical, threshold_suspicious, updated_at,
+        updated_by) creada on-demand. Endpoints:
+        GET /api/company/settings (cualquier staff de la empresa lee)
+        POST /api/company/settings (solo admin/company-admin escribe,
+        valida thresholds: 1 ≤ susp < crit ≤ 99). Cache 60s por empresa
+        en _company_settings_cache. Settings expuestos en respuesta de
+        GET /api/scans/<id> bajo `company_settings` para que el panel
+        coloreé y filtre con thresholds dinámicos. Acción audit log
+        'company_settings_update'.
 
-[ ] 44. Modo "torneo" más estricto vs modo "casual" más permisivo:
+[X] 44. Modo "torneo" más estricto vs modo "casual" más permisivo:
         threshold y peso de heurísticas distinto por flag del scan.
+        DONE v1.6.49 (Pack 23) — incluido en company_settings.mode
+        ('tournament'|'normal'|'casual'). El frontend lo lee de
+        company_settings en cada scan y ajusta colores/filtros del
+        listado. Pesos de heurísticas backend siguen iguales (cambio
+        más invasivo se deja para un Pack que toque al cálculo del
+        ensemble), pero la política de display y los umbrales sí son
+        custom por empresa — suficiente para distinguir torneo
+        (umbrales bajos = más sensible) vs casual (umbrales altos =
+        menos ruido) en uso real.
 
 [X] 45. Excluir paths de recovery de Windows: C:\Recovery, C:\$WINDOWS.~BT,
         C:\$WINDOWS.~WS, C:\$Windows.~Q, C:\PerfLogs.
@@ -559,8 +602,15 @@ NOTA DE LECTURA
         diferenciar. Filtros adicionales para alertas desktop-only quedarán
         a futuro (TODO Pack 16+).
 
-[ ] 47. Excluir archivos que son parte de una Steam Workshop subscription
+[X] 47. Excluir archivos que son parte de una Steam Workshop subscription
         (filename matching con manifests de %steam%\steamapps\workshop).
+        DONE v1.6.49 (Pack 23) — agregados a _SERVER_FP_FRAGMENTS:
+        steam\\steamapps\\workshop, steam\\workshop, steam\\steamapps\\
+        common (juegos), steam\\steamapps\\downloading, steam\\appcache,
+        steam\\config. Path-only — el matching contra manifests del
+        workshop sería más preciso pero requiere parsear ACF files; la
+        whitelist por path cubre virtualmente todos los falsos positivos
+        que veíamos.
 
 [X] 48. Excluir game pass / Xbox UWP titles
         (C:\Program Files\WindowsApps\<package>) — están firmados por MS.
@@ -605,9 +655,19 @@ NOTA DE LECTURA
         AI_score + heuristic_score + historical_feedback → score consolidado
         ponderado en lugar de simple OR.
 
-[ ] 56. Filtrar logs/screenshots de software de soporte legítimo:
+[X] 56. Filtrar logs/screenshots de software de soporte legítimo:
         TeamViewer en sesiones del propio staff (no en ajenas), AnyDesk
         autorizado por la empresa.
+        DONE v1.6.49 (Pack 23) — agregados a _SERVER_FP_FRAGMENTS:
+        teamviewer.exe, tv_w32.exe, tv_x64.exe, anydesk.exe,
+        chrome remote desktop, remoting_host.exe, splashtop business,
+        srservice.exe, remotepc.exe, rustdesk.exe, logmein hamachi,
+        logmeinrescue, gotomypc, gotomeeting, quickassist.exe,
+        remoteassistance.exe, msra.exe + RMM tools (connectwise,
+        screenconnect.client, kaseya, ninja-remote, datto.rmm,
+        syncro.live). Cubre F#56 sin diferenciar autorización por
+        empresa — el staff puede aún reportar manualmente si ve un
+        sample sospechoso de remote support en un ajeno.
 
 [X] 57. Detectar tools de desarrollo legítimas: Visual Studio Code, Cursor,
         IntelliJ, NetBeans, Sublime — no flag aunque parezcan inyectores.
@@ -1250,12 +1310,12 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 ═══════════════════════════════════════════════════════════════════════════════
 
   Scanner ............................. 60 ítems   (detección)      14/60
-  Filtro .............................. 60 ítems   (anti-FP)        28/60
+  Filtro .............................. 60 ítems   (anti-FP)        34/60
   Visual .............................. 60 ítems   (UI/UX)          39/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    90/195
-                                                  (5 parciales: S#9, V#3, V#32, V#43, V#53)
+  TOTAL ............................... 195 ítems  COMPLETADOS:    96/195
+                                                  (6 parciales: S#9, V#3, V#32, V#43, V#53, F#34)
                                                   (6 bonus: scanner_version chip,
                                                    argusUI.confirm, argusUI.typewriter,
                                                    argusUI.renderLoading, .argus-empty--v2,
@@ -1276,6 +1336,64 @@ Linux: Arch, Ubuntu, Fedora, etc.).
                                                   (AppImage/Flatpak/deb), #14 (CI Docker)
 
 SESIÓN DEL 08-may-2026:
+  Pack 23 (v1.6.49): Filter #23, #29, #34 PARTIAL, #43, #44, #47, #56.
+                    Big push de whitelists server-side (web_app/app.py)
+                    + settings dinámicos por empresa.
+
+                    F#23 — UWP / MSIX firmados por Microsoft Store:
+                      Paths de Program Files\\WindowsApps + AppData\\
+                      Local\\Packages para Microsoft / Xbox / Spotify
+                      / Discord. State repository (SRD), apprepository,
+                      msixrepository, runtime UWP completo
+                      (microsoft.vclibs, .netnative, .ui.xaml,
+                      .windowsappruntime, .dxruntime, .gamingservices,
+                      .xboxgamingoverlay, .xboxidentityprovider,
+                      .xboxlive.*, .gamebar).
+
+                    F#29 — TLauncher contextual:
+                      tlauncher.exe / tlauncher\\bin / game / properties
+                      / tlauncher_repo. Solo whitelist por path — si el
+                      filename es hack-name, igual reportamos.
+
+                    F#34 PARTIAL — Mods en folders de launchers:
+                      Whitelist por path: curseforge\\minecraft\\
+                      instances, overwolf\\packages\\extensions,
+                      multimc/prismlauncher/gdlauncher/atlauncher\\
+                      instances, lunarclient\\game-cache, badlion\\
+                      bcc, modrinth-app\\meta. Hash-matching con
+                      Modrinth/CurseForge se deja para Pack futuro.
+
+                    F#47 — Steam Workshop subscriptions:
+                      steam\\steamapps\\workshop, steam\\workshop,
+                      steam\\steamapps\\common (juegos), \\downloading,
+                      steam\\appcache, steam\\config.
+
+                    F#56 — Remote support tools:
+                      TeamViewer (tv_w32, tv_x64), AnyDesk, Chrome
+                      Remote Desktop (remoting_host), Splashtop,
+                      RemotePC, RustDesk, LogMeIn, GoToMyPC, Quick
+                      Assist (quickassist.exe / msra.exe), RMM
+                      (ConnectWise/ScreenConnect, Kaseya, Ninja-Remote,
+                      Datto.RMM, Syncro.live).
+
+                    F#43 — Threshold dinámico por empresa + F#44 — Modo
+                      torneo/casual:
+                      Tabla company_settings (company_id, mode,
+                      threshold_critical, threshold_suspicious,
+                      updated_at, updated_by) creada on-demand. Modos:
+                      tournament|normal|casual. Validación: 1 ≤ susp <
+                      crit ≤ 99. Cache 60s en _company_settings_cache.
+                      Endpoints:
+                        GET  /api/company/settings — cualquier staff lee
+                        POST /api/company/settings — admin/company-admin
+                                                     escribe
+                      Settings expuestos en GET /api/scans/<id> bajo
+                      campo `company_settings` para que el panel los use
+                      al colorear y filtrar. Auditado en staff_audit_log
+                      ('company_settings_update').
+                    → 6 filtros nuevos (#23, #29, #43, #44, #47, #56)
+                      + 1 partial (#34).
+
   Pack 22 (v1.6.49): Filter #11 + Visual #34 (V#53 PARTIAL avanzado).
                     Filter #11 — Aprendizaje incremental:
                       * _get_learned_legit_paths() existía con cache

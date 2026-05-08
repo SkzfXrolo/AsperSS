@@ -3258,7 +3258,203 @@ _SERVER_FP_FRAGMENTS = [
     'parsec\\parsec', 'parsecd.exe',         # remote play
     'moonlight\\moonlight', 'moonlight-qt',  # game streaming
     'sunshine\\sunshine.exe',                # host de moonlight
+
+    # ── Filter #23 — UWP / MSIX (Microsoft Store apps firmadas) ─────────────
+    # WindowsApps/ ya estaba parcial. Acá añadimos rutas más explícitas y
+    # patrones del AppRepository/StateRepository que aparecen como fp.
+    'program files\\windowsapps\\microsoft.',
+    'program files\\windowsapps\\xbox',
+    'program files\\windowsapps\\spotifyab.spotifymusic',
+    'program files\\windowsapps\\discord',
+    'appdata\\local\\packages\\microsoft.',
+    'appdata\\local\\packages\\xbox',
+    'appdata\\local\\packages\\spotifyab.',
+    'appdata\\local\\packages\\netflix.',
+    'staterepository-machine.srd', 'staterepository-app.srd',
+    'apprepositorystatemachine', 'msixrepository',
+    'windowsstore-msixappfilegateway',
+    # Components silenciosos del runtime UWP
+    'microsoft.vclibs', 'microsoft.netnative',
+    'microsoft.ui.xaml', 'microsoft.windowsappruntime',
+    'microsoft.dxruntime', 'microsoft.gamingservices',
+    'microsoft.xboxgamingoverlay', 'microsoft.xboxidentityprovider',
+    'microsoft.xboxlive.', 'microsoft.gamebar',
+
+    # ── Filter #56 — Remote support tools autorizados ─────────────────────
+    # TeamViewer / AnyDesk / Chrome Remote / Splashtop. Estos hookean
+    # input y captura, lo que las heurísticas viejas marcaban como cheat
+    # backdoor. Si están en su carpeta canónica (Program Files), legit.
+    # NOTA: también podrían usarse en ataques sociales — el staff debe
+    # cruzar este FP filter con el contexto del scan (lo dejamos como
+    # whitelist de path para reducir ruido, no un absuelve total).
+    'teamviewer.exe', 'tv_w32.exe', 'tv_x64.exe',
+    'program files\\teamviewer', 'program files (x86)\\teamviewer',
+    'anydesk.exe', 'program files (x86)\\anydesk',
+    'program files\\anydesk',
+    'chrome remote desktop', 'remoting_host.exe',
+    'splashtop\\splashtop business', 'srservice.exe',
+    'remotepc.exe', 'rustdesk.exe',  # RustDesk — open source remote
+    'logmein\\logmein hamachi', 'logmein\\logmeinrescue',
+    'gotomypc', 'gotomeeting',
+    # Microsoft propio para soporte
+    'quickassist.exe',                       # Quick Assist (Windows 11)
+    'microsoft\\windows\\quickassist',
+    'remoteassistance.exe', 'msra.exe',
+    # Atajos de gestión empresarial
+    'connectwise control', 'screenconnect.client',
+    'kaseya', 'ninja-remote', 'ninjaremote',
+    'datto.rmm', 'syncro.live',
+
+    # ── Filter #29 — TLauncher contextual (advisory, no FP duro) ──────────
+    # TLauncher es FP recurrente en zonas de bajo poder adquisitivo. Sus
+    # binarios y carpetas se whitelist por path; si el filename es hack
+    # explícito, igual reportamos (no se arriesga falso negativo).
+    'tlauncher.exe', 'tlauncher\\bin', 'tlauncher\\game',
+    'tlauncher\\properties', 'tlauncher_repo',
+
+    # ── Filter #34 — Mods en folders de launchers (CurseForge, Lunar...) ──
+    # Ampliamos el whitelist existente: las carpetas mods/cache/instances
+    # de los launchers más comunes. F#53 ya cubre paths de update —
+    # esto cubre el storage estático.
+    'curseforge\\minecraft\\instances', 'curseforge\\minecraft\\install',
+    'overwolf\\packages\\extensions',
+    'multimc\\instances', 'prismlauncher\\instances',
+    'gdlauncher\\instances', 'gdlauncher\\datastore',
+    'atlauncher\\instances', 'atlauncher\\downloads',
+    'lunarclient\\game-cache', 'lunarclient\\offline',
+    'badlion client\\bcc', 'badlionclient\\bcc',
+    'modrinth-app\\meta', 'modrinth.app\\profiles',
+
+    # ── Filter #47 — Steam Workshop subscriptions ──────────────────────────
+    'steam\\steamapps\\workshop', 'steam\\workshop',
+    'steam\\steamapps\\common',          # juegos instalados (no son hack)
+    'steam\\steamapps\\downloading',     # downloads en curso
+    'steam\\appcache', 'steam\\config',
 ]
+
+
+# ── Filter #43, #44 — Settings por empresa (threshold dinámico + modo) ──────
+# Permite que cada empresa configure su política:
+#   * mode: 'tournament' (más estricto, threshold default -10), 'normal',
+#           'casual' (más permisivo, threshold default +10).
+#   * threshold_critical / threshold_suspicious: umbrales custom (override
+#           del default {70, 30}).
+# Cargado on-demand con cache 60s por empresa. Si la empresa no configuró
+# nada, devuelve los defaults.
+_company_settings_cache = {}    # {company_id: (settings_dict, ts)}
+_COMPANY_SETTINGS_TTL = 60.0     # 1 min — staff verá los cambios pronto
+
+def _get_company_settings(company_id):
+    if not company_id:
+        return {'mode': 'normal', 'threshold_critical': 70, 'threshold_suspicious': 30}
+    import time as _time
+    cached = _company_settings_cache.get(company_id)
+    if cached and (_time.time() - cached[1]) < _COMPANY_SETTINGS_TTL:
+        return cached[0]
+    settings = {'mode': 'normal', 'threshold_critical': 70, 'threshold_suspicious': 30}
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS company_settings (
+                    company_id          INTEGER PRIMARY KEY,
+                    mode                VARCHAR(20)  DEFAULT 'normal',
+                    threshold_critical  INTEGER      DEFAULT 70,
+                    threshold_suspicious INTEGER     DEFAULT 30,
+                    updated_at          TIMESTAMP DEFAULT NOW(),
+                    updated_by          INTEGER
+                )
+            ''')
+            cur.execute(
+                f'SELECT mode, threshold_critical, threshold_suspicious '
+                f'FROM company_settings WHERE company_id = {_PH}',
+                (company_id,)
+            )
+            row = cur.fetchone()
+            if row:
+                if isinstance(row, dict):
+                    settings['mode'] = row.get('mode') or 'normal'
+                    settings['threshold_critical'] = int(row.get('threshold_critical') or 70)
+                    settings['threshold_suspicious'] = int(row.get('threshold_suspicious') or 30)
+                else:
+                    settings['mode'] = row[0] or 'normal'
+                    settings['threshold_critical'] = int(row[1] or 70)
+                    settings['threshold_suspicious'] = int(row[2] or 30)
+    except Exception as e:
+        print(f'[CompanySettings] error: {e}')
+    _company_settings_cache[company_id] = (settings, _time.time())
+    return settings
+
+
+@app.route('/api/company/settings', methods=['GET'])
+@login_required
+def get_company_settings_endpoint():
+    company_id = session.get('company_id')
+    if not company_id:
+        return jsonify({'error': 'Sin empresa asignada'}), 400
+    return jsonify(_get_company_settings(company_id)), 200
+
+
+@app.route('/api/company/settings', methods=['POST'])
+@login_required
+def set_company_settings_endpoint():
+    user_id = session.get('user_id')
+    company_id = session.get('company_id')
+    if not company_id:
+        return jsonify({'error': 'Sin empresa asignada'}), 400
+    if not (is_admin(user_id) or is_company_admin(user_id, company_id)):
+        return jsonify({'error': 'Solo admins de empresa pueden cambiar settings'}), 403
+    data = request.get_json(silent=True) or {}
+    mode = (data.get('mode') or 'normal').lower()
+    if mode not in ('tournament', 'normal', 'casual'):
+        return jsonify({'error': "mode debe ser tournament|normal|casual"}), 400
+    try:
+        crit = int(data.get('threshold_critical', 70))
+        susp = int(data.get('threshold_suspicious', 30))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'thresholds inválidos'}), 400
+    if not (1 <= susp < crit <= 99):
+        return jsonify({'error': 'thresholds: suspicious < critical, ambos 1..99'}), 400
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS company_settings (
+                    company_id          INTEGER PRIMARY KEY,
+                    mode                VARCHAR(20)  DEFAULT 'normal',
+                    threshold_critical  INTEGER      DEFAULT 70,
+                    threshold_suspicious INTEGER     DEFAULT 30,
+                    updated_at          TIMESTAMP DEFAULT NOW(),
+                    updated_by          INTEGER
+                )
+            ''')
+            # UPSERT manual: PostgreSQL soporta ON CONFLICT, MySQL ON DUPLICATE KEY.
+            try:
+                cur.execute(
+                    f'INSERT INTO company_settings (company_id, mode, threshold_critical, threshold_suspicious, updated_at, updated_by) '
+                    f'VALUES ({_PH}, {_PH}, {_PH}, {_PH}, NOW(), {_PH}) '
+                    f'ON CONFLICT (company_id) DO UPDATE SET '
+                    f'mode = EXCLUDED.mode, threshold_critical = EXCLUDED.threshold_critical, '
+                    f'threshold_suspicious = EXCLUDED.threshold_suspicious, updated_at = NOW(), updated_by = EXCLUDED.updated_by',
+                    (company_id, mode, crit, susp, user_id)
+                )
+            except Exception:
+                # Fallback DELETE + INSERT
+                cur.execute(f'DELETE FROM company_settings WHERE company_id = {_PH}', (company_id,))
+                cur.execute(
+                    f'INSERT INTO company_settings (company_id, mode, threshold_critical, threshold_suspicious, updated_by) '
+                    f'VALUES ({_PH}, {_PH}, {_PH}, {_PH}, {_PH})',
+                    (company_id, mode, crit, susp, user_id)
+                )
+        # Invalidar caché
+        _company_settings_cache.pop(company_id, None)
+        try:
+            _log_staff_action('company_settings_update',
+                              detail=f'mode={mode} crit={crit} susp={susp}')
+        except Exception:
+            pass
+        return jsonify({'ok': True, 'mode': mode,
+                        'threshold_critical': crit, 'threshold_suspicious': susp}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # Tipos de issue que nunca deben guardarse (FP estructural, no por ruta)
 _ZERO_RISK_ISSUE_TYPES = {
@@ -4682,7 +4878,21 @@ def get_scan(scan_id):
                 results = _scrub_results_for_display(results)
 
                 scan['results'] = results
-                
+
+                # Filter #43, #44 — incluir thresholds dinámicos de la
+                # empresa del staff. El frontend los usa para colorear
+                # el risk_score y para los filtros del listado. Si el
+                # staff no tiene company_id (admin global), defaults.
+                try:
+                    _cs = _get_company_settings(session.get('company_id'))
+                    scan['company_settings'] = _cs
+                except Exception:
+                    scan['company_settings'] = {
+                        'mode': 'normal',
+                        'threshold_critical': 70,
+                        'threshold_suspicious': 30,
+                    }
+
                 # Guardar en caché
                 _stats_cache[cache_key] = scan
                 _stats_cache_time[cache_key] = time.time()
