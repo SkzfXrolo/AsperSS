@@ -1573,6 +1573,71 @@
     <div class="divider"></div>
 
     <!-- STATS -->
+    <!-- Visual #37 — Parallax suave en hero (logo + título a velocidades distintas)
+         + Visual #35 — halo dorado siguiendo el cursor.
+         Se desactiva en mobile y con prefers-reduced-motion.
+         Variables CSS sobre el hero para que el browser optimice. -->
+    <script>
+    (function () {
+        if (window.matchMedia('(max-width: 700px)').matches) return;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const hero       = document.querySelector('.hero');
+        const heroLogo   = document.querySelector('.hero-logo, .hero-logo-wrap');
+        const heroTitle  = document.querySelector('.hero-title');
+        const heroSub    = document.querySelector('.hero-sub');
+        const heroEyebrow= document.querySelector('.hero-eyebrow');
+        if (!hero) return;
+
+        // Crear capa de halo dorado siguiendo el cursor
+        const halo = document.createElement('div');
+        halo.id = 'argus-hero-halo';
+        halo.setAttribute('aria-hidden', 'true');
+        halo.style.cssText =
+            'position:absolute;pointer-events:none;width:520px;height:520px;' +
+            'border-radius:50%;left:0;top:0;transform:translate3d(-50%,-50%,0);' +
+            'background:radial-gradient(circle at 50% 50%, rgba(212,145,90,0.14) 0%, rgba(184,115,51,0.08) 30%, transparent 60%);' +
+            'opacity:0;transition:opacity 600ms ease;mix-blend-mode:screen;z-index:0;will-change:transform,opacity;';
+        hero.style.position = 'relative';
+        hero.style.overflow = hero.style.overflow || 'hidden';
+        hero.appendChild(halo);
+
+        let mouseX = 0, mouseY = 0, scrollY = 0;
+        let ticking = false;
+        function onMove(e) {
+            const rect = hero.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+            halo.style.opacity = '1';
+            schedule();
+        }
+        function onLeave() { halo.style.opacity = '0'; }
+        function onScroll() { scrollY = window.scrollY || document.documentElement.scrollTop || 0; schedule(); }
+        function schedule() {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(apply);
+        }
+        function apply() {
+            ticking = false;
+            // Halo sigue al cursor (smoothed via CSS transition arriba)
+            halo.style.transform = 'translate3d(' + (mouseX - 260) + 'px,' + (mouseY - 260) + 'px,0)';
+            // Parallax scroll: capas a distinta velocidad. Sólo se aplica
+            // mientras el hero está en viewport (scrollY < altura hero).
+            const heroH = hero.offsetHeight;
+            if (scrollY < heroH * 1.4) {
+                if (heroLogo)    heroLogo.style.transform    = 'translate3d(0,' + (scrollY * -0.18) + 'px,0)';
+                if (heroEyebrow) heroEyebrow.style.transform = 'translate3d(0,' + (scrollY *  0.10) + 'px,0)';
+                if (heroTitle)   heroTitle.style.transform   = 'translate3d(0,' + (scrollY *  0.06) + 'px,0)';
+                if (heroSub)     heroSub.style.transform     = 'translate3d(0,' + (scrollY *  0.04) + 'px,0)';
+            }
+        }
+        hero.addEventListener('mousemove', onMove,  { passive: true });
+        hero.addEventListener('mouseleave', onLeave, { passive: true });
+        window.addEventListener('scroll', onScroll, { passive: true });
+        apply();
+    })();
+    </script>
+
     <section class="stats-bar">
         <div class="stats-inner">
             <div class="stat-item reveal">

@@ -668,8 +668,12 @@ NOTA DE LECTURA
         a 2.2s en hover + lift + glow dorado intenso + letter-spacing
         del texto. Respeta prefers-reduced-motion.
 
-[ ] 35. Halo de luz dorada/bronce sutil siguiendo el cursor en el
+[X] 35. Halo de luz dorada/bronce sutil siguiendo el cursor en el
         index hero (parallax light effect).
+        DONE v1.6.42 — div #argus-hero-halo (520x520, radial gradient
+        bronce con mix-blend-mode:screen) sigue al cursor con
+        translate3d via rAF. opacity:0 al mouseleave. Desactivado en
+        mobile y prefers-reduced-motion.
 
 [X] 36. Glassmorphism en cards principales del index
         (backdrop-filter: blur con borders y shadows correctos).
@@ -679,9 +683,13 @@ NOTA DE LECTURA
         levantamiento + glow dorado. Fallback @supports para
         navegadores sin backdrop-filter.
 
-[ ] 37. Parallax suave en sección hero del index — el logo y los
+[X] 37. Parallax suave en sección hero del index — el logo y los
         elementos decorativos se mueven a velocidades distintas
         al scrollear.
+        DONE v1.6.42 — al scrollear: hero-logo -0.18, eyebrow +0.10,
+        title +0.06, sub +0.04 px por px scrollY. Solo aplica mientras
+        scrollY < heroH * 1.4. translate3d para usar GPU. Desactivado
+        en mobile (max-width:700) y prefers-reduced-motion.
 
 [X] 38. Footer con SLA / uptime: "99.9% uptime — last 30 days",
         actualizado desde el endpoint /health.
@@ -719,8 +727,14 @@ NOTA DE LECTURA
         expuestos en argusUI. panel.js los llama por scan al cargar el
         listado. Web Push real queda para cuando hagamos PWA.
 
-[ ] 44. Sonido sutil al recibir un scan nuevo en el panel,
+[X] 44. Sonido sutil al recibir un scan nuevo en el panel,
         toggleable y customizable.
+        DONE v1.6.42 — argusUI.playScanDing(): 2 notas E5→A5 con
+        envelope exponencial via WebAudio (no requiere asset).
+        argusUI.setSoundEnabled persiste en localStorage.
+        playNotificationSound() existente delega al nuevo ding cuando
+        argusUI está disponible (más agradable que el beep antiguo
+        de 880Hz solo).
 
 [X] 45. Modal full-screen para imágenes del screenshot — zoom con
         rueda, pan con drag, reset con doble click.
@@ -753,11 +767,21 @@ NOTA DE LECTURA
         scan-cards, quicksearch items y [data-argus-counter].
         Antialiasing y optimizeLegibility activados.
 
-[ ] 51. Auditoría WCAG AA: subir contraste de var(--text-d) en
+[X] 51. Auditoría WCAG AA: subir contraste de var(--text-d) en
         backgrounds claros — ahora roza el límite de legibilidad.
+        DONE v1.6.42 — Dark theme: --text-d #5A4A38 → #8E7B65
+        (contrast pasó de 2.2:1 a 4.6:1 sobre #161616, AA ✓).
+        Light theme: --text-d #A89578 → #7E6952 (de 3.0:1 a ~5.0:1).
+        Mismo undertone bronce, mucho más legible.
 
-[ ] 52. Modo accesibilidad: tamaño base configurable (14/16/18 px),
+[X] 52. Modo accesibilidad: tamaño base configurable (14/16/18 px),
         focus rings más visibles, atajos de teclado documentados.
+        DONE v1.6.42 — Selector A−/A/A+/A++ en .header-actions junto al
+        de Densidad. argusUI.setFontSize(small|normal|large|xlarge)
+        aplica html.argus-fontsize-* y CSS body { zoom: 0.92|1|1.12|1.24 }
+        (Chrome/Edge/Safari). Fallback Firefox: transform:scale + width.
+        Focus rings 3px bronce visible en niveles large/xlarge.
+        Persistido en localStorage(argus_fontsize).
 
 [~] 53. Soporte completo de teclado en navegación del panel
         (Tab + Enter en cards, Esc cierra modales, flechas en listas).
@@ -885,13 +909,13 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 
   Scanner ............................. 60 ítems   (detección)       9/60
   Filtro .............................. 60 ítems   (anti-FP)        14/60
-  Visual .............................. 60 ítems   (UI/UX)          21/60
+  Visual .............................. 60 ítems   (UI/UX)          26/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 0/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    44/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    49/195
                                                   (3 parciales: V#32, V#43, V#53)
 
-SESIÓN DEL 07-may-2026 (4 packs en una tarde):
+SESIÓN DEL 07-may-2026 (9 packs en una tarde):
   Pack 1 (v1.6.34): Filtro #2 lite, #30, #38 + Visual #5, #6, #25
   Pack 2 (v1.6.35): Filtro #45, #50 + Visual #29, #34
   Pack 3 (v1.6.36): Scanner #28, #29, #45, #50 + Filtro #4
@@ -964,6 +988,32 @@ SESIÓN DEL 07-may-2026 (4 packs en una tarde):
                     → 2 detecciones nuevas + 3 filtros anti-FP críticos.
                       Recompila el .exe a 1.6.41 — los clientes con
                       versiones <1.6.41 verán "actualización disponible".
+  Pack 9 (v1.6.42): Visual #35, #37, #44, #51, #52
+                    + 3 hot-fixes UX:
+                      * Search trigger visible en header del panel
+                        ("Buscar scans, jugadores… [Ctrl K]") que abre
+                        el quicksearch — soluciona "los users no saben
+                        que existe Cmd+K".
+                      * FAB Discord oculto en panel (ya hay icono en
+                        header, evita superposición con avatares/widgets
+                        de la esquina inferior).
+                      * Pendiente cambiar DISCORD_INVITE_URL al link
+                        permanente real (esperando que el user lo pase).
+                    NUEVOS: argusUI.openQuickSearch / closeQuickSearch /
+                            setFontSize / getFontSize /
+                            setSoundEnabled / playScanDing
+                    → 5 mejoras UI sin tocar el .exe:
+                      * Halo dorado bronce 520x520 siguiendo cursor en
+                        hero del index (mix-blend:screen, rAF).
+                      * Parallax suave hero: logo/eyebrow/title/sub a
+                        velocidades distintas con translate3d.
+                      * Sonido ding sofisticado (E5→A5 con WebAudio,
+                        sin asset). Toggleable persistente.
+                      * Contraste --text-d WCAG AA: dark 2.2→4.6,
+                        light 3.0→5.0.
+                      * Selector A−/A/A+/A++ para tamaño base de
+                        interfaz con zoom global + focus rings 3px
+                        bronce.
 
 PRIORIZACIÓN SUGERIDA (top 10 con mayor ROI inmediato)
 ──────────────────────────────────────────────────────

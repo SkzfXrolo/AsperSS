@@ -429,6 +429,12 @@ function showToast(message, type = 'info', scanId = null) {
 let _soundEnabled = localStorage.getItem('notif-sound') !== 'false';
 function playNotificationSound() {
     if (!_soundEnabled) return;
+    // Visual #44 — usar el ding sofisticado de argusUI cuando esté disponible
+    // (2 notas E5->A5, perfil exponencial, más agradable que el beep antiguo).
+    if (window.argusUI && typeof window.argusUI.playScanDing === 'function') {
+        window.argusUI.playScanDing(true);
+        return;
+    }
     try {
         const ctx  = new (window.AudioContext || window.webkitAudioContext)();
         const osc  = ctx.createOscillator();

@@ -677,6 +677,100 @@
         _initStickyHeaderShadow();
     }
 
+    // ── Sonido sutil al recibir scan nuevo (Visual #44) ──────────────────────
+    // No requiere assets: genera un "ding" suave con WebAudio API.
+    // Toggleable via argusUI.setSoundEnabled(true|false) y persiste en LS.
+    // Volumen sutil (~0.10), 2 notas (E5 -> A5) en 220ms para no irritar.
+    const SND_KEY = 'argus_sound_enabled';
+    function _isSoundEnabled() {
+        try { return localStorage.getItem(SND_KEY) === '1'; }
+        catch (_e) { return false; }
+    }
+    function setSoundEnabled(b) {
+        try { localStorage.setItem(SND_KEY, b ? '1' : '0'); } catch (_e) {}
+        if (b && typeof window.showToast === 'function') {
+            window.showToast('🔔 Sonido activado para scans nuevos', 'success', { duration: 2200 });
+            // Probar inmediatamente para que el usuario sepa cómo suena
+            setTimeout(() => playScanDing(), 150);
+        }
+    }
+    let _audioCtx = null;
+    function _getAudioCtx() {
+        if (_audioCtx) return _audioCtx;
+        try {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return null;
+            _audioCtx = new Ctx();
+        } catch (_e) { _audioCtx = null; }
+        return _audioCtx;
+    }
+    function playScanDing(force) {
+        if (!force && !_isSoundEnabled()) return;
+        const ctx = _getAudioCtx();
+        if (!ctx) return;
+        // Si el contexto está suspendido (autoplay policy), intentar reanudar
+        if (ctx.state === 'suspended') {
+            try { ctx.resume(); } catch (_e) {}
+        }
+        const now = ctx.currentTime;
+        function note(freq, start, dur, peak) {
+            const osc  = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + start);
+            gain.gain.setValueAtTime(0, now + start);
+            gain.gain.linearTargetAtTime ? null : null;  // no-op, broaden compat
+            gain.gain.linearRampToValueAtTime(peak,    now + start + 0.012);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+            osc.connect(gain).connect(ctx.destination);
+            osc.start(now + start);
+            osc.stop(now + start + dur + 0.02);
+        }
+        note(659.25, 0.000, 0.18, 0.10);  // E5
+        note(880.00, 0.080, 0.22, 0.08);  // A5
+    }
+
+
+    // ── Font-size base configurable (Visual #52) ─────────────────────────────
+    // Aplica clase argus-fontsize-{small|normal|large|xlarge} a <html>.
+    // El CSS usa `zoom` (Chrome/Edge/Safari). Firefox cae en fallback JS.
+    const FS_KEY = 'argus_fontsize';
+    const FS_VALID = ['small', 'normal', 'large', 'xlarge'];
+    const FS_FALLBACK = { small: 0.92, normal: 1, large: 1.12, xlarge: 1.24 };
+    function _supportsZoom() {
+        try {
+            const t = document.createElement('div');
+            t.style.zoom = '1.5';
+            return t.style.zoom === '1.5' || t.style.zoom !== '';
+        } catch (_e) { return false; }
+    }
+    const _hasZoom = _supportsZoom();
+    function _applyFontSize(s) {
+        if (!FS_VALID.includes(s)) s = 'normal';
+        const html = document.documentElement;
+        FS_VALID.forEach(v => html.classList.remove('argus-fontsize-' + v));
+        html.classList.add('argus-fontsize-' + s);
+        if (!_hasZoom && document.body) {
+            const f = FS_FALLBACK[s] || 1;
+            document.body.style.transformOrigin = 'top left';
+            if (Math.abs(f - 1) < 0.01) {
+                document.body.style.transform = '';
+                document.body.style.width    = '';
+            } else {
+                document.body.style.transform = 'scale(' + f + ')';
+                document.body.style.width = (100 / f) + '%';
+            }
+        }
+        try { localStorage.setItem(FS_KEY, s); } catch (_e) {}
+    }
+    function _getFontSize() {
+        try { return localStorage.getItem(FS_KEY) || 'normal'; }
+        catch (_e) { return 'normal'; }
+    }
+    function setFontSize(s) { _applyFontSize(s); }
+    _applyFontSize(_getFontSize());
+
+
     // ── Densidad ajustable (Visual #33) ──────────────────────────────────────
     // Aplica clase argus-density-{cozy|normal|compact} a <html>. Persiste
     // la preferencia en localStorage('argus_density').
@@ -775,6 +869,11 @@
         markScanFinished,
         openQuickSearch:  _qsOpen,
         closeQuickSearch: _qsClose,
+        setFontSize,
+        getFontSize: _getFontSize,
+        setSoundEnabled,
+        isSoundEnabled: _isSoundEnabled,
+        playScanDing,
     };
 
     // Re-aplicar la vista guardada cuando se haya cargado el DOM

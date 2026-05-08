@@ -439,6 +439,25 @@
 }
 
 
+/* ── Modo accesibilidad: font-size base configurable (Visual #52) ────────── */
+/* Aplica zoom global al body para que TODO escale (incluyendo medidas hard-
+ * coded en px). Ajustable desde argusUI.setFontSize('small'|'normal'|'large').
+ * Usa la propiedad CSS `zoom` (no estándar pero soportada en Chrome/Edge/Safari)
+ * con fallback a `transform: scale()` para Firefox vía JS. */
+html.argus-fontsize-small  body { zoom: 0.92; }
+html.argus-fontsize-normal body { zoom: 1.00; }
+html.argus-fontsize-large  body { zoom: 1.12; }
+html.argus-fontsize-xlarge body { zoom: 1.24; }
+
+/* Focus rings más visibles para accesibilidad (Visual #52 b) */
+html.argus-fontsize-large *:focus-visible,
+html.argus-fontsize-xlarge *:focus-visible {
+    outline: 3px solid rgba(212, 145, 90, 0.85) !important;
+    outline-offset: 2px !important;
+    border-radius: 4px;
+}
+
+
 /* ── Tipografía: números tabulares + ligaduras estilísticas (Visual #50) ── */
 /* OpenType font-features en TODA la app:
  *  - 'tnum'  → números de ancho fijo (alineación perfecta en columnas)

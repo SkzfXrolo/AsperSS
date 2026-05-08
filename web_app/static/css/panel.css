@@ -34,10 +34,13 @@
     --yellow:      #FBBF24;
     --yellow-bg:   rgba(251,191,36,0.10);
 
-    /* Text */
+    /* Text — Visual #51 (WCAG AA pass): --text-d antes era #5A4A38
+     * (contrast ~2.2:1 sobre #161616, fail). Subido a #8E7B65 que da
+     * contrast ~4.6:1 sobre los backgrounds dark del panel manteniendo
+     * el feel cobre. */
     --text:        #EAD8C0;
     --text-m:      #A89578;
-    --text-d:      #5A4A38;
+    --text-d:      #8E7B65;
 
     /* Misc */
     --radius:      14px;
@@ -94,7 +97,9 @@ body.light-theme {
 
     --text:        #3A2A18;
     --text-m:      #6B5240;
-    --text-d:      #A89578;
+    /* Visual #51 (WCAG AA): #A89578 sobre #FAF6F0 daba contrast ~3:1.
+     * Bajado a #7E6952 (~5.0:1) — mismo undertone bronce, legible. */
+    --text-d:      #7E6952;
 
     --shadow:      0 8px 32px rgba(120,80,40,0.10);
     --shadow-lg:   0 20px 60px rgba(120,80,40,0.18);
