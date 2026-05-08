@@ -563,6 +563,7 @@
                 </div>
                 <div class="page-actions">
                     <button class="btn btn-outline btn-sm" onclick="reloadAll()">↻ Refrescar</button>
+                    <a class="btn btn-outline btn-sm" href="/aspers-sa/api/export/recent-scans.csv?limit=500" download>↓ CSV scans</a>
                 </div>
             </div>
 
@@ -629,6 +630,7 @@
                 </div>
                 <div class="page-actions">
                     <button class="btn btn-red btn-sm" onclick="switchTab('nueva')">＋ Nueva empresa</button>
+                    <a class="btn btn-outline btn-sm" href="/aspers-sa/api/export/companies.csv" download>↓ CSV</a>
                 </div>
             </div>
 
@@ -693,6 +695,9 @@
                 <div>
                     <span class="page-eyebrow">// PEOPLE</span>
                     <h1 class="page-title">Usuarios <span>de la plataforma</span></h1>
+                </div>
+                <div class="page-actions">
+                    <a class="btn btn-outline btn-sm" href="/aspers-sa/api/export/users.csv" download>↓ CSV</a>
                 </div>
             </div>
             <div class="card">
@@ -854,6 +859,7 @@
                 </div>
                 <div class="page-actions">
                     <button class="btn btn-outline btn-sm" onclick="loadStaffTrust()">↻ Refrescar</button>
+                    <a class="btn btn-outline btn-sm" href="/aspers-sa/api/export/trust.csv" download>↓ CSV</a>
                 </div>
             </div>
             <div class="card">
@@ -886,6 +892,7 @@
                 </div>
                 <div class="page-actions">
                     <button class="btn btn-outline btn-sm" onclick="loadPatterns()">↻ Refrescar</button>
+                    <a class="btn btn-outline btn-sm" href="/aspers-sa/api/export/patterns.csv" download>↓ CSV</a>
                 </div>
             </div>
             <div class="card">
@@ -918,6 +925,7 @@
                 </div>
                 <div class="page-actions">
                     <button class="btn btn-outline btn-sm" onclick="loadCooldowns()">↻ Refrescar</button>
+                    <a class="btn btn-outline btn-sm" href="/aspers-sa/api/export/cooldowns.csv" download>↓ CSV</a>
                 </div>
             </div>
             <div class="card">
@@ -954,6 +962,7 @@
                         <option value="365">365d</option>
                     </select>
                     <button class="btn btn-outline btn-sm" onclick="loadOffenders()">↻</button>
+                    <a class="btn btn-outline btn-sm" id="off-csv" href="/aspers-sa/api/export/offenders.csv?since_days=90" download>↓ CSV</a>
                 </div>
             </div>
             <div class="card">
@@ -1039,6 +1048,7 @@ Acciones:
                 </div>
                 <div class="page-actions">
                     <button class="btn btn-outline btn-sm" onclick="loadAudit()">↻ Refrescar</button>
+                    <a class="btn btn-outline btn-sm" href="/aspers-sa/api/export/audit.csv" download>↓ CSV</a>
                 </div>
             </div>
             <div class="card">
@@ -1113,6 +1123,17 @@ Acciones:
                 <button type="submit" class="btn btn-red">Guardar</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- MODAL COMPANY HEALTH (deep dive) -->
+<div class="modal-bg" id="modal-health">
+    <div class="modal" style="max-width:780px">
+        <div class="modal-head">
+            <span class="modal-title" id="health-title">Company health</span>
+            <button class="modal-close" onclick="closeModal('modal-health')">×</button>
+        </div>
+        <div class="modal-body" id="health-body">Cargando…</div>
     </div>
 </div>
 
@@ -1261,8 +1282,8 @@ async function loadOverview() {
             tbody.innerHTML = '<tr><td colspan="4" class="empty">Sin datos en 30d</td></tr>';
         } else {
             tbody.innerHTML = d.top_companies_30d.map(c => `
-                <tr>
-                    <td><strong>${escHTML(c.company_name)}</strong></td>
+                <tr style="cursor:pointer" onclick="openCompanyHealth(${c.company_id})">
+                    <td><strong>${escHTML(c.company_name)}</strong> <span class="mono" style="color:var(--text-d);font-size:10px">→</span></td>
                     <td class="num">${fmtNum(c.scans)}</td>
                     <td class="num"><span class="badge ${c.hacks>0?'badge-hack':'badge-clean'}">${fmtNum(c.hacks)}</span></td>
                     <td class="num">${(c.hack_rate*100).toFixed(1)}%</td>
@@ -1733,6 +1754,84 @@ async function loadSystem() {
     } catch(e) { console.error(e); }
 }
 
+/* ── COMPANY HEALTH DEEP-DIVE ── */
+async function openCompanyHealth(cid) {
+    const m = $('#modal-health');
+    m.classList.add('open');
+    $('#health-title').textContent = 'Company health · #' + cid;
+    $('#health-body').innerHTML = '<div class="empty">Cargando…</div>';
+    try {
+        const d = await api('/companies/' + cid + '/health');
+        const fmt = v => v==null?'—':(v*100).toFixed(1)+'%';
+        const cd = d.cooldown || {};
+        const m_ = (d.ai_metrics || {});
+        const sug = (d.ai_suggestion || {});
+        const fp = d.fp_candidates || [];
+        const off = d.top_offenders || [];
+        $('#health-title').textContent = `${d.name || ('#' + cid)}`;
+        $('#health-body').innerHTML = `
+            <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:18px">
+                <div class="kpi"><div class="kpi-label">Estado</div><div class="kpi-val text-m" style="font-size:18px">${escHTML(d.subscription_status||'—')}</div><div class="kpi-sub">${d.subscription_price?'$'+d.subscription_price+'/mes':'—'}</div></div>
+                <div class="kpi"><div class="kpi-label">Scans totales</div><div class="kpi-val blue">${fmtNum(d.scans_total||0)}</div></div>
+                <div class="kpi"><div class="kpi-label">Hacks / Cleans</div><div class="kpi-val red" style="font-size:22px">${fmtNum(d.hacks||0)} <span style="color:var(--text-d);font-size:14px">/</span> <span style="color:#34D399">${fmtNum(d.cleans||0)}</span></div></div>
+                <div class="kpi"><div class="kpi-label">Pendientes</div><div class="kpi-val amber">${fmtNum(d.pendings||0)}</div></div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+                <div class="card" style="margin:0">
+                    <div class="card-head"><span class="card-title">Cooldown</span></div>
+                    <div class="card-body">
+                        ${cd.threshold_bump > 0 ? `
+                            <div class="alert-box amber">
+                                <div>Bump activo: <strong>+${cd.threshold_bump}</strong>
+                                <br><span class="mono" style="font-size:11px">FP 24h: ${cd.fp_count_24h||0} · Overturns 24h: ${cd.overturn_count_24h||0}</span></div>
+                            </div>
+                            <div style="margin-top:10px"><button class="btn btn-amber btn-sm" onclick="resetCooldown(${cid}); closeModal('modal-health')">↺ Reset</button></div>
+                        ` : `<div class="alert-box ok">Sin bump activo · empresa estable</div>`}
+                    </div>
+                </div>
+                <div class="card" style="margin:0">
+                    <div class="card-head"><span class="card-title">Calidad IA (90d)</span></div>
+                    <div class="card-body">
+                        ${m_.total_evaluated > 0 ? `
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
+                                <div><div class="mono" style="color:var(--text-d);font-size:10px">P</div><div class="mono" style="font-size:16px;font-weight:700">${fmt(m_.precision)}</div></div>
+                                <div><div class="mono" style="color:var(--text-d);font-size:10px">R</div><div class="mono" style="font-size:16px;font-weight:700">${fmt(m_.recall)}</div></div>
+                                <div><div class="mono" style="color:var(--text-d);font-size:10px">F1</div><div class="mono" style="font-size:16px;font-weight:700">${fmt(m_.f1)}</div></div>
+                            </div>
+                            <div style="margin-top:10px;font-size:11.5px;color:var(--text-m)">
+                                <strong>${escHTML(sug.action || 'keep')}</strong> · ${escHTML(sug.rationale || '')}
+                            </div>
+                        ` : `<div style="color:var(--text-d);font-size:12px">Sin verdicts cerrados aún (necesita ≥30 para sugerir).</div>`}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom:14px">
+                <div class="card-head"><span class="card-title">Top reincidentes (180d)</span><span class="card-sub">${off.length} jugadores</span></div>
+                <div class="tbl-wrap">
+                    ${off.length ? `<table>
+                        <thead><tr><th>#</th><th>Jugador</th><th>Hacks</th><th>Risk máx</th><th>Último</th></tr></thead>
+                        <tbody>${off.map((r,i)=>`<tr><td class="num">#${i+1}</td><td><strong>${escHTML(r.minecraft_username)}</strong></td><td class="num"><span class="badge badge-hack">${r.hacks}</span></td><td class="num">${r.max_risk}</td><td class="mono">${fmtAgo(r.last_hack)}</td></tr>`).join('')}</tbody>
+                    </table>` : '<div class="empty">Sin reincidentes</div>'}
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom:0">
+                <div class="card-head"><span class="card-title">Top FP candidatos (90d)</span><span class="card-sub">${fp.length}</span></div>
+                <div class="tbl-wrap">
+                    ${fp.length ? `<table>
+                        <thead><tr><th>Fragmento</th><th>Veces</th></tr></thead>
+                        <tbody>${fp.map(r=>`<tr><td class="mono" style="max-width:380px;word-break:break-all;font-size:11px">${escHTML(r.fragment || r.path_full)}</td><td class="num"><span class="badge badge-info">${r.count}</span></td></tr>`).join('')}</tbody>
+                    </table>` : '<div class="empty">Sin candidatos en 90d</div>'}
+                </div>
+            </div>
+        `;
+    } catch(e) {
+        $('#health-body').innerHTML = '<div class="alert-box red">Error: ' + escHTML(e.message) + '</div>';
+    }
+}
+
 /* ── Edit / toggle empresa modals ── */
 function openEdit(id, name, price, status, expiry, maxu, maxa, email) {
     $('#edit-id').value    = id;
@@ -1792,7 +1891,11 @@ document.addEventListener('DOMContentLoaded', () => {
     $$('.sb-link').forEach(a => a.addEventListener('click', () => switchTab(a.dataset.tab)));
     $('#live-pill').addEventListener('click', toggleLive);
     $('#ai-since-days').addEventListener('change', loadAIHealth);
-    $('#off-since-days').addEventListener('change', loadOffenders);
+    $('#off-since-days').addEventListener('change', () => {
+        loadOffenders();
+        const link = $('#off-csv');
+        if (link) link.href = '/aspers-sa/api/export/offenders.csv?since_days=' + $('#off-since-days').value;
+    });
 
     // Tab inicial desde hash
     const hash = (location.hash || '').replace('#', '');

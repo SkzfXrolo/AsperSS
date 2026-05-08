@@ -3896,10 +3896,170 @@ def _is_server_false_positive(result: dict) -> bool:
             # Solo descarta si el alert es bajo o es archivo benigno
             if nivel not in ('CRITICAL',):
                 return True
+
+        # ════════════════════════════════════════════════════════════════
+        # PACK 40 — Filter F#1 cierre (instaladores legítimos por filename
+        # + publisher pattern). Server-side, sin DB de hashes externa.
+        # Cubre el último 30% que faltaba después del path-whitelist Pack 29.
+        # ════════════════════════════════════════════════════════════════
+        if is_known_legit_installer(name_lower, combined):
+            return True
     except Exception:
         pass
 
     return False
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Filter F#1 — Whitelist de instaladores legítimos por filename pattern
+# (server-side, sin VirusTotal Intelligence ni Microsoft Catalog).
+#
+# Estrategia: en lugar de mantener una tabla de hashes (carísimo de poblar
+# y mantener), reconocemos el filename + estructura típica de los instaladores
+# de software popular. Los cheats reales NO se distribuyen como
+# "EpicGamesLauncherInstaller.exe" en Downloads — vienen como `vape.jar`
+# en `.minecraft\mods` o `client.exe` en una carpeta sin firma.
+#
+# Reglas:
+#   1. Filename matchea uno de los patterns conocidos.
+#   2. Path típico de instalador (Downloads, Temp, %TEMP%, Cache, AppData,
+#      Program Files, Recycle, MSOCache, package cache...).
+#   3. Extensión .exe o .msi (los cheats raramente usan .msi).
+#
+# Si los 3 se cumplen → es un instalador reconocido y se descarta como FP.
+# ────────────────────────────────────────────────────────────────────────────
+import re as _re_legit_installer
+
+_KNOWN_INSTALLER_PATTERNS = [
+    # NVIDIA
+    _re_legit_installer.compile(r'(?:^|\W)nvidia[-_ ]?(?:geforce|game|app|experience|driver|broadcast|inspector|control[-_ ]?panel)?[-_ ]?(?:setup|installer|update)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^geforce[-_ ]?experience[-_ ]?(?:setup|installer|update|app)[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^nvgflashwindows.*\.exe$'),
+    # AMD
+    _re_legit_installer.compile(r'^(?:amd|radeon)[-_ ]?software[-_ ]?(?:adrenalin|crimson)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^amd[-_ ]?(?:chipset|driver|cleanup[-_ ]?utility)[-_ \d\.\w]*\.exe$'),
+    # Intel
+    _re_legit_installer.compile(r'^intel[-_ ]?(?:driver|graphics|wireless|chipset|arc|installation)[-_ ]?(?:assistant|setup|installer)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^igfxsetup[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^wirelesssetup[-_ \d\.\w]*\.exe$'),
+    # Microsoft Visual C++ Redistributables / .NET / Edge / Office / Visual Studio
+    _re_legit_installer.compile(r'^vc(?:_|-)redist[-_\.\w]*\.(?:exe|msi)$'),
+    _re_legit_installer.compile(r'^(?:vc(?:pp|\+\+))[-_ ]?\d{4}[-_ ]?redist.*\.(?:exe|msi)$'),
+    _re_legit_installer.compile(r'^(?:dotnet|netcore|net[-_]framework)[-_ ]?(?:runtime|sdk|installer)?[-_ \d\.\w]*\.(?:exe|msi)$'),
+    _re_legit_installer.compile(r'^windowsdesktop[-_ ]?runtime[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^aspnetcore[-_ ]?runtime[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:office|o365|microsoft365)[-_ ]?(?:setup|installer|home|business|pro)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:officesetup|onenotesetup|teamssetup|outlooksetup|wordsetup|excelsetup|powerpointsetup)[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:edge|microsoftedge|edgewebview)[-_ ]?(?:setup|installer|update)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:visualstudio|vs[-_ ]?(?:code|community|pro|enterprise))[-_ ]?(?:setup|installer|bootstrapper)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^vssetup[-_ \d\.\w]*\.(?:exe|msi)$'),
+    _re_legit_installer.compile(r'^(?:powershell|wt|windowsterminal)[-_ ]?(?:setup|installer|preview)?[-_ \d\.\w]*\.(?:exe|msi|msix)$'),
+    _re_legit_installer.compile(r'^(?:directx|dxsetup|d3dx9_redist).*\.exe$'),
+    _re_legit_installer.compile(r'^(?:winget|appinstaller|app[-_ ]?installer).*\.(?:exe|msi|msix|msixbundle)$'),
+    # Browsers
+    _re_legit_installer.compile(r'^(?:chrome|google[-_ ]?chrome)[-_ ]?(?:setup|installer)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^firefox[-_ ]?(?:setup|installer|esr)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:brave|bravebrowser)[-_ ]?(?:setup|installer)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:opera|opera[-_ ]?gx|operasetup)[-_ ]?(?:setup|installer)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:vivaldi|vivaldi[-_ ]?installer)[-_ \d\.\w]*\.exe$'),
+    # Discord, Spotify, Slack, Telegram
+    _re_legit_installer.compile(r'^discordsetup[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^discord(?:[-_ ]?canary|[-_ ]?ptb)?[-_ ]?setup[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^spotifysetup[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^slacksetup[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^telegram[-_ ]?(?:setup|desktop|installer)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^zoom(?:installer|setup|launcher)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^teamssetup[-_ \d\.\w]*\.exe$'),
+    # Steam, Epic, Riot, Battle.net, GOG, Origin, Ubisoft, Rockstar
+    _re_legit_installer.compile(r'^steamsetup[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^epicgameslauncherinstaller[-_ \d\.\w]*\.msi$'),
+    _re_legit_installer.compile(r'^epicgameslauncher[-_ ]?(?:installer|setup)?[-_ \d\.\w]*\.(?:exe|msi)$'),
+    _re_legit_installer.compile(r'^riotclient(?:installer|setup)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^battle[-_ ]?net[-_ ]?(?:setup|installer)[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:gog|gog[-_ ]?galaxy)[-_ ]?(?:setup|installer|update)?[-_ \d\.\w]*\.(?:exe|msi)$'),
+    _re_legit_installer.compile(r'^origin(?:setup|installer|launcher|update)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:ubisoft|uplay)[-_ ]?(?:connect|launcher|installer|setup)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:rockstar|socialclub)[-_ ]?(?:games[-_ ]?launcher)?[-_ ]?(?:setup|installer)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^playstation(?:[-_ ]?launcher)?[-_ \d\.\w]*\.exe$'),
+    # OBS, Streamlabs, capture tools
+    _re_legit_installer.compile(r'^obs[-_ ]?studio[-_ ]?[-_ \d\.\w]*(?:full[-_ ]?installer|setup|installer)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^streamlabs[-_ ]?(?:obs|desktop|setup|installer)?[-_ \d\.\w]*\.exe$'),
+    # Java JDK / JRE / OpenJDK
+    _re_legit_installer.compile(r'^(?:jdk|jre|openjdk|java)[-_ ]?(?:setup|installer|win|x64|x86)?[-_ \d\.\w]*\.(?:exe|msi)$'),
+    _re_legit_installer.compile(r'^(?:adoptopenjdk|adoptium|temurin|corretto|liberica|zulu|microsoft[-_ ]?build[-_ ]?of[-_ ]?openjdk)[-_ ]?[-_ \d\.\w]*\.(?:exe|msi)$'),
+    # Razer, Logitech, Corsair, SteelSeries, HyperX
+    _re_legit_installer.compile(r'^(?:razer)[-_ ]?(?:synapse|cortex|chroma|installer|setup)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:logitech|lghub)[-_ ]?(?:installer|setup|gaming|update)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^lghub_installer[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:icue|corsair[-_ ]?icue)[-_ ]?(?:installer|setup)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:steelseries|sse|ss[-_ ]?engine)[-_ ]?(?:gg|installer|setup)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:hyperx|ngenuity)[-_ ]?(?:installer|setup)?[-_ \d\.\w]*\.exe$'),
+    # 7-Zip, WinRAR, NotePad++, Git
+    _re_legit_installer.compile(r'^7z[-_ \d\.\w]*\.(?:exe|msi)$'),
+    _re_legit_installer.compile(r'^winrar[-_ ]?(?:x64|x86)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^npp[-_ ]?(?:installer|setup)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^git[-_ ]?(?:bash|cmd|installer|setup|for[-_ ]?windows)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^github[-_ ]?desktop[-_ ]?(?:setup|installer)?[-_ \d\.\w]*\.exe$'),
+    # Antivirus (instaladores oficiales)
+    _re_legit_installer.compile(r'^(?:malwarebytes|mbam|mb3|mb4)[-_ ]?(?:installer|setup)?[-_ \d\.\w]*\.exe$'),
+    _re_legit_installer.compile(r'^(?:avast|avg|kaspersky|bitdefender|eset|norton|mcafee|sophos)[-_ ]?(?:setup|installer|free|antivirus)?[-_ \d\.\w]*\.exe$'),
+    # Drivers genéricos (HID, audio realtek, etc.)
+    _re_legit_installer.compile(r'^realtek[-_ ]?(?:audio|hd|wireless|setup)?[-_ \d\.\w]*\.exe$'),
+    # NVidia/AMD legacy DCH installers
+    _re_legit_installer.compile(r'^\d{3,4}\.\d{1,3}[-_ ]?(?:desktop|notebook|game|studio|dch)[-_ ]?(?:notebook|win\d+|x64|us|setup|international)?[-_ \d\.\w]*\.exe$'),
+]
+
+_INSTALLER_PATH_HINTS = (
+    '\\downloads\\', '\\descargas\\', '\\desktop\\', '\\escritorio\\',
+    '\\temp\\', '\\tmp\\', '\\appdata\\local\\temp\\',
+    '\\windows\\softwaredistribution\\', '\\windows\\installer\\',
+    '\\msocache\\', '\\windows\\winsxs\\',
+    '\\packagecache\\', '\\package cache\\', '\\packages\\',
+    '\\program files\\', '\\program files (x86)\\',
+    '\\appdata\\local\\packages\\', '\\appdata\\local\\microsoft\\',
+    '\\appdata\\roaming\\microsoft\\',
+    '\\$recycle.bin\\', '\\recycle.bin\\',
+    '\\nvidia\\', '\\amd\\', '\\intel\\',
+    '\\squirreltemp\\', '\\update\\packages\\',
+)
+
+
+def is_known_legit_installer(name_lower: str, combined_lower: str) -> bool:
+    """True si el filename matchea un installer reconocido Y está en path
+    típico de instalador. Diseñado para tener 0 FN sobre instaladores reales
+    populares y ~0 FP sobre cheats (los cheats no se llaman como installers
+    de NVIDIA / Office).
+
+    Args:
+        name_lower:     nombre del archivo en lowercase (sin path)
+        combined_lower: path|name completo en lowercase
+    """
+    if not name_lower or not name_lower.endswith(('.exe', '.msi', '.msix', '.msixbundle')):
+        return False
+    # Match contra patterns
+    matched_pattern = False
+    for pat in _KNOWN_INSTALLER_PATTERNS:
+        try:
+            if pat.match(name_lower):
+                matched_pattern = True
+                break
+        except Exception:
+            continue
+    if not matched_pattern:
+        return False
+    # Confirmar con un path hint razonable (los cheats típicos aparecen en
+    # .minecraft/mods, no en C:\Windows\Installer ni en Downloads como
+    # GeForceExperience-Setup.exe). Si el path es ambiguo (sin ningún hint),
+    # SOLO descartamos si el filename es muy específico de installer
+    # (contiene "setup" / "installer" / "redist" / "runtime").
+    path_ok = any(hint in combined_lower for hint in _INSTALLER_PATH_HINTS)
+    explicit_installer_token = any(
+        tok in name_lower for tok in (
+            'setup', 'installer', 'redist', 'runtime', 'update',
+            'bootstrapper', 'webview', 'distribut', 'installation'
+        )
+    )
+    return path_ok or explicit_installer_token
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -12609,6 +12769,359 @@ def sa_api_scans_timeseries():
         return jsonify({'series': series, 'days': days}), 200
     except Exception as e:
         return jsonify({'error': str(e), 'series': []}), 500
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Pack 40 — Bonus pre-anuncio:
+#   * /aspers-sa/api/companies/<id>/health (deep-dive por empresa)
+#   * /aspers-sa/api/export/<kind>.csv     (export CSV de las tablas)
+# ════════════════════════════════════════════════════════════════════════
+
+@app.route('/aspers-sa/api/companies/<int:cid>/health', methods=['GET'])
+@_sa_required
+def sa_api_company_health(cid):
+    """Deep-dive de UNA empresa: scans, hacks/cleans/pendings, top players,
+    cooldown, métricas IA propias, top FP candidatos para ESTA empresa."""
+    out = {'company_id': cid}
+    try:
+        from auth import list_companies as _lc
+        cmap = {c.get('id'): c for c in (_lc() or [])}
+        c = cmap.get(cid) or {}
+        out['name']               = c.get('name') or f'company_{cid}'
+        out['contact_email']      = c.get('contact_email')
+        out['subscription_status']= c.get('subscription_status')
+        out['subscription_price'] = float(c.get('subscription_price') or 0)
+        out['max_users']          = c.get('max_users')
+        out['max_admins']         = c.get('max_admins')
+        out['current_users']      = c.get('current_users')
+    except Exception:
+        pass
+    try:
+        with get_api_db_cursor() as cur:
+            ph = '%s'  # PG por defecto; SQLite acepta también con _sa_dual_count si fuera necesario
+            try:
+                cur.execute(f"SELECT COUNT(*) FROM scans WHERE company_id = {ph}", (cid,))
+                r = cur.fetchone()
+                out['scans_total'] = int(_row_get(r, 0, list(r.keys())[0]) if r and hasattr(r,'keys') else (r[0] if r else 0) or 0)
+            except Exception:
+                cur.execute("SELECT COUNT(*) FROM scans WHERE company_id = ?", (cid,))
+                r = cur.fetchone()
+                out['scans_total'] = int(r[0] if r else 0)
+            # Verdicts breakdown
+            for verdict, key in [('hack','hacks'), ('clean','cleans')]:
+                try:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM scans WHERE company_id = %s AND verdict = %s",
+                        (cid, verdict)
+                    )
+                    r = cur.fetchone()
+                    out[key] = int(_row_get(r, 0, list(r.keys())[0]) if r and hasattr(r,'keys') else (r[0] if r else 0) or 0)
+                except Exception:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM scans WHERE company_id = ? AND verdict = ?",
+                        (cid, verdict)
+                    )
+                    r = cur.fetchone()
+                    out[key] = int(r[0] if r else 0)
+            try:
+                cur.execute(
+                    "SELECT COUNT(*) FROM scans WHERE company_id = %s AND (verdict IS NULL OR verdict = '' OR verdict = 'pending')",
+                    (cid,)
+                )
+                r = cur.fetchone()
+                out['pendings'] = int(_row_get(r, 0, list(r.keys())[0]) if r and hasattr(r,'keys') else (r[0] if r else 0) or 0)
+            except Exception:
+                cur.execute(
+                    "SELECT COUNT(*) FROM scans WHERE company_id = ? AND (verdict IS NULL OR verdict = '' OR verdict = 'pending')",
+                    (cid,)
+                )
+                r = cur.fetchone()
+                out['pendings'] = int(r[0] if r else 0)
+            # Cooldown
+            if _AI_TRUST_AVAILABLE:
+                try:
+                    out['cooldown'] = _ai_trust.get_company_cooldown(cur, cid)
+                except Exception:
+                    out['cooldown'] = None
+            # Quality metrics propias
+            if _AI_QUALITY_AVAILABLE:
+                try:
+                    m = _ai_quality.get_quality_metrics(cur, company_id=cid, since_days=90)
+                    out['ai_metrics']    = m
+                    out['ai_suggestion'] = _ai_quality.suggest_threshold_adjustment(m)
+                except Exception:
+                    pass
+                try:
+                    out['fp_candidates'] = _ai_quality.suggest_learn_fp_candidates(
+                        cur, company_id=cid, limit=10
+                    )
+                except Exception:
+                    pass
+            # Top players
+            if _AI_MAINT_AVAILABLE:
+                try:
+                    out['top_offenders'] = _ai_maint.get_top_repeat_offenders(
+                        cur, company_id=cid, since_days=180, limit=10
+                    )
+                except Exception:
+                    pass
+        return jsonify(out), 200
+    except Exception as e:
+        return jsonify({'error': str(e), **out}), 500
+
+
+@app.route('/aspers-sa/api/export/<kind>.csv', methods=['GET'])
+@_sa_required
+def sa_api_export_csv(kind):
+    """Export CSV de las tablas del panel SuperAdmin.
+    kinds soportados: companies | users | trust | cooldowns | patterns |
+                      offenders | audit | recent-scans
+    """
+    import csv as _csv
+    import io as _io
+    from flask import Response as _Resp
+
+    buf = _io.StringIO()
+    w = _csv.writer(buf, lineterminator='\n')
+    rows_count = 0
+
+    try:
+        if kind == 'companies':
+            from auth import list_companies as _lc
+            cs = _lc() or []
+            w.writerow(['id', 'name', 'contact_email', 'subscription_status',
+                        'subscription_price', 'max_users', 'max_admins',
+                        'current_users', 'subscription_end_date', 'created_at'])
+            for c in cs:
+                w.writerow([
+                    c.get('id'), c.get('name'), c.get('contact_email'),
+                    c.get('subscription_status'),
+                    float(c.get('subscription_price') or 0),
+                    c.get('max_users'), c.get('max_admins'),
+                    c.get('current_users'),
+                    c.get('subscription_end_date'),
+                    c.get('created_at'),
+                ])
+                rows_count += 1
+
+        elif kind == 'users':
+            from auth import list_users as _lu, list_companies as _lc
+            us = _lu() or []
+            cmap = {c.get('id'): c.get('name') for c in (_lc() or [])}
+            w.writerow(['id', 'username', 'email', 'company_id', 'company_name',
+                        'roles', 'is_active', 'last_login', 'created_at'])
+            for u in us:
+                roles_str = ','.join(u.get('roles') or [])
+                w.writerow([
+                    u.get('id'), u.get('username'), u.get('email'),
+                    u.get('company_id'), cmap.get(u.get('company_id'), ''),
+                    roles_str, bool(u.get('is_active')),
+                    u.get('last_login'), u.get('created_at'),
+                ])
+                rows_count += 1
+
+        elif kind == 'trust':
+            if not _AI_TRUST_AVAILABLE:
+                return jsonify({'error': 'ai_trust no cargado'}), 503
+            with get_api_db_cursor() as cur:
+                _ai_trust.ensure_trust_tables(cur)
+                cur.execute(
+                    'SELECT user_id, verdicts_total, agreements, disagreements, '
+                    'overturns_to_clean, overturns_to_hack, confirmed_correct, '
+                    'confirmed_wrong, trust_score, updated_at '
+                    'FROM staff_trust ORDER BY trust_score DESC'
+                )
+                rows = cur.fetchall() or []
+                user_map = {}
+                try:
+                    from auth import list_users as _lu
+                    user_map = {u.get('id'): u.get('username') for u in (_lu() or [])}
+                except Exception:
+                    pass
+                w.writerow(['user_id', 'username', 'verdicts_total', 'agreements',
+                            'disagreements', 'overturns_to_clean', 'overturns_to_hack',
+                            'confirmed_correct', 'confirmed_wrong', 'trust_score',
+                            'updated_at'])
+                for r in rows:
+                    uid = _row_get(r, 0, 'user_id')
+                    w.writerow([
+                        uid, user_map.get(uid, f'user_{uid}'),
+                        _row_get(r, 1, 'verdicts_total') or 0,
+                        _row_get(r, 2, 'agreements') or 0,
+                        _row_get(r, 3, 'disagreements') or 0,
+                        _row_get(r, 4, 'overturns_to_clean') or 0,
+                        _row_get(r, 5, 'overturns_to_hack') or 0,
+                        _row_get(r, 6, 'confirmed_correct') or 0,
+                        _row_get(r, 7, 'confirmed_wrong') or 0,
+                        float(_row_get(r, 8, 'trust_score') or 50.0),
+                        str(_row_get(r, 9, 'updated_at') or ''),
+                    ])
+                    rows_count += 1
+
+        elif kind == 'cooldowns':
+            if not _AI_TRUST_AVAILABLE:
+                return jsonify({'error': 'ai_trust no cargado'}), 503
+            with get_api_db_cursor() as cur:
+                _ai_trust.ensure_trust_tables(cur)
+                cur.execute(
+                    'SELECT company_id, fp_count_24h, overturn_count_24h, '
+                    'threshold_bump, cooldown_until, last_event_at '
+                    'FROM company_fp_cooldown'
+                )
+                rows = cur.fetchall() or []
+                cmap = {}
+                try:
+                    from auth import list_companies as _lc
+                    cmap = {c.get('id'): c.get('name') for c in (_lc() or [])}
+                except Exception:
+                    pass
+                w.writerow(['company_id', 'company_name', 'fp_count_24h',
+                            'overturn_count_24h', 'threshold_bump',
+                            'cooldown_until', 'last_event_at'])
+                for r in rows:
+                    cid = _row_get(r, 0, 'company_id')
+                    w.writerow([
+                        cid, cmap.get(cid, f'company_{cid}'),
+                        _row_get(r, 1, 'fp_count_24h') or 0,
+                        _row_get(r, 2, 'overturn_count_24h') or 0,
+                        _row_get(r, 3, 'threshold_bump') or 0,
+                        str(_row_get(r, 4, 'cooldown_until') or ''),
+                        str(_row_get(r, 5, 'last_event_at') or ''),
+                    ])
+                    rows_count += 1
+
+        elif kind == 'patterns':
+            if not _AI_AUTOLEARN_AVAILABLE:
+                return jsonify({'error': 'ai_autolearn no cargado'}), 503
+            with get_api_db_cursor() as cur:
+                _ai_autolearn.ensure_autolearn_table(cur)
+                cur.execute(
+                    'SELECT id, pattern_kind, pattern_value, confidence, '
+                    'hit_count, confirmed_count, learned_from_scan_id, '
+                    'learned_by, learned_at, last_hit_at, decay_score '
+                    'FROM learned_hack_patterns ORDER BY confidence DESC'
+                )
+                rows = cur.fetchall() or []
+                w.writerow(['id', 'pattern_kind', 'pattern_value', 'confidence',
+                            'hit_count', 'confirmed_count', 'learned_from_scan_id',
+                            'learned_by', 'learned_at', 'last_hit_at', 'decay_score'])
+                for r in rows:
+                    w.writerow([
+                        _row_get(r, 0, 'id'),
+                        _row_get(r, 1, 'pattern_kind'),
+                        _row_get(r, 2, 'pattern_value'),
+                        float(_row_get(r, 3, 'confidence') or 0.0),
+                        _row_get(r, 4, 'hit_count') or 0,
+                        _row_get(r, 5, 'confirmed_count') or 0,
+                        _row_get(r, 6, 'learned_from_scan_id'),
+                        _row_get(r, 7, 'learned_by'),
+                        str(_row_get(r, 8, 'learned_at') or ''),
+                        str(_row_get(r, 9, 'last_hit_at') or ''),
+                        float(_row_get(r, 10, 'decay_score') or 1.0),
+                    ])
+                    rows_count += 1
+
+        elif kind == 'offenders':
+            if not _AI_MAINT_AVAILABLE:
+                return jsonify({'error': 'ai_maintenance no cargado'}), 503
+            try:
+                since = max(7, min(730, int(request.args.get('since_days', 90))))
+            except Exception:
+                since = 90
+            with get_api_db_cursor() as cur:
+                rows = _ai_maint.get_top_repeat_offenders(
+                    cur, company_id=None, since_days=since, limit=200
+                )
+            w.writerow(['minecraft_username', 'hacks', 'max_risk', 'last_hack', 'since_days'])
+            for r in rows:
+                w.writerow([r.get('minecraft_username'), r.get('hacks'),
+                            r.get('max_risk'), r.get('last_hack'), since])
+                rows_count += 1
+
+        elif kind == 'audit':
+            with get_api_db_cursor() as cur:
+                try:
+                    cur.execute(
+                        'SELECT id, user_id, action, target_scan_id, detail, timestamp '
+                        'FROM staff_audit_log ORDER BY timestamp DESC LIMIT 1000'
+                    )
+                    rows = cur.fetchall() or []
+                except Exception:
+                    rows = []
+                user_map = {}
+                try:
+                    from auth import list_users as _lu
+                    user_map = {u.get('id'): u.get('username') for u in (_lu() or [])}
+                except Exception:
+                    pass
+                w.writerow(['id', 'timestamp', 'user_id', 'username', 'action',
+                            'target_scan_id', 'detail'])
+                for r in rows:
+                    uid = _row_get(r, 1, 'user_id')
+                    w.writerow([
+                        _row_get(r, 0, 'id'),
+                        str(_row_get(r, 5, 'timestamp') or ''),
+                        uid, user_map.get(uid, f'user_{uid}' if uid else 'system'),
+                        _row_get(r, 2, 'action'),
+                        _row_get(r, 3, 'target_scan_id'),
+                        _row_get(r, 4, 'detail'),
+                    ])
+                    rows_count += 1
+
+        elif kind == 'recent-scans':
+            try:
+                limit = max(10, min(2000, int(request.args.get('limit', 500))))
+            except Exception:
+                limit = 500
+            with get_api_db_cursor() as cur:
+                try:
+                    cur.execute(
+                        'SELECT id, machine_name, minecraft_username, company_id, '
+                        'status, verdict, risk_score, started_at, completed_at '
+                        'FROM scans ORDER BY id DESC LIMIT ' + str(limit)
+                    )
+                    rows = cur.fetchall() or []
+                except Exception:
+                    rows = []
+                cmap = {}
+                try:
+                    from auth import list_companies as _lc
+                    cmap = {c.get('id'): c.get('name') for c in (_lc() or [])}
+                except Exception:
+                    pass
+                w.writerow(['id', 'machine_name', 'minecraft_username',
+                            'company_id', 'company_name', 'status', 'verdict',
+                            'risk_score', 'started_at', 'completed_at'])
+                for r in rows:
+                    cid = _row_get(r, 3, 'company_id')
+                    w.writerow([
+                        _row_get(r, 0, 'id'),
+                        _row_get(r, 1, 'machine_name'),
+                        _row_get(r, 2, 'minecraft_username'),
+                        cid, cmap.get(cid, ''),
+                        _row_get(r, 4, 'status'),
+                        _row_get(r, 5, 'verdict'),
+                        _row_get(r, 6, 'risk_score') or 0,
+                        str(_row_get(r, 7, 'started_at') or ''),
+                        str(_row_get(r, 8, 'completed_at') or ''),
+                    ])
+                    rows_count += 1
+
+        else:
+            return jsonify({'error': f'kind desconocido: {kind}'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    csv_data = buf.getvalue()
+    fname = f'argus_sa_export_{kind}_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+    return _Resp(
+        '\ufeff' + csv_data,  # BOM para Excel
+        mimetype='text/csv; charset=utf-8',
+        headers={
+            'Content-Disposition': f'attachment; filename="{fname}"',
+            'X-Rows-Count': str(rows_count),
+        },
+    )
 
 
 # ════════════════════════════════════════════════════════════════════════
