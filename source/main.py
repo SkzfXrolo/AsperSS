@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.37"
+SCANNER_VERSION = "1.6.39"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -188,6 +188,51 @@ _LEGIT_MC_MOD_TERMS = (
 )
 
 
+# ── Overlays gráficos legítimos (Filtros #18 y #19) ─────────────────────────
+#
+# ReShade / SpecialK / SweetFX / MSI Afterburner / RTSS son overlays gráficos
+# que inyectan DLLs en juegos para post-procesado o monitoring. Hacen hooking
+# de Direct3D/OpenGL/Vulkan que se PARECE a un cheat (DLL injection), pero son
+# software legítimo ampliamente usado por la comunidad gaming.
+#
+# Whitelist por filename (no todos están firmados con un cert reconocible),
+# con matching por palabra completa para evitar pisar cosas como "reshadev2-cheat".
+_LEGIT_OVERLAY_TERMS = (
+    # Post-procesado gráfico
+    'reshade', 'reshade-shaders', 'reshadefx',
+    'specialk', 'special-k',
+    'sweetfx',
+    'enbseries', 'enblocal',
+    # Performance overlays
+    'msiafterburner', 'msi-afterburner', 'rtss',
+    'rivatunerstatisticsserver', 'rivatuner',
+    'fraps',
+    'msiafterburner.exe',
+    # GPU vendor overlays
+    'nvidiacontainer', 'nvbackend', 'nvtelemetry',
+    'amdrsserv', 'radeonsoftware', 'radeon-software',
+    # Audio overlays
+    'nahimic', 'sonicstudio', 'sonicradar',
+    # Streaming overlays legítimos
+    'streamlabsobs', 'obs-vstplugin', 'obs-virtualcam',
+    # Monitor overlays
+    'aida64', 'hwinfo', 'hwinfo64', 'hwmonitor', 'cpu-z', 'cpuz', 'gpu-z', 'gpuz',
+    # Game store overlays (legítimos pero a veces inyectan DLLs)
+    'gameoverlayui', 'overlay32', 'epicgameslauncher-overlay',
+)
+
+@functools.lru_cache(maxsize=1)
+def _legit_overlay_regex():
+    return _build_smart_hack_regex(_LEGIT_OVERLAY_TERMS)
+
+def is_legit_overlay(filename_or_path: str) -> bool:
+    """True si el filename matchea un overlay gráfico legítimo conocido
+    (ReShade, SpecialK, MSI Afterburner, RTSS, etc.) — Filtros #18 y #19."""
+    if not filename_or_path:
+        return False
+    return smart_hack_match(filename_or_path.lower(), _legit_overlay_regex())
+
+
 # ── Smart Hack-Term Matcher (Filtro #38) ─────────────────────────────────────
 #
 # El matching antiguo (`any(term in text for term in hack_terms)`) generaba
@@ -314,12 +359,46 @@ _TRUSTED_PUBLISHERS = (
     'corsair memory, inc.', 'corsair components, inc.',
     'steelseries aps', 'steelseries',
     'kingston technology company, inc.',
-    # Antivirus / Seguridad
+    # Antivirus / Seguridad (Filtro #20)
     'avast software s.r.o.', 'avast software',
     'malwarebytes corporation', 'malwarebytes inc',
     'bitdefender srl', 'bitdefender',
     'kaspersky lab',
-    'eset, spol. s r.o.',
+    'eset, spol. s r.o.', 'eset spol s r o',
+    'norton', 'symantec corporation', 'nortonlifelock inc.',
+    'mcafee, llc', 'mcafee llc', 'mcafee inc',
+    'sophos limited', 'sophos plc', 'sophos ltd',
+    'trend micro inc.', 'trend micro incorporated',
+    'avg technologies cz, s.r.o.', 'avg technologies',
+    'panda security s.l.', 'panda security',
+    'f-secure corporation', 'f-secure',
+    'webroot inc', 'webroot',
+    'dr.web', 'doctor web', 'doctor web ltd.',
+    'crowdstrike inc.', 'crowdstrike, inc.',
+    'sentinelone, inc.',
+    # Hardware / overlays (Filtros #18 y #19)
+    'guru3d.com', 'unwinder', 'alexey nicolaychuk',  # RTSS author
+    'crosire',  # ReShade author
+    'micro-star international co., ltd.', 'msi co. ltd',  # MSI Afterburner
+    'asustek computer inc.', 'asus',
+    'gigabyte technology co., ltd.',
+    'evga corporation',
+    'zotac technology limited',
+    'nzxt inc.',
+    'ifi audio',
+    'realtek semiconductor corp.', 'realtek',
+    'creative technology ltd', 'creative labs',
+    'a-volute', 'a volute',  # Nahimic
+    'finalwire ltd', 'finalwire',  # AIDA64
+    'cpuid', 'franck delattre',  # CPU-Z
+    # Game stores (Filtro #48 - WindowsApps + game launchers)
+    'gog.com', 'gog limited',
+    'electronic arts, inc.', 'ea games', 'ea',
+    'ubisoft entertainment', 'ubisoft',
+    'rockstar games', 'rockstar games inc.',
+    'riot games, inc.', 'riot games',
+    'blizzard entertainment, inc.', 'blizzard entertainment',
+    'square enix co., ltd.', 'square enix',
     # Navegadores
     'google llc', 'google inc',
     'mozilla corporation',
@@ -4978,6 +5057,8 @@ class ArgusApp:
                 _run_safe(self.scan_recent_install_tasks)
                 self._set_scan_phase("🛡️ Exclusiones de Defender...")
                 _run_safe(self.scan_defender_exclusions)
+                self._set_scan_phase("🦠 Cuarentena de Defender...")
+                _run_safe(self.scan_defender_quarantine)
                 self._set_scan_phase("🔥 Reglas custom de Firewall...")
                 _run_safe(self.scan_recent_firewall_rules)
                 self._set_scan_phase("💥 Crash dumps recientes (.dmp)...")
@@ -8776,6 +8857,21 @@ class ArgusApp:
                                 # no flagear aunque la extensión lo permita.
                                 if not is_hack and is_exec and is_legit_mc_mod(base_l):
                                     continue
+                                # Filtros #18/#19: overlays gráficos legítimos
+                                # (ReShade, SpecialK, MSI Afterburner, RTSS,
+                                # SweetFX, Nahimic, etc.) son DLLs/exes que
+                                # hacen hooking pero no son cheats.
+                                if not is_hack and is_exec and is_legit_overlay(base_l):
+                                    continue
+                                # Filtro #48: archivos de C:\Program Files\
+                                # WindowsApps\<package>\ son del Microsoft Store
+                                # (UWP/MSIX), todos firmados por MS o el dev
+                                # registrado en la Store. Excluir para evitar
+                                # FPs de Game Pass / Xbox app / Spotify UWP /
+                                # Discord UWP / etc.
+                                orig_lower = (orig_path or '').lower()
+                                if not is_hack and ('\\windowsapps\\' in orig_lower or '/windowsapps/' in orig_lower):
+                                    continue
                                 # Filtro #41: tamaños fuera del rango típico
                                 # de hacks. Hacks .exe pesan 1-50 MB,
                                 # .jar 100 KB - 5 MB. Si está MUY chico
@@ -11406,6 +11502,119 @@ class ArgusApp:
                 print("✓ Sin exclusiones custom en Defender (limpio)")
         except Exception as e:
             print(f"Error en scan_defender_exclusions: {e}")
+
+    def scan_defender_quarantine(self):
+        """Scanner #25 — Inventario de cuarentena de Microsoft Defender.
+
+        Defender almacena los archivos puestos en cuarentena en
+        `C:\\ProgramData\\Microsoft\\Windows Defender\\Quarantine\\`. La
+        metadata real está cifrada (RC4) y solo accesible como SYSTEM, pero
+        sí podemos:
+          - Contar entries en `Quarantine\\Entries\\` (cuántas detecciones)
+          - Contar archivos en `Quarantine\\ResourceData\\` (artefactos crudos)
+          - Ver mtimes para saber si hubo cuarentenas en últimas 72h
+          - Leer también `Quarantine\\Resources\\` (paths originales)
+
+        Si Defender movió algo a cuarentena recientemente: el cliente intentó
+        ejecutar algo malicioso. Eso no es un veredicto de cheat, pero sí una
+        SEÑAL importante para staff. Reportamos como SOSPECHOSO con counts.
+        """
+        print("🔍 Escaneando cuarentena de Microsoft Defender...")
+        try:
+            programdata = os.environ.get('PROGRAMDATA', r'C:\ProgramData')
+            qbase = os.path.join(programdata, 'Microsoft', 'Windows Defender', 'Quarantine')
+            if not os.path.isdir(qbase):
+                print("  · Defender no instalado o sin acceso a Quarantine — skip")
+                return
+            entries_dir   = os.path.join(qbase, 'Entries')
+            resdata_dir   = os.path.join(qbase, 'ResourceData')
+            resources_dir = os.path.join(qbase, 'Resources')
+            cutoff_72h = time.time() - 72 * 3600
+
+            def _safe_walk(p):
+                """Cuenta archivos en p, devuelve (total, recent_count, max_mtime)."""
+                if not os.path.isdir(p):
+                    return 0, 0, 0
+                total = 0
+                recent = 0
+                max_mt = 0
+                try:
+                    for root, _dirs, files in os.walk(p):
+                        for f in files:
+                            full = os.path.join(root, f)
+                            try:
+                                mt = os.path.getmtime(full)
+                            except (PermissionError, OSError):
+                                continue
+                            total += 1
+                            if mt > cutoff_72h:
+                                recent += 1
+                            if mt > max_mt:
+                                max_mt = mt
+                except (PermissionError, OSError):
+                    return total, recent, max_mt
+                return total, recent, max_mt
+
+            tot_entries, rec_entries, mt_entries = _safe_walk(entries_dir)
+            tot_resdata, rec_resdata, mt_resdata = _safe_walk(resdata_dir)
+            _tot_res, _rec_res, _mt_res          = _safe_walk(resources_dir)
+            recent_total = max(rec_entries, rec_resdata)
+            grand_total  = max(tot_entries, tot_resdata)
+
+            if grand_total == 0:
+                print("✓ Cuarentena de Defender vacía o sin acceso")
+                return
+
+            last_mt = max(mt_entries, mt_resdata)
+            last_str = ''
+            if last_mt > 0:
+                try:
+                    last_str = datetime.fromtimestamp(last_mt).strftime('%d/%m %H:%M')
+                except Exception:
+                    last_str = ''
+
+            # Severidad:
+            #   - Si NADA reciente (>72h): NORMAL (informativo)
+            #   - Si 1-3 detecciones recientes: SOSPECHOSO
+            #   - Si >=4 detecciones recientes: CRITICAL (cliente persistente)
+            if recent_total == 0:
+                alerta = 'NORMAL'
+                conf   = 0.20
+                tag    = 'historico'
+                resumen = (f'Defender Quarantine: {grand_total} entradas históricas '
+                           f'(última: {last_str}) — sin actividad reciente')
+            elif recent_total < 4:
+                alerta = 'SOSPECHOSO'
+                conf   = 0.55
+                tag    = 'reciente'
+                resumen = (f'Defender Quarantine: {recent_total} detección(es) en '
+                           f'últimas 72h (total histórico {grand_total}, última {last_str})')
+            else:
+                alerta = 'CRITICAL'
+                conf   = 0.78
+                tag    = 'persistente'
+                resumen = (f'Defender Quarantine: {recent_total} detecciones en últimas '
+                           f'72h (total {grand_total}, última {last_str}) — el cliente '
+                           f'intentó ejecutar varios binarios maliciosos')
+            self.issues_found.append({
+                'tipo':       'defender_quarantine',
+                'nombre':     resumen,
+                'ruta':       qbase,
+                'archivo':    f'Quarantine ({grand_total} entries)',
+                'categoria':  'EVASION',
+                'alerta':     alerta,
+                'confidence': conf,
+                'detected_patterns': ['defender_quarantine_' + tag],
+                'extra': {
+                    'total_entries':         grand_total,
+                    'recent_72h_entries':    recent_total,
+                    'last_detection_mtime':  int(last_mt) if last_mt else 0,
+                    'last_detection_human':  last_str,
+                },
+            })
+            print(f"  · Total entries: {grand_total} | recientes 72h: {recent_total}")
+        except Exception as e:
+            print(f"Error en scan_defender_quarantine: {e}")
 
     def scan_crash_dumps(self):
         """Detecta crash dumps recientes (.dmp) en ubicaciones estándar.

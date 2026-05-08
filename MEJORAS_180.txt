@@ -99,8 +99,14 @@ NOTA DE LECTURA
         (Microsoft-Windows-Windows Defender/Operational): Event ID 1121/1122
         registran ejecuciones bloqueadas previamente.
 
-[ ] 25. Inspección de Defender Quarantine (C:\ProgramData\Microsoft\Windows
+[X] 25. Inspección de Defender Quarantine (C:\ProgramData\Microsoft\Windows
         Defender\Quarantine) — los hacks borrados por el AV quedan ahí.
+        DONE v1.6.39 — scan_defender_quarantine cuenta entries de
+        Quarantine\Entries\ + ResourceData\ (no descifra metadata, eso
+        requiere SYSTEM, pero sí cuenta y mide mtime). 0 reciente =
+        NORMAL informativo, 1-3 = SOSPECHOSO, ≥4 = CRITICAL (cliente
+        persistente). Reporta total histórico, recientes 72h y
+        última fecha humanizada.
 
 [ ] 26. SmartScreen log (Microsoft-Windows-AppLocker/EXE and DLL y
         SmartScreen.evtx) — ejecutables bloqueados por reputación.
@@ -295,15 +301,26 @@ NOTA DE LECTURA
         ventana que se parecen a inyectores. Whitelist OBS y sus plugins
         firmados.
 
-[ ] 18. ReShade / SpecialK / SweetFX: overlays gráficos. FP en VAC pero no
+[X] 18. ReShade / SpecialK / SweetFX: overlays gráficos. FP en VAC pero no
         cheat de Minecraft. Whitelist.
+        DONE v1.6.39 — _LEGIT_OVERLAY_TERMS + is_legit_overlay() con
+        smart_hack_match (word-boundary). Aplicado en scan_deleted_recycle.
+        Cubre reshade/specialk/sweetfx/enbseries.
 
-[ ] 19. MSI Afterburner / RivaTuner Statistics Server (RTSS) — overlay con
+[X] 19. MSI Afterburner / RivaTuner Statistics Server (RTSS) — overlay con
         DLL injection legítimo. Whitelist por publisher.
+        DONE v1.6.39 — incluido en _LEGIT_OVERLAY_TERMS (msiafterburner,
+        rtss, rivatuner, fraps, nahimic, hwinfo, aida64, cpu-z, gpu-z).
+        También sumé los publishers (Guru3D, MSI, Crosire, Nahimic vendor
+        a-volute, Realtek, Creative, FinalWire, CPUID) a _TRUSTED_PUBLISHERS.
 
-[ ] 20. Procesos antivirus en background:
+[X] 20. Procesos antivirus en background:
         Avast, Kaspersky, Bitdefender, Norton, McAfee, ESET, Sophos, Malware-
         bytes — sus binarios inyectan en otros procesos, es legítimo.
+        DONE v1.6.39 — _TRUSTED_PUBLISHERS extendida con Norton/Symantec,
+        McAfee, Sophos, Trend Micro, AVG, Panda, F-Secure, Webroot, Dr.Web,
+        CrowdStrike, SentinelOne además de los ya presentes (Avast,
+        Malwarebytes, Bitdefender, Kaspersky, ESET).
 
 [ ] 21. Microsoft Defender (MsMpEng.exe, NisSrv.exe, SecurityHealthService) —
         whitelist absoluta, son SO esencial.
@@ -403,8 +420,12 @@ NOTA DE LECTURA
 [ ] 47. Excluir archivos que son parte de una Steam Workshop subscription
         (filename matching con manifests de %steam%\steamapps\workshop).
 
-[ ] 48. Excluir game pass / Xbox UWP titles
+[X] 48. Excluir game pass / Xbox UWP titles
         (C:\Program Files\WindowsApps\<package>) — están firmados por MS.
+        DONE v1.6.39 — scan_deleted_recycle salta cualquier orig_path
+        que contenga \windowsapps\ — cubre Xbox app, Game Pass titles,
+        Spotify UWP, Discord UWP y cualquier app del Microsoft Store
+        que sí esté firmada por MS o publisher registrado.
 
 [ ] 49. Mejor parser de USN Journal: ignorar transactions de Windows Update
         (TrustedInstaller, wuauclt) y System Restore.
@@ -802,12 +823,12 @@ Linux: Arch, Ubuntu, Fedora, etc.).
   RESUMEN
 ═══════════════════════════════════════════════════════════════════════════════
 
-  Scanner ............................. 60 ítems   (detección)       6/60
-  Filtro .............................. 60 ítems   (anti-FP)         7/60
+  Scanner ............................. 60 ítems   (detección)       7/60
+  Filtro .............................. 60 ítems   (anti-FP)        11/60
   Visual .............................. 60 ítems   (UI/UX)          16/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 0/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    29/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    34/195
                                                   (1 visual parcial: V#53)
 
 SESIÓN DEL 07-may-2026 (4 packs en una tarde):
@@ -841,6 +862,18 @@ SESIÓN DEL 07-may-2026 (4 packs en una tarde):
                       IntersectionObserver, lightbox para screenshots
                       (zoom hacia cursor + pan + atajos), Esc cierra
                       modales globalmente.
+  Pack 6 (v1.6.39): Scanner #25 + Filtros #18, #19, #20, #48
+                    NUEVOS: scan_defender_quarantine (counts +
+                            tiers NORMAL/SOSPECHOSO/CRITICAL según
+                            recientes 72h),
+                            _LEGIT_OVERLAY_TERMS + is_legit_overlay()
+                            cubre ReShade/SpecialK/SweetFX/MSI Afterburner/
+                            RTSS/Nahimic/HWiNFO/AIDA64/CPU-Z,
+                            _TRUSTED_PUBLISHERS extendido +20 vendors
+                            (AVs, hardware, game stores)
+                    → 1 detección nueva + 4 filtros anti-FP. Recompila el
+                      .exe a 1.6.39 — clientes con 1.6.37 verán "actualización
+                      disponible" en /descargar.
 
 PRIORIZACIÓN SUGERIDA (top 10 con mayor ROI inmediato)
 ──────────────────────────────────────────────────────
