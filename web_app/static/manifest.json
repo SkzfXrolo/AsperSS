@@ -2,21 +2,58 @@
   "name": "Argus Projects — Staff Panel",
   "short_name": "Argus",
   "description": "Panel de staff para revisar escaneos de Minecraft",
-  "start_url": "/panel",
+  "lang": "es",
+  "dir": "ltr",
+  "scope": "/",
+  "start_url": "/panel?source=pwa",
+  "id": "/panel",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#0d1117",
   "theme_color": "#8B5CF6",
-  "orientation": "portrait-primary",
+  "orientation": "any",
+  "categories": ["productivity", "security", "utilities"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/static/img/logo.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/static/img/logo.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/img/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/img/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Escaneos recientes",
+      "short_name": "Scans",
+      "description": "Ver los últimos escaneos recibidos",
+      "url": "/panel#scans",
+      "icons": [{ "src": "/static/img/logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Descargar Argus",
+      "short_name": "Descargar",
+      "description": "Página de descargas (Windows / Linux / Android)",
+      "url": "/descargar",
+      "icons": [{ "src": "/static/img/logo.png", "sizes": "192x192" }]
     }
   ]
 }

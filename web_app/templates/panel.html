@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#B87333">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -10,10 +10,13 @@
     <meta name="apple-mobile-web-app-title" content="Argus">
     <title>Panel Staff - Argus Projects</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/logo.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=22">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel-bronze-premium.css') }}?v=1">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-ui.css') }}?v=14">
+    <!-- Mobile responsive overrides (Pack 27) — DEBE cargarse último para sobrescribir paddings/footer/dropdowns -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-mobile-fix.css') }}?v=1">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <!-- Visual #49 — Tipografía dual: Playfair (serif elegante) + Inter (sans para data) -->
@@ -2383,13 +2386,15 @@
         }
     </style>
 
-    <!-- Visual #38: footer con version + uptime + estado backend -->
+    <!-- Visual #38: footer con version + uptime + estado backend
+         left:240px se sobrescribe en argus-mobile-fix.css para tablet/mobile -->
     <div id="argus-footer" style="position:fixed;bottom:0;left:240px;right:0;
          z-index:50;display:flex;align-items:center;justify-content:center;gap:14px;
          padding:6px 14px;font-size:10.5px;color:var(--text-d);
          background:linear-gradient(to top, rgba(15,12,20,0.85), rgba(15,12,20,0));
          backdrop-filter:blur(6px);pointer-events:none;
-         font-family:'JetBrains Mono','Consolas',monospace;letter-spacing:0.4px;">
+         font-family:'JetBrains Mono','Consolas',monospace;letter-spacing:0.4px;
+         max-width:100vw;flex-wrap:wrap;">
         <span id="argus-footer-version" style="opacity:0.7;">Argus v…</span>
         <span style="opacity:0.3;">·</span>
         <span id="argus-footer-uptime" style="opacity:0.7;">uptime …</span>

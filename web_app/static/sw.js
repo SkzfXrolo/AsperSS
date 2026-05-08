@@ -1,7 +1,8 @@
-const CACHE_NAME = 'argus-v3';
+const CACHE_NAME = 'argus-v4-mobile-fix';
 const STATIC_URLS = [
   '/static/css/style.css',
   '/static/css/panel.css',
+  '/static/css/argus-mobile-fix.css',
   '/static/js/panel.js',
   '/static/img/logo.png',
   '/static/manifest.json',

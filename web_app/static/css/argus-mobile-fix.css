@@ -1,0 +1,352 @@
+/* ════════════════════════════════════════════════════════════════════
+   Argus — Mobile / responsive fix consolidado (Pack 27)
+   ════════════════════════════════════════════════════════════════════
+   Se carga al final de cada template (panel, descargar, index, login,
+   register) sobre los estilos base. Solo aplica overrides para
+   pantallas <= 900px (tablets pequeñas) y <= 600px (móviles).
+   No toca desktop.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── Globales: comportamiento safari iOS + zoom prevent ──────────── */
+html { -webkit-text-size-adjust: 100%; }
+
+/* iOS hace zoom automático cuando un input tiene font-size <16px.
+   Forzamos 16px en mobile para que el browser no aleje la página. */
+@media (max-width: 600px) {
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea,
+    .filter-input,
+    .filter-select,
+    .form-input,
+    .search-input { font-size: 16px !important; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   PANEL (panel.html / panel.css)
+   ════════════════════════════════════════════════════════════════ */
+
+/* Footer fijo: en desktop arranca en left:240px (después del sidebar);
+   en tablet (<=900px) en left:220px; en móvil cubre todo el ancho. */
+@media (max-width: 900px) {
+    #argus-footer { left: 220px !important; right: 0 !important; }
+}
+@media (max-width: 540px) {
+    #argus-footer {
+        left: 0 !important;
+        right: 0 !important;
+        font-size: 9.5px !important;
+        gap: 8px !important;
+        padding: 5px 10px !important;
+    }
+    /* Sidebar oculto en mobile, footer ocupa todo */
+    #argus-footer-uptime { display: none; }
+}
+
+/* Modales: en mobile NO restringimos a max-width:520px porque queda
+   un cajón chico centrado. Usamos 96vw y padding interno reducido. */
+@media (max-width: 600px) {
+    .modal-content,
+    .modal > div[class*="modal"],
+    [id$="-modal"] .modal-content {
+        width: 96vw !important;
+        max-width: 96vw !important;
+        max-height: 88vh !important;
+        margin: 0 auto;
+        border-radius: 12px !important;
+    }
+    .modal-content [style*="padding:24px"],
+    .modal-content [style*="padding: 24px"] { padding: 16px !important; }
+}
+
+/* Subnav (Stats, Empresas, Tokens…): chips horizontales scrollables */
+@media (max-width: 600px) {
+    .subnav-row {
+        overflow-x: auto !important;
+        flex-wrap: nowrap !important;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding-bottom: 4px;
+    }
+    .subnav-row::-webkit-scrollbar { display: none; }
+    .subnav-tab { flex-shrink: 0 !important; }
+}
+
+/* Stats grid: 1 columna en pantallas muy chicas (≤420px) */
+@media (max-width: 420px) {
+    .stats-grid { grid-template-columns: 1fr !important; }
+    .stat-card { padding: 14px !important; }
+    .stat-number, .stat-card .number { font-size: 24px !important; }
+}
+
+/* Filtros: stack vertical y inputs full-width */
+@media (max-width: 600px) {
+    .scans-filter-bar,
+    .filter-controls {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 8px !important;
+    }
+    .filter-input,
+    .filter-select,
+    .filter-date,
+    .filter-preset-select,
+    #filter-search,
+    #filter-country,
+    #filter-staff,
+    #filter-os,
+    #filter-risk {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+}
+
+/* Dropdowns / menús flotantes con min-width fijo: limitar para no
+   desbordar el viewport. */
+@media (max-width: 600px) {
+    [style*="min-width:230px"],
+    [style*="min-width: 230px"],
+    [style*="min-width:200px"],
+    [style*="min-width: 200px"],
+    [style*="min-width:180px"],
+    [style*="min-width: 180px"] {
+        min-width: 0 !important;
+        max-width: calc(100vw - 24px) !important;
+    }
+}
+
+/* Header del panel: títulos más chicos y wrap */
+@media (max-width: 600px) {
+    .panel-header {
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+        padding: 10px 12px !important;
+    }
+    .panel-title {
+        font-size: 14px !important;
+        max-width: 50vw;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .panel-header .btn,
+    .panel-header button {
+        padding: 7px 10px !important;
+        font-size: 11px !important;
+    }
+    /* Header-actions: scroll horizontal silencioso si hay muchos botones */
+    .header-actions {
+        gap: 6px !important;
+        flex-wrap: wrap !important;
+        justify-content: flex-end !important;
+    }
+    /* Quicksearch trigger: en mobile solo icono */
+    #argus-quicksearch-trigger {
+        min-width: 0 !important;
+        width: 36px !important;
+        padding: 0 !important;
+        justify-content: center !important;
+    }
+    #argus-quicksearch-trigger > *:not(svg) { display: none !important; }
+    /* User-info: ocultar texto, solo avatar */
+    .user-info {
+        padding: 5px 8px !important;
+        gap: 4px !important;
+    }
+    .user-info .user-name,
+    .user-info .user-role { display: none !important; }
+}
+
+/* Sidebar mobile: drawer desliza desde la izquierda con backdrop tap */
+@media (max-width: 540px) {
+    .sidebar.mobile-open + .main-content,
+    body:has(.sidebar.mobile-open) .main-content {
+        overflow: hidden;
+    }
+}
+
+/* Tablas de results: scroll horizontal con tarjeta delimitada */
+@media (max-width: 600px) {
+    .results-table-wrapper,
+    .table-wrapper,
+    table.results,
+    table.scan-table {
+        max-width: 100vw !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+    .results-table-wrapper table,
+    .table-wrapper table { font-size: 12px !important; }
+    .results-table-wrapper td,
+    .results-table-wrapper th { padding: 6px 8px !important; }
+}
+
+/* Botones de acción del scan-detail (Verdict / Delete / etc): wrap */
+@media (max-width: 600px) {
+    .scan-actions,
+    .verdict-actions,
+    .section-header-actions {
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+    }
+    .section-header-actions .btn { flex: 1 1 calc(50% - 4px) !important; }
+}
+
+/* Cards de scan en lista: más compactas */
+@media (max-width: 600px) {
+    .scan-card,
+    .recent-scan-row {
+        padding: 12px !important;
+        gap: 8px !important;
+    }
+    .scan-card .machine-name { font-size: 13px !important; }
+    .scan-card .timestamp { font-size: 10.5px !important; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   DESCARGAR (descargar.html)
+   ════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 600px) {
+    body { padding: 16px 12px 60px !important; }
+    .wrap { max-width: 100% !important; }
+    h1 { font-size: clamp(28px, 9vw, 36px) !important; }
+    .subtitle { font-size: 13.5px !important; padding: 0 4px; }
+    .release-card {
+        padding: 18px 14px !important;
+        border-radius: 18px !important;
+    }
+    .download-btn {
+        padding: 16px 14px !important;
+        font-size: 14px !important;
+        gap: 8px !important;
+    }
+    .download-btn svg,
+    .download-btn .icon { width: 22px !important; height: 22px !important; }
+    .step {
+        padding: 10px 12px !important;
+        font-size: 12.5px !important;
+        gap: 10px !important;
+    }
+    .step-num { width: 24px !important; height: 24px !important; font-size: 11px !important; }
+    .warning {
+        padding: 10px 12px !important;
+        font-size: 12px !important;
+    }
+    .hash-row {
+        padding: 8px 10px !important;
+        font-size: 10px !important;
+        gap: 6px !important;
+    }
+    .hash-row .value { font-size: 9.5px !important; }
+    .build-meta {
+        flex-direction: column !important;
+        gap: 4px !important;
+        font-size: 11px !important;
+    }
+    .version-tag { font-size: 12px !important; padding: 6px 10px !important; }
+    .discord-card { padding: 14px 16px !important; }
+}
+
+/* Plat tabs (Windows / Linux / Android): scroll horizontal en lugar
+   de wrap si no caben. Más legible que envolverse. */
+@media (max-width: 540px) {
+    .plat-tabs,
+    .plat-switch {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        flex-wrap: nowrap !important;
+    }
+    .plat-tabs::-webkit-scrollbar,
+    .plat-switch::-webkit-scrollbar { display: none; }
+    .plat-tab {
+        flex: 0 0 auto !important;
+        font-size: 11.5px !important;
+        padding: 8px 12px !important;
+        white-space: nowrap;
+    }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   INDEX (landing)
+   ════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 600px) {
+    .hero,
+    .hero-section { padding: 60px 16px 40px !important; }
+    .hero h1,
+    .hero-title { font-size: clamp(34px, 11vw, 48px) !important; }
+    .hero p,
+    .hero-sub,
+    .hero-subtitle { font-size: 14px !important; padding: 0 4px; }
+    .cta-row,
+    .hero-cta {
+        flex-direction: column !important;
+        gap: 10px !important;
+        width: 100%;
+    }
+    .cta-row .btn,
+    .hero-cta .btn,
+    .hero-cta a {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+    section,
+    .section { padding: 40px 16px !important; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   LOGIN / REGISTER
+   ════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 600px) {
+    .login-container,
+    .register-container,
+    .auth-card {
+        width: 92vw !important;
+        max-width: 92vw !important;
+        padding: 24px 18px !important;
+    }
+    .login-form input,
+    .register-form input,
+    .auth-form input {
+        font-size: 16px !important; /* anti zoom iOS */
+    }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   FAB Discord — más chico en mobile (ya hay reglas, las endurecemos)
+   ════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 540px) {
+    .discord-fab,
+    #argus-discord-fab {
+        right: 12px !important;
+        bottom: 18px !important;
+        padding: 10px 14px 10px 12px !important;
+    }
+    .discord-fab span,
+    #argus-discord-fab span:not([class]) { display: none !important; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   PWA standalone — quita el address bar y respeta safe areas iOS.
+   ════════════════════════════════════════════════════════════════ */
+
+@media (display-mode: standalone) {
+    body {
+        padding-top: env(safe-area-inset-top, 0) !important;
+        padding-bottom: env(safe-area-inset-bottom, 0) !important;
+        padding-left: env(safe-area-inset-left, 0) !important;
+        padding-right: env(safe-area-inset-right, 0) !important;
+    }
+    .panel-header,
+    .sidebar-header {
+        padding-top: calc(env(safe-area-inset-top, 0) + 12px) !important;
+    }
+    #argus-footer {
+        padding-bottom: calc(env(safe-area-inset-bottom, 0) + 6px) !important;
+    }
+}
