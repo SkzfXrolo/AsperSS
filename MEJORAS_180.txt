@@ -673,8 +673,25 @@ NOTA DE LECTURA
 [ ] 10. Gráfica de risk score histórico del staff (line chart) en su
         sub-perfil del panel.
 
-[ ] 11. Heatmap GitHub-style de actividad por día/hora del staff
+[X] 11. Heatmap GitHub-style de actividad por día/hora del staff
         (cuándo scannea más).
+        DONE v1.6.49 (Pack 19) — Backend: nuevo endpoint
+        /api/staff/my-activity-heatmap?days=365 en app.py. Cuenta dos
+        fuentes en paralelo (combinadas por día):
+          1) staff_audit_log filtrado por user_id de la sesión (acciones).
+          2) Tabla scans con verdict_by = username y verdict_at en rango
+             (verdicts puestos antes de existir el audit_log).
+        Devuelve {days[], total_count, days_active, streak, best_streak,
+        days_back, today}. Streak calculado server-side. Skip graceful si
+        las tablas no existen.
+        Frontend: nav-item "Mi actividad" en el sidebar-footer (icono
+        SVG 3x3 mini-grid bronce). openMyActivityHeatmap() abre modal
+        900px con 4 stat cards (acciones totales, días activos, streak
+        actual, mejor streak) + grid 7×~52 SVG de celdas 13px con escala
+        log de intensidad (5 niveles bronze). Hover muestra tooltip
+        position:fixed con fecha y conteo. Today resaltado en amarillo.
+        Etiquetas mensuales sobre la grid (ENE..DIC), DOW labels
+        (Lun/Mié/Vie) en la columna izquierda. Legend Menos→Más debajo.
 
 [X] 12. Avatar generado a partir del nombre (initials con color hash
         determinístico) cuando no hay PFP configurado.
@@ -807,8 +824,18 @@ NOTA DE LECTURA
         "ESCANEÁ PARA ABRIR" arriba. Si falla la red o CORS, el modal
         sigue funcionando con la imagen sin QR (graceful degradation).
 
-[ ] 31. Sidebar colapsable (icon-only mode) para más espacio horizontal
+[X] 31. Sidebar colapsable (icon-only mode) para más espacio horizontal
         en monitores ultrawide.
+        DONE v1.6.49 (Pack 19) — Estaba implementado de antes pero no
+        marcado: panel.html ya tiene <button class="sidebar-toggle-btn"
+        onclick="toggleSidebarCollapse()">. La función en panel.js
+        toggle la clase .collapsed sobre .sidebar y persiste en
+        localStorage como argus_sidebar_collapsed. CSS en panel.css
+        (líneas 3163-3170): .sidebar.collapsed { width: 60px } +
+        oculta labels (.nav-item span, .nav-group-label,
+        .sidebar-header div, .avatar-info, etc), centra brand-icon y
+        nav-items. Init temprano (antes del DOMContentLoaded) lee
+        localStorage y aplica la clase para evitar flash.
 
 [~] 32. Vista de tarjetas vs lista vs tabla en historial de scans
         (toggle persistente).
@@ -1142,10 +1169,10 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 
   Scanner ............................. 60 ítems   (detección)      14/60
   Filtro .............................. 60 ítems   (anti-FP)        22/60
-  Visual .............................. 60 ítems   (UI/UX)          36/60
+  Visual .............................. 60 ítems   (UI/UX)          38/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    81/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    83/195
                                                   (5 parciales: S#9, V#3, V#32, V#43, V#53)
                                                   + 3 BONUS Pack 11 (Stream-friendly,
                                                   CompanyTag color, Why-this-score modal)
@@ -1163,6 +1190,32 @@ Linux: Arch, Ubuntu, Fedora, etc.).
                                                   (AppImage/Flatpak/deb), #14 (CI Docker)
 
 SESIÓN DEL 08-may-2026:
+  Pack 19 (v1.6.49): Visual #11, #31 — Heatmap actividad + sidebar
+                    collapsable (sin recompilar .exe).
+                    Visual #11 — Heatmap GitHub-style del staff:
+                      * Backend: nuevo endpoint
+                        /api/staff/my-activity-heatmap?days=365 en
+                        app.py. Combina staff_audit_log (acciones) +
+                        scans (verdicts del staff) por día. Streak y
+                        best_streak calculados server-side.
+                      * Frontend: nav-item "Mi actividad" en sidebar-
+                        footer (icono SVG 3x3 mini-grid bronce).
+                      * openMyActivityHeatmap(): modal 900px con 4
+                        stat cards (totales/activos/streak/best) +
+                        grid 7×~52 SVG con celdas 13px y escala log
+                        de 5 niveles bronze. Tooltip position:fixed
+                        en hover. Today resaltado en amarillo.
+                        Month labels (ENE..DIC) sobre la grid, DOW
+                        labels (Lun/Mié/Vie) izquierda, legend Menos→
+                        Más debajo. Hover scale(1.18) + brightness 1.35.
+                    Visual #31 — Sidebar colapsable: ya implementado
+                      de antes pero no marcado en MEJORAS_180. Botón
+                      sidebar-toggle-btn en panel.html, función
+                      toggleSidebarCollapse() persiste en localStorage,
+                      CSS .sidebar.collapsed (60px width). Marcado DONE.
+                    panel.html: panel.js v=61.
+                    → 2 visuales completados (V#11, V#31).
+
   Pack 18 (v1.6.49): Visual #28, #30, #48 — Share verdict + jerarquía
                     (sin recompilar .exe).
                     Visual #28 + #30 — Modal Compartir veredicto:

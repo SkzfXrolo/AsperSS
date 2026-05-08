@@ -8997,6 +8997,115 @@ def get_staff_audit_log():
         return jsonify({'error': str(e)}), 500
 
 
+# ── Visual #11 — Staff activity heatmap (GitHub-style) ──────────────────────
+# Devuelve la actividad del staff loggeado durante los últimos N días (default
+# 365). Cuenta dos cosas en paralelo:
+#   1) Acciones registradas en staff_audit_log (verdicts, exports, etc).
+#   2) Verdicts puestos en la tabla scans donde verdict_by = staff.username.
+# Las dos sumas se combinan por día para que el heatmap refleje TODA la
+# actividad del staff, no solo las acciones audit. Resultado:
+#   { 'days': [{date, count}], 'total_count': N, 'days_active': M, 'streak': K }
+# La generación de la grilla 7×52 se hace client-side; aquí solo damos el
+# diccionario de fechas con contadores no nulos.
+@app.route('/api/staff/my-activity-heatmap', methods=['GET'])
+@login_required
+def get_my_activity_heatmap():
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'No session'}), 401
+    try:
+        days_back = max(1, min(730, int(request.args.get('days', 365))))
+    except Exception:
+        days_back = 365
+    try:
+        from datetime import date, timedelta
+        today    = date.today()
+        start_dt = today - timedelta(days=days_back - 1)
+        with get_api_db_cursor() as cur:
+            buckets = {}
+
+            # Audit log buckets (CREATE IF NOT EXISTS por si la tabla aún no
+            # existe en este deployment — devolvemos vacío sin romper).
+            try:
+                cur.execute('''
+                    SELECT DATE(created_at) AS d, COUNT(*) AS c
+                      FROM staff_audit_log
+                     WHERE user_id = %s AND created_at >= %s
+                  GROUP BY DATE(created_at)
+                ''', (uid, start_dt))
+                for r in cur.fetchall() or []:
+                    d = r[0] if not isinstance(r, dict) else r.get('d')
+                    c = r[1] if not isinstance(r, dict) else r.get('c')
+                    if d:
+                        buckets[str(d)] = buckets.get(str(d), 0) + int(c or 0)
+            except Exception as e:
+                print(f'[ActivityHeatmap] audit_log skip: {e}')
+
+            # Verdicts del staff sobre scans (tabla scans, columna verdict_by
+            # = username). Esto cubre verdicts puestos antes de que existiera
+            # el staff_audit_log y los que no se loguearon por error.
+            try:
+                cur.execute('SELECT username FROM users WHERE id = %s', (uid,))
+                _u = cur.fetchone()
+                username = (_u[0] if _u and not isinstance(_u, dict)
+                            else (_u or {}).get('username') if _u else None)
+                if username:
+                    cur.execute('''
+                        SELECT DATE(verdict_at) AS d, COUNT(*) AS c
+                          FROM scans
+                         WHERE verdict_by = %s AND verdict_at IS NOT NULL
+                           AND verdict_at >= %s
+                      GROUP BY DATE(verdict_at)
+                    ''', (username, start_dt))
+                    for r in cur.fetchall() or []:
+                        d = r[0] if not isinstance(r, dict) else r.get('d')
+                        c = r[1] if not isinstance(r, dict) else r.get('c')
+                        if d:
+                            buckets[str(d)] = buckets.get(str(d), 0) + int(c or 0)
+            except Exception as e:
+                print(f'[ActivityHeatmap] scans skip: {e}')
+
+        days = [{'date': k, 'count': v} for k, v in buckets.items()]
+        days.sort(key=lambda x: x['date'])
+        total = sum(d['count'] for d in days)
+        active = len(days)
+
+        # Streak actual: días consecutivos hasta hoy con count > 0
+        streak = 0
+        cur_d = today
+        while True:
+            if buckets.get(str(cur_d), 0) > 0:
+                streak += 1
+                cur_d = cur_d - timedelta(days=1)
+            else:
+                break
+        # Mejor streak histórico
+        best_streak = 0
+        run = 0
+        prev = None
+        for d in days:
+            from datetime import datetime as _dt
+            cur_dd = _dt.strptime(d['date'], '%Y-%m-%d').date()
+            if prev is not None and (cur_dd - prev).days == 1:
+                run += 1
+            else:
+                run = 1
+            best_streak = max(best_streak, run)
+            prev = cur_dd
+
+        return jsonify({
+            'days':         days,
+            'total_count':  total,
+            'days_active':  active,
+            'streak':       streak,
+            'best_streak':  best_streak,
+            'days_back':    days_back,
+            'today':        str(today),
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ── P5 #19 — Auto-generate ban message ────────────────────────────────────────
 
 @app.route('/api/staff/ai/generate-ban-message', methods=['POST'])

@@ -787,6 +787,234 @@ async function openShareVerdictModal(scanId) {
 }
 window.openShareVerdictModal = openShareVerdictModal;
 
+
+/**
+ * Visual #11 — Heatmap GitHub-style de actividad del staff loggeado.
+ * Endpoint: /api/staff/my-activity-heatmap?days=365
+ * Renderiza una grilla 7×N donde cada celda es un día (un cuadrado bronce
+ * cuya intensidad escala con el número de acciones). Hover muestra tooltip
+ * con la fecha y el conteo. Stats arriba: total, días activos, streak actual,
+ * mejor streak.
+ */
+async function openMyActivityHeatmap() {
+    document.getElementById('argus-activity-modal')?.remove();
+    const root = document.createElement('div');
+    root.id = 'argus-activity-modal';
+    root.style.cssText = 'position:fixed;inset:0;z-index:99996;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(8,6,4,0.62);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);animation:argusConfirmFadeIn 180ms ease;';
+    root.innerHTML = `
+        <div role="dialog" aria-modal="true" aria-labelledby="argus-activity-title"
+             style="background:var(--bg-2,#15110A);color:var(--text,#EAD8C0);
+                    border:1px solid var(--border-m,rgba(184,115,51,0.28));
+                    border-radius:14px;width:min(900px,96vw);max-height:92vh;overflow:auto;
+                    box-shadow:0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04) inset;
+                    animation:argusConfirmPop 220ms cubic-bezier(0.22,1,0.36,1);">
+            <div style="padding:18px 22px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--border);">
+                <div>
+                    <span class="argus-eyebrow">Tu actividad</span>
+                    <h2 id="argus-activity-title" class="section-title" style="margin:6px 0 0;">Heatmap · últimos 365 días</h2>
+                </div>
+                <button id="argus-activity-close" type="button" aria-label="Cerrar"
+                    style="background:transparent;border:1px solid var(--border-m);color:var(--text-m);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0;">×</button>
+            </div>
+            <div id="argus-activity-body" style="padding:22px;">
+                <div style="display:flex;align-items:center;justify-content:center;padding:60px 0;color:var(--text-d);font-size:13px;">Cargando actividad…</div>
+            </div>
+        </div>`;
+    document.body.appendChild(root);
+
+    const close = () => {
+        document.removeEventListener('keydown', onKey, true);
+        root.style.animation = 'argusConfirmFadeOut 140ms ease';
+        setTimeout(() => root.remove(), 130);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+    document.addEventListener('keydown', onKey, true);
+    root.querySelector('#argus-activity-close').addEventListener('click', close);
+    root.addEventListener('click', (e) => { if (e.target === root) close(); });
+
+    let data;
+    try {
+        const r = await fetch('/api/staff/my-activity-heatmap?days=365');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        data = await r.json();
+    } catch (e) {
+        const body = root.querySelector('#argus-activity-body');
+        if (body) body.innerHTML = `<div style="color:#f87171;text-align:center;padding:40px;font-size:13px;">No se pudo cargar la actividad: ${e.message || e}</div>`;
+        return;
+    }
+
+    _renderActivityHeatmap(root.querySelector('#argus-activity-body'), data);
+}
+window.openMyActivityHeatmap = openMyActivityHeatmap;
+
+function _renderActivityHeatmap(container, data) {
+    if (!container) return;
+    const days = Array.isArray(data?.days) ? data.days : [];
+    const today = data?.today ? new Date(data.today + 'T00:00:00') : new Date();
+    const daysBack = data?.days_back || 365;
+    const total  = data?.total_count || 0;
+    const active = data?.days_active || 0;
+    const streak = data?.streak || 0;
+    const best   = data?.best_streak || 0;
+
+    // Index para lookups O(1)
+    const counts = {};
+    let maxCount = 0;
+    for (const d of days) {
+        counts[d.date] = d.count;
+        if (d.count > maxCount) maxCount = d.count;
+    }
+
+    // Generar la grilla: empezamos desde un domingo `daysBack-1` días atrás
+    const start = new Date(today);
+    start.setDate(start.getDate() - (daysBack - 1));
+    // Alinear al domingo previo (domingo = 0)
+    const startDow = start.getDay();
+    start.setDate(start.getDate() - startDow);
+
+    // Total de semanas a renderizar
+    const totalDays = Math.ceil((today.getTime() - start.getTime()) / (24*3600*1000)) + 1;
+    const weeks = Math.ceil(totalDays / 7);
+
+    // Helper: intensidad 0-4 según count vs maxCount (escala log)
+    const intensity = (c) => {
+        if (!c) return 0;
+        if (!maxCount) return 0;
+        const ratio = Math.log(c + 1) / Math.log(maxCount + 1);
+        if (ratio < 0.25) return 1;
+        if (ratio < 0.50) return 2;
+        if (ratio < 0.75) return 3;
+        return 4;
+    };
+    const colors = [
+        'rgba(255,255,255,0.04)',
+        'rgba(184,115,51,0.22)',
+        'rgba(184,115,51,0.45)',
+        'rgba(212,145,90,0.72)',
+        '#D4915A',
+    ];
+
+    // Stats top row
+    const statsHtml = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px;">
+            <div style="padding:14px 16px;background:rgba(184,115,51,0.06);border:1px solid var(--border);border-radius:10px;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-d);">Acciones totales</div>
+                <div style="font-size:24px;font-weight:800;color:var(--accent);font-feature-settings:'tnum' 1;margin-top:4px;">${total}</div>
+            </div>
+            <div style="padding:14px 16px;background:rgba(184,115,51,0.06);border:1px solid var(--border);border-radius:10px;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-d);">Días activos</div>
+                <div style="font-size:24px;font-weight:800;color:var(--text);font-feature-settings:'tnum' 1;margin-top:4px;">${active} <span style="font-size:13px;font-weight:500;color:var(--text-d);">/ ${daysBack}</span></div>
+            </div>
+            <div style="padding:14px 16px;background:rgba(184,115,51,0.06);border:1px solid var(--border);border-radius:10px;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-d);">Racha actual</div>
+                <div style="font-size:24px;font-weight:800;color:${streak >= 7 ? '#fbbf24' : 'var(--text)'};font-feature-settings:'tnum' 1;margin-top:4px;">${streak} <span style="font-size:13px;font-weight:500;color:var(--text-d);">${streak === 1 ? 'día' : 'días'}</span></div>
+            </div>
+            <div style="padding:14px 16px;background:rgba(184,115,51,0.06);border:1px solid var(--border);border-radius:10px;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-d);">Mejor racha</div>
+                <div style="font-size:24px;font-weight:800;color:var(--text);font-feature-settings:'tnum' 1;margin-top:4px;">${best} <span style="font-size:13px;font-weight:500;color:var(--text-d);">${best === 1 ? 'día' : 'días'}</span></div>
+            </div>
+        </div>`;
+
+    // Grid construction
+    const cellSize = 13;
+    const cellGap  = 3;
+    const gridW = weeks * (cellSize + cellGap) - cellGap;
+    const gridH = 7   * (cellSize + cellGap) - cellGap;
+
+    let cells = '';
+    let monthLabels = '';
+    let lastMonth = -1;
+
+    for (let w = 0; w < weeks; w++) {
+        // Tag del mes (sobre la primera columna de cada mes)
+        const colDate = new Date(start);
+        colDate.setDate(colDate.getDate() + w * 7);
+        if (colDate.getMonth() !== lastMonth) {
+            const monthName = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'][colDate.getMonth()];
+            monthLabels += `<text x="${w * (cellSize + cellGap)}" y="9" font-size="9.5" font-family="JetBrains Mono, monospace" fill="rgba(234,216,192,0.45)" font-weight="700" letter-spacing="0.5">${monthName}</text>`;
+            lastMonth = colDate.getMonth();
+        }
+
+        for (let d = 0; d < 7; d++) {
+            const cellDate = new Date(start);
+            cellDate.setDate(cellDate.getDate() + w * 7 + d);
+            if (cellDate > today) continue;
+            const dateStr = cellDate.toISOString().slice(0, 10);
+            const c = counts[dateStr] || 0;
+            const lvl = intensity(c);
+            const fill = colors[lvl];
+            const isToday = (cellDate.toDateString() === today.toDateString());
+            const stroke = isToday ? '#fbbf24' : (lvl > 0 ? 'rgba(184,115,51,0.32)' : 'rgba(184,115,51,0.10)');
+            const tooltip = c > 0
+                ? `${c} ${c === 1 ? 'acción' : 'acciones'} · ${dateStr}`
+                : `Sin actividad · ${dateStr}`;
+            cells += `<rect x="${w * (cellSize + cellGap)}" y="${d * (cellSize + cellGap) + 14}" width="${cellSize}" height="${cellSize}" rx="2.5" ry="2.5"
+                fill="${fill}" stroke="${stroke}" stroke-width="${isToday ? 1.5 : 0.8}"
+                data-tip="${tooltip}"
+                style="transition:transform 120ms ease, filter 120ms ease;cursor:default;"
+                onmouseover="this.style.filter='brightness(1.35)';this.style.transform='scale(1.18)';this.style.transformOrigin='${w * (cellSize + cellGap) + cellSize/2}px ${d * (cellSize + cellGap) + 14 + cellSize/2}px';"
+                onmouseout="this.style.filter='';this.style.transform='';"></rect>`;
+        }
+    }
+
+    // Day-of-week labels (col izquierda)
+    const dowLabels = ['','Lun','','Mié','','Vie',''];
+    let dowSvg = '';
+    for (let i = 0; i < 7; i++) {
+        if (!dowLabels[i]) continue;
+        dowSvg += `<text x="-4" y="${i * (cellSize + cellGap) + 14 + cellSize - 3}" font-size="9" text-anchor="end" font-family="JetBrains Mono, monospace" fill="rgba(234,216,192,0.45)">${dowLabels[i]}</text>`;
+    }
+
+    // Legend (derecha)
+    const legendHtml = `
+        <div style="display:flex;align-items:center;gap:10px;margin-top:14px;font-size:11px;color:var(--text-d);font-family:'JetBrains Mono', monospace;">
+            <span style="opacity:0.7;">Menos</span>
+            <span style="display:inline-block;width:13px;height:13px;border-radius:2.5px;background:${colors[0]};border:1px solid rgba(184,115,51,0.10);"></span>
+            <span style="display:inline-block;width:13px;height:13px;border-radius:2.5px;background:${colors[1]};"></span>
+            <span style="display:inline-block;width:13px;height:13px;border-radius:2.5px;background:${colors[2]};"></span>
+            <span style="display:inline-block;width:13px;height:13px;border-radius:2.5px;background:${colors[3]};"></span>
+            <span style="display:inline-block;width:13px;height:13px;border-radius:2.5px;background:${colors[4]};"></span>
+            <span style="opacity:0.7;">Más</span>
+            <span style="margin-left:auto;color:var(--text-m);">Hoy resaltado en amarillo · Pasá el cursor por una celda para ver el conteo.</span>
+        </div>`;
+
+    const heatmapHtml = `
+        <div style="overflow-x:auto;padding:6px 4px 6px 28px;">
+            <svg id="argus-activity-svg" width="${gridW + 6}" height="${gridH + 22}" viewBox="0 0 ${gridW + 6} ${gridH + 22}" style="display:block;">
+                ${monthLabels}
+                <g transform="translate(0,0)">${dowSvg}</g>
+                ${cells}
+            </svg>
+        </div>
+        ${legendHtml}`;
+
+    container.innerHTML = statsHtml + heatmapHtml;
+
+    // Tooltip simple sobre las celdas (data-tip)
+    const svg = container.querySelector('#argus-activity-svg');
+    if (svg) {
+        let tip = null;
+        svg.addEventListener('mousemove', (e) => {
+            const t = e.target;
+            if (!(t instanceof SVGRectElement)) {
+                if (tip) { tip.remove(); tip = null; }
+                return;
+            }
+            const text = t.getAttribute('data-tip');
+            if (!text) return;
+            if (!tip) {
+                tip = document.createElement('div');
+                tip.style.cssText = 'position:fixed;z-index:99997;pointer-events:none;background:rgba(20,16,10,0.96);color:#EAD8C0;border:1px solid rgba(184,115,51,0.32);border-radius:6px;padding:6px 10px;font-size:11.5px;font-family:JetBrains Mono, monospace;box-shadow:0 8px 22px rgba(0,0,0,0.45);white-space:nowrap;';
+                document.body.appendChild(tip);
+            }
+            tip.textContent = text;
+            tip.style.left = (e.clientX + 12) + 'px';
+            tip.style.top  = (e.clientY - 28) + 'px';
+        });
+        svg.addEventListener('mouseleave', () => { if (tip) { tip.remove(); tip = null; } });
+    }
+}
+
 async function copyScanLink(scanId) {
     if (!scanId) {
         if (typeof showToast === 'function') {
