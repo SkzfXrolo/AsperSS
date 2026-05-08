@@ -24,6 +24,17 @@ from auth import (
     STAFF_ROLE_HIERARCHY
 )
 
+# Pack 32 — Sistema de Trust + Cooldown (F#54, F#55, F#60).
+# Se importa en try/except por compatibilidad: si el archivo no está
+# (deploy parcial, rollback), el resto de la app sigue funcionando.
+try:
+    import ai_trust as _ai_trust
+    _AI_TRUST_AVAILABLE = True
+except Exception as _ai_trust_err:
+    _ai_trust = None
+    _AI_TRUST_AVAILABLE = False
+    print(f'[boot] ai_trust no disponible: {_ai_trust_err}')
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-production')
 
@@ -3500,6 +3511,35 @@ def _get_company_settings(company_id):
                     settings['threshold_suspicious'] = int(row[2] or 30)
     except Exception as e:
         print(f'[CompanySettings] error: {e}')
+
+    # Pack 32 F#60 — Aplicar threshold_bump del cooldown si existe.
+    # No mutamos los valores guardados en BD; sumamos en memoria por
+    # request. Si la empresa hizo muchos overturns o learn-fp, sus
+    # thresholds suben para forzar revisión más estricta.
+    if _AI_TRUST_AVAILABLE:
+        try:
+            with get_api_db_cursor() as _ccur:
+                cd = _ai_trust.get_company_cooldown(_ccur, company_id)
+                bump = int(cd.get('threshold_bump') or 0)
+                if bump > 0:
+                    settings['threshold_critical'] = min(
+                        99, settings['threshold_critical'] + bump
+                    )
+                    settings['threshold_suspicious'] = min(
+                        settings['threshold_critical'] - 1,
+                        settings['threshold_suspicious'] + bump
+                    )
+                    settings['cooldown_active']  = True
+                    settings['cooldown_bump']    = bump
+                    settings['cooldown_reason']  = (
+                        f"FP={cd.get('fp_count_24h',0)} "
+                        f"overturns={cd.get('overturn_count_24h',0)}"
+                    )
+                else:
+                    settings['cooldown_active'] = False
+        except Exception as _e_cd:
+            print(f'[CompanySettings.cooldown] {_e_cd}')
+
     _company_settings_cache[company_id] = (settings, _time.time())
     return settings
 
@@ -4214,17 +4254,23 @@ _ENSEMBLE_KNOWN_CLIENTS = [
 _VERDICT_ORDER = ['LIMPIO', 'POCO_SOSPECHOSO', 'SOSPECHOSO', 'MUY_SOSPECHOSO', 'HACK_CONFIRMADO']
 
 
-def _compute_ensemble_verdict(results, cursor=None):
+def _compute_ensemble_verdict(results, cursor=None, machine_id=None,
+                              minecraft_username=None, exclude_scan_id=None):
     """6-system ensemble verdict with in-instance hard gate.
 
     Gate rule: without any in-instance evidence, max verdict = SOSPECHOSO (not sanctionable).
     Systems and weights:
-      1. Risk Score       0.15
-      2. Instance Layer   0.35  (also acts as sanctionability gate)
-      3. Signal Conv.     0.20
-      4. Hash Reputation  0.15
-      5. Temporality      0.10
-      6. ML               0.05
+      1. Risk Score          0.30
+      2. Instance Layer      0.00  (gate, no contribuye al score)
+      3. Signal Convergence  0.25
+      4. Hash Reputation     0.20
+      5. Temporality         0.10
+      6. ML                  0.05
+      7. Prior Consensus     0.10  (Pack 32 F#55 — verdicts previos del
+                                   mismo machine_id/player). Solo se
+                                   aplica si machine_id o
+                                   minecraft_username están presentes.
+
     All systems return 0-4; final score is weighted average scaled to 0-100.
     """
     if not results:
@@ -4304,8 +4350,37 @@ def _compute_ensemble_verdict(results, cursor=None):
     # -- System 6: ML (reuse existing risk_score proxy) --
     s6 = min(4, risk_score // 25)
 
-    # -- Weighted ensemble (s1,s3,s4,s5,s6 only — Instance Layer is a gate, not a score contributor) --
-    raw = s1 * 0.35 + s3 * 0.30 + s4 * 0.20 + s5 * 0.10 + s6 * 0.05
+    # -- System 7: Prior Consensus (Pack 32 F#55) --
+    s7 = 2  # neutro
+    s7_meta = {'verdicts': [], 'count': 0, 'reason': 'sin contexto'}
+    if _AI_TRUST_AVAILABLE and cursor and (machine_id or minecraft_username):
+        try:
+            s7_data = _ai_trust.system7_prior_consensus(
+                cursor, machine_id, minecraft_username,
+                exclude_scan_id=exclude_scan_id,
+            )
+            s7 = int(s7_data.get('score', 2))
+            s7_meta = {
+                'verdicts': s7_data.get('verdicts', []),
+                'count':    s7_data.get('count', 0),
+                'hacks':    s7_data.get('hacks', 0),
+                'cleans':   s7_data.get('cleans', 0),
+                'reason':   s7_data.get('reason', ''),
+            }
+        except Exception as _e_s7:
+            print(f'[ensemble.s7] {_e_s7}')
+
+    # -- Weighted ensemble. Instance Layer es gate, no contribuye a la
+    # suma. El System 7 entra con peso 0.10 cuando hay machine_id /
+    # username, en cuyo caso se renormaliza el resto a 0.90.
+    if _AI_TRUST_AVAILABLE and (machine_id or minecraft_username):
+        # Pesos con S7 activo
+        raw = (s1 * 0.30 + s3 * 0.25 + s4 * 0.20 +
+               s5 * 0.10 + s6 * 0.05 + s7 * 0.10)
+    else:
+        # Pesos legacy (sin S7): renormalizo hacia 1.0 manteniendo
+        # las proporciones originales.
+        raw = s1 * 0.35 + s3 * 0.30 + s4 * 0.20 + s5 * 0.10 + s6 * 0.05
     score = min(100, round(raw / 4.0 * 100))
 
     # -- Verdict from score --
@@ -4329,18 +4404,23 @@ def _compute_ensemble_verdict(results, cursor=None):
         top_client = max(client_signals, key=lambda k: len(client_signals[k]))
         reasons.append(f'{top_client} ({len(client_signals[top_client])} señal(es))')
 
+    s7_active = _AI_TRUST_AVAILABLE and (machine_id or minecraft_username)
+    if s7_active and s7_meta.get('count', 0) > 0:
+        reasons.append(f"prior: {s7_meta['reason']}")
+
     return {
         'verdict': verdict,
         'sanctionable': sanctionable,
         'score': score,
         'gate_capped': gate_capped,
         'systems': {
-            'risk_score':        {'score': s1, 'raw': risk_score, 'weight': 0.35},
-            'instance_layer':    {'score': s2, 'in_instance': in_inst_count, 'sanctionable': sanctionable, 'weight': 0},
-            'signal_convergence':{'score': s3, 'clients': {k: list(v) for k, v in client_signals.items()}, 'weight': 0.30},
-            'hash_reputation':   {'score': s4, 'weight': 0.20},
-            'temporality':       {'score': s5, 'weight': 0.10},
-            'ml':                {'score': s6, 'weight': 0.05},
+            'risk_score':         {'score': s1, 'raw': risk_score, 'weight': 0.30 if s7_active else 0.35},
+            'instance_layer':     {'score': s2, 'in_instance': in_inst_count, 'sanctionable': sanctionable, 'weight': 0},
+            'signal_convergence': {'score': s3, 'clients': {k: list(v) for k, v in client_signals.items()}, 'weight': 0.25 if s7_active else 0.30},
+            'hash_reputation':    {'score': s4, 'weight': 0.20},
+            'temporality':        {'score': s5, 'weight': 0.10},
+            'ml':                 {'score': s6, 'weight': 0.05},
+            'prior_consensus':    {'score': s7, 'weight': 0.10 if s7_active else 0.0, 'active': bool(s7_active), **s7_meta},
         },
         'reason': ' · '.join(reasons) if reasons else '',
     }
@@ -4560,10 +4640,31 @@ def submit_scan_results(scan_id):
                 except Exception:
                     pass
 
-            # 6-system ensemble verdict
+            # 7-system ensemble verdict (Pack 32 incluye Prior Consensus).
+            # Leemos machine_id + minecraft_username del scan actual para
+            # alimentar el sistema 7 con verdicts previos del mismo
+            # cliente / jugador.
+            _scan_machine_id = None
+            _scan_username   = None
+            try:
+                cursor.execute(
+                    f'SELECT machine_id, minecraft_username FROM scans WHERE id = {_PH}',
+                    (scan_id,)
+                )
+                _row = cursor.fetchone()
+                if _row:
+                    _scan_machine_id = _row_get(_row, 0, 'machine_id')
+                    _scan_username   = _row_get(_row, 1, 'minecraft_username')
+            except Exception:
+                pass
             try:
                 cursor.execute('SAVEPOINT ensemble_save')
-                _ens = _compute_ensemble_verdict(results, cursor)
+                _ens = _compute_ensemble_verdict(
+                    results, cursor,
+                    machine_id=_scan_machine_id,
+                    minecraft_username=_scan_username,
+                    exclude_scan_id=scan_id,
+                )
                 cursor.execute(
                     f'UPDATE scans SET ensemble_data = {_PH} WHERE id = {_PH}',
                     (json.dumps(_ens), scan_id)
@@ -7268,8 +7369,34 @@ def set_scan_verdict(scan_id):
     if not reason:
         return jsonify({'error': 'La razón del veredicto es obligatoria'}), 400
     user = session.get('username', 'staff')
+    user_id = session.get('user_id')
     try:
         with get_api_db_cursor() as cursor:
+            # Pack 32 — Capturar ensemble verdict, prior verdict y company
+            # ANTES de overwriteear, para alimentar staff_trust + cooldown.
+            prior_verdict = None
+            ensemble_verdict_str = None
+            scan_company_id = None
+            try:
+                cursor.execute(
+                    f'SELECT verdict, ensemble_data, company_id '
+                    f'FROM scans WHERE id={_PH}',
+                    (scan_id,)
+                )
+                _vrow = cursor.fetchone()
+                if _vrow:
+                    prior_verdict = _row_get(_vrow, 0, 'verdict')
+                    _ed = _row_get(_vrow, 1, 'ensemble_data')
+                    if _ed:
+                        try:
+                            _edd = json.loads(_ed) if isinstance(_ed, str) else _ed
+                            ensemble_verdict_str = (_edd or {}).get('verdict')
+                        except Exception:
+                            pass
+                    scan_company_id = _row_get(_vrow, 2, 'company_id')
+            except Exception:
+                pass
+
             cursor.execute(
                 f'UPDATE scans SET verdict={_PH}, verdict_reason={_PH}, verdict_by={_PH},'
                 f' verdict_at=CURRENT_TIMESTAMP WHERE id={_PH}',
@@ -7281,6 +7408,51 @@ def set_scan_verdict(scan_id):
                 f' VALUES ({_PH},{_PH},{_PH},{_PH})',
                 (scan_id, verdict, reason, user)
             )
+
+            # Pack 32 F#54 — Actualizar staff_trust comparando humano vs
+            # ensemble. Idempotente, dentro de SAVEPOINT por si la tabla
+            # está corrupta no rompe el verdict.
+            if _AI_TRUST_AVAILABLE and user_id and ensemble_verdict_str:
+                try:
+                    cursor.execute('SAVEPOINT staff_trust_save')
+                    _ai_trust.update_staff_trust_on_verdict(
+                        cursor,
+                        user_id=user_id,
+                        human_verdict=verdict,
+                        ensemble_verdict=ensemble_verdict_str,
+                        prior_human_verdict=(prior_verdict or None),
+                    )
+                    cursor.execute('RELEASE SAVEPOINT staff_trust_save')
+                except Exception:
+                    try:
+                        cursor.execute('ROLLBACK TO SAVEPOINT staff_trust_save')
+                    except Exception:
+                        pass
+
+            # Pack 32 F#60 — Si el verdict actual es 'clean' y el prior
+            # era 'hack' (o el ensemble decía hack), incrementar
+            # overturn cooldown de la empresa.
+            if _AI_TRUST_AVAILABLE and scan_company_id:
+                is_overturn_to_clean = (
+                    verdict == 'clean' and (
+                        (prior_verdict and prior_verdict.lower() == 'hack') or
+                        (ensemble_verdict_str and ensemble_verdict_str.upper() in
+                         ('HACK_CONFIRMADO', 'MUY_SOSPECHOSO'))
+                    )
+                )
+                if is_overturn_to_clean:
+                    try:
+                        cursor.execute('SAVEPOINT cooldown_save')
+                        _ai_trust.increment_cooldown(
+                            cursor, scan_company_id, kind='overturn'
+                        )
+                        cursor.execute('RELEASE SAVEPOINT cooldown_save')
+                    except Exception:
+                        try:
+                            cursor.execute('ROLLBACK TO SAVEPOINT cooldown_save')
+                        except Exception:
+                            pass
+
             cursor.execute(
                 f'SELECT machine_name, minecraft_username FROM scans WHERE id={_PH}',
                 (scan_id,)
@@ -9875,6 +10047,168 @@ def _log_staff_action(action: str, target_scan_id=None, detail: str = '', user_i
         print(f'[AuditLog] Error: {e}')
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Pack 32 — F#54/F#55/F#60 endpoints
+# ═══════════════════════════════════════════════════════════════════════
+
+@app.route('/api/staff/my-trust', methods=['GET'])
+@login_required
+def get_my_trust():
+    """Trust score del staff logueado (F#54).
+    Cualquier staff lo ve para sí mismo; admin ve cualquiera.
+    """
+    if not _AI_TRUST_AVAILABLE:
+        return jsonify({'available': False, 'reason': 'ai_trust no cargado'}), 200
+    user_id = session.get('user_id')
+    qs_uid  = request.args.get('user_id', type=int)
+    if qs_uid and qs_uid != user_id and not is_admin(user_id):
+        return jsonify({'error': 'Solo admin puede ver trust de otros'}), 403
+    target = qs_uid or user_id
+    try:
+        with get_api_db_cursor() as cur:
+            data = _ai_trust.get_staff_trust(cur, target)
+        # Bayesian alpha/beta para info
+        a = data.get('agreements', 0) + 2 * data.get('confirmed_correct', 0)
+        b = data.get('disagreements', 0) + 2 * data.get('confirmed_wrong', 0)
+        return jsonify({
+            'available':         True,
+            'user_id':           target,
+            'trust_score':       data.get('trust_score', 50.0),
+            'verdicts_total':    data.get('verdicts_total', 0),
+            'agreements':        data.get('agreements', 0),
+            'disagreements':     data.get('disagreements', 0),
+            'overturns_to_clean': data.get('overturns_to_clean', 0),
+            'overturns_to_hack':  data.get('overturns_to_hack', 0),
+            'confirmed_correct': data.get('confirmed_correct', 0),
+            'confirmed_wrong':   data.get('confirmed_wrong', 0),
+            'last_verdict_at':   data.get('updated_at', ''),
+            'bayesian':          {'alpha': a + 1, 'beta': b + 1},
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/staff-trust', methods=['GET'])
+@login_required
+def get_admin_staff_trust():
+    """Ranking global de staff_trust (admin only)."""
+    if not is_admin(session.get('user_id')):
+        return jsonify({'error': 'Acceso denegado'}), 403
+    if not _AI_TRUST_AVAILABLE:
+        return jsonify({'available': False, 'rows': []}), 200
+    try:
+        with get_api_db_cursor() as cur:
+            _ai_trust.ensure_trust_tables(cur)
+            cur.execute(
+                'SELECT user_id, verdicts_total, agreements, disagreements, '
+                'overturns_to_clean, overturns_to_hack, confirmed_correct, '
+                'confirmed_wrong, trust_score, updated_at '
+                'FROM staff_trust ORDER BY verdicts_total DESC, trust_score DESC '
+                'LIMIT 200'
+            )
+            rows = cur.fetchall() or []
+            out = []
+            for r in rows:
+                uid = _row_get(r, 0, 'user_id')
+                out.append({
+                    'user_id':           uid,
+                    'verdicts_total':    int(_row_get(r, 1, 'verdicts_total')     or 0),
+                    'agreements':        int(_row_get(r, 2, 'agreements')         or 0),
+                    'disagreements':     int(_row_get(r, 3, 'disagreements')      or 0),
+                    'overturns_to_clean': int(_row_get(r, 4, 'overturns_to_clean') or 0),
+                    'overturns_to_hack':  int(_row_get(r, 5, 'overturns_to_hack')  or 0),
+                    'confirmed_correct':  int(_row_get(r, 6, 'confirmed_correct')  or 0),
+                    'confirmed_wrong':    int(_row_get(r, 7, 'confirmed_wrong')    or 0),
+                    'trust_score':        float(_row_get(r, 8, 'trust_score')      or 50.0),
+                    'updated_at':         str(_row_get(r, 9, 'updated_at')         or ''),
+                })
+            # Enriquecer con username si tenemos auth.list_users
+            try:
+                user_map = {u.get('id'): u.get('username') for u in (list_users() or [])}
+                for o in out:
+                    o['username'] = user_map.get(o['user_id'], f'user_{o["user_id"]}')
+            except Exception:
+                for o in out:
+                    o['username'] = f'user_{o["user_id"]}'
+        return jsonify({'available': True, 'rows': out, 'count': len(out)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/company-cooldowns', methods=['GET'])
+@login_required
+def get_admin_company_cooldowns():
+    """Lista de empresas con cooldown activo o reciente (admin only)."""
+    if not is_admin(session.get('user_id')):
+        return jsonify({'error': 'Acceso denegado'}), 403
+    if not _AI_TRUST_AVAILABLE:
+        return jsonify({'available': False, 'rows': []}), 200
+    try:
+        with get_api_db_cursor() as cur:
+            _ai_trust.ensure_trust_tables(cur)
+            cur.execute(
+                'SELECT company_id, fp_count_24h, overturn_count_24h, '
+                'threshold_bump, cooldown_until, last_event_at, updated_at '
+                'FROM company_fp_cooldown '
+                'ORDER BY threshold_bump DESC, last_event_at DESC '
+                'LIMIT 200'
+            )
+            rows = cur.fetchall() or []
+            out = []
+            for r in rows:
+                cid = _row_get(r, 0, 'company_id')
+                out.append({
+                    'company_id':         cid,
+                    'fp_count_24h':       int(_row_get(r, 1, 'fp_count_24h')       or 0),
+                    'overturn_count_24h': int(_row_get(r, 2, 'overturn_count_24h') or 0),
+                    'threshold_bump':     int(_row_get(r, 3, 'threshold_bump')     or 0),
+                    'cooldown_until':     str(_row_get(r, 4, 'cooldown_until')     or ''),
+                    'last_event_at':      str(_row_get(r, 5, 'last_event_at')      or ''),
+                    'updated_at':         str(_row_get(r, 6, 'updated_at')         or ''),
+                })
+            try:
+                companies = list_companies() or []
+                cmap = {c.get('id'): c.get('name') for c in companies}
+                for o in out:
+                    o['company_name'] = cmap.get(o['company_id'], f'company_{o["company_id"]}')
+            except Exception:
+                for o in out:
+                    o['company_name'] = f'company_{o["company_id"]}'
+        return jsonify({'available': True, 'rows': out, 'count': len(out)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/staff-trust/confirm', methods=['POST'])
+@login_required
+def confirm_staff_trust():
+    """Admin confirma o desmiente una decisión post-facto del staff
+    (F#54 — confirmed_correct / confirmed_wrong pesan doble en el score).
+
+    body: {user_id: int, was_correct: bool}
+    """
+    if not is_admin(session.get('user_id')):
+        return jsonify({'error': 'Acceso denegado'}), 403
+    if not _AI_TRUST_AVAILABLE:
+        return jsonify({'error': 'ai_trust no cargado'}), 503
+    data = request.get_json(silent=True) or {}
+    target = data.get('user_id')
+    was_correct = bool(data.get('was_correct', False))
+    if not target:
+        return jsonify({'error': 'user_id requerido'}), 400
+    try:
+        with get_api_db_cursor() as cur:
+            _ai_trust.confirm_staff_decision(cur, int(target), was_correct)
+        try:
+            _log_staff_action('staff_trust_confirm',
+                              detail=f'target={target} was_correct={was_correct}')
+        except Exception:
+            pass
+        return jsonify({'ok': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/staff/audit-log', methods=['GET'])
 @login_required
 def get_staff_audit_log():
@@ -9990,6 +10324,19 @@ def learn_fp_path():
             _log_staff_action('learn_fp', detail=f"path_fragment={fragment} action={action}")
         except Exception:
             pass
+
+        # Pack 32 F#60 — Incrementar cooldown de la empresa.
+        # Detecta volúmenes anómalos de FP-learning como señal de
+        # corrupción o filtro mal calibrado, y sube los thresholds
+        # del cliente para forzar revisión más estricta.
+        if _AI_TRUST_AVAILABLE and session.get('company_id'):
+            try:
+                with get_api_db_cursor() as _ccur:
+                    _ai_trust.increment_cooldown(
+                        _ccur, session.get('company_id'), kind='fp'
+                    )
+            except Exception as _e_cd:
+                print(f'[learn-fp.cooldown] {_e_cd}')
 
         return jsonify({
             'ok': True,

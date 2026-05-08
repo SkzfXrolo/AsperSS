@@ -1034,19 +1034,31 @@ NOTA DE LECTURA
         en scan_deleted_recycle y scan_messaging_downloads: si un
         path es de un launcher y NO es hack-name explícito → skip.
 
-[-] 54. Confianza modulada por antigüedad y reputación del staff: staff con
-        DEFERRED — requiere tabla `staff_trust_score` con cálculo
-        histórico (overturns previos, disagreement con peers, etc.) y
-        plumbing en el ensemble del verdict. Pack futuro: implementación
-        completa con dashboard de "trust history" para que el staff lo
-        vea. Hoy, todos los verdicts pesan igual (que es lo seguro por
-        defecto).
+[X] 54. Confianza modulada por antigüedad y reputación del staff: staff con
+        DONE v1.6.49 (Pack 32) — módulo nuevo web_app/ai_trust.py con
+        tabla staff_trust (idempotente CREATE IF NOT EXISTS). Cada
+        verdict humano alimenta agreements/disagreements vs ensemble,
+        overturns_to_clean/hack, y los confirmados post-facto por admin
+        (confirmed_correct/wrong, peso doble). trust_score 0-100 con
+        Bayesian-lite: score = 100*α/(α+β) donde α = 1 + agreements +
+        2*confirmed_correct, β = 1 + disagreements + 2*confirmed_wrong.
+        Cache 2min. Endpoints: GET /api/staff/my-trust (propio o admin
+        con ?user_id), GET /api/admin/staff-trust (ranking),
+        POST /api/admin/staff-trust/confirm (admin marca correctos/
+        incorrectos post-revisión).
         >100 veredictos correctos tiene más peso al marcar FP.
 
-[-] 55. Confidence ensemble con factor humano:
-        DEFERRED — depende de F#54 (staff trust score). Mismo Pack
-        futuro. Hoy el ensemble combina heurística + RF + reglas server
-        sin ponderar por staff (intencionalmente neutral).
+[X] 55. Confidence ensemble con factor humano:
+        DONE v1.6.49 (Pack 32) — _compute_ensemble_verdict ahora es
+        7-system (era 6-system). Sistema 7 = "Prior Consensus": mira
+        los últimos 5 verdicts cerrados del mismo machine_id O
+        minecraft_username (case-insensitive) y devuelve score 0-4.
+        Mayoría hack reciente sube el score; mayoría clean lo baja.
+        Peso 0.10 cuando hay machine_id/username, renormalizando los
+        otros pesos. submit_scan_results ahora pasa machine_id +
+        username + exclude_scan_id al ensemble. ensemble_data en BD
+        guarda systems.prior_consensus con verdicts/count/hacks/cleans/
+        reason para mostrar en "why-this-score" del panel.
         AI_score + heuristic_score + historical_feedback → score consolidado
         ponderado en lugar de simple OR.
 
@@ -1102,12 +1114,18 @@ NOTA DE LECTURA
         hack-name explícito se descarta). Solución por path en lugar
         de por timestamp + log → más robusto y rápido.
 
-[-] 60. "Penalty cooldown": si una empresa ya marcó X hashes como FP en las
-        DEFERRED — depende de tracking explícito de FP rate por empresa
-        en ventana de 24h. learn-fp ya audita en staff_audit_log, pero
-        falta el cron-job/aggregator que active el cooldown. Pack futuro
-        (cron + dashboard "salud de filtros de mi empresa"). Hoy, F#11
-        cubre el aprendizaje retroactivo sin cooldown explícito.
+[X] 60. "Penalty cooldown": si una empresa ya marcó X hashes como FP en las
+        DONE v1.6.49 (Pack 32) — tabla company_fp_cooldown
+        (idempotente). learn-fp incrementa fp_count_24h; overturn
+        hack→clean en set_scan_verdict incrementa overturn_count_24h.
+        threshold_bump escalado: fp>=5 ó overturn>=3 → +5,
+        fp>=10 ó overturn>=5 → +10, fp>=20 ó overturn>=10 → +15.
+        Decay automático: si last_event_at >24h, todos los counters
+        vuelven a 0. _get_company_settings suma threshold_bump al
+        threshold_critical/suspicious en memoria (no muta BD), forzando
+        revisión más estricta. Cache 1min. Endpoint admin
+        GET /api/admin/company-cooldowns devuelve ranking. No requiere
+        cron — es event-driven.
         últimas 48h, subir threshold dinámicamente para esa empresa hasta
         que se ajusten heurísticas — evita lluvia de FPs idénticos.
 
