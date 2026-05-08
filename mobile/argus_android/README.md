@@ -1,14 +1,29 @@
-# Argus Android (APK) — Pack 26: completo
+# Argus Android (APK) — Pack 27: signed release + auto-updater
 
 Versión móvil del scanner anti-cheat Argus para **Minecraft Bedrock Edition**
 y **Minecraft Java vía PojavLauncher / Boardwalk**. Comparte el contrato API
 con el backend Argus (los mismos `POST /api/scans` y
 `POST /api/scans/<id>/results` que usan los scanners Windows y Linux).
 
-> Versión: **1.6.49-android2**
+> Versión: **1.6.49-android3**
 > Min SDK: 26 (Android 8.0)
 > Target SDK: 34 (Android 14)
 > Lenguaje: Kotlin · UI: Jetpack Compose
+
+## Novedades Pack 27
+
+- **APK release firmado con keystore propio**. CI persiste un keystore
+  RSA-2048 self-signed entre runs (publicado como release oculto
+  `_keystore`). La firma es **estable**, así que builds nuevos se instalan
+  como update sobre los previos sin pedir desinstalar.
+- **Auto-updater in-app**. Al iniciar, la app consulta
+  `/api/android-version?current=<commit>` y, si el backend reporta un
+  build más reciente, muestra un banner "Hay versión nueva" con botón
+  **Actualizar** que abre el APK firmado en el navegador para instalarlo.
+- **`BuildConfig.ARGUS_BUILD_COMMIT` + `ARGUS_BUILD_TIMESTAMP`** inyectados
+  desde CI; `versionCode` ahora viene del `github.run_number` (incrementa
+  monotónicamente). Visible en el banner de update y enviable al backend
+  como diagnóstico.
 
 ---
 

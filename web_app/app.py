@@ -5837,6 +5837,95 @@ ANDROID_RELEASE_URL = (
     f'https://github.com/SkzfXrolo/AsperSS/releases/download/'
     f'{ANDROID_RELEASE_TAG}/{ANDROID_RELEASE_ASSET}'
 )
+ANDROID_RELEASE_API = (
+    'https://api.github.com/repos/SkzfXrolo/AsperSS/releases/tags/'
+    f'{ANDROID_RELEASE_TAG}'
+)
+
+# Cache simple en proceso para no martillar la API de GitHub (60 req/h
+# sin auth). TTL 5min — coincide con el ritmo realista de re-deploys.
+_android_version_cache: dict = {'data': None, 'fetched_at': 0.0}
+_ANDROID_VERSION_TTL_S = 300
+
+
+def _android_version_payload() -> dict:
+    """Item Android #15 — meta del último APK publicado.
+
+    Devuelve {latest_commit, short_commit, apk_url, published_at,
+    release_name, size_bytes, release_notes}. Si la API de GitHub falla,
+    cae a un payload mínimo con apk_url estable.
+    """
+    now = _time_mod.time()
+    cached = _android_version_cache.get('data')
+    if cached and now - _android_version_cache['fetched_at'] < _ANDROID_VERSION_TTL_S:
+        return cached
+
+    fallback = {
+        'latest_commit': None,
+        'short_commit': None,
+        'apk_url': ANDROID_RELEASE_URL,
+        'published_at': None,
+        'release_name': None,
+        'size_bytes': None,
+        'release_notes': None,
+        'tag': ANDROID_RELEASE_TAG,
+        'source': 'fallback',
+    }
+    try:
+        resp = requests.get(ANDROID_RELEASE_API, timeout=4)
+        if resp.status_code != 200:
+            _android_version_cache['data'] = fallback
+            _android_version_cache['fetched_at'] = now
+            return fallback
+        data = resp.json() or {}
+        commit = (data.get('target_commitish') or '').strip() or None
+        apk_asset = None
+        for asset in data.get('assets') or []:
+            if (asset.get('name') or '').lower() == ANDROID_RELEASE_ASSET:
+                apk_asset = asset
+                break
+        payload = {
+            'latest_commit': commit,
+            'short_commit': commit[:7] if commit else None,
+            'apk_url': (apk_asset or {}).get('browser_download_url') or ANDROID_RELEASE_URL,
+            'published_at': data.get('published_at'),
+            'release_name': data.get('name'),
+            'size_bytes': (apk_asset or {}).get('size'),
+            'release_notes': (data.get('body') or '').strip()[:1500] or None,
+            'tag': ANDROID_RELEASE_TAG,
+            'source': 'github',
+        }
+        _android_version_cache['data'] = payload
+        _android_version_cache['fetched_at'] = now
+        return payload
+    except Exception:
+        _android_version_cache['data'] = fallback
+        _android_version_cache['fetched_at'] = now
+        return fallback
+
+
+@app.route('/api/android-version')
+def api_android_version():
+    """Item Android #15 — endpoint que la app Argus consulta al iniciar
+    para detectar versión nueva.
+
+    Cliente típico: la app envía su BuildConfig.ARGUS_BUILD_COMMIT como
+    ?current=abc1234. Si no coincide con `short_commit` y la release
+    es más reciente, la app muestra "Hay versión nueva" + botón
+    Actualizar (que abre apk_url en el navegador para que el usuario
+    descargue e instale el APK firmado).
+
+    Sin parámetro `current`, devuelve solo la meta del último build.
+    """
+    payload = _android_version_payload()
+    current = (request.args.get('current') or '').strip().lower()
+    update_available = False
+    if current and payload.get('short_commit'):
+        update_available = (current != payload['short_commit'].lower())
+    out = dict(payload)
+    out['update_available'] = update_available
+    out['current'] = current or None
+    return jsonify(out)
 
 
 @app.route('/descargar/android')

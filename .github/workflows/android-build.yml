@@ -1,19 +1,24 @@
 name: Android APK Build
 
-# Item Android #12 — pipeline CI para compilar el APK debug en cada push
-# que toque mobile/argus_android/. Sube el APK como artifact (devs) Y como
-# GitHub Release rolling tag "android-latest" (usuarios finales) de modo
-# que /descargar/android en Render redirija a una URL pública estable
-# sin token ni redeploy.
+# Item Android #12 + #15 — pipeline CI para compilar y firmar el APK release
+# en cada push que toque mobile/argus_android/.
+#
+# Cambios en Pack 27:
+#   * Build assembleRelease (no debug) con keystore self-signed propio.
+#   * El keystore se persiste entre runs en una release oculta `_keystore`,
+#     así la firma es ESTABLE entre builds: el OTA updater de la app puede
+#     instalar APKs nuevos como "update" del previo sin obligar a desinstalar.
+#   * BuildConfig recibe BUILD_COMMIT y BUILD_TIMESTAMP, leídos por la app
+#     para mostrar versión real y comparar contra /api/android-version.
 #
 # Se ejecuta:
-#  - En push a main que cambia mobile/argus_android/** o este workflow
-#  - En PR que toca esos paths (sin publicar release, solo artifact)
-#  - Manualmente vía workflow_dispatch
+#   - En push a main que cambia mobile/argus_android/** o este workflow
+#   - En PR que toca esos paths (sin publicar release; solo artifact)
+#   - Manualmente vía workflow_dispatch
 #
 # Output:
-#  - argus-android-debug-<sha>.zip como artifact (válido 30 días)
-#  - argus-android.apk en release "android-latest" (URL pública estable)
+#   - argus-android-release-<sha>.zip como artifact (devs, 30 días)
+#   - argus-android.apk firmado en release "android-latest" (URL pública estable)
 
 on:
   push:
@@ -30,8 +35,8 @@ permissions:
   contents: write
 
 jobs:
-  build-debug:
-    name: Build debug APK
+  build:
+    name: Build signed release APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -54,25 +59,79 @@ jobs:
       # gradle/actions/setup-gradle@v4 instala una versión específica de
       # Gradle (no usa la del runner, que puede ser Gradle 9.x e incompatible
       # con AGP 8.2.2) y maneja caché de dependencias automáticamente.
-      # Esto reemplaza al "gradle wrapper" + actions/cache manual del workflow
-      # anterior, que era frágil porque dependía del Gradle preinstalado.
       - name: Setup Gradle 8.5
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.5"
           cache-read-only: false
 
-      - name: Build debug APK
-        id: build
+      # ── Item Android #15 — keystore self-signed persistente ───────────────
+      # El keystore se guarda como asset de un release oculto `_keystore`.
+      # Si existe, lo restauramos. Si no, generamos uno y lo subimos. El
+      # password es público porque self-signed sin Play Console — la
+      # consistencia entre builds es lo que importa para que Android
+      # acepte updates sin desinstalar.
+      - name: Restore or seed Argus signing keystore
+        id: keystore
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEYSTORE_PASS: argus_release_keystore_v1
         working-directory: mobile/argus_android
         run: |
-          set -o pipefail
-          gradle --no-daemon --stacktrace --info assembleDebug 2>&1 | tee build.log
-          echo "log_path=mobile/argus_android/build.log" >> "$GITHUB_OUTPUT"
+          set -e
+          mkdir -p signing
+          if gh release download _keystore -p "argus-release.jks" -D signing 2>/dev/null; then
+            echo "keystore_source=restored" >> "$GITHUB_OUTPUT"
+            echo "Keystore restaurado desde release _keystore."
+          else
+            echo "keystore_source=generated" >> "$GITHUB_OUTPUT"
+            echo "Generando keystore self-signed nuevo (1ra vez)…"
+            keytool -genkeypair -v \
+              -keystore signing/argus-release.jks \
+              -storepass "$KEYSTORE_PASS" \
+              -keypass   "$KEYSTORE_PASS" \
+              -alias argus \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Argus Anti-Cheat, OU=Argus Projects, O=AsperSS, L=Buenos Aires, ST=BA, C=AR"
+            gh release create _keystore signing/argus-release.jks \
+              --title "Argus signing keystore (do not delete)" \
+              --notes "Self-signed RSA-2048 keystore para firmar Argus Android. Auto-generado por android-build.yml. NO BORRAR — borrarlo cambia la firma y rompe updates en dispositivos existentes." \
+              --prerelease
+          fi
+          echo "keystore_path=mobile/argus_android/signing/argus-release.jks" >> "$GITHUB_OUTPUT"
 
-      # En caso de fallo, dump el log al GITHUB_STEP_SUMMARY (visible
-      # públicamente en la UI del run sin necesidad de login). Truncamos
-      # a las últimas 600 líneas para mantener el summary legible.
+      # PRs no tienen acceso a write y no necesitan firmar contra producción.
+      # Para PRs generamos un keystore efímero solo para que la build pase.
+      - name: Generate ephemeral PR keystore
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+        working-directory: mobile/argus_android
+        env:
+          KEYSTORE_PASS: argus_release_keystore_v1
+        run: |
+          mkdir -p signing
+          keytool -genkeypair -v \
+            -keystore signing/argus-release.jks \
+            -storepass "$KEYSTORE_PASS" \
+            -keypass   "$KEYSTORE_PASS" \
+            -alias argus \
+            -keyalg RSA -keysize 2048 -validity 365 \
+            -dname "CN=Argus PR Build, OU=ci, O=AsperSS, L=BA, ST=BA, C=AR"
+
+      - name: Build release APK
+        id: build
+        working-directory: mobile/argus_android
+        env:
+          ARGUS_KEYSTORE_PATH: signing/argus-release.jks
+          ARGUS_KEYSTORE_PASS: argus_release_keystore_v1
+          ARGUS_KEY_ALIAS:     argus
+          ARGUS_KEY_PASS:      argus_release_keystore_v1
+          ARGUS_BUILD_COMMIT:  ${{ github.sha }}
+          ARGUS_BUILD_NUMBER:  ${{ github.run_number }}
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace --info assembleRelease 2>&1 | tee build.log
+
       - name: Dump build log on failure
         if: failure() && steps.build.outcome == 'failure'
         working-directory: mobile/argus_android
@@ -95,25 +154,34 @@ jobs:
         id: locate
         working-directory: mobile/argus_android
         run: |
-          APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -n1)
+          APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n1)
           if [ -z "$APK" ]; then
-            echo "::error::No se encontró el APK"
+            echo "::error::No se encontró el APK release"
             exit 1
           fi
-          # Copia con nombre estable para release/asset.
-          cp "$APK" app/build/outputs/apk/debug/argus-android.apk
+          cp "$APK" app/build/outputs/apk/release/argus-android.apk
           SIZE_KB=$(du -k "$APK" | cut -f1)
           echo "apk=$APK" >> "$GITHUB_OUTPUT"
-          echo "release_apk=mobile/argus_android/app/build/outputs/apk/debug/argus-android.apk" >> "$GITHUB_OUTPUT"
+          echo "release_apk=mobile/argus_android/app/build/outputs/apk/release/argus-android.apk" >> "$GITHUB_OUTPUT"
           echo "size_kb=$SIZE_KB" >> "$GITHUB_OUTPUT"
           echo "## APK Build Result" >> "$GITHUB_STEP_SUMMARY"
           echo "- APK: \`$APK\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tamaño: ${SIZE_KB} KB" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify APK signature
+        working-directory: mobile/argus_android
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | head -n1)
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/argus-android.apk \
+              | tee >(grep -i "subject\|sha256" >> "$GITHUB_STEP_SUMMARY") || true
+          fi
 
       - name: Upload APK artifact (per-commit, 30 day retention)
         uses: actions/upload-artifact@v4
         with:
-          name: argus-android-debug-${{ github.sha }}
+          name: argus-android-release-${{ github.sha }}
           path: mobile/argus_android/${{ steps.locate.outputs.apk }}
           retention-days: 30
           if-no-files-found: error
@@ -127,17 +195,18 @@ jobs:
           tag_name: android-latest
           name: "Argus Android — Last build (${{ github.sha }})"
           body: |
-            APK Argus Android compilado automáticamente desde el commit
-            `${{ github.sha }}` de `main`.
+            APK Argus Android **firmado** compilado automáticamente desde el
+            commit `${{ github.sha }}` de `main`.
 
             **Descarga directa**: el botón "Descargar APK" de
             https://asperss.onrender.com/descargar te trae acá automáticamente.
 
             Tamaño aproximado: ${{ steps.locate.outputs.size_kb }} KB.
 
-            > Build debug — sin firmar con keystore de release. Para
-            > distribución masiva habría que firmarlo (item Android #15).
+            > Build release firmado con keystore self-signed propio
+            > (item Android #15). La firma es **estable** entre builds, así que
+            > la app puede auto-actualizarse sin pedir desinstalar.
           prerelease: true
           make_latest: false
-          files: mobile/argus_android/app/build/outputs/apk/debug/argus-android.apk
+          files: mobile/argus_android/app/build/outputs/apk/release/argus-android.apk
           fail_on_unmatched_files: true

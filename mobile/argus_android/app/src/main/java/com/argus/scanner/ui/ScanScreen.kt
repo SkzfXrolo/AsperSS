@@ -1,6 +1,7 @@
 package com.argus.scanner.ui
 
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,10 +24,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.argus.scanner.BuildConfig
 import com.argus.scanner.core.ScanOrchestrator
 import com.argus.scanner.core.ScanProgressEvent
+import com.argus.scanner.core.UpdateChecker
+import com.argus.scanner.core.UpdateInfo
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * ScanScreen — UI principal de la APK Argus Android.
@@ -78,6 +84,17 @@ fun ScanScreen(
         usageGranted   = hasUsage()
     }
 
+    // ── Item Android #15 — auto-updater on-launch ─────────────────────────
+    // Chequea silenciosamente al primer composición. Si hay versión nueva,
+    // un banner aparece arriba con botón "Actualizar" que abre el APK URL
+    // en el navegador. No bloquea ningún flujo.
+    var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+    var updateDismissed by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val info = withContext(Dispatchers.IO) { UpdateChecker().check() }
+        if (info != null) updateInfo = info
+    }
+
     fun launchScan(includeScreenshot: Boolean) {
         error = null
         log.clear()
@@ -112,6 +129,23 @@ fun ScanScreen(
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = BgDark) {
+      Column(modifier = Modifier.fillMaxSize()) {
+        // Banner sticky arriba — visible en todos los phases si hay update.
+        val info = updateInfo
+        if (info != null && !updateDismissed) {
+            UpdateBanner(
+                info = info,
+                onUpdate = {
+                    runCatching {
+                        ctx.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(info.apkUrl))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                },
+                onDismiss = { updateDismissed = true },
+            )
+        }
         when (phase) {
             "onboarding" -> OnboardingPanel(
                 storageGranted = storageGranted,
@@ -156,6 +190,67 @@ fun ScanScreen(
                     phase = "input"
                 }
             )
+        }
+      }
+    }
+}
+
+// ─────────────────────────── Update banner (item #15) ───────────────────────────
+
+@Composable
+private fun UpdateBanner(
+    info: UpdateInfo,
+    onUpdate: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Bronze.copy(alpha = 0.18f))
+            .border(0.dp, Color.Transparent)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "ACTUALIZACIÓN",
+                    color = Warn,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier
+                        .background(Warn.copy(alpha = 0.18f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Hay una versión nueva de Argus",
+                    color = BronzeLight,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            val tail = info.latestCommit?.let { "→ $it" } ?: ""
+            Text(
+                "Tu build: ${BuildConfig.ARGUS_BUILD_COMMIT} $tail",
+                color = TextDim,
+                fontSize = 11.sp,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        TextButton(onClick = onDismiss) {
+            Text("Después", color = TextDim, fontSize = 12.sp)
+        }
+        Button(
+            onClick = onUpdate,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Bronze,
+                contentColor = BgDark,
+            ),
+            shape = RoundedCornerShape(8.dp),
+        ) {
+            Text("Actualizar", fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

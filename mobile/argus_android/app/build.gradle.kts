@@ -4,10 +4,25 @@
 // Compose UI minimalista. Sin OkHttp ni Gson — usamos
 // HttpURLConnection + org.json para mantener APK liviano (<8MB target).
 
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.TimeZone
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+// ── Item Android #15 — meta-build leído del environment de CI ───────────
+// Se inyecta en BuildConfig para que la app conozca su propio commit y
+// pueda comparar contra /api/android-version (auto-updater).
+val argusBuildCommit: String = (System.getenv("ARGUS_BUILD_COMMIT") ?: "dev").let {
+    if (it.length >= 7) it.substring(0, 7) else it
+}
+val argusBuildNumber: Int = (System.getenv("ARGUS_BUILD_NUMBER") ?: "1").toIntOrNull() ?: 1
+val argusBuildTimestamp: String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'").apply {
+    timeZone = TimeZone.getTimeZone("UTC")
+}.format(Date())
 
 android {
     namespace = "com.argus.scanner"
@@ -17,7 +32,9 @@ android {
         applicationId = "com.argus.scanner"
         minSdk        = 26
         targetSdk     = 34
-        versionCode   = 1
+        // versionCode debe incrementarse en cada release CI; usamos
+        // github.run_number como source-of-truth, default 1 en local.
+        versionCode   = argusBuildNumber
         versionName   = "1.6.49"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -26,6 +43,34 @@ android {
         // Backend URL; override con BuildConfig para builds dev/release.
         buildConfigField("String", "ARGUS_API_BASE",
             "\"https://asperss.onrender.com\"")
+        buildConfigField("String", "ARGUS_BUILD_COMMIT",
+            "\"$argusBuildCommit\"")
+        buildConfigField("String", "ARGUS_BUILD_TIMESTAMP",
+            "\"$argusBuildTimestamp\"")
+    }
+
+    // ── Item Android #15 — signing config self-signed ──────────────────
+    // El keystore lo provee el workflow CI. En local sin env vars, el
+    // build sigue funcionando con la signing config debug por default.
+    val keystorePathEnv = System.getenv("ARGUS_KEYSTORE_PATH")
+    val keystorePassEnv = System.getenv("ARGUS_KEYSTORE_PASS")
+    val keyAliasEnv     = System.getenv("ARGUS_KEY_ALIAS")
+    val keyPassEnv      = System.getenv("ARGUS_KEY_PASS")
+    val hasReleaseKey   = !keystorePathEnv.isNullOrBlank() &&
+                          !keystorePassEnv.isNullOrBlank() &&
+                          !keyAliasEnv.isNullOrBlank() &&
+                          !keyPassEnv.isNullOrBlank() &&
+                          file(keystorePathEnv!!).exists()
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile     = file(keystorePathEnv!!)
+                storePassword = keystorePassEnv
+                keyAlias      = keyAliasEnv
+                keyPassword   = keyPassEnv
+            }
+        }
     }
 
     buildTypes {
@@ -36,6 +81,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (hasReleaseKey) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         debug {
             isMinifyEnabled = false

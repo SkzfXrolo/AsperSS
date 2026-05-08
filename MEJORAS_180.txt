@@ -1693,13 +1693,23 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
         artifact descargable durante 30 días desde la UI de Actions
         — los staff/devs lo bajan sin tener Android Studio.
         Reporta tamaño del APK al GITHUB_STEP_SUMMARY.
-        AAB flavor + auto-publish a Releases: DEFERRED Pack 27+
-        (requiere keystore en GH Secrets).
+        UPGRADE Pack 27 (v1.6.49-android3) —
+        - Build assembleRelease (no debug) firmado con keystore
+          self-signed RSA-2048 propio. Keystore persistido entre runs
+          en una release oculta `_keystore` (auto-creada en el primer
+          push), de modo que la firma es ESTABLE y los APKs nuevos se
+          instalan como update sobre los existentes sin pedir
+          desinstalar.
+        - GitHub Release rolling tag `android-latest` ahora apunta al
+          APK release firmado (no más debug). El workflow ejecuta
+          `apksigner verify --print-certs` y dump el subject/sha256
+          al GITHUB_STEP_SUMMARY como prueba pública.
+        - BuildConfig.ARGUS_BUILD_COMMIT + ARGUS_BUILD_TIMESTAMP
+          inyectados desde env (github.sha + UTC now), versionCode =
+          github.run_number → monotónico por build CI.
         F-Droid: DEFERRED (reproducible builds).
-        Para servir el APK desde /descargar/android: descargar el
-        artifact del último run verde, descomprimir y copiarlo a
-        web_app/static/dist/argus-android.apk. Pack 28+ automatizará
-        ese copy on-merge-to-main vía GH Actions.
+        AAB Play Store: DEFERRED (riesgo alto de rejection por
+        permisos sensibles, costo $25 + verificación de identidad).
 
 [X] 13. Endpoint backend `/descargar/android` + tab UI con QR code:
         DONE v1.6.49 (Pack 25) — Flask:
@@ -1776,6 +1786,23 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
         Tests E2E con Firebase Test Lab DEFERRED Pack 26+.
         Modo --scan-self DEFERRED Pack 26.
 
+        UPGRADE Pack 27 (v1.6.49-android3) — In-app auto-updater:
+        - Backend: GET /api/android-version lee la última release
+          GitHub `android-latest` (cache 5min) y devuelve
+          {short_commit, apk_url, release_notes, update_available}.
+          Acepta ?current=<commit> y compara contra el último build
+          publicado.
+        - App: UpdateChecker.kt corre en Dispatchers.IO al primer
+          composeit de ScanScreen, lee BuildConfig.ARGUS_BUILD_COMMIT
+          y consulta el endpoint. Si update_available=true muestra
+          un banner sticky arriba del flow con botón "Actualizar"
+          que abre apk_url en el navegador (sin REQUEST_INSTALL_
+          PACKAGES — delega al UX nativo de "abrir APK descargado").
+        - Botón "Después" hace dismiss (rememberSaveable) hasta
+          siguiente reinicio.
+        - Falla silenciosa: sin red o backend caído → no banner,
+          la app sigue funcional con su versión actual.
+
 
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -1786,9 +1813,9 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
   Filtro .............................. 60 ítems   (anti-FP)        35/60
   Visual .............................. 60 ítems   (UI/UX)          43/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
-  Plataforma (Android / APK) .......... 15 ítems   (móvil Bedrock+Pojav) 14/15
+  Plataforma (Android / APK) .......... 15 ítems   (móvil Bedrock+Pojav) 15/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 210 ítems  COMPLETADOS:   115/210
+  TOTAL ............................... 210 ítems  COMPLETADOS:   116/210
                                                   (6 parciales: S#9, V#32, V#43, V#53, F#34, A#3)
                                                   (6 bonus: scanner_version chip,
                                                    argusUI.confirm, argusUI.typewriter,
