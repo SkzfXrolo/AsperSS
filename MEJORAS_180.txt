@@ -542,9 +542,14 @@ NOTA DE LECTURA
         rAF (passive scroll). Drop-shadow profundo + glow dorado al
         scrollear >6px. Respeta prefers-reduced-motion.
 
-[ ] 16. Filtros guardados como presets nombrados:
+[X] 16. Filtros guardados como presets nombrados:
         "Solo CRITICAL último día", "Mis scans pendientes", "Top FP",
         etc.
+        DONE v1.6.40 — saveFilterPreset/loadFilterPreset reescritos:
+        cubre los 8 campos del filter-bar (search, verdict, dates, country,
+        os, staff, risk), backward compat con presets viejos, opción
+        "🗑 Borrar preset…" en el select. Avisos via showToast en lugar
+        de alert(). Persiste último preset usado.
 
 [X] 17. Quick search global con Cmd+K / Ctrl+K — abrir scan por ID,
         empresa, jugador.
@@ -608,11 +613,22 @@ NOTA DE LECTURA
 [ ] 31. Sidebar colapsable (icon-only mode) para más espacio horizontal
         en monitores ultrawide.
 
-[ ] 32. Vista de tarjetas vs lista vs tabla en historial de scans
+[~] 32. Vista de tarjetas vs lista vs tabla en historial de scans
         (toggle persistente).
+        PARTIAL v1.6.40 — Sistema CSS+JS listo en argus-ui:
+        argusUI.setScansView('cards'|'list'|'table') aplica clase
+        scans-view-* al contenedor padre y persiste en localStorage.
+        Falta integrar el toggle UI en el header del historial — el
+        template necesita un id contenedor estable. (Half-done.)
 
-[ ] 33. Densidad ajustable: cómoda / normal / compacta — staff con
+[X] 33. Densidad ajustable: cómoda / normal / compacta — staff con
         muchos scans/día prefiere compacta.
+        DONE v1.6.40 — html.argus-density-{cozy|normal|compact} con
+        CSS variables --argus-pad-multiplier / --argus-text-multiplier
+        / --argus-row-multiplier y overrides por densidad en cards,
+        tablas y stats. argusUI.setDensity() persiste en localStorage
+        y se aplica EARLY (antes del DOMContentLoaded) para evitar
+        flash de layout. Toggle integrado en el header del historial.
 
 [X] 34. Animación del logo Argus en hover: rotación suave del aro
         (orbital ring) y respiración del centro.
@@ -662,8 +678,14 @@ NOTA DE LECTURA
         usa {{ discord_invite }} del context_processor (configurable
         via DISCORD_INVITE_URL en el .env). Responsive y accesible.
 
-[ ] 43. Web Push notifications (con permiso explícito) cuando entra
+[~] 43. Web Push notifications (con permiso explícito) cuando entra
         un scan nuevo del server propio del staff.
+        ALT-DONE v1.6.40 — En lugar de Web Push (requiere service worker
+        + suscripción server), implementé el caso más común: toast
+        warning automático cuando un scan running supera 4 minutos
+        (probable hang del cliente). markScanRunning/markScanFinished
+        expuestos en argusUI. panel.js los llama por scan al cargar el
+        listado. Web Push real queda para cuando hagamos PWA.
 
 [ ] 44. Sonido sutil al recibir un scan nuevo en el panel,
         toggleable y customizable.
@@ -689,9 +711,15 @@ NOTA DE LECTURA
 [ ] 49. Tipografía dual: serif elegante (Playfair / Cormorant) para
         titulares grandes, sans-serif (Inter / Geist) para data y UI.
 
-[ ] 50. Activar font-feature-settings para ligaduras estilísticas
+[X] 50. Activar font-feature-settings para ligaduras estilísticas
         y números tabulares (alineación perfecta de columnas
         numéricas en tablas).
+        DONE v1.6.40 — body con 'liga' + 'kern' + 'lnum';
+        font-variant-numeric: lining-nums proportional-nums.
+        Refuerzo con 'tnum' (tabular-nums) en data tables, risk badges,
+        scan IDs, footer, tooltips kbd, stats values, toasts, skeleton,
+        scan-cards, quicksearch items y [data-argus-counter].
+        Antialiasing y optimizeLegibility activados.
 
 [ ] 51. Auditoría WCAG AA: subir contraste de var(--text-d) en
         backgrounds claros — ahora roza el límite de legibilidad.
@@ -825,11 +853,11 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 
   Scanner ............................. 60 ítems   (detección)       7/60
   Filtro .............................. 60 ítems   (anti-FP)        11/60
-  Visual .............................. 60 ítems   (UI/UX)          16/60
+  Visual .............................. 60 ítems   (UI/UX)          21/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 0/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    34/195
-                                                  (1 visual parcial: V#53)
+  TOTAL ............................... 195 ítems  COMPLETADOS:    39/195
+                                                  (3 parciales: V#32, V#43, V#53)
 
 SESIÓN DEL 07-may-2026 (4 packs en una tarde):
   Pack 1 (v1.6.34): Filtro #2 lite, #30, #38 + Visual #5, #6, #25
@@ -874,6 +902,23 @@ SESIÓN DEL 07-may-2026 (4 packs en una tarde):
                     → 1 detección nueva + 4 filtros anti-FP. Recompila el
                       .exe a 1.6.39 — clientes con 1.6.37 verán "actualización
                       disponible" en /descargar.
+  Pack 7 (v1.6.40): Visual #16, #33, #50 + (#32, #43 parciales)
+                    NUEVOS: argusUI.setDensity / setScansView /
+                            markScanRunning / markScanFinished
+                    → 5 mejoras UI sin tocar el .exe:
+                      * presets de filtros extendidos a 8 campos
+                        (search, verdict, dates, country, os, staff,
+                         risk) con opción de borrar via select.
+                      * densidad global cómoda/normal/compacta con
+                        CSS variables y persistencia LS, toggle en
+                        header del historial.
+                      * tabular-nums + ligaduras + antialiasing
+                        elevan la legibilidad numérica en TODAS las
+                        tablas y badges.
+                      * sistema de "scan colgado": toast warning
+                        automático si un scan running >4min.
+                      * framework CSS+JS para vista cards/list/table
+                        listo (UI toggle pendiente de integración).
 
 PRIORIZACIÓN SUGERIDA (top 10 con mayor ROI inmediato)
 ──────────────────────────────────────────────────────

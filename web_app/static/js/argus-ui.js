@@ -677,9 +677,108 @@
         _initStickyHeaderShadow();
     }
 
+    // ── Densidad ajustable (Visual #33) ──────────────────────────────────────
+    // Aplica clase argus-density-{cozy|normal|compact} a <html>. Persiste
+    // la preferencia en localStorage('argus_density').
+    const DENSITY_KEY = 'argus_density';
+    const DENSITY_VALID = ['cozy', 'normal', 'compact'];
+    function _applyDensity(d) {
+        if (!DENSITY_VALID.includes(d)) d = 'normal';
+        const html = document.documentElement;
+        DENSITY_VALID.forEach(v => html.classList.remove('argus-density-' + v));
+        html.classList.add('argus-density-' + d);
+        try { localStorage.setItem(DENSITY_KEY, d); } catch (_e) {}
+    }
+    function _getDensity() {
+        try { return localStorage.getItem(DENSITY_KEY) || 'normal'; }
+        catch (_e) { return 'normal'; }
+    }
+    function setDensity(d) { _applyDensity(d); }
+    // Aplicar al cargar (early — antes incluso del DOMContentLoaded)
+    _applyDensity(_getDensity());
+
+    // ── Toggle vista cards/lista/tabla en historial (Visual #32) ─────────────
+    const VIEW_KEY = 'argus_scans_view';
+    const VIEW_VALID = ['cards', 'list', 'table'];
+    function _applyScansView(v) {
+        if (!VIEW_VALID.includes(v)) v = 'cards';
+        const sec = document.getElementById('scans-section') ||
+                    document.getElementById('historial') ||
+                    document.querySelector('[data-scans-container]');
+        if (!sec) return;
+        VIEW_VALID.forEach(x => sec.classList.remove('scans-view-' + x));
+        sec.classList.add('scans-view-' + v);
+        // Update toggle UI si existe
+        document.querySelectorAll('.scans-view-toggle button').forEach(btn => {
+            btn.classList.toggle('is-active', btn.dataset.view === v);
+        });
+        try { localStorage.setItem(VIEW_KEY, v); } catch (_e) {}
+    }
+    function _getScansView() {
+        try { return localStorage.getItem(VIEW_KEY) || 'cards'; }
+        catch (_e) { return 'cards'; }
+    }
+    function setScansView(v) { _applyScansView(v); }
+
+    // ── Toast si un scan tarda demasiado (Visual #43) ────────────────────────
+    // Mantiene un mapa { scanId: epoch_ms } de "running scans" reportados
+    // por panel.js (window.argusUI.markScanRunning(id, started)). Cada 30s
+    // chequea si alguno supera el umbral (4 min). Si sí, muestra UN toast
+    // por scan (no spam) y olvida el id.
+    const _slowThresholdMs = 240 * 1000;
+    const _slowSeen = new Set();
+    const _runningScans = new Map();
+    function markScanRunning(id, startedTs) {
+        if (typeof id === 'undefined' || id === null) return;
+        const t = (startedTs && Number(startedTs)) || Date.now();
+        _runningScans.set(String(id), t);
+    }
+    function markScanFinished(id) {
+        const k = String(id);
+        _runningScans.delete(k);
+        _slowSeen.delete(k);
+    }
+    function _slowScansTick() {
+        const now = Date.now();
+        for (const [id, started] of _runningScans.entries()) {
+            if (_slowSeen.has(id)) continue;
+            if (now - started > _slowThresholdMs) {
+                _slowSeen.add(id);
+                if (typeof window.showToast === 'function') {
+                    const mins = Math.round((now - started) / 60000);
+                    window.showToast(
+                        `⚠️ El scan #${id} lleva ${mins} min ejecutándose. ` +
+                        `Si no termina en breve, podría haberse colgado en el cliente.`,
+                        'warning',
+                        { duration: 9000 }
+                    );
+                }
+            }
+        }
+    }
+    setInterval(_slowScansTick, 30 * 1000);
+
     // ── Export ───────────────────────────────────────────────────────────────
     window.showToast        = showToast;
     window.renderEmptyState = renderEmptyState;
     window.renderSkeleton   = renderSkeleton;
-    window.argusUI = { showToast, renderEmptyState, renderSkeleton, refreshFooter: _refreshFooter };
+    window.argusUI = {
+        showToast,
+        renderEmptyState,
+        renderSkeleton,
+        refreshFooter: _refreshFooter,
+        setDensity,
+        getDensity: _getDensity,
+        setScansView,
+        getScansView: _getScansView,
+        markScanRunning,
+        markScanFinished,
+    };
+
+    // Re-aplicar la vista guardada cuando se haya cargado el DOM
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => _applyScansView(_getScansView()));
+    } else {
+        _applyScansView(_getScansView());
+    }
 })();

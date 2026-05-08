@@ -1574,6 +1574,18 @@ async function loadScans() {
             };
 
             const now = Date.now();
+            // Visual #43 — registrar/desregistrar scans running para que
+            // argusUI lance un toast si tardan demasiado (>4 min).
+            if (window.argusUI && window.argusUI.markScanRunning) {
+                data.scans.forEach(s => {
+                    if (s.status === 'running') {
+                        const startedTs = s.started_at ? new Date(s.started_at).getTime() : Date.now();
+                        window.argusUI.markScanRunning(s.id, startedTs);
+                    } else {
+                        window.argusUI.markScanFinished(s.id);
+                    }
+                });
+            }
             tbody.innerHTML = data.scans.map((scan, idx) => {
                 const rs = scan.risk_score;
                 const riskClass = rs >= 70 ? 'tr-risk-critical' : rs >= 30 ? 'tr-risk-suspicious' : (rs !== undefined && rs !== null ? 'tr-risk-clean' : '');
@@ -1712,40 +1724,111 @@ function quickFilter(type) {
     loadScans();
 }
 
+// ── Visual #16 — Filtros guardados como presets nombrados ─────────────────
+// Persistencia en localStorage('scan_filter_presets'). Cubre TODOS los campos
+// del filter-bar (no solo search/verdict/date). Incluye delete + last-used.
+
+const _PRESET_FIELDS = [
+    'filter-search', 'filter-verdict', 'filter-date-from', 'filter-date-to',
+    'filter-country', 'filter-os', 'filter-staff', 'filter-risk',
+];
+
+function _readCurrentFilters() {
+    const out = {};
+    _PRESET_FIELDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) out[id] = (el.value || '').trim();
+    });
+    return out;
+}
+
+function _hasAnyFilter(o) {
+    return Object.values(o || {}).some(v => v && String(v).trim() !== '');
+}
+
 function saveFilterPreset() {
-    const search   = (document.getElementById('filter-search')?.value || '').trim();
-    const verdict  = document.getElementById('filter-verdict')?.value || '';
-    const dateFrom = document.getElementById('filter-date-from')?.value || '';
-    const dateTo   = document.getElementById('filter-date-to')?.value || '';
-    if (!search && !verdict && !dateFrom && !dateTo) return;
-    const name = prompt('Nombre del preset:');
-    if (!name) return;
+    const filters = _readCurrentFilters();
+    if (!_hasAnyFilter(filters)) {
+        if (window.showToast) window.showToast('No hay filtros activos para guardar.', 'warning');
+        return;
+    }
+    const name = prompt('Nombre del preset (ej: "Pendientes hoy", "Mis FPs"):');
+    if (!name || !name.trim()) return;
+    const trimmed = name.trim().slice(0, 50);
     const presets = JSON.parse(localStorage.getItem('scan_filter_presets') || '{}');
-    presets[name] = { search, verdict, dateFrom, dateTo };
+    presets[trimmed] = { fields: filters, savedAt: Date.now() };
     localStorage.setItem('scan_filter_presets', JSON.stringify(presets));
-    _renderPresetOptions();
+    _renderPresetOptions(trimmed);
+    if (window.showToast) window.showToast(`✅ Preset "${trimmed}" guardado.`, 'success');
 }
 
 function loadFilterPreset(name) {
     if (!name) return;
+    if (name === '__delete__') return _deleteFilterPresetPrompt();
     const presets = JSON.parse(localStorage.getItem('scan_filter_presets') || '{}');
     const p = presets[name];
     if (!p) return;
-    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-    set('filter-search', p.search);
-    set('filter-verdict', p.verdict);
-    set('filter-date-from', p.dateFrom);
-    set('filter-date-to', p.dateTo);
-    loadScans();
+    // Backward compat: presets viejos guardaban directo {search,verdict,...}
+    const fields = p.fields || p;
+    _PRESET_FIELDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        // Map legacy keys if existen
+        let v = fields[id];
+        if (typeof v === 'undefined') {
+            const legacyMap = {
+                'filter-search': 'search', 'filter-verdict': 'verdict',
+                'filter-date-from': 'dateFrom', 'filter-date-to': 'dateTo',
+                'filter-country': 'country', 'filter-os': 'os',
+                'filter-staff': 'staff', 'filter-risk': 'risk',
+            };
+            v = fields[legacyMap[id]];
+        }
+        el.value = v || '';
+    });
+    try { localStorage.setItem('scan_filter_presets_last', name); } catch (_e) {}
+    if (window.showToast) window.showToast(`Preset "${name}" cargado.`, 'info', { duration: 2500 });
+    if (typeof loadScans === 'function') loadScans();
 }
 
-function _renderPresetOptions() {
+function _deleteFilterPresetPrompt() {
+    const presets = JSON.parse(localStorage.getItem('scan_filter_presets') || '{}');
+    const names = Object.keys(presets);
+    if (!names.length) {
+        if (window.showToast) window.showToast('No hay presets guardados.', 'info');
+        _renderPresetOptions();
+        return;
+    }
+    const name = prompt('¿Qué preset borrar? Opciones:\n  ' + names.join('\n  '));
+    if (!name || !presets[name]) {
+        _renderPresetOptions();
+        return;
+    }
+    delete presets[name];
+    localStorage.setItem('scan_filter_presets', JSON.stringify(presets));
+    _renderPresetOptions();
+    if (window.showToast) window.showToast(`Preset "${name}" eliminado.`, 'success');
+}
+
+function _renderPresetOptions(highlight) {
     const sel = document.getElementById('filter-presets');
     if (!sel) return;
     const presets = JSON.parse(localStorage.getItem('scan_filter_presets') || '{}');
-    sel.innerHTML = '<option value="">Presets...</option>' +
-        Object.keys(presets).map(n => `<option value="${n}">${n}</option>`).join('');
+    const names = Object.keys(presets).sort((a, b) => a.localeCompare(b));
+    let html = '<option value="">Presets…</option>';
+    if (names.length) {
+        html += '<optgroup label="Tus presets">';
+        names.forEach(n => {
+            html += `<option value="${n}" ${highlight === n ? 'selected' : ''}>${n}</option>`;
+        });
+        html += '</optgroup>';
+        html += '<option value="__delete__" style="color:#ef4444;">🗑 Borrar un preset…</option>';
+    }
+    sel.innerHTML = html;
 }
+
+window.saveFilterPreset = saveFilterPreset;
+window.loadFilterPreset = loadFilterPreset;
 
 // ── Staff management ───────────────────────────────────────────────────────
 

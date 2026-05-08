@@ -437,3 +437,177 @@
 @media (prefers-reduced-motion: reduce) {
     .argus-shake { animation: none !important; }
 }
+
+
+/* ── Tipografía: números tabulares + ligaduras estilísticas (Visual #50) ── */
+/* OpenType font-features en TODA la app:
+ *  - 'tnum'  → números de ancho fijo (alineación perfecta en columnas)
+ *  - 'lnum'  → números modernos (no oldstyle)
+ *  - 'ss01'/'cv01' → variantes estilísticas si la fuente las define
+ *  - 'liga'  → ligaduras estándar (fi, fl, etc.)
+ * Aplicado al <body> para herencia, y reforzado en celdas con datos numéricos
+ * para garantizar alineación monoespaciada de scores, IDs, fechas, IPs. */
+body, html {
+    font-feature-settings: 'liga' 1, 'kern' 1, 'lnum' 1;
+    font-variant-numeric: lining-nums proportional-nums;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Forzar tabular-nums donde la alineación importa */
+.scans-table td, .scans-table th,
+.results-table td, .results-table th,
+.data-table td, .data-table th,
+.risk-score-badge,
+.scan-id, .scan-time, .scan-meta,
+#argus-footer, #argus-tooltip kbd,
+.stat-value, .ga2-stat-val,
+.argus-toast, .argus-skel,
+.scan-card, .scan-card-meta,
+.argus-qs-item,
+[data-argus-counter] {
+    font-feature-settings: 'tnum' 1, 'lnum' 1, 'kern' 1;
+    font-variant-numeric: tabular-nums lining-nums;
+}
+
+
+/* ── Densidad ajustable (Visual #33) ────────────────────────────────────── */
+/* Aplicar al <html> o <body> la clase .argus-density-{cozy|normal|compact}.
+ * Por defecto es 'normal'. El selector de densidad se renderiza en el footer
+ * y persiste en localStorage (ver argus-ui.js). */
+
+html.argus-density-cozy {
+    --argus-pad-multiplier: 1.18;
+    --argus-text-multiplier: 1.06;
+    --argus-row-multiplier: 1.20;
+}
+html.argus-density-normal {
+    --argus-pad-multiplier: 1;
+    --argus-text-multiplier: 1;
+    --argus-row-multiplier: 1;
+}
+html.argus-density-compact {
+    --argus-pad-multiplier: 0.78;
+    --argus-text-multiplier: 0.93;
+    --argus-row-multiplier: 0.80;
+}
+
+/* Densidad cómoda — más aire alrededor de cards y filas */
+html.argus-density-cozy .scan-card,
+html.argus-density-cozy .stat-card,
+html.argus-density-cozy .section-card,
+html.argus-density-cozy .recent-activity,
+html.argus-density-cozy .dashboard-card,
+html.argus-density-cozy .empresa-card {
+    padding-top:    calc(20px * var(--argus-pad-multiplier)) !important;
+    padding-bottom: calc(20px * var(--argus-pad-multiplier)) !important;
+}
+html.argus-density-cozy table.scans-table td,
+html.argus-density-cozy table.scans-table th,
+html.argus-density-cozy .scans-list-row {
+    padding-top:    calc(12px * var(--argus-row-multiplier)) !important;
+    padding-bottom: calc(12px * var(--argus-row-multiplier)) !important;
+    line-height: 1.55 !important;
+}
+
+/* Densidad compacta — más rows visibles */
+html.argus-density-compact .scan-card,
+html.argus-density-compact .stat-card,
+html.argus-density-compact .section-card,
+html.argus-density-compact .recent-activity,
+html.argus-density-compact .dashboard-card,
+html.argus-density-compact .empresa-card {
+    padding-top:    calc(14px * var(--argus-pad-multiplier)) !important;
+    padding-bottom: calc(14px * var(--argus-pad-multiplier)) !important;
+}
+html.argus-density-compact table.scans-table td,
+html.argus-density-compact table.scans-table th,
+html.argus-density-compact .scans-list-row {
+    padding-top:    calc(7px * var(--argus-row-multiplier)) !important;
+    padding-bottom: calc(7px * var(--argus-row-multiplier)) !important;
+    line-height: 1.30 !important;
+    font-size: calc(13px * var(--argus-text-multiplier)) !important;
+}
+html.argus-density-compact .scan-card .scan-meta,
+html.argus-density-compact .scan-card .scan-tags { gap: 4px !important; }
+html.argus-density-compact .stat-value { font-size: calc(28px * var(--argus-text-multiplier)) !important; }
+
+
+/* ── Toggle vista cards/lista/tabla en historial (Visual #32) ──────────── */
+/* El layout por defecto es .scans-view-cards. Las clases adicionales:
+ *   .scans-view-list  → cards apiladas como filas finitas
+ *   .scans-view-table → tabla densa estilo terminal
+ * Se setean en el contenedor padre #scans-section (ver panel.js). */
+
+.scans-view-toggle {
+    display: inline-flex;
+    background: rgba(20,14,8,0.45);
+    border: 1px solid rgba(184,115,51,0.20);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+}
+.scans-view-toggle button {
+    background: transparent;
+    border: none;
+    color: rgba(241,230,211,0.55);
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    transition: all 180ms ease;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.scans-view-toggle button:hover {
+    background: rgba(184,115,51,0.10);
+    color: rgba(241,230,211,0.85);
+}
+.scans-view-toggle button.is-active {
+    background: linear-gradient(180deg, rgba(184,115,51,0.30), rgba(184,115,51,0.18));
+    color: #f3e0c5;
+    box-shadow: 0 1px 0 rgba(255,230,200,0.10) inset,
+                0 4px 12px -4px rgba(184,115,51,0.40);
+}
+
+/* Vista LIST: cards en filas finitas, info horizontal */
+.scans-view-list .scan-card {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    padding: 10px 16px !important;
+    gap: 14px !important;
+    margin-bottom: 6px !important;
+}
+.scans-view-list .scan-card .scan-card-body { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
+.scans-view-list .scan-card .scan-card-actions { margin-left: auto; }
+.scans-view-list .scan-card-large-tags { display: none !important; }
+
+/* Vista TABLE: cards renderizadas como rows monoespaciadas */
+.scans-view-table .scan-card {
+    display: grid !important;
+    grid-template-columns: minmax(80px, 100px) 1fr 1fr 100px 80px;
+    align-items: center !important;
+    padding: 6px 14px !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    border-bottom: 1px solid rgba(184,115,51,0.10) !important;
+    font-size: 12.5px !important;
+    background: transparent !important;
+}
+.scans-view-table .scan-card:hover {
+    background: rgba(184,115,51,0.06) !important;
+}
+.scans-view-table .scan-card .scan-card-header,
+.scans-view-table .scan-card .scan-card-tags-large,
+.scans-view-table .scan-card .scan-meta-extra { display: none !important; }
+.scans-view-table .scan-card .scan-avatar-circle,
+.scans-view-table .scan-card img.scan-pfp {
+    width: 24px !important; height: 24px !important;
+    border-radius: 4px !important;
+}
