@@ -35,6 +35,15 @@ except Exception as _ai_trust_err:
     _AI_TRUST_AVAILABLE = False
     print(f'[boot] ai_trust no disponible: {_ai_trust_err}')
 
+# Pack 35 — AI Quality + Adaptive Thresholds + RF Retraining trigger.
+try:
+    import ai_quality as _ai_quality
+    _AI_QUALITY_AVAILABLE = True
+except Exception as _ai_quality_err:
+    _ai_quality = None
+    _AI_QUALITY_AVAILABLE = False
+    print(f'[boot] ai_quality no disponible: {_ai_quality_err}')
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-production')
 
@@ -10205,6 +10214,169 @@ def confirm_staff_trust():
         except Exception:
             pass
         return jsonify({'ok': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Pack 35 — AI Quality Dashboard + Adaptive Thresholds + RF retrain
+# ═══════════════════════════════════════════════════════════════════════
+
+@app.route('/api/ai-quality/metrics', methods=['GET'])
+@login_required
+def ai_quality_metrics():
+    """Métricas de calidad del ensemble: precision/recall/f1/drift.
+    Scope: si el usuario es admin, se puede pasar ?company_id=N para
+    métricas globales o de una empresa puntual; non-admin siempre ve
+    solo su propia empresa.
+    """
+    if not _AI_QUALITY_AVAILABLE:
+        return jsonify({'available': False}), 200
+    user_id    = session.get('user_id')
+    company_id = session.get('company_id')
+    qs_company = request.args.get('company_id', type=int)
+    is_glob    = is_admin(user_id)
+    if qs_company and not is_glob and qs_company != company_id:
+        return jsonify({'error': 'Solo admin puede ver otras empresas'}), 403
+    target_company = qs_company if is_glob else company_id
+    try:
+        since_days = max(7, min(365, int(request.args.get('since_days', 90))))
+    except Exception:
+        since_days = 90
+    try:
+        with get_api_db_cursor() as cur:
+            metrics = _ai_quality.get_quality_metrics(
+                cur, company_id=target_company, since_days=since_days
+            )
+            suggestion = _ai_quality.suggest_threshold_adjustment(metrics)
+
+            # Last train at: si app_versions tiene model_trained_at o algo
+            # similar lo leemos. Si no, dejamos None.
+            last_train_at = None
+            verdicts_since = 0
+            try:
+                cur.execute(
+                    'SELECT COUNT(*) FROM scans '
+                    "WHERE verdict IN ('clean','hack') AND ensemble_data IS NOT NULL"
+                )
+                row = cur.fetchone()
+                verdicts_since = int(_row_get(row, 0, 'count') or 0)
+            except Exception:
+                pass
+            retrain = _ai_quality.should_retrain_rf(
+                metrics, last_train_at=last_train_at,
+                verdicts_since_train=verdicts_since
+            )
+        return jsonify({
+            'available':    True,
+            'metrics':      metrics,
+            'suggestion':   suggestion,
+            'retrain':      retrain,
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/ai-quality/learn-fp-suggestions', methods=['GET'])
+@login_required
+def ai_quality_learn_fp_suggestions():
+    """Top 20 paths que la IA flagea pero el staff descarta.
+    Candidatos para automatizar como learn-fp.
+    Scope: admin ve global, non-admin solo su company.
+    """
+    if not _AI_QUALITY_AVAILABLE:
+        return jsonify({'available': False, 'rows': []}), 200
+    user_id    = session.get('user_id')
+    company_id = session.get('company_id')
+    qs_company = request.args.get('company_id', type=int)
+    is_glob    = is_admin(user_id)
+    if qs_company and not is_glob and qs_company != company_id:
+        return jsonify({'error': 'Solo admin puede ver otras empresas'}), 403
+    target_company = qs_company if is_glob else company_id
+    try:
+        limit = max(5, min(50, int(request.args.get('limit', 20))))
+    except Exception:
+        limit = 20
+    try:
+        with get_api_db_cursor() as cur:
+            rows = _ai_quality.suggest_learn_fp_candidates(
+                cur, company_id=target_company, limit=limit
+            )
+        return jsonify({'available': True, 'rows': rows, 'count': len(rows)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/ai-quality/apply-threshold', methods=['POST'])
+@login_required
+def ai_quality_apply_threshold():
+    """Admin de empresa aplica la sugerencia de threshold adjustment.
+    body: {delta: int}  (positive = subir, negative = bajar)
+    """
+    if not _AI_QUALITY_AVAILABLE:
+        return jsonify({'error': 'ai_quality no cargado'}), 503
+    user_id    = session.get('user_id')
+    company_id = session.get('company_id')
+    if not company_id:
+        return jsonify({'error': 'Sin empresa asignada'}), 400
+    if not (is_admin(user_id) or is_company_admin(user_id, company_id)):
+        return jsonify({'error': 'Solo admin/company-admin'}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        delta = int(data.get('delta', 0))
+    except Exception:
+        delta = 0
+    if not (-20 <= delta <= 20) or delta == 0:
+        return jsonify({'error': 'delta inválido (-20..20, no cero)'}), 400
+
+    # Lee settings actuales y aplica delta clampeado.
+    try:
+        cur_settings = _get_company_settings(company_id)
+        new_crit = max(20, min(99, int(cur_settings['threshold_critical']) + delta))
+        new_susp = max(10, min(new_crit - 1, int(cur_settings['threshold_suspicious']) + delta))
+        with get_api_db_cursor() as cur:
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS company_settings (
+                    company_id          INTEGER PRIMARY KEY,
+                    mode                VARCHAR(20)  DEFAULT 'normal',
+                    threshold_critical  INTEGER      DEFAULT 70,
+                    threshold_suspicious INTEGER     DEFAULT 30,
+                    updated_at          TIMESTAMP DEFAULT NOW(),
+                    updated_by          INTEGER
+                )
+            ''')
+            try:
+                cur.execute(
+                    f'INSERT INTO company_settings (company_id, mode, threshold_critical, threshold_suspicious, updated_at, updated_by) '
+                    f'VALUES ({_PH}, {_PH}, {_PH}, {_PH}, NOW(), {_PH}) '
+                    f'ON CONFLICT (company_id) DO UPDATE SET '
+                    f'  threshold_critical = EXCLUDED.threshold_critical, '
+                    f'  threshold_suspicious = EXCLUDED.threshold_suspicious, '
+                    f'  updated_at = NOW(), updated_by = EXCLUDED.updated_by',
+                    (company_id, cur_settings.get('mode', 'normal'),
+                     new_crit, new_susp, user_id)
+                )
+            except Exception:
+                cur.execute(
+                    f'UPDATE company_settings SET threshold_critical={_PH}, '
+                    f'threshold_suspicious={_PH}, updated_by={_PH} '
+                    f'WHERE company_id={_PH}',
+                    (new_crit, new_susp, user_id, company_id)
+                )
+        _company_settings_cache.pop(company_id, None)
+        try:
+            _log_staff_action(
+                'ai_threshold_adjust',
+                detail=f'delta={delta} new_crit={new_crit} new_susp={new_susp}'
+            )
+        except Exception:
+            pass
+        return jsonify({
+            'ok': True,
+            'threshold_critical':   new_crit,
+            'threshold_suspicious': new_susp,
+            'delta_applied':        delta,
+        }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

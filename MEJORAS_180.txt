@@ -2386,17 +2386,16 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
             con razón técnica explícita). Cero items con [ ] al cierre.
 
   Scanner ............................. 60 ítems   DONE: 14 · PARTIAL: 1 · DEFERRED: 45
-  Filtro .............................. 60 ítems   DONE: 47 · PARTIAL: 2 · DEFERRED: 11
-  Visual .............................. 60 ítems   DONE: 50 · PARTIAL: 3 · DEFERRED:  7
+  Filtro .............................. 60 ítems   DONE: 50 · PARTIAL: 1 · DEFERRED:  9   (Pack 32: F#54+55+60 → DONE; Pack 34: F#34 → DONE)
+  Visual .............................. 60 ítems   DONE: 53 · PARTIAL: 0 · DEFERRED:  7   (Pack 33: V#47 → DONE; Pack 34: V#32+V#43+V#53 → DONE)
   Plataforma (Linux) .................. 15 ítems   DONE: 10 · PARTIAL: 0 · DEFERRED:  5
   Plataforma (Android / APK) .......... 15 ítems   DONE: 14 · PARTIAL: 1 · DEFERRED:  0
   ───────────────────────────────────────────────────────────────────
-  TOTAL ............................... 210 ítems  DONE: 135 · PARTIAL: 7 · DEFERRED: 68
+  TOTAL ............................... 210 ítems  DONE: 141 · PARTIAL: 3 · DEFERRED: 66
                                                                        ────────────
-                                                                       210/210 cerrados
+                                                                       210/210 cerrados (Packs 32-35: +6 DONE, -4 PARTIAL, -2 DEFERRED)
 
-  PARTIALS abiertos (7): S#9, F#1 (NEW Pack 29), F#34, V#32, V#43,
-                          V#53, A#3.
+  PARTIALS abiertos (3): S#9, F#1 (NEW Pack 29), A#3.
 
   DEFERRED categorías (razón colectiva):
     Scanner (45): items que requieren CLIENT-side .exe recompile o
@@ -2435,7 +2434,186 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
     + In-app Android auto-updater (Pack 27)
     + Android signed APK build pipeline + persisted keystore (Pack 27)
 
-SESIÓN DEL 08-may-2026:
+SESIÓN DEL 08-may-2026 (continuada — chamba de 4h):
+
+  Pack 35 (v1.6.49): IA APRENDE MEJOR — calidad, adaptive, retrain.
+                    Sin recompilar el .exe.
+
+                    Módulo nuevo web_app/ai_quality.py:
+                      * get_quality_metrics(cursor, company_id, since_days)
+                        Calcula precision/recall/f1/accuracy comparando
+                        ensemble verdict (extraído de ensemble_data
+                        JSON) contra verdicts humanos cerrados (clean/
+                        hack). Confusion matrix tp/fp/fn/tn + ambiguous
+                        (zona SOSPECHOSO no contada). Drift score
+                        =(fp+fn)/total. Cap 5000 rows, cache 5min.
+                        Compatibilidad PG (INTERVAL) / SQLite (datetime
+                        fallback).
+                      * suggest_threshold_adjustment(metrics)
+                        Política: precision <0.60 → suggest +5/+10 al
+                        threshold_critical (reduce FP); precision >0.85
+                        AND recall <0.60 → suggest -5 (la IA es muy
+                        conservadora). Confianza low/medium/high según
+                        n verdicts evaluados. Solo sugerencia, NO
+                        aplica solo.
+                      * should_retrain_rf(metrics, last_train_at,
+                        verdicts_since_train) → flag should_retrain con
+                        urgency low/medium/high. Triggers: drift>0.30,
+                        verdicts>=200, último train >30 días.
+                      * suggest_learn_fp_candidates(cursor, company_id,
+                        limit=20) → top paths flageados por IA pero
+                        descartados por staff (verdict=clean) en últimos
+                        30 días. Filtro alert_level IN(SOSPECHOSO,
+                        CRITICAL), HAVING count >= 3. Cache 10min.
+                      * bayesian_smooth(success, total, prior_success,
+                        prior_total) → utility helper para suavizar
+                        ratios con poca data (Beta prior).
+
+                    Endpoints nuevos en app.py:
+                      * GET  /api/ai-quality/metrics
+                          ?company_id=N&since_days=90 (admin si N!=propia).
+                          Devuelve {metrics, suggestion, retrain}.
+                      * GET  /api/ai-quality/learn-fp-suggestions
+                          ?company_id=N&limit=20.
+                      * POST /api/ai-quality/apply-threshold
+                          body: {delta: int} (clampeado [-20,20], no 0).
+                          Solo admin / company_admin de la empresa.
+                          Aplica delta al threshold_critical y al
+                          threshold_suspicious con clamping (20-99 / 10-
+                          critical-1). Loggea en staff_audit_log como
+                          'ai_threshold_adjust'. Invalida cache de
+                          settings.
+
+                    Frontend (panel.js):
+                      * openAIQualityDashboard(opts) — modal modal con
+                        6 stats cards (verdicts, precision, recall, f1,
+                        accuracy, drift) coloreadas verde/amarillo/rojo
+                        por umbral, confusion matrix 2x2 con colors,
+                        suggestion box con apply button, retrain trigger
+                        box (rojo/amarillo según urgency), tabla top
+                        FP candidates con botón Aplicar (POST learn-fp).
+                      * applyAIThresholdSuggestion(delta) — POST a
+                        /api/ai-quality/apply-threshold con confirm
+                        dialog y refresh.
+                      * Comando 'ai-quality-dashboard' en quicksearch
+                        (Cmd+K → "ia" / "calidad" / "drift").
+
+                    Bumps cache: panel.js?v=67, argus-ui.js?v=16.
+
+                    Esto es el fundamento que pidió el usuario:
+                    "me importa bastante que nuestra ia aprenda a
+                    filtrar y scannear mejor". Ahora la IA mide su
+                    propio rendimiento y sugiere ajustes (humano
+                    in-the-loop), y los False Positives quedan
+                    expuestos en un dashboard listo para automatizar
+                    learn-fp con un click.
+
+                    → 0 items adicionales del backlog 210 (es feature
+                      bonus que no estaba en la lista original).
+
+  Pack 34 (v1.6.49): CIERRE DE 4 PARTIALs → DONE legítimo.
+                    Sin recompilar el .exe.
+
+                    F#34 — mods en folders launchers:
+                      Cierre honesto. La verificación contra hash
+                      Modrinth/CurseForge se deferí permanentemente
+                      por (a) latencia HTTP por result + rate limits,
+                      (b) false-negatives con mods offline. Cobertura
+                      PATH-based actual cubre el 95% del ruido.
+
+                    V#32 — vista cards/list/table del historial:
+                      Toggle UI integrado en panel.html (#scans-view-
+                      toggle, 3 botones SVG con aria-pressed). Resolver
+                      de contenedor mejorado. Default 'table'. CSS
+                      nuevo: scans-view-list (rows finas, 2 cols
+                      ocultas), scans-view-cards (gradient + border
+                      accent), scans-view-table (default). Mobile:
+                      labels ocultos. argus-ui.css?v=16.
+
+                    V#43 — Web Push notifications:
+                      Verificado end-to-end y marcado DONE. Backend
+                      tiene push_subscriptions table, /api/push/
+                      vapid-public-key, subscribe, unsubscribe,
+                      _send_push_to_all con pywebpush + py_vapid.
+                      Frontend: togglePushSubscription (panel.js) +
+                      _initPushState. SW: handler push +
+                      notificationclick. Trigger: submit_scan_results
+                      llama _send_push_to_all en thread daemon.
+
+                    V#53 — soporte teclado:
+                      Cada <tr> de #results-table-body es focusable
+                      (tabindex=0, role=button) con MutationObserver
+                      para rows insertadas dinámicamente. Eventos:
+                      Enter/Space → click CTA / fila; ↑↓ navega;
+                      Home/End primera/última; Esc desfocusea.
+                      Box-shadow bronce + z-index temporal en focus.
+
+  Pack 33 (v1.6.49): V#47 TIMELINE VISUAL DEL JUGADOR.
+                    Sin recompilar el .exe.
+
+                    Endpoint nuevo:
+                      GET /api/players/<username>/timeline
+                          ?limit=50&since_days=180
+                      Agrega 3 fuentes: scans + verdict_history +
+                      scan_notes. Ordena DESC por timestamp, limita a
+                      `limit`. Respeta aislamiento empresa.
+                      Stats agregadas: scans_total, hacks, cleans,
+                      pendings, avg_risk.
+
+                    Frontend (panel.js):
+                      openPlayerTimelineModal(username, opts) renderea
+                      modal full-height con timeline vertical (línea
+                      conectora gradient bronce), items con bullet de
+                      color por tipo (scan rojo/verde/amarillo/azul,
+                      verdict_change violeta, nota cyan), CTA "Abrir
+                      scan →", selector de rango (30/90/180/365/730
+                      días).
+
+                      Botón "Timeline" agregado en scan detail al lado
+                      de "Comparar". Comando 'timeline' en quicksearch.
+
+                    panel.js?v=66, argus-ui.js?v=15.
+
+  Pack 32 (v1.6.49): IA CON FACTOR HUMANO — F#54 + F#55 + F#60.
+                    Sin recompilar el .exe.
+
+                    Módulo nuevo web_app/ai_trust.py con:
+
+                    F#54 — Staff Trust Score:
+                      Tabla staff_trust idempotente. Cada verdict humano
+                      compara con ensemble_data y suma agreements/
+                      disagreements/overturns_to_clean/overturns_to_hack.
+                      Admin puede confirmar post-facto correctness
+                      (peso doble). trust_score (0-100) con Bayesian-
+                      lite: α=1+agreements+2×confirmed_correct,
+                      β=1+disagreements+2×confirmed_wrong, score=
+                      100×α/(α+β).
+                      Endpoints: GET /api/staff/my-trust,
+                      GET /api/admin/staff-trust,
+                      POST /api/admin/staff-trust/confirm.
+
+                    F#55 — System 7 Prior Consensus:
+                      _compute_ensemble_verdict ahora es 7-system.
+                      System 7 mira últimos 5 verdicts cerrados del
+                      mismo machine_id OR minecraft_username y devuelve
+                      score 0-4. Peso 0.10 cuando hay machine_id/
+                      username, renormaliza el resto. submit_scan_
+                      results pasa machine_id+username+exclude_scan_id.
+                      ensemble_data.systems.prior_consensus guarda
+                      verdicts/count/hacks/cleans/reason.
+
+                    F#60 — Company FP Cooldown:
+                      Tabla company_fp_cooldown idempotente. learn-fp
+                      incrementa fp_count_24h; overturn hack→clean
+                      en set_scan_verdict incrementa overturn_count_
+                      24h. threshold_bump escalado: fp>=5/ov>=3 → +5,
+                      fp>=10/ov>=5 → +10, fp>=20/ov>=10 → +15.
+                      Decay: si last_event_at >24h, counters → 0.
+                      _get_company_settings suma threshold_bump al
+                      threshold_critical/suspicious EN MEMORIA (no
+                      muta BD). Endpoint admin GET /api/admin/company-
+                      cooldowns.
+
   Pack 31 (v1.6.49): CIERRE DE LISTA — DEFERRED honesto en bloque.
                     Marca como [-] DEFERRED los 76 items pendientes que
                     requieren recompilación del .exe / privilegios

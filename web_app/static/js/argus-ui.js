@@ -543,6 +543,18 @@
             },
         },
         {
+            id: 'ai-quality-dashboard',
+            title: 'Dashboard calidad IA',
+            hint:  'Precision/recall, drift, sugerencias de threshold (Pack 35)',
+            keys:  ['ia', 'ai', 'calidad', 'quality', 'dashboard', 'metrics', 'metricas',
+                    'precision', 'recall', 'drift', 'retrain'],
+            run:   () => {
+                if (typeof window.openAIQualityDashboard === 'function') {
+                    window.openAIQualityDashboard();
+                }
+            },
+        },
+        {
             id: 'sound-toggle',
             title: 'Sonido al recibir scan',
             hint:  'Habilitar / silenciar notificación de scan nuevo',

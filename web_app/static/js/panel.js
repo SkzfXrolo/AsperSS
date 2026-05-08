@@ -7964,3 +7964,199 @@ function _renderTimelineEvent(ev) {
 }
 
 window.openPlayerTimelineModal = openPlayerTimelineModal;
+
+
+/* ════════════════════════════════════════════════════════════════════════
+ * Pack 35 — AI Quality Dashboard
+ * Muestra precision/recall/f1/drift del ensemble vs verdicts humanos +
+ * sugerencias de adaptive thresholds + retrain trigger + top FP candidates
+ * ════════════════════════════════════════════════════════════════════════ */
+async function openAIQualityDashboard(opts) {
+    opts = opts || {};
+    const sinceDays = opts.since_days || 90;
+
+    let root = document.getElementById('argus-ai-quality-modal');
+    if (!root) {
+        root = document.createElement('div');
+        root.id = 'argus-ai-quality-modal';
+        root.className = 'modal';
+        root.innerHTML = `
+            <div class="modal-content" style="max-width:880px; width:96vw; max-height:92vh; overflow-y:auto;">
+                <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                    <h3 style="margin:0;display:flex;align-items:center;gap:8px;">
+                        <span aria-hidden="true">🧠</span>
+                        <span>Dashboard de calidad IA</span>
+                    </h3>
+                    <div style="display:flex;gap:6px;">
+                        <select id="argus-aiq-range" class="select-sm" style="padding:4px 8px;font-size:13px;background:rgba(0,0,0,.18);color:var(--text-h);border:1px solid var(--border, rgba(255,255,255,.1));border-radius:6px;">
+                            <option value="30">30 días</option>
+                            <option value="60">60 días</option>
+                            <option value="90" selected>90 días</option>
+                            <option value="180">180 días</option>
+                            <option value="365">1 año</option>
+                        </select>
+                        <button class="modal-close" type="button" onclick="document.getElementById('argus-ai-quality-modal').classList.remove('show')" aria-label="Cerrar">×</button>
+                    </div>
+                </div>
+                <div class="modal-body" id="argus-aiq-body" style="padding:14px 18px;">
+                    <div style="text-align:center;padding:40px 0;color:var(--text-d);">Cargando métricas IA…</div>
+                </div>
+            </div>`;
+        document.body.appendChild(root);
+        root.addEventListener('click', (e) => { if (e.target === root) root.classList.remove('show'); });
+        root.querySelector('#argus-aiq-range').addEventListener('change', (e) => {
+            openAIQualityDashboard({ since_days: parseInt(e.target.value, 10) || 90 });
+        });
+    }
+    root.querySelector('#argus-aiq-range').value = String(sinceDays);
+    root.classList.add('show');
+
+    const body = root.querySelector('#argus-aiq-body');
+    body.innerHTML = `<div style="text-align:center;padding:40px 0;color:var(--text-d);">Cargando métricas IA…</div>`;
+
+    let metrics, suggestions;
+    try {
+        const [m, s] = await Promise.all([
+            fetch(`/api/ai-quality/metrics?since_days=${sinceDays}`, { credentials: 'include' }).then(r => r.json()),
+            fetch(`/api/ai-quality/learn-fp-suggestions?limit=15`, { credentials: 'include' }).then(r => r.json()),
+        ]);
+        metrics = m; suggestions = s;
+    } catch (e) {
+        body.innerHTML = `<div style="padding:30px;text-align:center;color:#ef4444;">Error: ${(e.message || e)}</div>`;
+        return;
+    }
+
+    if (!metrics || metrics.available === false) {
+        body.innerHTML = `<div style="padding:30px;text-align:center;color:var(--text-d);">Módulo ai_quality no disponible en el servidor.</div>`;
+        return;
+    }
+    const m = metrics.metrics || {};
+    const sugg = metrics.suggestion || {};
+    const retrain = metrics.retrain || {};
+
+    const pct = (v) => v === null || v === undefined ? '—' : `${(v * 100).toFixed(1)}%`;
+    const escape = (typeof _qsEscapeSafe === 'function')
+        ? _qsEscapeSafe
+        : (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const colorFor = (v, good = 0.75, ok = 0.60) => {
+        if (v === null || v === undefined) return 'var(--text-d)';
+        return v >= good ? '#22c55e' : v >= ok ? '#fbbf24' : '#ef4444';
+    };
+
+    const stat = (label, val, color, hint) => `
+        <div style="flex:1;min-width:130px;padding:12px 14px;background:rgba(255,255,255,.02);border:1px solid var(--border, rgba(255,255,255,.06));border-radius:10px;">
+            <div style="font-size:10px;color:var(--text-d);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">${label}</div>
+            <div style="font-size:24px;font-weight:700;color:${color};font-variant-numeric:tabular-nums;">${val}</div>
+            ${hint ? `<div style="font-size:11px;color:var(--text-d);opacity:.8;margin-top:4px;">${hint}</div>` : ''}
+        </div>`;
+
+    const cm = `
+        <div style="margin-top:14px;padding:10px 12px;background:rgba(0,0,0,.2);border:1px solid var(--border, rgba(255,255,255,.05));border-radius:8px;font-size:13px;">
+            <div style="font-weight:600;margin-bottom:8px;color:var(--text-h);">Confusion matrix</div>
+            <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:center;">
+                <div></div>
+                <div style="font-size:11px;color:var(--text-d);text-align:center;">Humano: hack</div>
+                <div style="font-size:11px;color:var(--text-d);text-align:center;">Humano: clean</div>
+                <div style="font-size:11px;color:var(--text-d);">IA: hack</div>
+                <div style="text-align:center;padding:6px;background:rgba(34,197,94,.10);border-radius:6px;color:#22c55e;font-weight:700;">${m.tp || 0} <span style="opacity:.6;font-weight:400;">TP</span></div>
+                <div style="text-align:center;padding:6px;background:rgba(239,68,68,.10);border-radius:6px;color:#ef4444;font-weight:700;">${m.fp || 0} <span style="opacity:.6;font-weight:400;">FP</span></div>
+                <div style="font-size:11px;color:var(--text-d);">IA: clean</div>
+                <div style="text-align:center;padding:6px;background:rgba(239,68,68,.10);border-radius:6px;color:#ef4444;font-weight:700;">${m.fn || 0} <span style="opacity:.6;font-weight:400;">FN</span></div>
+                <div style="text-align:center;padding:6px;background:rgba(34,197,94,.10);border-radius:6px;color:#22c55e;font-weight:700;">${m.tn || 0} <span style="opacity:.6;font-weight:400;">TN</span></div>
+            </div>
+            ${m.ambiguous ? `<div style="font-size:11px;color:var(--text-d);margin-top:6px;">+ ${m.ambiguous} en zona ambigua (SOSPECHOSO) — no contados.</div>` : ''}
+        </div>`;
+
+    const suggColor = sugg.action === 'raise' ? '#fbbf24' : sugg.action === 'lower' ? '#60a5fa' : '#22c55e';
+    const suggIcon  = sugg.action === 'raise' ? '⬆️' : sugg.action === 'lower' ? '⬇️' : '✅';
+    const applyBtn  = (sugg.action === 'raise' || sugg.action === 'lower')
+        ? `<button onclick="applyAIThresholdSuggestion(${sugg.delta})" style="margin-top:10px;padding:6px 14px;background:${suggColor};color:#000;border:0;border-radius:6px;font-weight:600;font-size:12px;cursor:pointer;">Aplicar (${sugg.delta > 0 ? '+' : ''}${sugg.delta})</button>`
+        : '';
+
+    const suggBox = `
+        <div style="margin-top:14px;padding:12px 14px;background:rgba(${sugg.action === 'raise' ? '251,191,36' : sugg.action === 'lower' ? '96,165,250' : '34,197,94'},.08);border:1px solid ${suggColor}55;border-radius:10px;">
+            <div style="font-weight:600;font-size:13px;color:${suggColor};margin-bottom:6px;">${suggIcon} Sugerencia threshold</div>
+            <div style="font-size:13px;line-height:1.5;color:var(--text-h);">${escape(sugg.rationale || '')}</div>
+            <div style="font-size:11px;color:var(--text-d);margin-top:4px;">Confianza: ${escape(sugg.confidence || 'low')}</div>
+            ${applyBtn}
+        </div>`;
+
+    const retrainColor = retrain.urgency === 'high' ? '#ef4444' : retrain.urgency === 'medium' ? '#fbbf24' : 'var(--text-d)';
+    const retrainBox = retrain.should_retrain ? `
+        <div style="margin-top:10px;padding:10px 12px;background:rgba(239,68,68,.06);border:1px solid ${retrainColor}55;border-radius:10px;">
+            <div style="font-weight:600;font-size:13px;color:${retrainColor};margin-bottom:5px;">🔄 Retrain RF recomendado (${escape(retrain.urgency)})</div>
+            <ul style="margin:0;padding-left:18px;font-size:12px;color:var(--text-h);">
+                ${(retrain.reasons || []).map(r => `<li>${escape(r)}</li>`).join('')}
+            </ul>
+        </div>` : '';
+
+    const fpRows = (suggestions && suggestions.rows && suggestions.rows.length)
+        ? suggestions.rows.map(r => `
+            <tr style="border-bottom:1px solid var(--border, rgba(255,255,255,.05));">
+                <td style="padding:6px 10px;font-family:monospace;font-size:11.5px;word-break:break-all;">${escape(r.path_full || '')}</td>
+                <td style="padding:6px 10px;text-align:center;font-weight:600;">${r.count || 0}</td>
+                <td style="padding:6px 10px;text-align:right;">
+                    <button onclick="(async function(){
+                        if (!confirm('Aplicar learn-fp para fragmento: ${escape(r.fragment)}?')) return;
+                        const resp = await fetch('/api/staff/learn-fp', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({fragment: ${JSON.stringify(r.fragment)}}) });
+                        const d = await resp.json();
+                        if (resp.ok) { if (window.showToast) showToast('learn-fp aplicado', 'success'); }
+                        else { alert('Error: ' + (d.error || resp.status)); }
+                    })()" style="padding:3px 8px;font-size:11px;background:rgba(184,115,51,.15);border:1px solid var(--accent, #B87333);color:var(--accent, #B87333);border-radius:4px;cursor:pointer;">Aplicar</button>
+                </td>
+            </tr>`).join('')
+        : `<tr><td colspan="3" style="padding:14px;text-align:center;color:var(--text-d);">Sin candidatos en los últimos 30 días.</td></tr>`;
+
+    body.innerHTML = `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+            ${stat('Verdicts evaluados', m.total_evaluated || 0, 'var(--text-h)', `${escape(String(m.since_days || sinceDays))} días`)}
+            ${stat('Precision', pct(m.precision), colorFor(m.precision), 'TP / (TP+FP)')}
+            ${stat('Recall',    pct(m.recall),    colorFor(m.recall),    'TP / (TP+FN)')}
+            ${stat('F1 score',  pct(m.f1),        colorFor(m.f1),        'media armónica')}
+            ${stat('Accuracy',  pct(m.accuracy),  colorFor(m.accuracy),  '(TP+TN) / total')}
+            ${stat('Drift',     pct(m.drift_score), m.drift_score >= 0.30 ? '#ef4444' : m.drift_score >= 0.20 ? '#fbbf24' : '#22c55e', 'desacuerdo IA-humano')}
+        </div>
+        ${cm}
+        ${suggBox}
+        ${retrainBox}
+        <div style="margin-top:18px;">
+            <div style="font-weight:600;font-size:13px;color:var(--text-h);margin-bottom:8px;">
+                Top false positives candidatos a learn-fp (último mes)
+            </div>
+            <div style="border:1px solid var(--border, rgba(255,255,255,.05));border-radius:8px;overflow:hidden;">
+                <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+                    <thead style="background:rgba(0,0,0,.20);">
+                        <tr>
+                            <th style="padding:8px 10px;text-align:left;font-weight:600;font-size:11px;color:var(--text-d);text-transform:uppercase;letter-spacing:.05em;">Path</th>
+                            <th style="padding:8px 10px;text-align:center;font-weight:600;font-size:11px;color:var(--text-d);text-transform:uppercase;letter-spacing:.05em;">FPs</th>
+                            <th style="padding:8px 10px;text-align:right;font-weight:600;font-size:11px;color:var(--text-d);text-transform:uppercase;letter-spacing:.05em;">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>${fpRows}</tbody>
+                </table>
+            </div>
+        </div>`;
+}
+
+async function applyAIThresholdSuggestion(delta) {
+    if (!confirm(`Aplicar ajuste de ${delta > 0 ? '+' : ''}${delta} a tus thresholds?\n\nEsto modifica los thresholds críticos/sospechosos guardados en BD.`)) return;
+    try {
+        const r = await fetch('/api/ai-quality/apply-threshold', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            credentials: 'include', body: JSON.stringify({ delta })
+        });
+        const d = await r.json();
+        if (r.ok) {
+            if (window.showToast) showToast(`Threshold aplicado: critical=${d.threshold_critical}, suspicious=${d.threshold_suspicious}`, 'success');
+            // Refrescar el dashboard
+            await openAIQualityDashboard();
+        } else {
+            alert('Error: ' + (d.error || r.status));
+        }
+    } catch (e) {
+        alert('Error: ' + (e.message || e));
+    }
+}
+
+window.openAIQualityDashboard = openAIQualityDashboard;
+window.applyAIThresholdSuggestion = applyAIThresholdSuggestion;
