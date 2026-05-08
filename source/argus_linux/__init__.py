@@ -16,4 +16,4 @@ pero usa fuentes de evidencia nativas de Linux:
 Entry point: argus_linux.scanner:main (correr `python3 -m argus_linux`).
 """
 
-__version__ = '1.6.45-linux2'
+__version__ = '1.6.45-linux3'

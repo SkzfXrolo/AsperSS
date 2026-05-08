@@ -544,8 +544,15 @@ NOTA DE LECTURA
         Wireshark/Fiddler/ngrok. Aplicado en scan_deleted_recycle y
         scan_messaging_downloads.
 
-[ ] 58. Filtro de Java agents legítimos: profilers (YourKit, JProfiler,
+[X] 58. Filtro de Java agents legítimos: profilers (YourKit, JProfiler,
         VisualVM), debuggers, build tools (Gradle agents).
+        DONE v1.6.48 (Pack 14, Linux) — LEGIT_JAVA_AGENTS en
+        source/argus_linux/metadata.py + helper is_legit_java_agent()
+        usado en scan_minecraft_launchers para skip explícito antes del
+        match. Cubre yourkit/jprofiler/visualvm/jrebel/newrelic/datadog/
+        appdynamics/glowroot/kanela/pinpoint/aspectjweaver/jacocoagent/
+        byteman/gradle-agent/maven-surefire. TODO Windows: añadir
+        equivalente en source/main.py — Pack 15.
 
 [X] 59. Excluir archivos creados/modificados durante updates conocidos
         de Windows (cruzando timestamps con WindowsUpdate.log).
@@ -1008,14 +1015,18 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 ═══════════════════════════════════════════════════════════════════════════════
 
   Scanner ............................. 60 ítems   (detección)      14/60
-  Filtro .............................. 60 ítems   (anti-FP)        17/60
+  Filtro .............................. 60 ítems   (anti-FP)        18/60
   Visual .............................. 60 ítems   (UI/UX)          28/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    68/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    69/195
                                                   (4 parciales: S#9, V#32, V#43, V#53)
                                                   + 3 BONUS Pack 11 (Stream-friendly,
                                                   CompanyTag color, Why-this-score modal)
+                                                  + 1 BONUS Pack 14 (Inspector de metadata
+                                                  JAR/ELF/PE compartido Linux+Windows
+                                                  con verdict legit_mod/suspicious/unknown
+                                                  y chip clickeable en el panel)
                                                   Pack 13 (Linux MVP): #1, #2, #3, #4,
                                                   #6, #7, #8, #9, #13, #15 ✓ — DEFERRED
                                                   honestos: #5 (auditd), #10/#11/#12

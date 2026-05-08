@@ -1513,6 +1513,98 @@ window.deleteToken = deleteToken;
 // ESCANEOS Y RESULTADOS
 // ============================================================
 
+/** Pack 14 — chip y modal de metadata de archivo (JAR/ELF/PE).
+ *  Recibe el `result.extra` (objeto) y devuelve un mini-chip clickeable que
+ *  abre el modal con la metadata cruda. Vacío si no hay metadata.
+ */
+function _metadataVerdictChip(result) {
+    const ex = (result && result.extra) || {};
+    const blob = ex.jar_metadata || (ex.file_metadata && ex.file_metadata.meta) || ex.file_metadata || null;
+    if (!blob || typeof blob !== 'object') return '';
+    const verdict = String(blob.verdict || '').toLowerCase();
+    let label = '', bg = '', fg = '', bd = '';
+    if (verdict === 'legit_mod') {
+        label = 'JAR LEGIT'; bg = 'rgba(16,185,129,0.14)'; fg = '#6ee7b7'; bd = 'rgba(16,185,129,0.36)';
+    } else if (verdict === 'suspicious') {
+        label = 'BYTECODE HIT'; bg = 'rgba(239,68,68,0.18)'; fg = '#fca5a5'; bd = 'rgba(239,68,68,0.45)';
+    } else if (blob.mod_loader || blob.signed || blob.kind === 'jar') {
+        label = 'JAR · ' + (blob.mod_loader || (blob.signed ? 'SIGNED' : 'UNKNOWN')).toUpperCase();
+        bg = 'rgba(245,158,11,0.12)'; fg = '#fbbf24'; bd = 'rgba(245,158,11,0.32)';
+    } else if (blob.kind === 'elf') {
+        label = 'ELF · ' + (blob.arch || 'unknown').toUpperCase();
+        bg = 'rgba(59,130,246,0.10)'; fg = '#93c5fd'; bd = 'rgba(59,130,246,0.30)';
+    } else if (blob.kind === 'pe') {
+        label = 'PE · ' + (blob.machine || 'unknown').toUpperCase();
+        bg = 'rgba(148,163,184,0.10)'; fg = '#cbd5e1'; bd = 'rgba(148,163,184,0.28)';
+    } else {
+        return '';
+    }
+    const safeBlob = JSON.stringify(blob).replace(/'/g, '&#39;').replace(/</g, '&lt;');
+    return `<button onclick="event.stopPropagation();_openMetadataModal('${safeBlob}')"
+            title="Ver metadata del archivo"
+            style="font-size:10px;font-weight:700;letter-spacing:0.4px;padding:1px 7px;border-radius:4px;
+                   background:${bg};color:${fg};border:1px solid ${bd};cursor:pointer;flex-shrink:0;
+                   white-space:nowrap;font-family:inherit;">${label}</button>`;
+}
+
+function _openMetadataModal(blobJsonEscaped) {
+    let blob = {};
+    try {
+        const decoded = blobJsonEscaped.replace(/&#39;/g, "'").replace(/&lt;/g, '<');
+        blob = JSON.parse(decoded);
+    } catch (_e) { return; }
+    const lines = [];
+    const push = (k, v, kind) => {
+        if (v === undefined || v === null || v === '') return;
+        const valHtml = typeof v === 'object'
+            ? `<code style="white-space:pre-wrap;display:block;font-size:11px;background:var(--bg-3);padding:6px 8px;border-radius:4px;color:var(--text-h);max-height:160px;overflow:auto;">${escapeHtml(JSON.stringify(v, null, 2))}</code>`
+            : `<span style="color:${kind==='good'?'#6ee7b7':kind==='bad'?'#fca5a5':'var(--text-h)'};font-weight:600;">${escapeHtml(String(v))}</span>`;
+        lines.push(`<div style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--border-m);">
+            <div style="min-width:140px;font-size:11px;color:var(--text-d);text-transform:uppercase;letter-spacing:0.4px;font-weight:600;">${k}</div>
+            <div style="flex:1;font-size:12.5px;">${valHtml}</div>
+        </div>`);
+    };
+    const verdict = String(blob.verdict || 'unknown');
+    const verdictKind = verdict === 'legit_mod' ? 'good' : verdict === 'suspicious' ? 'bad' : 'neutral';
+    push('Verdict', verdict, verdictKind);
+    push('Tipo de archivo', blob.kind);
+    if (blob.mod_loader) push('Mod loader', blob.mod_loader, 'good');
+    if (blob.manifest_vendor) push('Vendor (manifest)', blob.manifest_vendor);
+    if (blob.manifest_title)  push('Title (manifest)',  blob.manifest_title);
+    if (blob.signed !== undefined)     push('Firmado',       blob.signed ? 'sí' : 'no', blob.signed ? 'good' : 'neutral');
+    if (blob.cdn_signed !== undefined) push('Firma de CDN',  blob.cdn_signed ? 'sí (CurseForge/Modrinth/...)' : 'no', blob.cdn_signed ? 'good' : 'neutral');
+    if (blob.bytecode_hits && blob.bytecode_hits.length) push('Bytecode hits', blob.bytecode_hits, 'bad');
+    if (blob.class_count !== undefined) push('Clases (.class)', blob.class_count);
+    if (blob.size_b !== undefined) {
+        const kb = (blob.size_b / 1024);
+        push('Tamaño', kb >= 1024 ? (kb/1024).toFixed(2) + ' MB' : kb.toFixed(1) + ' KB');
+    }
+    if (blob.arch)     push('Arquitectura', blob.arch);
+    if (blob.elf_type) push('ELF type', blob.elf_type);
+    if (blob.interp)   push('Interpreter', blob.interp);
+    if (blob.machine)  push('PE machine', blob.machine);
+    if (blob.error)    push('Error de parseo', blob.error, 'bad');
+
+    const modal = document.createElement('div');
+    modal.id = 'metadata-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.78);display:flex;align-items:center;justify-content:center;padding:24px;';
+    modal.innerHTML = `
+        <div style="background:var(--bg-2);border:1px solid var(--border-m);border-radius:12px;max-width:680px;width:100%;max-height:80vh;overflow:auto;box-shadow:0 20px 40px rgba(0,0,0,0.55);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border-m);">
+                <div style="font-size:14px;font-weight:700;color:var(--text-h);">🔬 Metadata del archivo</div>
+                <button id="md-modal-close" style="background:none;border:none;color:var(--text-d);font-size:18px;cursor:pointer;line-height:1;">×</button>
+            </div>
+            <div style="padding:14px 18px;">${lines.join('') || '<div style="color:var(--text-d);font-size:12px;">Sin metadata estructurada disponible.</div>'}</div>
+            <div style="padding:10px 18px;border-top:1px solid var(--border-m);font-size:11px;color:var(--text-d);">
+                Inspector de metadatos · <a href="https://asperss.onrender.com/descargar?plat=lin" target="_blank" rel="noopener" style="color:var(--accent);">Argus Linux v1.6.45-linux3</a>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('#md-modal-close').onclick = () => modal.remove();
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+}
+window._openMetadataModal = _openMetadataModal;
+
 /** SO / scanner: Linux vs Windows (columna scans.os + scanner_platform en detalle). */
 function _scanPlatformLabel(scan) {
     const raw = String(scan?.os_name || scan?.os || '').trim();
@@ -2265,6 +2357,7 @@ function renderIssuePage(container, scanId) {
             ? `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);flex-shrink:0;white-space:nowrap;">En instancia</span>`
             : `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);flex-shrink:0;white-space:nowrap;">Fuera de instancia</span>`);
         const variantBadge = _grp ? `<button onclick="event.stopPropagation();var el=document.getElementById('vg_${_gKey}');el.style.display=el.style.display==='flex'?'none':'flex';" style="font-size:10px;padding:1px 7px;border-radius:4px;background:rgba(129,140,248,0.15);color:#818cf8;border:1px solid rgba(129,140,248,0.3);cursor:pointer;flex-shrink:0;">${_grp.length} variantes ▾</button>` : '';
+        const metaChip = _metadataVerdictChip(result);
 
         const safeLevel = (result.alert_level || 'SOSPECHOSO').replace(/'/g,"");
         const safeName  = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
@@ -2295,6 +2388,7 @@ function renderIssuePage(container, scanId) {
                     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;word-break:break-all;min-width:0;flex:1;">${name}</span>
                     <span style="font-size:12px;flex-shrink:0;" title="Nivel de peligro">${flames}</span>
                     ${variantBadge}
+                    ${metaChip}
                     ${instBadge}
                     ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;flex-shrink:0;white-space:nowrap;">${_getCategoryLabel(cat)}</span>` : ''}
                     <button onclick="event.stopPropagation();aiExplainFinding('${safeName}','${safeLevel}',this)" title="Explicar con IA"

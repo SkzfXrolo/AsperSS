@@ -42,7 +42,27 @@ except ImportError:  # pragma: no cover
     print("[FATAL] Python 3 requerido", file=sys.stderr)
     sys.exit(2)
 
-SCANNER_VERSION = '1.6.45-linux2'
+# Inspector de metadatos (Pack 14) — JAR/ELF/PE deep parse para reducir FPs.
+try:
+    from .metadata import (
+        inspect_file as _meta_inspect_file,
+        inspect_jar  as _meta_inspect_jar,
+        is_legit_java_agent as _meta_is_legit_java_agent,
+    )
+except ImportError:
+    # Permite correr scanner.py standalone fuera del paquete (debug)
+    try:
+        from metadata import (  # type: ignore[no-redef]
+            inspect_file as _meta_inspect_file,
+            inspect_jar  as _meta_inspect_jar,
+            is_legit_java_agent as _meta_is_legit_java_agent,
+        )
+    except ImportError:
+        _meta_inspect_file = None      # type: ignore[assignment]
+        _meta_inspect_jar  = None      # type: ignore[assignment]
+        _meta_is_legit_java_agent = None  # type: ignore[assignment]
+
+SCANNER_VERSION = '1.6.45-linux3'
 DEFAULT_SERVER  = 'https://asperss.onrender.com'
 
 # ── Hack-name terms (sincronizados con Windows scanner) ─────────────────────
@@ -364,8 +384,33 @@ class LinuxScanner:
                 except OSError:
                     pass
 
+                # Pack 14 — metadatos del archivo todavía presente en files/
+                file_meta: dict[str, Any] = {}
+                if (_meta_inspect_file is not None
+                        and ext in ('.jar', '.exe', '.dll', '.so', '.appimage')
+                        and os.path.isfile(actual_in_files)):
+                    try:
+                        file_meta = _meta_inspect_file(actual_in_files)
+                    except Exception:
+                        file_meta = {}
+
                 alerta = 'CRITICAL' if hack else 'SOSPECHOSO'
                 conf = 0.85 if hack else 0.45
+
+                # Anti-FP por metadata: si es un JAR con mod-loader oficial +
+                # firma CDN y SIN bytecode hits, bajamos a SOSPECHOSO aunque
+                # el filename matchee algún término genérico.
+                meta_inner = (file_meta or {}).get('meta') or {}
+                if (hack and ext == '.jar'
+                        and meta_inner.get('verdict') == 'legit_mod'
+                        and not (meta_inner.get('bytecode_hits') or [])):
+                    alerta = 'SOSPECHOSO'
+                    conf = min(conf, 0.55)
+                # Bytecode hits → empujar a CRITICAL aunque no haya hack-name
+                if meta_inner.get('bytecode_hits'):
+                    alerta = 'CRITICAL'
+                    conf = max(conf, 0.90)
+
                 self._add_issue(
                     tipo='trash_xdg',
                     nombre=f'Archivo borrado (papelera XDG): {base_name}',
@@ -376,11 +421,12 @@ class LinuxScanner:
                     confidence=conf,
                     patterns=['xdg_trash', f'ext{ext}'] + ([f'hack:{hack}'] if hack else []),
                     extra={
-                        'deleted_at': deleted_at,
-                        'orig_path':  orig_path,
-                        'size_bytes': size_b,
-                        'trash_root': base,
-                        'hack_term':  hack,
+                        'deleted_at':   deleted_at,
+                        'orig_path':    orig_path,
+                        'size_bytes':   size_b,
+                        'trash_root':   base,
+                        'hack_term':    hack,
+                        'file_metadata': file_meta or None,
                     },
                 )
         _print(f'  · {seen} entries en papelera, {sus} sospechosas')
@@ -522,8 +568,22 @@ class LinuxScanner:
                             if path_l.endswith('.jar') or path_l.endswith('.so'):
                                 hack2 = _smart_hack_match(path_l)
                                 if hack2 and not _is_legit_mc_mod(path_l):
+                                    # Pack 14 — confirmar con metadata del JAR
+                                    jm: dict[str, Any] = {}
+                                    if path_l.endswith('.jar') and _meta_inspect_jar is not None:
+                                        try:
+                                            jm = _meta_inspect_jar(path)
+                                        except Exception:
+                                            jm = {}
+                                    # Skip si el JAR es claramente legit y
+                                    # no tiene bytecode hits (ejemplo: un mod
+                                    # OptiFine renombrado que matchea por
+                                    # casualidad).
+                                    if jm.get('verdict') == 'legit_mod' and not (jm.get('bytecode_hits') or []):
+                                        continue
                                     java_with_hack_jar.append({
                                         'pid': int(pid), 'jar': path, 'hack': hack2,
+                                        'jar_metadata': jm or None,
                                     })
                 except (OSError, PermissionError):
                     pass
@@ -641,6 +701,9 @@ class LinuxScanner:
             return
 
         mods_collected: list[dict[str, Any]] = []
+        downgraded_legit  = 0
+        skipped_java_agent = 0
+        boosted_bytecode   = 0
         for label, root in roots:
             for dirpath, _dirs, files in os.walk(root, followlinks=False):
                 self.total_dirs += 1
@@ -658,6 +721,10 @@ class LinuxScanner:
                         continue
                     if _is_legit_mc_mod(fn_l):
                         continue
+                    # Filter #58 — Java agents legítimos (YourKit/JProfiler/etc)
+                    if _meta_is_legit_java_agent and _meta_is_legit_java_agent(fn_l):
+                        skipped_java_agent += 1
+                        continue
                     fpath = os.path.join(dirpath, fn)
                     try:
                         size_b = os.path.getsize(fpath)
@@ -665,28 +732,70 @@ class LinuxScanner:
                     except OSError:
                         size_b, mtime = 0, 0
                     digest = _sha256_file(fpath)
+
+                    # Pack 14 — inspección de metadatos del JAR (manifest,
+                    # firma, mod-loader, bytecode hits)
+                    jar_meta: dict[str, Any] = {}
+                    if _meta_inspect_jar is not None:
+                        try:
+                            jar_meta = _meta_inspect_jar(fpath)
+                        except Exception:
+                            jar_meta = {}
+
+                    verdict = jar_meta.get('verdict') or 'unknown'
+                    bc_hits = jar_meta.get('bytecode_hits') or []
+
+                    # Hard skip si el manifest dice claramente que es un mod
+                    # legítimo (loader + vendor oficial / firma CDN) y no
+                    # encontramos bytecode sospechoso en ~80 clases.
+                    if verdict == 'legit_mod' and not bc_hits:
+                        downgraded_legit += 1
+                        continue
+
                     mods_collected.append({
                         'name': fn, 'path': fpath, 'size': size_b,
                         'mtime': int(mtime), 'sha256': digest, 'hack': hack,
-                        'launcher_root': label,
+                        'launcher_root': label, 'meta': jar_meta,
                     })
+                    if bc_hits:
+                        boosted_bytecode += 1
 
         for m in mods_collected[:25]:
+            jar_meta = m.get('meta') or {}
+            verdict  = jar_meta.get('verdict') or 'unknown'
+            bc_hits  = jar_meta.get('bytecode_hits') or []
+            patterns = ['mc_jar', m['hack']]
+
+            # Score base: 0.92 (filename match). Bytecode hits empuja a 0.97;
+            # manifest sin loader y firma rota lo mantiene; verdict unknown
+            # con loader oficial pero sin firma CDN baja a 0.78 (sospechoso
+            # pero NO crítico hasta que el staff revise).
+            confidence = 0.92
+            alerta     = 'CRITICAL'
+            if bc_hits:
+                confidence = 0.97
+                patterns.extend([f'bc:{h}' for h in bc_hits[:4]])
+            elif verdict == 'unknown' and jar_meta.get('mod_loader') and not jar_meta.get('cdn_signed'):
+                confidence = 0.78
+                alerta     = 'SOSPECHOSO'
+                patterns.append('mod_loader_no_cdn')
+
             self._add_issue(
                 tipo='minecraft_hack_jar',
                 nombre=f'Mod sospechoso: {m["name"]} (en {m["launcher_root"]})',
                 ruta=m['path'],
                 archivo=m['name'],
                 categoria='MINECRAFT',
-                alerta='CRITICAL',
-                confidence=0.92,
-                patterns=['mc_jar', m['hack']],
+                alerta=alerta,
+                confidence=confidence,
+                patterns=patterns,
                 extra={
-                    'sha256':   m['sha256'],
-                    'size':     m['size'],
-                    'mtime':    m['mtime'],
-                    'launcher': m['launcher_root'],
-                    'hack_term': m['hack'],
+                    'sha256':       m['sha256'],
+                    'size':         m['size'],
+                    'mtime':        m['mtime'],
+                    'launcher':     m['launcher_root'],
+                    'hack_term':    m['hack'],
+                    'jar_metadata': jar_meta,
                 },
             )
         # mc_info para banner del scan en panel
@@ -694,7 +803,9 @@ class LinuxScanner:
             'launcher': roots[0][0] if roots else None,
             'mods':     [m['name'] for m in mods_collected[:50]],
         }
-        _print(f'  · {len(roots)} launcher root(s), {len(mods_collected)} mods sospechosos')
+        _print(f'  · {len(roots)} launcher root(s), {len(mods_collected)} mods sospechosos '
+               f'(meta-skip: {downgraded_legit}, java-agents: {skipped_java_agent}, '
+               f'bytecode-hits: {boosted_bytecode})')
 
     # ── escaneo: browser history (compartido con Windows) ───────────────
     def scan_browser_history(self) -> None:

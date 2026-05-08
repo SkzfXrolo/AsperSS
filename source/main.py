@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.45"
+SCANNER_VERSION = "1.6.48"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -3124,6 +3124,142 @@ class ArgusApp:
                 continue
 
         return frozenset(abandoned)
+
+    @staticmethod
+    def _collect_mod_jar_metadata(jar_path: str) -> dict:
+        """Pack 14 — metadata estructurada del JAR para enviar al panel
+        como `extra.jar_metadata`. Permite al staff ver vendor / loader /
+        signed / bytecode_hits sin abrir el archivo. NUNCA crashea.
+
+        Espejo del inspector usado por argus_linux (source/argus_linux/
+        metadata.py): mismas keys, mismo verdict ('legit_mod' / 'suspicious'
+        / 'unknown'), para que el chip del panel funcione igual sin importar
+        si el scan vino del .exe Windows o del paquete Linux.
+        """
+        out = {
+            'kind':            'jar',
+            'mod_loader':      None,
+            'manifest_vendor': '',
+            'manifest_title':  '',
+            'signed':          False,
+            'cdn_signed':      False,
+            'bytecode_hits':   [],
+            'class_count':     0,
+            'size_b':          0,
+            'verdict':         'unknown',
+            'error':           None,
+        }
+        try:
+            out['size_b'] = os.path.getsize(jar_path)
+        except OSError:
+            pass
+        try:
+            import zipfile as _zf
+            if not _zf.is_zipfile(jar_path):
+                out['error'] = 'not_a_zip'
+                return out
+            with _zf.ZipFile(jar_path, 'r') as zf:
+                names = zf.namelist()
+                names_lower = {n.lower(): n for n in names}
+                for marker in ('fabric.mod.json', 'quilt.mod.json',
+                               'meta-inf/mods.toml', 'meta-inf/neoforge.mods.toml',
+                               'mcmod.info'):
+                    if marker in names_lower:
+                        if 'fabric' in marker:
+                            out['mod_loader'] = 'fabric'
+                        elif 'quilt' in marker:
+                            out['mod_loader'] = 'quilt'
+                        elif 'neoforge' in marker:
+                            out['mod_loader'] = 'neoforge'
+                        elif 'mods.toml' in marker:
+                            out['mod_loader'] = 'forge'
+                        elif marker == 'mcmod.info':
+                            out['mod_loader'] = 'legacy'
+                        break
+                mf_key = names_lower.get('meta-inf/manifest.mf')
+                if mf_key:
+                    try:
+                        text = zf.read(mf_key)[:262144].decode('utf-8', errors='ignore')
+                        for ln in text.splitlines():
+                            ll = ln.lower()
+                            if ll.startswith('implementation-vendor:'):
+                                out['manifest_vendor'] = ln.split(':', 1)[1].strip().lower()
+                            elif ll.startswith('implementation-title:'):
+                                out['manifest_title'] = ln.split(':', 1)[1].strip().lower()
+                            elif ll.startswith('built-by:') and not out['manifest_vendor']:
+                                out['manifest_vendor'] = ln.split(':', 1)[1].strip().lower()
+                    except Exception:
+                        pass
+                sf = [n for n in names if n.upper().startswith('META-INF/') and n.upper().endswith('.SF')]
+                sig = [n for n in names if n.upper().startswith('META-INF/') and
+                       n.upper().rsplit('.', 1)[-1] in ('RSA', 'DSA', 'EC')]
+                if sf and sig:
+                    out['signed'] = True
+                    for sb in sig[:2]:
+                        try:
+                            sd = zf.read(sb)[:65536].decode('utf-8', errors='ignore').lower()
+                            if any(c in sd for c in ('curseforge', 'modrinth', 'overwolf',
+                                                      'multimc.org', 'prismlauncher',
+                                                      'minecraftforge', 'fabricmc', 'neoforged')):
+                                out['cdn_signed'] = True
+                                break
+                        except Exception:
+                            pass
+                cls = [n for n in names if n.endswith('.class')]
+                out['class_count'] = len(cls)
+                hits: set[str] = set()
+                _PATS = (
+                    b'net/minecraft/client/Minecraft',
+                    b'net/liquidbounce/', b'meteordevelopment/',
+                    b'com/github/wurstclient/', b'me/zeroeightsix/',
+                    b'com/vape/', b'net/sigma/', b'com/aristois/',
+                    b'me/drip/', b'net/rusherhack/',
+                    b'KillAura', b'AimBot', b'AimAssist', b'AutoClick',
+                    b'AutoClicker', b'TriggerBot', b'WallHack',
+                    b'java/lang/instrument/Instrumentation',
+                )
+                for cf in cls[:80]:
+                    try:
+                        bc = zf.read(cf)
+                    except Exception:
+                        continue
+                    for p in _PATS:
+                        if p in bc:
+                            tok = p.decode('latin-1').replace('/', '.').rstrip('.')
+                            hits.add(tok[:60])
+                            if len(hits) >= 6:
+                                break
+                    if len(hits) >= 6:
+                        break
+                out['bytecode_hits'] = sorted(hits)
+        except Exception as e:
+            out['error'] = type(e).__name__
+
+        # Verdict consistente con argus_linux/metadata.py
+        has_loader = bool(out.get('mod_loader'))
+        vendor     = out.get('manifest_vendor', '')
+        legit_v    = any(v in vendor for v in (
+            'fabricmc', 'minecraftforge', 'neoforged', 'neoforge',
+            'quiltmc', 'quilt', 'mojang', 'optifine', 'jetbrains',
+            'oracle', 'azul systems', 'amazon corretto',
+            'eclipse adoptium', 'temurin',
+        )) if vendor else False
+        has_hits   = bool(out.get('bytecode_hits'))
+        cdn        = bool(out.get('cdn_signed'))
+        signed     = bool(out.get('signed'))
+        if has_hits:
+            out['verdict'] = 'suspicious'
+        elif has_loader and (cdn or legit_v):
+            out['verdict'] = 'legit_mod'
+        elif has_loader and signed:
+            out['verdict'] = 'legit_mod'
+        elif has_loader:
+            out['verdict'] = 'unknown'
+        elif signed and legit_v:
+            out['verdict'] = 'legit_mod'
+        else:
+            out['verdict'] = 'unknown'
+        return out
 
     @staticmethod
     def _is_legitimate_mod_jar(jar_path: str) -> bool:
@@ -13584,6 +13720,9 @@ class ArgusApp:
                 # P2 #1 — Verificar contra whitelist dinámica de mods legítimos (hash)
                 if cloud_whitelist and _sha256 and _sha256 in cloud_whitelist:
                     continue  # mod legítimo confirmado
+                # Pack 14 — metadata estructurada del JAR (1 sola lectura
+                # del zip, reutilizada por todos los appends posteriores).
+                _jar_meta = self._collect_mod_jar_metadata(fpath)
                 # P3 #17 — Verificar contra blacklist dinámica de hacks confirmados
                 if cloud_blacklist and _sha256 and _sha256 in cloud_blacklist:
                     print(f"🚨 HASH EN BLACKLIST DINÁMICA: {fname} ({_sha256[:12]}...)")
@@ -13602,6 +13741,7 @@ class ArgusApp:
                             'confirmado como hack en 3 o más scans previos. '
                             'Detección 100% confiable por hash.'
                         ),
+                        'extra': {'jar_metadata': _jar_meta},
                     })
                     continue
                 # F13 — Si el mod está en la carpeta de un modpack popular, skip
@@ -13614,18 +13754,40 @@ class ArgusApp:
 
                 matched_bl = next((bl for bl in BLACKLISTED if bl in fname_lower), None)
                 if matched_bl:
-                    print(f"🚨 MOD PROHIBIDO: {fname}")
+                    # Pack 14 — anti-FP por metadata: si el JAR es claramente
+                    # un mod legítimo (loader oficial + firma CDN, SIN hits
+                    # de bytecode), bajamos a SOSPECHOSO. Esto evita banear
+                    # a alguien por tener "baritone-1.10.2.jar" oficial.
+                    _meta_verdict = (_jar_meta.get('verdict') or 'unknown')
+                    _bc_hits      = _jar_meta.get('bytecode_hits') or []
+                    if _meta_verdict == 'legit_mod' and not _bc_hits:
+                        _alerta = 'SOSPECHOSO'
+                        _conf   = 0.55
+                        _patterns = [f'blacklisted_mod:{matched_bl}', 'metadata_legit_mod']
+                        _expl = (f'El archivo "{fname}" matchea por nombre con un hack ({matched_bl}), '
+                                 f'pero su metadata indica que es un mod legítimo '
+                                 f'(loader: {_jar_meta.get("mod_loader")}, vendor: {_jar_meta.get("manifest_vendor") or "—"}). '
+                                 f'Revisión humana recomendada.')
+                    else:
+                        _alerta = 'CRITICAL'
+                        _conf   = 0.97 if _bc_hits else 0.95
+                        _patterns = [f'blacklisted_mod:{matched_bl}']
+                        if _bc_hits:
+                            _patterns.extend([f'bc:{h}' for h in _bc_hits[:4]])
+                        _expl = (f'El archivo "{fname}" en la carpeta de mods contiene el nombre de un hack client '
+                                 f'conocido ({matched_bl}). Está directamente instalado como mod en Minecraft.')
+                    print(f"🚨 MOD PROHIBIDO: {fname} (alerta={_alerta} meta={_meta_verdict})")
                     self.issues_found.append({
                         'nombre': f'Mod prohibido detectado en .minecraft/mods/: {fname}',
                         'ruta': fpath,
                         'archivo': fname,
                         'tipo': 'blacklisted_mod',
                         'categoria': 'GHOST_CLIENT',
-                        'alerta': 'CRITICAL',
-                        'confidence': 0.95,
-                        'detected_patterns': [f'blacklisted_mod:{matched_bl}'],
-                        'explicacion': f'El archivo "{fname}" en la carpeta de mods contiene el nombre de un hack client '
-                                       f'conocido ({matched_bl}). Está directamente instalado como mod en Minecraft.',
+                        'alerta': _alerta,
+                        'confidence': _conf,
+                        'detected_patterns': _patterns,
+                        'explicacion': _expl,
+                        'extra': {'jar_metadata': _jar_meta},
                     })
                 else:
                     # Analizar nombres de clases internas del JAR — detecta mods renombrados
@@ -13671,11 +13833,19 @@ class ArgusApp:
                                 f'pertenecen al paquete "{class_hit}" — un hack client conocido. '
                                 f'El jugador renombró el JAR para evadir la detección por nombre.'
                             ),
+                            'extra': {'jar_metadata': _jar_meta},
                         })
                     else:
                         # P3 #10 — character n-gram similarity for renamed/obfuscated hack mods
                         sim, matched_hack = self._score_path_hack_similarity(fname)
                         if sim >= 0.40:
+                            # Pack 14 — si la metadata dice claramente que es
+                            # mod legítimo, descartar el match por similitud
+                            # (el n-gram tiene FPs frecuentes con mods de mismo
+                            # autor, ej. "wurst-keyboard" vs "wurst-client").
+                            if (_jar_meta.get('verdict') == 'legit_mod'
+                                    and not (_jar_meta.get('bytecode_hits') or [])):
+                                continue
                             print(f"⚠️ MOD SIMILAR A HACK (N-GRAM): {fname} ~ {matched_hack} ({sim:.2f})")
                             self.issues_found.append({
                                 'nombre': f'Mod con nombre similar a hack conocido: {fname} ≈ {matched_hack}',
@@ -13688,6 +13858,7 @@ class ArgusApp:
                                 'detected_patterns': [f'name_similar_to:{matched_hack}({sim:.2f})'],
                                 'explicacion': f'El mod "{fname}" tiene alta similitud de caracteres (n-gram Jaccard={sim:.2f}) '
                                                f'con el cliente de hack conocido "{matched_hack}". Puede estar renombrado para evadir detección.',
+                                'extra': {'jar_metadata': _jar_meta},
                             })
         except Exception as e:
             print(f"Error en scan_minecraft_mods_blacklist: {e}")
