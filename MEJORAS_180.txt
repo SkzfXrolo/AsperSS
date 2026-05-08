@@ -2444,6 +2444,20 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
     + Top repeat offenders con tabla rankada (Pack 37)
     + Index suggestions PG/SQLite (Pack 37)
     + Discord webhook con embed de salud IA (Pack 38)
+    + Super Admin Panel rediseño 500% (Pack 39)
+       * Sidebar con 11 secciones (vs 3 tabs antes)
+       * 8 KPIs live + sparkline 30d + feed scans + top empresas (Dashboard)
+       * AI Health: P/R/F1/drift/accuracy + confusion matrix + suggestions
+       * Staff Trust ranking con bar gradient + confirm correct/wrong inline
+       * Patterns auto-IA con delete + decay visible + opacity por inactivo
+       * Cooldowns con bump pill colorizado + reset por empresa
+       * Repeat Offenders con dropdown período
+       * Learn-FP suggestions browseable
+       * Maintenance: dry run / run / run + Discord, todo desde el panel
+       * Audit log live + System Info (env masked, table counts, modules)
+       * Live polling 60s con pause toggle
+       * Auth movida a env vars SUPER_ADMIN_USER / SUPER_ADMIN_PASS
+       * 17 endpoints nuevos /aspers-sa/api/*
 
 SESIÓN DEL 08-may-2026 (continuada — chamba de 4h):
 
@@ -2477,9 +2491,10 @@ SESIÓN DEL 08-may-2026 (continuada — chamba de 4h):
         (hoy es manual desde panel admin).
       * UI dedicada para Discord webhook config en panel admin
         (hoy se setea con env var).
-      * Frontend para AI Quality Dashboard ya existe (Pack 35) pero
-        falta exponer "AI Health" como sección persistente en el
-        admin nav (hoy es solo accesible vía Cmd+K → "ia").
+      * Frontend para AI Quality Dashboard ya existe (Pack 35) y
+        AHORA ESTÁ COMPLETAMENTE EMBEBIDO en el SuperAdmin panel
+        (Pack 39 sección "IA · Salud") accesible siempre desde el
+        sidebar — además del Cmd+K → "ia" del staff panel.
 
     Total backlog: 210 ítems · DONE 141 · PARTIAL 3 · DEFERRED 66
     (DEFERRED 66 = 76 originales + 4 cerrados en Pack 34 + 6 cerrados
@@ -2507,6 +2522,90 @@ SESIÓN DEL 08-may-2026 (continuada — chamba de 4h):
                       ai_quality.get_quality_metrics + send_health_
                       webhook. Loggea en staff_audit_log con flag
                       discord=true/false.
+
+  Pack 39 (v1.6.49): SUPER ADMIN PANEL — REDISEÑO 500%.
+                    Sin recompilar el .exe.
+
+                    Pidió el dueño: "quiero mejorarlo en un 500% y
+                    además tener acceso a modificar / mejorar / ver el
+                    estado de nuestra IA". Antes: panel /aspers-sa con
+                    3 tabs simples (Empresas / Usuarios / Nueva), 4 KPIs
+                    básicos, cero IA. Ahora: panel completo con sidebar
+                    de 11 secciones, 8 KPIs live, sparkline 30d, control
+                    total sobre la IA construida en Packs 32-38.
+
+                    Backend (web_app/app.py +600 lns) — 17 endpoints
+                    nuevos bajo /aspers-sa/api/* con _sa_required:
+                      * GET  /overview               KPIs globales +
+                                                     top empresas 30d +
+                                                     últimos scans
+                      * GET  /scans/recent           feed live
+                      * GET  /scans/timeseries       serie diaria 30d
+                      * GET  /ai-health              P/R/F1/drift +
+                                                     suggestion + retrain
+                                                     + top FP candidatos
+                      * GET  /staff-trust            ranking enriquecido
+                      * POST /staff-trust/confirm    correct/wrong inline
+                      * GET  /cooldowns              empresas con bump
+                      * POST /cooldowns/reset        reset por empresa
+                      * GET  /learned-patterns       auto-IA listado
+                      * DEL  /learned-patterns/<id>  borrar pattern
+                      * GET  /repeat-offenders       reincidentes
+                      * GET  /audit-log              últimas 100 acciones
+                      * GET  /system-info            versión + env masked
+                                                     + table counts +
+                                                     modules disponibles
+                      * GET  /maintenance/dryrun     preview
+                      * POST /maintenance/run        body {notify_discord,
+                                                     include_metrics}
+                      * GET  /learn-fp/suggestions   candidatos browseable
+                    Helpers _sa_count, _sa_dual_count, _sa_interval_clause
+                    para soportar PG/SQLite con un solo path.
+
+                    Frontend (admin_subscriptions.html reescrito de 681 →
+                    ~1100 lns):
+                      * Sidebar sticky con 11 secciones agrupadas en 3
+                        bloques (Operación / Inteligencia Argus / Sistema).
+                      * Pills live en sidebar con counts de empresas/users/
+                        trust/patterns/cooldowns.
+                      * Topbar sticky con breadcrumbs + LIVE pill (60s
+                        polling, click to pause).
+                      * KPI grid: 8 tiles con valores gradient + subtitle
+                        contextual.
+                      * Sparkline SVG 30 días (scans + hacks dashed).
+                      * AI Health: 5 health-tiles (P/R/F1/Acc/Drift)
+                        coloreadas por umbral, confusion matrix 2x2,
+                        suggestion box + retrain box con urgency, top FP.
+                      * Staff Trust: bar gradient roja→amarilla→verde por
+                        score, columnas confirmados ✓/✗ + overturns,
+                        botones inline "+correcto" / "−incorrecto".
+                      * Patterns: tabla con confidence/decay bars, opacity
+                        reducida para inactivos, botón ✕ borrar inline.
+                      * Cooldowns: bump-pill colorizado por severity (5/10/
+                        15), botón ↺ reset.
+                      * Maintenance: 3 botones (Dry run / Ejecutar /
+                        Ejecutar+Discord) + pre con report formateado +
+                        tabla de índices sugeridos.
+                      * Audit log: timeline-style última acción primero.
+                      * System Info: 4 cards (Runtime / Módulos IA /
+                        Variables env enmascaradas / Conteos por tabla).
+                      * Modales mantenidos para edit / toggle status.
+                      * Lazy load por tab (solo carga cuando se abre).
+                      * Hash routing (#dashboard, #ai-health, etc).
+
+                    Security:
+                      * Credenciales 'Rodrigo'/'Rodrigo@1' movidas a env
+                        vars SUPER_ADMIN_USER/SUPER_ADMIN_PASS con fallback
+                        al valor histórico para no romper el deploy actual.
+                      * Login persistente registra timestamp en session
+                        (admin_subscriptions_login_at) — visible en sidebar
+                        y System Info.
+
+                    Result: el dueño (Rodrigo) ahora controla TODA la
+                    inteligencia construida en Packs 32-38 desde un solo
+                    panel sin tener que abrir el panel de staff o usar la
+                    API directo. El panel super admin ahora literalmente
+                    cubre 500%+ del funcional anterior.
 
   Pack 37 (v1.6.49): MANTENIMIENTO AUTOMÁTICO IA + REINCIDENTES.
                     Sin recompilar el .exe.

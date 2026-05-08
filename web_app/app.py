@@ -928,12 +928,20 @@ def panel():
 
 @app.route('/aspers-sa', methods=['GET', 'POST'])
 def admin_subscriptions():
-    """Panel SuperAdmin — acceso solo mediante URL directa (no linkada públicamente)"""
+    """Panel SuperAdmin — acceso solo mediante URL directa (no linkada públicamente).
+
+    Credenciales: env vars SUPER_ADMIN_USER / SUPER_ADMIN_PASS (con fallback al
+    valor histórico hardcoded para no romper el deploy actual; en producción
+    DEBEN definirse en Render para evitar exponer creds en el repo).
+    """
     if request.method == 'POST':
         username = request.form.get('username', '')
         password = request.form.get('password', '')
-        if username == 'Rodrigo' and password == 'Rodrigo@1':
+        expected_user = (os.environ.get('SUPER_ADMIN_USER') or 'Rodrigo').strip()
+        expected_pass = (os.environ.get('SUPER_ADMIN_PASS') or 'Rodrigo@1').strip()
+        if username == expected_user and password == expected_pass:
             session['admin_subscriptions'] = True
+            session['admin_subscriptions_login_at'] = datetime.datetime.now().isoformat()
             return redirect('/aspers-sa')
         else:
             return render_template('admin_subscriptions_login.html', error='Credenciales incorrectas')
@@ -11804,6 +11812,808 @@ def coordinated_cheating():
         return jsonify({'clusters': clusters[:20], 'total_groups': len(clusters)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ════════════════════════════════════════════════════════════════════════
+# PACK 39 — Super Admin Panel API (/aspers-sa/api/*)
+# ════════════════════════════════════════════════════════════════════════
+#
+# Endpoints dedicados al panel /aspers-sa para que el dueño tenga control
+# completo sobre la IA y las operaciones de la plataforma SIN depender de
+# tener cuenta de staff activa. Todos protegidos por la sesión existente
+# admin_subscriptions_required.
+#
+# Composición:
+#   /overview              → KPIs globales (revenue, scans, hacks, FP rate, drift)
+#   /ai-health             → métricas P/R/F1/drift + retrain flag + suggestion
+#   /staff-trust           → ranking trust con username
+#   /staff-trust/confirm   → confirma decisión post-facto (correct/wrong)
+#   /cooldowns             → empresas con threshold_bump activo
+#   /cooldowns/reset       → resetear cooldown de una empresa
+#   /learned-patterns      → patterns auto-aprendidos (hack)
+#   /learned-patterns/<id> → DELETE para borrar pattern manualmente
+#   /repeat-offenders      → top jugadores reincidentes
+#   /audit-log             → últimas 100 acciones de staff
+#   /system-info           → versión, env (masked), DB info, modules availability
+#   /maintenance/dryrun    → preview del mantenimiento
+#   /maintenance/run       → ejecuta mantenimiento (con notify_discord opcional)
+#   /learn-fp/suggestions  → top FP candidatos
+#   /learn-fp/apply        → aplica un fragment como learn-fp
+#   /scans/recent          → últimos 50 scans (para feed live)
+#   /companies/<id>/health → salud agregada de una empresa puntual
+# ════════════════════════════════════════════════════════════════════════
+
+def _sa_required(f):
+    """Wrapper local para devolver JSON 401 en endpoints SA-API.
+    El `admin_subscriptions_required` global devuelve 401 OK pero queremos
+    también un mensaje consistente."""
+    from functools import wraps as _wraps
+    @_wraps(f)
+    def _w(*a, **kw):
+        if not session.get('admin_subscriptions'):
+            return jsonify({'error': 'No autorizado', 'sa_login_required': True}), 401
+        return f(*a, **kw)
+    return _w
+
+
+def _sa_count(cursor, sql, params=()):
+    """Helper para SELECT COUNT(*) que devuelve int sin reventar."""
+    try:
+        cursor.execute(sql, params)
+        row = cursor.fetchone()
+        if not row:
+            return 0
+        v = _row_get(row, 0, list(row.keys())[0]) if hasattr(row, 'keys') else row[0]
+        return int(v or 0)
+    except Exception:
+        return 0
+
+
+def _sa_interval_clause(field: str, days: int) -> tuple:
+    """Devuelve dos cláusulas (PG, SQLite) para WHERE field >= now - N days.
+    Usar try/except afuera para alternar entre dialectos."""
+    return (
+        f"{field} >= CURRENT_TIMESTAMP - INTERVAL '{int(days)} days'",
+        f"{field} >= datetime('now', '-{int(days)} days')",
+    )
+
+
+def _sa_dual_count(cursor, sql_pg: str, sql_sqlite: str, params=()) -> int:
+    """Intenta query PG, si falla fallback a SQLite."""
+    try:
+        cursor.execute(sql_pg, params)
+    except Exception:
+        try:
+            cursor.execute(sql_sqlite, params)
+        except Exception:
+            return 0
+    row = cursor.fetchone()
+    if not row:
+        return 0
+    try:
+        v = _row_get(row, 0, list(row.keys())[0]) if hasattr(row, 'keys') else row[0]
+        return int(v or 0)
+    except Exception:
+        return 0
+
+
+@app.route('/aspers-sa/api/overview', methods=['GET'])
+@_sa_required
+def sa_api_overview():
+    """KPIs globales: revenue, empresas, usuarios, scans 24h/7d/30d,
+    hacks, cleans, pendings, FP rate, drift IA, top empresas por volumen."""
+    out = {
+        'revenue_monthly':        0.0,
+        'companies_total':        0,
+        'companies_active':       0,
+        'companies_expired':      0,
+        'users_total':            0,
+        'users_active':           0,
+        'scans_24h':              0,
+        'scans_7d':               0,
+        'scans_30d':              0,
+        'scans_total':            0,
+        'hacks_30d':              0,
+        'cleans_30d':             0,
+        'pending_total':          0,
+        'fp_rate_30d':            None,
+        'drift_score':            None,
+        'top_companies_30d':      [],
+        'last_scan_at':           None,
+        'machines_unique':        0,
+        'players_unique':         0,
+        'verdicts_total':         0,
+        'autolearn_active':       0,
+        'cooldowns_active':       0,
+        'staff_with_trust':       0,
+        'modules': {
+            'ai_trust':     _AI_TRUST_AVAILABLE,
+            'ai_quality':   _AI_QUALITY_AVAILABLE,
+            'ai_autolearn': _AI_AUTOLEARN_AVAILABLE,
+            'ai_maint':     _AI_MAINT_AVAILABLE,
+        },
+    }
+    try:
+        from auth import list_companies as _lc, list_users as _lu
+        companies = _lc() or []
+        users     = _lu() or []
+        out['companies_total']   = len(companies)
+        out['users_total']       = len(users)
+        out['users_active']      = sum(1 for u in users if u.get('is_active'))
+        rev = 0.0
+        for c in companies:
+            try:
+                price = float(c.get('subscription_price') or 0)
+            except Exception:
+                price = 0.0
+            status = (c.get('subscription_status') or '').lower()
+            if status == 'active' and price > 0:
+                rev += price
+                out['companies_active'] += 1
+            elif status == 'active':
+                out['companies_active'] += 1
+            elif status == 'expired':
+                out['companies_expired'] += 1
+        out['revenue_monthly'] = round(rev, 2)
+    except Exception as e:
+        print(f'[sa.overview.companies] {e}')
+
+    try:
+        with get_api_db_cursor() as cur:
+            out['scans_total'] = _sa_count(cur, 'SELECT COUNT(*) FROM scans')
+            out['scans_24h']   = _sa_dual_count(
+                cur,
+                "SELECT COUNT(*) FROM scans WHERE started_at >= CURRENT_TIMESTAMP - INTERVAL '1 day'",
+                "SELECT COUNT(*) FROM scans WHERE started_at >= datetime('now', '-1 day')",
+            )
+            out['scans_7d']    = _sa_dual_count(
+                cur,
+                "SELECT COUNT(*) FROM scans WHERE started_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'",
+                "SELECT COUNT(*) FROM scans WHERE started_at >= datetime('now', '-7 days')",
+            )
+            out['scans_30d']   = _sa_dual_count(
+                cur,
+                "SELECT COUNT(*) FROM scans WHERE started_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'",
+                "SELECT COUNT(*) FROM scans WHERE started_at >= datetime('now', '-30 days')",
+            )
+            out['hacks_30d']   = _sa_dual_count(
+                cur,
+                "SELECT COUNT(*) FROM scans WHERE verdict = 'hack' AND verdict_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'",
+                "SELECT COUNT(*) FROM scans WHERE verdict = 'hack' AND verdict_at >= datetime('now', '-30 days')",
+            )
+            out['cleans_30d']  = _sa_dual_count(
+                cur,
+                "SELECT COUNT(*) FROM scans WHERE verdict = 'clean' AND verdict_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'",
+                "SELECT COUNT(*) FROM scans WHERE verdict = 'clean' AND verdict_at >= datetime('now', '-30 days')",
+            )
+            out['pending_total'] = _sa_count(
+                cur,
+                "SELECT COUNT(*) FROM scans WHERE verdict IS NULL OR verdict = '' OR verdict = 'pending'"
+            )
+            out['verdicts_total'] = _sa_count(
+                cur,
+                "SELECT COUNT(*) FROM scans WHERE verdict IN ('clean','hack')"
+            )
+            out['machines_unique'] = _sa_count(
+                cur,
+                "SELECT COUNT(DISTINCT machine_id) FROM scans WHERE machine_id IS NOT NULL AND machine_id != ''"
+            )
+            out['players_unique'] = _sa_count(
+                cur,
+                "SELECT COUNT(DISTINCT LOWER(minecraft_username)) FROM scans WHERE minecraft_username IS NOT NULL AND minecraft_username != ''"
+            )
+
+            try:
+                cur.execute("SELECT MAX(started_at) FROM scans")
+                r = cur.fetchone()
+                if r:
+                    v = _row_get(r, 0, list(r.keys())[0]) if hasattr(r, 'keys') else r[0]
+                    out['last_scan_at'] = str(v) if v else None
+            except Exception:
+                pass
+
+            # Top empresas por volumen 30d
+            try:
+                try:
+                    cur.execute(
+                        "SELECT company_id, COUNT(*) AS n, "
+                        "  SUM(CASE WHEN verdict='hack' THEN 1 ELSE 0 END) AS hacks "
+                        "FROM scans "
+                        "WHERE started_at >= CURRENT_TIMESTAMP - INTERVAL '30 days' "
+                        "  AND company_id IS NOT NULL "
+                        "GROUP BY company_id ORDER BY COUNT(*) DESC LIMIT 10"
+                    )
+                except Exception:
+                    cur.execute(
+                        "SELECT company_id, COUNT(*) AS n, "
+                        "  SUM(CASE WHEN verdict='hack' THEN 1 ELSE 0 END) AS hacks "
+                        "FROM scans "
+                        "WHERE started_at >= datetime('now', '-30 days') "
+                        "  AND company_id IS NOT NULL "
+                        "GROUP BY company_id ORDER BY COUNT(*) DESC LIMIT 10"
+                    )
+                rows = cur.fetchall() or []
+                cmap = {}
+                try:
+                    from auth import list_companies as _lc2
+                    for c in (_lc2() or []):
+                        cmap[c.get('id')] = c.get('name')
+                except Exception:
+                    pass
+                for r in rows:
+                    cid = _row_get(r, 0, 'company_id')
+                    n   = int(_row_get(r, 1, 'n') or 0)
+                    h   = int(_row_get(r, 2, 'hacks') or 0)
+                    out['top_companies_30d'].append({
+                        'company_id':   cid,
+                        'company_name': cmap.get(cid, f'company_{cid}'),
+                        'scans':        n,
+                        'hacks':        h,
+                        'hack_rate':    round(h / n, 3) if n > 0 else 0.0,
+                    })
+            except Exception as e:
+                print(f'[sa.overview.top_companies] {e}')
+
+            # Cooldowns activos
+            if _AI_TRUST_AVAILABLE:
+                try:
+                    _ai_trust.ensure_trust_tables(cur)
+                    out['cooldowns_active'] = _sa_count(
+                        cur,
+                        'SELECT COUNT(*) FROM company_fp_cooldown WHERE threshold_bump > 0'
+                    )
+                    out['staff_with_trust'] = _sa_count(
+                        cur,
+                        'SELECT COUNT(*) FROM staff_trust WHERE verdicts_total > 0'
+                    )
+                except Exception:
+                    pass
+
+            # Patterns auto-learned activos
+            if _AI_AUTOLEARN_AVAILABLE:
+                try:
+                    _ai_autolearn.ensure_autolearn_table(cur)
+                    out['autolearn_active'] = _sa_count(
+                        cur,
+                        'SELECT COUNT(*) FROM learned_hack_patterns WHERE decay_score > 0.20 AND confidence > 0.30'
+                    )
+                except Exception:
+                    pass
+
+            # Drift y FP rate (de ai_quality si está disponible)
+            if _AI_QUALITY_AVAILABLE:
+                try:
+                    m = _ai_quality.get_quality_metrics(cur, company_id=None, since_days=30)
+                    out['drift_score'] = m.get('drift_score')
+                    fp = m.get('fp', 0)
+                    tn = m.get('tn', 0)
+                    if (fp + tn) > 0:
+                        out['fp_rate_30d'] = round(fp / (fp + tn), 3)
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f'[sa.overview] {e}')
+
+    return jsonify(out), 200
+
+
+@app.route('/aspers-sa/api/ai-health', methods=['GET'])
+@_sa_required
+def sa_api_ai_health():
+    """AI Health: P/R/F1/drift, retrain flag, suggestion, top FP candidatos."""
+    if not _AI_QUALITY_AVAILABLE:
+        return jsonify({'available': False}), 200
+    try:
+        since_days = max(7, min(365, int(request.args.get('since_days', 30))))
+    except Exception:
+        since_days = 30
+    company_id = request.args.get('company_id', type=int)
+    out = {'available': True}
+    try:
+        with get_api_db_cursor() as cur:
+            metrics = _ai_quality.get_quality_metrics(
+                cur, company_id=company_id, since_days=since_days
+            )
+            out['metrics']    = metrics
+            out['suggestion'] = _ai_quality.suggest_threshold_adjustment(metrics)
+            verdicts_since = _sa_count(
+                cur,
+                "SELECT COUNT(*) FROM scans WHERE verdict IN ('clean','hack') AND ensemble_data IS NOT NULL"
+            )
+            out['retrain'] = _ai_quality.should_retrain_rf(
+                metrics, last_train_at=None, verdicts_since_train=verdicts_since
+            )
+            out['fp_candidates'] = _ai_quality.suggest_learn_fp_candidates(
+                cur, company_id=company_id, limit=15
+            )
+        return jsonify(out), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/staff-trust', methods=['GET'])
+@_sa_required
+def sa_api_staff_trust():
+    """Ranking de staff_trust enriquecido con username."""
+    if not _AI_TRUST_AVAILABLE:
+        return jsonify({'available': False, 'rows': []}), 200
+    try:
+        with get_api_db_cursor() as cur:
+            _ai_trust.ensure_trust_tables(cur)
+            cur.execute(
+                'SELECT user_id, verdicts_total, agreements, disagreements, '
+                'overturns_to_clean, overturns_to_hack, confirmed_correct, '
+                'confirmed_wrong, trust_score, updated_at, last_verdict_at '
+                'FROM staff_trust ORDER BY trust_score DESC, verdicts_total DESC '
+                'LIMIT 200'
+            )
+            rows = cur.fetchall() or []
+        out = []
+        try:
+            from auth import list_users as _lu
+            user_map = {u.get('id'): u for u in (_lu() or [])}
+        except Exception:
+            user_map = {}
+        for r in rows:
+            uid = _row_get(r, 0, 'user_id')
+            u = user_map.get(uid) or {}
+            out.append({
+                'user_id':            uid,
+                'username':           u.get('username') or f'user_{uid}',
+                'company_id':         u.get('company_id'),
+                'roles':              u.get('roles') or [],
+                'verdicts_total':     int(_row_get(r, 1, 'verdicts_total')     or 0),
+                'agreements':         int(_row_get(r, 2, 'agreements')         or 0),
+                'disagreements':      int(_row_get(r, 3, 'disagreements')      or 0),
+                'overturns_to_clean': int(_row_get(r, 4, 'overturns_to_clean') or 0),
+                'overturns_to_hack':  int(_row_get(r, 5, 'overturns_to_hack')  or 0),
+                'confirmed_correct':  int(_row_get(r, 6, 'confirmed_correct')  or 0),
+                'confirmed_wrong':    int(_row_get(r, 7, 'confirmed_wrong')    or 0),
+                'trust_score':        float(_row_get(r, 8, 'trust_score')      or 50.0),
+                'updated_at':         str(_row_get(r, 9, 'updated_at')         or ''),
+                'last_verdict_at':    str(_row_get(r, 10, 'last_verdict_at')   or ''),
+            })
+        return jsonify({'available': True, 'rows': out, 'count': len(out)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/staff-trust/confirm', methods=['POST'])
+@_sa_required
+def sa_api_staff_trust_confirm():
+    """Confirma o desmiente decisión post-facto del staff (pesa doble)."""
+    if not _AI_TRUST_AVAILABLE:
+        return jsonify({'error': 'ai_trust no cargado'}), 503
+    data = request.get_json(silent=True) or {}
+    target = data.get('user_id')
+    was_correct = bool(data.get('was_correct', False))
+    if not target:
+        return jsonify({'error': 'user_id requerido'}), 400
+    try:
+        with get_api_db_cursor() as cur:
+            _ai_trust.confirm_staff_decision(cur, int(target), was_correct)
+        return jsonify({'ok': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/cooldowns', methods=['GET'])
+@_sa_required
+def sa_api_cooldowns():
+    """Lista de empresas con threshold_bump activo o reciente."""
+    if not _AI_TRUST_AVAILABLE:
+        return jsonify({'available': False, 'rows': []}), 200
+    try:
+        with get_api_db_cursor() as cur:
+            _ai_trust.ensure_trust_tables(cur)
+            cur.execute(
+                'SELECT company_id, fp_count_24h, overturn_count_24h, '
+                'threshold_bump, cooldown_until, last_event_at, updated_at '
+                'FROM company_fp_cooldown '
+                'ORDER BY threshold_bump DESC, last_event_at DESC '
+                'LIMIT 200'
+            )
+            rows = cur.fetchall() or []
+        out = []
+        try:
+            from auth import list_companies as _lc
+            cmap = {c.get('id'): c.get('name') for c in (_lc() or [])}
+        except Exception:
+            cmap = {}
+        for r in rows:
+            cid = _row_get(r, 0, 'company_id')
+            out.append({
+                'company_id':         cid,
+                'company_name':       cmap.get(cid, f'company_{cid}'),
+                'fp_count_24h':       int(_row_get(r, 1, 'fp_count_24h')       or 0),
+                'overturn_count_24h': int(_row_get(r, 2, 'overturn_count_24h') or 0),
+                'threshold_bump':     int(_row_get(r, 3, 'threshold_bump')     or 0),
+                'cooldown_until':     str(_row_get(r, 4, 'cooldown_until')     or ''),
+                'last_event_at':      str(_row_get(r, 5, 'last_event_at')      or ''),
+                'updated_at':         str(_row_get(r, 6, 'updated_at')         or ''),
+            })
+        return jsonify({'available': True, 'rows': out, 'count': len(out)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/cooldowns/reset', methods=['POST'])
+@_sa_required
+def sa_api_cooldown_reset():
+    """Reset manual del cooldown de una empresa puntual."""
+    if not _AI_TRUST_AVAILABLE:
+        return jsonify({'error': 'ai_trust no cargado'}), 503
+    data = request.get_json(silent=True) or {}
+    cid = data.get('company_id')
+    if not cid:
+        return jsonify({'error': 'company_id requerido'}), 400
+    try:
+        with get_api_db_cursor() as cur:
+            _ai_trust.ensure_trust_tables(cur)
+            ph = _ai_trust._ph(cur)
+            cur.execute(
+                f'UPDATE company_fp_cooldown SET '
+                f'  fp_count_24h = 0, overturn_count_24h = 0, '
+                f'  threshold_bump = 0, updated_at = CURRENT_TIMESTAMP '
+                f'WHERE company_id = {ph}',
+                (int(cid),)
+            )
+            try:
+                _ai_trust._invalidate_cooldown(int(cid))
+            except Exception:
+                pass
+        return jsonify({'ok': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/learned-patterns', methods=['GET'])
+@_sa_required
+def sa_api_learned_patterns():
+    """Patterns auto-aprendidos (hack) ordenados por confidence."""
+    if not _AI_AUTOLEARN_AVAILABLE:
+        return jsonify({'available': False, 'rows': []}), 200
+    try:
+        with get_api_db_cursor() as cur:
+            _ai_autolearn.ensure_autolearn_table(cur)
+            cur.execute(
+                'SELECT id, pattern_kind, pattern_value, confidence, '
+                'hit_count, confirmed_count, learned_from_scan_id, '
+                'learned_by, learned_at, last_hit_at, decay_score '
+                'FROM learned_hack_patterns '
+                'ORDER BY confidence DESC, confirmed_count DESC LIMIT 300'
+            )
+            rows = cur.fetchall() or []
+        out = []
+        for r in rows:
+            out.append({
+                'id':                   _row_get(r, 0, 'id'),
+                'pattern_kind':         _row_get(r, 1, 'pattern_kind'),
+                'pattern_value':        _row_get(r, 2, 'pattern_value'),
+                'confidence':           float(_row_get(r, 3, 'confidence') or 0.0),
+                'hit_count':            int(_row_get(r, 4, 'hit_count') or 0),
+                'confirmed_count':      int(_row_get(r, 5, 'confirmed_count') or 0),
+                'learned_from_scan_id': _row_get(r, 6, 'learned_from_scan_id'),
+                'learned_by':           _row_get(r, 7, 'learned_by'),
+                'learned_at':           str(_row_get(r, 8, 'learned_at') or ''),
+                'last_hit_at':          str(_row_get(r, 9, 'last_hit_at') or ''),
+                'decay_score':          float(_row_get(r, 10, 'decay_score') or 1.0),
+            })
+        return jsonify({'available': True, 'rows': out, 'count': len(out)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/learned-patterns/<int:pid>', methods=['DELETE'])
+@_sa_required
+def sa_api_delete_pattern(pid):
+    """Borra un pattern auto-aprendido (típicamente FP que se coló)."""
+    if not _AI_AUTOLEARN_AVAILABLE:
+        return jsonify({'error': 'ai_autolearn no cargado'}), 503
+    try:
+        with get_api_db_cursor() as cur:
+            _ai_autolearn.ensure_autolearn_table(cur)
+            ph = _ai_autolearn._ph(cur) if hasattr(_ai_autolearn, '_ph') else '?'
+            cur.execute(f'DELETE FROM learned_hack_patterns WHERE id = {ph}', (int(pid),))
+        try:
+            if hasattr(_ai_autolearn, '_invalidate_active_cache'):
+                _ai_autolearn._invalidate_active_cache()
+        except Exception:
+            pass
+        return jsonify({'ok': True, 'deleted_id': int(pid)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/repeat-offenders', methods=['GET'])
+@_sa_required
+def sa_api_repeat_offenders():
+    """Top jugadores reincidentes (>=2 hacks en N días). Global o por empresa."""
+    if not _AI_MAINT_AVAILABLE:
+        return jsonify({'available': False, 'rows': []}), 200
+    try:
+        since = max(7, min(730, int(request.args.get('since_days', 90))))
+        limit = max(5, min(100, int(request.args.get('limit', 25))))
+    except Exception:
+        since, limit = 90, 25
+    cid = request.args.get('company_id', type=int)
+    try:
+        with get_api_db_cursor() as cur:
+            rows = _ai_maint.get_top_repeat_offenders(
+                cur, company_id=cid, since_days=since, limit=limit
+            )
+        return jsonify({
+            'available': True, 'rows': rows, 'count': len(rows),
+            'since_days': since, 'company_id': cid,
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/audit-log', methods=['GET'])
+@_sa_required
+def sa_api_audit_log():
+    """Últimas 100 acciones de staff (audit log)."""
+    try:
+        limit = max(10, min(500, int(request.args.get('limit', 100))))
+    except Exception:
+        limit = 100
+    out = []
+    try:
+        with get_api_db_cursor() as cur:
+            try:
+                cur.execute(
+                    'SELECT id, user_id, action, target_scan_id, detail, timestamp '
+                    'FROM staff_audit_log ORDER BY timestamp DESC LIMIT ' + str(limit)
+                )
+                rows = cur.fetchall() or []
+            except Exception:
+                rows = []
+            user_map = {}
+            try:
+                from auth import list_users as _lu
+                user_map = {u.get('id'): u.get('username') for u in (_lu() or [])}
+            except Exception:
+                pass
+            for r in rows:
+                uid = _row_get(r, 1, 'user_id')
+                out.append({
+                    'id':              _row_get(r, 0, 'id'),
+                    'user_id':         uid,
+                    'username':        user_map.get(uid, f'user_{uid}' if uid else 'system'),
+                    'action':          _row_get(r, 2, 'action'),
+                    'target_scan_id':  _row_get(r, 3, 'target_scan_id'),
+                    'detail':          _row_get(r, 4, 'detail'),
+                    'timestamp':       str(_row_get(r, 5, 'timestamp') or ''),
+                })
+        return jsonify({'rows': out, 'count': len(out)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e), 'rows': []}), 500
+
+
+@app.route('/aspers-sa/api/system-info', methods=['GET'])
+@_sa_required
+def sa_api_system_info():
+    """Versión, env (masked), DB info, módulos disponibles, uptime aproximado."""
+    import sys as _sys
+    import platform as _plat
+    out = {
+        'argus_version':  _ARGUS_VERSION,
+        'python_version': _sys.version.split()[0],
+        'platform':       f'{_plat.system()} {_plat.release()}',
+        'modules': {
+            'ai_trust':     _AI_TRUST_AVAILABLE,
+            'ai_quality':   _AI_QUALITY_AVAILABLE,
+            'ai_autolearn': _AI_AUTOLEARN_AVAILABLE,
+            'ai_maint':     _AI_MAINT_AVAILABLE,
+        },
+        'db_engine':      'postgres' if _USE_PG else ('mysql' if _USE_MYSQL else 'sqlite'),
+        'is_render':      bool(IS_RENDER),
+        'env_masked':     {},
+        'session_login_at': session.get('admin_subscriptions_login_at', ''),
+    }
+    interesting_keys = [
+        'DATABASE_URL', 'API_URL', 'API_KEY', 'SECRET_KEY',
+        'DISCORD_DEPLOY_WEBHOOK', 'DISCORD_AI_HEALTH_WEBHOOK', 'DISCORD_INVITE_URL',
+        'SUPER_ADMIN_USER', 'SUPER_ADMIN_PASS',
+        'RENDER', 'FLASK_ENV', 'PORT',
+    ]
+    for k in interesting_keys:
+        v = os.environ.get(k)
+        if v is None:
+            out['env_masked'][k] = None
+        elif len(v) <= 8:
+            out['env_masked'][k] = '*' * len(v)
+        else:
+            out['env_masked'][k] = v[:4] + '*' * (len(v) - 8) + v[-4:]
+    try:
+        with get_api_db_cursor() as cur:
+            tables = ['scans', 'scan_results', 'staff_trust', 'company_fp_cooldown',
+                      'learned_hack_patterns', 'learned_patterns', 'staff_audit_log',
+                      'verdict_history', 'evidence_fingerprints', 'companies', 'users']
+            out['table_counts'] = {}
+            for t in tables:
+                try:
+                    cur.execute(f'SELECT COUNT(*) FROM {t}')
+                    r = cur.fetchone()
+                    if r:
+                        v = _row_get(r, 0, list(r.keys())[0]) if hasattr(r, 'keys') else r[0]
+                        out['table_counts'][t] = int(v or 0)
+                except Exception:
+                    out['table_counts'][t] = None
+    except Exception:
+        out['table_counts'] = {}
+    return jsonify(out), 200
+
+
+@app.route('/aspers-sa/api/maintenance/dryrun', methods=['GET'])
+@_sa_required
+def sa_api_maint_dryrun():
+    if not _AI_MAINT_AVAILABLE:
+        return jsonify({'available': False}), 200
+    try:
+        with get_api_db_cursor() as cur:
+            report = _ai_maint.run_maintenance(cur, dry_run=True)
+        return jsonify({'available': True, 'report': report, 'dry_run': True}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/maintenance/run', methods=['POST'])
+@_sa_required
+def sa_api_maint_run():
+    """Ejecuta mantenimiento real. body: {notify_discord: bool, include_metrics: bool}"""
+    if not _AI_MAINT_AVAILABLE:
+        return jsonify({'error': 'ai_maintenance no cargado'}), 503
+    body = request.get_json(silent=True) or {}
+    notify_discord  = bool(body.get('notify_discord', False))
+    include_metrics = bool(body.get('include_metrics', True))
+    out = {'ok': True}
+    try:
+        with get_api_db_cursor() as cur:
+            report = _ai_maint.run_maintenance(cur, dry_run=False)
+            out['report'] = report
+            metrics_block = None
+            if include_metrics and _AI_QUALITY_AVAILABLE:
+                try:
+                    metrics_block = {
+                        'metrics':    _ai_quality.get_quality_metrics(cur, since_days=90),
+                    }
+                    metrics_block['suggestion'] = _ai_quality.suggest_threshold_adjustment(
+                        metrics_block['metrics'])
+                    vs = _sa_count(
+                        cur,
+                        "SELECT COUNT(*) FROM scans WHERE verdict IN ('clean','hack') AND ensemble_data IS NOT NULL"
+                    )
+                    metrics_block['retrain'] = _ai_quality.should_retrain_rf(
+                        metrics_block['metrics'], last_train_at=None, verdicts_since_train=vs
+                    )
+                    out['metrics'] = metrics_block
+                except Exception as _em:
+                    print(f'[sa.maint.metrics] {_em}')
+        if notify_discord:
+            try:
+                wh = _ai_maint.send_health_webhook(out.get('report'), metrics=out.get('metrics'))
+                out['webhook'] = wh
+            except Exception as _ew:
+                out['webhook'] = {'sent': False, 'error': str(_ew)}
+        return jsonify(out), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/learn-fp/suggestions', methods=['GET'])
+@_sa_required
+def sa_api_learn_fp_suggestions():
+    if not _AI_QUALITY_AVAILABLE:
+        return jsonify({'available': False, 'rows': []}), 200
+    cid = request.args.get('company_id', type=int)
+    try:
+        limit = max(5, min(50, int(request.args.get('limit', 25))))
+    except Exception:
+        limit = 25
+    try:
+        with get_api_db_cursor() as cur:
+            rows = _ai_quality.suggest_learn_fp_candidates(
+                cur, company_id=cid, limit=limit
+            )
+        return jsonify({'available': True, 'rows': rows, 'count': len(rows)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/scans/recent', methods=['GET'])
+@_sa_required
+def sa_api_scans_recent():
+    """Últimos N scans para feed live."""
+    try:
+        limit = max(5, min(200, int(request.args.get('limit', 30))))
+    except Exception:
+        limit = 30
+    out = []
+    try:
+        with get_api_db_cursor() as cur:
+            try:
+                cur.execute(
+                    'SELECT id, machine_name, minecraft_username, company_id, '
+                    '  status, verdict, risk_score, started_at, completed_at '
+                    'FROM scans ORDER BY id DESC LIMIT ' + str(limit)
+                )
+                rows = cur.fetchall() or []
+            except Exception:
+                rows = []
+            cmap = {}
+            try:
+                from auth import list_companies as _lc
+                cmap = {c.get('id'): c.get('name') for c in (_lc() or [])}
+            except Exception:
+                pass
+            for r in rows:
+                cid = _row_get(r, 3, 'company_id')
+                out.append({
+                    'id':                 _row_get(r, 0, 'id'),
+                    'machine_name':       _row_get(r, 1, 'machine_name') or '',
+                    'minecraft_username': _row_get(r, 2, 'minecraft_username') or '',
+                    'company_id':         cid,
+                    'company_name':       cmap.get(cid, ''),
+                    'status':             _row_get(r, 4, 'status') or '',
+                    'verdict':            _row_get(r, 5, 'verdict') or '',
+                    'risk_score':         int(_row_get(r, 6, 'risk_score') or 0),
+                    'started_at':         str(_row_get(r, 7, 'started_at') or ''),
+                    'completed_at':       str(_row_get(r, 8, 'completed_at') or ''),
+                })
+        return jsonify({'rows': out, 'count': len(out)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e), 'rows': []}), 500
+
+
+@app.route('/aspers-sa/api/scans/timeseries', methods=['GET'])
+@_sa_required
+def sa_api_scans_timeseries():
+    """Serie temporal de scans por día (últimos N días) para sparkline."""
+    try:
+        days = max(7, min(90, int(request.args.get('days', 30))))
+    except Exception:
+        days = 30
+    series = []
+    try:
+        with get_api_db_cursor() as cur:
+            # Buckets por fecha (PG: DATE_TRUNC, SQLite: date())
+            try:
+                cur.execute(
+                    "SELECT DATE_TRUNC('day', started_at)::date AS d, "
+                    "  COUNT(*) AS scans, "
+                    "  SUM(CASE WHEN verdict='hack' THEN 1 ELSE 0 END) AS hacks "
+                    "FROM scans "
+                    f"WHERE started_at >= CURRENT_TIMESTAMP - INTERVAL '{int(days)} days' "
+                    "GROUP BY DATE_TRUNC('day', started_at) "
+                    "ORDER BY d ASC"
+                )
+            except Exception:
+                cur.execute(
+                    "SELECT date(started_at) AS d, "
+                    "  COUNT(*) AS scans, "
+                    "  SUM(CASE WHEN verdict='hack' THEN 1 ELSE 0 END) AS hacks "
+                    "FROM scans "
+                    f"WHERE started_at >= datetime('now', '-{int(days)} days') "
+                    "GROUP BY date(started_at) "
+                    "ORDER BY d ASC"
+                )
+            rows = cur.fetchall() or []
+            for r in rows:
+                series.append({
+                    'date':  str(_row_get(r, 0, 'd') or ''),
+                    'scans': int(_row_get(r, 1, 'scans') or 0),
+                    'hacks': int(_row_get(r, 2, 'hacks') or 0),
+                })
+        return jsonify({'series': series, 'days': days}), 200
+    except Exception as e:
+        return jsonify({'error': str(e), 'series': []}), 500
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Fin Pack 39 — Super Admin Panel API
+# ════════════════════════════════════════════════════════════════════════
 
 
 if __name__ == '__main__':
