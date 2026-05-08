@@ -48,8 +48,15 @@ NOTA DE LECTURA
 [ ]  8. BAM (Background Activity Moderator) y DAM — timestamps precisos de
         ejecución por SID en ControlSet001\Services\bam\State\UserSettings.
 
-[ ]  9. JumpLists (AutomaticDestinations-ms y CustomDestinations-ms) —
+[~]  9. JumpLists (AutomaticDestinations-ms y CustomDestinations-ms) —
         archivos abiertos recientemente por aplicación, sobreviven a wipes.
+        PARTIAL v1.6.43 — implementé scan_recent_docs_registry() que
+        lee HKCU\..\Explorer\RecentDocs (entries binarios UTF-16),
+        cubriendo el ~70% del valor de JumpLists (archivos abiertos
+        desde Explorer con hack-name match → CRITICAL). Filtra por
+        extensiones interesantes (.exe/.jar/.dll/.zip/etc) y aplica
+        is_legit_mc_mod / overlay / devtool / backup / argus_own.
+        TODO: parser binario de AutomaticDestinations-ms (LNK chain).
 
 [ ] 10. Thumbcache (thumbcache_*.db) — miniaturas de imágenes y ejecutables
         ya borrados; algunas aún contienen metadatos del binario original.
@@ -153,8 +160,13 @@ NOTA DE LECTURA
 [ ] 36. Detectar tarjetas Wi-Fi/USB en modo monitor o promiscuo (señal de
         herramientas de packet capture/manipulation, raras en gaming).
 
-[ ] 37. DNS cache reciente (Get-DnsClientCache) — lookups a dominios tipo
+[X] 37. DNS cache reciente (Get-DnsClientCache) — lookups a dominios tipo
         vape.cc, azura.gg, moon-client.com, salhack.io, novoline.cc.
+        DONE v1.6.43 — scan_dns_cache_recent(): ipconfig /displaydns
+        contra ~25 dominios cheat conocidos (gamesense.pub, onetap,
+        aimware, neverlose, skeet, wurst, liquidbounce, sigma, rusher,
+        meteor, impact, future, etc.). TTL DNS cache es minutos-horas
+        → prueba fresca de visita reciente. CRITICAL conf 0.82.
 
 [ ] 38. Conexiones TCP/UDP recientes (Get-NetTCPConnection / netstat -ano)
         cruzadas con procesos: IPs/puertos sospechosos por proceso.
@@ -202,8 +214,16 @@ NOTA DE LECTURA
         filtra por mtime <72h, parsea <Command> XML, detecta triggers
         sospechosos. CRITICAL si target está en AppData/Temp/Downloads/Public.
 
-[ ] 51. Persistencia clásica: Startup folders (CurrentUser y AllUsers), Run/
+[X] 51. Persistencia clásica: Startup folders (CurrentUser y AllUsers), Run/
         RunOnce keys, UserInitMprLogonScript, Winlogon\Userinit.
+        DONE v1.6.43 — scan_registry_run_persistence() recorre 5 keys
+        (HKCU+HKLM Run/RunOnce + Wow6432Node Run). Whitelist suave
+        de ~40 entries legítimos (Steam/Discord/AVs/realtek/etc).
+        Heurísticas: hack_name, temp_path, public_path, obfuscated_cmd
+        (-enc/mshta/rundll32 javascript), roaming_unknown_company.
+        Severidad CRITICAL 0.85 si hack/obfuscado, 0.70 si temp/public,
+        0.50 si solo company unknown. Filtro #51 aplicado para no
+        auto-detectarse.
 
 [ ] 52. WMI Event Subscriptions (root\subscription) — persistencia avanzada
         usada por hack loaders modernos.
@@ -457,8 +477,14 @@ NOTA DE LECTURA
         Defender, Windows Search Indexer (basura común que no aporta).
         ✓ DONE v1.6.35 — _PF_NOISE_PREFIXES con ~25 binarios del SO.
 
-[ ] 51. Filtrar entradas de scan_file_activity_log que sean del propio
+[X] 51. Filtrar entradas de scan_file_activity_log que sean del propio
         Argus (su propio log, screenshot, json output, dist/ArgusScanner.exe).
+        DONE v1.6.43 — is_argus_own_artifact() chequea filename y path
+        contra _ARGUS_OWN_NAMES (argusscanner.exe, argusprojects.exe,
+        aspers.exe, etc.) y _ARGUS_OWN_FOLDERS. Aplicado en
+        scan_deleted_recycle, scan_messaging_downloads,
+        scan_recent_docs_registry y scan_registry_run_persistence.
+        Evita ruido cíclico de auto-detección.
 
 [ ] 52. Detectar reinstalaciones legítimas: mismo binario, mismo hash, ruta
         canonical, intervalo razonable → no doble flag.
@@ -493,8 +519,16 @@ NOTA DE LECTURA
 [ ] 58. Filtro de Java agents legítimos: profilers (YourKit, JProfiler,
         VisualVM), debuggers, build tools (Gradle agents).
 
-[ ] 59. Excluir archivos creados/modificados durante updates conocidos
+[X] 59. Excluir archivos creados/modificados durante updates conocidos
         de Windows (cruzando timestamps con WindowsUpdate.log).
+        DONE v1.6.43 — is_windows_update_path() detecta paths bajo
+        SoftwareDistribution, WinSxS, DriverStore, catroot, Servicing,
+        INF, Panther, $WINDOWS.~BT, Windows.old, Package Cache,
+        WindowsUpdate, USOShared, DRM. Aplicado en
+        scan_deleted_recycle, scan_messaging_downloads,
+        scan_registry_run_persistence (cualquier hit que NO sea
+        hack-name explícito se descarta). Solución por path en lugar
+        de por timestamp + log → más robusto y rápido.
 
 [ ] 60. "Penalty cooldown": si una empresa ya marcó X hashes como FP en las
         últimas 48h, subir threshold dinámicamente para esa empresa hasta
@@ -907,13 +941,13 @@ Linux: Arch, Ubuntu, Fedora, etc.).
   RESUMEN
 ═══════════════════════════════════════════════════════════════════════════════
 
-  Scanner ............................. 60 ítems   (detección)       9/60
-  Filtro .............................. 60 ítems   (anti-FP)        14/60
+  Scanner ............................. 60 ítems   (detección)      11/60
+  Filtro .............................. 60 ítems   (anti-FP)        16/60
   Visual .............................. 60 ítems   (UI/UX)          26/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 0/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    49/195
-                                                  (3 parciales: V#32, V#43, V#53)
+  TOTAL ............................... 195 ítems  COMPLETADOS:    53/195
+                                                  (4 parciales: S#9, V#32, V#43, V#53)
 
 SESIÓN DEL 07-may-2026 (9 packs en una tarde):
   Pack 1 (v1.6.34): Filtro #2 lite, #30, #38 + Visual #5, #6, #25
@@ -988,6 +1022,23 @@ SESIÓN DEL 07-may-2026 (9 packs en una tarde):
                     → 2 detecciones nuevas + 3 filtros anti-FP críticos.
                       Recompila el .exe a 1.6.41 — los clientes con
                       versiones <1.6.41 verán "actualización disponible".
+  Pack 10 (v1.6.43): Scanner #37, #51 + Filtros #51, #59 + (S#9 parcial)
+                    NUEVOS: scan_registry_run_persistence (5 hives
+                            HKCU/HKLM Run/RunOnce con whitelist suave
+                            de ~40 entries legit + heurísticas hack/
+                            temp/public/obfuscated/roaming-unknown),
+                            scan_dns_cache_recent (ipconfig
+                            /displaydns vs ~25 dominios cheat),
+                            scan_recent_docs_registry (HKCU
+                            RecentDocs binarios UTF-16 con extensiones
+                            interesantes y todos los filtros anti-FP),
+                            is_windows_update_path() y
+                            is_argus_own_artifact() helpers globales.
+                    → 3 detecciones forenses inéditas + 2 filtros
+                      anti-FP de gran impacto. Recompila el .exe a
+                      1.6.43 — los clientes con versiones <1.6.43
+                      verán "actualización disponible".
+
   Pack 9 (v1.6.42): Visual #35, #37, #44, #51, #52
                     + 3 hot-fixes UX:
                       * Search trigger visible en header del panel

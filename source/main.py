@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.41"
+SCANNER_VERSION = "1.6.43"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -338,6 +338,64 @@ def is_backup_suffix(filename: str) -> bool:
         return False
     base = os.path.basename(str(filename)).lower()
     return bool(_BACKUP_SUFFIX_RE.search(base))
+
+
+# ── Filtro #59: Excluir paths de Windows Update / system updates ─────────────
+_WINUPDATE_PATH_PATTERNS = (
+    r'\windows\softwaredistribution\\',
+    r'\windows\winsxs\\',
+    r'\windows\system32\catroot',
+    r'\windows\system32\catroot2',
+    r'\windows\system32\driverstore\\',
+    r'\windows\system32\config\\',
+    r'\windows\servicing\\',
+    r'\windows\inf\\',
+    r'\windows\panther\\',
+    r'\$windows.~bt\\',
+    r'\$windows.~ws\\',
+    r'\windows.old\\',
+    r'\programdata\package cache\\',
+    r'\programdata\microsoft\windows\windowsupdate\\',
+    r'\programdata\microsoft\windows\drm\\',
+    r'\programdata\usoshared\\',
+)
+def is_windows_update_path(path: str) -> bool:
+    """True si la ruta apunta a un archivo de Windows Update / WinSxS /
+    DriverStore / Servicing / Package Cache, etc. Estos archivos son
+    ruido y nunca son cheats — incluso si el nombre tiene 'driver',
+    'package', 'patch', etc. (Filtro #59)."""
+    if not path:
+        return False
+    p = str(path).lower().replace('/', '\\')
+    return any(pat in p for pat in _WINUPDATE_PATH_PATTERNS)
+
+
+# ── Filtro #51: Excluir entradas que sean del propio Argus ───────────────────
+_ARGUS_OWN_NAMES = (
+    'argusscanner.exe',
+    'argusscanner_old.exe',
+    'argus.exe',
+    'argusprojects.exe',
+    'aspers.exe',
+    'asperss.exe',
+)
+_ARGUS_OWN_FOLDERS = (
+    'argusprojects',
+    'argusscanner',
+    'aspers',
+    'asperss',
+)
+def is_argus_own_artifact(path_or_name: str) -> bool:
+    """True si el path/filename apunta al propio Argus (su exe o su
+    carpeta de trabajo). Evita auto-detectarse y generar ruido cíclico
+    (Filtro #51)."""
+    if not path_or_name:
+        return False
+    s = str(path_or_name).lower().replace('/', '\\')
+    base = os.path.basename(s)
+    if base in _ARGUS_OWN_NAMES:
+        return True
+    return any(('\\' + n + '\\') in s for n in _ARGUS_OWN_FOLDERS)
 
 
 # ── Smart Hack-Term Matcher (Filtro #38) ─────────────────────────────────────
@@ -5170,6 +5228,12 @@ class ArgusApp:
                 _run_safe(self.scan_defender_asr_events)
                 self._set_scan_phase("💬 Downloads de Telegram/WhatsApp/Discord...")
                 _run_safe(self.scan_messaging_downloads)
+                self._set_scan_phase("🔑 Persistencia Run/RunOnce (registry)...")
+                _run_safe(self.scan_registry_run_persistence)
+                self._set_scan_phase("🌐 DNS cache reciente (cheat domains)...")
+                _run_safe(self.scan_dns_cache_recent)
+                self._set_scan_phase("📂 RecentDocs (registry)...")
+                _run_safe(self.scan_recent_docs_registry)
                 self._set_scan_phase("🔥 Reglas custom de Firewall...")
                 _run_safe(self.scan_recent_firewall_rules)
                 self._set_scan_phase("💥 Crash dumps recientes (.dmp)...")
@@ -9001,6 +9065,14 @@ class ArgusApp:
                                 # la papelera al actualizar Adobe/Office/Chrome.
                                 if not is_hack and is_backup_suffix(base_l):
                                     continue
+                                # Filtro #59: archivos de Windows Update /
+                                # WinSxS / DriverStore / Servicing.
+                                if not is_hack and is_windows_update_path(orig_path):
+                                    continue
+                                # Filtro #51: el propio Argus (su exe / carpeta)
+                                # no debe auto-detectarse.
+                                if is_argus_own_artifact(orig_path) or is_argus_own_artifact(base_l):
+                                    continue
                                 # Filtro #41: tamaños fuera del rango típico
                                 # de hacks. Hacks .exe pesan 1-50 MB,
                                 # .jar 100 KB - 5 MB. Si está MUY chico
@@ -11704,6 +11776,10 @@ class ArgusApp:
                             # Aplicar filtros anti-FP estándar
                             if is_legit_mc_mod(base_l) or is_legit_overlay(base_l) or is_legit_devtool(base_l):
                                 continue
+                            if is_argus_own_artifact(full) or is_argus_own_artifact(base_l):
+                                continue
+                            if is_windows_update_path(full):
+                                continue
                             if is_backup_suffix(base_l):
                                 continue
                             try:
@@ -11867,6 +11943,323 @@ class ArgusApp:
             print("⚠ Timeout leyendo eventos Defender (skip)")
         except Exception as e:
             print(f"Error en scan_defender_asr_events: {e}")
+
+
+    def scan_registry_run_persistence(self):
+        """Scanner #51 — Persistencia clásica via registry Run/RunOnce.
+        Casi todo malware/cheat persistente se registra acá. Listamos
+        TODOS los entries de:
+          HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run
+          HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce
+          HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run
+          HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce
+          HKLM\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run
+        Los conocidos legítimos (Steam, Discord, AVs, etc.) se filtran
+        suavemente; cualquier path en %TEMP%, %APPDATA%\\Roaming sin
+        carpeta de empresa conocida o cuyo target tenga hack-name → ALERTA.
+        """
+        print("🔍 Escaneando persistencia en registry Run/RunOnce...")
+        try:
+            run_keys = [
+                ('HKCU', winreg.HKEY_CURRENT_USER,  r'Software\Microsoft\Windows\CurrentVersion\Run'),
+                ('HKCU', winreg.HKEY_CURRENT_USER,  r'Software\Microsoft\Windows\CurrentVersion\RunOnce'),
+                ('HKLM', winreg.HKEY_LOCAL_MACHINE, r'Software\Microsoft\Windows\CurrentVersion\Run'),
+                ('HKLM', winreg.HKEY_LOCAL_MACHINE, r'Software\Microsoft\Windows\CurrentVersion\RunOnce'),
+                ('HKLM', winreg.HKEY_LOCAL_MACHINE, r'Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Run'),
+            ]
+
+            # Whitelist de entries conocidos legítimos (sustring case-insensitive)
+            legit_substrings = (
+                'steam',          'epic games',     'gog galaxy',        'origin',
+                'ubisoft connect','rockstar games', 'battle.net',
+                'discord',        'spotify',        'slack',             'zoom',
+                'onedrive',       'dropbox',        'google drive',      'mega',
+                'msteams',        'whatsapp',       'telegram',
+                'msi center',    'asus',            'gigabyte',          'evga',
+                'nahimic',       'realtek',         'intel',             'amd',
+                'nvidia',        'corsair',         'logitech',          'razer',
+                'msmpeng',       'securityhealth',  'windowsdefender',
+                'avast',         'avg',             'bitdefender',       'kaspersky',
+                'eset',          'malwarebytes',    'norton',            'mcafee',
+                'sophos',        'crowdstrike',     'sentinelone',
+                'java',          'javaupdate',     'adobe',              'oneapp.intunemgmt',
+                'ctfmon',        'rtkngui',         'rtkngui64',         'igfxtray',
+                'rtkaudservice',
+            )
+
+            total = 0
+            suspicious = 0
+            entries_collected = []
+            for hive_name, hive, sub in run_keys:
+                try:
+                    with winreg.OpenKey(hive, sub) as k:
+                        i = 0
+                        while True:
+                            try:
+                                name, value, _t = winreg.EnumValue(k, i)
+                                i += 1
+                            except OSError:
+                                break
+                            total += 1
+                            if not isinstance(value, str) or not value.strip():
+                                continue
+                            entries_collected.append((hive_name, sub, name, value))
+                except FileNotFoundError:
+                    continue
+                except PermissionError:
+                    continue
+                except Exception:
+                    continue
+
+            for hive_name, sub, name, value in entries_collected:
+                low = (name + ' ' + value).lower()
+                # Filtrar legitimos primero
+                if any(s in low for s in legit_substrings):
+                    continue
+                # Filtro #51: el propio Argus en autostart no debe alarmarse
+                if is_argus_own_artifact(value) or is_argus_own_artifact(name):
+                    continue
+                # Filtro #59: paths de Windows Update / Servicing
+                if is_windows_update_path(value):
+                    continue
+                # Heurísticas de sospecha
+                hits = []
+                # 1) hack-name en nombre o en path
+                if smart_hack_match(low):
+                    hits.append('hack_name_match')
+                # 2) Path en TEMP o LocalTemp
+                if r'\temp\\' in low or r'\\appdata\\local\\temp\\' in low or 'localtemp' in low:
+                    hits.append('temp_path')
+                # 3) Path en Public/Downloads (raro para legit)
+                if r'\\users\\public\\' in low and '.exe' in low:
+                    hits.append('public_path')
+                # 4) Comando ofuscado: powershell -enc, cmd /c reg add, mshta, rundll32 javascript
+                if (' -enc ' in low or ' -encodedcommand' in low or
+                    'mshta ' in low or 'rundll32.exe javascript' in low or
+                    ('cmd' in low and '/c reg' in low)):
+                    hits.append('obfuscated_cmd')
+                # 5) Path en AppData\Roaming sin subcarpeta de empresa conocida
+                if (r'\\appdata\\roaming\\' in low and '.exe' in low):
+                    after = low.split(r'\\appdata\\roaming\\', 1)[1]
+                    folder = after.split('\\\\', 1)[0]
+                    known_co = ('discord', 'spotify', 'microsoft', 'mozilla', 'google',
+                                'opera', 'brave', 'vivaldi', 'slack', 'github', 'electron')
+                    if folder and not any(c in folder for c in known_co):
+                        hits.append('roaming_unknown_company')
+
+                if not hits:
+                    continue
+                suspicious += 1
+                # Severidad según hits
+                if 'hack_name_match' in hits or 'obfuscated_cmd' in hits:
+                    alerta, conf = 'CRITICAL', 0.85
+                elif 'temp_path' in hits or 'public_path' in hits:
+                    alerta, conf = 'CRITICAL', 0.70
+                else:
+                    alerta, conf = 'SOSPECHOSO', 0.50
+                self.issues_found.append({
+                    'tipo':       'registry_run_persistence',
+                    'nombre':     f'Persistencia Run: "{name}" ({hive_name})',
+                    'ruta':       f'{hive_name}\\{sub}',
+                    'archivo':    (value[:240] if isinstance(value, str) else str(value)[:240]),
+                    'categoria':  'PERSISTENCIA',
+                    'alerta':     alerta,
+                    'confidence': conf,
+                    'detected_patterns': hits,
+                    'extra': {
+                        'value_name':  name,
+                        'value_data':  (value[:300] if isinstance(value, str) else str(value)[:300]),
+                        'hive':        hive_name,
+                        'reasons':     hits,
+                    },
+                })
+            print(f"  · {total} entries Run/RunOnce inspeccionados, {suspicious} sospechosos")
+        except Exception as e:
+            print(f"Error en scan_registry_run_persistence: {e}")
+
+
+    def scan_dns_cache_recent(self):
+        """Scanner #37 — DNS cache reciente. ipconfig /displaydns muestra
+        las resoluciones DNS aún en caché del cliente. Si vemos dominios
+        de hack stores (gamesense.pub, onetap.com, ot.tap, popflash.gg,
+        ragebot.fun, etc.) significa que ese host visitó (o intentó
+        visitar) la página recientemente — incluso si limpió historial.
+
+        El TTL del DNS cache es típicamente minutos a horas, así que
+        esto es PRUEBA FRESCA de actividad reciente. No requiere admin.
+        """
+        print("🔍 Escaneando DNS cache reciente en busca de cheat domains...")
+        cheat_domains = (
+            # Cheat / hack stores conocidos (ejemplos públicos)
+            'gamesense.pub',     'onetap.com',          'onetap.su',
+            'aimware.net',       'fatality.win',        'neverlose.cc',
+            'aim4ck.com',        'skeet.cc',            'osiris.cc',
+            'hyper.gg',          'ragebot.fun',         'popflash.gg',
+            'cheatengine.org',
+            'wurstclient.net',   'liquidbounce.net',    'sigma-jello.com',
+            'sigmaclient.net',   'rusherhack.org',      'meteorclient.com',
+            'impactclient.net',  'futureclient.net',    'novetus.org',
+            'inertia.club',      'flux.lol',            'trolly.gg',
+            # Generic injection / DLL hosting (spotty pero útil)
+            'dllpad.com',        'rentry.co/cheat',
+        )
+        try:
+            r = subprocess.run(
+                ['ipconfig', '/displaydns'],
+                capture_output=True, text=True, timeout=20,
+            )
+            out = (r.stdout or '') + (r.stderr or '')
+            if not out.strip():
+                print("✓ DNS cache vacío o inaccesible")
+                return
+            low = out.lower()
+            hits = []
+            for dom in cheat_domains:
+                if dom in low:
+                    # contar ocurrencias para extra
+                    cnt = low.count(dom)
+                    hits.append((dom, cnt))
+            if not hits:
+                print("  · DNS cache limpio (0 dominios sospechosos)")
+                return
+            for dom, cnt in hits:
+                self.issues_found.append({
+                    'tipo':       'dns_cache_cheat_domain',
+                    'nombre':     f'Dominio sospechoso en DNS cache: {dom}',
+                    'ruta':       'ipconfig /displaydns',
+                    'archivo':    dom,
+                    'categoria':  'NETWORK',
+                    'alerta':     'CRITICAL',
+                    'confidence': 0.82,
+                    'detected_patterns': ['dns_cache', 'cheat_domain'],
+                    'extra': {
+                        'domain':      dom,
+                        'cache_count': cnt,
+                        'note':        'TTL del DNS cache es minutos-horas; el host visitó este dominio recientemente',
+                    },
+                })
+            print(f"  · {len(hits)} dominio(s) sospechoso(s) en DNS cache")
+        except subprocess.TimeoutExpired:
+            print("⚠ Timeout en ipconfig /displaydns (skip)")
+        except Exception as e:
+            print(f"Error en scan_dns_cache_recent: {e}")
+
+
+    def scan_recent_docs_registry(self):
+        """Scanner #9 — RecentDocs en registry.
+        HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RecentDocs
+        guarda los archivos abiertos recientemente desde el shell, agrupados
+        por extensión. Los entries son binarios (UTF-16 + struct), pero los
+        nombres de archivo se ven en plano. Si vemos .jar/.exe/.dll/.zip
+        con hack-names en RecentDocs → fue abierto desde Explorer.
+
+        Sirve incluso si el archivo ya fue borrado de disco.
+        """
+        print("🔍 Escaneando RecentDocs del registry...")
+        try:
+            base = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r'Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs',
+            )
+            # Extensiones de interés (las riesgosas)
+            interesting_exts = ('.exe', '.jar', '.dll', '.zip', '.rar', '.7z', '.bat', '.ps1', '.vbs', '.iso', '.msi')
+            collected = []  # (ext, filename)
+            # Recorrer subkeys (cada extensión)
+            try:
+                idx = 0
+                while True:
+                    try:
+                        sub_name = winreg.EnumKey(base, idx)
+                        idx += 1
+                    except OSError:
+                        break
+                    sub_ext = ('.' + sub_name.lower()) if not sub_name.startswith('.') else sub_name.lower()
+                    if sub_ext not in interesting_exts:
+                        continue
+                    try:
+                        with winreg.OpenKey(base, sub_name) as k:
+                            j = 0
+                            while True:
+                                try:
+                                    val_name, val_data, val_type = winreg.EnumValue(k, j)
+                                    j += 1
+                                except OSError:
+                                    break
+                                if val_type != winreg.REG_BINARY or not val_data:
+                                    continue
+                                # Los datos contienen UTF-16LE: el filename está al inicio
+                                try:
+                                    raw = bytes(val_data)
+                                    # null-terminator UTF-16: 00 00 (par)
+                                    end = 0
+                                    n = len(raw)
+                                    while end + 1 < n:
+                                        if raw[end] == 0 and raw[end + 1] == 0:
+                                            break
+                                        end += 2
+                                    if end <= 0:
+                                        continue
+                                    fname = raw[:end].decode('utf-16-le', errors='ignore').strip()
+                                    if not fname:
+                                        continue
+                                    fname_l = fname.lower()
+                                    if not any(fname_l.endswith(e) for e in interesting_exts):
+                                        # Igual chequear si tiene hack-name aunque la extension cambie
+                                        pass
+                                    collected.append((sub_ext, fname))
+                                except Exception:
+                                    continue
+                    except Exception:
+                        continue
+            finally:
+                try: base.Close()
+                except Exception: pass
+
+            if not collected:
+                print("✓ RecentDocs vacío o sin extensiones de interés")
+                return
+
+            suspicious_count = 0
+            for ext, fname in collected:
+                fname_l = fname.lower()
+                # Filtros anti-FP
+                if 'is_legit_mc_mod' in globals() and is_legit_mc_mod(fname_l):
+                    continue
+                if 'is_legit_overlay' in globals() and is_legit_overlay(fname_l):
+                    continue
+                if 'is_legit_devtool' in globals() and is_legit_devtool(fname_l):
+                    continue
+                if 'is_backup_suffix' in globals() and is_backup_suffix(fname_l):
+                    continue
+                if 'is_argus_own_artifact' in globals() and is_argus_own_artifact(fname_l):
+                    continue
+                if 'is_windows_update_path' in globals() and is_windows_update_path(fname_l):
+                    continue
+                # Hack-name match
+                hack = smart_hack_match(fname_l) if 'smart_hack_match' in globals() else None
+                if not hack:
+                    continue
+                suspicious_count += 1
+                self.issues_found.append({
+                    'tipo':       'recent_docs_registry',
+                    'nombre':     f'Archivo abierto desde Explorer (RecentDocs): {fname}',
+                    'ruta':       r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs',
+                    'archivo':    fname[:240],
+                    'categoria':  'EJECUCION_SHELL',
+                    'alerta':     'CRITICAL',
+                    'confidence': 0.78,
+                    'detected_patterns': ['recent_docs', 'hack_name', f'ext{ext}'],
+                    'extra': {
+                        'extension':       ext,
+                        'filename':        fname,
+                        'hack_term_match': str(hack),
+                    },
+                })
+            print(f"  · {len(collected)} entries en RecentDocs, {suspicious_count} sospechosos")
+        except FileNotFoundError:
+            print("✓ RecentDocs no existe en este perfil")
+        except Exception as e:
+            print(f"Error en scan_recent_docs_registry: {e}")
 
 
     def scan_defender_quarantine(self):
