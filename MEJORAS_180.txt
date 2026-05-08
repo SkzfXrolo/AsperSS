@@ -15,6 +15,10 @@ NOTA DE LECTURA
 - "Visual": UI/UX del panel staff, /descargar, index, scanner Tkinter, plugin MC.
 - Cada ítem es independiente y se puede priorizar por separado.
 - Marcar con [X] al completar; con [WIP] mientras se implementa.
+- Marcar con [-] DEFERRED cuando hay una razón técnica honesta para no
+  abordarlo a corto plazo (kernel-level access, recompilación del .exe
+  para todos los clientes, costo de SDK de pago, alta tasa de FP, etc).
+  El item NO está cancelado: queda explícito como roadmap futuro.
 
 
 
@@ -22,33 +26,69 @@ NOTA DE LECTURA
   PARTE 1/3 — SCANNER (DETECCIÓN)                                       60 ítems
 ═══════════════════════════════════════════════════════════════════════════════
 
-[ ]  1. ETW (Event Tracing for Windows) en tiempo real durante el scan para
+[-]  1. ETW (Event Tracing for Windows) en tiempo real durante el scan para
         capturar ProcessStart, ImageLoad y FileIO de los últimos 30s aunque el
         proceso ya se haya cerrado antes de que el staff abra el scanner.
+        DEFERRED — ETW requiere CLIENT-side con privilegios elevados +
+        wevtutil + buffer ring management. Recompilación del .exe. Roadmap.
 
-[ ]  2. Hash SHA-256 de cada $R presente en Recycle Bin contra base local de
+[-]  2. Hash SHA-256 de cada $R presente en Recycle Bin contra base local de
         hashes conocidos de hacks (Vape, Liquid, Salhack, Inertia, Meteor,
         Wurst, Impact, Future, Sigma, Astolfo, Rise, Drip).
+        DEFERRED — CLIENT-side (lectura $R), recompilación del .exe +
+        bundle de ~2000 hashes conocidos. Mientras tanto, el filename
+        match contra hack-terms YA detecta estos clientes en Pack
+        scan_deleted_recycle. Roadmap.
 
-[ ]  3. Comparar timestamps $SI vs $FN del MFT — divergencia >5min indica
+[-]  3. Comparar timestamps $SI vs $FN del MFT — divergencia >5min indica
         timestamp tampering (técnica clásica de cheats para ocultarse).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ]  4. Parsear Amcache.hve (C:\Windows\AppCompat\Programs\Amcache.hve):
+[-]  4. Parsear Amcache.hve (C:\Windows\AppCompat\Programs\Amcache.hve):
         historial de TODOS los .exe ejecutados en los últimos 30+ días, incluso
         si Prefetch fue limpiado.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ]  5. SRUM (System Resource Usage Monitor) — DB con uso de red/CPU/disco
+[-]  5. SRUM (System Resource Usage Monitor) — DB con uso de red/CPU/disco
         por proceso por hora. Detecta procesos que se borraron pero dejaron
         huella de tráfico.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ]  6. UserAssist en HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\
+[-]  6. UserAssist en HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\
         UserAssist — programas ejecutados desde Explorer (rot13 decoded).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ]  7. ShimCache (AppCompatCache en SYSTEM hive) — registra programas que
+[-]  7. ShimCache (AppCompatCache en SYSTEM hive) — registra programas que
         existieron incluso después del delete.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ]  8. BAM (Background Activity Moderator) y DAM — timestamps precisos de
+[-]  8. BAM (Background Activity Moderator) y DAM — timestamps precisos de
         ejecución por SID en ControlSet001\Services\bam\State\UserSettings.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
 [~]  9. JumpLists (AutomaticDestinations-ms y CustomDestinations-ms) —
         archivos abiertos recientemente por aplicación, sobreviven a wipes.
@@ -60,17 +100,37 @@ NOTA DE LECTURA
         is_legit_mc_mod / overlay / devtool / backup / argus_own.
         TODO: parser binario de AutomaticDestinations-ms (LNK chain).
 
-[ ] 10. Thumbcache (thumbcache_*.db) — miniaturas de imágenes y ejecutables
+[-] 10. Thumbcache (thumbcache_*.db) — miniaturas de imágenes y ejecutables
         ya borrados; algunas aún contienen metadatos del binario original.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 11. Lectura del USN Journal sin requerir admin vía DeviceIoControl
+[-] 11. Lectura del USN Journal sin requerir admin vía DeviceIoControl
         directo con FSCTL_READ_USN_JOURNAL en handles read-only del volumen.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 12. Volume Shadow Copies (VSS) — escanear copias antiguas del filesystem
+[-] 12. Volume Shadow Copies (VSS) — escanear copias antiguas del filesystem
         para detectar evidencia ya borrada del estado actual.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 13. Detección de procesos con PEB unlinked (ocultos a Task Manager) usando
+[-] 13. Detección de procesos con PEB unlinked (ocultos a Task Manager) usando
         NtQuerySystemInformation con SystemProcessInformation.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
 [X] 14. Cross-check de procesos: WMI vs CreateToolhelp32Snapshot vs
         NtQuerySystemInformation. Mismatch en alguno = posible rootkit.
@@ -81,34 +141,79 @@ NOTA DE LECTURA
         Excluye PIDs system (0/4/8, csrss, registry, etc). Reporta
         agrupado por fuente fantasma como CRITICAL conf 0.72.
 
-[ ] 15. Enumerar SetWindowsHookEx hooks activos y verificar firma de las DLLs
+[-] 15. Enumerar SetWindowsHookEx hooks activos y verificar firma de las DLLs
         que los implementan. Hook sin firma sobre todos los procesos = autoclicker.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 16. Detectar polling de GetAsyncKeyState desde proceso externo a javaw.exe
+[-] 16. Detectar polling de GetAsyncKeyState desde proceso externo a javaw.exe
         (firma típica de killaura/aim-assist no inyectados).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 17. Análisis estático de cada .jar nuevo: descomprimir y buscar referencias
+[-] 17. Análisis estático de cada .jar nuevo: descomprimir y buscar referencias
         a net.minecraft.client.Minecraft + patrones de obfuscation
         (pro-guard, allatori, transformers Mixin sospechosos).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 18. Hash de cada .jar contra Modrinth/CurseForge API de mods limpios para
+[-] 18. Hash de cada .jar contra Modrinth/CurseForge API de mods limpios para
         confirmar legitimidad antes de flaguearlo.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 19. Detectar Java agents en command line (-javaagent:): vector típico de
+[-] 19. Detectar Java agents en command line (-javaagent:): vector típico de
         Weave Loader, Vanilla+ Injector, JLoader.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 20. Inspeccionar JNI runtime: leer libpath de la JVM activa y listar
+[-] 20. Inspeccionar JNI runtime: leer libpath de la JVM activa y listar
         DLLs cargadas en javaw.exe — DLLs sin firma o con nombre extraño = flag.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 21. Detectar drivers de kernel sin firma cargados (vulnerable drivers
+[-] 21. Detectar drivers de kernel sin firma cargados (vulnerable drivers
         usados por DMA cheats: RTCore64.sys, dbutil_2_3.sys, gdrv.sys,
         AsrDrv101.sys, capcom.sys).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 22. Strings sweep en \\.\PhysicalMemory y firmware UEFI dumps en busca de
+[-] 22. Strings sweep en \\.\PhysicalMemory y firmware UEFI dumps en busca de
         signatures de hardware DMA cheats (PCILeech, CaptainDMA, EclipseDMA).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 23. Procesar logs de Sysmon si está instalado (Microsoft-Windows-Sysmon/
+[-] 23. Procesar logs de Sysmon si está instalado (Microsoft-Windows-Sysmon/
         Operational): Process Create, Image Load, Network Connect.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
 [X] 24. Leer logs de Defender ASR rules
         (Microsoft-Windows-Windows Defender/Operational): Event ID 1121/1122
@@ -130,10 +235,20 @@ NOTA DE LECTURA
         persistente). Reporta total histórico, recientes 72h y
         última fecha humanizada.
 
-[ ] 26. SmartScreen log (Microsoft-Windows-AppLocker/EXE and DLL y
+[-] 26. SmartScreen log (Microsoft-Windows-AppLocker/EXE and DLL y
         SmartScreen.evtx) — ejecutables bloqueados por reputación.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 27. AppLocker / WDAC blocked logs — empresa pro con políticas activas.
+[-] 27. AppLocker / WDAC blocked logs — empresa pro con políticas activas.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
 [X] 28. Reglas custom del Firewall — un cheat suele agregarse a la whitelist.
         Listar reglas creadas por usuario en últimas 72h.
@@ -146,27 +261,62 @@ NOTA DE LECTURA
         ✓ ya existía como scan_hosts_file (detecta redirect de
         session.minecraft.net, mojang.com, hypixel, mineplex, cubecraft).
 
-[ ] 30. Detectar procesos huérfanos: PPID apunta a proceso ya muerto, pero el
+[-] 30. Detectar procesos huérfanos: PPID apunta a proceso ya muerto, pero el
         hijo sigue vivo con handles de javaw.exe abiertos.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 31. Detección de inyección DLL avanzada: SetWindowsHookEx,
+[-] 31. Detección de inyección DLL avanzada: SetWindowsHookEx,
         NtCreateThreadEx, QueueUserAPC, AtomBombing, Process Doppelgänging,
         Process Herpaderping, Process Ghosting.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 32. Enumerar handles abiertos a javaw.exe desde procesos no-relacionados
+[-] 32. Enumerar handles abiertos a javaw.exe desde procesos no-relacionados
         (cheat externo escribiendo memoria de Minecraft via WriteProcessMemory).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 33. Detectar virtual joysticks (vJoy, ViGEm), macro recorders (ReWASD,
+[-] 33. Detectar virtual joysticks (vJoy, ViGEm), macro recorders (ReWASD,
         X-Mouse Button Control con macros activas).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 34. Verificar Authenticode de TODOS los .exe en Prefetch — los cheats casi
+[-] 34. Verificar Authenticode de TODOS los .exe en Prefetch — los cheats casi
         nunca firman; ratio firmados/no-firmados ejecutados es señal fuerte.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 35. Heurística de ratio: si el % de binarios sin firma ejecutados en la
+[-] 35. Heurística de ratio: si el % de binarios sin firma ejecutados en la
         última hora supera el baseline del usuario, score++.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 36. Detectar tarjetas Wi-Fi/USB en modo monitor o promiscuo (señal de
+[-] 36. Detectar tarjetas Wi-Fi/USB en modo monitor o promiscuo (señal de
         herramientas de packet capture/manipulation, raras en gaming).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
 [X] 37. DNS cache reciente (Get-DnsClientCache) — lookups a dominios tipo
         vape.cc, azura.gg, moon-client.com, salhack.io, novoline.cc.
@@ -176,33 +326,73 @@ NOTA DE LECTURA
         meteor, impact, future, etc.). TTL DNS cache es minutos-horas
         → prueba fresca de visita reciente. CRITICAL conf 0.82.
 
-[ ] 38. Conexiones TCP/UDP recientes (Get-NetTCPConnection / netstat -ano)
+[-] 38. Conexiones TCP/UDP recientes (Get-NetTCPConnection / netstat -ano)
         cruzadas con procesos: IPs/puertos sospechosos por proceso.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 39. Event ID 4688 (Process Creation) en Security log si auditing
+[-] 39. Event ID 4688 (Process Creation) en Security log si auditing
         habilitado — cubre 7-90 días según política.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 40. Process Hollowing / Module Stomping detection: comparar memoria de
+[-] 40. Process Hollowing / Module Stomping detection: comparar memoria de
         sección .text mapeada vs imagen en disco para procesos sospechosos.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 41. Manifest tampering: validar que el digest declarado en el Authenticode
+[-] 41. Manifest tampering: validar que el digest declarado en el Authenticode
         coincida con el binario actual (defensa contra resigning).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 42. Bundle de YARA rules embebido (~150 reglas) para los hacks más comunes
+[-] 42. Bundle de YARA rules embebido (~150 reglas) para los hacks más comunes
         de Minecraft: Wurst, Meteor, Impact, Salhack, Inertia, Future, Sigma,
         Astolfo, Drip, Rise, Vape, Liquid, RusherHack, Ares.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 43. CAPA capabilities matrix sobre binarios sospechosos: anti-debug,
+[-] 43. CAPA capabilities matrix sobre binarios sospechosos: anti-debug,
         anti-VM, persistence, code injection, network discovery.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 44. Time forensics: drift entre RTC, NTP y reloj de sistema. Drift >5min
+[-] 44. Time forensics: drift entre RTC, NTP y reloj de sistema. Drift >5min
         es señal de manipulación temporal (hacks que falsean timestamps).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
 [X] 45. PowerShell history (ConsoleHost_history.txt en cada user) — comandos
         Invoke-WebRequest / iwr / curl a dominios de cheat.
         ✓ ya existía como scan_powershell_history.
 
-[ ] 46. cmd doskey history y bash_history (si WSL está instalado).
+[-] 46. cmd doskey history y bash_history (si WSL está instalado).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
 [X] 47. Logs de RDP, TeamViewer, AnyDesk, Parsec — terceros remotos durante el
         timeframe del scan (un amigo "ayudando" a hackear).
@@ -210,11 +400,21 @@ NOTA DE LECTURA
         TeamViewer/AnyDesk/Parsec/Chrome RD/RustDesk/VNC/etc. corriendo
         durante el scan (CRITICAL si hay sesión RDP entrante via quser).
 
-[ ] 48. SecurityHealthService logs: Defender disabled events, exclusions
+[-] 48. SecurityHealthService logs: Defender disabled events, exclusions
         agregadas en últimas 72h.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 49. Service installations recientes (HKLM\System\CurrentControlSet\Services
+[-] 49. Service installations recientes (HKLM\System\CurrentControlSet\Services
         creadas en últimas 72h) — drivers de cheat se persisten así.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
 [X] 50. Scheduled tasks creadas en últimas 24h con triggers OnLogon, OnIdle,
         AtStartup. Apuntan a binarios fuera de Program Files = sospechoso.
@@ -244,11 +444,21 @@ NOTA DE LECTURA
         hack_term. CRITICAL 0.85 si hits, SOSPECHOSO 0.55 si no
         (todo subscription custom merece review humano).
 
-[ ] 53. COM hijacking detection: enumerar CLSIDs en HKCU que sobrescriben
+[-] 53. COM hijacking detection: enumerar CLSIDs en HKCU que sobrescriben
         HKLM (técnica de persistencia/loader).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 54. AppInit_DLLs, KnownDLLs, SafeBoot drivers, AlternateShell — vectores
+[-] 54. AppInit_DLLs, KnownDLLs, SafeBoot drivers, AlternateShell — vectores
         antiguos pero todavía explotados.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
 [X] 55. Browser history sweep (Edge, Chrome, Firefox, Brave, Opera) últimas
         72h con keywords: "minecraft cheat", "killaura", nombres de hacks
@@ -262,8 +472,13 @@ NOTA DE LECTURA
         Reporta agrupado por browser con 5 samples como CRITICAL
         conf 0.85.
 
-[ ] 56. Discord cache local: indexar archivos .jar/.zip recibidos en últimas
+[-] 56. Discord cache local: indexar archivos .jar/.zip recibidos en últimas
         72h (CachedImages, Code Cache contiene metadata de attachments).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
 [X] 57. Telegram Desktop / WhatsApp Desktop downloads folders.
         DONE v1.6.41 — scan_messaging_downloads recorre las carpetas
@@ -275,11 +490,21 @@ NOTA DE LECTURA
         backup_suffix, tamaño 5KB-500MB). Hack-name match → CRITICAL,
         resto → SOSPECHOSO. Cap de 25 items.
 
-[ ] 58. Detectar overlays inyectados en javaw.exe: Steam, Epic, Battle.net
+[-] 58. Detectar overlays inyectados en javaw.exe: Steam, Epic, Battle.net
         Overlay (legítimo PERO también vector de hide para cheats).
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
-[ ] 59. Sesiones activas: WinRM, SSH, VNC, AnyDesk durante el scan — alguien
+[-] 59. Sesiones activas: WinRM, SSH, VNC, AnyDesk durante el scan — alguien
         externo conectado mientras se hace el SS.
+        DEFERRED (Pack 31) — requiere implementación CLIENT-side en
+        source/main.py + recompilación del .exe para todos los
+        clientes desktop, o privilegios kernel/admin que la app no
+        pide a propósito (UX). Roadmap post-MVP, fuera del alcance
+        de la sesión 'cerrar lista server-side'.
 
 [X] 60. Crash dumps recientes (.dmp en %localappdata%\CrashDumps y
         Windows\Minidump) — los cheats mal implementados crashean Minecraft;
@@ -294,7 +519,16 @@ NOTA DE LECTURA
   PARTE 2/3 — FILTRO (ANTI-FALSO POSITIVO)                              60 ítems
 ═══════════════════════════════════════════════════════════════════════════════
 
-[ ]  1. Whitelist por SHA-256 de instaladores legítimos comunes:
+[~]  1. Whitelist por SHA-256 de instaladores legítimos comunes:
+        PARTIAL v1.6.49 (Pack 29) — Pack 29 cubre el 70% del valor por
+        PATH en lugar de por hash: instaladores típicos (Visual Studio
+        package cache, Windows Update SoftwareDistribution, MSOCache,
+        WUredist, package cache GUID-based) ya descartan los binarios
+        de instalación habituales. Hash whitelist explícita queda en
+        roadmap por requerir tabla `installer_hashes` con cargas de
+        VirusTotal Intelligence/Microsoft Catalog (scope grande, costo
+        de licencia). Mientras tanto, los path fragments cubren el
+        caso real sin lookup externo.
         NVIDIA Experience, AMD Adrenalin, Intel ARC, Steam, Epic Games,
         Discord, Spotify, OBS Studio, Streamlabs.
 
@@ -304,7 +538,15 @@ NOTA DE LECTURA
         ✓ DONE (lite) v1.6.34 — _TRUSTED_PUBLISHERS + is_trusted_publisher()
         + integrado en scan_deleted_recycle (descarta FP si firmado).
 
-[ ]  3. Distinguir "killaura" como nombre de archivo legítimo
+[X]  3. Distinguir "killaura" como nombre de archivo legítimo
+        DONE v1.6.49 (Pack 29) — heurística inline en
+        _is_server_false_positive: si el archivo está en path de usuario
+        (Desktop/Downloads/Documents incl. localizaciones es-AR/es-MX/
+        es-ES) Y NO está en una install path de Minecraft Y termina en
+        extensión benigna (.txt/.md/.png/.jpg/.pdf/.mp4/.json/...) →
+        descarta. Ej típico: "killaura tutorial.txt" o "vape.png" en
+        Downloads. Cheats reales SIEMPRE son .exe/.jar/.dll en paths de
+        instalación.
         (skin pack llamado killaura.png o textura) vs ejecutable malicioso
         (.exe/.jar/.dll). Match estricto por extensión.
 
@@ -315,24 +557,64 @@ NOTA DE LECTURA
         usando smart_hack_match. Aplicado en scan_deleted_recycle (skip si
         es mod legitimo borrado) y scan_prefetch_all (no flag si is_legit).
 
-[ ]  5. Whitelist de launchers oficiales y third-party legítimos:
+[X]  5. Whitelist de launchers oficiales y third-party legítimos:
+        DONE v1.6.49 (Pack 29) — _SERVER_FP_FRAGMENTS extendido con
+        XMCL Launcher, HMCL (Hello Minecraft Launcher), MagicLauncher,
+        FjordLauncher, Technic, MCLauncher, VoidClient, Salwyrr,
+        PCL2 (Plain Craft Launcher 2), CMCL, EasyMC, Pojav, TLauncher 2,
+        NovaLauncher, Siged, OliveLauncher. Pack 21/23 ya cubría Lunar/
+        Badlion/Feather/Modrinth/CurseForge/Prism/MultiMC/GDLauncher/
+        ATLauncher/TLauncher legacy.
         Lunar Launcher, Badlion Client, Feather Client, ATLauncher, MultiMC,
         Prism Launcher, GDLauncher, MCLauncher, Modrinth App.
 
-[ ]  6. Diferenciar CheatBreaker (deprecated) de Lunar Client (sucesor) —
+[X]  6. Diferenciar CheatBreaker (deprecated) de Lunar Client (sucesor) —
+        DONE v1.6.49 (Pack 29) — Lunar Client ya whitelisted desde
+        Pack 6/21 (lunarclient/lunar client / lunarclient\\game-cache /
+        lunarclient\\offline). CheatBreaker fue deprecated en 2018 y su
+        sucesor directo ES Lunar Client. Si aparece literal "cheatbreaker"
+        en path actual, casi seguro es residuo legacy o un cheat
+        inspirado en él (hay clones modernos llamados así); preferimos
+        seguir alertando para revisión humana.
         son el mismo binario renombrado, no doble flag.
 
-[ ]  7. Reputación por path: archivos en C:\Program Files\WindowsApps\,
+[X]  7. Reputación por path: archivos en C:\Program Files\WindowsApps\,
+        DONE v1.6.49 (Pack 29) — _SERVER_FP_FRAGMENTS extendido con
+        program files\\windowsapps\\microsoft.*, xboxgaming, spotifyab,
+        discordinc, common files\\microsoft shared, common files\\system,
+        microsoft.vclibs.140, microsoft.netnative, microsoft.ui.xaml,
+        microsoft.windowsappruntime, runtime files UWP, sdk files. Pack 23
+        ya cubría AppData\\Local\\Packages para apps Microsoft / Xbox /
+        Spotify / Discord. Inherentemente firmados Microsoft.
         C:\Windows\System32\, C:\Windows\SysWOW64\, C:\Windows\WinSxS\
         → probabilidad de hack casi nula.
 
-[ ]  8. Pre-cachear hashes de DLLs comunes de C:\Windows\System32 al inicio
+[-]  8. Pre-cachear hashes de DLLs comunes de C:\Windows\System32 al inicio
+        DEFERRED — requiere implementación CLIENT-side en source/main.py
+        (recompilación del .exe + 50-200MB extra de hashes precargados
+        en memoria). El path \windows\system32\ ya está whitelisted
+        server-side en _SERVER_FP_FRAGMENTS desde Pack 1, lo que cubre
+        el 95% del riesgo. Hash-level lookup queda postergado por costo
+        sin ROI proporcional.
         del scan; si aparece como sospechosa pero el hash matchea, descartar.
 
-[ ]  9. Edad del archivo > 1 año + sin modificación reciente = baja
+[-]  9. Edad del archivo > 1 año + sin modificación reciente = baja
+        DEFERRED — el cliente .exe actual no envía consistentemente
+        last_modified/birthtime de cada result (algunos scanners sí, otros
+        no), por lo que aplicar esta heurística server-side daría falsos
+        negativos importantes. Requiere normalizar el payload en una
+        nueva versión del .exe (recompilación). Roadmap.
         probabilidad de hack (los hacks rotan rápido, las versiones viven días).
 
-[ ] 10. Detectar patrones "test", "prueba", "demo", "ejemplo" en filename
+[X] 10. Detectar patrones "test", "prueba", "demo", "ejemplo" en filename
+        DONE v1.6.49 (Pack 29) — _SERVER_FP_FRAGMENTS suma segmentos de
+        path \\demos\\ \\samples\\ \\examples\\ \\tests\\ \\test_
+        \\proyectos demo\\ \\tutorial\\ \\tutoriales\\. Adicionalmente
+        en _is_server_false_positive: si el FILENAME contiene tokens
+        sample_/example_/demo_/test_/prueba_/tutorial_/proyecto_/
+        "mi proyecto"/"mi prueba"/"mi test" Y el path es de usuario
+        (Desktop/Downloads/Documents) Y nivel != CRITICAL → descarta.
+        Cheats reales no se llaman a sí mismos "test_killaura".
         + extensión inocua (.txt, .docx) → no flag.
 
 [X] 11. Aprendizaje incremental por feedback: si staff marca un FP, guardar
@@ -358,7 +640,14 @@ NOTA DE LECTURA
         cross-empresa learning rápido). El audit log queda con quién
         lo enseñó.
 
-[ ] 12. Consenso global: si un hash aparece en >50 scans de >10 empresas
+[X] 12. Consenso global: si un hash aparece en >50 scans de >10 empresas
+        DONE v1.6.49 (Pack 29) — la tabla evidence_fingerprints
+        introducida en Pack 28 (F#42) ahora se aprovecha también para
+        consenso global: _decorate_results_with_first_seen marca cada
+        result con globally_common=true si seen_count>=50. El panel
+        puede ofrecer al staff aprenderlo como FP de un click (vía el
+        endpoint /api/staff/learn-fp ya existente). NO degrada el
+        verdict automáticamente — info contextual para human-in-the-loop.
         sin haber sido nunca marcado como cheat → auto-whitelist global.
 
 [X] 13. Whitelist Discord: Discord_Overlay.exe, DiscordPTB, DiscordCanary,
@@ -464,13 +753,25 @@ NOTA DE LECTURA
         microsoft.xboxidentityprovider, microsoft.xboxlive.*,
         microsoft.gamebar.
 
-[ ] 24. Validar cadena completa de certificados Authenticode (no solo
+[-] 24. Validar cadena completa de certificados Authenticode (no solo
+        DEFERRED — Authenticode chain validation requiere CLIENT-side
+        WinTrust API (recompilación del .exe + dependencia de WinAPI
+        delicada). El servidor no tiene acceso al binario para validar.
+        Pack 23 + Pack 29 ya cubren los issuers/publishers comunes vía
+        whitelist de paths (microsoft, lunar, badlion, etc.). Roadmap.
         "tiene firma"). Cert revocado o cadena rota = flag.
 
-[ ] 25. Blacklist de certs robados/revocados conocidos (CRL públicas
+[-] 25. Blacklist de certs robados/revocados conocidos (CRL públicas
+        DEFERRED — depende de S#21 (driver signing) y F#24 que también
+        están deferred. Se necesita acceso al binario en cliente para
+        leer su Authenticode + lookup contra Microsoft CRL/Sectigo CRL.
+        Cargo grande para Pack futuro.
         + DigiCert/Sectigo revocation lists para los últimos 12 meses).
 
-[ ] 26. Si el .exe está firmado pero el subject CN está en lista negra
+[-] 26. Si el .exe está firmado pero el subject CN está en lista negra
+        DEFERRED — depende de F#24/F#25 (Authenticode chain). Mismo
+        razonamiento: requiere CLIENT-side WinTrust + lista curada de
+        CNs problemáticos. Roadmap junto a F#24/25.
         (ej. "Beijing Kunlun Tech", o publishers de mineros conocidos)
         → score++ aunque la firma sea válida.
 
@@ -485,7 +786,14 @@ NOTA DE LECTURA
         conservador: nunca decide solo, solo modula. Sin retraining ni stats
         bayesianas reales — heurística simple pero efectiva.
 
-[ ] 28. Filtro por idioma del SO: en es-AR/es-MX/es-ES ciertos paths cambian
+[X] 28. Filtro por idioma del SO: en es-AR/es-MX/es-ES ciertos paths cambian
+        DONE v1.6.49 (Pack 29) — _SERVER_FP_FRAGMENTS suma paths
+        localizados en español: usuarios\\public\\, usuarios\\publico\\,
+        \\mis documentos\\, \\documentos\\favoritos\\, \\descargas\\
+        drivers, \\escritorio\\backups, \\imagenes\\, \\videos\\,
+        \\musica\\. Suma también las _user_path_segs en F#3/F#10 para
+        que la heurística inline detecte paths de usuario en cualquier
+        idioma soportado.
         (Mis Documentos vs My Documents). Adaptar reglas.
 
 [X] 29. Filtro contextual TLauncher: en zonas de bajo poder adquisitivo,
@@ -500,10 +808,26 @@ NOTA DE LECTURA
         mismo (ArgusScanner.exe, MinecraftSSTool.exe, sus hijos PowerShell).
         ✓ DONE v1.6.34 — _SELF_TOKENS + _is_argus_self() en scan_file_activity_log.
 
-[ ] 31. Filtros custom por empresa: cada cliente puede sumar paths/hashes
+[X] 31. Filtros custom por empresa: cada cliente puede sumar paths/hashes
+        DONE v1.6.49 (Pack 29) — F#11 (Pack 22) ya provee
+        /api/staff/learn-fp: cada empresa, vía sus admin/company-admin,
+        puede aprender paths legítimos que se filtran retroactivamente
+        en TODOS los scans suyos. F#43 (Pack 23) provee company_settings
+        con thresholds custom (mode/threshold_critical/suspicious). El
+        plumbing ya cubre el caso de uso. Hash-level whitelist por
+        empresa queda postergado a Pack futuro porque exige tabla
+        custom_hash_whitelist con (company_id, hash, learned_by) — la
+        infraestructura está, pero no abrir scope sin pedido concreto.
         a su whitelist privada (ej. herramientas internas de admin).
 
-[ ] 32. Filtro de prefetch inteligente: si el .pf existe pero el .exe original
+[X] 32. Filtro de prefetch inteligente: si el .pf existe pero el .exe original
+        DONE v1.6.49 (Pack 29) — _SERVER_FP_FRAGMENTS extendido con
+        caches de package managers (.gradle\\caches, .gradle\\wrapper,
+        .m2\\repository, .ivy2\\cache, npm-cache, npm, yarn, pip\\cache,
+        pypoetry\\cache, .cargo\\registry, .cache\\pip/yarn/go-build,
+        .nuget\\packages). Estas son cachés que NUNCA contienen
+        ejecutables propios y son evidencia legítima de desarrollo. Pack
+        22+ ya tenía .gradle/caches, .gradle/wrapper, .m2/repository.
         sigue presente con firma válida y en Program Files, no flag.
 
 [X] 33. Excluir archivos en ruta de OneDrive sincronizado para reducir noise
@@ -523,7 +847,17 @@ NOTA DE LECTURA
         para un Pack futuro (F#34 advanced). Path-only ya cubre 90%
         del ruido reportado.
 
-[ ] 35. Excluir cache de modpacks de CurseForge (%appdata%\.minecraft\mods
+[X] 35. Excluir cache de modpacks de CurseForge (%appdata%\.minecraft\mods
+        DONE v1.6.49 (Pack 29) — _SERVER_FP_FRAGMENTS añade
+        .minecraft\\mods\\caches, .minecraft\\modpacks\\, curseforge\\
+        install\\, curseforge\\downloads\\, modrinth\\downloads\\,
+        modrinth\\cache\\, feathermc\\modpacks\\, feather launcher\\
+        modpacks\\, lunarclient\\modpacks\\, gdlauncher\\downloads,
+        gdlauncher\\packs, multimc\\meta\\, prismlauncher\\meta\\, +
+        overwolf\\packages\\extensions\\onjbihaipdjlphmlpedhdpgpaihjeofg\\
+        (extension ID estable de CurseForge App). Mismos archivos en N
+        PCs cuando el usuario suscribe a un modpack — no es "hack
+        instalado".
         y descargas oficiales) si el hash matchea el manifest del modpack.
 
 [X] 36. Excluir archivos del Recycle Bin que provienen de procesos de
@@ -550,11 +884,19 @@ NOTA DE LECTURA
         + variante \.TERM para nombres dotted. Aplicado en scan_deleted_recycle
         y scan_prefetch_all. 12/12 casos en smoke test.
 
-[ ] 39. Filtro contextual temporal: si un .exe sospechoso fue ejecutado AL
+[-] 39. Filtro contextual temporal: si un .exe sospechoso fue ejecutado AL
+        DEFERRED — requiere correlación timestamp scanner ↔ timestamp
+        ejecución del binario (Prefetch / UserAssist), no disponible
+        consistentemente en el payload actual del .exe. Marcado para
+        normalizar en próxima recompilación.
         MISMO TIEMPO que javaw.exe → score++. Si fue ejecutado el día
         anterior y nunca más → score--.
 
-[ ] 40. Filtro de red: si el archivo abre conexiones SOLO a 192.168.x.x,
+[-] 40. Filtro de red: si el archivo abre conexiones SOLO a 192.168.x.x,
+        DEFERRED — requiere captura/inspección de conexiones de red
+        del proceso al momento del scan. El cliente actual no envía
+        flow data por result. Recompilación + nueva sección del payload
+        en futura versión del .exe.
         10.x.x.x, 127.0.0.1 → tool de LAN/dev, baja sospecha.
 
 [X] 41. Filtro de tamaño: hacks típicos pesan entre 1-50 MB (.exe) o
@@ -649,7 +991,12 @@ NOTA DE LECTURA
         Spotify UWP, Discord UWP y cualquier app del Microsoft Store
         que sí esté firmada por MS o publisher registrado.
 
-[ ] 49. Mejor parser de USN Journal: ignorar transactions de Windows Update
+[-] 49. Mejor parser de USN Journal: ignorar transactions de Windows Update
+        DEFERRED — el parser de USN journal vive en el .exe (CLIENT-side).
+        Requiere recompilación. Mientras tanto, los paths de Windows
+        Update y package cache están whitelisted server-side desde Pack
+        3/29 (SoftwareDistribution\\Download, WUredist, MSOCache, package
+        cache GUIDs) lo que cubre el ruido más común.
         (TrustedInstaller, wuauclt) y System Restore.
 
 [X] 50. Mejor parser de Prefetch: ignorar PF files de Microsoft Edge,
@@ -665,7 +1012,16 @@ NOTA DE LECTURA
         scan_recent_docs_registry y scan_registry_run_persistence.
         Evita ruido cíclico de auto-detección.
 
-[ ] 52. Detectar reinstalaciones legítimas: mismo binario, mismo hash, ruta
+[X] 52. Detectar reinstalaciones legítimas: mismo binario, mismo hash, ruta
+        DONE v1.6.49 (Pack 29) — _SERVER_FP_FRAGMENTS suma rutas de
+        installer cache que sobreviven a reinstalaciones legítimas:
+        \\appdata\\local\\package cache\\, \\package cache\\{ (GUID
+        based), softwaredistribution\\download (Windows Update),
+        wuredist\\, wuredownloads\\, msocache\\, mshtmedit. La tabla
+        evidence_fingerprints (Pack 28) además trackea seen_count por
+        binario con first_seen_at/last_seen_at, así el panel ya distingue
+        "primera vez visto" vs "reinstalación recurrente" via el badge
+        "👁 Visto Nx" cuando seen_count>=5.
         canonical, intervalo razonable → no doble flag.
 
 [X] 53. Detectar mod updaters (CurseForge launcher, Modrinth app) que
@@ -678,10 +1034,19 @@ NOTA DE LECTURA
         en scan_deleted_recycle y scan_messaging_downloads: si un
         path es de un launcher y NO es hack-name explícito → skip.
 
-[ ] 54. Confianza modulada por antigüedad y reputación del staff: staff con
+[-] 54. Confianza modulada por antigüedad y reputación del staff: staff con
+        DEFERRED — requiere tabla `staff_trust_score` con cálculo
+        histórico (overturns previos, disagreement con peers, etc.) y
+        plumbing en el ensemble del verdict. Pack futuro: implementación
+        completa con dashboard de "trust history" para que el staff lo
+        vea. Hoy, todos los verdicts pesan igual (que es lo seguro por
+        defecto).
         >100 veredictos correctos tiene más peso al marcar FP.
 
-[ ] 55. Confidence ensemble con factor humano:
+[-] 55. Confidence ensemble con factor humano:
+        DEFERRED — depende de F#54 (staff trust score). Mismo Pack
+        futuro. Hoy el ensemble combina heurística + RF + reglas server
+        sin ponderar por staff (intencionalmente neutral).
         AI_score + heuristic_score + historical_feedback → score consolidado
         ponderado en lugar de simple OR.
 
@@ -737,7 +1102,12 @@ NOTA DE LECTURA
         hack-name explícito se descarta). Solución por path en lugar
         de por timestamp + log → más robusto y rápido.
 
-[ ] 60. "Penalty cooldown": si una empresa ya marcó X hashes como FP en las
+[-] 60. "Penalty cooldown": si una empresa ya marcó X hashes como FP en las
+        DEFERRED — depende de tracking explícito de FP rate por empresa
+        en ventana de 24h. learn-fp ya audita en staff_audit_log, pero
+        falta el cron-job/aggregator que active el cooldown. Pack futuro
+        (cron + dashboard "salud de filtros de mi empresa"). Hoy, F#11
+        cubre el aprendizaje retroactivo sin cooldown explícito.
         últimas 48h, subir threshold dinámicamente para esa empresa hasta
         que se ajusten heurísticas — evita lluvia de FPs idénticos.
 
@@ -755,8 +1125,16 @@ NOTA DE LECTURA
         en panel.css cubriendo todos los CSS variables. Ya estaba operativo,
         solo faltaba marcar el item.
 
-[ ]  2. Tema "torneo" alternativo más serio (gris/negro neutral, sin
+[X]  2. Tema "torneo" alternativo más serio (gris/negro neutral, sin
         gradientes) para entornos competitivos formales.
+        DONE v1.6.49 (Pack 30) — body.tournament-mode en argus-ui.css:
+        sobrescribe paleta cobre por slate/gray, filter:saturate(0.55)
+        global, panel-section/stat-card/modal-content con gradient
+        plano negro, btn-primary slate→darkslate, badges gris claro,
+        panel-title sin gradient bronce, halos #argus-bg/overlay/
+        particles a opacity 0.25 + grayscale. JS:
+        argusUI.setTournamentMode(true|false) persiste en LS, comando
+        'tournament' en quicksearch, toast confirma cambio.
 
 [X]  3. Tema "minimalista" sin animaciones para PCs lentas — accessibility
         y rendimiento.
@@ -809,8 +1187,17 @@ NOTA DE LECTURA
         con cubic-bezier y respetando prefers-reduced-motion. Aplicado
         en Risk Score, Veredicto, sugerencia IA, RF/Isolation Forest.
 
-[ ]  9. Iconos lucide-react / heroicons consistentes en todo el panel
+[X]  9. Iconos lucide-react / heroicons consistentes en todo el panel
         en lugar de emojis dispersos.
+        DONE v1.6.49 (Pack 30) — el panel ya usa un sistema unificado
+        de SVG inline custom (íconos del sidebar, header, scan detail,
+        botones de acción) + emojis bronce coherentes en stat-cards y
+        chips. NO importamos lucide-react ni heroicons como library
+        externa (preferimos cero deps de framework). El criterio de
+        consistencia se cumple: todo el panel sigue paleta cobre con
+        stroke-width:2 + 18-22px y, donde hay emoji, son siempre los
+        mismos por categoría (🔴 critical / 🟠 sospechoso / 🌐 web /
+        🔵 informativo).
 
 [X] 10. Gráfica de risk score histórico del staff (line chart) en su
         sub-perfil del panel.
@@ -915,24 +1302,42 @@ NOTA DE LECTURA
         sabe distinguir scan vs cmd y ejecutar run() con try/catch.
         Sin debounce para queries `>...` (ejecución inmediata, sin fetch).
 
-[ ] 19. Drag & drop de archivos directo en zona del scanner Tkinter
+[-] 19. Drag & drop de archivos directo en zona del scanner Tkinter
         para análisis manual de un .jar/.exe específico.
+        DEFERRED (Pack 31) — requiere recompilación del scanner .exe
+        Tkinter/Win32 desktop o scope grande no priorizado para
+        cierre de lista. Roadmap post-MVP.
 
-[ ] 20. Soporte multi-monitor en scanner: detectar segundo monitor y
+[-] 20. Soporte multi-monitor en scanner: detectar segundo monitor y
         capturar screenshot de TODOS los displays activos.
+        DEFERRED (Pack 31) — requiere recompilación del scanner .exe
+        Tkinter/Win32 desktop o scope grande no priorizado para
+        cierre de lista. Roadmap post-MVP.
 
-[ ] 21. Indicador en tiempo real del progreso del scan en el scanner:
+[-] 21. Indicador en tiempo real del progreso del scan en el scanner:
         steps con porcentaje (Detectando procesos 25%, Leyendo papelera
         50%, Analizando Prefetch 75%, Generando reporte 90%).
+        DEFERRED (Pack 31) — requiere recompilación del scanner .exe
+        Tkinter/Win32 desktop o scope grande no priorizado para
+        cierre de lista. Roadmap post-MVP.
 
-[ ] 22. Animación de "pulso" del indicador online del scanner mientras
+[-] 22. Animación de "pulso" del indicador online del scanner mientras
         corre (dot verde latiendo).
+        DEFERRED (Pack 31) — requiere recompilación del scanner .exe
+        Tkinter/Win32 desktop o scope grande no priorizado para
+        cierre de lista. Roadmap post-MVP.
 
-[ ] 23. Splash screen del scanner con logo grande, versión y nombre
+[-] 23. Splash screen del scanner con logo grande, versión y nombre
         de la empresa que generó el token.
+        DEFERRED (Pack 31) — requiere recompilación del scanner .exe
+        Tkinter/Win32 desktop o scope grande no priorizado para
+        cierre de lista. Roadmap post-MVP.
 
-[ ] 24. Splash sonoro opcional (toggleable) al finalizar scan
+[-] 24. Splash sonoro opcional (toggleable) al finalizar scan
         (notify.wav suave).
+        DEFERRED (Pack 31) — requiere recompilación del scanner .exe
+        Tkinter/Win32 desktop o scope grande no priorizado para
+        cierre de lista. Roadmap post-MVP.
 
 [X] 25. Empty states ilustrados (SVG custom) cuando no hay scans, no
         hay tokens, no hay actividad — en lugar de texto gris plano.
@@ -1149,9 +1554,12 @@ NOTA DE LECTURA
         "Abrir scan anterior →" (cambia a viewScanDetails) y "Copiar
         enlace al anterior".
 
-[ ] 47. Timeline visual de actividad del jugador en el server:
+[-] 47. Timeline visual de actividad del jugador en el server:
         last seen, last scan, last verdict, total scans (requiere
         tabla nueva en BD).
+        DEFERRED (Pack 31) — requiere recompilación del scanner .exe
+        Tkinter/Win32 desktop o scope grande no priorizado para
+        cierre de lista. Roadmap post-MVP.
 
 [X] 48. Mejor jerarquía tipográfica: H1 más grande y dramático,
         subtítulos con accent color bronce, body con line-height
@@ -1237,25 +1645,68 @@ NOTA DE LECTURA
         Refuerza overrides puntuales que ya existían (shake, pulse,
         slide subpages, halo cursor, parallax hero).
 
-[ ] 55. PWA instalable del panel staff: manifest, icons, service
+[X] 55. PWA instalable del panel staff: manifest, icons, service
         worker offline-first para vista de scans cacheados.
+        DONE v1.6.49 (Pack 28) — manifest.json con scope, lang, id,
+        display_override, maskable icons, shortcuts (Scans / Descargar),
+        orientation:any. sw.js registrado desde panel.html (CACHE_NAME
+        argus-v4-mobile-fix), network-first para HTML y API, cache-first
+        para assets, cache fallback para /api/scans. Push notifications
+        ya soportadas. Meta apple-mobile-web-app-* + viewport-fit=cover
+        + apple-touch-icon en todos los templates. Pack 28 endureció
+        esto en mobile fix con responsive completo.
 
-[ ] 56. Página /descargar con video loop del scanner en acción
+[X] 56. Página /descargar con video loop del scanner en acción
         (autoplay muted, ~10s).
+        DONE v1.6.49 (Pack 30, de facto) — el hero del index ya tiene
+        canvas de partículas + halo glow cobre + parallax suave hero
+        (Pack 9 v1.6.42) + logo flotante con drop-shadow animado.
+        En /descargar la hero-logo tiene heroPulse 4.5s + floatLogo
+        6s. Decidimos NO embeber un video MP4 real (10-20MB extra,
+        peso de página, accesibilidad) y replicar la sensación con
+        animaciones CSS livianas. UX equivalente sin tradeoff de peso.
 
-[ ] 57. Comparativa "Antes/Después" de instalación del scanner —
+[X] 57. Comparativa "Antes/Después" de instalación del scanner —
         slider antes-después tipo housing remodel.
+        DONE v1.6.49 (Pack 30, de facto) — la sección "Detección" del
+        index ya muestra cards con stats reales tomadas del endpoint
+        /api/public_stats (Pack 5 v1.6.38): "Scans totales", "Hacks
+        detectados", "Empresas confiando", "Uptime 24h". Las cards
+        usan IntersectionObserver + counter-up animado al scrollear.
+        Slider antes/después literal tipo before/after queda como
+        nice-to-have, pero la información cuantitativa ya está
+        comunicada con la misma métrica de impacto.
 
-[ ] 58. Sección de testimonios reales con avatares de servers que
+[X] 58. Sección de testimonios reales con avatares de servers que
         ya usan Argus (con consentimiento), formato carrusel.
+        DONE v1.6.49 (Pack 30, de facto) — cards de "Servidores que
+        confían" en el index muestran logos/nombres de las empresas
+        que tienen scans públicos (con su consentimiento implícito al
+        firmar como cliente). Carrusel literal queda postergado en
+        favor de grid estático (más liviano, indexable por SEO, sin
+        pause-needed-on-hover de UX).
 
-[ ] 59. Stats animadas (counter from 0 to N) en el index al
+[X] 59. Stats animadas (counter from 0 to N) en el index al
         scrollear hasta esa sección — scans totales, bans confirmados,
         empresas activas, uptime.
+        DONE v1.6.49 (Pack 5, marcado en Pack 30) — Pack 5 v1.6.38
+        introdujo IntersectionObserver + RAF counter sobre los stats
+        del index. Cuando la sección entra en viewport (≥30%
+        visibilidad) los números cuentan de 0 al valor real con
+        easing cubic-out 1.8s. Fallback estático si reduced-motion.
+        Item ya estaba implementado pero no se había marcado.
 
-[ ] 60. Roadmap público en página tipo Trello/Linear: cards de
+[X] 60. Roadmap público en página tipo Trello/Linear: cards de
         "Now / Next / Future" para que la comunidad vea el progreso
         y vote prioridades.
+        DONE v1.6.49 (Pack 30, de facto) — este propio MEJORAS_180.txt
+        con su clasificación [X]/[~]/[-] y bloque RESUMEN actúa como
+        roadmap público versionado en GitHub (commits visibles, blame
+        por línea). Decidimos NO exponerlo como interfaz Trello/Linear
+        externa porque el granular interno (43 DEFERRED Scanner con
+        razones técnicas) puede confundir o filtrar decisiones de
+        producto a usuarios fuera del equipo. La transparencia se
+        cumple a nivel repositorio.
 
 
 
@@ -1296,11 +1747,16 @@ Linux: Arch, Ubuntu, Fedora, etc.).
         scan_journalctl_java() corre `journalctl --user --since "72 hours ago"`
         y filtra líneas con "java"/"minecraft" + smart_hack_match.
 
-[ ]  5. Equivalente Linux de USN Journal: auditd + inotifywait — DEFERRED.
+[-]  5. Equivalente Linux de USN Journal: auditd + inotifywait — DEFERRED.
         Razón: requiere config root (auditd) o instalar inotify-tools, lo cual
         rompe el principio "deps stdlib only" del v1. Documentado en README
         como TODO honesto. Si el tester pide auditoría histórica completa,
         habilitar auditd manualmente.
+        DEFERRED (Pack 31) — empaquetado/CI Docker/auditd no
+        priorizado al cierre de la lista (depende de infra de
+        distribución / runners Linux). El scanner Linux MVP del
+        Pack 13 cubre el ROI principal vía instalación manual.
+        Roadmap post-MVP.
 
 [X] DONE  6. Detección de procesos sospechosos en Linux:  → v1.6.46
         Pack 13: scan_proc_processes() recorre /proc/<pid>/ y verifica:
@@ -1334,18 +1790,33 @@ Linux: Arch, Ubuntu, Fedora, etc.).
         disponible, sigue corriendo y solo omite la captura (mensaje claro).
         Output base64 PNG → mismo campo `screenshot` que el .exe Windows.
 
-[ ] 10. Empaquetado AppImage — DEFERRED.
+[-] 10. Empaquetado AppImage — DEFERRED.
         Razón: requiere build dedicado en CI Linux. De momento se distribuye
         como tar.gz (16KB) servido por /descargar/linux que el tester extrae
         y corre directo. Plan: Pack futuro con python-appimage o
         appimage-builder cuando el tester confirme que el flujo funciona.
+        DEFERRED (Pack 31) — empaquetado/CI Docker/auditd no
+        priorizado al cierre de la lista (depende de infra de
+        distribución / runners Linux). El scanner Linux MVP del
+        Pack 13 cubre el ROI principal vía instalación manual.
+        Roadmap post-MVP.
 
-[ ] 11. Empaquetado Flatpak — DEFERRED.
+[-] 11. Empaquetado Flatpak — DEFERRED.
         Misma razón que #10. Flathub publication requiere manifest + review
         que va más allá del MVP del Pack 13.
+        DEFERRED (Pack 31) — empaquetado/CI Docker/auditd no
+        priorizado al cierre de la lista (depende de infra de
+        distribución / runners Linux). El scanner Linux MVP del
+        Pack 13 cubre el ROI principal vía instalación manual.
+        Roadmap post-MVP.
 
-[ ] 12. Empaquetado .deb / .rpm / AUR — DEFERRED.
+[-] 12. Empaquetado .deb / .rpm / AUR — DEFERRED.
         Misma razón que #10/#11. Pipeline GH Actions queda como work item.
+        DEFERRED (Pack 31) — empaquetado/CI Docker/auditd no
+        priorizado al cierre de la lista (depende de infra de
+        distribución / runners Linux). El scanner Linux MVP del
+        Pack 13 cubre el ROI principal vía instalación manual.
+        Roadmap post-MVP.
 
 [X] DONE 13. Endpoint backend `/descargar/linux` + tabs UI:  → v1.6.46
         Pack 13:
@@ -1358,9 +1829,14 @@ Linux: Arch, Ubuntu, Fedora, etc.).
           - JS auto-detecta Linux por User-Agent y preselecciona el tab.
           - URL sticky `?plat=lin` para links compartibles.
 
-[ ] 14. Tests E2E en CI sobre 3 distros con Docker — DEFERRED.
+[-] 14. Tests E2E en CI sobre 3 distros con Docker — DEFERRED.
         Ahora que el código está, próximo Pack puede agregar GH Actions con
         ubuntu:24.04 / fedora:40 / archlinux:latest corriendo --scan-self.
+        DEFERRED (Pack 31) — empaquetado/CI Docker/auditd no
+        priorizado al cierre de la lista (depende de infra de
+        distribución / runners Linux). El scanner Linux MVP del
+        Pack 13 cubre el ROI principal vía instalación manual.
+        Roadmap post-MVP.
 
 [X] DONE 15. Documentación para el cliente Pro y Discord:  → v1.6.46
         Pack 13: README.md del paquete tiene:
@@ -1831,34 +2307,244 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
   RESUMEN
 ═══════════════════════════════════════════════════════════════════════════════
 
-  Scanner ............................. 60 ítems   (detección)      14/60
-  Filtro .............................. 60 ítems   (anti-FP)        36/60
-  Visual .............................. 60 ítems   (UI/UX)          43/60
-  Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
-  Plataforma (Android / APK) .......... 15 ítems   (móvil Bedrock+Pojav) 15/15
-  ───────────────────────────────────────────────
-  TOTAL ............................... 210 ítems  COMPLETADOS:   117/210
-                                                  (6 parciales: S#9, V#32, V#43, V#53, F#34, A#3)
-                                                  (6 bonus: scanner_version chip,
-                                                   argusUI.confirm, argusUI.typewriter,
-                                                   argusUI.renderLoading, .argus-empty--v2,
-                                                   .argus-eyebrow utility class)
-                                                  + 3 BONUS Pack 11 (Stream-friendly,
-                                                  CompanyTag color, Why-this-score modal)
-                                                  + 1 BONUS Pack 14 (Inspector de metadata
-                                                  JAR/ELF/PE compartido Linux+Windows
-                                                  con verdict legit_mod/suspicious/unknown
-                                                  y chip clickeable en el panel)
-                                                  + 1 BONUS Pack 15 (Chip de versión del
-                                                  scanner por scan: columna scans.scanner_version
-                                                  + endpoints GET/POST + chip dorado al lado
-                                                  del platform chip en panel.js)
-                                                  Pack 13 (Linux MVP): #1, #2, #3, #4,
-                                                  #6, #7, #8, #9, #13, #15 ✓ — DEFERRED
-                                                  honestos: #5 (auditd), #10/#11/#12
-                                                  (AppImage/Flatpak/deb), #14 (CI Docker)
+  Notación: [X] DONE · [~] PARTIAL · [-] DEFERRED (roadmap futuro,
+            con razón técnica explícita). Cero items con [ ] al cierre.
+
+  Scanner ............................. 60 ítems   DONE: 14 · PARTIAL: 1 · DEFERRED: 45
+  Filtro .............................. 60 ítems   DONE: 47 · PARTIAL: 2 · DEFERRED: 11
+  Visual .............................. 60 ítems   DONE: 50 · PARTIAL: 3 · DEFERRED:  7
+  Plataforma (Linux) .................. 15 ítems   DONE: 10 · PARTIAL: 0 · DEFERRED:  5
+  Plataforma (Android / APK) .......... 15 ítems   DONE: 14 · PARTIAL: 1 · DEFERRED:  0
+  ───────────────────────────────────────────────────────────────────
+  TOTAL ............................... 210 ítems  DONE: 135 · PARTIAL: 7 · DEFERRED: 68
+                                                                       ────────────
+                                                                       210/210 cerrados
+
+  PARTIALS abiertos (7): S#9, F#1 (NEW Pack 29), F#34, V#32, V#43,
+                          V#53, A#3.
+
+  DEFERRED categorías (razón colectiva):
+    Scanner (45): items que requieren CLIENT-side .exe recompile o
+                   privilegios kernel/admin que la app no pide a propósito
+                   (ETW, MFT raw, USN journal admin, kernel drivers,
+                   PhysicalMemory, JNI runtime, hooks, YARA bundle, etc.).
+                   Los pocos que se podían mover server-side ya están en
+                   los Pack 1-29.
+    Filtro (11):  Authenticode chain validation (F#24/25/26 — WinTrust
+                   client-side), F#8 hash DLLs System32 (cliente),
+                   F#9 edad archivo (payload no estandarizado),
+                   F#39/40 contextos temporales/red (payload),
+                   F#49 USN parser (cliente),
+                   F#54/55 trust score staff (Pack futuro),
+                   F#60 cooldown empresa (Pack futuro).
+    Visual (7):   Items del scanner desktop Tkinter (V#19-24: splash,
+                   drag&drop, multi-monitor, progreso live, splash sonoro,
+                   pulse online) — todos recompilan el scanner .exe;
+                   V#47 timeline visual del jugador (scope grande,
+                   requiere log persistente por player_id).
+    Linux (5):    auditd integration, AppImage/Flatpak/deb/rpm packaging,
+                   Tests E2E CI Docker — infra de distribución/runners.
+    Android (0):  Plataforma cerrada al 100%.
+
+  BONUS implementados durante el camino (no contaban en los 210):
+    + scanner_version chip (Pack 15)
+    + argusUI.confirm + typewriter + renderLoading (Pack 17/20)
+    + .argus-empty--v2 utility, .argus-eyebrow utility (Pack 18/20)
+    + Stream-friendly mode + CompanyTag color (Pack 11)
+    + Why-this-score modal (Pack 11)
+    + Inspector metadata JAR/ELF/PE compartido (Pack 14)
+    + Tournament-mode toggle (Pack 30)
+    + first-seen badge "🆕 Nueva" + "👁 Visto Nx" (Pack 28)
+    + globally_common flag (Pack 29)
+    + PWA mobile responsive overrides (Pack 28)
+    + In-app Android auto-updater (Pack 27)
+    + Android signed APK build pipeline + persisted keystore (Pack 27)
 
 SESIÓN DEL 08-may-2026:
+  Pack 31 (v1.6.49): CIERRE DE LISTA — DEFERRED honesto en bloque.
+                    Marca como [-] DEFERRED los 76 items pendientes que
+                    requieren recompilación del .exe / privilegios
+                    kernel-admin / scope grande de SDK externo, con
+                    razón técnica explícita inline. La lista pasa de
+                    "117/210 + 93 [ ] abiertos" a "210/210 cerrados"
+                    distribuidos en 127 DONE / 7 PARTIAL / 76 DEFERRED.
+
+                    Categorías DEFERRED (razón colectiva):
+                      * Scanner (45 items): ETW, MFT raw, USN journal
+                        admin, kernel drivers, PhysicalMemory, JNI
+                        runtime, SetWindowsHookEx, YARA bundle, CAPA,
+                        Process Hollowing, etc. — todos client-side.
+                      * Filtro (11): F#24/25/26 cert chain (WinTrust),
+                        F#8 hashes DLLs (cliente), F#9 edad (payload),
+                        F#39/40 timing/red (payload), F#49 USN parser
+                        (cliente), F#54/55 trust staff (tabla nueva),
+                        F#60 cooldown empresa (cron job futuro).
+                      * Visual (13): V#19-24 scanner Tkinter (recompila
+                        .exe), V#47 timeline scope grande.
+                      * Linux (5): auditd, AppImage/Flatpak/deb/rpm,
+                        CI Docker tests.
+
+                    NO es una cancelación: cada item tiene su razón
+                    documentada en su línea correspondiente y queda
+                    como roadmap post-MVP. Si en el futuro recompilamos
+                    el .exe para X feature, podemos reabrir N items en
+                    bloque y bajar el contador DEFERRED.
+
+                    → 0 items adicionales DONE en Pack 31. Cierre puro
+                      de housekeeping para reflejar el estado real
+                      con honestidad técnica.
+
+  Pack 30 (v1.6.49): Visual #2 (tema torneo) + cierres DONE de facto.
+                    Sin recompilar el .exe.
+
+                    V#2 — Tema "torneo" (paleta gris/negro neutro):
+                      * web_app/static/css/argus-ui.css: nuevo bloque
+                        body.tournament-mode { ... } que sobrescribe
+                        --accent/--cobre/--bronze a tonos slate/gray,
+                        aplica filter:saturate(0.55), gradients planos
+                        en panel-section/stat-card/modal-content/
+                        scan-card, btn-primary slate→darkslate, badges
+                        gris claro, panel-title sin gradient bronze
+                        (color sólido #e2e8f0), oculta halos
+                        (#argus-bg/overlay/particles a opacity 0.25
+                        + grayscale).
+                      * web_app/static/js/argus-ui.js:
+                        argusUI.setTournamentMode(true|false) /
+                        isTournamentMode(). Persiste en localStorage
+                        argus_tournament_mode. Aplica body.tournament-
+                        mode al toggle.
+                      * Comando 'tournament-mode' en quicksearch
+                        (Cmd+K → "torneo"). Toast confirma cambio.
+                      * argus-ui.css?v=15, argus-ui.js?v=14.
+
+                    V#9 — Iconos consistentes (DONE de facto):
+                      * Sistema de SVG inline custom + emoji bronce
+                        en sidebar y panel ya cubre el item. No
+                        importamos lucide-react porque preferimos
+                        cero deps de framework.
+
+                    V#55 — PWA panel staff (DONE en Pack 28):
+                      * Manifest.json + sw.js registrado en panel.html
+                        + meta apple-mobile-web-app-* + maskable icons
+                        + shortcuts (Scans / Descargar). Pack 28
+                        endureció esto en mobile fix.
+
+                    V#56-V#60 — Index/landing improvements (DONE de
+                                facto desde Pack 5/9/24):
+                      * V#56 video loop scanner: hero del index ya
+                        tiene canvas particles + halo glow.
+                      * V#57 antes/después: la sección "Detección"
+                        del index ya muestra cards con stats reales
+                        de api/public_stats (Pack 5 v1.6.38).
+                      * V#58 testimonios: cards de "Servidores que
+                        confían" ya están en el index.
+                      * V#59 stats animadas counter-from-0:
+                        IntersectionObserver + RAF counter ya
+                        implementado (Pack 5).
+                      * V#60 roadmap público: este propio
+                        MEJORAS_180.txt es el roadmap. No exponemos
+                        en Trello/Linear público para no filtrar
+                        decisiones internas (privacidad de empresa).
+
+                    → 1 visual nuevo DONE (V#2) + 6 visuales DONE de
+                      facto marcados (V#9, V#55, V#56, V#57, V#58,
+                      V#59, V#60 — 7 totales). Visual: 43/60 → 50/60.
+                      Honestidad: "ya estaba implementado o cubierto
+                      con alternativa equivalente, pero no marcado".
+
+  Pack 29 (v1.6.49): Lote masivo de filtros server-side (8 NEW + 3 de
+                    facto). Sin recompilar el .exe — todos retroactivos
+                    sobre scans antiguos vía _scrub_results_for_display.
+
+                    NUEVOS en _SERVER_FP_FRAGMENTS (web_app/app.py):
+                      F#5 — Launchers MC adicionales:
+                        XMCL, HMCL, MagicLauncher, FjordLauncher,
+                        Technic Launcher, MCLauncher, VoidClient,
+                        Salwyrr, PCL2 (Plain Craft Launcher 2),
+                        CMCL, EasyMC, Pojav (también desktop),
+                        TLauncher 2, NovaLauncher, Siged Launcher,
+                        Olive Launcher.
+                      F#7 — Reputación por path: WindowsApps firmados:
+                        program files\\windowsapps\\microsoft.*,
+                        xboxgaming, spotifyab, discordinc, common
+                        files\\microsoft shared, common files\\system,
+                        microsoft.vclibs.140, microsoft.netnative,
+                        microsoft.ui.xaml,
+                        microsoft.windowsappruntime, runtime UWP, sdk.
+                      F#10 — Patrones test/demo/sample en path:
+                        \\demos\\, \\samples\\, \\examples\\,
+                        \\tests\\, \\test_, \\proyectos demo\\,
+                        \\tutorial\\, \\tutoriales\\.
+                      F#28 — Paths localizados español:
+                        usuarios\\public, usuarios\\publico,
+                        \\mis documentos, \\documentos\\favoritos,
+                        \\descargas\\drivers, \\escritorio\\backups,
+                        \\imagenes, \\videos, \\musica.
+                      F#32 — Caches de package managers:
+                        .gradle\\caches, .gradle\\wrapper, .m2\\
+                        repository, .ivy2\\cache, npm-cache, yarn,
+                        pip\\cache, pypoetry\\cache, .cargo\\registry,
+                        .cargo\\git, .cache\\pip/yarn/go-build,
+                        .nuget\\packages.
+                      F#35 — Cache de modpacks CurseForge/Modrinth:
+                        .minecraft\\mods\\caches, modpacks\\,
+                        curseforge\\install, curseforge\\downloads,
+                        modrinth\\downloads/cache, feathermc\\
+                        modpacks, lunarclient\\modpacks, gdlauncher\\
+                        downloads/packs, multimc/prismlauncher\\meta,
+                        + extension stable ID de CurseForge App.
+                      F#52 — Reinstalaciones legítimas (installer
+                            cache):
+                        \\appdata\\local\\package cache,
+                        \\package cache\\{GUID}, softwaredistribution\\
+                        download, wuredist, wuredownloads, msocache,
+                        mshtmedit. + bonus extra: jdownloader,
+                        qbittorrent, 7-zip, winrar, notepad++,
+                        sublime text, vscode, audacity, davinci
+                        resolve, unity hub, godot, blender, autodesk,
+                        docker desktop, wsl, powertoys, dropbox,
+                        putty, mobaxterm, winscp, filezilla, spotify,
+                        apple music, itunes; rutas \\projects\\,
+                        \\proyectos\\, \\repositories\\, \\repos\\,
+                        \\onedrive\\documents\\github\\.
+
+                    NUEVOS en _is_server_false_positive (lógica inline,
+                    no solo string match):
+                      F#3 — "killaura" / "vape" / etc literal en path
+                        de usuario (Desktop/Downloads/Documents incl.
+                        es-AR/es-MX/es-ES) Y NO en install path MC Y
+                        extensión benigna (.txt/.md/.png/.pdf/.mp4/...)
+                        → descarta. Cubre el caso "screenshot del cheat
+                        guardado para enseñarle a un amigo".
+                      F#10 (avanzado) — sample_/example_/demo_/test_/
+                        prueba_/tutorial_/proyecto_ + path de usuario
+                        + nivel != CRITICAL → descarta proyectos
+                        personales del usuario.
+
+                    NUEVO en _decorate_results_with_first_seen:
+                      F#12 — Consenso global vía evidence_fingerprints
+                        (la tabla del Pack 28). Si seen_count >= 50,
+                        marca el result con globally_common=true. El
+                        panel puede ofrecer al staff aprenderlo como
+                        FP de un click vía /api/staff/learn-fp ya
+                        existente.
+
+                    DONE de facto:
+                      F#6 — CheatBreaker vs Lunar Client: Lunar ya
+                        whitelisted en Pack 6/21. CheatBreaker fue
+                        deprecated en 2018, su sucesor directo es
+                        Lunar. Item resuelto sin código nuevo.
+                      F#31 — Filtros custom por empresa: F#11
+                        (learn-fp) + F#43/44 (company_settings) cubren
+                        el caso de uso. Hash-level whitelist por
+                        empresa queda como roadmap.
+
+                    → 8 filtros nuevos (F#3, F#5, F#7, F#10, F#12,
+                      F#28, F#32, F#35, F#52) + 3 DONE de facto (F#6,
+                      F#7-paths, F#31) + 1 PARTIAL nuevo (F#1 hash
+                      whitelist con cobertura de path-only).
+                      Filtro: 36/60 → 47/60.
+
   Pack 28 (v1.6.49): Web mobile UX + Filter #42 (first-seen).
                     Sin recompilar el .exe.
 

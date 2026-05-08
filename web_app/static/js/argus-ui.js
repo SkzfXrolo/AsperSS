@@ -524,6 +524,13 @@
             run:   () => setStreamFriendly(!_isStreamFriendly()),
         },
         {
+            id: 'tournament-mode',
+            title: 'Modo Torneo',
+            hint:  'Paleta gris/negro neutro para screenshots de competición',
+            keys:  ['torneo', 'tournament', 'competicion', 'tournament mode', 'gris', 'neutro'],
+            run:   () => setTournamentMode(!_isTournamentMode()),
+        },
+        {
             id: 'sound-toggle',
             title: 'Sonido al recibir scan',
             hint:  'Habilitar / silenciar notificación de scan nuevo',
@@ -887,6 +894,40 @@
         }
     }
     _applyStreamFriendly(_isStreamFriendly());
+
+
+    // ── Modo Torneo (Visual #2 — Pack 30) ───────────────────────────────────
+    // Activable via argusUI.setTournamentMode(true|false). Persiste en LS.
+    // Aplica body.tournament-mode → CSS desatura, quita gradientes bronce y
+    // todo el panel pasa a paleta gris/negra (ideal para screenshots de
+    // resultados de torneo que se van a publicar).
+    const TM_KEY = 'argus_tournament_mode';
+    function _isTournamentMode() {
+        try { return localStorage.getItem(TM_KEY) === '1'; }
+        catch (_e) { return false; }
+    }
+    function _applyTournamentMode(b) {
+        if (document.body) {
+            document.body.classList.toggle('tournament-mode', !!b);
+        } else {
+            document.addEventListener('DOMContentLoaded', () => {
+                document.body.classList.toggle('tournament-mode', !!b);
+            }, { once: true });
+        }
+        try { localStorage.setItem(TM_KEY, b ? '1' : '0'); } catch (_e) {}
+    }
+    function setTournamentMode(b) {
+        _applyTournamentMode(!!b);
+        if (typeof window.showToast === 'function') {
+            window.showToast(
+                b ? '🏆 Modo torneo: paleta gris/negro neutro activada'
+                  : '🎨 Modo torneo desactivado: vuelve la paleta cobre',
+                b ? 'success' : 'info',
+                { duration: 2400 }
+            );
+        }
+    }
+    _applyTournamentMode(_isTournamentMode());
 
 
     // ── Tag color determinístico por empresa (Visual #41) ────────────────────
@@ -1610,6 +1651,8 @@
         playScanDing,
         setStreamFriendly,
         isStreamFriendly: _isStreamFriendly,
+        setTournamentMode,
+        isTournamentMode: _isTournamentMode,
         companyColor,
         companyTag,
         staggerIn,

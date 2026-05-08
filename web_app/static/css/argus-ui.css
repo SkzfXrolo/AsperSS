@@ -1265,3 +1265,65 @@ h1.argus-display {
 .section-title:has([data-argus-counter]) {
     font-feature-settings: 'tnum', 'lnum' !important;
 }
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   PACK 30 — Visual #2: Tema "torneo" (gris/negro neutro, sin gradientes
+   bronce, foco en legibilidad y screenshots-ready). Activable con
+   body.tournament-mode (toggle desde argusUI.setTournamentMode(true|false)).
+   ════════════════════════════════════════════════════════════════════════ */
+body.tournament-mode {
+    --accent:        #94a3b8 !important;
+    --accent-bg:     rgba(148, 163, 184, 0.10) !important;
+    --bronze:        #94a3b8 !important;
+    --cobre:         #cbd5e1 !important;
+    --cobre-glow:    #e2e8f0 !important;
+    --bg-2:          #0a0d12 !important;
+    --bg-3:          #11151c !important;
+    --border:        rgba(255,255,255,0.08) !important;
+    --border-m:      rgba(255,255,255,0.16) !important;
+    filter: saturate(0.55);
+}
+body.tournament-mode .stat-card,
+body.tournament-mode .panel-section,
+body.tournament-mode .modal-content,
+body.tournament-mode .scan-card,
+body.tournament-mode .recent-scan-row {
+    background: linear-gradient(180deg, #0d1117, #0a0d12) !important;
+    border-color: rgba(255, 255, 255, 0.10) !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.6) !important;
+}
+body.tournament-mode .btn-primary {
+    background: linear-gradient(135deg, #475569 0%, #1e293b 100%) !important;
+    color: #fff !important;
+    box-shadow: 0 2px 6px rgba(15,23,42,0.4) !important;
+}
+body.tournament-mode .badge,
+body.tournament-mode .chip,
+body.tournament-mode .argus-chip-tab.active {
+    background: rgba(148,163,184,0.12) !important;
+    border-color: rgba(148,163,184,0.32) !important;
+    color: #cbd5e1 !important;
+}
+body.tournament-mode .panel-title,
+body.tournament-mode .section-title,
+body.tournament-mode .scan-page-title {
+    background: none !important;
+    -webkit-text-fill-color: #e2e8f0 !important;
+    color: #e2e8f0 !important;
+    text-shadow: none !important;
+}
+/* Quita halos/efectos llamativos */
+body.tournament-mode #argus-bg,
+body.tournament-mode #argus-bg-overlay,
+body.tournament-mode #particles-canvas {
+    opacity: 0.25 !important;
+    filter: grayscale(1) !important;
+}
+body.tournament-mode .stat-number,
+body.tournament-mode .stat-card .number {
+    color: #e2e8f0 !important;
+    background: none !important;
+    -webkit-text-fill-color: #e2e8f0 !important;
+}
+

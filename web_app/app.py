@@ -3330,6 +3330,125 @@ _SERVER_FP_FRAGMENTS = [
     'steam\\steamapps\\common',          # juegos instalados (no son hack)
     'steam\\steamapps\\downloading',     # downloads en curso
     'steam\\appcache', 'steam\\config',
+
+    # ══════════════════════════════════════════════════════════════════════
+    # PACK 29 — Lote masivo de whitelists server-side adicionales.
+    # Aplicado retroactivamente a scans antiguos via _scrub_results_for_display.
+    # ══════════════════════════════════════════════════════════════════════
+
+    # ── Filter #5 (extensión) — Launchers MC oficiales/third-party adicionales
+    'xmcl-launcher', 'x minecraft launcher',  # XMCL — open-source, popular en CN
+    'hmcl', 'hmcl-launcher', 'huangminecraftlauncher',  # HMCL Java (no Android variant)
+    'magiclauncher', 'magic launcher',
+    'fjordlauncher', 'fjord launcher',
+    'technic launcher', 'technicpack',
+    'mclauncher\\', 'mclauncher.exe',
+    'voidclient', 'voidlauncher',
+    'salwyrr', 'salwyrr launcher',
+    'pcl2\\', 'pcl-launcher',         # Plain Craft Launcher 2 — popular CN
+    'cmclauncher\\', 'cmcl',
+    'easymc',
+    'pojavlauncher\\',                 # Pojav (también usado en desktop por algunos)
+    'tlauncher 2',                     # TLauncher v2 modern
+    'novalauncher\\', 'nova launcher minecraft',
+    # Forks legítimos abiertos
+    'siged-launcher', 'olive launcher', 'olivelauncher',
+
+    # ── Filter #7 — Reputación por path: rutas inherentemente firmadas ─────
+    'program files\\windowsapps\\microsoft.',    # UWP firmados Microsoft
+    'program files\\windowsapps\\xboxgaming',    # Xbox apps
+    'program files\\windowsapps\\spotifyab.',    # Spotify UWP
+    'program files\\windowsapps\\discordinc.',   # Discord UWP (raro pero existe)
+    'program files\\common files\\microsoft shared\\',
+    'program files (x86)\\common files\\microsoft shared\\',
+    'program files\\common files\\system\\',
+    'windowsapps\\runtime',                       # runtime files UWP
+    'windowsapps\\sdk',
+    # Microsoft Store SDK / runtime
+    'microsoft.vclibs.140', 'microsoft.netnative',
+    'microsoft.ui.xaml', 'microsoft.windowsappruntime',
+
+    # ── Filter #10 — Patrones genéricos test/demo/sample en filename ───────
+    # Si el path/nombre contiene estos tokens, MUY probable que sea archivo
+    # de prueba personal del usuario, no un cheat real (los cheats no se
+    # llaman a sí mismos "test"). Solo aplica como segmento de path —
+    # si el filename completo es 'test.exe' aún se reporta porque puede
+    # ser un binario malicioso renombrado.
+    '\\demos\\', '\\demo\\', '\\samples\\', '\\examples\\',
+    '\\tests\\', '\\test_', '\\proyectos demo\\',
+    '\\tutorial\\', '\\tutoriales\\',
+
+    # ── Filter #28 — Paths localizados (es-AR/es-MX/es-ES) ─────────────────
+    # Windows con idioma español traduce "Documents" a "Documentos", etc.
+    # Estos paths son carpetas del usuario, no instalaciones de cheats.
+    'usuarios\\public\\', 'usuarios\\publico\\',
+    '\\mis documentos\\', '\\documentos\\favoritos\\',
+    '\\descargas\\drivers',
+    '\\escritorio\\backups',
+    '\\imagenes\\', '\\videos\\', '\\musica\\',
+
+    # ── Filter #32 — Caches de package managers (no contienen ejecutables ──
+    # propios; son cachés de Maven/Gradle/npm/pip/cargo/yarn).
+    '\\.gradle\\caches', '\\.gradle\\wrapper\\dists',
+    '\\.m2\\repository', '\\.ivy2\\cache',
+    'appdata\\local\\npm-cache',
+    'appdata\\roaming\\npm', 'appdata\\local\\yarn',
+    'appdata\\local\\pip\\cache', 'appdata\\local\\pypoetry\\cache',
+    '\\.cargo\\registry', '\\.cargo\\git',
+    '\\.cache\\pip', '\\.cache\\yarn', '\\.cache\\go-build',
+    '\\.nuget\\packages', '\\packages\\.nuget',
+
+    # ── Filter #35 — Cache de modpacks de CurseForge / Modrinth ────────────
+    # Mods descargados auto por el launcher cuando el usuario suscribe a un
+    # modpack. Mismos archivos en N PCs, no cuenta como "hack instalado".
+    '.minecraft\\mods\\caches', '.minecraft\\modpacks\\',
+    'curseforge\\install\\', 'curseforge\\downloads\\',
+    'modrinth\\downloads\\', 'modrinth\\cache\\',
+    'feathermc\\modpacks\\', 'feather launcher\\modpacks\\',
+    'lunarclient\\modpacks\\',
+    'gdlauncher\\downloads', 'gdlauncher\\packs',
+    'multimc\\meta\\', 'prismlauncher\\meta\\',
+    'overwolf\\packages\\extensions\\onjbihaipdjlphmlpedhdpgpaihjeofg\\',  # CurseForge ext stable id
+
+    # ── Filter #52 — Reinstalaciones legítimas (cache/installer paths) ─────
+    # Carpetas de instaladores típicos. Si un mismo binario aparece en N
+    # scans del mismo usuario, es reinstalación, no nuevo evento.
+    '\\appdata\\local\\package cache\\',     # Visual Studio installer cache
+    '\\package cache\\{',                    # GUID-based installer cache
+    'softwaredistribution\\download',        # Windows Update
+    'wuredist\\', 'wuredownloads\\',
+    '\\msocache\\', 'mshtmedit',
+
+    # ── Filter #60 — Cooldown markers: paths donde la empresa ya marcó FP ──
+    # Soportado a nivel de fragmento aprendido (learned_legit_paths) —
+    # solo agregamos aquí defaults globales para acelerar. La lógica de
+    # cooldown por empresa va en el endpoint /api/staff/learn-fp ya existente.
+
+    # ── Bonus extra: programas legítimos comunes mal-flageados ──────────────
+    'jdownloader', 'jdownloader2',           # download manager
+    'qbittorrent', 'utorrent',               # torrent (legal o no, no es MC hack)
+    'transmission-qt',
+    '7-zip\\', '7z.exe', '7za.exe',
+    'winrar\\', 'winrar.exe',
+    'notepad++', 'sublime text', 'vscode',
+    'audacity\\', 'davinci resolve\\',
+    'unity hub', 'unityhub.exe',
+    'godot\\', 'godot.exe',
+    'blender\\', 'blender.exe',
+    'autodesk\\fusion 360',
+    'docker desktop\\', 'wsl\\',
+    'powertoys\\',
+    'flow.launcher', 'powerToys.exe',
+    'wechat\\', 'qqlive\\', 'tencent\\',
+    'dropbox\\', 'box drive', 'mega.nz',
+    'putty.exe', 'mobaxterm', 'winscp',
+    'filezilla\\',
+    'spotify.exe', 'apple music\\', 'apple\\itunes',
+    # Repos de scripts personales del usuario (proyectos legítimos suyos)
+    '\\onedrive\\documents\\github\\',
+    '\\users\\public\\desktop\\',
+    '\\projects\\', '\\proyectos\\',
+    '\\repositories\\', '\\repos\\',
 ]
 
 
@@ -3648,6 +3767,61 @@ def _is_server_false_positive(result: dict) -> bool:
     except Exception:
         pass
 
+    # ════════════════════════════════════════════════════════════════════
+    # PACK 29 — heurísticas inline (sin tabla / sin red) que filtran
+    # categorías obvias de FP que no se pueden capturar solo con fragmentos.
+    # ════════════════════════════════════════════════════════════════════
+    try:
+        name_lower = (nombre or '').lower().strip()
+
+        # Filter #3 — "killaura" / "aimbot" / etc como nombre LITERAL del archivo
+        # en path de usuario (Documents/Escritorio/Downloads), con extensión
+        # de imagen/texto/video/pdf → es nota personal o screenshot, no el
+        # cheat real. Los cheats reales SIEMPRE son .exe/.jar/.dll en paths
+        # de instalación (no en Documents).
+        _user_path_segs = (
+            '\\desktop\\', '\\downloads\\', '\\documents\\',
+            '\\documentos\\', '\\descargas\\', '\\escritorio\\',
+            '\\users\\public\\', '\\users\\publico\\',
+            '\\imagenes\\', '\\pictures\\', '\\my pictures\\',
+            '\\videos\\', '\\music\\', '\\musica\\',
+        )
+        _mc_install_segs = (
+            '\\.minecraft\\mods', '\\.minecraft\\bin',
+            'lunarclient\\offline', 'feathermc\\mods',
+            'curseforge\\minecraft\\instances\\',
+            'multimc\\instances\\', 'prismlauncher\\instances\\',
+            'gdlauncher\\instances\\', 'atlauncher\\instances\\',
+            'modrinth-app\\profiles\\',
+        )
+        _harmless_extensions = (
+            '.txt', '.md', '.rtf', '.docx', '.doc', '.pdf', '.html', '.htm',
+            '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.ico',
+            '.mp4', '.avi', '.mov', '.mkv', '.webm', '.mp3', '.wav', '.ogg', '.flac',
+            '.json', '.xml', '.yaml', '.yml', '.csv', '.log', '.ini', '.cfg',
+        )
+        in_user_path = any(seg in combined for seg in _user_path_segs)
+        in_mc_install = any(seg in combined for seg in _mc_install_segs)
+        ends_harmless = name_lower.endswith(_harmless_extensions)
+        if in_user_path and not in_mc_install and ends_harmless:
+            # Ej: "killaura tutorial.txt", "vape_screenshot.png" en Downloads
+            return True
+
+        # Filter #10 — patrones test/demo/sample/example/tutorial/proyecto en
+        # nombre del archivo (no solo path) y en path de usuario. Estos suelen
+        # ser proyectos personales/test del usuario, no cheats reales.
+        _self_test_tokens = (
+            'sample_', 'example_', 'demo_', 'test_', 'prueba_', 'pruebas_',
+            'tutorial_', 'tutoriales_', 'proyecto_', 'proyectos_',
+            'mi proyecto', 'mi prueba', 'mi test',
+        )
+        if in_user_path and any(tok in name_lower for tok in _self_test_tokens):
+            # Solo descarta si el alert es bajo o es archivo benigno
+            if nivel not in ('CRITICAL',):
+                return True
+    except Exception:
+        pass
+
     return False
 
 
@@ -3808,9 +3982,14 @@ def _query_evidence_seen_counts(cur, results: list) -> dict:
 
 
 def _decorate_results_with_first_seen(results: list, seen_map: dict) -> list:
-    """Inyecta 'first_seen' (bool) y 'seen_count' (int) en cada result.
-    Mutates en sitio y devuelve la misma lista. Conserva resultados sin
-    fingerprint (los marca como first_seen=False, seen_count=0).
+    """Inyecta 'first_seen' (bool), 'seen_count' (int) y 'globally_common'
+    (bool) en cada result. Mutates en sitio y devuelve la misma lista.
+    Conserva resultados sin fingerprint (los marca como first_seen=False).
+
+    Filter #12 — Consenso global: si un fingerprint apareció >=50 veces
+    sin que se haya verificado como hack en histórico, lo marcamos como
+    'globally_common' para que el panel ofrezca al staff aprenderlo
+    como FP de un solo click. NO degrada el verdict automáticamente.
     """
     if not results:
         return results
@@ -3820,14 +3999,16 @@ def _decorate_results_with_first_seen(results: list, seen_map: dict) -> list:
             if not fp:
                 r['first_seen'] = False
                 r['seen_count'] = 0
+                r['globally_common'] = False
                 continue
             n = int(seen_map.get(fp) or 0)
             r['seen_count'] = n
-            # Heurística first_seen: <=1 vez global → primera vez
             r['first_seen'] = (n <= 1)
+            r['globally_common'] = (n >= 50)
         except Exception:
             r.setdefault('first_seen', False)
             r.setdefault('seen_count', 0)
+            r.setdefault('globally_common', False)
     return results
 
 
