@@ -3651,6 +3651,186 @@ def _is_server_false_positive(result: dict) -> bool:
     return False
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# Filter #42 — Heurística "Primera vez visto" (first-seen tracking).
+# ════════════════════════════════════════════════════════════════════════════
+# Cada evidencia (file_hash o name_norm+tipo) se trackea en evidence_fingerprints
+# con contador acumulado. Cuando un scan llega:
+#   - Si el fingerprint no existe → first_seen=true (revisión humana sugerida).
+#   - Si seen_count crece → ya fue visto antes en otros scans/empresas.
+# El panel muestra badge "🆕 Primera vez visto" o "👁 Visto Nx" en cada hallazgo.
+# Auditable y NO destructivo: nunca cambia el verdict, solo decora metadata.
+# ════════════════════════════════════════════════════════════════════════════
+import re as _re_fp42
+_NAME_NORM_RE = _re_fp42.compile(r'[\d\s_\-\.\(\)\[\]\{\}]+')
+
+
+def _compute_evidence_fingerprint(r: dict) -> str | None:
+    """Genera un fingerprint estable para un result de scan.
+    Prioridad: file_hash (sha256 real del binario) → name_norm+tipo.
+    Devuelve None si no hay datos suficientes para identificar la evidencia.
+    """
+    if not r or not isinstance(r, dict):
+        return None
+    fh = (r.get('file_hash') or '').strip().lower()
+    if fh and len(fh) >= 16 and all(c in '0123456789abcdef' for c in fh[:64]):
+        return f"hash:{fh[:64]}"
+    name = (r.get('nombre') or r.get('archivo') or r.get('issue_name') or '').lower().strip()
+    if not name:
+        return None
+    name_norm = _NAME_NORM_RE.sub('', name)[:64]
+    if len(name_norm) < 3:
+        return None
+    tipo = (r.get('tipo') or r.get('issue_type') or '').lower()[:32]
+    return f"name:{name_norm}|tipo:{tipo}"
+
+
+def _ensure_evidence_fingerprints_table(cur) -> bool:
+    """Crea evidence_fingerprints si no existe. Idempotente, seguro de llamar
+    múltiples veces. Devuelve True si la tabla está disponible.
+    """
+    try:
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS evidence_fingerprints ("
+            " fingerprint TEXT PRIMARY KEY,"
+            " sample_name TEXT,"
+            " sample_tipo TEXT,"
+            " sample_categoria TEXT,"
+            " seen_count INTEGER NOT NULL DEFAULT 1,"
+            " first_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+            " last_seen_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+            " hack_count    INTEGER NOT NULL DEFAULT 0,"
+            " clean_count   INTEGER NOT NULL DEFAULT 0,"
+            " sample_scan_id INTEGER"
+            ")"
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _upsert_evidence_fingerprints(cur, scan_id: int, results: list) -> dict:
+    """UPSERT por cada result en evidence_fingerprints. Devuelve dict
+    {fingerprint: {'seen_count': N, 'was_first': bool}} para que el caller
+    pueda decorar la respuesta con esa info.
+    Idempotente, tolera fallos de BD (devuelve dict vacío si la tabla cae).
+    """
+    out: dict = {}
+    if not results:
+        return out
+    if not _ensure_evidence_fingerprints_table(cur):
+        return out
+    seen_in_batch: set = set()
+    for r in results:
+        fp = _compute_evidence_fingerprint(r)
+        if not fp or fp in seen_in_batch:
+            continue
+        seen_in_batch.add(fp)
+        try:
+            cur.execute('SAVEPOINT efp_save')
+            cur.execute(
+                f"SELECT seen_count FROM evidence_fingerprints WHERE fingerprint = {_PH}",
+                (fp,)
+            )
+            row = cur.fetchone()
+            existing_count = None
+            if row:
+                existing_count = row[0] if not isinstance(row, dict) else row.get('seen_count')
+            if existing_count is None:
+                # Primera vez visto a nivel global
+                cur.execute(
+                    f"INSERT INTO evidence_fingerprints "
+                    f" (fingerprint, sample_name, sample_tipo, sample_categoria, "
+                    f"  seen_count, first_seen_at, last_seen_at, sample_scan_id) "
+                    f" VALUES ({_PH},{_PH},{_PH},{_PH},1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,{_PH})",
+                    (
+                        fp,
+                        ((r.get('nombre') or r.get('archivo') or r.get('issue_name') or '')[:255]),
+                        ((r.get('tipo') or r.get('issue_type') or '')[:64]),
+                        ((r.get('categoria') or r.get('issue_category') or '')[:64]),
+                        scan_id,
+                    )
+                )
+                out[fp] = {'seen_count': 1, 'was_first': True}
+            else:
+                cur.execute(
+                    f"UPDATE evidence_fingerprints "
+                    f" SET seen_count = seen_count + 1, last_seen_at = CURRENT_TIMESTAMP "
+                    f" WHERE fingerprint = {_PH}",
+                    (fp,)
+                )
+                out[fp] = {'seen_count': int(existing_count) + 1, 'was_first': False}
+            cur.execute('RELEASE SAVEPOINT efp_save')
+        except Exception:
+            try:
+                cur.execute('ROLLBACK TO SAVEPOINT efp_save')
+            except Exception:
+                pass
+            # Si la tabla falla a nivel filo, salimos en silencio
+            return out
+    return out
+
+
+def _query_evidence_seen_counts(cur, results: list) -> dict:
+    """Variante read-only para GET: devuelve dict {fingerprint: seen_count}
+    sin escribir. Si la tabla no existe, devuelve dict vacío (decorate falla
+    silenciosamente y todos quedan como first_seen=true, lo cual es seguro).
+    """
+    out: dict = {}
+    if not results:
+        return out
+    fps: list = []
+    for r in results:
+        fp = _compute_evidence_fingerprint(r)
+        if fp and fp not in out:
+            fps.append(fp)
+            out[fp] = 0  # default
+    if not fps:
+        return out
+    try:
+        # Construimos un IN (...) con placeholders dinámicos
+        placeholders = ','.join([_PH] * len(fps))
+        cur.execute(
+            f"SELECT fingerprint, seen_count FROM evidence_fingerprints "
+            f"WHERE fingerprint IN ({placeholders})",
+            fps
+        )
+        rows = cur.fetchall() or []
+        for row in rows:
+            if isinstance(row, dict):
+                out[row.get('fingerprint')] = int(row.get('seen_count') or 0)
+            else:
+                out[row[0]] = int(row[1] or 0)
+    except Exception:
+        # Tabla aún no existe (deploys nuevos), todos quedan en 0 → first_seen
+        return {fp: 0 for fp in fps}
+    return out
+
+
+def _decorate_results_with_first_seen(results: list, seen_map: dict) -> list:
+    """Inyecta 'first_seen' (bool) y 'seen_count' (int) en cada result.
+    Mutates en sitio y devuelve la misma lista. Conserva resultados sin
+    fingerprint (los marca como first_seen=False, seen_count=0).
+    """
+    if not results:
+        return results
+    for r in results:
+        try:
+            fp = _compute_evidence_fingerprint(r)
+            if not fp:
+                r['first_seen'] = False
+                r['seen_count'] = 0
+                continue
+            n = int(seen_map.get(fp) or 0)
+            r['seen_count'] = n
+            # Heurística first_seen: <=1 vez global → primera vez
+            r['first_seen'] = (n <= 1)
+        except Exception:
+            r.setdefault('first_seen', False)
+            r.setdefault('seen_count', 0)
+    return results
+
+
 def _scrub_results_for_display(results: list) -> list:
     """Aplica el filtro server-side a una lista de resultados ya almacenados,
     devolviendo solo los que NO son FP. Útil para sanear scans antiguos al servirlos.
@@ -4109,6 +4289,18 @@ def submit_scan_results(scan_id):
             results = [r for r in results if not _is_server_false_positive(r)]
             if len(results) < before:
                 print(f"[DEBUG] FP filter: {before} → {len(results)} resultados ({before - len(results)} descartados)")
+            # Filter #42 — Upsert evidence_fingerprints para tracking "first-seen"
+            # Tolera fallos: si la tabla aún no existe, simplemente no se decora.
+            try:
+                cursor.execute('SAVEPOINT efp_upsert_save')
+                _upsert_evidence_fingerprints(cursor, scan_id, results)
+                cursor.execute('RELEASE SAVEPOINT efp_upsert_save')
+            except Exception as _efp_e:
+                try:
+                    cursor.execute('ROLLBACK TO SAVEPOINT efp_upsert_save')
+                except Exception:
+                    pass
+                print(f"[DEBUG] evidence_fingerprints upsert falló silenciosamente: {_efp_e}")
             print(f"[DEBUG] Insertando {len(results)} resultados en scan_results")
             if results:
                 def _norm_conf(v):
@@ -4919,6 +5111,15 @@ def get_scan(scan_id):
                 # Saneo de display: filtrar FPs de scans antiguos al servirlos al panel
                 # (no toca la BD, solo lo que ve el staff)
                 results = _scrub_results_for_display(results)
+
+                # Filter #42 — Decorar con first_seen + seen_count antes de servir.
+                # 1 query para todo el scan (IN ...). Si la tabla cae, todos quedan
+                # en first_seen=true que es "más alarmante" y por tanto seguro.
+                try:
+                    _seen_map = _query_evidence_seen_counts(cursor, results)
+                    _decorate_results_with_first_seen(results, _seen_map)
+                except Exception as _fs_e:
+                    print(f"⚠️ first-seen decorate falló: {_fs_e}")
 
                 scan['results'] = results
 

@@ -564,9 +564,31 @@ NOTA DE LECTURA
         hay match de hack-term. Si el nombre coincide con hack, igual
         se reporta (no se arriesga falso negativo).
 
-[ ] 42. Heurística "primera vez visto" segura: si el hash NUNCA fue visto
+[X] 42. Heurística "primera vez visto" segura: si el hash NUNCA fue visto
         en la base global de Argus, NO banear automáticamente — marcar para
         revisión humana primero (evita ser zero-day-paranoid).
+        DONE v1.6.49 (Pack 28) — Tabla evidence_fingerprints (creada
+        on-demand) con (fingerprint, sample_name/tipo/categoria,
+        seen_count, first_seen_at, last_seen_at, hack/clean_count,
+        sample_scan_id). Helpers en web_app/app.py:
+        - _compute_evidence_fingerprint(r): file_hash sha256[:64] si
+          existe, fallback name_norm+tipo (limpia números/separadores).
+        - _ensure_evidence_fingerprints_table(cur): CREATE TABLE IF NOT
+          EXISTS, idempotente, sin migración manual.
+        - _upsert_evidence_fingerprints(cur, scan_id, results): UPSERT
+          por result, devuelve {fp: {seen_count, was_first}}. Aplicado
+          en submit_scan_results dentro de SAVEPOINT efp_upsert_save
+          (tolera fallos sin tumbar el insert principal).
+        - _query_evidence_seen_counts(cur, results): batch SELECT IN(...)
+          read-only para GET /api/scans/<id>.
+        - _decorate_results_with_first_seen(results, seen_map): inyecta
+          first_seen (bool) y seen_count (int) en cada result.
+        Frontend (panel.js v=65): badge naranja "🆕 Nueva" si first_seen=
+        true, badge índigo "👁 Visto Nx" si seen_count>=5, solo en
+        CRITICAL/SOSPECHOSO (en informativos solo añadía ruido visual).
+        Tooltip explica el significado al staff.
+        No automatiza el verdict — es informativo, alinea con el
+        principio de "human-in-the-loop" antes de banear.
 
 [X] 43. Threshold dinámico de risk score por empresa: cliente premium
         configura "estricto/normal/permisivo" según política del server.
@@ -1810,12 +1832,12 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
 ═══════════════════════════════════════════════════════════════════════════════
 
   Scanner ............................. 60 ítems   (detección)      14/60
-  Filtro .............................. 60 ítems   (anti-FP)        35/60
+  Filtro .............................. 60 ítems   (anti-FP)        36/60
   Visual .............................. 60 ítems   (UI/UX)          43/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
   Plataforma (Android / APK) .......... 15 ítems   (móvil Bedrock+Pojav) 15/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 210 ítems  COMPLETADOS:   116/210
+  TOTAL ............................... 210 ítems  COMPLETADOS:   117/210
                                                   (6 parciales: S#9, V#32, V#43, V#53, F#34, A#3)
                                                   (6 bonus: scanner_version chip,
                                                    argusUI.confirm, argusUI.typewriter,
@@ -1837,6 +1859,86 @@ Restricciones honestas (qué NO cubre vs Windows/Linux):
                                                   (AppImage/Flatpak/deb), #14 (CI Docker)
 
 SESIÓN DEL 08-may-2026:
+  Pack 28 (v1.6.49): Web mobile UX + Filter #42 (first-seen).
+                    Sin recompilar el .exe.
+
+                    ────── BLOQUE A: WEB MOBILE UX + PWA ──────
+                    Reporte del usuario: "las dimensiones para teléfonos
+                    son erróneas, panel staff y /descargar se ven fatal".
+                    Diagnóstico: la PWA estaba bien configurada pero
+                    elementos clave reventaban en mobile:
+                      * Footer fijo del panel con `left:240px` hardcoded
+                        (se quedaba pegado al sidebar fantasma).
+                      * Modales/dropdowns con min-width 200-230px que
+                        desbordaban en pantallas <400px.
+                      * Plat-tabs de /descargar (Win/Linux/Android) se
+                        envolvían feo.
+                      * Inputs sin font-size 16px disparaban zoom auto
+                        en iOS.
+                      * Service worker cacheando panel.css viejo
+                        (argus-v3) → fixes tardaban en verse.
+                    Cambios:
+                      * web_app/static/css/argus-mobile-fix.css NUEVO,
+                        consolida overrides en 3 breakpoints (600/540/
+                        420px) cubriendo panel, descargar, index, login
+                        y register. Reglas para footer responsive,
+                        modales 96vw, subnav scrollable, filtros stack,
+                        dropdowns con min-width fijo limitados a
+                        100vw-24px, quicksearch+user-info compactos,
+                        plat-tabs scroll horizontal.
+                      * Cargado en panel.html / descargar.html /
+                        index.html / login.html / register.html.
+                      * Meta `viewport-fit=cover` + apple-mobile-web-app-*
+                        + apple-touch-icon en todos los templates.
+                      * web_app/static/manifest.json: scope, lang, id,
+                        display_override, maskable icons, shortcuts
+                        (Scans / Descargar), orientation:any (antes
+                        portrait-primary, demasiado restrictivo).
+                      * web_app/static/sw.js: CACHE_NAME bump a
+                        argus-v4-mobile-fix → activate borra el cache
+                        viejo, los clientes ya instalados ven el CSS
+                        nuevo al primer reload.
+                      * panel.html: footer #argus-footer pasa de
+                        flex-wrap:nowrap a flex-wrap:wrap + max-width:
+                        100vw, así no desborda nunca.
+                      * Inputs forzados a font-size 16px en mobile
+                        (no más zoom auto en iOS al focusear filtros).
+
+                    ────── BLOQUE B: FILTER #42 FIRST-SEEN ──────
+                    F#42 — Heurística "primera vez visto":
+                      * Tabla evidence_fingerprints creada on-demand
+                        (CREATE TABLE IF NOT EXISTS) con fingerprint
+                        PRIMARY KEY, sample_name/tipo/categoria,
+                        seen_count, first_seen_at, last_seen_at,
+                        hack/clean_count, sample_scan_id.
+                      * _compute_evidence_fingerprint(r): prioriza
+                        file_hash (sha256[:64]) si presente,
+                        fallback name_norm + tipo (limpia números/
+                        separadores con regex).
+                      * _upsert_evidence_fingerprints en POST
+                        /api/scans/<id>/results dentro de SAVEPOINT
+                        efp_upsert_save → si la tabla cae, el insert
+                        principal sigue funcionando.
+                      * _query_evidence_seen_counts en GET
+                        /api/scans/<id> con batch SELECT IN(...) →
+                        1 query por scan (no N).
+                      * _decorate_results_with_first_seen inyecta
+                        first_seen (bool) y seen_count (int) en cada
+                        result servido.
+                      * Panel (panel.js v=65): badge naranja
+                        "🆕 Nueva" si first_seen=true, badge índigo
+                        "👁 Visto Nx" si seen_count>=5. Solo en
+                        CRITICAL/SOSPECHOSO. Tooltip explica al staff.
+                      * NO automatiza verdicts — es human-in-the-loop:
+                        si una evidencia es la primera vez vista
+                        globalmente, el staff debería revisarla
+                        manualmente antes de banear (zero-day-paranoid
+                        prevention).
+
+                    → 1 filtro completado (F#42) + UX completa de
+                      mobile sobre 5 templates. Filtro: 35/60 → 36/60.
+                      Total: 116/210 → 117/210.
+
   Pack 26 (v1.6.49-android2): Android completo — A#4, A#5, A#7, A#9,
                     A#12 de PARTIAL→DONE. Plataforma Android pasa de
                     9/15 a 14/15. Únicos pendientes restantes: A#3

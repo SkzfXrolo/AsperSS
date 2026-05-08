@@ -3230,6 +3230,23 @@ function renderIssuePage(container, scanId) {
             : `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);flex-shrink:0;white-space:nowrap;">Fuera de instancia</span>`);
         const variantBadge = _grp ? `<button onclick="event.stopPropagation();var el=document.getElementById('vg_${_gKey}');el.style.display=el.style.display==='flex'?'none':'flex';" style="font-size:10px;padding:1px 7px;border-radius:4px;background:rgba(129,140,248,0.15);color:#818cf8;border:1px solid rgba(129,140,248,0.3);cursor:pointer;flex-shrink:0;">${_grp.length} variantes ▾</button>` : '';
         const metaChip = _metadataVerdictChip(result);
+        // Filter #42 — Badge "primera vez visto" / "visto Nx".
+        // Decorado por el backend con first_seen + seen_count en /api/scans/<id>.
+        // Solo mostramos en CRITICAL/SOSPECHOSO (en informativos solo añade ruido).
+        let seenBadge = '';
+        if (isCrit || isMid) {
+            if (result.first_seen === true) {
+                seenBadge = `<span title="Esta evidencia es la primera vez que la vemos en cualquier scan de Argus. Sugerimos revisión humana antes de banear."
+                    style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;
+                    background:rgba(245,158,11,0.18);color:#f59e0b;border:1px solid rgba(245,158,11,0.45);
+                    flex-shrink:0;white-space:nowrap;">🆕 Nueva</span>`;
+            } else if (typeof result.seen_count === 'number' && result.seen_count >= 5) {
+                seenBadge = `<span title="Esta evidencia ya ha aparecido ${result.seen_count} veces en otros scans. Más confianza en el verdict."
+                    style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;
+                    background:rgba(99,102,241,0.14);color:#818cf8;border:1px solid rgba(99,102,241,0.32);
+                    flex-shrink:0;white-space:nowrap;">👁 Visto ${result.seen_count}×</span>`;
+            }
+        }
 
         const safeLevel = (result.alert_level || 'SOSPECHOSO').replace(/'/g,"");
         const safeName  = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
@@ -3261,6 +3278,7 @@ function renderIssuePage(container, scanId) {
                     <span style="font-size:12px;flex-shrink:0;" title="Nivel de peligro">${flames}</span>
                     ${variantBadge}
                     ${metaChip}
+                    ${seenBadge}
                     ${instBadge}
                     ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;flex-shrink:0;white-space:nowrap;">${_getCategoryLabel(cat)}</span>` : ''}
                     <button onclick="event.stopPropagation();aiExplainFinding('${safeName}','${safeLevel}',this)" title="Explicar con IA"
