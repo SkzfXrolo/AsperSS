@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.48"
+SCANNER_VERSION = "1.6.49"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -438,6 +438,197 @@ def is_mod_updater_path(path: str) -> bool:
         return False
     p = str(path).lower().replace('/', '\\')
     return any(frag in p for frag in _MOD_UPDATER_PATH_FRAGMENTS)
+
+
+# ── Filtro #21: Microsoft Defender — whitelist absoluta ─────────────────────
+# Defender es parte esencial de Windows; sus binarios inyectan en otros
+# procesos y leen handles de cualquier .exe. Si un FP del scanner apunta a
+# Defender, lo descartamos directamente.
+_DEFENDER_BINARIES = (
+    'msmpeng.exe',                    # Defender real-time engine
+    'msmpenghosted.exe',
+    'nissrv.exe',                     # Defender Network Inspection
+    'mpcmdrun.exe',                   # Defender CLI
+    'mpcopyaccelerator.exe',
+    'mpdetours.dll', 'mpdetoursdr.sys',
+    'mpsigstub.exe',                  # Defender signature update stub
+    'securityhealthservice.exe',      # Win11 SecurityHealth
+    'securityhealthhost.exe',
+    'securityhealthsystray.exe',
+    'mpdefendercoreservice.exe',
+    'amsi.dll', 'mpoav.dll', 'mpclient.dll',
+    'configsecuritypolicy.exe',
+    'mssense.exe',                    # Microsoft Defender for Endpoint
+    'sense.exe',
+    'sgrmbroker.exe',                 # System Guard runtime broker
+)
+_DEFENDER_PATH_FRAGMENTS = (
+    r'\windows defender\\',
+    r'\windowsdefender\\',
+    r'\windows defender advanced threat protection\\',
+    r'\microsoft\windows defender\\',
+    r'\windows security\\',
+    r'\windowsapps\microsoft.windows.securityhealthui',
+    r'\programdata\microsoft\windows defender\\',
+    r'\programdata\microsoft\windows security health\\',
+)
+def is_microsoft_defender(path_or_name: str) -> bool:
+    """True si el path/filename pertenece a Microsoft Defender o Windows
+    Security Health (Filtro #21)."""
+    if not path_or_name:
+        return False
+    s = str(path_or_name).lower().replace('/', '\\')
+    base = os.path.basename(s)
+    if base in _DEFENDER_BINARIES:
+        return True
+    return any(frag in s for frag in _DEFENDER_PATH_FRAGMENTS)
+
+
+# ── Filtro #22: WinSxS / Common Files Microsoft / Servicing / assembly ─────
+_WINDOWS_SHARED_PATH_FRAGMENTS = (
+    r'\windows\winsxs\\',
+    r'\windows\servicing\\',
+    r'\windows\assembly\\',
+    r'\windows\inf\\',
+    r'\windows\policydefinitions\\',
+    r'\windows\fonts\\',
+    r'\windows\globalization\\',
+    r'\windows\immersivecontrolpanel\\',
+    r'\program files\common files\microsoft shared\\',
+    r'\program files (x86)\common files\microsoft shared\\',
+    r'\program files\common files\system\\',
+    r'\program files (x86)\common files\system\\',
+    r'\program files\windows defender\\',
+    r'\program files (x86)\windows defender\\',
+    r'\program files\windows nt\\',
+    r'\program files\windowspowershell\\',
+    r'\program files (x86)\windowspowershell\\',
+)
+def is_windows_shared_path(path: str) -> bool:
+    """True si el path es de WinSxS, assembly, Microsoft Shared o
+    cualquier carpeta de sistema con binarios firmados por MS que el
+    scanner suele falsamente marcar (Filtro #22)."""
+    if not path:
+        return False
+    p = str(path).lower().replace('/', '\\')
+    return any(frag in p for frag in _WINDOWS_SHARED_PATH_FRAGMENTS)
+
+
+# ── Filtro #58: Java agents legítimos (espejo del de argus_linux) ──────────
+# Profilers / APMs / build tools que se atachan a JVMs vía -javaagent
+# (sus filenames suelen contener tokens que parecen sospechosos).
+_LEGIT_JAVA_AGENT_TOKENS = (
+    'yourkit', 'jprofiler', 'visualvm', 'jrebel',
+    'newrelic', 'datadog-agent', 'datadog-java-agent', 'appdynamics',
+    'glowroot', 'kanela', 'pinpoint-agent', 'aspectjweaver',
+    'jacocoagent', 'jacoco-agent', 'byteman',
+    'gradle-agent', 'maven-surefire', 'mockito-agent',
+    'opentelemetry-javaagent', 'aws-opentelemetry-agent',
+    'spring-instrument', 'spring-boot-devtools',
+)
+def is_legit_java_agent(filename_or_path: str) -> bool:
+    """True si el texto contiene el nombre de un Java agent legítimo
+    (profilers/APM/build tools). Filtro #58."""
+    if not filename_or_path:
+        return False
+    n = str(filename_or_path).lower()
+    return any(tok in n for tok in _LEGIT_JAVA_AGENT_TOKENS)
+
+
+# ── Filtro #27: Bayesian-lite filename score ───────────────────────────────
+# Tokens que SUMAN sospecha cuando aparecen en un .exe/.jar relacionado
+# con Minecraft, y tokens que RESTAN sospecha (típicos de instaladores
+# legítimos). El delta es chico — nunca decide solo, solo modifica el
+# score base devuelto por las heurísticas existentes.
+_BAYESIAN_POS_TOKENS = (
+    'loader', 'injector', 'inject', 'cheat', 'hook',
+    'autoclick', 'autoclicker', 'killaura', 'aimbot', 'wallhack',
+    'noslow', 'nofall', 'reach', 'speedhack', 'triggerbot',
+    'crack', 'cracked', 'undetected',
+)
+_BAYESIAN_NEG_TOKENS = (
+    'setup', 'installer', 'install', 'uninstall', 'uninstaller',
+    'update', 'updater', 'patch', 'patcher',
+    'runtime', 'redistributable', 'redist', 'driver', 'drivers',
+    'recovery', 'repair', 'cleanup', 'service-pack', 'servicepack',
+    'launcher', 'launchwrapper',  # launchers oficiales suelen incluirlo
+    'agent',                      # cubre datadog-agent/yourkit-agent/etc.
+)
+def bayesian_filename_delta(filename: str, *, mc_context: bool = False) -> float:
+    """Devuelve un delta para sumar/restar a la confianza base (rango
+    -0.20 .. +0.15). Diseñado para ser CONSERVADOR — solo modula, nunca
+    decide. mc_context=True habilita los tokens MC-related.
+
+    No usar boundaries duros: si el token aparece como substring del
+    filename y suma evidencia, basta. El smart_hack_match ya hace el
+    boundary check para los hack-name fuertes.
+    """
+    if not filename:
+        return 0.0
+    n = str(filename).lower()
+    delta = 0.0
+    pos_hits = 0
+    for tok in _BAYESIAN_POS_TOKENS:
+        if tok in n:
+            pos_hits += 1
+            if mc_context:
+                delta += 0.06
+            else:
+                delta += 0.04
+    neg_hits = 0
+    for tok in _BAYESIAN_NEG_TOKENS:
+        if tok in n:
+            neg_hits += 1
+            delta -= 0.06
+    # Cap absoluto
+    if delta > 0.15:
+        delta = 0.15
+    if delta < -0.20:
+        delta = -0.20
+    return delta
+
+
+# ── Filtro #46: Detección Windows Server ────────────────────────────────────
+# Si el host es Windows Server (no desktop), bajamos peso de las heurísticas
+# que asumen entorno de jugador (autoclickers, programas en bandeja, etc.).
+# Cacheado: solo se calcula 1 vez por sesión.
+_IS_WINDOWS_SERVER_CACHE: bool | None = None
+def is_windows_server_host() -> bool:
+    """True si el host actual corre Windows Server (Server 2019/2022/2025/etc).
+    Filtro #46 — staff puede correr el scanner desde un VPS/Server."""
+    global _IS_WINDOWS_SERVER_CACHE
+    if _IS_WINDOWS_SERVER_CACHE is not None:
+        return _IS_WINDOWS_SERVER_CACHE
+    detected = False
+    try:
+        # platform.win32_edition() devuelve 'ServerStandard'/'ServerDatacenter'
+        # en Windows Server 2019+. En desktop devuelve 'Core'/'Professional'/etc.
+        import platform as _plat
+        edition = (_plat.win32_edition() or '').lower() if hasattr(_plat, 'win32_edition') else ''
+        if 'server' in edition:
+            detected = True
+        else:
+            release = (_plat.platform() or '').lower()
+            if 'server' in release:
+                detected = True
+    except Exception:
+        pass
+    if not detected:
+        # Fallback: leer ProductName del registro
+        try:
+            import winreg as _wr
+            key = _wr.OpenKey(_wr.HKEY_LOCAL_MACHINE,
+                              r'SOFTWARE\Microsoft\Windows NT\CurrentVersion')
+            try:
+                pn, _ = _wr.QueryValueEx(key, 'ProductName')
+                if 'server' in str(pn).lower():
+                    detected = True
+            finally:
+                _wr.CloseKey(key)
+        except Exception:
+            pass
+    _IS_WINDOWS_SERVER_CACHE = bool(detected)
+    return _IS_WINDOWS_SERVER_CACHE
 
 
 # ── Smart Hack-Term Matcher (Filtro #38) ─────────────────────────────────────
@@ -9253,6 +9444,20 @@ class ArgusApp:
                                 # WinSxS / DriverStore / Servicing.
                                 if not is_hack and is_windows_update_path(orig_path):
                                     continue
+                                # Filtro #22: WinSxS / Common Files Microsoft
+                                # Shared / assembly / fuentes / etc.
+                                if not is_hack and is_windows_shared_path(orig_path):
+                                    continue
+                                # Filtro #21: Microsoft Defender — los binarios
+                                # de Defender NO son hacks, aunque inyecten en
+                                # otros procesos.
+                                if not is_hack and (is_microsoft_defender(orig_path)
+                                                    or is_microsoft_defender(base_l)):
+                                    continue
+                                # Filtro #58: Java agents legítimos (profilers,
+                                # APM, build tools). Solo aplica a .jar.
+                                if not is_hack and ext == '.jar' and is_legit_java_agent(base_l):
+                                    continue
                                 # Filtro #51: el propio Argus (su exe / carpeta)
                                 # no debe auto-detectarse.
                                 if is_argus_own_artifact(orig_path) or is_argus_own_artifact(base_l):
@@ -11971,6 +12176,12 @@ class ArgusApp:
                                 continue
                             if is_windows_update_path(full):
                                 continue
+                            if is_windows_shared_path(full):
+                                continue
+                            if is_microsoft_defender(full) or is_microsoft_defender(base_l):
+                                continue
+                            if base_l.endswith('.jar') and is_legit_java_agent(base_l):
+                                continue
                             if is_mod_updater_path(full):
                                 continue
                             if is_backup_suffix(base_l):
@@ -12605,6 +12816,12 @@ class ArgusApp:
                 # Filtro #59: paths de Windows Update / Servicing
                 if is_windows_update_path(value):
                     continue
+                # Filtro #22: WinSxS / Microsoft Shared / assembly
+                if is_windows_shared_path(value):
+                    continue
+                # Filtro #21: Microsoft Defender
+                if is_microsoft_defender(value):
+                    continue
                 # Heurísticas de sospecha
                 hits = []
                 # 1) hack-name en nombre o en path
@@ -12817,6 +13034,10 @@ class ArgusApp:
                 if 'is_argus_own_artifact' in globals() and is_argus_own_artifact(fname_l):
                     continue
                 if 'is_windows_update_path' in globals() and is_windows_update_path(fname_l):
+                    continue
+                if 'is_windows_shared_path' in globals() and is_windows_shared_path(fname_l):
+                    continue
+                if 'is_microsoft_defender' in globals() and is_microsoft_defender(fname_l):
                     continue
                 # Hack-name match
                 hack = smart_hack_match(fname_l) if 'smart_hack_match' in globals() else None
@@ -13751,6 +13972,9 @@ class ArgusApp:
                 # F15 — Whitelist de nombres de mods legítimos que colisionan con hack patterns
                 if any(lm in fname_lower for lm in LEGIT_MOD_NAME_FRAGMENTS):
                     continue
+                # Filtro #58 — Java agents legítimos (yourkit/datadog/newrelic/aspectj/etc.)
+                if is_legit_java_agent(fname_lower):
+                    continue
 
                 matched_bl = next((bl for bl in BLACKLISTED if bl in fname_lower), None)
                 if matched_bl:
@@ -13771,9 +13995,19 @@ class ArgusApp:
                     else:
                         _alerta = 'CRITICAL'
                         _conf   = 0.97 if _bc_hits else 0.95
+                        # Filtro #27 — Bayesian-lite: tokens loader/injector/etc.
+                        # suben la confianza, tokens setup/installer la bajan.
+                        try:
+                            _bayes = bayesian_filename_delta(fname_lower, mc_context=True)
+                            if _bayes:
+                                _conf = max(0.50, min(0.99, _conf + _bayes))
+                        except Exception:
+                            _bayes = 0.0
                         _patterns = [f'blacklisted_mod:{matched_bl}']
                         if _bc_hits:
                             _patterns.extend([f'bc:{h}' for h in _bc_hits[:4]])
+                        if _bayes:
+                            _patterns.append(f'bayes:{_bayes:+.2f}')
                         _expl = (f'El archivo "{fname}" en la carpeta de mods contiene el nombre de un hack client '
                                  f'conocido ({matched_bl}). Está directamente instalado como mod en Minecraft.')
                     print(f"🚨 MOD PROHIBIDO: {fname} (alerta={_alerta} meta={_meta_verdict})")

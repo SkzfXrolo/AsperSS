@@ -443,6 +443,7 @@ def init_postgresql_db():
             ('total_dirs_scanned', 'INTEGER DEFAULT 0'),
             ('screenshot',     'TEXT'),
             ('mc_info',        'TEXT'),
+            ('scanner_version', 'VARCHAR(40)'),
         ]:
             try:
                 cursor.execute(f'ALTER TABLE scans ADD COLUMN IF NOT EXISTS {col} {definition}')

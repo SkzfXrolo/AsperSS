@@ -1011,6 +1011,7 @@ class LinuxScanner:
             'mc_version':         self.mc_info.get('version'),
             'mc_launcher':        self.mc_info.get('launcher'),
             'mc_mods':            self.mc_info.get('mods', []),
+            'scanner_version':    SCANNER_VERSION,
         }
         try:
             resp = _http_post_json(f'{self.server}/api/scans', body, timeout=20)

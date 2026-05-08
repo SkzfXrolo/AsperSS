@@ -50,7 +50,7 @@ def _make_session_permanent():
 CORS(app)
 
 # Inicializar base de datos de autenticación al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.48'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
+_ARGUS_VERSION = '1.6.49'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
 # URL de invitacion permanente al Discord oficial. Se inyecta en todos los
 # templates como `discord_invite` via @app.context_processor (ver mas abajo).
@@ -2752,7 +2752,7 @@ def debug_last_scan():
 
 
 # Current released scanner version — update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.6.48"
+CURRENT_SCANNER_VERSION = "1.6.49"
 
 @app.route('/sw.js')
 def service_worker():
@@ -3012,6 +3012,18 @@ def start_scan():
                     cursor.execute('ROLLBACK TO SAVEPOINT os_save')
                 except Exception:
                     pass
+            # Visual #50 — guardar la versión del scanner que generó este scan
+            scanner_ver = (data.get('scanner_version') or '')[:40]
+            if scanner_ver:
+                try:
+                    cursor.execute('SAVEPOINT scnv_save')
+                    cursor.execute(f'UPDATE scans SET scanner_version = {_PH} WHERE id = {_PH}', (scanner_ver, scan_id))
+                    cursor.execute('RELEASE SAVEPOINT scnv_save')
+                except Exception:
+                    try:
+                        cursor.execute('ROLLBACK TO SAVEPOINT scnv_save')
+                    except Exception:
+                        pass
 
         print(f"[DEBUG start_scan] scan_id={scan_id} creado OK")
         return jsonify({'success': True, 'scan_id': scan_id, 'status': 'running', 'message': 'Escaneo iniciado'}), 201
@@ -4135,17 +4147,34 @@ def list_scans():
                 where = ('WHERE ' + ' AND '.join(conditions)) if conditions else ''
                 params += [limit, offset]
 
-                cursor.execute(f'''
-                    SELECT s.id, s.scan_token, s.started_at, s.completed_at, s.status,
-                           s.total_files_scanned, s.issues_found, s.scan_duration, s.machine_name,
-                           s.minecraft_username, s.ip_address, s.country,
-                           st.created_by AS scanned_by, s.risk_score, s.verdict, s.os
-                    FROM scans s
-                    LEFT JOIN scan_tokens st ON s.token_id = st.id
-                    {where}
-                    ORDER BY s.started_at DESC
-                    LIMIT {_PH} OFFSET {_PH}
-                ''', params)
+                # scanner_version puede no existir aún en deploys viejos — fallback NULL.
+                try:
+                    cursor.execute(f'''
+                        SELECT s.id, s.scan_token, s.started_at, s.completed_at, s.status,
+                               s.total_files_scanned, s.issues_found, s.scan_duration, s.machine_name,
+                               s.minecraft_username, s.ip_address, s.country,
+                               st.created_by AS scanned_by, s.risk_score, s.verdict, s.os,
+                               s.scanner_version
+                        FROM scans s
+                        LEFT JOIN scan_tokens st ON s.token_id = st.id
+                        {where}
+                        ORDER BY s.started_at DESC
+                        LIMIT {_PH} OFFSET {_PH}
+                    ''', params)
+                    _has_scn_ver = True
+                except Exception:
+                    _has_scn_ver = False
+                    cursor.execute(f'''
+                        SELECT s.id, s.scan_token, s.started_at, s.completed_at, s.status,
+                               s.total_files_scanned, s.issues_found, s.scan_duration, s.machine_name,
+                               s.minecraft_username, s.ip_address, s.country,
+                               st.created_by AS scanned_by, s.risk_score, s.verdict, s.os
+                        FROM scans s
+                        LEFT JOIN scan_tokens st ON s.token_id = st.id
+                        {where}
+                        ORDER BY s.started_at DESC
+                        LIMIT {_PH} OFFSET {_PH}
+                    ''', params)
 
                 scans = []
                 scan_ids = []
@@ -4163,6 +4192,13 @@ def list_scans():
                         _plat = 'other'
                     else:
                         _plat = 'windows'
+                    _scn_ver = ''
+                    if _has_scn_ver:
+                        try:
+                            _v = _row_get(row, 16, 'scanner_version')
+                            _scn_ver = (str(_v).strip() if _v is not None else '') or ''
+                        except Exception:
+                            _scn_ver = ''
                     scans.append({
                         'id': scan_id,
                         'scan_token': _row_get(row, 1, 'scan_token'),
@@ -4182,6 +4218,7 @@ def list_scans():
                         'os': _os_str,
                         'os_name': _os_str,
                         'scanner_platform': _plat,
+                        'scanner_version': _scn_ver,
                     })
                 
                 print(f"📊 Escaneos encontrados en BD local: {len(scans)}")
@@ -4380,13 +4417,24 @@ def get_scan(scan_id):
                 scan['mc_info'] = None
                 scan['risk_score'] = 0
                 scan['ensemble_data'] = None
+                scan['scanner_version'] = ''
                 try:
                     cursor.execute('SAVEPOINT opt_cols')
-                    cursor.execute(f'''
-                        SELECT total_dirs_scanned, verdict, verdict_reason, verdict_by, verdict_at,
-                               screenshot, mc_info, risk_score, ensemble_data, os
-                        FROM scans WHERE id = {_PH}
-                    ''', (scan_id,))
+                    # Visual #50 — leer scanner_version. Tolerante a deploys sin la columna.
+                    try:
+                        cursor.execute(f'''
+                            SELECT total_dirs_scanned, verdict, verdict_reason, verdict_by, verdict_at,
+                                   screenshot, mc_info, risk_score, ensemble_data, os, scanner_version
+                            FROM scans WHERE id = {_PH}
+                        ''', (scan_id,))
+                        _has_scn_ver_col = True
+                    except Exception:
+                        _has_scn_ver_col = False
+                        cursor.execute(f'''
+                            SELECT total_dirs_scanned, verdict, verdict_reason, verdict_by, verdict_at,
+                                   screenshot, mc_info, risk_score, ensemble_data, os
+                            FROM scans WHERE id = {_PH}
+                        ''', (scan_id,))
                     vrow = cursor.fetchone()
                     if vrow:
                         scan['total_dirs_scanned'] = _row_get(vrow, 0, 'total_dirs_scanned') or 0
@@ -4422,6 +4470,12 @@ def get_scan(scan_id):
                             scan['scanner_platform'] = 'other'
                         else:
                             scan['scanner_platform'] = 'windows'
+                        if _has_scn_ver_col:
+                            try:
+                                _sv = _row_get(vrow, 10, 'scanner_version')
+                                scan['scanner_version'] = (str(_sv).strip() if _sv is not None else '') or ''
+                            except Exception:
+                                scan['scanner_version'] = ''
                     cursor.execute('RELEASE SAVEPOINT opt_cols')
                 except Exception:
                     try:

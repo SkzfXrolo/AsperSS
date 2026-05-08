@@ -1624,6 +1624,15 @@ function _scanPlatformChipHtml(scan) {
     return `<span class="scan-platform-chip" data-platform="${p.key}" title="Cliente scanner: ${p.label}" style="display:inline-flex;align-items:center;margin-left:6px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:0.35px;text-transform:uppercase;background:${p.bg};color:${p.fg};border:1px solid ${p.bd};vertical-align:middle;">${p.label}</span>`;
 }
 
+/** Visual #50 — chip con la versión EXACTA del scanner que generó este scan.
+ *  Vacío si el dato no está (deploys viejos / scanner pre-1.6.49). */
+function _scannerVersionChipHtml(scan) {
+    const v = String(scan?.scanner_version || '').trim();
+    if (!v) return '';
+    const safe = escapeHtml(v);
+    return `<span class="scanner-version-chip" title="Versión del scanner cliente que generó este scan" style="display:inline-flex;align-items:center;margin-left:6px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.3px;background:rgba(217,119,6,0.12);color:#fbbf24;border:1px solid rgba(217,119,6,0.32);vertical-align:middle;font-family:'JetBrains Mono','Fira Code',monospace;">v${safe}</span>`;
+}
+
 async function loadScans() {
     const tbody = document.getElementById('results-table-body');
     // V18: Skeleton loading
@@ -1726,7 +1735,7 @@ async function loadScans() {
                 // V17: OS icon + chip Linux/Windows (columna scans.os desde API)
                 const osStr = (scan.os_name || scan.os || '').toLowerCase();
                 const osIcon = osStr.includes('linux') ? '🐧' : osStr.includes('mac') ? '🍎' : (osStr.includes('win') || !osStr) ? '🪟' : '';
-                const platChip = _scanPlatformChipHtml(scan);
+                const platChip = _scanPlatformChipHtml(scan) + _scannerVersionChipHtml(scan);
 
                 const machineName = _hl(scan.machine_name || 'N/A');
 
@@ -2926,7 +2935,7 @@ async function viewScanDetails(scanId) {
         if (osEl) {
             const osRaw = data.os || data.os_name || data.operating_system || '';
             const safeOs = escapeHtml(osRaw.trim() || '—');
-            osEl.innerHTML = `${safeOs}${_scanPlatformChipHtml(data)}`;
+            osEl.innerHTML = `${safeOs}${_scanPlatformChipHtml(data)}${_scannerVersionChipHtml(data)}`;
         }
         
         const machineEl = document.getElementById('detail-machine-name');

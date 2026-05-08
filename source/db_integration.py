@@ -68,6 +68,24 @@ class DatabaseIntegration:
             if not minecraft_username:
                 minecraft_username = self.user_info.get('minecraft_username')
             
+            # Visual #50 — incluir versión del scanner que generó este scan
+            _scn_ver = ''
+            try:
+                if self.app is not None:
+                    _scn_ver = getattr(self.app, 'scanner_version', '') or ''
+                if not _scn_ver:
+                    try:
+                        from main import SCANNER_VERSION as _SV  # type: ignore
+                        _scn_ver = _SV
+                    except Exception:
+                        try:
+                            import main as _m  # type: ignore
+                            _scn_ver = getattr(_m, 'SCANNER_VERSION', '') or ''
+                        except Exception:
+                            pass
+            except Exception:
+                _scn_ver = ''
+
             scan_data = {
                 'token': self.scan_token,
                 'machine_id': self.machine_id,
@@ -81,6 +99,7 @@ class DatabaseIntegration:
                 'mc_launcher': self.user_info.get('mc_launcher'),
                 'mc_mods': self.user_info.get('mc_mods', []),
                 'java_agents': self.user_info.get('java_agents', []),
+                'scanner_version': _scn_ver,
             }
             
             response = requests.post(

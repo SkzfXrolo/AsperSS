@@ -379,11 +379,23 @@ NOTA DE LECTURA
         CrowdStrike, SentinelOne además de los ya presentes (Avast,
         Malwarebytes, Bitdefender, Kaspersky, ESET).
 
-[ ] 21. Microsoft Defender (MsMpEng.exe, NisSrv.exe, SecurityHealthService) —
+[X] 21. Microsoft Defender (MsMpEng.exe, NisSrv.exe, SecurityHealthService) —
         whitelist absoluta, son SO esencial.
+        DONE v1.6.49 (Pack 15) — _DEFENDER_BINARIES + _DEFENDER_PATH_FRAGMENTS
+        + helper is_microsoft_defender() en source/main.py. Aplicado en
+        scan_deleted_recycle, scan_recent_executables y scan_recent_docs_registry
+        ANTES de cualquier hack-name match. Cubre msmpeng, nissrv, mpcmdrun,
+        securityhealthservice, mssense, sgrmbroker + paths \windows defender\,
+        \windows security\, \windowsapps\microsoft.windows.securityhealthui.
 
-[ ] 22. Filtrar binarios en %WINDIR%\WinSxS, %ProgramFiles%\Common Files\
+[X] 22. Filtrar binarios en %WINDIR%\WinSxS, %ProgramFiles%\Common Files\
         Microsoft Shared, %SystemRoot%\Servicing, %WINDIR%\assembly.
+        DONE v1.6.49 (Pack 15) — _WINDOWS_SHARED_PATH_FRAGMENTS + helper
+        is_windows_shared_path() en source/main.py. Aplicado en los mismos
+        3 puntos que #21. Cubre WinSxS, servicing, assembly, inf,
+        policydefinitions, fonts, globalization, immersivecontrolpanel,
+        program files\common files\microsoft shared\, common files\system\,
+        windowspowershell\, windows nt\.
 
 [ ] 23. Lista de paquetes UWP/MSIX firmados por Microsoft Store
         (HKLM\Software\Classes\Local Settings\Software\Microsoft\Windows\
@@ -399,9 +411,16 @@ NOTA DE LECTURA
         (ej. "Beijing Kunlun Tech", o publishers de mineros conocidos)
         → score++ aunque la firma sea válida.
 
-[ ] 27. Bayesian filter sobre filename: tokens como "loader", "injector",
+[X] 27. Bayesian filter sobre filename: tokens como "loader", "injector",
         "client" + Minecraft-related → score++; tokens como "setup",
         "installer", "update", "uninstaller" → score--.
+        DONE v1.6.49 (Pack 15) — _BAYESIAN_POS_TOKENS + _BAYESIAN_NEG_TOKENS +
+        helper bayesian_filename_delta(filename, mc_context=...) en
+        source/main.py. Aplicado en scan_minecraft_mods_blacklist sobre _conf
+        para CRITICAL: cap +0.15 / -0.20, mc_context=True suma más a cada hit
+        positivo. _patterns guarda 'bayes:+0.12' para auditoría. Diseño
+        conservador: nunca decide solo, solo modula. Sin retraining ni stats
+        bayesianas reales — heurística simple pero efectiva.
 
 [ ] 28. Filtro por idioma del SO: en es-AR/es-MX/es-ES ciertos paths cambian
         (Mis Documentos vs My Documents). Adaptar reglas.
@@ -478,9 +497,17 @@ NOTA DE LECTURA
         ✓ DONE v1.6.35 — _RECOVERY_TOKENS + _is_os_recovery_noise() en
         scan_file_activity_log (incluye DiagTrack, EventCache, $Sysreset).
 
-[ ] 46. Detectar si el host es Windows Server y bajar peso de heurísticas
+[X] 46. Detectar si el host es Windows Server y bajar peso de heurísticas
         que asumen entorno desktop (un staff puede correr el scanner desde
         un VPS).
+        DONE v1.6.49 (Pack 15) — helper is_windows_server_host() en
+        source/main.py (cacheado, usa platform.win32_edition() + fallback al
+        registro HKLM\Software\Microsoft\Windows NT\CurrentVersion\ProductName).
+        En source/user_info_collector.py: si win32_edition() contiene
+        'server', el campo 'os' enviado al backend pasa de "Windows" a
+        "Windows Server" — el panel y filtros server-side ya pueden
+        diferenciar. Filtros adicionales para alertas desktop-only quedarán
+        a futuro (TODO Pack 16+).
 
 [ ] 47. Excluir archivos que son parte de una Steam Workshop subscription
         (filename matching con manifests de %steam%\steamapps\workshop).
@@ -551,8 +578,13 @@ NOTA DE LECTURA
         usado en scan_minecraft_launchers para skip explícito antes del
         match. Cubre yourkit/jprofiler/visualvm/jrebel/newrelic/datadog/
         appdynamics/glowroot/kanela/pinpoint/aspectjweaver/jacocoagent/
-        byteman/gradle-agent/maven-surefire. TODO Windows: añadir
-        equivalente en source/main.py — Pack 15.
+        byteman/gradle-agent/maven-surefire.
+        DONE v1.6.49 (Pack 15, Windows) — _LEGIT_JAVA_AGENT_TOKENS +
+        is_legit_java_agent() en source/main.py. Aplicado en
+        scan_minecraft_mods_blacklist (skip explícito antes del match BL),
+        scan_deleted_recycle (.jar agents en papelera), scan_recent_executables
+        (.jar agents en exec recientes). Mismo set de tokens que el de Linux
+        + opentelemetry-javaagent + spring-instrument para cubrir APMs nuevos.
 
 [X] 59. Excluir archivos creados/modificados durante updates conocidos
         de Windows (cruzando timestamps con WindowsUpdate.log).
@@ -1015,11 +1047,11 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 ═══════════════════════════════════════════════════════════════════════════════
 
   Scanner ............................. 60 ítems   (detección)      14/60
-  Filtro .............................. 60 ítems   (anti-FP)        18/60
+  Filtro .............................. 60 ítems   (anti-FP)        22/60
   Visual .............................. 60 ítems   (UI/UX)          28/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    69/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    73/195
                                                   (4 parciales: S#9, V#32, V#43, V#53)
                                                   + 3 BONUS Pack 11 (Stream-friendly,
                                                   CompanyTag color, Why-this-score modal)
@@ -1027,10 +1059,54 @@ Linux: Arch, Ubuntu, Fedora, etc.).
                                                   JAR/ELF/PE compartido Linux+Windows
                                                   con verdict legit_mod/suspicious/unknown
                                                   y chip clickeable en el panel)
+                                                  + 1 BONUS Pack 15 (Chip de versión del
+                                                  scanner por scan: columna scans.scanner_version
+                                                  + endpoints GET/POST + chip dorado al lado
+                                                  del platform chip en panel.js)
                                                   Pack 13 (Linux MVP): #1, #2, #3, #4,
                                                   #6, #7, #8, #9, #13, #15 ✓ — DEFERRED
                                                   honestos: #5 (auditd), #10/#11/#12
                                                   (AppImage/Flatpak/deb), #14 (CI Docker)
+
+SESIÓN DEL 08-may-2026:
+  Pack 15 (v1.6.49): Filtros #21, #22, #27, #46, #58 (Windows) + BONUS Visual.
+                    NUEVOS en source/main.py:
+                      * is_microsoft_defender() — whitelist absoluta para
+                        MsMpEng/NisSrv/SecurityHealthService/MpDefenderCore/
+                        MsSense/SgrmBroker + paths \windows defender\,
+                        \windows security\, ATP, securityhealthui.
+                      * is_windows_shared_path() — WinSxS, servicing,
+                        assembly, inf, policydefinitions, fonts, common
+                        files microsoft shared, common files system,
+                        windowspowershell, windows nt.
+                      * is_legit_java_agent() — espejo del de Linux,
+                        cubre yourkit/jprofiler/datadog/newrelic/etc.
+                      * bayesian_filename_delta(name, mc_context=) —
+                        cap +0.15/-0.20, modula confidence en blacklisted
+                        mods (loader/injector/cheat ↑, setup/installer/
+                        update ↓). Patterns guarda 'bayes:+0.12'.
+                      * is_windows_server_host() — cacheado, usa
+                        platform.win32_edition() + fallback registry
+                        ProductName.
+                    NUEVOS en source/user_info_collector.py:
+                      * Si win32_edition() es Server → os = "Windows Server"
+                        (panel diferencia, futuras heurísticas pueden
+                        bajar peso de alertas desktop-only).
+                    BONUS Visual: chip de versión del scanner cliente
+                      junto al platform chip — nueva columna
+                      scans.scanner_version (ALTER TABLE seguro), enviada
+                      desde db_integration.py (Win) y argus_linux/scanner.py,
+                      guardada con SAVEPOINT en /api/scans POST,
+                      devuelta en GET list y GET detail con fallback a
+                      deploys sin la columna. _scannerVersionChipHtml en
+                      panel.js (v=57) muestra chip dorado v1.6.49 en
+                      monospace al lado del platform chip.
+                    → 4 filtros anti-FP nuevos en Windows + #58 espejo
+                      Linux + nueva visibilidad por scan de qué versión
+                      del scanner lo generó (clave para debugging cuando
+                      un cliente reporta un bug específico de su build).
+                      Recompila el .exe a 1.6.49 — clientes con <1.6.49
+                      verán "actualización disponible".
 
 SESIÓN DEL 07-may-2026 (9 packs en una tarde):
   Pack 1 (v1.6.34): Filtro #2 lite, #30, #38 + Visual #5, #6, #25

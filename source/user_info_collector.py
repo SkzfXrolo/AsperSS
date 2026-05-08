@@ -318,11 +318,22 @@ class UserInfoCollector:
         else:
             mc_username = self.get_minecraft_username()
 
+        # Filtro #46 — detección de Windows Server. Si el host es Server,
+        # marcamos `os` con sufijo "Server" para que el panel pueda
+        # bajar peso de heurísticas que asumen entorno desktop.
+        os_label = platform.system()
+        try:
+            edition = platform.win32_edition() if hasattr(platform, 'win32_edition') else None
+            if edition and 'server' in str(edition).lower():
+                os_label = f'{os_label} Server'
+        except Exception:
+            pass
+
         info = {
             'ip_address': self.get_ip_address(),
             'country': self.get_country_from_ip(),
             'minecraft_username': mc_username,
-            'os': platform.system(),
+            'os': os_label,
             'os_version': platform.version(),
             'mc_running': mc_info['mc_running'],
             'mc_version': mc_info['mc_version'],
