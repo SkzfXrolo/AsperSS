@@ -1481,7 +1481,15 @@ async function createToken() {
 }
 
 async function deleteToken(tokenId) {
-    if (!confirm('¿Eliminar permanentemente este token?\n\n⚠️ Esta acción no se puede deshacer.\n\nSi algún cliente está usando este token, dejará de funcionar inmediatamente.')) {
+    const ok = await (window.argusUI?.confirm
+        ? window.argusUI.confirm({
+            title: '¿Eliminar token permanentemente?',
+            body: 'Esta acción no se puede deshacer.\n\nSi algún cliente está usando este token, dejará de funcionar inmediatamente.',
+            ok: 'Eliminar token',
+            danger: true,
+          })
+        : Promise.resolve(confirm('¿Eliminar permanentemente este token?\n\n⚠️ Esta acción no se puede deshacer.\n\nSi algún cliente está usando este token, dejará de funcionar inmediatamente.')));
+    if (!ok) {
         return;
     }
     
@@ -4327,7 +4335,14 @@ async function loadLearnedPatterns() {
 }
 
 async function updateModel() {
-    if (!confirm('¿Actualizar el modelo de IA de ASPERS Projects?\n\nLos clientes descargarán automáticamente los nuevos patrones al iniciar.\nNO es necesario recompilar el ejecutable.')) {
+    const ok = await (window.argusUI?.confirm
+        ? window.argusUI.confirm({
+            title: '¿Actualizar el modelo de IA de Argus?',
+            body: 'Los clientes descargarán automáticamente los nuevos patrones al iniciar.\n\nNO es necesario recompilar el ejecutable.',
+            ok: 'Actualizar modelo',
+          })
+        : Promise.resolve(confirm('¿Actualizar el modelo de IA de ASPERS Projects?\n\nLos clientes descargarán automáticamente los nuevos patrones al iniciar.\nNO es necesario recompilar el ejecutable.')));
+    if (!ok) {
         return;
     }
 
@@ -4362,7 +4377,15 @@ async function updateModel() {
 // ============================================================
 
 async function purgeGarbageResults() {
-    if (!confirm('⚠️ Eliminará TODOS los resultados basura de la BD completa (EXECUTED_DELETED, nombres binarios).\n\n¿Continuar?')) return;
+    const ok = await (window.argusUI?.confirm
+        ? window.argusUI.confirm({
+            title: 'Purga de resultados basura',
+            body: 'Eliminará TODOS los resultados basura de la BD completa (EXECUTED_DELETED, nombres binarios).\n\n¿Continuar?',
+            ok: 'Purgar',
+            danger: true,
+          })
+        : Promise.resolve(confirm('⚠️ Eliminará TODOS los resultados basura de la BD completa (EXECUTED_DELETED, nombres binarios).\n\n¿Continuar?')));
+    if (!ok) return;
     const res = await fetch('/api/admin/purge-garbage-results', {method: 'POST', headers: {'Content-Type':'application/json'}});
     const d = await res.json();
     const el = document.getElementById('purge-result');
@@ -4375,7 +4398,15 @@ async function deleteMachineScans() {
         alert('No se encontró el nombre de la máquina.');
         return;
     }
-    if (!confirm(`⚠️ Esto eliminará TODOS los scans de "${machineName}" de la base de datos.\n\nÚsalo solo para limpiar scans de prueba propios.\n\n¿Continuar?`)) return;
+    const ok = await (window.argusUI?.confirm
+        ? window.argusUI.confirm({
+            title: 'Eliminar scans de máquina',
+            body: `Esto eliminará TODOS los scans de "${machineName}" de la base de datos.\n\nÚsalo solo para limpiar scans de prueba propios.\n\n¿Continuar?`,
+            ok: 'Eliminar scans',
+            danger: true,
+          })
+        : Promise.resolve(confirm(`⚠️ Esto eliminará TODOS los scans de "${machineName}" de la base de datos.\n\nÚsalo solo para limpiar scans de prueba propios.\n\n¿Continuar?`)));
+    if (!ok) return;
 
     try {
         const res = await fetch('/api/admin/scans/bulk-delete', {
@@ -4471,7 +4502,15 @@ async function downloadApp() {
 // ============================================================
 
 async function compileApp() {
-    if (!confirm('¿Compilar nueva versión del ejecutable?\n\n⚠️ SOLO usa esto si hay cambios en el código del programa.\n\nLas actualizaciones de IA se descargan automáticamente sin necesidad de recompilar.\n\nEl proceso puede tardar varios minutos.')) {
+    const ok = await (window.argusUI?.confirm
+        ? window.argusUI.confirm({
+            title: '¿Compilar nueva versión del ejecutable?',
+            body: 'SOLO usa esto si hay cambios en el código del programa.\n\nLas actualizaciones de IA se descargan automáticamente sin necesidad de recompilar.\n\nEl proceso puede tardar varios minutos.',
+            ok: 'Compilar',
+            danger: true,
+          })
+        : Promise.resolve(confirm('¿Compilar nueva versión del ejecutable?\n\n⚠️ SOLO usa esto si hay cambios en el código del programa.\n\nLas actualizaciones de IA se descargan automáticamente sin necesidad de recompilar.\n\nEl proceso puede tardar varios minutos.')));
+    if (!ok) {
         return;
     }
 
@@ -4845,7 +4884,15 @@ async function loadDownloadLinks() {
 }
 
 async function deleteDownloadLink(linkId) {
-    if (!confirm('¿Estás seguro de que quieres desactivar este enlace de descarga?')) {
+    const ok = await (window.argusUI?.confirm
+        ? window.argusUI.confirm({
+            title: '¿Desactivar enlace de descarga?',
+            body: 'El enlace dejará de funcionar. Los clientes que tengan el link guardado no podrán descargar el scanner desde él.',
+            ok: 'Desactivar',
+            danger: true,
+          })
+        : Promise.resolve(confirm('¿Estás seguro de que quieres desactivar este enlace de descarga?')));
+    if (!ok) {
         return;
     }
     
@@ -4981,7 +5028,15 @@ async function loadCompanyUsersForAdmin() {
 }
 
 async function deactivateUser(userId) {
-    if (!confirm('¿Estás seguro de que quieres desactivar este usuario? El usuario no podrá iniciar sesión hasta que lo reactives.')) {
+    const ok = await (window.argusUI?.confirm
+        ? window.argusUI.confirm({
+            title: '¿Desactivar usuario?',
+            body: 'El usuario no podrá iniciar sesión hasta que lo reactives.',
+            ok: 'Desactivar',
+            danger: true,
+          })
+        : Promise.resolve(confirm('¿Estás seguro de que quieres desactivar este usuario? El usuario no podrá iniciar sesión hasta que lo reactives.')));
+    if (!ok) {
         return;
     }
     
@@ -5025,11 +5080,28 @@ async function activateUser(userId) {
 }
 
 async function deleteUser(userId, username) {
-    if (!confirm(`¿Estás SEGURO de que quieres ELIMINAR permanentemente al usuario "${username}"?\n\nEsta acción NO se puede deshacer.`)) {
+    const ok1 = await (window.argusUI?.confirm
+        ? window.argusUI.confirm({
+            title: '¿Eliminar usuario permanentemente?',
+            body: `Vas a ELIMINAR de forma permanente al usuario "${username}".\n\nEsta acción NO se puede deshacer.`,
+            ok: 'Eliminar usuario',
+            danger: true,
+          })
+        : Promise.resolve(confirm(`¿Estás SEGURO de que quieres ELIMINAR permanentemente al usuario "${username}"?\n\nEsta acción NO se puede deshacer.`)));
+    if (!ok1) {
         return;
     }
-    
-    if (!confirm('Esta acción es PERMANENTE. ¿Confirmas la eliminación?')) {
+
+    const ok2 = await (window.argusUI?.confirm
+        ? window.argusUI.confirm({
+            title: 'Confirmación final',
+            body: 'Esta acción es PERMANENTE. ¿Estás 100% seguro?',
+            ok: 'Sí, eliminar',
+            cancel: 'Cancelar',
+            danger: true,
+          })
+        : Promise.resolve(confirm('Esta acción es PERMANENTE. ¿Confirmas la eliminación?')));
+    if (!ok2) {
         return;
     }
     
@@ -5537,8 +5609,19 @@ async function aiScanSummary(scanId, btn) {
             const card = document.getElementById('ai-verdict-card');
             if (card) card.appendChild(el);
         }
-        el.innerHTML = '<span style="color:#D4915A;font-weight:600">📝 Resumen IA:</span><br>' + text;
+        // Visual #41 — typewriter del resumen IA. Header inmediato + texto con
+        // animación typing. Si argusUI.typewriter no está disponible (build vieja
+        // de argus-ui.js), volvemos al render plano.
+        el.innerHTML = '<span style="color:#D4915A;font-weight:600">📝 Resumen IA:</span><br><span class="ai-summary-text"></span>';
         el.style.display = 'block';
+        const target = el.querySelector('.ai-summary-text');
+        if (target && window.argusUI?.typewriter) {
+            window.argusUI.typewriter(target, text, { speedCps: 120 });
+        } else if (target) {
+            target.textContent = text;
+        } else {
+            el.innerHTML = '<span style="color:#D4915A;font-weight:600">📝 Resumen IA:</span><br>' + text;
+        }
     } catch(e) {
         console.error('aiScanSummary error', e);
     }

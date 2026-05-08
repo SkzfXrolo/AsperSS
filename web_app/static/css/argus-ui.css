@@ -761,3 +761,35 @@ html.argus-density-compact .stat-value { font-size: calc(28px * var(--argus-text
         animation-delay: 0ms !important;
     }
 }
+
+
+/* ── Visual #7 — Modal de confirmación unificado ─────────────────────────────
+   Animaciones del backdrop y el panel del argusUI.confirm(). Las paletas y
+   fonts heredan via CSS variables del tema activo (dark/light). */
+@keyframes argusConfirmFadeIn  { from { opacity: 0; }                 to { opacity: 1; } }
+@keyframes argusConfirmFadeOut { from { opacity: 1; }                 to { opacity: 0; } }
+@keyframes argusConfirmPop {
+    from { opacity: 0; transform: scale(0.94) translateY(8px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+#argus-confirm-modal #argus-confirm-cancel:hover {
+    background: var(--accent-bg, rgba(184,115,51,0.08)) !important;
+    color: var(--text, #EAD8C0) !important;
+    border-color: var(--border-h, rgba(184,115,51,0.55)) !important;
+}
+#argus-confirm-modal #argus-confirm-ok:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+}
+#argus-confirm-modal button:focus-visible {
+    outline: 2px solid var(--accent, #B87333);
+    outline-offset: 2px;
+}
+
+
+/* ── Visual #41 — Typewriter caret blink ────────────────────────────────── */
+@keyframes argusTwBlink {
+    0%, 49%   { opacity: 0.85; }
+    50%, 100% { opacity: 0;    }
+}

@@ -474,11 +474,127 @@
     });
 
     // ── Quick search global Cmd+K / Ctrl+K (Visual #17) ──────────────────────
+    // Visual #18 — Command palette: el quicksearch ahora también acepta
+    // "comandos" prefijados con `>` o `/`, o que coincidan con el title del
+    // comando. Cada comando es una entry navegable con el mismo UX que un scan.
     const QS_DEBOUNCE_MS = 220;
     let _qsDebounce  = null;
-    let _qsItems     = [];
+    let _qsItems     = [];     // mix de {kind:'scan',...} y {kind:'cmd',...}
     let _qsActiveIdx = 0;
     let _qsAbort     = null;
+
+    // Catálogo de comandos. Cada uno: { id, title, hint, run: () => void }.
+    // Algunos comandos son condicionales según permisos — usamos `enabled()`.
+    const _qsCommandCatalog = [
+        {
+            id: 'goto-scans',
+            title: 'Ir a Scans',
+            hint:  'Lista de escaneos recientes',
+            keys:  ['scans', 'historial', 'lista'],
+            run:   () => { window.location.hash = '#scans-section'; window.scrollTo({ top: 0, behavior: 'smooth' }); },
+        },
+        {
+            id: 'goto-tokens',
+            title: 'Ir a Tokens',
+            hint:  'Generar / revocar tokens del scanner',
+            keys:  ['tokens', 'token', 'generar token', 'revocar'],
+            run:   () => { window.location.hash = '#tokens-section'; },
+        },
+        {
+            id: 'goto-users',
+            title: 'Ir a Usuarios',
+            hint:  'Gestionar staff / clientes Pro',
+            keys:  ['users', 'usuarios', 'staff'],
+            run:   () => { window.location.hash = '#users-section'; },
+        },
+        {
+            id: 'theme-toggle',
+            title: 'Cambiar tema (claro/oscuro)',
+            hint:  'Alterna entre dark bronze y light bronze',
+            keys:  ['theme', 'tema', 'oscuro', 'claro', 'dark', 'light', 'modo'],
+            run:   () => { if (typeof window.toggleTheme === 'function') window.toggleTheme(); },
+        },
+        {
+            id: 'stream-mode',
+            title: 'Modo Stream-friendly',
+            hint:  'Blur en nombres / IP / UUIDs (anti-doxing)',
+            keys:  ['stream', 'streamer', 'blur', 'privacidad', 'twitch', 'ocultar'],
+            run:   () => setStreamFriendly(!_isStreamFriendly()),
+        },
+        {
+            id: 'sound-toggle',
+            title: 'Sonido al recibir scan',
+            hint:  'Habilitar / silenciar notificación de scan nuevo',
+            keys:  ['sonido', 'sound', 'audio', 'ding', 'silencio', 'mute'],
+            run:   () => setSoundEnabled(!_isSoundEnabled()),
+        },
+        {
+            id: 'density-cozy',
+            title: 'Densidad cómoda',
+            hint:  'Más espacio entre filas',
+            keys:  ['density', 'densidad', 'cozy', 'comoda', 'cómoda', 'espacio'],
+            run:   () => setDensity('cozy'),
+        },
+        {
+            id: 'density-compact',
+            title: 'Densidad compacta',
+            hint:  'Más información visible por pantalla',
+            keys:  ['density', 'densidad', 'compact', 'compacta', 'denso'],
+            run:   () => setDensity('compact'),
+        },
+        {
+            id: 'fontsize-bigger',
+            title: 'Aumentar tamaño de letra',
+            hint:  'Sube un nivel (A → A+ → A++)',
+            keys:  ['font', 'tamaño', 'letra', 'zoom', 'grande', 'a+'],
+            run:   () => {
+                const order = ['xs','sm','normal','lg','xl'];
+                const cur = _getFontSize();
+                const next = order[Math.min(order.length - 1, order.indexOf(cur) + 1)];
+                setFontSize(next);
+            },
+        },
+        {
+            id: 'logout',
+            title: 'Cerrar sesión',
+            hint:  'Termina la sesión actual',
+            keys:  ['logout', 'salir', 'cerrar', 'desconectar', 'sign out'],
+            run:   () => { window.location.href = '/logout'; },
+        },
+        {
+            id: 'help-shortcuts',
+            title: 'Ver atajos de teclado',
+            hint:  'Cmd/Ctrl+K · Esc · ↑↓ Enter',
+            keys:  ['help', 'ayuda', 'atajos', 'shortcuts', 'keyboard', 'teclado'],
+            run:   () => {
+                showToast(
+                    'Atajos: Ctrl+K abre búsqueda · ↑/↓ navegan · Enter abre · Esc cierra · `>` filtra solo comandos',
+                    'info', { duration: 6500 }
+                );
+            },
+        },
+    ];
+
+    function _qsMatchCommands(q) {
+        const stripped = q.replace(/^[>\/\s]+/, '').toLowerCase().trim();
+        if (!stripped) {
+            // Sin texto pero con prefijo: mostrar todos
+            return _qsCommandCatalog.map(c => ({ ...c, _score: 0 }));
+        }
+        const tokens = stripped.split(/\s+/).filter(Boolean);
+        const out = [];
+        for (const cmd of _qsCommandCatalog) {
+            let score = 0;
+            const haystack = (cmd.title + ' ' + (cmd.hint || '') + ' ' + (cmd.keys || []).join(' ')).toLowerCase();
+            for (const t of tokens) {
+                if (haystack.includes(t)) score += t.length >= 4 ? 3 : 1;
+                if (cmd.title.toLowerCase().startsWith(t)) score += 2;
+            }
+            if (score > 0) out.push({ ...cmd, _score: score });
+        }
+        out.sort((a, b) => b._score - a._score);
+        return out;
+    }
 
     function _qsOpen() {
         const root = document.getElementById('argus-quicksearch');
@@ -505,26 +621,52 @@
         if (!query) {
             box.innerHTML = '<div style="padding:24px;text-align:center;color:rgba(241,230,211,0.5);font-size:13px;">' +
                 'Empieza a escribir para buscar…<br>' +
-                '<span style="font-size:11px;opacity:0.7;">Tip: si escribís solo un número, abre ese scan directamente.</span>' +
+                '<span style="font-size:11px;opacity:0.7;">Tip: número = abrir scan · prefijo <code style="background:rgba(184,115,51,0.18);padding:1px 5px;border-radius:3px;">&gt;</code> = solo comandos · Cmd/Ctrl+K abre/cierra.</span>' +
                 '</div>';
             return;
         }
         if (!_qsItems.length) {
             box.innerHTML = '<div style="padding:18px;text-align:center;color:rgba(241,230,211,0.55);font-size:13px;">' +
-                'Sin resultados para <b>' + _qsEscape(query) + '</b></div>';
+                'Sin resultados para <b>' + _qsEscape(query) + '</b><br>' +
+                '<span style="font-size:11px;opacity:0.7;">Probá empezar con <code>&gt;</code> para ver comandos disponibles.</span>' +
+                '</div>';
             return;
         }
-        const html = _qsItems.map((s, i) => {
+        const html = _qsItems.map((it, i) => {
+            const active = (i === _qsActiveIdx);
+            const baseStyle = 'display:flex;align-items:center;gap:10px;padding:9px 16px;cursor:pointer;' +
+                'border-left:3px solid ' + (active ? 'rgba(212,145,90,0.95)' : 'transparent') + ';' +
+                'background:' + (active ? 'rgba(184,115,51,0.10)' : 'transparent') + ';';
+
+            // Visual #18 — render diferente para comandos
+            if (it.kind === 'cmd') {
+                return '<div class="argus-qs-item" data-kind="cmd" data-cmd-id="' + _qsEscape(it.id) + '" data-idx="' + i + '"' +
+                       ' style="' + baseStyle + '">' +
+                           '<span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;' +
+                                'background:rgba(184,115,51,0.18);color:#fbbf24;font-size:13px;font-weight:700;flex-shrink:0;">›_</span>' +
+                           '<div style="flex:1;min-width:0;">' +
+                               '<div style="font-size:13px;font-weight:600;color:#f1e6d3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+                                   _qsEscape(String(it.title)) +
+                               '</div>' +
+                               '<div style="font-size:11px;color:rgba(241,230,211,0.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+                                   _qsEscape(String(it.hint || 'Comando')) +
+                               '</div>' +
+                           '</div>' +
+                           '<span style="font-size:9.5px;font-weight:700;color:#fbbf24;letter-spacing:0.4px;' +
+                                'background:rgba(245,158,11,0.10);padding:2px 7px;border-radius:10px;border:1px solid rgba(245,158,11,0.28);' +
+                                'text-transform:uppercase;">CMD</span>' +
+                       '</div>';
+            }
+
+            // Default: scan
+            const s = it;
             const risk = s.risk_score == null ? '—' : s.risk_score;
             const riskColor = risk >= 70 ? '#ef4444' : risk >= 30 ? '#f59e0b' : '#10b981';
             const player    = s.minecraft_user || s.user || s.usuario || 'Sin jugador';
             const company   = s.empresa_name || s.company || s.empresa || '';
             const created   = s.created_at ? new Date(s.created_at).toLocaleString() : '';
-            const active = (i === _qsActiveIdx);
-            return '<div class="argus-qs-item" data-id="' + s.id + '" data-idx="' + i + '"' +
-                   ' style="display:flex;align-items:center;gap:10px;padding:9px 16px;cursor:pointer;' +
-                   'border-left:3px solid ' + (active ? 'rgba(212,145,90,0.95)' : 'transparent') + ';' +
-                   'background:' + (active ? 'rgba(184,115,51,0.10)' : 'transparent') + ';">' +
+            return '<div class="argus-qs-item" data-kind="scan" data-id="' + s.id + '" data-idx="' + i + '"' +
+                   ' style="' + baseStyle + '">' +
                        '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + riskColor + ';' +
                             'box-shadow:0 0 6px ' + riskColor + ';flex-shrink:0;"></span>' +
                        '<div style="flex:1;min-width:0;">' +
@@ -541,14 +683,27 @@
         }).join('');
         box.innerHTML = html;
         box.querySelectorAll('.argus-qs-item').forEach(el => {
-            el.addEventListener('click', () => {
-                _qsOpenScan(parseInt(el.dataset.id, 10));
-            });
+            el.addEventListener('click', () => _qsActivateItem(parseInt(el.dataset.idx, 10)));
             el.addEventListener('mouseenter', () => {
                 _qsActiveIdx = parseInt(el.dataset.idx, 10);
                 _qsRender(document.getElementById('argus-quicksearch-input').value);
             });
         });
+    }
+
+    function _qsActivateItem(idx) {
+        const it = _qsItems[idx];
+        if (!it) return;
+        if (it.kind === 'cmd') {
+            _qsClose();
+            try { it.run(); }
+            catch (e) {
+                if (typeof showToast === 'function')
+                    showToast('Error ejecutando comando: ' + (e?.message || e), 'error');
+            }
+            return;
+        }
+        _qsOpenScan(parseInt(it.id, 10));
     }
     function _qsEscape(s) {
         return String(s).replace(/[&<>"']/g, c => ({
@@ -566,14 +721,27 @@
     async function _qsFetch(query) {
         if (_qsAbort) { try { _qsAbort.abort(); } catch(_){} }
         _qsAbort = (typeof AbortController === 'function') ? new AbortController() : null;
+
+        // Visual #18 — modo "solo comandos" cuando empieza con `>` o `/`.
+        if (/^[>\/]/.test(query)) {
+            _qsItems = _qsMatchCommands(query).map(c => ({ ...c, kind: 'cmd' }));
+            _qsActiveIdx = 0;
+            _qsRender(query);
+            return;
+        }
+
+        // Caso numérico puro: solo scans, sin mezcla de comandos
+        const isNumeric = /^\d+$/.test(query);
+
+        // Comandos relevantes según la query (siempre arriba, máx 3)
+        const cmdMatches = isNumeric ? [] : _qsMatchCommands(query).slice(0, 3).map(c => ({ ...c, kind: 'cmd' }));
+
         try {
             const url = '/api/scans?limit=40&q=' + encodeURIComponent(query);
             const r = await fetch(url, _qsAbort ? { signal: _qsAbort.signal } : {});
             if (!r.ok) throw new Error('HTTP ' + r.status);
             const d = await r.json();
             let items = (d && d.scans) ? d.scans : (Array.isArray(d) ? d : []);
-            // Si la query es solo numérica, intentamos también que aparezca el ID exacto
-            const isNumeric = /^\d+$/.test(query);
             if (isNumeric) {
                 const idQ = parseInt(query, 10);
                 const exact = items.find(s => s.id === idQ);
@@ -581,7 +749,6 @@
                     items = [{ id: idQ, minecraft_user: '(abrir scan #' + idQ + ')', risk_score: null }, ...items];
                 }
             } else {
-                // Filtro client-side adicional por si el backend ignora ?q=
                 const ql = query.toLowerCase();
                 items = items.filter(s => {
                     const haystack = [
@@ -591,12 +758,15 @@
                     return haystack.includes(ql);
                 });
             }
-            _qsItems = items.slice(0, 25);
+            const scanItems = items.slice(0, 25 - cmdMatches.length).map(s => ({ ...s, kind: 'scan' }));
+            _qsItems = [...cmdMatches, ...scanItems];
             _qsActiveIdx = 0;
             _qsRender(query);
         } catch (e) {
             if (e && e.name === 'AbortError') return;
-            _qsItems = [];
+            // Si falla la fetch pero hay comandos, igual mostramos los comandos
+            _qsItems = cmdMatches;
+            _qsActiveIdx = 0;
             _qsRender(query);
         }
     }
@@ -628,7 +798,9 @@
                 }
             } else if (key === 'enter') {
                 e.preventDefault();
-                if (_qsItems.length) _qsOpenScan(_qsItems[_qsActiveIdx].id);
+                // Visual #18 — usa el activador unificado que sabe distinguir
+                // scans de comandos del catálogo.
+                if (_qsItems.length) _qsActivateItem(_qsActiveIdx);
             }
         });
         root.addEventListener('click', (e) => {
@@ -637,7 +809,18 @@
         input.addEventListener('input', () => {
             const q = input.value.trim();
             if (_qsDebounce) clearTimeout(_qsDebounce);
-            if (!q) { _qsItems = []; _qsRender(''); return; }
+            if (!q) {
+                // Sin texto: si no hay nada, mostrar hint; pero si el usuario
+                // escribió solo `>` o `/`, mostrar el catálogo entero.
+                _qsItems = [];
+                _qsRender('');
+                return;
+            }
+            // Comandos puros (`>...`) son sincrónicos — sin debounce.
+            if (/^[>\/]/.test(q)) {
+                _qsFetch(q);
+                return;
+            }
             _qsDebounce = setTimeout(() => _qsFetch(q), QS_DEBOUNCE_MS);
         });
     }
@@ -1019,6 +1202,147 @@
     }
 
 
+    // ── Visual #7 — Modal de confirmación unificado ──────────────────────────
+    // Reemplaza el confirm() del browser (que en Chrome muestra el ugly diálogo
+    // nativo y bloquea TODO el thread). API: argusUI.confirm({title, body, ok,
+    // cancel, danger}) → Promise<boolean>. backdrop blur, animaciones consistentes,
+    // foco autoseteado en el botón cancel para evitar acciones destructivas
+    // accidentales con Enter. Esc / click fuera = cancelar.
+    function confirmModal(opts) {
+        const o = opts || {};
+        const title  = o.title  || '¿Confirmar acción?';
+        const body   = o.body   || '';
+        const okLabel     = o.ok     || 'Confirmar';
+        const cancelLabel = o.cancel || 'Cancelar';
+        const danger = !!o.danger;
+        const okBg     = danger ? 'linear-gradient(135deg,#dc2626,#b91c1c)' : 'linear-gradient(135deg,var(--accent,#B87333),var(--accent-d,#7A4824))';
+        const okShadow = danger ? 'rgba(220,38,38,0.40)' : 'rgba(184,115,51,0.40)';
+
+        // Si ya hay uno abierto, lo cerramos primero
+        document.getElementById('argus-confirm-modal')?.remove();
+
+        return new Promise((resolve) => {
+            const root = document.createElement('div');
+            root.id = 'argus-confirm-modal';
+            root.style.cssText = [
+                'position:fixed',
+                'inset:0',
+                'z-index:99996',
+                'display:flex',
+                'align-items:center',
+                'justify-content:center',
+                'padding:24px',
+                'background:rgba(8,6,4,0.62)',
+                'backdrop-filter:blur(10px)',
+                '-webkit-backdrop-filter:blur(10px)',
+                'animation:argusConfirmFadeIn 180ms cubic-bezier(0.22,1,0.36,1)',
+            ].join(';') + ';';
+
+            // El cuerpo soporta string plano O HTML escapado por el caller
+            const bodyHtml = (typeof body === 'string' && body.includes('<'))
+                ? body
+                : String(body).split('\n').map(l => `<div>${(l || '&nbsp;').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`).join('');
+
+            root.innerHTML = `
+                <div role="dialog" aria-modal="true" aria-labelledby="argus-confirm-title"
+                     style="background:var(--bg-2,#15110A);color:var(--text,#EAD8C0);
+                            border:1px solid var(--border-m,rgba(184,115,51,0.28));
+                            border-radius:14px;width:min(460px,92vw);
+                            box-shadow:0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04) inset;
+                            animation:argusConfirmPop 220ms cubic-bezier(0.22,1,0.36,1);overflow:hidden;">
+                    <div style="padding:20px 22px 8px;">
+                        <div id="argus-confirm-title" style="font-size:15px;font-weight:700;color:var(--text-h,#EAD8C0);letter-spacing:0.2px;">${title.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+                    </div>
+                    <div style="padding:6px 22px 18px;font-size:13px;line-height:1.55;color:var(--text-m,#A89578);">
+                        ${bodyHtml}
+                    </div>
+                    <div style="padding:14px 22px;background:rgba(0,0,0,0.18);
+                                border-top:1px solid var(--border,rgba(184,115,51,0.12));
+                                display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+                        <button id="argus-confirm-cancel" type="button"
+                                style="font-size:12.5px;font-weight:600;padding:8px 16px;border-radius:8px;
+                                       background:transparent;border:1px solid var(--border-m,rgba(184,115,51,0.28));
+                                       color:var(--text-m,#A89578);cursor:pointer;letter-spacing:0.2px;
+                                       transition:all 160ms ease;">${cancelLabel.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</button>
+                        <button id="argus-confirm-ok" type="button"
+                                style="font-size:12.5px;font-weight:700;padding:8px 18px;border-radius:8px;
+                                       background:${okBg};border:none;color:#fff;cursor:pointer;
+                                       letter-spacing:0.2px;box-shadow:0 6px 18px -6px ${okShadow};
+                                       transition:all 160ms ease;">${okLabel.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</button>
+                    </div>
+                </div>`;
+
+            document.body.appendChild(root);
+
+            const close = (val) => {
+                document.removeEventListener('keydown', onKey, true);
+                root.style.animation = 'argusConfirmFadeOut 140ms cubic-bezier(0.22,1,0.36,1)';
+                setTimeout(() => { root.remove(); resolve(val); }, 130);
+            };
+            const onKey = (e) => {
+                if (e.key === 'Escape') { e.preventDefault(); close(false); }
+                else if (e.key === 'Enter') { e.preventDefault(); close(true); }
+            };
+            document.addEventListener('keydown', onKey, true);
+            root.addEventListener('click', (e) => { if (e.target === root) close(false); });
+            root.querySelector('#argus-confirm-cancel').addEventListener('click', () => close(false));
+            root.querySelector('#argus-confirm-ok').addEventListener('click',     () => close(true));
+            // Foco al cancel para que Enter accidental NO confirme acciones destructivas
+            setTimeout(() => {
+                (danger ? root.querySelector('#argus-confirm-cancel')
+                        : root.querySelector('#argus-confirm-ok')).focus();
+            }, 30);
+        });
+    }
+
+
+    // ── Visual #41 — Typewriter / animación typing en text containers ─────────
+    // Usado para el resumen IA y otros textos generados que aparecen "vivos".
+    // API: argusUI.typewriter(el, text, opts) → Promise<void> que resuelve
+    // al terminar. Cancelable (.argus-tw-cancel = true sobre el elemento).
+    function typewriter(el, text, opts) {
+        const o = opts || {};
+        const speed = Math.max(2, o.speedCps ? Math.round(1000 / o.speedCps) : (o.delay || 12));
+        const reduce = window.matchMedia &&
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        return new Promise((resolve) => {
+            if (!el || !text) { if (el) el.textContent = String(text || ''); return resolve(); }
+            if (reduce) { el.textContent = String(text); return resolve(); }
+            el._argusTwCancel = false;
+            el.textContent = '';
+            // Caret pulsante
+            const caret = document.createElement('span');
+            caret.className = 'argus-tw-caret';
+            caret.style.cssText = 'display:inline-block;width:1px;height:1em;background:currentColor;margin-left:1px;animation:argusTwBlink 850ms steps(2) infinite;vertical-align:-2px;opacity:0.7;';
+            el.appendChild(caret);
+
+            const chars = String(text).split('');
+            let i = 0;
+            // Escribir en chunks de 1-3 chars para sentir más "humano"
+            function step() {
+                if (el._argusTwCancel) {
+                    if (caret.parentNode) caret.remove();
+                    el.textContent = String(text);
+                    return resolve();
+                }
+                const burst = 1 + (Math.random() < 0.25 ? 2 : 0);
+                for (let k = 0; k < burst && i < chars.length; k++, i++) {
+                    caret.insertAdjacentText('beforebegin', chars[i]);
+                }
+                if (i >= chars.length) {
+                    setTimeout(() => { if (caret.parentNode) caret.remove(); resolve(); }, 350);
+                    return;
+                }
+                // Pausa más larga después de signos de puntuación
+                const last = chars[i - 1] || '';
+                const extra = '.,;:?!\n'.includes(last) ? 80 : 0;
+                setTimeout(step, speed + extra);
+            }
+            step();
+        });
+    }
+
+
     // ── Export ───────────────────────────────────────────────────────────────
     window.showToast        = showToast;
     window.renderEmptyState = renderEmptyState;
@@ -1047,6 +1371,8 @@
         companyTag,
         staggerIn,
         celebrate,
+        confirm: confirmModal,
+        typewriter,
     };
 
     // Re-aplicar la vista guardada cuando se haya cargado el DOM

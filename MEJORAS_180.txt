@@ -646,8 +646,18 @@ NOTA DE LECTURA
         que detecta tipo (success/warning/error/info) por prefijo emoji.
         Sustitución global automática de las 25+ llamadas alert() existentes.
 
-[ ]  7. Modal de confirmación con backdrop blur consistente entre
+[X]  7. Modal de confirmación con backdrop blur consistente entre
         veredictos, eliminación de tokens, etc.
+        DONE v1.6.49 (Pack 17) — argusUI.confirm({title, body, ok, cancel,
+        danger}) → Promise<boolean> en argus-ui.js. backdrop blur 10px,
+        animación pop in/out, foco automático al botón cancel cuando
+        danger:true (anti-Enter accidental sobre acciones destructivas),
+        Esc cancela, Enter confirma. CSS para hover/focus de botones en
+        argus-ui.css. Migrados los 8 confirm() del browser que había en
+        panel.js (deleteToken, updateModel, purgeGarbageResults,
+        deleteMachineScans, compileApp, deleteDownloadLink,
+        deactivateUser, deleteUser ×2). Fallback a window.confirm() si
+        argusUI no está disponible.
 
 [X]  8. Tooltips con ayuda contextual (?) en cada label crítico del scan
         (Risk Score, Verdict, AI confidence, etc.).
@@ -706,8 +716,17 @@ NOTA DE LECTURA
         contra /api/scans?q= y filtra extra client-side. Soporta
         número exacto -> abrir scan ID directo. Esc o click fuera cierra.
 
-[ ] 18. Command palette para staff (estilo VS Code):
+[X] 18. Command palette para staff (estilo VS Code):
         "Open scan #X", "Generate token", "Switch theme", "View tokens".
+        DONE v1.6.49 (Pack 17) — _qsCommandCatalog en argus-ui.js extiende
+        el quicksearch (Cmd+K) con 11 comandos de acción: Ir a Scans/
+        Tokens/Usuarios, Cambiar tema, Modo Stream, Sonido, Densidad
+        cómoda/compacta, Aumentar letra, Cerrar sesión, Ver atajos. Prefijo
+        `>` o `/` filtra solo comandos. Sin prefijo, los top-3 comandos
+        relevantes a la query aparecen ARRIBA de los scans. Render con
+        chip "CMD" amarillo + icono "›_". _qsActivateItem(idx) unificado
+        sabe distinguir scan vs cmd y ejecutar run() con try/catch.
+        Sin debounce para queries `>...` (ejecución inmediata, sin fetch).
 
 [ ] 19. Drag & drop de archivos directo en zona del scanner Tkinter
         para análisis manual de un .jar/.exe específico.
@@ -838,8 +857,18 @@ NOTA DE LECTURA
         siempre = mismo color). Inicial mayúscula del nombre,
         gradient + shadow. Tooltip "Firmado por: <nombre>".
 
-[ ] 41. Animación de "typing" en el AI analysis (texto que aparece
+[X] 41. Animación de "typing" en el AI analysis (texto que aparece
         carácter a carácter como GPT pensando).
+        DONE v1.6.49 (Pack 17) — argusUI.typewriter(el, text, opts) en
+        argus-ui.js: writes en bursts de 1-3 chars con pausa extra
+        (~80ms) tras puntuación para sentir más humano. Caret pulsante
+        argusTwBlink (CSS keyframe en argus-ui.css). Honra
+        prefers-reduced-motion (texto se setea instantáneo). Cancelable
+        via el._argusTwCancel = true. Devuelve Promise<void>. Aplicado
+        en aiScanSummary() de panel.js: el header "📝 Resumen IA:"
+        aparece inmediato y el texto se escribe con speedCps=120 en un
+        <span class="ai-summary-text"> hijo. Fallback a textContent plano
+        si argusUI.typewriter no está disponible.
 
 [X] 42. Botón flotante de Discord siempre visible (esquina inferior
         derecha) con burbuja de notificación cuando hay anuncios.
@@ -1072,10 +1101,10 @@ Linux: Arch, Ubuntu, Fedora, etc.).
 
   Scanner ............................. 60 ítems   (detección)      14/60
   Filtro .............................. 60 ítems   (anti-FP)        22/60
-  Visual .............................. 60 ítems   (UI/UX)          30/60
+  Visual .............................. 60 ítems   (UI/UX)          33/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 9/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    75/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    78/195
                                                   (5 parciales: S#9, V#3, V#32, V#43, V#53)
                                                   + 3 BONUS Pack 11 (Stream-friendly,
                                                   CompanyTag color, Why-this-score modal)
@@ -1093,6 +1122,47 @@ Linux: Arch, Ubuntu, Fedora, etc.).
                                                   (AppImage/Flatpak/deb), #14 (CI Docker)
 
 SESIÓN DEL 08-may-2026:
+  Pack 17 (v1.6.49): Visual #7, #18, #41 — Power UI features (sin .exe).
+                    NUEVOS en argus-ui.js:
+                      * confirmModal(opts) — argusUI.confirm() devuelve
+                        Promise<boolean>. Backdrop blur 10px, animación
+                        pop, foco al cancel cuando danger:true. Esc
+                        cancela, Enter confirma. Reemplaza confirm()
+                        nativo del browser.
+                      * typewriter(el, text, opts) — argusUI.typewriter()
+                        escribe text con animación carácter-a-carácter en
+                        bursts pseudo-aleatorios + pausa post-puntuación
+                        (~80ms tras .,;:?!\n). Caret pulsante. Cancelable.
+                        Honra prefers-reduced-motion.
+                      * _qsCommandCatalog — 11 comandos (Ir a Scans/
+                        Tokens/Users, Cambiar tema, Stream mode, Sonido,
+                        Densidad ×2, Aumentar letra, Cerrar sesión, Atajos).
+                      * _qsMatchCommands(q) + _qsActivateItem(idx) —
+                        scoring básico por substring + título-startsWith,
+                        activador unificado scan|cmd con try/catch.
+                    NUEVOS en argus-ui.css:
+                      * @keyframes argusConfirmFadeIn / FadeOut / Pop
+                      * Hover/focus styles para botones del confirm modal
+                      * @keyframes argusTwBlink (caret 850ms steps(2))
+                    INTEGRACIONES en panel.js:
+                      * Migrados 8 confirm() del browser a argusUI.confirm():
+                        deleteToken, updateModel, purgeGarbageResults,
+                        deleteMachineScans, compileApp, deleteDownloadLink,
+                        deactivateUser, deleteUser ×2 (todas las funciones
+                        ya eran async, integración limpia).
+                      * aiScanSummary(): texto se renderiza con typewriter
+                        (speedCps=120) sobre un <span class="ai-summary-text">.
+                      * Quicksearch (Cmd+K): comandos relevantes top-3
+                        aparecen sobre los scans; prefijo `>` o `/` filtra
+                        solo comandos sin debounce.
+                    panel.html: argus-ui.js v=10 / argus-ui.css v=11 /
+                      panel.js v=59 (cache busters).
+                    → 3 visuales completados (V#7, V#18, V#41) — fix
+                      definitivo a la inconsistencia de modals nativos
+                      vs custom + nueva forma rápida de navegar el
+                      panel + texto IA con feel "vivo". Sin recompilar
+                      el .exe.
+
   Pack 16 (v1.6.49): Visual #1, #4, #26 (sin recompilar .exe).
                     NUEVOS en argus-ui.js:
                       * staggerIn(container, opts) — aplica clase
