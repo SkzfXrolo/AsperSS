@@ -4474,6 +4474,15 @@ def list_scans():
                 params += [limit, offset]
 
                 # scanner_version puede no existir aún en deploys viejos — fallback NULL.
+                # IMPORTANTE: PostgreSQL aborta la TX entera si la query del try falla
+                # (ej. UndefinedColumn). Sin SAVEPOINT, la query del except hereda la
+                # TX aborted y revienta con "current transaction is aborted, commands
+                # ignored until end of transaction block" → list_scans cae a fallback
+                # HTTP roto. Causa del 500 en Pack 25 cuando Render upgradeó Python.
+                try:
+                    cursor.execute('SAVEPOINT scn_ver_probe')
+                except Exception:
+                    pass
                 try:
                     cursor.execute(f'''
                         SELECT s.id, s.scan_token, s.started_at, s.completed_at, s.status,
@@ -4488,7 +4497,16 @@ def list_scans():
                         LIMIT {_PH} OFFSET {_PH}
                     ''', params)
                     _has_scn_ver = True
-                except Exception:
+                    try:
+                        cursor.execute('RELEASE SAVEPOINT scn_ver_probe')
+                    except Exception:
+                        pass
+                except Exception as _scn_err:
+                    print(f"⚠️ list_scans: probe scanner_version falló ({_scn_err.__class__.__name__}: {_scn_err}); usando query sin esa columna")
+                    try:
+                        cursor.execute('ROLLBACK TO SAVEPOINT scn_ver_probe')
+                    except Exception:
+                        pass
                     _has_scn_ver = False
                     cursor.execute(f'''
                         SELECT s.id, s.scan_token, s.started_at, s.completed_at, s.status,

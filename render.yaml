@@ -12,6 +12,15 @@ services:
     startCommand: gunicorn --config gunicorn_config.py app:app
     autoDeploy: true
     envVars:
+      # Pin de Python — Render desde 2026-05 usa Python 3.14 por default si
+      # no hay un pin explícito. psycopg2-binary 2.9.9 + cryptography 41.x
+      # NO tienen wheels precompiladas para Python 3.14 → builds rotos.
+      # PYTHON_VERSION es la forma oficial actual de Render (runtime.txt
+      # quedó deprecated). NO subir esto a 3.13+ sin antes upgradear
+      # psycopg2-binary y cryptography simultáneamente. Probado bien con
+      # 3.12.7 (la última 3.12.x con security patches).
+      - key: PYTHON_VERSION
+        value: "3.12.7"
       - key: DATABASE_URL
         fromDatabase:
           name: aspers-db
