@@ -2136,6 +2136,23 @@
         </div>
     </div>
 
+    <!-- Visual #38: footer con version + uptime + estado backend -->
+    <div id="argus-footer" style="position:fixed;bottom:0;left:240px;right:0;
+         z-index:50;display:flex;align-items:center;justify-content:center;gap:14px;
+         padding:6px 14px;font-size:10.5px;color:var(--text-d);
+         background:linear-gradient(to top, rgba(15,12,20,0.85), rgba(15,12,20,0));
+         backdrop-filter:blur(6px);pointer-events:none;
+         font-family:'JetBrains Mono','Consolas',monospace;letter-spacing:0.4px;">
+        <span id="argus-footer-version" style="opacity:0.7;">Argus v…</span>
+        <span style="opacity:0.3;">·</span>
+        <span id="argus-footer-uptime" style="opacity:0.7;">uptime …</span>
+        <span style="opacity:0.3;">·</span>
+        <span id="argus-footer-status" style="display:inline-flex;align-items:center;gap:4px;opacity:0.7;">
+            <span id="argus-footer-dot" style="width:6px;height:6px;border-radius:50%;background:#94a3b8;display:inline-block;"></span>
+            <span id="argus-footer-status-text">checking…</span>
+        </span>
+    </div>
+
     <script>
     // Permisos de staff inyectados desde Flask
     window.STAFF_ROLE     = "{{ staff_role }}";
@@ -2143,8 +2160,8 @@
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=1"></script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=48"></script>
+    <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=49"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────

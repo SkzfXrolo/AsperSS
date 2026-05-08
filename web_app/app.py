@@ -50,7 +50,7 @@ def _make_session_permanent():
 CORS(app)
 
 # Inicializar base de datos de autenticación al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.35'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
+_ARGUS_VERSION = '1.6.36'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
 # URL de invitacion permanente al Discord oficial. Se inyecta en todos los
 # templates como `discord_invite` via @app.context_processor (ver mas abajo).
@@ -546,6 +546,43 @@ def health_check():
     response.headers['Content-Type'] = 'text/plain'
     response.headers['Cache-Control'] = 'no-cache'
     return response
+
+
+# Visual #38 - timestamp de arranque para calcular uptime
+import time as _time_mod
+_APP_START_TIME = _time_mod.time()
+
+
+@app.route('/api/version', methods=['GET'])
+def api_version():
+    """Devuelve versión, uptime y estado de la API. Usado por el footer del
+    panel para mostrar 'Argus v1.6.36 · uptime 2d 4h · ✓ DB OK'."""
+    uptime_seconds = int(_time_mod.time() - _APP_START_TIME)
+    days  = uptime_seconds // 86400
+    hours = (uptime_seconds % 86400) // 3600
+    mins  = (uptime_seconds % 3600) // 60
+    if days > 0:
+        uptime_human = f"{days}d {hours}h"
+    elif hours > 0:
+        uptime_human = f"{hours}h {mins}m"
+    else:
+        uptime_human = f"{mins}m"
+    db_ok = True
+    try:
+        conn = get_db_connection()
+        cur  = conn.cursor()
+        cur.execute('SELECT 1')
+        cur.fetchone()
+    except Exception:
+        db_ok = False
+    return jsonify({
+        'version':       _ARGUS_VERSION,
+        'scanner_version': CURRENT_SCANNER_VERSION,
+        'uptime_seconds': uptime_seconds,
+        'uptime_human':  uptime_human,
+        'db_ok':         db_ok,
+        'started_at':    int(_APP_START_TIME),
+    })
 
 @app.route('/diagnostico-login')
 def diagnostico_login():
@@ -2633,7 +2670,7 @@ def debug_last_scan():
 
 
 # Current released scanner version — update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.6.35"
+CURRENT_SCANNER_VERSION = "1.6.36"
 
 @app.route('/sw.js')
 def service_worker():

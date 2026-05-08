@@ -715,6 +715,36 @@ function _scanInitials(machineName) {
     return machineName.substring(0,2).toUpperCase();
 }
 
+/**
+ * Visual #12: hash determinístico (string → hue 0-360) para generar
+ * un color de avatar único pero estable por jugador.
+ * Mismo nombre = mismo color siempre.
+ */
+function _hashHue(str) {
+    if (!str) return 0;
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+        h = ((h << 5) - h) + str.charCodeAt(i);
+        h |= 0;
+    }
+    return Math.abs(h) % 360;
+}
+
+/**
+ * Visual #12: estilo inline para .scan-avatar-circle deterministico.
+ * Si ya hay clase semántica (av-detected/suspicious/clean), devuelve ''
+ * y deja que el CSS gane. Si no, genera un gradient único + color del texto.
+ */
+function _scanAvatarStyle(machineName, hasSemanticClass) {
+    if (hasSemanticClass) return '';
+    const hue  = _hashHue(machineName || '?');
+    const hue2 = (hue + 30) % 360;
+    return `background:linear-gradient(135deg, hsla(${hue},65%,55%,0.32), hsla(${hue2},70%,45%,0.45));`
+         + `border:1px solid hsla(${hue},60%,55%,0.40);`
+         + `color:hsl(${hue},85%,80%);`
+         + `font-weight:700;letter-spacing:0.5px;`;
+}
+
 // V7: Path highlight — folder gray, filename white-bold
 function _formatPath(path) {
     if (!path) return '';
@@ -961,8 +991,9 @@ async function loadRecentScans() {
                 const v = _scanVerdict(scan);
                 const rowCls = v ? `row-${v}` : '';
                 const avCls  = v ? `av-${v}` : '';
+                const _avStyle = _scanAvatarStyle(scan.machine_name, !!v);
                 return `<div class="echo-scan-row stagger-item ${rowCls}" style="animation-delay:${i*55}ms" onclick="viewScanDetails(${scan.id})">
-                    <div class="scan-avatar-circle ${avCls}">${_scanInitials(scan.machine_name)}</div>
+                    <div class="scan-avatar-circle ${avCls}" style="${_avStyle}">${_scanInitials(scan.machine_name)}</div>
                     <div class="scan-row-info">
                         <div class="scan-row-machine">${scan.machine_name || 'N/A'}</div>
                         <div class="scan-row-date">${formatDate(scan.started_at)}</div>
@@ -1549,9 +1580,10 @@ async function loadScans() {
 
                 // V12: Crafatar avatar or initials
                 const uuid = scan.minecraft_uuid || null;
+                const _avStyle = _scanAvatarStyle(scan.machine_name, false);
                 const avatar = uuid
-                    ? `<img src="https://crafatar.com/avatars/${uuid}?size=32&overlay" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;" onerror="this.outerHTML='<div class=\\"scan-avatar-circle\\">${_scanInitials(scan.machine_name)}</div>'">`
-                    : `<div class="scan-avatar-circle">${_scanInitials(scan.machine_name)}</div>`;
+                    ? `<img src="https://crafatar.com/avatars/${uuid}?size=32&overlay" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;" onerror="this.outerHTML='<div class=\\"scan-avatar-circle\\" style=\\"${_avStyle.replace(/"/g,'&quot;')}\\">${_scanInitials(scan.machine_name)}</div>'">`
+                    : `<div class="scan-avatar-circle" style="${_avStyle}">${_scanInitials(scan.machine_name)}</div>`;
 
                 // V13: NUEVO badge if scan < 30min old
                 const scanAge = scan.started_at ? (now - new Date(scan.started_at).getTime()) : Infinity;

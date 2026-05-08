@@ -107,11 +107,16 @@ NOTA DE LECTURA
 
 [ ] 27. AppLocker / WDAC blocked logs — empresa pro con políticas activas.
 
-[ ] 28. Reglas custom del Firewall — un cheat suele agregarse a la whitelist.
+[X] 28. Reglas custom del Firewall — un cheat suele agregarse a la whitelist.
         Listar reglas creadas por usuario en últimas 72h.
+        ✓ DONE v1.6.36 — scan_recent_firewall_rules NUEVO via PowerShell
+        Get-NetFirewallRule, distingue dir/Inbound/Outbound y eleva alerta
+        si target está en AppData/Downloads/Desktop/Public.
 
-[ ] 29. Modificaciones recientes a hosts file (C:\Windows\System32\drivers\etc\
+[X] 29. Modificaciones recientes a hosts file (C:\Windows\System32\drivers\etc\
         hosts) — bypasses de licencias de cheat (vape.cc → 127.0.0.1).
+        ✓ ya existía como scan_hosts_file (detecta redirect de
+        session.minecraft.net, mojang.com, hypixel, mineplex, cubecraft).
 
 [ ] 30. Detectar procesos huérfanos: PPID apunta a proceso ya muerto, pero el
         hijo sigue vivo con handles de javaw.exe abiertos.
@@ -160,8 +165,9 @@ NOTA DE LECTURA
 [ ] 44. Time forensics: drift entre RTC, NTP y reloj de sistema. Drift >5min
         es señal de manipulación temporal (hacks que falsean timestamps).
 
-[ ] 45. PowerShell history (ConsoleHost_history.txt en cada user) — comandos
+[X] 45. PowerShell history (ConsoleHost_history.txt en cada user) — comandos
         Invoke-WebRequest / iwr / curl a dominios de cheat.
+        ✓ ya existía como scan_powershell_history.
 
 [ ] 46. cmd doskey history y bash_history (si WSL está instalado).
 
@@ -174,8 +180,11 @@ NOTA DE LECTURA
 [ ] 49. Service installations recientes (HKLM\System\CurrentControlSet\Services
         creadas en últimas 72h) — drivers de cheat se persisten así.
 
-[ ] 50. Scheduled tasks creadas en últimas 24h con triggers OnLogon, OnIdle,
+[X] 50. Scheduled tasks creadas en últimas 24h con triggers OnLogon, OnIdle,
         AtStartup. Apuntan a binarios fuera de Program Files = sospechoso.
+        ✓ DONE v1.6.36 — scan_recent_install_tasks NUEVO. Walk a Tasks dir,
+        filtra por mtime <72h, parsea <Command> XML, detecta triggers
+        sospechosos. CRITICAL si target está en AppData/Temp/Downloads/Public.
 
 [ ] 51. Persistencia clásica: Startup folders (CurrentUser y AllUsers), Run/
         RunOnce keys, UserInitMprLogonScript, Winlogon\Userinit.
@@ -228,9 +237,12 @@ NOTA DE LECTURA
         (skin pack llamado killaura.png o textura) vs ejecutable malicioso
         (.exe/.jar/.dll). Match estricto por extensión.
 
-[ ]  4. Whitelist específica de mods legítimos de Minecraft Java:
+[X]  4. Whitelist específica de mods legítimos de Minecraft Java:
         OptiFine, Sodium, Iris, Lithium, Phosphor, Starlight, Lunar Client,
         Badlion, Feather, Forge, Fabric, NeoForge, Quilt, Mod Menu, JEI/REI.
+        ✓ DONE v1.6.36 — _LEGIT_MC_MOD_TERMS (40+ entries) + is_legit_mc_mod()
+        usando smart_hack_match. Aplicado en scan_deleted_recycle (skip si
+        es mod legitimo borrado) y scan_prefetch_all (no flag si is_legit).
 
 [ ]  5. Whitelist de launchers oficiales y third-party legítimos:
         Lunar Launcher, Badlion Client, Feather Client, ATLauncher, MultiMC,
@@ -470,8 +482,12 @@ NOTA DE LECTURA
 [ ] 11. Heatmap GitHub-style de actividad por día/hora del staff
         (cuándo scannea más).
 
-[ ] 12. Avatar generado a partir del nombre (initials con color hash
+[X] 12. Avatar generado a partir del nombre (initials con color hash
         determinístico) cuando no hay PFP configurado.
+        ✓ DONE v1.6.36 — _hashHue() + _scanAvatarStyle() generan gradient
+        HSL único pero estable por nombre. No piso colores semánticos
+        (av-detected/suspicious/clean) — solo se aplica cuando no hay
+        clase de severidad asignada.
 
 [ ] 13. Sistema de logros/streaks gamificado opcional:
         "5 scans con CLEAN", "100 scans totales", "Primera detección de
@@ -563,8 +579,11 @@ NOTA DE LECTURA
         elementos decorativos se mueven a velocidades distintas
         al scrollear.
 
-[ ] 38. Footer con SLA / uptime: "99.9% uptime — last 30 days",
+[X] 38. Footer con SLA / uptime: "99.9% uptime — last 30 days",
         actualizado desde el endpoint /health.
+        ✓ DONE v1.6.36 — endpoint /api/version (version + uptime_human + db_ok)
+        + footer fijo en panel.html con dot de status (verde/ámbar/rojo)
+        que auto-refresca cada 60s.
 
 [ ] 39. Live counter de scans totales en index (incrementa al ritmo
         del backend) — efecto "está vivo".
@@ -730,17 +749,22 @@ Linux: Arch, Ubuntu, Fedora, etc.).
   RESUMEN
 ═══════════════════════════════════════════════════════════════════════════════
 
-  Scanner ............................. 60 ítems   (detección)       0/60
-  Filtro .............................. 60 ítems   (anti-FP)         5/60
-  Visual .............................. 60 ítems   (UI/UX)           5/60
+  Scanner ............................. 60 ítems   (detección)       4/60
+  Filtro .............................. 60 ítems   (anti-FP)         6/60
+  Visual .............................. 60 ítems   (UI/UX)           7/60
   Plataforma (Linux) .................. 15 ítems   (multiplataforma) 0/15
   ───────────────────────────────────────────────
-  TOTAL ............................... 195 ítems  COMPLETADOS:    10/195
+  TOTAL ............................... 195 ítems  COMPLETADOS:    17/195
 
-ÚLTIMA SESIÓN (07-may-2026)
-  Filtro #2 lite, #30, #38, #45, #50
-  Visual #5, #6, #25, #29, #34
-  → 2 commits, 2 builds (1.6.34 y 1.6.35), todos en producción.
+SESIÓN DEL 07-may-2026 (3 packs en una tarde):
+  Pack 1 (v1.6.34): Filtro #2 lite, #30, #38 + Visual #5, #6, #25
+  Pack 2 (v1.6.35): Filtro #45, #50 + Visual #29, #34
+  Pack 3 (v1.6.36): Scanner #28, #29, #45, #50 + Filtro #4
+                    + Visual #12, #38
+                    NUEVOS: scan_recent_install_tasks,
+                            scan_defender_exclusions,
+                            scan_recent_firewall_rules
+                    → 3 detecciones forenses inéditas + endpoint /api/version
 
 PRIORIZACIÓN SUGERIDA (top 10 con mayor ROI inmediato)
 ──────────────────────────────────────────────────────

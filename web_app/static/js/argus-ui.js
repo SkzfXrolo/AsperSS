@@ -276,9 +276,50 @@
         cards.forEach(c => el.appendChild(c));
     }
 
+    // ── Footer con version + uptime (Visual #38) ─────────────────────────────
+
+    async function _refreshFooter() {
+        try {
+            const r = await fetch('/api/version', { cache: 'no-store' });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const d = await r.json();
+            const vEl = document.getElementById('argus-footer-version');
+            const uEl = document.getElementById('argus-footer-uptime');
+            const dot = document.getElementById('argus-footer-dot');
+            const txt = document.getElementById('argus-footer-status-text');
+            if (vEl) vEl.textContent = `Argus v${d.version}`;
+            if (uEl) uEl.textContent = `uptime ${d.uptime_human}`;
+            if (dot && txt) {
+                if (d.db_ok) {
+                    dot.style.background = '#10b981';
+                    dot.style.boxShadow  = '0 0 8px #10b981';
+                    txt.textContent = 'online';
+                } else {
+                    dot.style.background = '#f59e0b';
+                    dot.style.boxShadow  = '0 0 8px #f59e0b';
+                    txt.textContent = 'DB lenta';
+                }
+            }
+        } catch (_e) {
+            const dot = document.getElementById('argus-footer-dot');
+            const txt = document.getElementById('argus-footer-status-text');
+            if (dot) {
+                dot.style.background = '#ef4444';
+                dot.style.boxShadow  = '0 0 8px #ef4444';
+            }
+            if (txt) txt.textContent = 'sin conexión';
+        }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _refreshFooter);
+    } else {
+        _refreshFooter();
+    }
+    setInterval(_refreshFooter, 60000);
+
     // ── Export ───────────────────────────────────────────────────────────────
     window.showToast        = showToast;
     window.renderEmptyState = renderEmptyState;
     window.renderSkeleton   = renderSkeleton;
-    window.argusUI = { showToast, renderEmptyState, renderSkeleton };
+    window.argusUI = { showToast, renderEmptyState, renderSkeleton, refreshFooter: _refreshFooter };
 })();

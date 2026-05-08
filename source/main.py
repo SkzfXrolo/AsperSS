@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.35"
+SCANNER_VERSION = "1.6.36"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -147,6 +147,46 @@ _DEFINITE_HACK_NAMES = {
 # no relacionado con Minecraft. Las variantes MC-específicas están en _DEFINITE_HACK_NAMES.
 _WORD_BOUNDARY_HACK_WORDS = ['hack', 'cheat', 'bypass']
 
+# ── Whitelist de Mods/Launchers Legítimos de Minecraft (Filtro #4) ──────────
+#
+# Estos nombres aparecen en .jar/.exe en ~/.minecraft/mods, ~/.minecraft/libraries
+# o en launchers third-party. Si el filename contiene CUALQUIERA de estos
+# fragmentos como segmento (no como substring naive), el archivo es
+# casi seguro legítimo.
+#
+# Reglas:
+#   - Match con boundaries (igual que smart_hack_match) para evitar FP en
+#     archivos genéricos.
+#   - No usar para silenciar TODO el scan; solo se usa para descartar
+#     un único item que ya iba a flagearse por otra razón.
+_LEGIT_MC_MOD_TERMS = (
+    # Performance / rendering
+    'optifine', 'sodium', 'iris', 'lithium', 'phosphor', 'starlight',
+    'magnesium', 'embeddium', 'rubidium', 'oculus',
+    'ferrite-core', 'krypton',
+    # Loaders / API
+    'forge', 'fabric', 'fabric-api', 'fabric-loader',
+    'neoforge', 'quilt', 'quilt-loader', 'mod-menu', 'modmenu',
+    'mixin', 'sponge', 'liteloader',
+    # GUI / inventory
+    'jei', 'rei', 'roughlyenoughitems',
+    'inventory-tweaks', 'inventory-profiles', 'jade', 'wthit',
+    # Utility classics
+    'controlling', 'cloth-config', 'cloth-api', 'architectury',
+    'better-fps', 'betterfps', 'logical-zoom', 'zoomify',
+    'dynamic-fps', 'dynamicfps', 'better-mount-hud',
+    # Lunar / Badlion / Feather (clientes legitimos)
+    'lunar', 'lunarclient', 'lunar-client',
+    'badlion', 'badlion-client',
+    'feather', 'featherclient',
+    # Launchers
+    'tlauncher', 'multimc', 'prismlauncher', 'prism-launcher',
+    'gdlauncher', 'atlauncher', 'modrinth-app', 'modrinthapp',
+    'minecraft-launcher', 'launcher.exe',
+    # Mojang core
+    'minecraft.jar', 'forge-installer',
+)
+
 
 # ── Smart Hack-Term Matcher (Filtro #38) ─────────────────────────────────────
 #
@@ -222,6 +262,19 @@ def smart_hack_match(text, terms_or_regex):
 def _smart_hack_regex_cached(terms_tuple):
     """Versión cacheada de _build_smart_hack_regex para listas estáticas."""
     return _build_smart_hack_regex(terms_tuple)
+
+
+@functools.lru_cache(maxsize=1)
+def _legit_mc_mod_regex():
+    return _build_smart_hack_regex(_LEGIT_MC_MOD_TERMS)
+
+
+def is_legit_mc_mod(filename_or_path: str) -> bool:
+    """True si el filename/path matchea un mod o launcher legítimo de
+    Minecraft (Filtro #4). Usar para descartar FPs antes de flagear."""
+    if not filename_or_path:
+        return False
+    return smart_hack_match(filename_or_path.lower(), _legit_mc_mod_regex())
 
 
 # ── Authenticode Publisher Whitelist (Filtro #2 lite) ────────────────────────
@@ -4921,6 +4974,12 @@ class ArgusApp:
                 _run_safe(self.scan_recent_lnk)
                 self._set_scan_phase("📅 Tareas programadas...")
                 _run_safe(self.scan_scheduled_tasks)
+                self._set_scan_phase("⏰ Tareas programadas recientes (persistencia)...")
+                _run_safe(self.scan_recent_install_tasks)
+                self._set_scan_phase("🛡️ Exclusiones de Defender...")
+                _run_safe(self.scan_defender_exclusions)
+                self._set_scan_phase("🔥 Reglas custom de Firewall...")
+                _run_safe(self.scan_recent_firewall_rules)
                 self._set_scan_phase("🖥️ Comandos Run (Win+R)...")
                 _run_safe(self.scan_run_mru)
                 self._set_scan_phase("📁 Rutas escritas en Explorer...")
@@ -8602,7 +8661,7 @@ class ArgusApp:
                     all_executed.append({'name': pf_file, 'last_run': last_run, 'path': pf_path})
 
                     name_lower = pf_file.lower()
-                    is_legit = any(l in name_lower for l in legit_names)
+                    is_legit = any(l in name_lower for l in legit_names) or is_legit_mc_mod(name_lower)
                     is_hack = smart_hack_match(name_lower, _smart_hack_regex_cached(tuple(hack_names)))
 
                     if is_hack and not is_legit:
@@ -8708,6 +8767,11 @@ class ArgusApp:
                                 is_exec = ext in INTERESTING_EXTS
                                 is_hack = (smart_hack_match(base_l, _smart_hack_regex_cached(tuple(hack_terms)))
                                            or smart_hack_match(orig_path.lower(), _smart_hack_regex_cached(tuple(hack_terms))))
+                                # Filtro #4: si el archivo es un mod/launcher
+                                # legítimo de Minecraft borrado (update / cleanup),
+                                # no flagear aunque la extensión lo permita.
+                                if not is_hack and is_exec and is_legit_mc_mod(base_l):
+                                    continue
 
                                 if not (is_exec or is_hack):
                                     continue
@@ -11153,6 +11217,257 @@ class ArgusApp:
                         pass
         except Exception as e:
             print(f"Error en scan_scheduled_tasks: {e}")
+
+    def scan_recent_install_tasks(self):
+        """Detecta tareas programadas creadas/modificadas en las últimas 72h
+        cuyo binario apunte FUERA de Program Files / WindowsApps / System32.
+
+        Es el patrón clásico de persistencia: un cheat se instala como
+        scheduled task con trigger OnLogon/OnIdle/AtStartup apuntando a su
+        binario en %localappdata% o %temp%. Esta detección complementa a
+        scan_scheduled_tasks (que filtra por nombre) sumando el ángulo
+        forense de "tarea NUEVA con binario en lugar sospechoso".
+        """
+        print("🔍 Escaneando tareas programadas recientes (últimas 72h)...")
+        tasks_dir = r'C:\Windows\System32\Tasks'
+        if not os.path.exists(tasks_dir):
+            return
+        cutoff = time.time() - (72 * 3600)
+        # Paths "seguros" para binarios — si el target está acá, no flagear
+        SAFE_BIN_FRAGMENTS = (
+            'program files\\', 'program files (x86)\\',
+            'windowsapps\\', 'windows\\system32\\', 'windows\\syswow64\\',
+            'windows\\winsxs\\', 'common files\\',
+            '\\windows defender\\', '\\microsoft\\edge\\',
+            '\\nvidia corporation\\', '\\amd\\', '\\intel\\',
+            '\\google\\chrome\\', '\\mozilla\\firefox\\',
+            '\\discord\\', '\\steam\\', '\\valve\\',
+            # Tareas legítimas del sistema y del propio Defender
+            '\\microsoft\\', '\\windowspowershell\\',
+        )
+        # Triggers que más se usan para persistencia maliciosa
+        SUSPICIOUS_TRIGGERS = ('logontrigger', 'bootidletrigger', 'idletrigger',
+                               'registrationtrigger', 'sessionstatechangetrigger')
+        found = 0
+        try:
+            for root, _dirs, files in os.walk(tasks_dir):
+                for fname in files:
+                    fpath = os.path.join(root, fname)
+                    try:
+                        mtime = os.path.getmtime(fpath)
+                    except Exception:
+                        continue
+                    if mtime < cutoff:
+                        continue
+                    try:
+                        with open(fpath, 'r', encoding='utf-16-le', errors='ignore') as f:
+                            content = f.read(65536)
+                    except Exception:
+                        try:
+                            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read(65536)
+                        except Exception:
+                            continue
+                    content_lower = content.lower()
+                    # Extraer paths que aparecen en <Command>...</Command> o <Arguments>
+                    cmd_paths = _re_smart.findall(
+                        r'<command>([^<]+)</command>', content_lower
+                    )
+                    if not cmd_paths:
+                        # también buscar c:\foo\bar.exe en arguments crudos
+                        cmd_paths = _re_smart.findall(
+                            r'([a-z]:\\[^"<>\s]+\.(?:exe|bat|ps1|vbs|cmd))',
+                            content_lower
+                        )
+                    if not cmd_paths:
+                        continue
+                    bad_targets = [p for p in cmd_paths
+                                   if not any(s in p for s in SAFE_BIN_FRAGMENTS)]
+                    if not bad_targets:
+                        continue
+                    # Detectar tipo de trigger para reportarlo
+                    trig_kinds = [t for t in SUSPICIOUS_TRIGGERS if t in content_lower]
+                    rel_age_h = int((time.time() - mtime) / 3600)
+                    target = bad_targets[0][:160]
+                    is_critical = bool(trig_kinds) and (
+                        '\\appdata\\local\\temp\\' in target or
+                        '\\appdata\\roaming\\' in target or
+                        '\\downloads\\' in target or
+                        '\\users\\public\\' in target
+                    )
+                    self.issues_found.append({
+                        'tipo':       'scheduled_task_recent',
+                        'nombre':     f'Tarea programada nueva (hace {rel_age_h}h): {fname}',
+                        'ruta':       fpath[:255],
+                        'archivo':    target,
+                        'categoria':  'EVASION',
+                        'alerta':     'CRITICAL' if is_critical else 'SOSPECHOSO',
+                        'confidence': 0.85 if is_critical else 0.55,
+                        'detected_patterns': ['recent_task'] +
+                                             [f'trigger:{t}' for t in trig_kinds] +
+                                             ['target_outside_program_files'],
+                        'extra': {
+                            'task_name':   fname,
+                            'target':      target,
+                            'age_hours':   rel_age_h,
+                            'triggers':    trig_kinds,
+                        },
+                    })
+                    found += 1
+                    print(f"⚠️ TASK NUEVA ({rel_age_h}h): {fname} → {target[:80]}")
+            if found:
+                print(f"📌 {found} tareas programadas recientes con binario fuera de Program Files")
+        except Exception as e:
+            print(f"Error en scan_recent_install_tasks: {e}")
+
+    def scan_defender_exclusions(self):
+        """Lee las exclusiones configuradas en Microsoft Defender desde el
+        registro. Un cheater suele excluir su carpeta del antivirus para que
+        Defender no le borre el binario. Reportar exclusiones es señal MUY
+        fuerte si los paths apuntan a Downloads, AppData, Desktop, etc.
+        """
+        print("🔍 Escaneando exclusiones de Microsoft Defender...")
+        # HKLM\SOFTWARE\Microsoft\Windows Defender\Exclusions\{Paths,Extensions,Processes}
+        suspicious_dirs = (
+            'downloads', '\\appdata\\local\\temp', '\\appdata\\roaming',
+            '\\desktop\\', '\\users\\public\\', '\\documents\\',
+        )
+        try:
+            categories = {
+                'Paths':      'directorio',
+                'Extensions': 'extensión',
+                'Processes':  'proceso',
+            }
+            total = 0
+            for cat, label in categories.items():
+                key_path = r'SOFTWARE\Microsoft\Windows Defender\Exclusions\\' + cat
+                try:
+                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path,
+                                        0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY) as k:
+                        i = 0
+                        while True:
+                            try:
+                                name, _value, _t = winreg.EnumValue(k, i)
+                            except OSError:
+                                break
+                            i += 1
+                            total += 1
+                            name_l = str(name).lower()
+                            is_suspicious = (
+                                cat == 'Paths' and any(s in name_l for s in suspicious_dirs)
+                            ) or (
+                                cat == 'Processes' and any(
+                                    h in name_l for h in (
+                                        'java', 'minecraft', 'launcher',
+                                        'cheat', 'hack', 'inject',
+                                    )
+                                )
+                            )
+                            alert = 'CRITICAL' if is_suspicious else 'SOSPECHOSO'
+                            conf  = 0.88 if is_suspicious else 0.45
+                            self.issues_found.append({
+                                'tipo':     'defender_exclusion',
+                                'nombre':   f'Defender excluye {label}: {name[:120]}',
+                                'ruta':     key_path,
+                                'archivo':  str(name)[:255],
+                                'categoria': 'EVASION',
+                                'alerta':   alert,
+                                'confidence': conf,
+                                'detected_patterns': [f'defender_excl_{cat.lower()}'] +
+                                                     (['user_dir_excluded'] if is_suspicious else []),
+                                'extra': {
+                                    'exclusion_kind': cat,
+                                    'value':          str(name)[:255],
+                                },
+                            })
+                            print(f"  · Defender excl ({label}): {name}")
+                except FileNotFoundError:
+                    continue
+                except OSError:
+                    continue
+            if total == 0:
+                print("✓ Sin exclusiones custom en Defender (limpio)")
+        except Exception as e:
+            print(f"Error en scan_defender_exclusions: {e}")
+
+    def scan_recent_firewall_rules(self):
+        """Detecta reglas de Windows Firewall creadas/modificadas en últimas
+        72h por usuario (no por instalador del SO). Vector clásico: un cheat
+        agrega su binario a la whitelist Inbound/Outbound.
+
+        Usa PowerShell `Get-NetFirewallRule` con timeout, fail-soft.
+        """
+        print("🔍 Escaneando reglas de Firewall recientes...")
+        if sys.platform != 'win32':
+            return
+        try:
+            # CreationTime no se expone directamente en NetFirewallRule, pero
+            # podemos filtrar por DisplayName + Group y por Action=Allow.
+            # Usamos PowerShell para enumerar reglas custom.
+            ps_cmd = (
+                "Get-NetFirewallRule -PolicyStore PersistentStore "
+                "| Where-Object { $_.Action -eq 'Allow' -and $_.Enabled -eq 'True' "
+                "-and ($_.Group -eq $null -or $_.Group -eq '') } "
+                "| ForEach-Object { "
+                "  $app = ($_ | Get-NetFirewallApplicationFilter).Program; "
+                "  Write-Output ($_.DisplayName + '|' + $_.Direction + '|' + $app) "
+                "} | Select-Object -First 200"
+            )
+            result = subprocess.run(
+                ['powershell.exe', '-NoProfile', '-Command', ps_cmd],
+                capture_output=True, text=True, timeout=20,
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+            )
+            out = (result.stdout or '').strip()
+            if not out:
+                print("✓ Sin reglas custom de firewall (limpio)")
+                return
+            SUSPICIOUS_TARGETS = (
+                '\\appdata\\local\\temp\\', '\\appdata\\roaming\\',
+                '\\downloads\\', '\\desktop\\', '\\users\\public\\',
+            )
+            count_total = 0
+            count_susp  = 0
+            for line in out.splitlines():
+                parts = line.split('|', 2)
+                if len(parts) < 3:
+                    continue
+                name, direction, program = parts[0].strip(), parts[1].strip(), parts[2].strip()
+                if not program or program.lower() == 'any':
+                    continue
+                count_total += 1
+                p_lower = program.lower()
+                # Skip cosas firmadas claramente del SO
+                if any(s in p_lower for s in (
+                    'program files\\', 'windows\\system32\\', 'windowsapps\\',
+                    'common files\\', 'windows\\syswow64\\',
+                )):
+                    continue
+                is_user_dir = any(s in p_lower for s in SUSPICIOUS_TARGETS)
+                self.issues_found.append({
+                    'tipo':     'firewall_rule_custom',
+                    'nombre':   f'Regla firewall custom ({direction}): {name[:120]}',
+                    'ruta':     program[:255],
+                    'archivo':  os.path.basename(program)[:120],
+                    'categoria': 'EVASION',
+                    'alerta':   'CRITICAL' if is_user_dir else 'SOSPECHOSO',
+                    'confidence': 0.78 if is_user_dir else 0.45,
+                    'detected_patterns': ['firewall_user_rule', f'dir:{direction.lower()}'] +
+                                         (['target_in_user_dir'] if is_user_dir else []),
+                    'extra': {
+                        'rule_name': name,
+                        'direction': direction,
+                        'target':    program,
+                    },
+                })
+                count_susp += 1
+                print(f"  · Firewall: {direction} {name} → {program[:80]}")
+            if count_susp:
+                print(f"⚠️ {count_susp}/{count_total} reglas firewall custom con target sospechoso")
+        except subprocess.TimeoutExpired:
+            print("⏱️ scan_recent_firewall_rules: PowerShell timeout (20s)")
+        except Exception as e:
+            print(f"Error en scan_recent_firewall_rules: {e}")
 
     def scan_texture_packs(self):
         """Escanea resource packs de Minecraft, incluyendo análisis de XRay."""
