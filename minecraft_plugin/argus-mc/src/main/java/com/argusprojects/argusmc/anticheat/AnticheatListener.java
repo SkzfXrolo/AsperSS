@@ -642,33 +642,90 @@ public final class AnticheatListener implements Listener {
         PlayerState s = state(p);
         if (e.getCause() == EntityDamageEvent.DamageCause.FALL) {
             s.lastFallDistance = 0f;
+            // Cancela el flag pendiente del check nofall — el damage llego,
+            // no fue NoFall.
+            s.pendingNofallCheck = false;
         }
     }
 
-    /** NoFall — si el jugador toca suelo y NO tomo daño tras una caida grande. */
+    /**
+     * NoFall — si el jugador toca suelo y NO tomo daño tras una caida grande.
+     *
+     * <p>CRITICO: el {@link EntityDamageEvent} de FALL puede llegar hasta 3
+     * ticks DESPUES de que {@code isOnGround()} se vuelve true. Si flageamos
+     * inmediato, vamos a falsear casi cualquier caida >6 bloques. Por eso
+     * usamos un task delayed que verifica DESPUES si efectivamente no hubo
+     * damage (es decir, {@code lastFallDistance} sigue > 0).
+     *
+     * <p>Tambien aplicamos whitelist de aterrizajes legitimos sin daño:
+     * agua, lava, slime, hay, honey, cobweb, scaffolding, slow falling,
+     * levitation, vehicle, water bucket usado.
+     */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onLand(PlayerMoveEvent e) {
-        // (handler separado para legibilidad, podriamos fusionarlo con onMove)
         if (!cfg.isCheckEnabled("nofall")) return;
         Player p = e.getPlayer();
         if (p.getGameMode() == GameMode.CREATIVE || p.getGameMode() == GameMode.SPECTATOR) return;
         if (p.hasPermission("argus.ac.bypass")) return;
-        if (p.getAllowFlight() || p.isGliding()) return;
+        if (p.getAllowFlight() || p.isFlying() || p.isGliding()) return;
+        if (p.getVehicle() != null) return;
         PlayerState s = state(p);
-        if (p.isOnGround() && s.lastFallDistance > 4.0f) {
-            // Cayo > 4 bloques pero damage no ocurrio (esperamos un par de ticks
-            // por consistencia: si en el siguiente tick sigue >0, es NoFall).
-            // Para evitar falsos positivos, solo flagamos si la caida fue realmente
-            // grande (> 6 bloques).
-            float fallDist = s.lastFallDistance;
-            s.lastFallDistance = 0f;
-            if (fallDist > 6.0f) {
-                ViolationLevel lvl = fallDist > 15.0f ? ViolationLevel.HIGH
-                                                       : ViolationLevel.MID;
-                mgr.flag(new Violation(p, "nofall", lvl,
-                    String.format("cayo %.1fb sin daño", fallDist)));
+        if (!p.isOnGround() || s.lastFallDistance <= 6.0f) return;
+        // Snapshot inmediato y reset para no entrar 2 veces en este move
+        final float fallDist = s.lastFallDistance;
+        s.lastFallDistance = 0f;
+        // Whitelist: si aterriza sobre / dentro de un bloque que cancela
+        // el daño de caida vainilla, NO flagear nunca.
+        if (landingNullifiesFallDamage(p)) return;
+        if (hasFallImmunityEffect(p)) return;
+        // El damage event de FALL puede llegar hasta 3 ticks despues. Esperamos
+        // 4 ticks (200ms) y solo flageamos si Bukkit confirma que NO hubo
+        // damage (marcamos via flag interno que onDamage limpia).
+        s.pendingNofallCheck = true;
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            if (!p.isOnline()) return;
+            PlayerState s2 = state(p);
+            if (!s2.pendingNofallCheck) return;  // damage llegó, todo OK
+            s2.pendingNofallCheck = false;
+            // Re-chequear whitelist por si entro a agua despues
+            if (landingNullifiesFallDamage(p)) return;
+            if (hasFallImmunityEffect(p)) return;
+            // Confirmado: cayo X bloques sin daño = NoFall
+            ViolationLevel lvl = fallDist > 20.0f ? ViolationLevel.HIGH
+                                                   : ViolationLevel.MID;
+            mgr.flag(new Violation(p, "nofall", lvl,
+                String.format("cayo %.1fb sin daño", fallDist)));
+        }, 4L);
+    }
+
+    /** Devuelve true si el jugador aterrizo en un bloque que cancela el FALL damage. */
+    private static boolean landingNullifiesFallDamage(Player p) {
+        try {
+            org.bukkit.Location loc = p.getLocation();
+            org.bukkit.block.Block at    = loc.getBlock();
+            org.bukkit.block.Block below = loc.clone().add(0, -0.5, 0).getBlock();
+            org.bukkit.block.Block under = loc.clone().add(0, -1.2, 0).getBlock();
+            String[] names = {at.getType().name(), below.getType().name(), under.getType().name()};
+            for (String n : names) {
+                if (n.equals("WATER") || n.equals("LAVA")
+                    || n.equals("SLIME_BLOCK") || n.equals("HAY_BLOCK")
+                    || n.equals("HONEY_BLOCK") || n.equals("COBWEB")
+                    || n.equals("SCAFFOLDING") || n.equals("LADDER")
+                    || n.equals("VINE") || n.equals("SWEET_BERRY_BUSH")
+                    || n.equals("POWDER_SNOW") || n.equals("BUBBLE_COLUMN")
+                    || n.equals("SEAGRASS") || n.equals("TALL_SEAGRASS")
+                    || n.equals("KELP") || n.equals("KELP_PLANT")) return true;
             }
-        }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    /** Slow Falling, Levitation y similares cancelan el FALL damage. */
+    private static boolean hasFallImmunityEffect(Player p) {
+        try {
+            return p.hasPotionEffect(PotionEffectType.SLOW_FALLING)
+                || p.hasPotionEffect(PotionEffectType.LEVITATION);
+        } catch (Exception ignored) { return false; }
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -852,6 +909,10 @@ public final class AnticheatListener implements Listener {
         int  hoverTicks = 0;
         double lastSampleY = Double.MIN_VALUE;
         float lastFallDistance = 0f;
+        // Pack 44.1: Si true, hay un nofall delayed task pendiente. onDamage
+        // (FALL) lo desactiva si el damage llego. Si sigue true tras 4 ticks,
+        // confirmamos NoFall y flageamos.
+        boolean pendingNofallCheck = false;
         int  jesusTicks = 0;
         // Scaffold
         final Deque<Long> scaffoldHits = new ArrayDeque<>();
