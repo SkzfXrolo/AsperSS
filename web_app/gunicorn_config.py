@@ -1,19 +1,37 @@
 """
 Configuración de Gunicorn para Render
+
+Notas (2026-05) — outage reciente:
+  El servicio quedó "Live" en Render pero ninguna request respondía. Causa
+  más probable: 1 solo worker bloqueado en una request larga (o deadlock
+  entre el event loop de Discord y los threads de gunicorn) — sin worker
+  disponible, ni siquiera /healthz contesta. Cambios:
+    - 2 workers en lugar de 1: si uno se cuelga, el otro sigue atendiendo
+      mientras gunicorn lo recicla. Render Free Web (512 MB) suele aguantar
+      bien 2 workers gthread con preload_app=False (cada uno carga sklearn,
+      etc. en lazy import).
+    - graceful_timeout: gunicorn espera N segundos a que un worker termine
+      una request en curso antes de matarlo a SIGKILL al hacer reload o
+      cuando excede `timeout`. Antes era el default 30 → si el worker está
+      colgado, se queda zombie sin liberar el puerto.
+    - threads bajados de 4 → 2 por worker para que dos requests no monopolicen
+      el worker entero (con 2 workers x 2 threads = 4 concurrent requests).
+    - timeout 60 (en vez de 120) para detectar bloqueos antes y reciclar.
 """
 import multiprocessing
 import os
 
-# gthread: 1 proceso con N threads.
-# - Evita el deadlock de self-calls (threads concurrentes vs fork)
-# - El bot de Discord y los request-handlers comparten el mismo proceso
-#   → notify_new_scan / notify_verdict_change pueden usar el bot_loop directamente
-workers = 1
-threads = 4
+# gthread: cada worker es un proceso con N threads.
+# El bot de Discord arranca dentro de UNO de los workers (el primero que
+# atienda); las notificaciones cross-worker viajan por DB / webhook directo.
+workers = 2
+threads = 2
 worker_class = "gthread"
 
-# Timeout más alto para sobrevivir el cold start de Render (spin-up desde sleep)
-timeout = 120
+# Timeout más bajo para detectar y matar requests colgadas antes de que el
+# servicio entero se vuelva inalcanzable (antes 120s).
+timeout = 60
+graceful_timeout = 30
 keepalive = 5
 
 # Bind - Render asigna el puerto automáticamente en la variable PORT
@@ -33,6 +51,7 @@ _os.environ.setdefault('PYTHONUNBUFFERED', '1')
 preload_app = False
 
 # Max requests (reinicia workers después de N requests para evitar memory leaks)
-max_requests = 1000
-max_requests_jitter = 50
+# Cada worker se recicla por separado; con 2 workers el reciclo es escalonado.
+max_requests = 800
+max_requests_jitter = 100
 
