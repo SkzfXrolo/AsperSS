@@ -1,0 +1,77 @@
+name: Build Argus MC Plugin
+
+# Compila el plugin Bukkit/Paper en cada push que toque minecraft_plugin/
+# y publica el .jar como Release "plugin-latest" — descargable desde
+# https://github.com/SkzfXrolo/AsperSS/releases/tag/plugin-latest
+# (y desde el endpoint /descargar/plugin del propio Argus, que redirige
+#  a la URL fija de ese asset).
+#
+# Permite tambien dispararlo a mano con workflow_dispatch.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'minecraft_plugin/**'
+      - '.github/workflows/build-plugin.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # necesario para crear/actualizar Releases
+
+jobs:
+  build:
+    name: mvn package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Build with Maven
+        working-directory: minecraft_plugin/argus-mc
+        run: mvn -B -ntp clean package
+
+      - name: List built artifacts
+        run: |
+          echo "=== minecraft_plugin/argus-mc/target ==="
+          ls -lh minecraft_plugin/argus-mc/target/ || true
+
+      - name: Upload .jar as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: argus-mc-jar
+          path: minecraft_plugin/argus-mc/target/argus-mc-*.jar
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish to "plugin-latest" Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: plugin-latest
+          name: Argus MC Plugin (latest build)
+          body: |
+            Build automatico desde commit ${{ github.sha }}.
+
+            Archivo: `argus-mc-1.0.0.jar`
+
+            Compatible con Spigot/Paper/Purpur **1.19, 1.20.x, 1.21.x**
+            (compilado contra paper-api 1.20.1, declara api-version 1.19).
+
+            Instalacion:
+            1. Sube el .jar a `plugins/` de tu server (Aternos: panel -> Plugins -> Subir).
+            2. Reinicia el server.
+            3. Edita `plugins/ArgusMC/config.yml` y pega tu API key (`argus_pk_...`).
+            4. `/argus reload` -> `/argus test`.
+          files: minecraft_plugin/argus-mc/target/argus-mc-*.jar
+          prerelease: false
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

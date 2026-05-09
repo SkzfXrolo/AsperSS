@@ -42,11 +42,16 @@
     </repositories>
 
     <dependencies>
-        <!-- Paper API (compatible con Spigot) — provided porque el server lo aporta -->
+        <!-- Paper API (compatible con Spigot) — provided porque el server lo aporta.
+             Pinned a 1.20.1: el plugin solo usa APIs Bukkit estables desde 1.13,
+             asi que el .jar resultante corre tambien en 1.20.2/3/4/5/6 y 1.21+
+             sin recompilar (el plugin.yml declara api-version: '1.19'). Compilar
+             contra 1.20.1 garantiza que NO usamos por accidente APIs nuevas
+             que rompan en Aternos 1.20 / Spigot 1.20.1. -->
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>1.20.4-R0.1-SNAPSHOT</version>
+            <version>1.20.1-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
 

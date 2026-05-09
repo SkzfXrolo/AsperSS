@@ -6777,6 +6777,117 @@ def descargar_android():
     return redirect(ANDROID_RELEASE_URL, code=302)
 
 
+# ── Plugin Minecraft (/ss) — endpoint de descarga ──────────────────────────
+# Mismo patrón que Android: el workflow .github/workflows/build-plugin.yml
+# compila el .jar en cada push y lo publica como release "plugin-latest".
+# Esta URL es estable y pública (no requiere token), redirigimos sin
+# gastar bandwidth de Render.
+PLUGIN_RELEASE_TAG = 'plugin-latest'
+PLUGIN_RELEASE_ASSET = 'argus-mc-1.0.0.jar'
+PLUGIN_RELEASE_URL = (
+    f'https://github.com/SkzfXrolo/AsperSS/releases/download/'
+    f'{PLUGIN_RELEASE_TAG}/{PLUGIN_RELEASE_ASSET}'
+)
+PLUGIN_RELEASE_API = (
+    'https://api.github.com/repos/SkzfXrolo/AsperSS/releases/tags/'
+    f'{PLUGIN_RELEASE_TAG}'
+)
+
+_plugin_version_cache: dict = {'data': None, 'fetched_at': 0.0}
+_PLUGIN_VERSION_TTL_S = 300
+
+
+def _plugin_version_payload() -> dict:
+    """Meta del último .jar publicado en el release plugin-latest."""
+    now = _time_mod.time()
+    cached = _plugin_version_cache.get('data')
+    if cached and now - _plugin_version_cache['fetched_at'] < _PLUGIN_VERSION_TTL_S:
+        return cached
+
+    fallback = {
+        'latest_commit': None,
+        'short_commit':  None,
+        'jar_url':       PLUGIN_RELEASE_URL,
+        'published_at':  None,
+        'release_name':  None,
+        'size_bytes':    None,
+        'release_notes': None,
+        'tag':           PLUGIN_RELEASE_TAG,
+        'source':        'fallback',
+    }
+    try:
+        resp = requests.get(PLUGIN_RELEASE_API, timeout=4)
+        if resp.status_code != 200:
+            _plugin_version_cache['data'] = fallback
+            _plugin_version_cache['fetched_at'] = now
+            return fallback
+        data = resp.json() or {}
+        commit = (data.get('target_commitish') or '').strip() or None
+        jar_asset = None
+        for asset in data.get('assets') or []:
+            name = (asset.get('name') or '').lower()
+            if name.endswith('.jar') and 'argus' in name:
+                jar_asset = asset
+                break
+        payload = {
+            'latest_commit': commit,
+            'short_commit':  commit[:7] if commit else None,
+            'jar_url':       (jar_asset or {}).get('browser_download_url') or PLUGIN_RELEASE_URL,
+            'published_at':  data.get('published_at'),
+            'release_name':  data.get('name'),
+            'size_bytes':    (jar_asset or {}).get('size'),
+            'release_notes': (data.get('body') or '').strip()[:1500] or None,
+            'tag':           PLUGIN_RELEASE_TAG,
+            'source':        'github',
+        }
+        _plugin_version_cache['data'] = payload
+        _plugin_version_cache['fetched_at'] = now
+        return payload
+    except Exception:
+        _plugin_version_cache['data'] = fallback
+        _plugin_version_cache['fetched_at'] = now
+        return fallback
+
+
+@app.route('/api/plugin-version')
+def api_plugin_version():
+    """Endpoint público con la meta del último .jar (commit, tamaño, URL).
+    Útil para mostrar 'Última versión: 1.0.0 (#abc1234, 12 KB)' en la UI.
+    """
+    return jsonify(_plugin_version_payload())
+
+
+@app.route('/descargar/plugin')
+def descargar_plugin():
+    """Sirve el plugin Bukkit/Paper Argus MC.
+
+    Estrategia en cascada:
+      1) Si hay un .jar buildado a mano en `web_app/static/dist/argus-mc.jar`,
+         lo servimos directo (útil para dev local / on-prem).
+      2) Si no, redirigimos al asset estable del release de GitHub que el
+         workflow CI mantiene al día con cada push a `main` que toque
+         `minecraft_plugin/`.
+
+    `?direct=1` devuelve la URL absoluta como JSON (útil para clientes que
+    no toleran redirects, p. ej. paneles de Aternos via webhook).
+    """
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    jar_path = os.path.join(project_root, 'web_app', 'static', 'dist',
+                            'argus-mc.jar')
+
+    if os.path.isfile(jar_path):
+        return send_file(
+            jar_path,
+            mimetype='application/java-archive',
+            as_attachment=True,
+            download_name=PLUGIN_RELEASE_ASSET,
+        )
+
+    if request.args.get('direct') == '1':
+        return jsonify({'url': PLUGIN_RELEASE_URL}), 200
+    return redirect(PLUGIN_RELEASE_URL, code=302)
+
+
 @app.route('/descargar/android-source')
 def descargar_android_source():
     """Plataforma Android #13 — empaqueta el proyecto Android como tar.gz.
