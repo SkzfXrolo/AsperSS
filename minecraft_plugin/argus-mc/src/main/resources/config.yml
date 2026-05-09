@@ -135,9 +135,14 @@ anticheat:
       min_samples: 8         # cantidad minima de hits para evaluar varianza
     fly:
       enabled: true
-      max_hover_seconds: 4   # segundos sostenido en aire SIN bajar > 0.30b/s
-                             # 4s tolera saltos largos y caidas con elytra cortita.
-                             # Bajalo a 2 para servers PvP estrictos.
+      # HOVER REAL = Y casi constante (|dy| < 0.15 b/s). Saltos, parkour y
+      # caidas NO cuentan como hover. Para flagear necesita acumular este
+      # numero de segundos consecutivos de hover real.
+      max_hover_seconds: 4
+      # Doble candado: ademas de hover real, debe llevar este numero de
+      # segundos en el aire sin tocar piso. Saltos vainilla nunca pasan
+      # de ~1.5s sin tocar suelo, asi que 5s es muy seguro.
+      min_air_seconds_before_flag: 5
     speed:
       enabled: true
       max_blocks_per_sec: 8.0

@@ -544,20 +544,25 @@ public final class AnticheatListener implements Listener {
             }
 
             s.airTicks++;
-            // Si la diferencia de Y es <-0.5 bloques en 1 segundo, esta cayendo
-            // a velocidad razonable (>= half-block per sec). No es fly.
-            if (dy < -0.30) {
-                s.hoverTicks = 0;
-            } else {
-                // Y casi constante o subiendo en aire = sospecha fly
+            // HOVER REAL = Y casi constante (movimiento < 15 cm/seg en CUALQUIER
+            // direccion). Si el jugador sube (salta a un bloque mas alto) o cae,
+            // |dy| > 0.15 y NO es hover. El bug previo era contar como hover
+            // cualquier dy >= -0.30, lo que incluia las subidas (saltos).
+            if (Math.abs(dy) < 0.15) {
                 s.hoverTicks++;
+            } else {
+                s.hoverTicks = 0;
             }
 
             if (!cfg.isCheckEnabled("fly")) continue;
             ConfigurationSection sec = cfg.checkSection("fly");
-            int maxHoverSec = sec != null ? sec.getInt("max_hover_seconds", 4) : 4;
+            int maxHoverSec   = sec != null ? sec.getInt("max_hover_seconds", 4) : 4;
+            int minAirSeconds = sec != null ? sec.getInt("min_air_seconds_before_flag", 5) : 5;
 
-            if (s.hoverTicks >= maxHoverSec) {
+            // Doble candado: flag SOLO si llevamos hover real Y suficiente
+            // tiempo en el aire sin tocar piso (saltos vainilla nunca llegan
+            // a >5s sin tocar suelo).
+            if (s.hoverTicks >= maxHoverSec && s.airTicks >= minAirSeconds) {
                 ViolationLevel lvl = s.hoverTicks >= 10 ? ViolationLevel.CRITICAL
                                    : s.hoverTicks >= 7  ? ViolationLevel.HIGH
                                                         : ViolationLevel.MID;
