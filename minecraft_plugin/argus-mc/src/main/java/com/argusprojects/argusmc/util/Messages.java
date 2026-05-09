@@ -55,25 +55,23 @@ public final class Messages {
 
     public static Map<String, String> ph() { return new HashMap<>(); }
 
-    public static Map<String, String> ph(String k1, String v1) {
+    /**
+     * Construye un mapa key->value a partir de una lista plana de pares.
+     *
+     * <p>Acepta cualquier numero PAR de argumentos (kv-varargs):
+     * <pre>ph("a", "1", "b", "2", "c", "3")</pre>
+     * Si se pasa un numero impar, el ultimo se ignora silenciosamente.
+     *
+     * <p>Reemplaza los antiguos overloads fijos (2/4/6/8 args) que limitaban
+     * los placeholders a 4 maximo y rompian /argus info (que necesita 6).
+     */
+    public static Map<String, String> ph(String... kv) {
         Map<String, String> m = new HashMap<>();
-        m.put(k1, v1);
-        return m;
-    }
-    public static Map<String, String> ph(String k1, String v1, String k2, String v2) {
-        Map<String, String> m = ph(k1, v1);
-        m.put(k2, v2);
-        return m;
-    }
-    public static Map<String, String> ph(String k1, String v1, String k2, String v2, String k3, String v3) {
-        Map<String, String> m = ph(k1, v1, k2, v2);
-        m.put(k3, v3);
-        return m;
-    }
-    public static Map<String, String> ph(String k1, String v1, String k2, String v2,
-                                          String k3, String v3, String k4, String v4) {
-        Map<String, String> m = ph(k1, v1, k2, v2, k3, v3);
-        m.put(k4, v4);
+        if (kv == null) return m;
+        int n = kv.length - (kv.length % 2);
+        for (int i = 0; i < n; i += 2) {
+            m.put(kv[i], kv[i + 1]);
+        }
         return m;
     }
 

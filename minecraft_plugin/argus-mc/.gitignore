@@ -1,0 +1,5 @@
+# Maven build output - el .jar final se publica via /web_app/static/dist/
+# (commit manual) o como release de GitHub (workflow build-plugin.yml).
+target/
+.mvn/
+*.class
