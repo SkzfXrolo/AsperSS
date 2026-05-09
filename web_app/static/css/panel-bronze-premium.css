@@ -1,5 +1,5 @@
-/* ============================================================
-   ARGUS PANEL — BRONZE PREMIUM OVERLAY (V2026.05)
+﻿/* ============================================================
+   ARGUS PANEL â€” BRONZE PREMIUM OVERLAY (V2026.05)
    ------------------------------------------------------------
    Re-skin del panel staff hacia un look "metal cobre/bronce
    premium" sin modificar la estructura ni la funcionalidad
@@ -14,7 +14,7 @@
      en panel.html. Punto.
    ============================================================ */
 
-/* ── Paleta extendida bronce premium ─────────────────────── */
+/* â”€â”€ Paleta extendida bronce premium â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 :root {
     /* Base bronces (escalonados) */
     --bp-cobre-deep:    #5C2E1A;
@@ -30,9 +30,9 @@
 
     /* Sombras direccionales */
     --bp-shadow-sm:     0 2px 6px rgba(0,0,0,0.35), 0 1px 0 rgba(232,168,111,0.04) inset;
-    --bp-shadow-md:     0 8px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(184,115,51,0.08) inset;
+    --bp-shadow-md:     0 8px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(var(--accent-rgb), 0.08) inset;
     --bp-shadow-lg:     0 18px 52px rgba(0,0,0,0.55), 0 0 0 1px rgba(212,145,90,0.10) inset;
-    --bp-shadow-glow:   0 0 0 1px rgba(212,145,90,0.30), 0 0 28px rgba(184,115,51,0.30), 0 14px 40px rgba(0,0,0,0.55);
+    --bp-shadow-glow:   0 0 0 1px rgba(212,145,90,0.30), 0 0 28px rgba(var(--accent-rgb), 0.30), 0 14px 40px rgba(0,0,0,0.55);
 
     /* Gradientes reusables */
     --bp-grad-card:     linear-gradient(155deg, rgba(40,28,18,0.92) 0%, rgba(22,16,10,0.95) 60%, rgba(15,11,7,0.97) 100%);
@@ -45,11 +45,11 @@
     --bp-ring-cobre:    conic-gradient(from 0deg, #B87333, #E8A86F, #D4A017, #B87333);
 }
 
-/* ── Body: textura sutil + viñeta de luz superior ────────── */
+/* â”€â”€ Body: textura sutil + viÃ±eta de luz superior â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body:not(.light-theme) {
     background:
         radial-gradient(ellipse 120% 60% at 50% -10%,
-            rgba(184,115,51,0.10) 0%,
+            rgba(var(--accent-rgb), 0.10) 0%,
             transparent 60%),
         radial-gradient(ellipse 80% 50% at 100% 100%,
             rgba(92,46,26,0.10) 0%,
@@ -65,21 +65,21 @@ body:not(.light-theme)::before {
     z-index: 0;
     pointer-events: none;
     background-image:
-        linear-gradient(rgba(184,115,51,0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(184,115,51,0.025) 1px, transparent 1px);
+        linear-gradient(rgba(var(--accent-rgb), 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(var(--accent-rgb), 0.025) 1px, transparent 1px);
     background-size: 64px 64px;
     mask-image: radial-gradient(ellipse 100% 80% at 50% 30%, black 35%, transparent 80%);
     -webkit-mask-image: radial-gradient(ellipse 100% 80% at 50% 30%, black 35%, transparent 80%);
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  SIDEBAR                                                      */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .sidebar {
     background:
         linear-gradient(180deg, rgba(28,20,12,0.92) 0%, rgba(15,11,7,0.96) 100%) !important;
-    border-right: 1px solid rgba(184,115,51,0.18) !important;
+    border-right: 1px solid rgba(var(--accent-rgb), 0.18) !important;
     box-shadow:
         inset -1px 0 0 rgba(212,145,90,0.06),
         4px 0 36px rgba(0,0,0,0.40);
@@ -119,7 +119,7 @@ body:not(.light-theme)::before {
 
 .sidebar-header {
     padding: 24px 18px !important;
-    border-bottom: 1px solid rgba(184,115,51,0.16) !important;
+    border-bottom: 1px solid rgba(var(--accent-rgb), 0.16) !important;
     position: relative;
 }
 
@@ -148,17 +148,17 @@ body:not(.light-theme)::before {
 .sidebar-header img {
     filter:
         drop-shadow(0 0 8px rgba(212,145,90,0.55))
-        drop-shadow(0 0 18px rgba(184,115,51,0.30));
+        drop-shadow(0 0 18px rgba(var(--accent-rgb), 0.30));
     transition: filter 0.4s ease, transform 0.4s ease;
 }
 .sidebar-header img:hover {
     transform: rotate(-6deg) scale(1.06);
     filter:
         drop-shadow(0 0 12px rgba(232,168,111,0.85))
-        drop-shadow(0 0 28px rgba(184,115,51,0.45));
+        drop-shadow(0 0 28px rgba(var(--accent-rgb), 0.45));
 }
 
-/* ── Nav items: indicador animado + glow ─────────────────── */
+/* â”€â”€ Nav items: indicador animado + glow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .nav-item {
     border-radius: 0 12px 12px 0 !important;
     margin-right: 8px !important;
@@ -172,8 +172,8 @@ body:not(.light-theme)::before {
     position: absolute;
     inset: 0;
     background: linear-gradient(90deg,
-        rgba(184,115,51,0.18) 0%,
-        rgba(184,115,51,0.04) 60%,
+        rgba(var(--accent-rgb), 0.18) 0%,
+        rgba(var(--accent-rgb), 0.04) 60%,
         transparent 100%);
     opacity: 0;
     transition: opacity 0.25s ease;
@@ -191,31 +191,31 @@ body:not(.light-theme)::before {
 
 .nav-item.active {
     background: linear-gradient(90deg,
-        rgba(184,115,51,0.22) 0%,
-        rgba(184,115,51,0.10) 50%,
+        rgba(var(--accent-rgb), 0.22) 0%,
+        rgba(var(--accent-rgb), 0.10) 50%,
         transparent 100%) !important;
     border-left-width: 3px !important;
     border-left-color: var(--bp-cobre-light) !important;
     color: var(--bp-crema) !important;
-    box-shadow: inset 0 0 18px rgba(184,115,51,0.10);
+    box-shadow: inset 0 0 18px rgba(var(--accent-rgb), 0.10);
 }
 
 .nav-item.active::after {
     width: 3px !important;
     box-shadow:
         0 0 14px var(--bp-cobre-glow),
-        0 0 24px rgba(184,115,51,0.5) !important;
+        0 0 24px rgba(var(--accent-rgb), 0.5) !important;
     background: linear-gradient(180deg, var(--bp-cobre-glow), var(--bp-cobre)) !important;
 }
 
 .nav-item.active svg { filter: drop-shadow(0 0 8px rgba(212,145,90,0.85)); }
 
-/* ── User badge en sidebar ──────────────────────────────── */
+/* â”€â”€ User badge en sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .user-role-badge {
-    background: linear-gradient(135deg, rgba(212,145,90,0.22), rgba(184,115,51,0.10)) !important;
+    background: linear-gradient(135deg, rgba(212,145,90,0.22), rgba(var(--accent-rgb), 0.10)) !important;
     border: 1px solid rgba(212,145,90,0.40) !important;
     color: var(--bp-cobre-glow) !important;
-    box-shadow: 0 2px 6px rgba(184,115,51,0.18);
+    box-shadow: 0 2px 6px rgba(var(--accent-rgb), 0.18);
     text-shadow: 0 0 10px rgba(212,145,90,0.4);
 }
 
@@ -227,19 +227,19 @@ body:not(.light-theme)::before {
         var(--bp-grad-cobre) border-box !important;
     box-shadow:
         0 0 0 1px rgba(212,145,90,0.20),
-        0 0 18px rgba(184,115,51,0.30);
+        0 0 18px rgba(var(--accent-rgb), 0.30);
     transition: transform 0.35s cubic-bezier(0.4,0,0.2,1), box-shadow 0.35s ease;
 }
 .sidebar-user-avatar:hover {
     transform: scale(1.08) rotate(-3deg);
     box-shadow:
         0 0 0 1px rgba(232,168,111,0.45),
-        0 0 28px rgba(184,115,51,0.55);
+        0 0 28px rgba(var(--accent-rgb), 0.55);
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  PANEL HEADER                                                 */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .panel-header {
     padding: 22px 32px !important;
@@ -247,7 +247,7 @@ body:not(.light-theme)::before {
         linear-gradient(180deg,
             rgba(20,14,8,0.92) 0%,
             rgba(20,14,8,0.78) 100%) !important;
-    border-bottom: 1px solid rgba(184,115,51,0.18) !important;
+    border-bottom: 1px solid rgba(var(--accent-rgb), 0.18) !important;
     backdrop-filter: blur(20px) saturate(140%) !important;
     -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
     box-shadow: 0 1px 0 rgba(212,145,90,0.06), 0 8px 24px rgba(0,0,0,0.30);
@@ -265,7 +265,7 @@ body:not(.light-theme)::before {
         0 1px 0 rgba(212,145,90,0.10),
         0 14px 32px -8px rgba(0,0,0,0.55),
         0 26px 48px -16px rgba(0,0,0,0.40) !important;
-    border-bottom-color: rgba(184,115,51,0.32) !important;
+    border-bottom-color: rgba(var(--accent-rgb), 0.32) !important;
     background:
         linear-gradient(180deg,
             rgba(18,12,6,0.96) 0%,
@@ -309,12 +309,12 @@ body:not(.light-theme)::before {
     background: linear-gradient(135deg,
         rgba(40,28,18,0.85),
         rgba(22,16,10,0.92)) !important;
-    border: 1px solid rgba(184,115,51,0.30) !important;
+    border: 1px solid rgba(var(--accent-rgb), 0.30) !important;
     border-radius: 999px !important;
     padding: 6px 14px 6px 6px !important;
     box-shadow:
         var(--bp-shadow-sm),
-        inset 0 0 12px rgba(184,115,51,0.06);
+        inset 0 0 12px rgba(var(--accent-rgb), 0.06);
     transition: var(--trans);
 }
 .user-info:hover {
@@ -322,10 +322,10 @@ body:not(.light-theme)::before {
     box-shadow:
         0 0 0 1px rgba(212,145,90,0.30),
         0 8px 22px rgba(0,0,0,0.40),
-        inset 0 0 12px rgba(184,115,51,0.10);
+        inset 0 0 12px rgba(var(--accent-rgb), 0.10);
 }
 
-/* Botones del header (theme/cursor/notif/etc) — ya tienen 36x36, los pulimos */
+/* Botones del header (theme/cursor/notif/etc) â€” ya tienen 36x36, los pulimos */
 .header-actions > button,
 .header-actions > a,
 .header-actions > div > button {
@@ -336,13 +336,13 @@ body:not(.light-theme)::before {
     transform: translateY(-1px);
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  STAT CARDS (dashboard)                                       */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .stat-card {
     background: var(--bp-grad-card) !important;
-    border: 1px solid rgba(184,115,51,0.22) !important;
+    border: 1px solid rgba(var(--accent-rgb), 0.22) !important;
     border-radius: 18px !important;
     padding: 24px !important;
     box-shadow:
@@ -352,7 +352,7 @@ body:not(.light-theme)::before {
     isolation: isolate;
 }
 
-/* Glow inferior derecho — efecto "luz desde dentro" */
+/* Glow inferior derecho â€” efecto "luz desde dentro" */
 .stat-card::after {
     content: '';
     position: absolute;
@@ -385,7 +385,7 @@ body:not(.light-theme)::before {
     box-shadow:
         0 0 0 1px rgba(212,145,90,0.35),
         0 24px 60px rgba(0,0,0,0.55),
-        0 0 40px rgba(184,115,51,0.18) !important;
+        0 0 40px rgba(var(--accent-rgb), 0.18) !important;
 }
 .stat-card:hover::before { opacity: 1 !important; }
 .stat-card:hover::after  { opacity: 1; transform: scale(1.15); }
@@ -393,7 +393,7 @@ body:not(.light-theme)::before {
 .stat-icon {
     background: linear-gradient(135deg,
         rgba(212,145,90,0.22),
-        rgba(184,115,51,0.08)) !important;
+        rgba(var(--accent-rgb), 0.08)) !important;
     border: 1px solid rgba(212,145,90,0.35) !important;
     border-radius: 12px !important;
     width: 52px !important;
@@ -434,14 +434,14 @@ body:not(.light-theme)::before {
     color: rgba(212,145,90,0.75) !important;
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  SECTION CARDS / RECENT ACTIVITY / APP ACTIONS               */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .section-card,
 .recent-activity {
     background: var(--bp-grad-card) !important;
-    border: 1px solid rgba(184,115,51,0.18) !important;
+    border: 1px solid rgba(var(--accent-rgb), 0.18) !important;
     border-radius: 20px !important;
     box-shadow:
         var(--bp-shadow-md),
@@ -464,7 +464,7 @@ body:not(.light-theme)::before {
 /* App-action-card: lo elevamos */
 .app-action-card {
     background: var(--bp-grad-card) !important;
-    border: 1px solid rgba(184,115,51,0.22) !important;
+    border: 1px solid rgba(var(--accent-rgb), 0.22) !important;
     border-radius: 18px !important;
     box-shadow:
         var(--bp-shadow-md),
@@ -488,7 +488,7 @@ body:not(.light-theme)::before {
     box-shadow:
         0 0 0 1px rgba(212,145,90,0.30),
         0 22px 52px rgba(0,0,0,0.50),
-        0 0 36px rgba(184,115,51,0.16) !important;
+        0 0 36px rgba(var(--accent-rgb), 0.16) !important;
 }
 .app-action-card:hover::before { opacity: 1; }
 
@@ -496,7 +496,7 @@ body:not(.light-theme)::before {
 .activity-icon {
     background: linear-gradient(135deg,
         rgba(212,145,90,0.22),
-        rgba(184,115,51,0.08)) !important;
+        rgba(var(--accent-rgb), 0.08)) !important;
     border: 1px solid rgba(212,145,90,0.30) !important;
     border-radius: 12px !important;
     box-shadow: inset 0 1px 0 rgba(232,168,111,0.18);
@@ -510,9 +510,9 @@ body:not(.light-theme)::before {
     font-size: 15px !important;
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  SECTION HEADERS                                              */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .section-title {
     font-family: 'Syne', 'Inter', sans-serif !important;
@@ -528,9 +528,9 @@ body:not(.light-theme)::before {
     text-shadow: 0 0 24px rgba(212,145,90,0.18);
 }
 
-/* ════════════════════════════════════════════════════════════ */
-/*  BOTONES — primary con gradient cobre + shimmer              */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+/*  BOTONES â€” primary con gradient cobre + shimmer              */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .btn {
     border-radius: 10px !important;
@@ -551,7 +551,7 @@ body:not(.light-theme)::before {
     color: #FFFFFF !important;
     border: 1px solid rgba(232,168,111,0.55) !important;
     box-shadow:
-        0 6px 18px rgba(184,115,51,0.32),
+        0 6px 18px rgba(var(--accent-rgb), 0.32),
         inset 0 1px 0 rgba(255,235,210,0.30),
         inset 0 -2px 0 rgba(92,46,26,0.30) !important;
     text-shadow: 0 1px 0 rgba(92,46,26,0.30);
@@ -572,7 +572,7 @@ body:not(.light-theme)::before {
     background: var(--bp-grad-cobre-h) !important;
     transform: translateY(-2px) !important;
     box-shadow:
-        0 12px 28px rgba(184,115,51,0.48),
+        0 12px 28px rgba(var(--accent-rgb), 0.48),
         0 0 0 1px rgba(232,168,111,0.65),
         inset 0 1px 0 rgba(255,235,210,0.45),
         inset 0 -2px 0 rgba(92,46,26,0.30) !important;
@@ -581,7 +581,7 @@ body:not(.light-theme)::before {
 .btn-primary:active {
     transform: translateY(0) !important;
     box-shadow:
-        0 4px 12px rgba(184,115,51,0.30),
+        0 4px 12px rgba(var(--accent-rgb), 0.30),
         inset 0 2px 4px rgba(92,46,26,0.40) !important;
 }
 
@@ -635,16 +635,16 @@ body:not(.light-theme)::before {
         inset 0 1px 0 rgba(254,202,202,0.45) !important;
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  TABLAS                                                       */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .results-table-container,
 .data-table {
     border-radius: 16px !important;
     overflow: hidden;
     background: linear-gradient(180deg, rgba(28,20,12,0.55) 0%, rgba(15,11,7,0.65) 100%);
-    border: 1px solid rgba(184,115,51,0.18);
+    border: 1px solid rgba(var(--accent-rgb), 0.18);
     box-shadow: var(--bp-shadow-md);
 }
 
@@ -658,27 +658,27 @@ body:not(.light-theme)::before {
     letter-spacing: 1.2px !important;
     font-size: 11px !important;
     font-weight: 700 !important;
-    border-bottom: 1px solid rgba(184,115,51,0.30) !important;
+    border-bottom: 1px solid rgba(var(--accent-rgb), 0.30) !important;
     padding: 14px 16px !important;
-    text-shadow: 0 0 10px rgba(184,115,51,0.30);
+    text-shadow: 0 0 10px rgba(var(--accent-rgb), 0.30);
 }
 
 .data-table tbody tr {
     transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 .data-table tbody tr:hover {
-    background: rgba(184,115,51,0.06) !important;
+    background: rgba(var(--accent-rgb), 0.06) !important;
     box-shadow: inset 3px 0 0 var(--bp-cobre-light);
 }
 
 .data-table tbody td {
-    border-bottom: 1px solid rgba(184,115,51,0.08) !important;
+    border-bottom: 1px solid rgba(var(--accent-rgb), 0.08) !important;
     padding: 12px 16px !important;
 }
 
-/* ════════════════════════════════════════════════════════════ */
-/*  BADGES — glow segun tipo                                     */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+/*  BADGES â€” glow segun tipo                                     */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .badge {
     border-radius: 999px !important;
@@ -692,7 +692,7 @@ body:not(.light-theme)::before {
 }
 
 .badge-info {
-    background: linear-gradient(135deg, rgba(212,145,90,0.25), rgba(184,115,51,0.12)) !important;
+    background: linear-gradient(135deg, rgba(212,145,90,0.25), rgba(var(--accent-rgb), 0.12)) !important;
     border-color: rgba(212,145,90,0.45) !important;
     color: var(--bp-cobre-glow) !important;
     text-shadow: 0 0 8px rgba(212,145,90,0.4);
@@ -735,9 +735,9 @@ body:not(.light-theme)::before {
     color: #CBD5E1 !important;
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  INPUTS / FORMS                                               */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .form-input,
 .form-select,
@@ -750,7 +750,7 @@ body:not(.light-theme)::before {
     background: linear-gradient(180deg,
         rgba(15,11,7,0.85),
         rgba(22,16,10,0.85)) !important;
-    border: 1px solid rgba(184,115,51,0.28) !important;
+    border: 1px solid rgba(var(--accent-rgb), 0.28) !important;
     border-radius: 10px !important;
     color: var(--bp-crema) !important;
     transition:
@@ -777,7 +777,7 @@ body:not(.light-theme)::before {
     border-color: var(--bp-cobre-light) !important;
     box-shadow:
         0 0 0 4px rgba(212,145,90,0.16),
-        0 0 24px rgba(184,115,51,0.20),
+        0 0 24px rgba(var(--accent-rgb), 0.20),
         inset 0 2px 6px rgba(0,0,0,0.30) !important;
     background: linear-gradient(180deg,
         rgba(28,20,12,0.92),
@@ -792,9 +792,9 @@ body:not(.light-theme)::before {
     font-weight: 700 !important;
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  STATUS DOT / PROGRESS                                        */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .status-dot {
     background: var(--bp-cobre-glow) !important;
@@ -837,9 +837,9 @@ body:not(.light-theme)::before {
     100% { background-position: 200% 50%; }
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  MODAL                                                        */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .modal {
     backdrop-filter: blur(18px) saturate(140%) !important;
@@ -877,7 +877,7 @@ body:not(.light-theme)::before {
     background: linear-gradient(180deg,
         rgba(60,40,24,0.45),
         transparent) !important;
-    border-bottom: 1px solid rgba(184,115,51,0.18) !important;
+    border-bottom: 1px solid rgba(var(--accent-rgb), 0.18) !important;
     padding: 22px 26px !important;
 }
 
@@ -885,7 +885,7 @@ body:not(.light-theme)::before {
     background: linear-gradient(180deg,
         transparent,
         rgba(15,11,7,0.40)) !important;
-    border-top: 1px solid rgba(184,115,51,0.15) !important;
+    border-top: 1px solid rgba(var(--accent-rgb), 0.15) !important;
     padding: 18px 26px !important;
 }
 
@@ -899,9 +899,9 @@ body:not(.light-theme)::before {
     transform: rotate(90deg);
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  ALERTS                                                       */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .alert {
     border-radius: 12px !important;
@@ -910,7 +910,7 @@ body:not(.light-theme)::before {
     padding: 14px 18px !important;
 }
 .alert-info {
-    background: linear-gradient(135deg, rgba(212,145,90,0.16), rgba(184,115,51,0.06)) !important;
+    background: linear-gradient(135deg, rgba(212,145,90,0.16), rgba(var(--accent-rgb), 0.06)) !important;
     border-color: rgba(212,145,90,0.40) !important;
     color: var(--bp-cobre-glow) !important;
 }
@@ -930,14 +930,14 @@ body:not(.light-theme)::before {
     color: #FCA5A5 !important;
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  LOG / TOKEN COPY AREA                                        */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .log-content,
 .token-copy-area {
     background: linear-gradient(180deg, #0A0805 0%, #0F0B07 100%) !important;
-    border: 1px solid rgba(184,115,51,0.22) !important;
+    border: 1px solid rgba(var(--accent-rgb), 0.22) !important;
     border-radius: 12px !important;
     box-shadow:
         inset 0 2px 8px rgba(0,0,0,0.55),
@@ -946,15 +946,15 @@ body:not(.light-theme)::before {
     font-family: 'JetBrains Mono', monospace !important;
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  SCROLLBARS                                                   */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-track { background: rgba(15,11,7,0.4); }
 *::-webkit-scrollbar-thumb {
     background: linear-gradient(180deg,
-        rgba(184,115,51,0.45),
+        rgba(var(--accent-rgb), 0.45),
         rgba(122,72,36,0.55));
     border-radius: 999px;
     border: 2px solid rgba(15,11,7,0.6);
@@ -962,12 +962,12 @@ body:not(.light-theme)::before {
 *::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(180deg,
         rgba(212,145,90,0.65),
-        rgba(184,115,51,0.75));
+        rgba(var(--accent-rgb), 0.75));
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  TEXT SELECTION                                               */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 ::selection {
     background: rgba(212,145,90,0.45);
@@ -975,9 +975,9 @@ body:not(.light-theme)::before {
     text-shadow: 0 0 8px rgba(232,168,111,0.6);
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  ANIMACIONES STAGGER PARA GRIDS                               */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .stats-grid > .stat-card,
 .app-actions-grid > .app-action-card {
@@ -1009,9 +1009,9 @@ body:not(.light-theme)::before {
     }
 }
 
-/* ════════════════════════════════════════════════════════════ */
-/*  LIGHT THEME — Adaptaciones                                   */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+/*  LIGHT THEME â€” Adaptaciones                                   */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 body.light-theme .sidebar {
     background: linear-gradient(180deg, #FFFFFF 0%, #FAF1E3 100%) !important;
@@ -1058,9 +1058,9 @@ body.light-theme .filter-input {
     border-color: rgba(160,90,44,0.25) !important;
 }
 
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /*  REDUCED MOTION                                               */
-/* ════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 @media (prefers-reduced-motion: reduce) {
     *,
