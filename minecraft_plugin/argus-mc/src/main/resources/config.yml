@@ -89,22 +89,55 @@ anticheat:
   # Dejar vacio para deshabilitar.
   discord_webhook_url: ""
 
+  # ── Argus AI Oracle (Pack 44) ──────────────────────────────────────
+  # Cada violation se manda al backend Argus para que el Oracle (IA
+  # heuristica humanizada) evalue al jugador con TODA su evidencia
+  # (violations + historial de SS + metadata). Si la IA decide una
+  # accion MAS severa que la del ViolationManager local, la aplicamos
+  # automaticamente (kick, SS forzado, ban temporal). El staff con
+  # permiso 'argus.alerts' recibe el reasoning humanizado en chat.
+  #
+  # Apaga esto si tu server no quiere depender del backend o si vas a
+  # operar 100% offline.
+  ai_oracle_enabled: true
+
   # Permite desactivar checks individualmente o ajustar sus
   # umbrales por defecto. Cualquier check no listado usa sus
   # defaults internos.
   checks:
     reach:
       enabled: true
-      max_distance: 4.5      # bloques (vainilla = 3.0 melee, dejamos margen)
+      max_distance: 4.0      # bloques (vainilla = 3.0 melee). Distancia AL BORDE
+                             # de la hitbox, no al centro — mas estricto.
     killaura_angle:
       enabled: true
-      max_angle_deg: 60      # angulo entre cabeza-target en hit
+      max_angle_deg: 50      # angulo MIN entre look y hitbox del target.
+                             # 50deg ya es muy permisivo (la cara humana ve ~60deg
+                             # peripheral). Vape "reach behind" suele dar 60-90deg.
+    killaura_multi:
+      enabled: true
+      window_ms: 300         # ventana para contar targets distintos
+      min_distinct_targets: 2 # 2 targets en 300ms = imposible humano
+    killaura_yaw_snap:
+      enabled: true
+      max_delta_deg: 70      # diferencia entre yaw "publico" (move event) y server
+      max_age_ms: 250        # solo si el snap fue muy reciente (<= 250ms del hit)
+    killaura_no_swing:
+      enabled: true          # cliente vainilla swingea SIEMPRE antes de pegar
+      max_swing_age_ms: 400  # si paso > 400ms desde el ultimo swing, killaura
+    hit_through_wall:
+      enabled: true          # ray-trace desde el ojo al target en cada hit
     autoclicker:
       enabled: true
       max_cps: 20            # clicks por segundo sostenidos
+      variance_min_cps: 8    # a partir de este CPS, mide la varianza de intervalos
+      min_stddev_ms: 15.0    # < 15ms de stddev en CPS>=8 = bot humanizado
+      min_samples: 8         # cantidad minima de hits para evaluar varianza
     fly:
       enabled: true
-      max_air_ticks: 60      # ticks en aire sin caer ni saltar
+      max_hover_seconds: 4   # segundos sostenido en aire SIN bajar > 0.30b/s
+                             # 4s tolera saltos largos y caidas con elytra cortita.
+                             # Bajalo a 2 para servers PvP estrictos.
     speed:
       enabled: true
       max_blocks_per_sec: 8.0

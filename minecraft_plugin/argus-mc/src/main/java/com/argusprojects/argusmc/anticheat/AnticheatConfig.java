@@ -24,6 +24,7 @@ public final class AnticheatConfig {
 
     private final boolean reportToBackend;
     private final String discordWebhookUrl;
+    private final boolean aiOracleEnabled;
 
     public AnticheatConfig(FileConfiguration cfg) {
         this.root = cfg;
@@ -37,6 +38,7 @@ public final class AnticheatConfig {
         this.violationWindowSeconds = Math.max(10, cfg.getInt("anticheat.violation_window_seconds", 60));
         this.reportToBackend      = cfg.getBoolean("anticheat.report_to_backend", true);
         this.discordWebhookUrl    = cfg.getString("anticheat.discord_webhook_url", "").trim();
+        this.aiOracleEnabled      = cfg.getBoolean("anticheat.ai_oracle_enabled", true);
     }
 
     public boolean isEnabled() { return enabled; }
@@ -54,6 +56,7 @@ public final class AnticheatConfig {
     public boolean hasDiscordWebhook() {
         return discordWebhookUrl != null && !discordWebhookUrl.isEmpty();
     }
+    public boolean isAiOracleEnabled() { return aiOracleEnabled; }
 
     /** Subseccion de un check concreto (ej: "reach", "killaura_angle"). */
     public ConfigurationSection checkSection(String name) {

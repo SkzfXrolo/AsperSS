@@ -27,7 +27,7 @@ public final class JsonMini {
         return sb.toString();
     }
 
-    static String findString(String body, String key) {
+    public static String findString(String body, String key) {
         if (body == null || key == null) return null;
         // Busca la key (con comillas) y devuelve el valor string entre comillas.
         String needle = '"' + key + '"';
@@ -78,7 +78,42 @@ public final class JsonMini {
         return v == null ? defaultValue : v;
     }
 
-    static Boolean findBool(String body, String key) {
+    /**
+     * Parsea un numero (int o float) como double. Devuelve defaultValue si
+     * no encuentra la key o el valor no es numerico.
+     */
+    public static double findDouble(String body, String key, double defaultValue) {
+        if (body == null || key == null) return defaultValue;
+        String needle = '"' + key + '"';
+        int i = body.indexOf(needle);
+        if (i < 0) return defaultValue;
+        i = body.indexOf(':', i + needle.length());
+        if (i < 0) return defaultValue;
+        i++;
+        while (i < body.length() && Character.isWhitespace(body.charAt(i))) i++;
+        StringBuilder sb = new StringBuilder();
+        if (i < body.length() && body.charAt(i) == '-') {
+            sb.append('-');
+            i++;
+        }
+        while (i < body.length()) {
+            char c = body.charAt(i);
+            if (Character.isDigit(c) || c == '.' || c == 'e' || c == 'E' || c == '+' || c == '-') {
+                sb.append(c);
+                i++;
+            } else {
+                break;
+            }
+        }
+        if (sb.length() == 0) return defaultValue;
+        try {
+            return Double.parseDouble(sb.toString());
+        } catch (NumberFormatException ex) {
+            return defaultValue;
+        }
+    }
+
+    public static Boolean findBool(String body, String key) {
         if (body == null || key == null) return null;
         String needle = '"' + key + '"';
         int i = body.indexOf(needle);

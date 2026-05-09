@@ -2366,6 +2366,66 @@ def _ensure_plugin_keys_schema():
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_pv_level ON plugin_violations(level)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_pv_created ON plugin_violations(created_at DESC)")
 
+                # ─── Pack 44: Argus AI Oracle ────────────────────────────────
+                # Estado vigente por jugador. Una sola fila por (company_id, player_uuid).
+                # last_action: none | watch | ss_issued | kicked | banned
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_player_scores (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER NOT NULL,
+                        player_uuid VARCHAR(40) NOT NULL,
+                        player_name VARCHAR(64),
+                        score REAL DEFAULT 0,
+                        confidence REAL DEFAULT 0,
+                        last_action VARCHAR(32) DEFAULT 'none',
+                        last_reasoning TEXT,
+                        last_evidence_json TEXT,
+                        evaluations_count INTEGER DEFAULT 0,
+                        first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        last_evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_aps_unique ON ai_player_scores(company_id, player_uuid)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_aps_score ON ai_player_scores(company_id, score DESC)")
+
+                # Log inmutable de cada decision tomada por la IA. Sirve para
+                # auditoria, apelaciones y entrenamiento futuro de un modelo ML.
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_decisions_log (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER,
+                        plugin_key_id INTEGER,
+                        player_uuid VARCHAR(40),
+                        player_name VARCHAR(64),
+                        score REAL,
+                        confidence REAL,
+                        action VARCHAR(32),
+                        reasoning TEXT,
+                        evidence_json TEXT,
+                        triggered_by VARCHAR(40),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_adl_company ON ai_decisions_log(company_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_adl_player ON ai_decisions_log(player_name)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_adl_action ON ai_decisions_log(action)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_adl_created ON ai_decisions_log(created_at DESC)")
+
+                # Pesos del modelo. Una sola fila por company_id (0 = pesos
+                # globales — no usamos NULL para que UNIQUE funcione en ambos
+                # dialectos sin necesidad de indices funcionales).
+                # Se actualizan desde el panel super-admin sin redeploy.
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_weights (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER NOT NULL DEFAULT 0,
+                        weights_json TEXT NOT NULL,
+                        updated_by VARCHAR(255),
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT uq_aw_company UNIQUE (company_id)
+                    )
+                """)
+
                 # Columnas adicionales en scan_tokens — solo ALTER si no existen
                 _migrations = [
                     ('plugin_key_id', "ALTER TABLE scan_tokens ADD COLUMN plugin_key_id INTEGER"),
@@ -2895,6 +2955,445 @@ def api_violations_stats():
         }), 200
     except Exception as e:
         print(f"ERROR api_violations_stats: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────
+#  Pack 44: Argus AI Oracle
+# ─────────────────────────────────────────────────────────────────────
+
+# Cache de pesos por company_id para no machacar la BD en cada eval.
+_AI_WEIGHTS_CACHE: dict = {}
+_AI_WEIGHTS_TTL_S = 60.0
+
+
+def _get_ai_weights(company_id: int) -> dict:
+    """Obtiene los pesos del Oracle para una empresa, con cache 60s.
+
+    Si la empresa no tiene pesos custom, usa los globales (company_id=0).
+    Si tampoco hay globales en BD, usa los hardcoded de argus_ai_oracle."""
+    import time as _t
+    from web_app import argus_ai_oracle as _oracle
+    cache_key = company_id or 0
+    now = _t.time()
+    cached = _AI_WEIGHTS_CACHE.get(cache_key)
+    if cached and (now - cached['ts']) < _AI_WEIGHTS_TTL_S:
+        return cached['weights']
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT weights_json FROM ai_weights WHERE company_id = {_PH}",
+                (company_id,)
+            )
+            row = cursor.fetchone()
+            if not row and company_id != 0:
+                cursor.execute(
+                    f"SELECT weights_json FROM ai_weights WHERE company_id = {_PH}",
+                    (0,)
+                )
+                row = cursor.fetchone()
+            if row:
+                d = dict(row) if not isinstance(row, dict) else row
+                weights = json.loads(d['weights_json'])
+            else:
+                weights = _oracle.get_default_weights()
+    except Exception as e:
+        print(f"[ai_weights] fallback a defaults: {e}")
+        weights = _oracle.get_default_weights()
+    _AI_WEIGHTS_CACHE[cache_key] = {'weights': weights, 'ts': now}
+    return weights
+
+
+def _build_ai_evidence(cursor, company_id: int, player_uuid: str, player_name: str,
+                       new_violation: dict | None = None) -> dict:
+    """Junta toda la evidencia disponible sobre un jugador para el Oracle.
+
+    Lee:
+      - violations recientes (ultima hora) de plugin_violations
+      - estado actual de ai_player_scores (current_score + decay)
+      - SS pasados via scan_tokens.minecraft_target (cuantos limpios, ultimo resultado)
+      - reports recientes (no implementado aun, defaults a 0)
+    """
+    evidence: dict = {
+        'violations': [],
+        'current_score': 0.0,
+        'last_evaluated_at_age_seconds': None,
+        'first_seen_now': False,
+        'account_age_hours': None,
+        'playtime_hours': None,
+        'prior_clean_scans': 0,
+        'scan_detected_hacks_recent': False,
+        'reports_in_chat': 0,
+    }
+    # Estado previo
+    try:
+        cursor.execute(
+            f"SELECT score, last_evaluated_at FROM ai_player_scores "
+            f"WHERE company_id = {_PH} AND player_uuid = {_PH}",
+            (company_id, player_uuid)
+        )
+        row = cursor.fetchone()
+        if row:
+            d = dict(row) if not isinstance(row, dict) else row
+            evidence['current_score'] = float(d.get('score') or 0.0)
+            le = d.get('last_evaluated_at')
+            if le:
+                from datetime import datetime as _dt, timezone as _tz
+                if isinstance(le, str):
+                    try:
+                        le = _dt.fromisoformat(le.replace('Z', '+00:00'))
+                    except Exception:
+                        le = None
+                if le:
+                    le_aware = le if le.tzinfo else le.replace(tzinfo=_tz.utc)
+                    evidence['last_evaluated_at_age_seconds'] = max(
+                        0.0, (_dt.now(_tz.utc) - le_aware).total_seconds())
+        else:
+            evidence['first_seen_now'] = True
+    except Exception as e:
+        print(f"[ai_evidence] error leyendo ai_player_scores: {e}")
+
+    # Violations recientes (ultima hora)
+    try:
+        cursor.execute(
+            f"SELECT check_name, level, "
+            f"EXTRACT(EPOCH FROM (NOW() - created_at))::INT AS age_s "
+            f"FROM plugin_violations "
+            f"WHERE company_id = {_PH} AND player_uuid = {_PH} "
+            f"AND created_at > NOW() - INTERVAL '60 minutes' "
+            f"ORDER BY created_at DESC LIMIT 50",
+            (company_id, player_uuid)
+        )
+        for r in cursor.fetchall():
+            d = dict(r) if not isinstance(r, dict) else r
+            evidence['violations'].append({
+                'check_name': d.get('check_name'),
+                'level': d.get('level'),
+                'age_seconds': d.get('age_s') or 0,
+            })
+    except Exception as e:
+        print(f"[ai_evidence] error leyendo violations: {e}")
+
+    # Si nos pasan una violation NUEVA (la que acaba de disparar la eval), la
+    # incluimos manualmente con age=0 (puede no haber llegado al SELECT por
+    # carrera transaccional).
+    if new_violation:
+        evidence['violations'].insert(0, {
+            'check_name': new_violation.get('check_name'),
+            'level': new_violation.get('level', 'LOW'),
+            'age_seconds': 0,
+        })
+
+    # Historial de scans (Argus Windows scanner)
+    try:
+        cursor.execute(
+            f"SELECT COUNT(*) AS c FROM scan_tokens "
+            f"WHERE LOWER(minecraft_target) = LOWER({_PH}) AND completed = TRUE "
+            f"AND created_at > NOW() - INTERVAL '90 days'",
+            (player_name,)
+        )
+        cr = cursor.fetchone()
+        if cr:
+            evidence['prior_clean_scans'] = int(
+                (dict(cr) if not isinstance(cr, dict) else cr).get('c') or 0)
+    except Exception:
+        pass
+
+    return evidence
+
+
+def _persist_ai_decision(cursor, company_id: int, plugin_key_id: int | None,
+                         player_uuid: str, player_name: str, decision,
+                         triggered_by: str = 'auto') -> None:
+    """Guarda la decision en ai_decisions_log + actualiza ai_player_scores."""
+    try:
+        cursor.execute(
+            f"INSERT INTO ai_decisions_log "
+            f"(company_id, plugin_key_id, player_uuid, player_name, score, confidence, "
+            f"action, reasoning, evidence_json, triggered_by) "
+            f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})",
+            (company_id, plugin_key_id, player_uuid, player_name,
+             decision.score, decision.confidence, decision.action,
+             decision.reasoning, json.dumps({
+                 'top_factor': decision.top_factor,
+                 'evidence_used': decision.evidence_used,
+                 'multipliers_applied': decision.multipliers_applied,
+             }), triggered_by)
+        )
+    except Exception as e:
+        print(f"[ai_persist] error en log insert: {e}")
+
+    try:
+        # UPSERT compatible con ambos dialectos (postgres ON CONFLICT, sqlite IGNORE+UPDATE)
+        cursor.execute(
+            f"SELECT id FROM ai_player_scores WHERE company_id = {_PH} AND player_uuid = {_PH}",
+            (company_id, player_uuid)
+        )
+        existing = cursor.fetchone()
+        if existing:
+            cursor.execute(
+                f"UPDATE ai_player_scores SET "
+                f"player_name = {_PH}, score = {_PH}, confidence = {_PH}, "
+                f"last_action = {_PH}, last_reasoning = {_PH}, last_evidence_json = {_PH}, "
+                f"evaluations_count = evaluations_count + 1, "
+                f"last_evaluated_at = CURRENT_TIMESTAMP "
+                f"WHERE company_id = {_PH} AND player_uuid = {_PH}",
+                (player_name, decision.score, decision.confidence,
+                 decision.action, decision.reasoning,
+                 json.dumps(decision.evidence_used),
+                 company_id, player_uuid)
+            )
+        else:
+            cursor.execute(
+                f"INSERT INTO ai_player_scores "
+                f"(company_id, player_uuid, player_name, score, confidence, "
+                f"last_action, last_reasoning, last_evidence_json, evaluations_count) "
+                f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},1)",
+                (company_id, player_uuid, player_name, decision.score, decision.confidence,
+                 decision.action, decision.reasoning, json.dumps(decision.evidence_used))
+            )
+    except Exception as e:
+        print(f"[ai_persist] error en upsert score: {e}")
+
+
+@app.route('/api/plugin/ai-evaluate', methods=['POST'])
+def api_plugin_ai_evaluate():
+    """El plugin Bukkit envia evidencia, recibe veredicto del Oracle.
+
+    Body JSON:
+      - player_uuid (str)
+      - player_name (str)
+      - violation: dict opcional con la nueva violation que dispara la eval
+      - plugin_action: str opcional con la accion que el ViolationManager
+        del plugin ya tomaria (none/watch/ss/kick/ban). El Oracle puede
+        sobreescribirla a algo mas severo.
+
+    Auth via X-Argus-Plugin-Key.
+
+    Devuelve: {success, score, confidence, action, reasoning, top_factor,
+                merged_action}.
+    """
+    _plugin_schema_guard()
+    api_key = (
+        request.headers.get('X-Argus-Plugin-Key')
+        or request.headers.get('Authorization', '').replace('Bearer ', '').strip()
+    )
+    if not api_key:
+        return jsonify({'success': False, 'error': 'API key requerida'}), 401
+
+    body = request.get_json(silent=True) or {}
+    player_uuid = (body.get('player_uuid') or '')[:40]
+    player_name = (body.get('player_name') or '')[:64]
+    if not player_uuid or not player_name:
+        return jsonify({'success': False, 'error': 'player_uuid y player_name requeridos'}), 400
+    new_violation = body.get('violation')
+    plugin_action = body.get('plugin_action')
+
+    try:
+        from web_app import argus_ai_oracle as _oracle
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT id, company_id, label, is_active "
+                f"FROM company_plugin_keys WHERE api_key = {_PH}",
+                (api_key,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'success': False, 'error': 'API key invalida'}), 401
+            row = dict(row) if not isinstance(row, dict) else row
+            if not row.get('is_active'):
+                return jsonify({'success': False, 'error': 'API key revocada'}), 403
+            company_id = row['company_id']
+            plugin_key_id = row['id']
+
+            evidence = _build_ai_evidence(cursor, company_id, player_uuid, player_name, new_violation)
+            weights = _get_ai_weights(company_id)
+            decision = _oracle.evaluate(evidence, weights)
+            merged_action = _oracle.merge_action_with_existing(decision.action, plugin_action)
+
+            _persist_ai_decision(cursor, company_id, plugin_key_id,
+                                 player_uuid, player_name, decision,
+                                 triggered_by=new_violation.get('check_name') if new_violation else 'manual')
+
+        return jsonify({
+            'success': True,
+            'score': decision.score,
+            'confidence': decision.confidence,
+            'action': decision.action,
+            'merged_action': merged_action,
+            'reasoning': decision.reasoning,
+            'top_factor': decision.top_factor,
+        }), 200
+    except Exception as e:
+        print(f"ERROR api_plugin_ai_evaluate: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ai/scores', methods=['GET'])
+@login_required
+def api_ai_scores():
+    """Lista de jugadores con su score actual del Oracle (top sospechosos).
+
+    Aislamiento: super-admin global ve todo, staff de empresa solo su empresa.
+    """
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        roles = user.get('roles') or []
+        if isinstance(roles, str):
+            try: roles = json.loads(roles)
+            except Exception: roles = [roles]
+        roles_lower = {str(r).lower() for r in roles}
+        is_global_admin = bool(roles_lower & {'admin', 'owner', 'super_admin'})
+        company_id = _resolve_company_id_for_user(user)
+        limit = max(1, min(200, int(request.args.get('limit', 50))))
+        min_score = float(request.args.get('min_score', 0.0))
+
+        where = [f"score >= {_PH}"]
+        params: list = [min_score]
+        if not is_global_admin:
+            if not company_id:
+                return jsonify({'success': True, 'scores': []}), 200
+            where.append(f"company_id = {_PH}")
+            params.append(company_id)
+        where_sql = 'WHERE ' + ' AND '.join(where)
+
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT id, company_id, player_uuid, player_name, score, confidence, "
+                f"last_action, last_reasoning, evaluations_count, last_evaluated_at "
+                f"FROM ai_player_scores {where_sql} "
+                f"ORDER BY score DESC, last_evaluated_at DESC LIMIT {_PH}",
+                tuple(params + [limit])
+            )
+            rows = cursor.fetchall()
+
+        scores = []
+        for r in rows:
+            d = dict(r) if not isinstance(r, dict) else r
+            for k, v in list(d.items()):
+                if hasattr(v, 'isoformat'):
+                    d[k] = v.isoformat()
+            scores.append(d)
+        return jsonify({'success': True, 'scores': scores}), 200
+    except Exception as e:
+        print(f"ERROR api_ai_scores: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ai/decisions', methods=['GET'])
+@login_required
+def api_ai_decisions():
+    """Log de decisiones recientes del Oracle (auditoria + apelaciones)."""
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        roles = user.get('roles') or []
+        if isinstance(roles, str):
+            try: roles = json.loads(roles)
+            except Exception: roles = [roles]
+        roles_lower = {str(r).lower() for r in roles}
+        is_global_admin = bool(roles_lower & {'admin', 'owner', 'super_admin'})
+        company_id = _resolve_company_id_for_user(user)
+        limit = max(1, min(200, int(request.args.get('limit', 100))))
+        player = (request.args.get('player') or '').strip()[:64]
+        action = (request.args.get('action') or '').strip()[:32]
+
+        where = []
+        params: list = []
+        if not is_global_admin:
+            if not company_id:
+                return jsonify({'success': True, 'decisions': []}), 200
+            where.append(f"company_id = {_PH}")
+            params.append(company_id)
+        if player:
+            where.append(f"LOWER(player_name) = LOWER({_PH})")
+            params.append(player)
+        if action:
+            where.append(f"action = {_PH}")
+            params.append(action)
+        where_sql = ('WHERE ' + ' AND '.join(where)) if where else ''
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT id, company_id, player_uuid, player_name, score, confidence, "
+                f"action, reasoning, evidence_json, triggered_by, created_at "
+                f"FROM ai_decisions_log {where_sql} "
+                f"ORDER BY created_at DESC LIMIT {_PH}",
+                tuple(params + [limit])
+            )
+            rows = cursor.fetchall()
+
+        decisions = []
+        for r in rows:
+            d = dict(r) if not isinstance(r, dict) else r
+            for k, v in list(d.items()):
+                if hasattr(v, 'isoformat'):
+                    d[k] = v.isoformat()
+            decisions.append(d)
+        return jsonify({'success': True, 'decisions': decisions}), 200
+    except Exception as e:
+        print(f"ERROR api_ai_decisions: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ai/weights', methods=['GET'])
+@login_required
+def api_ai_weights_get():
+    """Devuelve los pesos vigentes para la empresa del usuario (o globales)."""
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        company_id = _resolve_company_id_for_user(user) or 0
+        weights = _get_ai_weights(company_id)
+        return jsonify({'success': True, 'company_id': company_id, 'weights': weights}), 200
+    except Exception as e:
+        print(f"ERROR api_ai_weights_get: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ai/weights', methods=['PUT'])
+@admin_required
+def api_ai_weights_set():
+    """Solo SUPER-ADMIN. Guarda pesos custom (puede ser por company_id o globales)."""
+    _plugin_schema_guard()
+    try:
+        body = request.get_json(silent=True) or {}
+        company_id = int(body.get('company_id') or 0)
+        weights = body.get('weights')
+        if not isinstance(weights, dict):
+            return jsonify({'success': False, 'error': 'weights debe ser un dict'}), 400
+        weights_json = json.dumps(weights)
+        user = get_user_by_id(session.get('user_id'))
+        username = (user or {}).get('username') or 'unknown'
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT id FROM ai_weights WHERE company_id = {_PH}",
+                (company_id,)
+            )
+            existing = cursor.fetchone()
+            if existing:
+                cursor.execute(
+                    f"UPDATE ai_weights SET weights_json = {_PH}, updated_by = {_PH}, "
+                    f"updated_at = CURRENT_TIMESTAMP WHERE company_id = {_PH}",
+                    (weights_json, username, company_id)
+                )
+            else:
+                cursor.execute(
+                    f"INSERT INTO ai_weights (company_id, weights_json, updated_by) "
+                    f"VALUES ({_PH}, {_PH}, {_PH})",
+                    (company_id, weights_json, username)
+                )
+        # Invalidar cache para que la proxima eval lea los nuevos pesos
+        _AI_WEIGHTS_CACHE.pop(company_id, None)
+        return jsonify({'success': True, 'company_id': company_id}), 200
+    except Exception as e:
+        print(f"ERROR api_ai_weights_set: {type(e).__name__}: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

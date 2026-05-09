@@ -1454,6 +1454,7 @@ function showSection(sectionName) {
         'mi-empresa': 'Mi Empresa',
         'equipo': 'Equipo',
         'anticheat': 'Anti-Cheat',
+        'argusai': 'Argus AI Oracle',
         'super-admin': 'Super Admin',
     };
     const titleElement = document.getElementById('section-title');

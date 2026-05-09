@@ -39,7 +39,7 @@ import java.util.List;
 public final class ArgusCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SS_ALIASES   = Arrays.asList("check", "ss", "screenshare", "scan");
-    private static final List<String> ADMIN_SUBS   = Arrays.asList("reload", "info", "test");
+    private static final List<String> ADMIN_SUBS   = Arrays.asList("reload", "info", "test", "debug", "violations", "duda");
 
     private final ArgusPlugin plugin;
     private final SsService ssService;
@@ -69,16 +69,110 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         switch (sub) {
-            case "reload": handleReload(sender); break;
-            case "info":   handleInfo(sender);   break;
-            case "test":   handleTest(sender);   break;
-            case "help":   sendHelp(sender);     break;
+            case "reload":     handleReload(sender);     break;
+            case "info":       handleInfo(sender);       break;
+            case "test":       handleTest(sender);       break;
+            case "debug":      handleDebug(sender);      break;
+            case "violations": handleViolations(sender, args); break;
+            case "duda":       handleDuda(sender, args); break;
+            case "help":       sendHelp(sender);         break;
             default:
                 sender.sendMessage(msg.prefix() + Messages.color("&cSubcomando desconocido: &f" + sub));
                 sendHelp(sender);
                 break;
         }
         return true;
+    }
+
+    /**
+     * /argus debug — toggle modo debug del anticheat. Cuando esta ON, cada hit
+     * loguea la telemetria completa (distancia, angulo, CPS, swing-age, yaw)
+     * a todos los staff con permiso 'argus.alerts'. Util para entender por
+     * que un cheat no esta siendo flageado.
+     */
+    private void handleDebug(CommandSender sender) {
+        com.argusprojects.argusmc.anticheat.AnticheatListener.debugMode =
+            !com.argusprojects.argusmc.anticheat.AnticheatListener.debugMode;
+        boolean now = com.argusprojects.argusmc.anticheat.AnticheatListener.debugMode;
+        Messages msg = plugin.getMessages();
+        sender.sendMessage(msg.prefix() + Messages.color(
+            now ? "&aAnticheat DEBUG MODE: ON &7- ahora cada hit logea metricas en chat para staff."
+                : "&7Anticheat DEBUG MODE: OFF"));
+    }
+
+    /**
+     * /argus duda &lt;jugador&gt; — pide al Argus AI Oracle que evalue al
+     * jugador con TODA su evidencia disponible y devuelve un veredicto
+     * humanizado (estilo staff senior) en chat al staff que lo invoco.
+     *
+     * <p>Esto es la version "on demand" del Oracle. La version automatica
+     * se dispara con cada Violation desde {@link com.argusprojects.argusmc.anticheat.ViolationManager}.
+     */
+    private void handleDuda(CommandSender sender, String[] args) {
+        Messages msg = plugin.getMessages();
+        if (args.length < 2) {
+            sender.sendMessage(msg.prefix() + Messages.color("&7Uso: &f/argus duda <jugador>"));
+            return;
+        }
+        Player target = org.bukkit.Bukkit.getPlayerExact(args[1]);
+        if (target == null) {
+            msg.sendPrefixed(sender, "player_not_found", Messages.ph("player", args[1]));
+            return;
+        }
+        sender.sendMessage(msg.prefix() + Messages.color(
+            "&7Consultando al Argus AI sobre &e" + target.getName() + "&7..."));
+
+        // Sintetizamos una "violation" placeholder solo para que el endpoint
+        // construya la evidencia completa (real lookup en BD).
+        com.argusprojects.argusmc.anticheat.Violation synth =
+            new com.argusprojects.argusmc.anticheat.Violation(
+                target, "manual_query",
+                com.argusprojects.argusmc.anticheat.ViolationLevel.LOW,
+                "/argus duda invocado por " + sender.getName());
+
+        plugin.getApiClient().evaluateAiAsync(synth, "none")
+            .whenComplete((verdict, err) -> org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> {
+                if (err != null || verdict == null) {
+                    sender.sendMessage(msg.prefix() + Messages.color(
+                        "&cNo se pudo consultar al Oracle. Verifica conexion con la API."));
+                    return;
+                }
+                String aiAction = verdict.mergedAction != null ? verdict.mergedAction : verdict.action;
+                if (aiAction == null) aiAction = "none";
+                sender.sendMessage(Messages.color("&7&m─────────────────────────────────────────"));
+                sender.sendMessage(Messages.color(String.format(
+                    "&8[&b&lArgus AI&8] &fVeredicto sobre &e%s",
+                    target.getName())));
+                sender.sendMessage(Messages.color(String.format(
+                    "&7Score: &f%.2f &8| &7Confianza: &f%.2f &8| &7Accion: &b%s",
+                    verdict.score, verdict.confidence, aiAction.toUpperCase())));
+                if (verdict.topFactor != null && !verdict.topFactor.isEmpty()) {
+                    sender.sendMessage(Messages.color("&7Factor principal: &f" + verdict.topFactor));
+                }
+                String reasoning = verdict.reasoning == null ? "(sin reasoning)" : verdict.reasoning;
+                sender.sendMessage(Messages.color("&f" + reasoning));
+                sender.sendMessage(Messages.color("&7&m─────────────────────────────────────────"));
+            }));
+    }
+
+    /**
+     * /argus violations [jugador] — muestra cuantas violations recientes
+     * tiene un jugador en la sliding window del manager.
+     */
+    private void handleViolations(CommandSender sender, String[] args) {
+        Messages msg = plugin.getMessages();
+        if (args.length < 2) {
+            sender.sendMessage(msg.prefix() + Messages.color("&7Uso: &f/argus violations <jugador>"));
+            return;
+        }
+        Player target = org.bukkit.Bukkit.getPlayerExact(args[1]);
+        if (target == null) {
+            msg.sendPrefixed(sender, "player_not_found", Messages.ph("player", args[1]));
+            return;
+        }
+        int count = plugin.getViolationManager().countRecent(target.getUniqueId());
+        sender.sendMessage(msg.prefix() + Messages.color(
+            "&7" + target.getName() + " tiene &e" + count + " &7violations en la ventana actual."));
     }
 
     private void sendHelp(CommandSender sender) {
@@ -91,6 +185,9 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Messages.color("  &e/argus reload &7- recarga config.yml"));
             sender.sendMessage(Messages.color("  &e/argus info &7- muestra estado y quota"));
             sender.sendMessage(Messages.color("  &e/argus test &7- health check de la API"));
+            sender.sendMessage(Messages.color("  &e/argus debug &7- toggle telemetria por hit"));
+            sender.sendMessage(Messages.color("  &e/argus violations <jugador> &7- ver violations recientes"));
+            sender.sendMessage(Messages.color("  &e/argus duda <jugador> &7- consulta al Argus AI Oracle"));
         }
     }
 

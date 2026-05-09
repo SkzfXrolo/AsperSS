@@ -102,6 +102,15 @@
                 <span>Anti-Cheat</span>
                 <span id="ac-live-badge" style="display:none;margin-left:auto;background:#dc2626;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center;"></span>
             </a>
+            <a href="/panel" class="nav-item" data-section="argusai">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/>
+                    <circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.6"/>
+                    <path d="M9 1.5V3M9 15V16.5M1.5 9H3M15 9H16.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                </svg>
+                <span>Argus AI</span>
+                <span id="ai-live-badge" style="display:none;margin-left:auto;background:linear-gradient(135deg,#06b6d4,#3b82f6);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center;"></span>
+            </a>
             {% endif %}
 
             {% if user and ('admin' in user.roles or 'administrador' in user.roles) %}
@@ -2091,6 +2100,279 @@
                     })
                     .catch(function(){});
             }, 30000);
+        })();
+        </script>
+        {% endif %}
+
+
+        <!-- ─── Pack 44: Argus AI Oracle Section ──────────────────────── -->
+        {% if staff_role or (user and 'admin' in user.roles) %}
+        <section class="panel-section" id="argusai-section">
+            <div class="section-content">
+                <h2 class="section-title">
+                    <span style="background:linear-gradient(135deg,#06b6d4,#3b82f6,#8b5cf6);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:800;">Argus AI Oracle</span>
+                </h2>
+                <p class="section-description">
+                    El staff IA senior. Evalúa cada violation contra el contexto completo del jugador
+                    (historial, scans previos, antigüedad de cuenta) y decide acciones autónomas.
+                    Habla en humano.
+                </p>
+
+                <!-- Top sospechosos actuales -->
+                <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px;">
+                    <div class="card">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                            <h3 class="card-title">🔥 Top sospechosos en vivo</h3>
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <label style="font-size:12px;color:var(--muted);">Score min:
+                                    <input type="number" id="ai-min-score" value="0.30" step="0.05" min="0" max="1"
+                                        style="width:60px;background:var(--bg-s);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:4px;font-size:12px;"/>
+                                </label>
+                                <button onclick="aiLoadScores()" style="background:var(--accent);color:#000;border:none;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;">↻</button>
+                            </div>
+                        </div>
+                        <div id="ai-scores-list" style="display:flex;flex-direction:column;gap:8px;min-height:80px;">
+                            <div style="color:var(--muted);text-align:center;padding:20px 0;font-size:13px;">Sin sospechosos en este momento.</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3 class="card-title">📊 Estadísticas</h3>
+                        <div id="ai-stats-grid" style="display:flex;flex-direction:column;gap:10px;">
+                            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+                                <span style="color:var(--muted);font-size:13px;">Decisiones hoy</span>
+                                <span id="ai-stat-today" style="font-weight:700;color:var(--accent);">—</span>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+                                <span style="color:var(--muted);font-size:13px;">Bans automáticos</span>
+                                <span id="ai-stat-bans" style="font-weight:700;color:#ef4444;">—</span>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+                                <span style="color:var(--muted);font-size:13px;">SS forzados</span>
+                                <span id="ai-stat-ss" style="font-weight:700;color:#f59e0b;">—</span>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;padding:8px 0;">
+                                <span style="color:var(--muted);font-size:13px;">En watchlist</span>
+                                <span id="ai-stat-watch" style="font-weight:700;color:#06b6d4;">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Log de decisiones recientes (lo que la IA dice/hace, en lenguaje humano) -->
+                <div class="card" style="margin-bottom:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h3 class="card-title">🗣 Lo que dice el Oracle (live)</h3>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <select id="ai-filter-action" onchange="aiLoadDecisions()"
+                                style="background:var(--bg-s);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-size:12px;">
+                                <option value="">Todas las acciones</option>
+                                <option value="ban">Solo BAN</option>
+                                <option value="kick">Solo KICK</option>
+                                <option value="ss">Solo SS</option>
+                                <option value="watch">Solo WATCH</option>
+                                <option value="none">Solo PASS</option>
+                            </select>
+                            <input type="text" id="ai-filter-player" placeholder="Filtro jugador..." onchange="aiLoadDecisions()"
+                                style="background:var(--bg-s);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-size:12px;width:140px;"/>
+                            <label style="font-size:12px;color:var(--muted);">
+                                <input type="checkbox" id="ai-auto-refresh" checked/> auto 10s
+                            </label>
+                        </div>
+                    </div>
+                    <div id="ai-decisions-feed" style="display:flex;flex-direction:column;gap:10px;max-height:520px;overflow-y:auto;">
+                        <div style="color:var(--muted);text-align:center;padding:30px 0;font-size:13px;">Cargando log de decisiones...</div>
+                    </div>
+                </div>
+
+                {% if user and 'admin' in user.roles %}
+                <!-- Pesos del modelo (solo super-admin) -->
+                <div class="card" style="border:1px dashed var(--border);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <h3 class="card-title">⚙️ Pesos del modelo (super-admin)</h3>
+                        <span style="font-size:11px;color:var(--muted);">Actualizable sin redeploy. Cache 60s.</span>
+                    </div>
+                    <p style="color:var(--muted);font-size:12px;margin-bottom:10px;">
+                        Editá los pesos JSON del Oracle. Cada empresa puede tener pesos custom; <code>company_id=0</code> son los globales.
+                    </p>
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+                        <button onclick="aiLoadWeights()" style="background:var(--bg-s);color:var(--text);border:1px solid var(--border);padding:5px 10px;border-radius:4px;font-size:12px;cursor:pointer;">Cargar vigentes</button>
+                        <button onclick="aiSaveWeights()" style="background:var(--accent);color:#000;border:none;padding:5px 10px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;">Guardar</button>
+                        <span id="ai-weights-status" style="font-size:12px;color:var(--muted);"></span>
+                    </div>
+                    <textarea id="ai-weights-json" spellcheck="false"
+                        style="width:100%;min-height:180px;font-family:'Cascadia Code',Consolas,monospace;font-size:12px;background:var(--bg-s);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;resize:vertical;"
+                        placeholder='{"violations": {...}, "multipliers": {...}, "actions": {...}}'></textarea>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+        <script>
+        (function(){
+            // ─── Helpers ────────────────────────────────────────────────
+            function actionBadge(action){
+                var colors = {
+                    'ban':   ['#dc2626', '#fff'],
+                    'kick':  ['#ea580c', '#fff'],
+                    'ss':    ['#f59e0b', '#000'],
+                    'watch': ['#06b6d4', '#fff'],
+                    'none':  ['#6b7280', '#fff']
+                };
+                var c = colors[action] || colors['none'];
+                return '<span style="background:'+c[0]+';color:'+c[1]+';font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:0.5px;">'+action+'</span>';
+            }
+            function fmtTime(iso){
+                if(!iso) return '—';
+                try { var d = new Date(iso); return d.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit', second:'2-digit'}); }
+                catch(e){ return iso; }
+            }
+            function fmtScore(s){
+                if(s === undefined || s === null) return '—';
+                var pct = Math.round(s * 100);
+                var color = pct >= 90 ? '#dc2626' : pct >= 70 ? '#ea580c' : pct >= 50 ? '#f59e0b' : pct >= 30 ? '#06b6d4' : '#6b7280';
+                return '<span style="color:'+color+';font-weight:700;">'+pct+'%</span>';
+            }
+
+            // ─── Top sospechosos ────────────────────────────────────────
+            window.aiLoadScores = function(){
+                var minScore = parseFloat(document.getElementById('ai-min-score').value) || 0.3;
+                fetch('/api/ai/scores?min_score=' + minScore + '&limit=20')
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){
+                        if(!d.success){ return; }
+                        var list = document.getElementById('ai-scores-list');
+                        if(!d.scores || d.scores.length === 0){
+                            list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px 0;font-size:13px;">Sin sospechosos por encima de '+Math.round(minScore*100)+'%.</div>';
+                            return;
+                        }
+                        list.innerHTML = d.scores.map(function(s){
+                            return '<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center;padding:10px;background:var(--bg-s);border:1px solid var(--border);border-radius:6px;">'
+                                + '<div><div style="font-weight:700;font-size:14px;">'+(s.player_name||'?')+'</div>'
+                                + '<div style="color:var(--muted);font-size:11px;margin-top:2px;">'+(s.last_reasoning||'').slice(0,90)+(s.last_reasoning && s.last_reasoning.length>90?'...':'')+'</div></div>'
+                                + '<div style="text-align:right;"><div style="font-size:11px;color:var(--muted);">score</div>'+fmtScore(s.score)+'</div>'
+                                + '<div>'+actionBadge(s.last_action||'none')+'</div>'
+                                + '<button onclick="aiQuickSs(\''+(s.player_name||'').replace(/\x27/g, "\\\x27")+'\')" style="background:var(--accent);color:#000;border:none;padding:5px 12px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;">SS</button>'
+                                + '</div>';
+                        }).join('');
+                    })
+                    .catch(function(){});
+            };
+
+            // ─── Decisiones (log) ───────────────────────────────────────
+            window.aiLoadDecisions = function(){
+                var action = document.getElementById('ai-filter-action').value;
+                var player = document.getElementById('ai-filter-player').value;
+                var url = '/api/ai/decisions?limit=80';
+                if(action) url += '&action=' + encodeURIComponent(action);
+                if(player) url += '&player=' + encodeURIComponent(player);
+                fetch(url)
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){
+                        if(!d.success){ return; }
+                        var feed = document.getElementById('ai-decisions-feed');
+                        if(!d.decisions || d.decisions.length === 0){
+                            feed.innerHTML = '<div style="color:var(--muted);text-align:center;padding:30px 0;font-size:13px;">Sin decisiones en este filtro.</div>';
+                            return;
+                        }
+                        // Stats agregados de las decisiones de las ultimas 24h
+                        var stats = {ban:0, kick:0, ss:0, watch:0, none:0};
+                        var todayCount = 0;
+                        var todayStr = (new Date()).toISOString().slice(0,10);
+                        d.decisions.forEach(function(dec){
+                            stats[dec.action] = (stats[dec.action] || 0) + 1;
+                            if(dec.created_at && dec.created_at.indexOf(todayStr) === 0) todayCount++;
+                        });
+                        document.getElementById('ai-stat-today').textContent = todayCount;
+                        document.getElementById('ai-stat-bans').textContent  = stats.ban;
+                        document.getElementById('ai-stat-ss').textContent    = stats.ss;
+                        document.getElementById('ai-stat-watch').textContent = stats.watch;
+
+                        feed.innerHTML = d.decisions.map(function(dec){
+                            var triggered = dec.triggered_by ? ('<span style="color:var(--muted);font-size:11px;">trigger: '+dec.triggered_by+'</span>') : '';
+                            return '<div style="border-left:3px solid '+ (dec.action==='ban'?'#dc2626':dec.action==='kick'?'#ea580c':dec.action==='ss'?'#f59e0b':dec.action==='watch'?'#06b6d4':'#374151') +';padding:10px 12px;background:var(--bg-s);border-radius:0 6px 6px 0;">'
+                                + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px;">'
+                                + '<div style="display:flex;align-items:center;gap:8px;"><span style="font-weight:700;font-size:14px;">'+(dec.player_name||'?')+'</span>'+actionBadge(dec.action)+'</div>'
+                                + '<div style="display:flex;align-items:center;gap:8px;">'+fmtScore(dec.score)+'<span style="color:var(--muted);font-size:11px;">'+fmtTime(dec.created_at)+'</span></div>'
+                                + '</div>'
+                                + '<div style="font-style:italic;color:var(--text);font-size:13px;line-height:1.45;">"'+(dec.reasoning||'').replace(/"/g,'\\"')+'"</div>'
+                                + (triggered ? '<div style="margin-top:4px;">'+triggered+'</div>' : '')
+                                + '</div>';
+                        }).join('');
+                    })
+                    .catch(function(){});
+            };
+
+            window.aiQuickSs = function(name){
+                if(!name) return;
+                var reason = prompt('Razon del SS para '+name+' (sugerido por Argus AI):', 'sugerido por Argus AI');
+                if (reason === null) return;
+                fetch('/api/tokens', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({used_for: name, comment: reason})
+                }).then(function(r){ return r.json(); })
+                  .then(function(d){
+                      if(d && d.success && d.token){
+                          alert('Token emitido: '+d.token.code+'\nDescarga: '+(d.token.download_url||'/descargar/exe'));
+                      } else {
+                          alert('Error: ' + (d && d.error || 'desconocido'));
+                      }
+                  })
+                  .catch(function(){ alert('Error de red al emitir SS'); });
+            };
+
+            // ─── Pesos (super-admin) ────────────────────────────────────
+            window.aiLoadWeights = function(){
+                fetch('/api/ai/weights')
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){
+                        if(!d.success){
+                            document.getElementById('ai-weights-status').textContent = 'Error: ' + (d.error || '');
+                            return;
+                        }
+                        var ta = document.getElementById('ai-weights-json');
+                        if(ta){ ta.value = JSON.stringify(d.weights, null, 2); }
+                        document.getElementById('ai-weights-status').textContent = 'Cargados (company_id=' + d.company_id + ')';
+                    })
+                    .catch(function(){ document.getElementById('ai-weights-status').textContent = 'Error de red'; });
+            };
+            window.aiSaveWeights = function(){
+                var ta = document.getElementById('ai-weights-json');
+                if(!ta) return;
+                var weights;
+                try { weights = JSON.parse(ta.value); }
+                catch(e){ alert('JSON invalido: ' + e.message); return; }
+                fetch('/api/ai/weights', {
+                    method: 'PUT',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({weights: weights, company_id: 0})
+                }).then(function(r){ return r.json(); })
+                  .then(function(d){
+                      if(d.success){ document.getElementById('ai-weights-status').textContent = 'Guardado OK'; }
+                      else { alert('Error: ' + (d.error || 'desconocido')); }
+                  })
+                  .catch(function(){ alert('Error de red'); });
+            };
+
+            // ─── Auto-refresh ───────────────────────────────────────────
+            var aiRefreshInterval = null;
+            function aiStartRefresh(){
+                aiStopRefresh();
+                aiRefreshInterval = setInterval(function(){
+                    var sec = document.getElementById('argusai-section');
+                    if(!sec || !sec.classList.contains('active')) return;
+                    var auto = document.getElementById('ai-auto-refresh');
+                    if(auto && auto.checked){ aiLoadScores(); aiLoadDecisions(); }
+                }, 10000);
+            }
+            function aiStopRefresh(){ if(aiRefreshInterval){ clearInterval(aiRefreshInterval); aiRefreshInterval = null; } }
+
+            document.addEventListener('click', function(ev){
+                var nav = ev.target.closest('[data-section="argusai"]');
+                if(nav){
+                    setTimeout(function(){ aiLoadScores(); aiLoadDecisions(); aiStartRefresh(); }, 80);
+                }
+            });
         })();
         </script>
         {% endif %}

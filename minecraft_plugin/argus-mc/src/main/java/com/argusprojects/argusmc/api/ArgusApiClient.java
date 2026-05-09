@@ -144,6 +144,61 @@ public final class ArgusApiClient {
     }
 
     /**
+     * Pack 44: Pide al backend AI Oracle que evalue al jugador con la
+     * evidencia disponible. Devuelve la accion sugerida (que puede ser
+     * MAS SEVERA que la del ViolationManager local) + reasoning humanizado.
+     *
+     * Async no-bloqueante. Si la API falla, devuelve null y el plugin sigue
+     * con la decision local del ViolationManager.
+     */
+    public java.util.concurrent.CompletableFuture<com.argusprojects.argusmc.anticheat.AiVerdict> evaluateAiAsync(
+            com.argusprojects.argusmc.anticheat.Violation v, String pluginAction) {
+        return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            try {
+                String url = cfg.getBaseUrl() + "/api/plugin/ai-evaluate";
+                java.util.Map<String, String> body = new java.util.HashMap<>();
+                body.put("player_uuid", v.playerUuid.toString());
+                body.put("player_name", v.playerName);
+                body.put("plugin_action", pluginAction == null ? "none" : pluginAction);
+                String violationJson = "{\"check_name\":\"" + JsonMini.escape(v.checkName)
+                    + "\",\"level\":\"" + JsonMini.escape(v.level.name())
+                    + "\",\"details\":\"" + JsonMini.escape(v.details) + "\"}";
+                String json = "{\"player_uuid\":\"" + JsonMini.escape(v.playerUuid.toString())
+                    + "\",\"player_name\":\"" + JsonMini.escape(v.playerName)
+                    + "\",\"plugin_action\":\"" + JsonMini.escape(pluginAction == null ? "none" : pluginAction)
+                    + "\",\"violation\":" + violationJson + "}";
+
+                HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(cfg.getTimeoutSeconds()))
+                    .header("Content-Type", "application/json")
+                    .header("X-Argus-Plugin-Key", cfg.getApiKey())
+                    .header("User-Agent", "ArgusMC-Plugin/" + plugin.getDescription().getVersion())
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+                HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() >= 400) {
+                    plugin.getLogger().log(Level.FINE, "AI eval HTTP " + resp.statusCode() + ": " + resp.body());
+                    return null;
+                }
+                String b = resp.body();
+                Boolean success = JsonMini.findBool(b, "success");
+                if (success == null || !success) return null;
+                com.argusprojects.argusmc.anticheat.AiVerdict verdict = new com.argusprojects.argusmc.anticheat.AiVerdict();
+                verdict.action       = JsonMini.findString(b, "action");
+                verdict.mergedAction = JsonMini.findString(b, "merged_action");
+                verdict.reasoning    = JsonMini.findString(b, "reasoning");
+                verdict.topFactor    = JsonMini.findString(b, "top_factor");
+                verdict.score      = JsonMini.findDouble(b, "score", 0.0);
+                verdict.confidence = JsonMini.findDouble(b, "confidence", 0.0);
+                return verdict;
+            } catch (Exception ex) {
+                plugin.getLogger().log(Level.FINE, "AI eval error: " + ex.getMessage());
+                return null;
+            }
+        }, executor);
+    }
+
+    /**
      * Envia un embed a un webhook de Discord con la violation.
      * El color depende del nivel (LOW=amarillo, MID=naranja, HIGH=rojo, CRITICAL=morado oscuro).
      */

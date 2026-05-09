@@ -110,6 +110,101 @@ public final class ViolationManager {
         if (cfg.hasDiscordWebhook() && v.level.atLeast(ViolationLevel.MID)) {
             sendDiscordWebhookAsync(v, cfg.getDiscordWebhookUrl());
         }
+
+        // 5) Pack 44: invocar al Argus AI Oracle si esta habilitado.
+        // El Oracle puede sobreescribir nuestra accion local con una MAS SEVERA
+        // (nunca menos). Si el plugin local ya kickeo/baneo, esto no agrega nada.
+        // El llamado es async y no bloquea el flow del listener.
+        if (plugin.getAnticheatConfig().isAiOracleEnabled()) {
+            String localAction = decideLocalAction(low, mid, high, critical, cfg);
+            plugin.getApiClient().evaluateAiAsync(v, localAction)
+                .whenComplete((verdict, err) -> {
+                    if (verdict == null) return;
+                    Bukkit.getScheduler().runTask(plugin,
+                        () -> handleAiVerdict(player, v, verdict, localAction));
+                });
+        }
+    }
+
+    private String decideLocalAction(int low, int mid, int high, int critical, AnticheatConfig cfg) {
+        if (critical >= cfg.getCriticalBanAt()) return "ban";
+        if (high >= cfg.getHighForceSs())       return "kick";
+        if (mid >= cfg.getMidKickAt())          return "kick";
+        if (low >= cfg.getLowAlertAt())         return "watch";
+        return "none";
+    }
+
+    /**
+     * El Oracle devolvio un veredicto. Si pide una accion MAS SEVERA que la
+     * que el plugin local tomo, la aplicamos y avisamos al staff con el
+     * reasoning humanizado del Oracle (es lo mas potente del feature: el
+     * staff recibe un mensaje tipo "Cheater confirmado, ban temporal" en
+     * vez de "[AC] HIGH player_name -> killaura_no_swing").
+     */
+    private void handleAiVerdict(Player player, Violation v, AiVerdict verdict, String localAction) {
+        if (player == null || !player.isOnline()) return;
+        AnticheatConfig cfg = plugin.getAnticheatConfig();
+
+        String aiAction     = verdict.mergedAction != null ? verdict.mergedAction : verdict.action;
+        if (aiAction == null) aiAction = "none";
+
+        // Broadcast del reasoning humanizado a staff con argus.alerts.
+        // Esto es lo que hace que la "voz" del Oracle se sienta.
+        String prefix = "&8[&b&lArgus AI&8] &7";
+        String header = String.format("%s%s &8(score &f%.2f&8 conf &f%.2f&8) &b%s &8>",
+            prefix, player.getName(), verdict.score, verdict.confidence, aiAction.toUpperCase());
+        String header2 = "  &7" + (verdict.reasoning == null ? "(sin reasoning)" : verdict.reasoning);
+
+        for (Player op : Bukkit.getOnlinePlayers()) {
+            if (op.hasPermission("argus.alerts")) {
+                op.sendMessage(org.bukkit.ChatColor.translateAlternateColorCodes('&', header));
+                op.sendMessage(org.bukkit.ChatColor.translateAlternateColorCodes('&', header2));
+            }
+        }
+        Bukkit.getConsoleSender().sendMessage(
+            org.bukkit.ChatColor.translateAlternateColorCodes('&',
+                "[ArgusAI] " + player.getName() + " score=" + verdict.score
+                    + " action=" + aiAction + " | " + verdict.reasoning));
+
+        // Solo aplicamos si la accion de la AI es MAS severa que la local.
+        // El plugin ya hizo la accion local; la AI solo escala.
+        int rankLocal = actionRank(localAction);
+        int rankAi    = actionRank(aiAction);
+        if (rankAi <= rankLocal) return;
+        if (!cfg.isEnforcement()) return;  // modo observador → no aplicamos nada
+
+        switch (aiAction) {
+            case "ban":
+                plugin.getLogger().warning("[AI] Escalando a BAN: " + player.getName() + " — " + verdict.reasoning);
+                banPlayerTemporarily(player, v, cfg.getCriticalBanMinutes());
+                break;
+            case "kick":
+                plugin.getLogger().info("[AI] Escalando a KICK: " + player.getName() + " — " + verdict.reasoning);
+                pendingForcedSs.add(player.getUniqueId());
+                kickPlayer(player, v, "ac_kick_message");
+                break;
+            case "ss":
+                plugin.getLogger().info("[AI] Forzando SS: " + player.getName());
+                ssService.issueScreenShare(
+                    Bukkit.getConsoleSender(), player.getName(),
+                    "Argus AI Oracle: " + (verdict.topFactor != null ? verdict.topFactor : "sospecha alta"),
+                    SsService.Source.ANTICHEAT_AUTO);
+                break;
+            case "watch":
+                // Solo log + alerta. Nada que hacer en el cliente.
+                break;
+        }
+    }
+
+    private static int actionRank(String a) {
+        if (a == null) return 0;
+        switch (a.toLowerCase()) {
+            case "watch": return 1;
+            case "ss":    return 2;
+            case "kick":  return 3;
+            case "ban":   return 4;
+            default:      return 0;
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────
