@@ -16,12 +16,11 @@
 
 /* â”€â”€ Paleta extendida bronce premium â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 :root {
-    /* Oro decorativo (solo donde sigue teniendo sentido fijo; la marca principal sigue el tema vÃ­a body) */
+    /* Oro decorativo (mantenido para resaltes muy puntuales como ⭐ o filos premium) */
     --bp-oro-deep:      #8B5A0F;
     --bp-oro:           #B8860B;
     --bp-oro-light:     #D4A017;
     --bp-oro-shine:     #F0C040;
-    --bp-crema:         #EAD8C0;
 
     /* Sombras direccionales (RGB del accent vÃ­a vars del tema en body) */
     --bp-shadow-sm:     0 2px 6px rgba(0,0,0,0.35), 0 1px 0 rgba(var(--accent-rgb), 0.04) inset;
@@ -30,9 +29,9 @@
     --bp-shadow-glow:   0 0 0 1px rgba(var(--accent-rgb), 0.30), 0 0 28px rgba(var(--accent-rgb), 0.30), 0 14px 40px rgba(0,0,0,0.55);
 
     /* Gradientes reusables (fondos de cartas â€” tonos neutros) */
-    --bp-grad-card:     linear-gradient(155deg, rgba(40,28,18,0.92) 0%, rgba(22,16,10,0.95) 60%, rgba(15,11,7,0.97) 100%);
+    --bp-grad-card:     linear-gradient(155deg, rgba(22,21,20,0.92) 0%, rgba(15,14,13,0.95) 60%, rgba(10,10,10,0.97) 100%);
     --bp-grad-oro:      linear-gradient(135deg, #F0C040 0%, #D4A017 50%, #8B5A0F 100%);
-    --bp-grad-section:  linear-gradient(180deg, rgba(28,20,12,0.78) 0%, rgba(20,14,8,0.85) 100%);
+    --bp-grad-section:  linear-gradient(180deg, rgba(18,17,16,0.78) 0%, rgba(14,13,12,0.85) 100%);
 }
 
 /*
@@ -46,6 +45,8 @@ body {
     --bp-cobre-warm:    color-mix(in srgb, var(--accent) 85%, white);
     --bp-cobre-light:   color-mix(in srgb, var(--accent) 70%, white);
     --bp-cobre-glow:    color-mix(in srgb, var(--accent) 55%, white);
+    /* Texto claro coherente con el tema (un blanco apenas teñido con el accent) */
+    --bp-crema:         color-mix(in srgb, var(--accent) 18%, #f5efe6);
     --bp-grad-cobre:    linear-gradient(135deg, var(--bp-cobre-light) 0%, var(--accent) 45%, var(--accent-d) 100%);
     --bp-grad-cobre-h:  linear-gradient(135deg, var(--bp-cobre-glow) 0%, var(--bp-cobre-light) 45%, var(--accent) 100%);
     --bp-ring-cobre:    conic-gradient(from 0deg, var(--accent), var(--bp-cobre-glow), var(--accent-d), var(--accent));
@@ -58,7 +59,7 @@ body:not(.light-theme) {
             rgba(var(--accent-rgb), 0.10) 0%,
             transparent 60%),
         radial-gradient(ellipse 80% 50% at 100% 100%,
-            rgba(92,46,26,0.10) 0%,
+            rgba(var(--accent-rgb),0.10) 0%,
             transparent 50%),
         var(--bg);
 }
@@ -84,7 +85,7 @@ body:not(.light-theme)::before {
 
 .sidebar {
     background:
-        linear-gradient(180deg, rgba(28,20,12,0.92) 0%, rgba(15,11,7,0.96) 100%) !important;
+        linear-gradient(180deg, rgba(18,17,16,0.92) 0%, rgba(10,10,10,0.96) 100%) !important;
     border-right: 1px solid rgba(var(--accent-rgb), 0.18) !important;
     box-shadow:
         inset -1px 0 0 rgba(var(--accent-rgb),0.06),
@@ -229,7 +230,7 @@ body:not(.light-theme)::before {
 .sidebar-user-avatar {
     border: 2px solid transparent;
     background:
-        linear-gradient(rgba(15,11,7,1), rgba(15,11,7,1)) padding-box,
+        linear-gradient(rgba(10,10,10,1), rgba(10,10,10,1)) padding-box,
         var(--bp-grad-cobre) border-box !important;
     box-shadow:
         0 0 0 1px rgba(var(--accent-rgb),0.20),
@@ -251,8 +252,8 @@ body:not(.light-theme)::before {
     padding: 22px 32px !important;
     background:
         linear-gradient(180deg,
-            rgba(20,14,8,0.92) 0%,
-            rgba(20,14,8,0.78) 100%) !important;
+            rgba(14,13,12,0.92) 0%,
+            rgba(14,13,12,0.78) 100%) !important;
     border-bottom: 1px solid rgba(var(--accent-rgb), 0.18) !important;
     backdrop-filter: blur(20px) saturate(140%) !important;
     -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
@@ -274,8 +275,8 @@ body:not(.light-theme)::before {
     border-bottom-color: rgba(var(--accent-rgb), 0.32) !important;
     background:
         linear-gradient(180deg,
-            rgba(18,12,6,0.96) 0%,
-            rgba(18,12,6,0.86) 100%) !important;
+            rgba(12,11,11,0.96) 0%,
+            rgba(12,11,11,0.86) 100%) !important;
 }
 @media (prefers-reduced-motion: reduce) {
     .panel-header { transition: none !important; }
@@ -302,7 +303,7 @@ body:not(.light-theme)::before {
     font-weight: 800 !important;
     letter-spacing: -0.3px !important;
     background: linear-gradient(135deg,
-        #FFEFE0 0%,
+        var(--bp-crema) 0%,
         var(--bp-crema) 50%,
         var(--bp-cobre-light) 100%);
     -webkit-background-clip: text;
@@ -313,8 +314,8 @@ body:not(.light-theme)::before {
 
 .user-info {
     background: linear-gradient(135deg,
-        rgba(40,28,18,0.85),
-        rgba(22,16,10,0.92)) !important;
+        rgba(22,21,20,0.85),
+        rgba(15,14,13,0.92)) !important;
     border: 1px solid rgba(var(--accent-rgb), 0.30) !important;
     border-radius: 999px !important;
     padding: 6px 14px 6px 6px !important;
@@ -524,7 +525,7 @@ body:not(.light-theme)::before {
     font-family: 'Syne', 'Inter', sans-serif !important;
     font-weight: 800 !important;
     background: linear-gradient(135deg,
-        #FFEFE0 0%,
+        var(--bp-crema) 0%,
         var(--bp-crema) 35%,
         var(--bp-cobre-light) 100%);
     -webkit-background-clip: text;
@@ -559,8 +560,8 @@ body:not(.light-theme)::before {
     box-shadow:
         0 6px 18px rgba(var(--accent-rgb), 0.32),
         inset 0 1px 0 rgba(255,235,210,0.30),
-        inset 0 -2px 0 rgba(92,46,26,0.30) !important;
-    text-shadow: 0 1px 0 rgba(92,46,26,0.30);
+        inset 0 -2px 0 rgba(var(--accent-rgb),0.30) !important;
+    text-shadow: 0 1px 0 rgba(var(--accent-rgb),0.30);
 }
 .btn-primary::before {
     content: '';
@@ -581,20 +582,20 @@ body:not(.light-theme)::before {
         0 12px 28px rgba(var(--accent-rgb), 0.48),
         0 0 0 1px rgba(var(--accent-rgb),0.65),
         inset 0 1px 0 rgba(255,235,210,0.45),
-        inset 0 -2px 0 rgba(92,46,26,0.30) !important;
+        inset 0 -2px 0 rgba(var(--accent-rgb),0.30) !important;
 }
 .btn-primary:hover::before { transform: translateX(100%); }
 .btn-primary:active {
     transform: translateY(0) !important;
     box-shadow:
         0 4px 12px rgba(var(--accent-rgb), 0.30),
-        inset 0 2px 4px rgba(92,46,26,0.40) !important;
+        inset 0 2px 4px rgba(var(--accent-rgb),0.40) !important;
 }
 
 .btn-secondary {
     background: linear-gradient(135deg,
-        rgba(40,28,18,0.85),
-        rgba(22,16,10,0.92)) !important;
+        rgba(22,21,20,0.85),
+        rgba(15,14,13,0.92)) !important;
     border: 1px solid rgba(var(--accent-rgb),0.40) !important;
     color: var(--bp-crema) !important;
     box-shadow: var(--bp-shadow-sm) !important;
@@ -649,7 +650,7 @@ body:not(.light-theme)::before {
 .data-table {
     border-radius: 16px !important;
     overflow: hidden;
-    background: linear-gradient(180deg, rgba(28,20,12,0.55) 0%, rgba(15,11,7,0.65) 100%);
+    background: linear-gradient(180deg, rgba(18,17,16,0.55) 0%, rgba(10,10,10,0.65) 100%);
     border: 1px solid rgba(var(--accent-rgb), 0.18);
     box-shadow: var(--bp-shadow-md);
 }
@@ -658,7 +659,7 @@ body:not(.light-theme)::before {
 .data-table th {
     background: linear-gradient(180deg,
         rgba(60,40,24,0.65) 0%,
-        rgba(40,28,18,0.55) 100%) !important;
+        rgba(22,21,20,0.55) 100%) !important;
     color: var(--bp-cobre-glow) !important;
     text-transform: uppercase;
     letter-spacing: 1.2px !important;
@@ -754,8 +755,8 @@ body:not(.light-theme)::before {
 .filter-date,
 .filter-preset-select {
     background: linear-gradient(180deg,
-        rgba(15,11,7,0.85),
-        rgba(22,16,10,0.85)) !important;
+        rgba(10,10,10,0.85),
+        rgba(15,14,13,0.85)) !important;
     border: 1px solid rgba(var(--accent-rgb), 0.28) !important;
     border-radius: 10px !important;
     color: var(--bp-crema) !important;
@@ -786,7 +787,7 @@ body:not(.light-theme)::before {
         0 0 24px rgba(var(--accent-rgb), 0.20),
         inset 0 2px 6px rgba(0,0,0,0.30) !important;
     background: linear-gradient(180deg,
-        rgba(28,20,12,0.92),
+        rgba(18,17,16,0.92),
         rgba(34,24,14,0.92)) !important;
 }
 
@@ -823,7 +824,7 @@ body:not(.light-theme)::before {
 }
 
 .progress-bar {
-    background: rgba(15,11,7,0.7) !important;
+    background: rgba(10,10,10,0.7) !important;
     height: 6px !important;
     border-radius: 999px !important;
     overflow: hidden;
@@ -855,9 +856,9 @@ body:not(.light-theme)::before {
 
 .modal-content {
     background: linear-gradient(160deg,
-        rgba(40,28,18,0.95) 0%,
-        rgba(22,16,10,0.97) 60%,
-        rgba(15,11,7,0.98) 100%) !important;
+        rgba(22,21,20,0.95) 0%,
+        rgba(15,14,13,0.97) 60%,
+        rgba(10,10,10,0.98) 100%) !important;
     border: 1px solid rgba(var(--accent-rgb),0.30) !important;
     border-radius: 22px !important;
     box-shadow:
@@ -890,7 +891,7 @@ body:not(.light-theme)::before {
 .modal-footer {
     background: linear-gradient(180deg,
         transparent,
-        rgba(15,11,7,0.40)) !important;
+        rgba(10,10,10,0.40)) !important;
     border-top: 1px solid rgba(var(--accent-rgb), 0.15) !important;
     padding: 18px 26px !important;
 }
@@ -957,13 +958,13 @@ body:not(.light-theme)::before {
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 *::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-track { background: rgba(15,11,7,0.4); }
+*::-webkit-scrollbar-track { background: rgba(10,10,10,0.4); }
 *::-webkit-scrollbar-thumb {
     background: linear-gradient(180deg,
         rgba(var(--accent-rgb), 0.45),
         rgba(122,72,36,0.55));
     border-radius: 999px;
-    border: 2px solid rgba(15,11,7,0.6);
+    border: 2px solid rgba(10,10,10,0.6);
 }
 *::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(180deg,
@@ -977,7 +978,7 @@ body:not(.light-theme)::before {
 
 ::selection {
     background: rgba(var(--accent-rgb),0.45);
-    color: #FFEFE0;
+    color: var(--bp-crema);
     text-shadow: 0 0 8px rgba(var(--accent-rgb),0.6);
 }
 

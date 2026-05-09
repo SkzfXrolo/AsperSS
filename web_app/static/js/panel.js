@@ -7372,6 +7372,7 @@ function setBgPreset(preset) {
     }
     _applyBg(cfg);
     _syncBgUI();
+    try { window.dispatchEvent(new CustomEvent('argus:preset-changed', { detail: { preset } })); } catch(_) {}
 }
 window.setBgPreset = setBgPreset;
 
@@ -7736,11 +7737,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const ti = parseInt(document.getElementById('total-issues')?.textContent) || 8;
         const um = parseInt(document.getElementById('unique-machines')?.textContent) || 15;
         const at = parseInt(document.getElementById('active-tokens')?.textContent) || 5;
-        _drawSparkline('spark-scans',    makeTrend(ts), '#B87333');
+        const accent = (getComputedStyle(document.body).getPropertyValue('--accent') || '#B87333').trim() || '#B87333';
+        _drawSparkline('spark-scans',    makeTrend(ts), accent);
         _drawSparkline('spark-issues',   makeTrend(ti), '#f43f5e');
         _drawSparkline('spark-machines', makeTrend(um), '#06b6d4');
         _drawSparkline('spark-tokens',   makeTrend(at), '#10b981');
     }, 1200);
+});
+
+// Re-pinta el sparkline 'scans' al cambiar de preset (Personalizar Fondo)
+window.addEventListener('argus:preset-changed', () => {
+    setTimeout(() => {
+        const ts = parseInt(document.getElementById('total-scans')?.textContent) || 20;
+        const accent = (getComputedStyle(document.body).getPropertyValue('--accent') || '#B87333').trim() || '#B87333';
+        const arr = [];
+        let v = ts * 0.6;
+        for (let i = 0; i < 8; i++) { v += (Math.random() - 0.4) * (ts * 0.15); arr.push(Math.max(0, v)); }
+        arr[arr.length - 1] = ts;
+        if (typeof _drawSparkline === 'function') _drawSparkline('spark-scans', arr, accent);
+    }, 60);
 });
 
 // ============================================================
