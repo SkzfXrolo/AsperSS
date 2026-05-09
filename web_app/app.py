@@ -368,9 +368,16 @@ def init_db_async():
     # Notificación de deploy nuevo — se dispara una sola vez por commit
     _notify_new_deploy()
 
-# Inicializar en un thread separado para no bloquear el inicio
+# Inicializar en un thread separado para no bloquear el inicio.
+# IMPORTANTE: el Thread.start() real está al FINAL del módulo (justo antes
+# de `if __name__ == '__main__':`) para evitar una race condition de import:
+# init_db_async() llama get_api_db_cursor() (definida en línea ~1091) y
+# _ensure_plugin_keys_schema() (línea ~2203). Si arrancamos el thread aquí,
+# Python aún no ha evaluado esas defs y falla con NameError, rompiendo TODAS
+# las migraciones (short_code, download_links, hack_blacklist, ensemble_data,
+# plugin_keys schema) y la notificación de deploy a Discord.
+# Hotfix Pack 41 (v1.6.50, post-rebuild): el .start() vive al final.
 import threading
-threading.Thread(target=init_db_async, daemon=True).start()
 
 def _autonomous_daily_learning():
     """Pipeline de aprendizaje autónomo — corre cada día a las 2:00 UTC.
@@ -13127,6 +13134,20 @@ def sa_api_export_csv(kind):
 # ════════════════════════════════════════════════════════════════════════
 # Fin Pack 39 — Super Admin Panel API
 # ════════════════════════════════════════════════════════════════════════
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Hotfix Pack 41 — arrancar init_db_async() AQUÍ, AHORA que TODAS las
+# funciones del módulo están definidas (get_api_db_cursor en ~1091,
+# _ensure_plugin_keys_schema en ~2203, _notify_new_deploy en ~113, etc).
+# Antes el .start() vivía en línea ~373 y arrancaba el thread durante el
+# import del módulo, antes de que esas defs existieran. Eso provocaba
+# NameError: name 'get_api_db_cursor' is not defined en cada deploy y
+# rompía TODAS las migraciones (short_code, download_links, hack_blacklist,
+# ensemble_data, plugin_keys schema) más la notificación a Discord.
+# Esto se ejecuta cuando gunicorn importa el módulo (no requiere __main__).
+# ──────────────────────────────────────────────────────────────────────
+threading.Thread(target=init_db_async, daemon=True).start()
 
 
 if __name__ == '__main__':
