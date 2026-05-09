@@ -168,6 +168,16 @@ body.light-theme::before {
 }
 
 /* â”€â”€ Preset: Aurora animada â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.bg-aurora {
+    --accent:      #6366F1;
+    --accent-d:    #4338CA;
+    --accent-rgb:  99, 102, 241;
+    --accent-bg:   rgba(99, 102, 241, 0.10);
+    --accent-glow: rgba(99, 102, 241, 0.32);
+    --border:      rgba(99, 102, 241, 0.14);
+    --border-m:    rgba(99, 102, 241, 0.28);
+    --border-h:    rgba(99, 102, 241, 0.55);
+}
 body.bg-aurora #argus-bg {
     background: linear-gradient(125deg, #0a0015 0%, #0d0028 30%, #060d2e 60%, #000d20 100%);
 }
@@ -189,6 +199,16 @@ body.bg-aurora #argus-bg::before {
 }
 
 /* â”€â”€ Preset: Nebula â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.bg-nebula {
+    --accent:      #A855F7;
+    --accent-d:    #7E22CE;
+    --accent-rgb:  168, 85, 247;
+    --accent-bg:   rgba(168, 85, 247, 0.10);
+    --accent-glow: rgba(168, 85, 247, 0.32);
+    --border:      rgba(168, 85, 247, 0.14);
+    --border-m:    rgba(168, 85, 247, 0.28);
+    --border-h:    rgba(168, 85, 247, 0.55);
+}
 body.bg-nebula #argus-bg {
     background: radial-gradient(ellipse at 50% 50%, #0d001f 0%, #020008 100%);
 }
@@ -3622,6 +3642,11 @@ body.light-theme .panel-card {
 .stat-icon-wrap.stat-icon-red   { --stat-accent: #f43f5e; --stat-glow: rgba(244,63,94,0.35); }
 .stat-icon-wrap.stat-icon-cyan  { --stat-accent: #06b6d4; --stat-glow: rgba(6,182,212,0.35); }
 .stat-icon-wrap.stat-icon-green { --stat-accent: #10b981; --stat-glow: rgba(16,185,129,0.35); }
+/* Card "neutra" (Escaneos Totales): sigue el --accent del preset activo */
+.stat-icon-wrap:not(.stat-icon-red):not(.stat-icon-cyan):not(.stat-icon-green) {
+    --stat-accent: var(--accent);
+    --stat-glow:   rgba(var(--accent-rgb), 0.35);
+}
 
 .stat-card:has(.stat-icon-red)   { --stat-accent: #f43f5e; --stat-glow: rgba(244,63,94,0.25); }
 .stat-card:has(.stat-icon-cyan)  { --stat-accent: #06b6d4; --stat-glow: rgba(6,182,212,0.25); }
