@@ -72,12 +72,14 @@ DEFAULT_WEIGHTS: dict[str, Any] = {
     "decay": {
         "half_life_hours": 24.0,  # cada 24h sin violation, score se divide a la mitad
     },
-    # Umbrales de accion por score final.
+    # Umbrales de accion por score final. Subidos en Pack 44.2 para que
+    # el Oracle no escale a kick/ban con 1 sola violation HIGH (que podria
+    # ser un FP del check propio).
     "actions": {
-        "watch":  0.30,
-        "ss":     0.50,
-        "kick":   0.70,
-        "ban":    0.90,
+        "watch":  0.35,
+        "ss":     0.55,
+        "kick":   0.78,
+        "ban":    0.95,
     },
 }
 
@@ -414,14 +416,26 @@ def evaluate(evidence: dict[str, Any], weights: dict[str, Any] | None = None) ->
     if pt > 100 or pcs > 3:
         confidence = min(1.0, confidence + 0.10)  # mas historia = mas confianza
 
-    # 5) Decidir accion segun umbrales
-    if final_score >= float(actions_w.get("ban", 0.90)):
-        action, bucket = "ban", "ban"
-    elif final_score >= float(actions_w.get("kick", 0.70)):
-        action, bucket = "kick", "kick"
-    elif final_score >= float(actions_w.get("ss", 0.50)):
+    # 5) Decidir accion segun umbrales.
+    # Pack 44.2 anti-FP guard: para ban requerimos confianza alta (>=0.6),
+    # si no, bajamos a kick. Y para kick requerimos confianza moderada
+    # (>=0.4), si no, bajamos a ss. Asi un score alto basado en pocos
+    # samples (un solo check HIGH muy temprano) NUNCA escala a accion
+    # destructiva. Necesita al menos 2-3 checks distintos para tener confidence
+    # suficiente.
+    if final_score >= float(actions_w.get("ban", 0.95)):
+        if confidence >= 0.60:
+            action, bucket = "ban", "ban"
+        else:
+            action, bucket = "kick", "kick"
+    elif final_score >= float(actions_w.get("kick", 0.78)):
+        if confidence >= 0.40:
+            action, bucket = "kick", "kick"
+        else:
+            action, bucket = "ss", "ss"
+    elif final_score >= float(actions_w.get("ss", 0.55)):
         action, bucket = "ss", "ss"
-    elif final_score >= float(actions_w.get("watch", 0.30)):
+    elif final_score >= float(actions_w.get("watch", 0.35)):
         action, bucket = "watch", "watch"
     else:
         action, bucket = "none", "clean"
