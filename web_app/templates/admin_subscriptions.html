@@ -743,6 +743,119 @@
                     </table>
                 </div>
             </div>
+
+            <!-- ── STAFF HUÉRFANOS (P42) ── -->
+            <div class="card" id="orphan-staff-card">
+                <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                    <span class="card-title">Staff huérfanos <span id="orphan-staff-count" style="opacity:.7;">(…)</span></span>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                        <select id="orphan-target-company" class="filter-select" style="min-width:200px;font-size:12px;padding:6px 10px;">
+                            <option value="">— Selecciona empresa destino —</option>
+                        </select>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="saAssignOrphans(false)">Asignar seleccionados</button>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="saAssignOrphans(true)">Asignar todos</button>
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="saLoadOrphans()" title="Recargar">↻</button>
+                    </div>
+                </div>
+                <div style="padding:0 16px 8px;font-size:12px;color:var(--text-d, #888);">
+                    Usuarios con rol staff (helper / moderador / admin) que están sin empresa asignada. Asígnalos
+                    a la empresa correcta para que aparezcan en su panel "Equipo" y dejen de figurar como
+                    individuales.
+                </div>
+                <div class="tbl-wrap">
+                    <table>
+                        <thead><tr><th style="width:34px;"><input type="checkbox" id="orphan-all-check" onchange="saToggleAllOrphans(this.checked)"></th><th>Usuario</th><th>Email</th><th>Rol staff</th><th>Roles</th><th>Creado</th></tr></thead>
+                        <tbody id="orphan-staff-tbody">
+                            <tr><td colspan="6" class="empty">Cargando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <script>
+                (function(){
+                    async function saLoadOrphans(){
+                        var sel  = document.getElementById('orphan-target-company');
+                        var tb   = document.getElementById('orphan-staff-tbody');
+                        var cnt  = document.getElementById('orphan-staff-count');
+                        if (tb) tb.innerHTML = '<tr><td colspan="6" class="empty">Cargando…</td></tr>';
+                        try {
+                            var r = await fetch('/aspers-sa/api/orphan-staff', {credentials:'same-origin'});
+                            if (!r.ok) {
+                                tb.innerHTML = '<tr><td colspan="6" class="empty">Sin acceso o error: HTTP '+r.status+'</td></tr>';
+                                return;
+                            }
+                            var d = await r.json();
+                            // Empresas
+                            if (sel && d.companies) {
+                                var current = sel.value;
+                                sel.innerHTML = '<option value="">— Selecciona empresa destino —</option>' +
+                                    d.companies.map(function(c){
+                                        return '<option value="'+c.id+'">'+(c.name||('Empresa #'+c.id))+' (#'+c.id+')</option>';
+                                    }).join('');
+                                if (current) sel.value = current;
+                            }
+                            // Tabla
+                            var orphans = d.orphans || [];
+                            if (cnt) cnt.textContent = '('+orphans.length+')';
+                            if (!orphans.length) {
+                                tb.innerHTML = '<tr><td colspan="6" class="empty">No hay staff huérfanos. Todo está aislado correctamente.</td></tr>';
+                                return;
+                            }
+                            tb.innerHTML = orphans.map(function(u){
+                                var rolesBadges = (u.roles||[]).map(function(rr){
+                                    return '<span class="badge badge-role" style="margin-right:2px">'+rr+'</span>';
+                                }).join('');
+                                return '<tr>' +
+                                    '<td><input type="checkbox" class="orphan-row-check" data-uid="'+u.id+'"></td>' +
+                                    '<td><strong>'+(u.username||'')+'</strong></td>' +
+                                    '<td class="mono" style="font-size:11px">'+(u.email||'—')+'</td>' +
+                                    '<td><span class="badge badge-role">'+(u.staff_role||'')+'</span></td>' +
+                                    '<td>'+rolesBadges+'</td>' +
+                                    '<td class="mono" style="font-size:11px">'+(u.created_at||'—')+'</td>' +
+                                    '</tr>';
+                            }).join('');
+                        } catch(e){
+                            tb.innerHTML = '<tr><td colspan="6" class="empty">Error: '+e.message+'</td></tr>';
+                        }
+                    }
+                    function saToggleAllOrphans(checked){
+                        document.querySelectorAll('.orphan-row-check').forEach(function(cb){ cb.checked = checked; });
+                    }
+                    async function saAssignOrphans(all){
+                        var sel = document.getElementById('orphan-target-company');
+                        var cid = sel ? parseInt(sel.value, 10) : NaN;
+                        if (!cid) { alert('Selecciona una empresa destino'); return; }
+                        var ids;
+                        if (all) {
+                            ids = Array.from(document.querySelectorAll('.orphan-row-check')).map(function(cb){ return parseInt(cb.dataset.uid, 10); });
+                        } else {
+                            ids = Array.from(document.querySelectorAll('.orphan-row-check:checked')).map(function(cb){ return parseInt(cb.dataset.uid, 10); });
+                        }
+                        ids = ids.filter(function(x){ return !isNaN(x); });
+                        if (!ids.length) { alert('No hay usuarios seleccionados'); return; }
+                        if (!confirm('¿Asignar '+ids.length+' usuario(s) a la empresa #'+cid+'?')) return;
+                        try {
+                            var r = await fetch('/aspers-sa/api/orphan-staff/assign', {
+                                method:'POST', credentials:'same-origin',
+                                headers:{'Content-Type':'application/json'},
+                                body: JSON.stringify({ user_ids: ids, target_company_id: cid })
+                            });
+                            var d = await r.json();
+                            if (!r.ok || d.error) { alert('Error: '+(d.error||r.status)); return; }
+                            alert('OK: '+d.updated+' actualizados, '+(d.skipped||[]).length+' omitidos');
+                            saLoadOrphans();
+                        } catch(e){ alert('Error de red: '+e.message); }
+                    }
+                    window.saLoadOrphans = saLoadOrphans;
+                    window.saToggleAllOrphans = saToggleAllOrphans;
+                    window.saAssignOrphans = saAssignOrphans;
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', saLoadOrphans);
+                    } else {
+                        saLoadOrphans();
+                    }
+                })();
+            </script>
         </section>
 
         <!-- ── NUEVA EMPRESA ── -->

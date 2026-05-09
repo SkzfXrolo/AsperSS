@@ -19,7 +19,7 @@ from auth import (
     verify_registration_token, login_required, admin_required, company_admin_required,
     company_user_required, get_user_by_id, list_registration_tokens, list_users,
     create_company, get_company_by_id, list_companies, update_company,
-    has_role, is_admin, is_company_admin, is_company_user,
+    has_role, is_admin, is_super_admin, is_company_admin, is_company_user,
     get_staff_role, can_change_verdict, can_manage_tokens, can_manage_staff,
     STAFF_ROLE_HIERARCHY
 )
@@ -8905,28 +8905,30 @@ def get_auto_whitelist():
 def list_staff_users():
     """Lista usuarios con su rol de staff. Solo Admin o superior.
 
-    - Si quien llama tiene company_id: lista solo los usuarios de su empresa
-      (incluye además a los staff "huérfanos" sin empresa para que el admin
-      pueda adoptarlos a un clic).
-    - Si quien llama es staff sin empresa (raro): lista todos.
+    AISLAMIENTO ESTRICTO ENTRE EMPRESAS (P42):
+    - Super-admin global ('admin'): ve todos los usuarios.
+    - Admin/Owner de empresa (company_id != NULL): SOLO ve los usuarios con
+      su mismo company_id. NUNCA ve staff de otras empresas ni huérfanos
+      cross-empresa.
+    - Staff individual (company_id NULL): SOLO ve a otros usuarios sin
+      empresa (otros individuales). Nunca ve staff de empresas.
+    La adopción de staff huérfanos legacy ahora es responsabilidad exclusiva
+    del SuperAdmin (panel /aspers-sa).
     """
     current_user = get_user_by_id(session.get('user_id'))
     if not can_manage_staff(current_user):
         return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
 
+    all_users = list_users() or []
     own_company_id = current_user.get('company_id') if current_user else None
-    if own_company_id:
-        # Usuarios de mi empresa + staff sin empresa (candidatos a adoptar)
-        all_users = list_users() or []
-        users = []
-        for u in all_users:
-            uc = u.get('company_id')
-            if uc == own_company_id:
-                users.append(u)
-            elif uc is None and any(r in STAFF_ROLE_HIERARCHY for r in (u.get('roles') or [])):
-                users.append(u)
+    is_super = is_super_admin(current_user)
+
+    if is_super:
+        users = all_users
+    elif own_company_id is not None:
+        users = [u for u in all_users if u.get('company_id') == own_company_id]
     else:
-        users = list_users() or []
+        users = [u for u in all_users if u.get('company_id') is None]
 
     result = []
     for u in users:
@@ -8942,7 +8944,11 @@ def list_staff_users():
             'company_id': u.get('company_id'),
             'in_my_company': bool(own_company_id) and u.get('company_id') == own_company_id,
         })
-    return jsonify({'users': result, 'my_company_id': own_company_id}), 200
+    return jsonify({
+        'users': result,
+        'my_company_id': own_company_id,
+        'is_super_admin': is_super,
+    }), 200
 
 
 @app.route('/api/staff/users/<int:user_id>/role', methods=['PUT'])
@@ -8950,9 +8956,15 @@ def list_staff_users():
 def update_staff_role(user_id):
     """Asigna un rol de staff a un usuario. Solo Admin o superior.
 
-    Si quien asigna pertenece a una empresa, el usuario destino queda vinculado
-    a esa misma empresa (siempre que esté huérfano o ya en la misma empresa).
-    Esto evita que aparezcan como "usuarios individuales" en SuperAdmin.
+    AISLAMIENTO ENTRE EMPRESAS (P42):
+    - Super-admin global ('admin'): puede modificar a cualquier usuario.
+    - Admin/Owner de empresa: SOLO puede modificar a usuarios de su empresa.
+      No puede tocar huérfanos (company_id NULL) ni usuarios de otras empresas.
+    - Staff individual (sin company_id): SOLO puede modificar a otros sin
+      company_id.
+
+    Si el target no tiene company_id y el caller sí, se le asigna company_id
+    automáticamente, manteniéndose el aislamiento.
     """
     current_user = get_user_by_id(session.get('user_id'))
     if not can_manage_staff(current_user):
@@ -8967,16 +8979,25 @@ def update_staff_role(user_id):
     if not target:
         return jsonify({'error': 'Usuario no encontrado'}), 404
 
+    own_company_id = current_user.get('company_id') if current_user else None
+    target_company_id = target.get('company_id')
+    is_super = is_super_admin(current_user)
+
+    if not is_super:
+        if own_company_id is not None:
+            if target_company_id != own_company_id:
+                return jsonify({'error': 'No puedes modificar usuarios fuera de tu empresa'}), 403
+        else:
+            if target_company_id is not None:
+                return jsonify({'error': 'No puedes modificar usuarios de empresas'}), 403
+
     existing = target.get('roles', []) if isinstance(target.get('roles'), list) else []
     non_staff = [r for r in existing if r not in STAFF_ROLE_HIERARCHY]
     updated = non_staff + [new_role]
 
-    own_company_id = current_user.get('company_id') if current_user else None
-    target_company_id = target.get('company_id')
     set_company = (
         own_company_id is not None
-        and target_company_id in (None, own_company_id)
-        and target_company_id != own_company_id
+        and target_company_id is None
     )
 
     import json as _json
@@ -9004,87 +9025,11 @@ def update_staff_role(user_id):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/staff/users/<int:user_id>/attach-to-my-company', methods=['POST'])
-@login_required
-def attach_user_to_my_company(user_id):
-    """Vincula un usuario huérfano (company_id NULL) a la empresa del que llama.
-
-    Pensado para reparar staff existente que quedó "individual" porque el viejo
-    endpoint update_staff_role no propagaba company_id.
-    """
-    current_user = get_user_by_id(session.get('user_id'))
-    if not can_manage_staff(current_user):
-        return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
-    own_company_id = current_user.get('company_id') if current_user else None
-    if not own_company_id:
-        return jsonify({'error': 'No perteneces a una empresa'}), 400
-    target = get_user_by_id(user_id)
-    if not target:
-        return jsonify({'error': 'Usuario no encontrado'}), 404
-    target_company_id = target.get('company_id')
-    if target_company_id == own_company_id:
-        return jsonify({'success': True, 'already': True, 'company_id': own_company_id}), 200
-    if target_company_id is not None:
-        return jsonify({'error': 'El usuario ya pertenece a otra empresa'}), 409
-    try:
-        from auth import _auth_cursor, _ph
-        ph = _ph()
-        with _auth_cursor() as cursor:
-            cursor.execute(
-                f'UPDATE users SET company_id = {ph} WHERE id = {ph}',
-                (own_company_id, user_id)
-            )
-        return jsonify({'success': True, 'company_id': own_company_id}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/staff/users/attach-all-orphan-staff', methods=['POST'])
-@login_required
-def attach_all_orphan_staff_to_my_company():
-    """Adopta de golpe todos los staff huérfanos (sin empresa) hacia mi empresa.
-
-    Útil para arreglar de un clic la situación heredada en la que el endpoint
-    de cambio de rol no propagaba company_id.
-    Solo cubre usuarios con rol staff (helper/moderador/admin) y company_id NULL;
-    nunca toca a quien ya pertenece a otra empresa, ni roles owner.
-    """
-    current_user = get_user_by_id(session.get('user_id'))
-    if not can_manage_staff(current_user):
-        return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
-    own_company_id = current_user.get('company_id') if current_user else None
-    if not own_company_id:
-        return jsonify({'error': 'No perteneces a una empresa'}), 400
-
-    try:
-        all_users = list_users() or []
-        # Candidatos: company_id NULL y al menos un rol staff (excluye owner)
-        adoptable_roles = {r for r in STAFF_ROLE_HIERARCHY if r != 'owner'}
-        candidates = [
-            u for u in all_users
-            if u.get('company_id') is None
-            and any(r in adoptable_roles for r in (u.get('roles') or []))
-        ]
-        if not candidates:
-            return jsonify({'success': True, 'adopted': 0, 'company_id': own_company_id}), 200
-        from auth import _auth_cursor, _ph
-        ph = _ph()
-        adopted = 0
-        with _auth_cursor() as cursor:
-            for u in candidates:
-                cursor.execute(
-                    f'UPDATE users SET company_id = {ph} WHERE id = {ph} AND company_id IS NULL',
-                    (own_company_id, u['id'])
-                )
-                adopted += 1
-        return jsonify({
-            'success': True,
-            'adopted': adopted,
-            'company_id': own_company_id,
-            'usernames': [u.get('username') for u in candidates],
-        }), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+# NOTA (P42): los endpoints /api/staff/users/.../attach* fueron retirados.
+# La asignación de staff huérfanos (legacy con company_id NULL) ahora es
+# responsabilidad EXCLUSIVA del SuperAdmin desde /aspers-sa, para evitar que
+# admins de una empresa puedan "adoptar" usuarios de otra empresa o staff
+# individual. Ver: /aspers-sa/api/orphan-staff y .../assign más abajo.
 
 
 @app.route('/api/staff/users/<int:user_id>/avatar', methods=['PUT'])
@@ -13266,6 +13211,116 @@ def sa_api_export_csv(kind):
             'X-Rows-Count': str(rows_count),
         },
     )
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Pack 42 — Aislamiento entre empresas: gestión de staff huérfanos
+# (legacy con company_id NULL) desde el SuperAdmin.
+# Antes cualquier admin de empresa podía "adoptar" huérfanos a un clic, lo
+# que permitía robar staff de otras empresas o de la pool individual. Ahora
+# solo el SuperAdmin puede asignarlos, eligiendo explícitamente la empresa
+# destino (o null para mantenerlos como individuales).
+# ════════════════════════════════════════════════════════════════════════
+
+@app.route('/aspers-sa/api/orphan-staff', methods=['GET'])
+@_sa_required
+def sa_api_orphan_staff_list():
+    """Lista usuarios staff con company_id NULL (huérfanos) y todas las
+    empresas disponibles, para poder asignar manualmente desde el panel SA.
+    """
+    try:
+        from auth import list_users as _lu, list_companies as _lc
+        users = _lu() or []
+        companies = _lc() or []
+        adoptable = {r for r in STAFF_ROLE_HIERARCHY if r != 'owner'}
+        orphans = []
+        for u in users:
+            if u.get('company_id') is not None:
+                continue
+            roles = u.get('roles') or []
+            if not any(r in adoptable for r in roles):
+                continue
+            orphans.append({
+                'id': u.get('id'),
+                'username': u.get('username'),
+                'email': u.get('email', ''),
+                'roles': roles,
+                'staff_role': get_staff_role(u),
+                'is_active': u.get('is_active', True),
+                'created_at': str(u.get('created_at', '')),
+            })
+        comp_list = [
+            {'id': c.get('id'), 'name': c.get('name')}
+            for c in companies
+        ]
+        return jsonify({
+            'orphans': orphans,
+            'companies': comp_list,
+            'total': len(orphans),
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/orphan-staff/assign', methods=['POST'])
+@_sa_required
+def sa_api_orphan_staff_assign():
+    """Asigna uno o varios staff huérfanos a una empresa concreta.
+    Body JSON: { "user_ids": [int, ...], "target_company_id": int|null }
+    Si target_company_id es null, los deja explícitamente como individuales
+    (no cambia nada útil, pero permite consultar el caso). Si no es null,
+    debe existir en la BD.
+    """
+    data = request.json or {}
+    raw_ids = data.get('user_ids') or []
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return jsonify({'error': 'user_ids debe ser lista no vacía'}), 400
+    try:
+        user_ids = [int(x) for x in raw_ids]
+    except Exception:
+        return jsonify({'error': 'user_ids debe contener enteros'}), 400
+
+    target_company_id = data.get('target_company_id')
+    if target_company_id is not None:
+        try:
+            target_company_id = int(target_company_id)
+        except Exception:
+            return jsonify({'error': 'target_company_id inválido'}), 400
+        from auth import get_company_by_id as _gc
+        if not _gc(target_company_id):
+            return jsonify({'error': f'Empresa {target_company_id} no existe'}), 404
+
+    try:
+        from auth import _auth_cursor, _ph
+        ph = _ph()
+        updated = 0
+        skipped = []
+        with _auth_cursor() as cursor:
+            for uid in user_ids:
+                target = get_user_by_id(uid)
+                if not target:
+                    skipped.append({'id': uid, 'reason': 'not_found'})
+                    continue
+                cur_cid = target.get('company_id')
+                if cur_cid == target_company_id:
+                    skipped.append({'id': uid, 'reason': 'already_assigned'})
+                    continue
+                if cur_cid is not None and target_company_id is not None:
+                    skipped.append({'id': uid, 'reason': 'in_other_company', 'company_id': cur_cid})
+                    continue
+                cursor.execute(
+                    f'UPDATE users SET company_id = {ph} WHERE id = {ph}',
+                    (target_company_id, uid)
+                )
+                updated += 1
+        return jsonify({
+            'success': True,
+            'updated': updated,
+            'skipped': skipped,
+            'target_company_id': target_company_id,
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # ════════════════════════════════════════════════════════════════════════

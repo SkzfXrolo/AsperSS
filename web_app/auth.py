@@ -910,7 +910,11 @@ def has_role(user, role):
     return role in roles
 
 def is_admin(user):
-    """Verifica si un usuario es administrador (admin o administrador)"""
+    """Verifica si un usuario es administrador (admin global o admin de empresa).
+
+    OJO: esta función devuelve True para AMBOS tipos de admin.
+    Para verificar SOLO super-admin global, usa is_super_admin().
+    """
     if isinstance(user, dict):
         roles = user.get('roles', [])
     elif isinstance(user, list):
@@ -919,6 +923,22 @@ def is_admin(user):
         return False
     
     return 'admin' in roles or 'administrador' in roles
+
+
+def is_super_admin(user):
+    """Verifica si un usuario es super-admin global (rol 'admin' explícito).
+
+    A diferencia de is_admin(), excluye a los administradores de empresa
+    (rol 'administrador'), que NO deben tener visibilidad cross-empresa.
+    """
+    if isinstance(user, dict):
+        roles = user.get('roles', [])
+    elif isinstance(user, list):
+        roles = user
+    else:
+        return False
+    return 'admin' in roles
+
 
 def is_company_admin(user):
     """Verifica si un usuario es administrador de empresa"""
@@ -1277,7 +1297,11 @@ def login_required(f):
     return decorated_function
 
 def admin_required(f):
-    """Decorador para requerir rol de administrador (super admin)"""
+    """Decorador para requerir rol de SUPER administrador global.
+
+    Excluye a administradores de empresa (rol 'administrador'), que NO deben
+    tener acceso a vistas/datos globales (cross-empresa).
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
         # Verificar si es una petición AJAX/JSON (múltiples formas de detectarlo)
@@ -1292,9 +1316,9 @@ def admin_required(f):
             return redirect(url_for('login'))
         
         user = get_user_by_id(session['user_id'])
-        if not user or not is_admin(user):
+        if not user or not is_super_admin(user):
             if is_ajax:
-                return jsonify({'error': 'Acceso denegado. Se requiere rol de administrador.'}), 403
+                return jsonify({'error': 'Acceso denegado. Se requiere super administrador global.'}), 403
             return redirect(url_for('panel'))
         
         return f(*args, **kwargs)
