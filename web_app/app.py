@@ -600,6 +600,94 @@ import time as _time_mod
 _APP_START_TIME = _time_mod.time()
 
 
+@app.route('/healthz', methods=['GET'])
+def healthz():
+    """Healthcheck mínimo SIN tocar la BD. Sirve para distinguir entre:
+      * worker caído (TCP OK pero esto da timeout)        → problema de proceso
+      * worker vivo pero BD muerta (esto OK + /api/version db_ok=False)
+    Útil cuando el servicio parece caído para diagnosticar la causa real
+    sin bloquearse 30s+ esperando a la BD.
+    """
+    return jsonify({
+        'ok':       True,
+        'version':  _ARGUS_VERSION,
+        'uptime_s': int(_time_mod.time() - _APP_START_TIME),
+    }), 200
+
+
+@app.route('/api/db-stats', methods=['GET'])
+def api_db_stats():
+    """Diagnóstico de espacio de BD. Útil para saber si Render Postgres está
+    cerca del límite (1 GB en plan Free). Acceso público sólo al tamaño total
+    y al # de filas top — sin datos sensibles.
+    """
+    info = {
+        'backend': 'postgresql' if _USE_PG else ('mysql' if _USE_MYSQL else 'sqlite'),
+        'size_bytes': None,
+        'size_human': None,
+        'limit_bytes': 1024 * 1024 * 1024,  # 1 GB Render Free
+        'limit_human': '1 GB (Render Free)',
+        'usage_percent': None,
+        'top_tables': [],
+        'error': None,
+    }
+    try:
+        with get_api_db_cursor() as cur:
+            if _USE_PG:
+                try:
+                    cur.execute('SELECT pg_database_size(current_database())')
+                    row = cur.fetchone()
+                    sb = int(_first_value(row) or 0) if row else 0
+                    info['size_bytes'] = sb
+                    info['size_human'] = _human_bytes(sb)
+                    info['usage_percent'] = round((sb / info['limit_bytes']) * 100.0, 2)
+                except Exception as _se:
+                    info['error'] = f'pg_database_size: {str(_se)[:200]}'
+                try:
+                    cur.execute("""
+                        SELECT relname AS table_name,
+                               pg_total_relation_size(C.oid) AS total_bytes
+                          FROM pg_class C
+                          LEFT JOIN pg_namespace N ON (N.oid = C.relnamespace)
+                         WHERE nspname NOT IN ('pg_catalog','information_schema')
+                           AND C.relkind = 'r'
+                         ORDER BY total_bytes DESC
+                         LIMIT 15
+                    """)
+                    for r in (cur.fetchall() or []):
+                        try:
+                            name = _row_get(r, 0, 'table_name')
+                            tb   = int(_row_get(r, 1, 'total_bytes') or 0)
+                        except Exception:
+                            name = r[0] if r else None
+                            tb   = int(r[1] or 0) if r and len(r) > 1 else 0
+                        info['top_tables'].append({
+                            'table': name,
+                            'bytes': tb,
+                            'human': _human_bytes(tb),
+                        })
+                except Exception as _te:
+                    if not info['error']:
+                        info['error'] = f'top_tables: {str(_te)[:200]}'
+            else:
+                info['error'] = f'No size query implemented for backend={info["backend"]}'
+    except Exception as e:
+        info['error'] = str(e)[:300]
+    return jsonify(info), 200
+
+
+def _human_bytes(n):
+    try:
+        n = float(n or 0)
+    except Exception:
+        return '0 B'
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if n < 1024.0:
+            return f'{n:.1f} {unit}'
+        n /= 1024.0
+    return f'{n:.1f} PB'
+
+
 @app.route('/api/version', methods=['GET'])
 def api_version():
     """Devuelve versión, uptime y estado de la API. Usado por el footer del
