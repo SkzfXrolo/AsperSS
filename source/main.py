@@ -54,7 +54,7 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.49"
+SCANNER_VERSION = "1.6.50"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -5806,6 +5806,19 @@ class ArgusApp:
                 _run_safe(self.scan_nbt_exploits_saves)
                 self._set_scan_phase("🔧 Drivers kernel sospechosos (KMDF/minifilter)...")
                 _run_safe(self.scan_suspicious_kernel_drivers)
+                # ── Pack 41 — scanners nuevos ─────────────────────
+                self._set_scan_phase("🖼️ Thumbcache — referencias a archivos borrados...")
+                _run_safe(self.scan_thumbcache_artifacts)
+                self._set_scan_phase("🫥 PEB unlink — procesos ocultos a Task Manager...")
+                _run_safe(self.scan_peb_unlink_mismatch)
+                self._set_scan_phase("📡 Wi-Fi modo monitor / sniffer...")
+                _run_safe(self.scan_wifi_promiscuous_mode)
+                self._set_scan_phase("⏰ Time forensics — drift sistema vs reloj externo...")
+                _run_safe(self.scan_time_drift_forensics)
+                self._set_scan_phase("🐧 WSL bash_history — comandos sospechosos...")
+                _run_safe(self.scan_wsl_bash_history)
+                self._set_scan_phase("🛡️ Defender disable / exclusiones (72h)...")
+                _run_safe(self.scan_securityhealth_disable_events)
             # Grupo F — Técnicas avanzadas
             def _group_advanced():
                 try:
@@ -19829,6 +19842,523 @@ class ArgusApp:
                     continue
         except Exception as e:
             print(f"Error en scan_javaw_network_connections: {e}")
+
+    # ──────────────────────────────────────────────────────────────────
+    #  PACK 41 — Scanners nuevos (sin admin, sin libs nuevas)
+    # ──────────────────────────────────────────────────────────────────
+
+    def scan_thumbcache_artifacts(self):
+        """S#10 — Lee thumbcache_*.db en %LOCALAPPDATA%\\Microsoft\\Windows\\Explorer.
+        Los thumbcache contienen referencias a archivos ya borrados; el header
+        binario expone filenames de imágenes/ejecutables con thumbnail generado.
+        Sin admin (los .db son legibles por el user owner). Solo metadata, no
+        descomprime imágenes.
+        """
+        print("🔍 Escaneando thumbcache (referencias a archivos borrados)...")
+        HACK_TERMS = list(_DEFINITE_HACK_NAMES)
+        thumb_dir = os.path.join(os.environ.get('LOCALAPPDATA', ''),
+                                  'Microsoft', 'Windows', 'Explorer')
+        if not os.path.isdir(thumb_dir):
+            return
+        try:
+            now = time.time()
+            cutoff = now - (14 * 86400)
+            db_files = []
+            for fname in os.listdir(thumb_dir):
+                if not fname.lower().startswith('thumbcache_'):
+                    continue
+                fpath = os.path.join(thumb_dir, fname)
+                try:
+                    if os.path.getmtime(fpath) >= cutoff:
+                        db_files.append(fpath)
+                except OSError:
+                    continue
+            if not db_files:
+                print("✓ Sin thumbcache_*.db modificado en últimos 14 días")
+                return
+            hits = []
+            for db_path in db_files[:8]:
+                try:
+                    with open(db_path, 'rb') as f:
+                        data = f.read(min(os.path.getsize(db_path), 8 * 1024 * 1024))
+                    sig_offsets = [i for i in range(0, len(data) - 4) if data[i:i+4] == b'CMMM']
+                    if not sig_offsets:
+                        continue
+                    for off in sig_offsets[:600]:
+                        try:
+                            entry_size = int.from_bytes(data[off+8:off+12], 'little') if off+12 <= len(data) else 0
+                            id_size = int.from_bytes(data[off+16:off+20], 'little') if off+20 <= len(data) else 0
+                            if id_size <= 0 or id_size > 1024:
+                                continue
+                            id_off = off + 24
+                            if id_off + id_size > len(data):
+                                continue
+                            raw_id = data[id_off:id_off + id_size]
+                            try:
+                                ident = raw_id.decode('utf-16-le', errors='ignore')
+                            except Exception:
+                                ident = raw_id.decode('latin-1', errors='ignore')
+                            ident_clean = ''.join(c for c in ident if c.isprintable()).lower()
+                            if not ident_clean or len(ident_clean) < 4:
+                                continue
+                            for term in HACK_TERMS:
+                                if term in ident_clean:
+                                    hits.append((os.path.basename(db_path), ident_clean[:120], term))
+                                    break
+                        except Exception:
+                            continue
+                except (PermissionError, OSError):
+                    continue
+            seen = set()
+            for db_name, ident, term in hits[:30]:
+                key = (ident[:60], term)
+                if key in seen:
+                    continue
+                seen.add(key)
+                self.issues_found.append({
+                    'tipo': 'thumbcache_artifact',
+                    'nombre': f'Thumbcache: referencia a archivo sospechoso — {ident[:60]}',
+                    'ruta': f'{db_name}::{ident[:200]}',
+                    'archivo': ident[:120],
+                    'categoria': 'FORENSE',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.62,
+                    'detected_patterns': [f'thumbcache:{term}'],
+                    'explicacion': (
+                        f'El thumbcache de Explorer ({db_name}) contiene una entrada '
+                        f'cuyo identificador menciona "{term}". Los thumbcache persisten '
+                        f'aunque el archivo original haya sido borrado.'
+                    ),
+                })
+                print(f"⚠️ THUMBCACHE: {db_name} → {ident[:50]} [{term}]")
+            if not hits:
+                print(f"✓ Thumbcache: {len(db_files)} DBs revisados, 0 referencias sospechosas")
+        except Exception as e:
+            print(f"Error en scan_thumbcache_artifacts: {e}")
+
+    def scan_peb_unlink_mismatch(self):
+        """S#13 — Cruza listado de procesos via psutil (CreateToolhelp32Snapshot)
+        vs NtQuerySystemInformation(SystemProcessInformation). Discrepancias
+        pueden indicar PEB unlinking (técnica clásica de rootkits user-mode).
+        Sin admin: NtQuerySystemInformation devuelve la lista global.
+        Tolerancia: ignora pids 0/4 + procesos system kernel-only.
+        """
+        print("🔍 Cross-check procesos (CreateToolhelp32 vs NtQSI)...")
+        SAFE_KERNEL_PIDS = {0, 4, 8}
+        SAFE_KERNEL_NAMES = {
+            'system', 'system idle process', 'registry', 'memcompression',
+            'secure system', 'csrss.exe', 'smss.exe',
+        }
+        try:
+            psutil_pids = set()
+            psutil_names = {}
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    pid = proc.info.get('pid')
+                    if pid is None:
+                        continue
+                    psutil_pids.add(pid)
+                    psutil_names[pid] = (proc.info.get('name') or '').lower()
+                except Exception:
+                    continue
+
+            ntdll = ctypes.WinDLL('ntdll', use_last_error=True)
+            STATUS_INFO_LENGTH_MISMATCH = 0xC0000004
+            SystemProcessInformation = 5
+
+            class UNICODE_STRING(ctypes.Structure):
+                _fields_ = [
+                    ('Length', wintypes.USHORT),
+                    ('MaximumLength', wintypes.USHORT),
+                    ('Buffer', ctypes.c_wchar_p),
+                ]
+
+            buf_size = 1024 * 1024
+            buf = ctypes.create_string_buffer(buf_size)
+            ret_size = wintypes.ULONG(0)
+            for _ in range(8):
+                status = ntdll.NtQuerySystemInformation(
+                    SystemProcessInformation,
+                    buf, buf_size,
+                    ctypes.byref(ret_size),
+                )
+                if status == 0:
+                    break
+                if status & 0xFFFFFFFF == STATUS_INFO_LENGTH_MISMATCH:
+                    buf_size *= 2
+                    buf = ctypes.create_string_buffer(buf_size)
+                    continue
+                print(f"  · NtQSI status 0x{status & 0xFFFFFFFF:08X}, abortando")
+                return
+
+            ntqsi_pids = set()
+            ntqsi_names = {}
+            offset = 0
+            data = bytes(buf.raw[:ret_size.value or buf_size])
+            while offset < len(data):
+                try:
+                    next_offset = int.from_bytes(data[offset:offset+4], 'little', signed=False)
+                    name_len = int.from_bytes(data[offset+56:offset+58], 'little', signed=False)
+                    name_buf_ptr_off = offset + 60
+                    pid_off = offset + 80
+                    pid = int.from_bytes(data[pid_off:pid_off+8], 'little', signed=False)
+                    name = ''
+                    if name_len > 0 and name_len <= 1024:
+                        try:
+                            name_ptr = int.from_bytes(data[name_buf_ptr_off:name_buf_ptr_off+8], 'little', signed=False)
+                            if name_ptr:
+                                wstr = ctypes.string_at(name_ptr, name_len)
+                                name = wstr.decode('utf-16-le', errors='ignore')
+                        except Exception:
+                            name = ''
+                    ntqsi_pids.add(pid)
+                    ntqsi_names[pid] = name.lower()
+                except Exception:
+                    pass
+                if next_offset == 0:
+                    break
+                offset += next_offset
+
+            only_psutil = psutil_pids - ntqsi_pids - SAFE_KERNEL_PIDS
+            only_ntqsi = ntqsi_pids - psutil_pids - SAFE_KERNEL_PIDS
+
+            for pid in list(only_ntqsi)[:10]:
+                name = ntqsi_names.get(pid, '?')
+                if name in SAFE_KERNEL_NAMES or not name:
+                    continue
+                self.issues_found.append({
+                    'tipo': 'peb_hidden_process',
+                    'nombre': f'Proceso oculto a Task Manager (PEB unlink): {name} pid={pid}',
+                    'ruta': f'pid:{pid}',
+                    'archivo': name,
+                    'categoria': 'PROCESO',
+                    'alerta': 'CRITICAL',
+                    'confidence': 0.78,
+                    'detected_patterns': ['peb_unlink', f'pid:{pid}'],
+                    'explicacion': (
+                        f'El proceso "{name}" (pid {pid}) aparece en NtQuerySystem'
+                        f'Information pero NO en CreateToolhelp32Snapshot. '
+                        f'Técnica clásica de rootkits user-mode: desenlazar el '
+                        f'PEB para ocultarse de Task Manager y AVs.'
+                    ),
+                })
+                print(f"🚨 PEB UNLINK: {name} pid={pid}")
+            for pid in list(only_psutil)[:5]:
+                name = psutil_names.get(pid, '?')
+                if name in SAFE_KERNEL_NAMES or not name:
+                    continue
+                self.issues_found.append({
+                    'tipo': 'phantom_process_psutil',
+                    'nombre': f'Proceso fantasma psutil-only: {name} pid={pid}',
+                    'ruta': f'pid:{pid}',
+                    'archivo': name,
+                    'categoria': 'PROCESO',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.55,
+                    'detected_patterns': ['phantom_psutil_only'],
+                })
+            if not (only_psutil or only_ntqsi):
+                print(f"✓ {len(psutil_pids)} procesos consistentes entre fuentes")
+        except Exception as e:
+            print(f"Error en scan_peb_unlink_mismatch: {e}")
+
+    def scan_wifi_promiscuous_mode(self):
+        """S#36 — Detecta tarjetas Wi-Fi en modo monitor/promiscuo via netsh.
+        Las herramientas de packet capture/manipulation requieren modo monitor;
+        es muy raro en gaming setups y puede ser señal de MITM/sniffer activo.
+        Sin admin: netsh wlan show drivers/interfaces es lectura.
+        """
+        print("🔍 Verificando modo monitor de tarjetas Wi-Fi...")
+        try:
+            res = subprocess.run(
+                ['netsh', 'wlan', 'show', 'drivers'],
+                capture_output=True, text=True, timeout=10,
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+            )
+            out = (res.stdout or '') + '\n' + (res.stderr or '')
+            if not out.strip():
+                print("✓ netsh wlan no devuelve drivers (sin Wi-Fi)")
+                return
+            cur_iface = None
+            cur_capable = False
+            cur_modes = ''
+            adapters_monitor = []
+            for line in out.splitlines():
+                line_l = line.strip().lower()
+                if 'interface name' in line_l or 'nombre de la interfaz' in line_l:
+                    if cur_iface and cur_capable:
+                        adapters_monitor.append((cur_iface, cur_modes))
+                    cur_iface = line.split(':', 1)[-1].strip()
+                    cur_capable = False
+                    cur_modes = ''
+                if ('network types supported' in line_l
+                        or 'tipos de red admitidos' in line_l
+                        or 'monitor' in line_l):
+                    if 'monitor' in line_l:
+                        cur_capable = True
+                        cur_modes = line.strip()
+            if cur_iface and cur_capable:
+                adapters_monitor.append((cur_iface, cur_modes))
+
+            res2 = subprocess.run(
+                ['netsh', 'wlan', 'show', 'interfaces'],
+                capture_output=True, text=True, timeout=10,
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+            )
+            out2 = (res2.stdout or '')
+            in_monitor_now = False
+            for line in out2.splitlines():
+                line_l = line.strip().lower()
+                if (line_l.startswith('mode') or line_l.startswith('modo')) and 'monitor' in line_l:
+                    in_monitor_now = True
+                if 'state' in line_l and 'monitor' in line_l:
+                    in_monitor_now = True
+
+            if in_monitor_now:
+                self.issues_found.append({
+                    'tipo': 'wifi_monitor_mode_active',
+                    'nombre': 'Tarjeta Wi-Fi en modo MONITOR activo (packet capture en curso)',
+                    'ruta': 'netsh wlan show interfaces',
+                    'archivo': 'wlan',
+                    'categoria': 'RED',
+                    'alerta': 'CRITICAL',
+                    'confidence': 0.85,
+                    'detected_patterns': ['wifi_monitor_active'],
+                    'explicacion': (
+                        'Una tarjeta Wi-Fi está actualmente en modo monitor. '
+                        'Esto sólo ocurre con herramientas de packet capture '
+                        '(Wireshark, Aircrack, MITMf). En un setup de gaming '
+                        'normal nunca debería estar activo.'
+                    ),
+                })
+                print('🚨 Wi-Fi en modo MONITOR ACTIVO')
+            elif adapters_monitor:
+                names = ', '.join([n for n, _ in adapters_monitor[:3]])
+                self.issues_found.append({
+                    'tipo': 'wifi_monitor_capable',
+                    'nombre': f'Adaptador(es) Wi-Fi capaces de modo monitor: {names}',
+                    'ruta': 'netsh wlan show drivers',
+                    'archivo': 'wlan',
+                    'categoria': 'RED',
+                    'alerta': 'POCO_SOSPECHOSO',
+                    'confidence': 0.30,
+                    'detected_patterns': ['wifi_monitor_capable'],
+                })
+                print(f'ℹ️ {len(adapters_monitor)} adaptador(es) capaces de monitor (no activo)')
+            else:
+                print('✓ Sin adaptadores Wi-Fi en modo monitor')
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+        except Exception as e:
+            print(f"Error en scan_wifi_promiscuous_mode: {e}")
+
+    def scan_time_drift_forensics(self):
+        """S#44 — Compara reloj del sistema vs reloj externo (HTTP Date header
+        de google.com). Drift > 5 min = posible time tampering. Algunos hacks
+        manipulan timestamps para evadir filtros de "archivo nuevo". Sin admin.
+        """
+        print("🔍 Time forensics — drift sistema vs reloj externo...")
+        if requests is None:
+            print("✓ requests no disponible, skip")
+            return
+        try:
+            try:
+                resp = requests.head('https://www.google.com', timeout=5,
+                                      allow_redirects=False)
+                date_hdr = resp.headers.get('Date')
+            except Exception:
+                date_hdr = None
+            if not date_hdr:
+                print("✓ Sin acceso a reloj HTTP, skip drift")
+                return
+            try:
+                from email.utils import parsedate_to_datetime
+                ext_dt = parsedate_to_datetime(date_hdr)
+                if ext_dt.tzinfo is not None:
+                    ext_ts = ext_dt.timestamp()
+                else:
+                    ext_ts = ext_dt.timestamp()
+            except Exception:
+                return
+            local_ts = time.time()
+            drift_sec = abs(local_ts - ext_ts)
+            drift_min = drift_sec / 60.0
+            if drift_min > 5:
+                alerta = 'CRITICAL' if drift_min > 30 else 'SOSPECHOSO'
+                conf = 0.85 if drift_min > 30 else 0.60
+                direction = 'adelantado' if local_ts > ext_ts else 'atrasado'
+                self.issues_found.append({
+                    'tipo': 'time_drift_anomaly',
+                    'nombre': f'Reloj del sistema {direction} {drift_min:.1f} min vs reloj HTTP',
+                    'ruta': f'drift:{drift_min:.1f}min',
+                    'archivo': 'system_clock',
+                    'categoria': 'EVASION',
+                    'alerta': alerta,
+                    'confidence': conf,
+                    'detected_patterns': ['time_drift', f'direction:{direction}'],
+                    'extra': {
+                        'drift_seconds': int(drift_sec),
+                        'local_ts': int(local_ts),
+                        'external_ts': int(ext_ts),
+                        'source': 'google.com:Date',
+                    },
+                    'explicacion': (
+                        f'El reloj del sistema está {direction} {drift_min:.1f} minutos '
+                        f'respecto al reloj externo (Date header de google.com). '
+                        f'Drifts grandes (>30 min) indican posible manipulación de hora '
+                        f'para falsear timestamps de archivos y evadir filtros temporales.'
+                    ),
+                })
+                print(f"⚠️ TIME DRIFT: {direction} {drift_min:.1f} min")
+            else:
+                print(f"✓ Drift normal: {drift_sec:.0f}s")
+        except Exception as e:
+            print(f"Error en scan_time_drift_forensics: {e}")
+
+    def scan_wsl_bash_history(self):
+        """S#46b — Lee bash_history de cada distro WSL instalada. Ghost clients
+        modernos a veces usan WSL para descargar/extraer payloads ocultos a
+        Defender. Sin admin: \\\\wsl$\\<distro>\\home\\<user>\\.bash_history
+        es lectura via SMB local del kernel.
+        """
+        print("🔍 WSL bash_history — comandos sospechosos...")
+        suspicious_terms = [
+            'wget', 'curl', 'vape', 'meteor', 'wurst', 'liquidbounce',
+            'killaura', 'sigma', 'aristois', 'rusherhack', 'astolfo',
+            'novoline', 'cheat', 'aimbot', 'inject', 'ghost',
+            'modrinth.com/cheat', 'pastebin', 'mega.nz', 'anonfiles',
+        ]
+        try:
+            try:
+                res = subprocess.run(
+                    ['wsl', '-l', '-q'],
+                    capture_output=True, text=True, timeout=8,
+                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+                )
+                out = (res.stdout or '').replace('\x00', '').strip()
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                print("✓ WSL no instalado, skip")
+                return
+            distros = [d.strip() for d in out.splitlines() if d.strip()]
+            if not distros:
+                print("✓ Sin distros WSL, skip")
+                return
+            user_profile = os.environ.get('USERPROFILE', '')
+            distro_user = os.path.basename(user_profile).lower() if user_profile else ''
+            hits_total = 0
+            for distro in distros[:5]:
+                bases = [
+                    rf'\\wsl$\{distro}\home',
+                    rf'\\wsl.localhost\{distro}\home',
+                ]
+                for base in bases:
+                    if not os.path.isdir(base):
+                        continue
+                    try:
+                        users = os.listdir(base)
+                    except OSError:
+                        continue
+                    for user in users[:5]:
+                        hist = os.path.join(base, user, '.bash_history')
+                        if not os.path.isfile(hist):
+                            continue
+                        try:
+                            with open(hist, 'r', encoding='utf-8', errors='ignore') as f:
+                                lines = f.readlines()[-2000:]
+                        except Exception:
+                            continue
+                        for line in lines:
+                            line_l = line.lower()
+                            for term in suspicious_terms:
+                                if term in line_l:
+                                    hits_total += 1
+                                    self.issues_found.append({
+                                        'tipo': 'wsl_bash_history',
+                                        'nombre': f'WSL [{distro}/{user}]: comando sospechoso — {line.strip()[:120]}',
+                                        'ruta': hist,
+                                        'archivo': '.bash_history',
+                                        'categoria': 'CMD_HISTORY',
+                                        'alerta': 'CRITICAL' if 'cheat' in term or term in _DEFINITE_HACK_NAMES else 'SOSPECHOSO',
+                                        'confidence': 0.78 if term in _DEFINITE_HACK_NAMES else 0.55,
+                                        'detected_patterns': [f'wsl:{term}'],
+                                    })
+                                    print(f"⚠️ WSL HIST [{distro}]: {line.strip()[:80]}")
+                                    break
+                    break
+            if hits_total == 0:
+                print(f"✓ WSL: {len(distros)} distro(s) revisada(s), 0 comandos sospechosos")
+        except Exception as e:
+            print(f"Error en scan_wsl_bash_history: {e}")
+
+    def scan_securityhealth_disable_events(self):
+        """S#48 — Lee Microsoft-Windows-Windows Defender/Operational por eventos
+        de Defender disabled (5001) o exclusiones agregadas (5004) en últimas
+        72h. Hack loaders modernos suelen agregar exclusiones antes de descargar
+        payloads. Sin admin: wevtutil qe es lectura.
+        """
+        print("🔍 SecurityHealth — Defender disable/exclusion events (72h)...")
+        import xml.etree.ElementTree as _ET
+        QUERIES = [
+            ('Microsoft-Windows-Windows Defender/Operational',
+             "*[System[(EventID=5001 or EventID=5004 or EventID=5007 or EventID=5010 or EventID=5012) and TimeCreated[timediff(@SystemTime) <= 259200000]]]",
+             'Defender desactivado / exclusiones agregadas / RTP off',
+             'CRITICAL', 0.85),
+            ('Microsoft-Windows-Windows Defender/Operational',
+             "*[System[(EventID=1006 or EventID=1015 or EventID=1116) and TimeCreated[timediff(@SystemTime) <= 259200000]]]",
+             'Malware detectado por Defender',
+             'CRITICAL', 0.82),
+        ]
+        try:
+            for log_name, query, description, severity, conf in QUERIES:
+                try:
+                    res = subprocess.run(
+                        ['wevtutil', 'qe', log_name,
+                         f'/q:{query}', '/c:25', '/rd:true', '/f:xml'],
+                        capture_output=True, text=True, timeout=15,
+                        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+                    )
+                    if not (res.stdout or '').strip():
+                        continue
+                    xml_text = f'<root>{res.stdout.strip()}</root>'
+                    try:
+                        root = _ET.fromstring(xml_text)
+                        ns = '{http://schemas.microsoft.com/win/2004/08/events/event}'
+                        events = root.findall(f'.//{ns}Event')
+                        if not events:
+                            continue
+                        per_id = {}
+                        for ev in events:
+                            sys_el = ev.find(f'{ns}System')
+                            if sys_el is None:
+                                continue
+                            eid_el = sys_el.find(f'{ns}EventID')
+                            eid = (eid_el.text or '?') if eid_el is not None else '?'
+                            per_id[eid] = per_id.get(eid, 0) + 1
+                        summary = ', '.join([f'EID {k}: {v}' for k, v in per_id.items()])
+                        self.issues_found.append({
+                            'tipo': 'defender_health_event',
+                            'nombre': f'{description} ({len(events)} eventos en 72h)',
+                            'ruta': log_name,
+                            'archivo': 'wevtutil',
+                            'categoria': 'EVASION',
+                            'alerta': severity,
+                            'confidence': conf,
+                            'detected_patterns': ['defender_health'] + [f'eid:{k}' for k in per_id.keys()],
+                            'extra': {'per_event_id': per_id, 'window': '72h'},
+                            'explicacion': (
+                                f'El log {log_name} registra {len(events)} eventos '
+                                f'en las últimas 72h ({summary}). Estos events indican '
+                                f'que Defender fue desactivado, se agregaron exclusiones, '
+                                f'o se detectó malware activo durante la ventana del SS.'
+                            ),
+                        })
+                        print(f"⚠️ DEFENDER HEALTH: {description} ({summary})")
+                    except _ET.ParseError:
+                        continue
+                except (subprocess.TimeoutExpired, FileNotFoundError):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_securityhealth_disable_events: {e}")
 
     def _apply_process_whitelist(self, issues):
         """P2 #13 — Descarta procesos conocidos y seguros del listado de hallazgos."""
