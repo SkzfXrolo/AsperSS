@@ -14,9 +14,11 @@
     <url>https://argusprojects.com</url>
 
     <properties>
-        <java.version>17</java.version>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <!-- Java 21: requerido por paper-api 1.20.5+ y todas las 1.21.x.
+             Aternos / Spigot 1.20 corre con JDK 21 sin problemas. -->
+        <java.version>21</java.version>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -43,15 +45,17 @@
 
     <dependencies>
         <!-- Paper API (compatible con Spigot) — provided porque el server lo aporta.
-             Pinned a 1.20.1: el plugin solo usa APIs Bukkit estables desde 1.13,
-             asi que el .jar resultante corre tambien en 1.20.2/3/4/5/6 y 1.21+
-             sin recompilar (el plugin.yml declara api-version: '1.19'). Compilar
-             contra 1.20.1 garantiza que NO usamos por accidente APIs nuevas
-             que rompan en Aternos 1.20 / Spigot 1.20.1. -->
+             OJO: PaperMC borra las versiones viejas de su repo Maven (al 2026-05
+             solo mantienen 1.21.3+). Por eso compilamos contra 1.21.3-R0.1-SNAPSHOT
+             aunque el plugin declare api-version: '1.19' en plugin.yml. El plugin
+             solo usa APIs Bukkit estables desde 1.13, asi que el .jar resultante
+             corre perfectamente en Spigot/Paper 1.19, 1.20.x, 1.21.x sin recompilar.
+             Verificado en Aternos 1.20 con Spigot. Si en el futuro PaperMC borra
+             tambien 1.21.3, subir a la version mas vieja disponible. -->
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>1.20.1-R0.1-SNAPSHOT</version>
+            <version>1.21.3-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
 
