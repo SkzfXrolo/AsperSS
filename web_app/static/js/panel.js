@@ -7311,7 +7311,8 @@ window._setBreadcrumb = _setBreadcrumb;
 // 🖼 BACKGROUND CUSTOMIZER
 // ============================================================
 
-const BG_PRESETS = ['default','aurora','nebula','cyber','ocean','lava','forest'];
+const BG_PRESETS = ['default','aurora','nebula','cyber','ocean','lava','forest','classic'];
+const CURSOR_MODES = ['argus','system'];
 
 function openBgCustomizer() {
     document.getElementById('bg-customizer')?.classList.add('open');
@@ -7328,6 +7329,10 @@ function _syncBgUI() {
     // Active preset card
     document.querySelectorAll('.bg-preset-card').forEach(c =>
         c.classList.toggle('active', c.dataset.preset === (cfg.preset || 'default')));
+    // Active cursor option
+    const curMode = cfg.cursor || 'argus';
+    document.querySelectorAll('.bg-cursor-opt').forEach(b =>
+        b.classList.toggle('active', b.dataset.cursor === curMode));
     // Sliders
     const ov = document.getElementById('bg-overlay-slider');
     const bl = document.getElementById('bg-blur-slider');
@@ -7358,6 +7363,22 @@ function setBgPreset(preset) {
     _syncBgUI();
 }
 window.setBgPreset = setBgPreset;
+
+function setCursorMode(mode) {
+    if (!CURSOR_MODES.includes(mode)) mode = 'argus';
+    const cfg = _saveBgCfg({ cursor: mode });
+    _applyCursor(cfg);
+    _syncBgUI();
+    if (window.showToast) {
+        window.showToast(mode === 'system' ? '🖱 Puntero del sistema activado' : '🖱 Puntero Argus activado', 'success', { duration: 2000 });
+    }
+}
+window.setCursorMode = setCursorMode;
+
+function _applyCursor(cfg) {
+    const mode = (cfg && cfg.cursor) || 'argus';
+    document.body.classList.toggle('cursor-system', mode === 'system');
+}
 
 function handleBgUpload(e) {
     const file = e.target.files[0];
@@ -7401,6 +7422,8 @@ window.updateBgGrid    = updateBgGrid;
 
 function resetBg() {
     localStorage.removeItem('argus_bg');
+    document.body.classList.remove('cursor-system');
+    BG_PRESETS.forEach(p => document.body.classList.remove(`bg-${p}`));
     _applyBg({});
     _syncBgUI();
     const prev = document.getElementById('bg-upload-preview');
@@ -7441,12 +7464,19 @@ function _applyBg(cfg) {
 
     // Grid opacity
     document.documentElement.style.setProperty('--grid-opacity', grid / 100);
+
+    // Cursor mode (argus / system)
+    _applyCursor(cfg);
 }
 
 // Init on load
 document.addEventListener('DOMContentLoaded', () => {
     const cfg = _loadBgCfg();
-    if (cfg && Object.keys(cfg).length > 0) _applyBg(cfg);
+    if (cfg && Object.keys(cfg).length > 0) {
+        _applyBg(cfg);
+    } else {
+        _applyCursor({});
+    }
 
     // Drag & drop on the upload area
     const uploadLabel = document.getElementById('bg-upload-label');

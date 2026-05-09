@@ -12,7 +12,7 @@
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/logo.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=22">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=23">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel-bronze-premium.css') }}?v=1">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-ui.css') }}?v=16">
     <!-- Mobile responsive overrides (Pack 27) — DEBE cargarse último para sobrescribir paddings/footer/dropdowns -->
@@ -2455,7 +2455,7 @@
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
     <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=17"></script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=69"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=70"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────
@@ -2637,6 +2637,29 @@
                 <div style="position:absolute;inset:0;background:radial-gradient(ellipse 70% 50% at 30% 70%,rgba(16,185,129,0.4),transparent 55%),radial-gradient(ellipse 50% 40% at 70% 30%,rgba(52,211,153,0.25),transparent 50%);filter:blur(8px);"></div>
                 <span>Forest 🌿</span>
             </div>
+            <div class="bg-preset-card" data-preset="classic" onclick="setBgPreset('classic')"
+                title="Diseño morado original (v1.x)"
+                style="background:linear-gradient(160deg,#0a0820,#14102e,#0e0a24);">
+                <div style="position:absolute;inset:0;background:radial-gradient(ellipse 70% 50% at 25% 30%,rgba(139,92,246,0.45),transparent 55%),radial-gradient(ellipse 60% 45% at 75% 70%,rgba(168,85,247,0.30),transparent 50%);filter:blur(8px);"></div>
+                <span>Clásico 💜</span>
+            </div>
+        </div>
+
+        <!-- Cursor / Puntero -->
+        <div style="font-size:11px;font-weight:700;color:var(--text-d);text-transform:uppercase;letter-spacing:1px;margin-top:20px;margin-bottom:8px;">Puntero del ratón</div>
+        <div class="bg-cursor-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <button type="button" class="bg-cursor-opt" data-cursor="argus" onclick="setCursorMode('argus')"
+                style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;font-size:12px;text-align:left;">
+                <span style="display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 20 20"><circle cx="4" cy="4" r="3.5" fill="#B87333"/><circle cx="4" cy="4" r="1.4" fill="white"/></svg>
+                </span>
+                <span><strong style="color:var(--text);">Argus</strong><br><span style="font-size:10px;color:var(--text-d);">Punto cobre/morado animado</span></span>
+            </button>
+            <button type="button" class="bg-cursor-opt" data-cursor="system" onclick="setCursorMode('system')"
+                style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;font-size:12px;text-align:left;">
+                <span style="display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;font-size:14px;">🖱</span>
+                <span><strong style="color:var(--text);">Windows</strong><br><span style="font-size:10px;color:var(--text-d);">Puntero estándar del sistema</span></span>
+            </button>
         </div>
 
         <!-- Upload custom -->
