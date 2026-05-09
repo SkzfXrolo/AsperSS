@@ -1,3 +1,7 @@
+# Archivos temporales del agente
+.commit_msg.tmp
+*.tmp.txt
+
 # Python
 __pycache__/
 *.py[cod]
