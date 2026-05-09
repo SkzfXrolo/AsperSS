@@ -732,6 +732,25 @@ public final class AnticheatListener implements Listener {
     //  Scaffold — colocar bloque mirando hacia abajo mientras se mueve
     // ─────────────────────────────────────────────────────────────────────
 
+    /**
+     * Scaffold detection.
+     *
+     * <p>Distinguir scaffold cheat de construccion normal es complicado.
+     * Construir un piso vainilla: pitch alto + placements debajo + frecuencia
+     * alta — los 3 trigger ingenuos. Scaffold cheat se diferencia porque el
+     * jugador esta SUSPENDIDO EN EL AIRE sostenido SOLO por los bloques que
+     * el mismo va poniendo (typical pattern: caminar hacia atras sobre nada,
+     * el cheat coloca el bloque siguiente que lo sostiene).
+     *
+     * <p>Criterios estrictos para flag:
+     * <ol>
+     *   <li>pitch > 70 (mirando casi recto abajo, no construyendo a 45 grados)</li>
+     *   <li>{@code !isOnGround()} (esta en el aire al colocar)</li>
+     *   <li>el bloque debajo de sus pies era AIR antes del placement (no
+     *       hay suelo solido sosteniendolo)</li>
+     *   <li>>= 6 placements consecutivos cumpliendo lo anterior en 2s</li>
+     * </ol>
+     */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onPlace(BlockPlaceEvent e) {
         if (!cfg.isCheckEnabled("scaffold")) return;
@@ -739,28 +758,40 @@ public final class AnticheatListener implements Listener {
         if (p.getGameMode() == GameMode.CREATIVE || p.getGameMode() == GameMode.SPECTATOR) return;
         if (p.hasPermission("argus.ac.bypass")) return;
 
-        // Pitch = angulo vertical de la mirada. > 60deg = mirando bastante abajo.
-        // Si ademas se mueve horizontalmente y el bloque se coloca DEBAJO suyo,
-        // es scaffold (estilo Towering / Bridging).
+        ConfigurationSection sec = cfg.checkSection("scaffold");
+        float minPitch  = sec != null ? (float) sec.getDouble("min_pitch_deg", 70.0) : 70f;
+        long  windowMs  = sec != null ? sec.getLong("window_ms", 2000L) : 2000L;
+        int   minHits   = sec != null ? sec.getInt("min_hits", 6) : 6;
+
         float pitch = p.getLocation().getPitch();
-        if (pitch < 50f) return;
+        if (pitch < minPitch) return;
 
         Block placed = e.getBlockPlaced();
-        Location pl = p.getLocation();
-        if (placed.getY() > pl.getY()) return; // bloque arriba: no es scaffold
+        Location pl  = p.getLocation();
+        if (placed.getY() > pl.getY()) return;
+
+        // Criterio fuerte: el jugador esta en el aire Y no hay suelo solido
+        // bajo sus pies (excluyendo el bloque que acaba de colocar). Esto
+        // distingue scaffold cheat de construir un piso normal sobre suelo.
+        if (p.isOnGround()) return;
+        Block belowFeet = pl.clone().add(0, -0.2, 0).getBlock();
+        Block twoBelow  = pl.clone().add(0, -1.2, 0).getBlock();
+        // Si el bloque debajo NO es aire ni el bloque que acaba de poner,
+        // hay suelo solido = construccion normal.
+        if (!belowFeet.getType().isAir() && !belowFeet.equals(placed)) return;
+        if (!twoBelow.getType().isAir() && !twoBelow.equals(placed)) return;
 
         PlayerState s = state(p);
         long now = System.currentTimeMillis();
         s.scaffoldHits.addLast(now);
-        while (!s.scaffoldHits.isEmpty() && now - s.scaffoldHits.peekFirst() > 3000L) {
+        while (!s.scaffoldHits.isEmpty() && now - s.scaffoldHits.peekFirst() > windowMs) {
             s.scaffoldHits.pollFirst();
         }
-        if (s.scaffoldHits.size() >= 4) {
-            // 4 placements en 3s mirando hacia abajo y debajo del player → scaffold
-            ViolationLevel lvl = s.scaffoldHits.size() >= 8 ? ViolationLevel.HIGH
-                                                            : ViolationLevel.MID;
+        if (s.scaffoldHits.size() >= minHits) {
+            ViolationLevel lvl = s.scaffoldHits.size() >= (minHits * 2) ? ViolationLevel.HIGH
+                                                                       : ViolationLevel.MID;
             mgr.flag(new Violation(p, "scaffold", lvl,
-                s.scaffoldHits.size() + " placements abajo en 3s, pitch=" + (int)pitch));
+                s.scaffoldHits.size() + " placements en aire en " + (windowMs/1000) + "s, pitch=" + (int)pitch));
             s.scaffoldHits.clear();
         }
     }
