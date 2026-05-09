@@ -2341,6 +2341,31 @@ def _ensure_plugin_keys_schema():
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_cpk_api_key ON company_plugin_keys(api_key)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_cpk_company ON company_plugin_keys(company_id)")
 
+                # Tabla de violations del anti-cheat (Pack 43).
+                # Cada fila es una deteccion individual hecha por el plugin Bukkit.
+                # Se crea via POST /api/plugin/violation y se consume desde el
+                # panel staff (pestana Anti-Cheat) y opcionalmente Discord.
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS plugin_violations (
+                        id SERIAL PRIMARY KEY,
+                        plugin_key_id INTEGER,
+                        company_id INTEGER,
+                        player_uuid VARCHAR(40),
+                        player_name VARCHAR(64),
+                        check_name VARCHAR(64),
+                        level VARCHAR(16),
+                        details VARCHAR(500),
+                        server_label VARCHAR(160),
+                        related_token_id INTEGER,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_pv_company ON plugin_violations(company_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_pv_player ON plugin_violations(player_name)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_pv_check ON plugin_violations(check_name)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_pv_level ON plugin_violations(level)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_pv_created ON plugin_violations(created_at DESC)")
+
                 # Columnas adicionales en scan_tokens — solo ALTER si no existen
                 _migrations = [
                     ('plugin_key_id', "ALTER TABLE scan_tokens ADD COLUMN plugin_key_id INTEGER"),
@@ -2652,6 +2677,225 @@ def api_plugin_issue_token():
         print(f"ERROR api_plugin_issue_token: {type(e).__name__}: {e}")
         traceback.print_exc()
         return jsonify({'success': False, 'error': f'Error interno: {str(e)}'}), 500
+
+
+@app.route('/api/plugin/violation', methods=['POST'])
+def api_plugin_violation():
+    """Recibe una violation del anti-cheat del plugin Bukkit.
+
+    Body JSON:
+      - player_uuid (str)
+      - player_name (str)
+      - check_name (str): "reach", "fly", etc.
+      - level (str): "LOW" / "MID" / "HIGH" / "CRITICAL"
+      - details (str): texto humano legible
+      - ts_ms (str/int): timestamp del lado del server MC
+
+    Auth via header X-Argus-Plugin-Key. Devuelve 200 con id de la violation.
+    Es fire-and-forget: el plugin ignora errores 5xx (gameplay no se rompe).
+    """
+    _plugin_schema_guard()
+    api_key = (
+        request.headers.get('X-Argus-Plugin-Key')
+        or request.headers.get('Authorization', '').replace('Bearer ', '').strip()
+    )
+    if not api_key:
+        return jsonify({'success': False, 'error': 'API key requerida'}), 401
+
+    body = request.get_json(silent=True) or {}
+    player_uuid = (body.get('player_uuid') or '')[:40]
+    player_name = (body.get('player_name') or '')[:64]
+    check_name  = (body.get('check_name') or 'unknown')[:64]
+    level       = (body.get('level') or 'LOW').upper()[:16]
+    details     = (body.get('details') or '')[:500]
+
+    if level not in ('LOW', 'MID', 'HIGH', 'CRITICAL'):
+        level = 'LOW'
+
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT id, company_id, label, is_active "
+                f"FROM company_plugin_keys WHERE api_key = {_PH}",
+                (api_key,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'success': False, 'error': 'API key invalida'}), 401
+            row = dict(row) if not isinstance(row, dict) else row
+            if not row.get('is_active'):
+                return jsonify({'success': False, 'error': 'API key revocada'}), 403
+
+            new_id = _insert_id(
+                cursor,
+                f"INSERT INTO plugin_violations "
+                f"(plugin_key_id, company_id, player_uuid, player_name, check_name, level, details, server_label) "
+                f"VALUES ({_PH}, {_PH}, {_PH}, {_PH}, {_PH}, {_PH}, {_PH}, {_PH})",
+                (row['id'], row['company_id'], player_uuid, player_name,
+                 check_name, level, details, row.get('label'))
+            )
+            return jsonify({
+                'success': True,
+                'violation_id': new_id,
+                'level': level,
+            }), 201
+    except Exception as e:
+        print(f"ERROR api_plugin_violation: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/plugin/violations', methods=['GET'])
+@login_required
+def api_list_violations():
+    """Lista violations del anti-cheat para el panel staff.
+
+    Query params:
+      - limit (int, default 100, max 500)
+      - offset (int, default 0)
+      - player (str): filtrar por nombre exacto
+      - check (str): filtrar por check_name (reach, fly, ...)
+      - level (str): LOW/MID/HIGH/CRITICAL
+      - since_minutes (int): ultimos N minutos
+
+    Aislamiento:
+      - Owner / admin global: ve TODAS las violations.
+      - Staff de empresa: solo ve las de su empresa.
+    """
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+
+        roles = user.get('roles') or []
+        if isinstance(roles, str):
+            try: roles = json.loads(roles)
+            except Exception: roles = [roles]
+        roles_lower = {str(r).lower() for r in roles}
+        is_global_admin = bool(roles_lower & {'admin', 'owner', 'super_admin'})
+        company_id = _resolve_company_id_for_user(user)
+
+        limit  = max(1, min(500, int(request.args.get('limit', 100))))
+        offset = max(0, int(request.args.get('offset', 0)))
+        player = (request.args.get('player') or '').strip()[:64]
+        check  = (request.args.get('check') or '').strip()[:64]
+        level  = (request.args.get('level') or '').strip().upper()[:16]
+        since_min = request.args.get('since_minutes')
+
+        where = []
+        params = []
+        if not is_global_admin:
+            if not company_id:
+                return jsonify({'success': True, 'violations': [], 'total': 0}), 200
+            where.append(f"company_id = {_PH}")
+            params.append(company_id)
+        if player:
+            where.append(f"LOWER(player_name) = LOWER({_PH})")
+            params.append(player)
+        if check:
+            where.append(f"check_name = {_PH}")
+            params.append(check)
+        if level in ('LOW', 'MID', 'HIGH', 'CRITICAL'):
+            where.append(f"level = {_PH}")
+            params.append(level)
+        if since_min:
+            try:
+                since_int = max(1, min(43200, int(since_min)))
+                where.append(f"created_at >= NOW() - INTERVAL '{since_int} minutes'")
+            except Exception:
+                pass
+
+        where_sql = ('WHERE ' + ' AND '.join(where)) if where else ''
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT id, plugin_key_id, company_id, player_uuid, player_name, "
+                f"check_name, level, details, server_label, related_token_id, created_at "
+                f"FROM plugin_violations {where_sql} "
+                f"ORDER BY created_at DESC LIMIT {_PH} OFFSET {_PH}",
+                tuple(params + [limit, offset])
+            )
+            rows = cursor.fetchall()
+            cursor.execute(
+                f"SELECT COUNT(*) AS c FROM plugin_violations {where_sql}",
+                tuple(params)
+            )
+            total_row = cursor.fetchone()
+            total = (dict(total_row) if not isinstance(total_row, dict) else total_row).get('c', 0)
+
+        violations = []
+        for r in rows:
+            d = dict(r) if not isinstance(r, dict) else r
+            for k, v in list(d.items()):
+                if hasattr(v, 'isoformat'):
+                    d[k] = v.isoformat()
+            violations.append(d)
+        return jsonify({'success': True, 'violations': violations, 'total': total}), 200
+    except Exception as e:
+        print(f"ERROR api_list_violations: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/plugin/violations/stats', methods=['GET'])
+@login_required
+def api_violations_stats():
+    """Stats agregados para el panel: total por nivel, top players, top checks."""
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        roles = user.get('roles') or []
+        if isinstance(roles, str):
+            try: roles = json.loads(roles)
+            except Exception: roles = [roles]
+        roles_lower = {str(r).lower() for r in roles}
+        is_global_admin = bool(roles_lower & {'admin', 'owner', 'super_admin'})
+        company_id = _resolve_company_id_for_user(user)
+
+        since_min = max(1, min(43200, int(request.args.get('since_minutes', 1440))))
+        scope_clause = ''
+        params = []
+        if not is_global_admin:
+            if not company_id:
+                return jsonify({'success': True, 'by_level': {}, 'top_players': [], 'top_checks': []}), 200
+            scope_clause = f"company_id = {_PH} AND "
+            params.append(company_id)
+
+        time_clause = f"created_at >= NOW() - INTERVAL '{since_min} minutes'"
+        where = scope_clause + time_clause
+
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT level, COUNT(*) AS c FROM plugin_violations WHERE {where} GROUP BY level",
+                tuple(params)
+            )
+            by_level = {}
+            for r in cursor.fetchall():
+                d = dict(r) if not isinstance(r, dict) else r
+                by_level[d.get('level')] = d.get('c')
+            cursor.execute(
+                f"SELECT player_name, COUNT(*) AS c FROM plugin_violations "
+                f"WHERE {where} GROUP BY player_name ORDER BY c DESC LIMIT 10",
+                tuple(params)
+            )
+            top_players = [dict(r) if not isinstance(r, dict) else r for r in cursor.fetchall()]
+            cursor.execute(
+                f"SELECT check_name, COUNT(*) AS c FROM plugin_violations "
+                f"WHERE {where} GROUP BY check_name ORDER BY c DESC LIMIT 10",
+                tuple(params)
+            )
+            top_checks = [dict(r) if not isinstance(r, dict) else r for r in cursor.fetchall()]
+
+        return jsonify({
+            'success': True,
+            'since_minutes': since_min,
+            'by_level': by_level,
+            'top_players': top_players,
+            'top_checks': top_checks,
+        }), 200
+    except Exception as e:
+        print(f"ERROR api_violations_stats: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/plugin/health', methods=['GET'])

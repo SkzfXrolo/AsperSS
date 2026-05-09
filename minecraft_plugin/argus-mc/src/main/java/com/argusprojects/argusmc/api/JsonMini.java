@@ -10,11 +10,11 @@ import java.util.Map;
  * <p>Suficiente para los 3-4 endpoints que usa este plugin. Si el backend
  * empieza a devolver objetos anidados, conviene agregar Gson como dependencia.
  */
-final class JsonMini {
+public final class JsonMini {
 
     private JsonMini() {}
 
-    static String toJson(Map<String, String> data) {
+    public static String toJson(Map<String, String> data) {
         StringBuilder sb = new StringBuilder("{");
         boolean first = true;
         for (Map.Entry<String, String> e : data.entrySet()) {
@@ -118,7 +118,7 @@ final class JsonMini {
         }
     }
 
-    private static String escape(String raw) {
+    public static String escape(String raw) {
         if (raw == null) return "";
         StringBuilder sb = new StringBuilder(raw.length() + 8);
         for (int i = 0; i < raw.length(); i++) {

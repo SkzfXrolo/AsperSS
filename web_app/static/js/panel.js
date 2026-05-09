@@ -1453,6 +1453,7 @@ function showSection(sectionName) {
         'administracion': 'Administración',
         'mi-empresa': 'Mi Empresa',
         'equipo': 'Equipo',
+        'anticheat': 'Anti-Cheat',
         'super-admin': 'Super Admin',
     };
     const titleElement = document.getElementById('section-title');

@@ -103,4 +103,84 @@ public final class ArgusApiClient {
             return HealthResponse.error(ex.getClass().getSimpleName() + ": " + ex.getMessage());
         }
     }
+
+    // ──────────────────────────────────────────────────────────────────────
+    //  Anti-Cheat: reportar violations al backend Argus + Discord
+    // ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * POSTea una violation al backend para que aparezca en el panel
+     * staff (pestaña Anti-Cheat). Fire-and-forget: si falla, solo
+     * loguea WARNING. El gameplay no se bloquea.
+     */
+    public void reportViolationAsync(com.argusprojects.argusmc.anticheat.Violation v) {
+        executor.submit(() -> {
+            try {
+                String url = cfg.getBaseUrl() + "/api/plugin/violation";
+                java.util.Map<String, String> body = new java.util.HashMap<>();
+                body.put("player_uuid", v.playerUuid.toString());
+                body.put("player_name", v.playerName);
+                body.put("check_name",  v.checkName);
+                body.put("level",       v.level.name());
+                body.put("details",     v.details);
+                body.put("ts_ms",       String.valueOf(v.timestampMs));
+                String json = JsonMini.toJson(body);
+
+                HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(cfg.getTimeoutSeconds()))
+                    .header("Content-Type", "application/json")
+                    .header("X-Argus-Plugin-Key", cfg.getApiKey())
+                    .header("User-Agent", "ArgusMC-Plugin/" + plugin.getDescription().getVersion())
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+                HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() >= 400) {
+                    plugin.getLogger().log(Level.FINE, "Argus reportViolation HTTP " + resp.statusCode() + ": " + resp.body());
+                }
+            } catch (Exception ex) {
+                plugin.getLogger().log(Level.FINE, "Argus reportViolation error: " + ex.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Envia un embed a un webhook de Discord con la violation.
+     * El color depende del nivel (LOW=amarillo, MID=naranja, HIGH=rojo, CRITICAL=morado oscuro).
+     */
+    public void sendDiscordWebhookAsync(String webhookUrl, com.argusprojects.argusmc.anticheat.Violation v) {
+        executor.submit(() -> {
+            try {
+                int color;
+                switch (v.level) {
+                    case CRITICAL: color = 0x550066; break;
+                    case HIGH:     color = 0xCC0000; break;
+                    case MID:      color = 0xFF8800; break;
+                    default:       color = 0xFFCC00; break;
+                }
+                // Serializamos el embed a mano (JsonMini no soporta nesting).
+                String title   = "Argus AC · " + v.level.name() + " · " + v.checkName;
+                String desc    = "**Jugador:** `" + v.playerName + "`\n"
+                               + "**Detalle:** " + v.details;
+                String json = "{\"username\":\"Argus AntiCheat\","
+                            + "\"embeds\":[{\"title\":\"" + JsonMini.escape(title) + "\","
+                            + "\"description\":\"" + JsonMini.escape(desc) + "\","
+                            + "\"color\":" + color + ","
+                            + "\"timestamp\":\"" + java.time.Instant.ofEpochMilli(v.timestampMs).toString() + "\""
+                            + "}]}";
+
+                HttpRequest req = HttpRequest.newBuilder(URI.create(webhookUrl))
+                    .timeout(Duration.ofSeconds(cfg.getTimeoutSeconds()))
+                    .header("Content-Type", "application/json")
+                    .header("User-Agent", "ArgusMC-Plugin/" + plugin.getDescription().getVersion())
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+                HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() >= 400) {
+                    plugin.getLogger().log(Level.FINE, "Discord webhook HTTP " + resp.statusCode() + ": " + resp.body());
+                }
+            } catch (Exception ex) {
+                plugin.getLogger().log(Level.FINE, "Discord webhook error: " + ex.getMessage());
+            }
+        });
+    }
 }

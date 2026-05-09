@@ -5,30 +5,36 @@ api-version: '1.19'
 author: Argus Projects
 authors: [Argus Projects]
 website: https://argusprojects.com
-description: Argus anti-cheat — emite tokens de Screen Share desde el server (LuckyPerms compatible)
+description: Argus anti-cheat — Screen Share + detector de hacks (LuckyPerms compatible)
 
 # LuckyPerms se hookea automaticamente: usamos hasPermission() de Bukkit y LP responde.
 softdepend: [LuckyPerms]
 
 commands:
-  ss:
-    description: Genera un codigo de Screen Share para un jugador y se lo envia
-    usage: /ss <player> [reason]
-    aliases: [argusss, screenshare]
-    permission: argus.ss.use
-    permission-message: "&cNo tienes permiso para usar /ss. Pidele a un admin que te asigne el permiso 'argus.ss.use'."
   argus:
-    description: Comandos administrativos del plugin Argus
-    usage: /argus <reload|info|test>
-    permission: argus.admin
-    permission-message: "&cNo tienes permiso para usar /argus."
+    description: Comando unificado de Argus (check / reload / info / test)
+    usage: |
+      /argus check <jugador> [razon] - emite codigo de Screen Share
+      /argus reload                  - recarga config.yml
+      /argus info                    - muestra estado y quota
+      /argus test                    - health check de la API
+    aliases: []
 
 permissions:
   argus.ss.use:
-    description: Permite usar /ss para solicitar un Screen Share
+    description: Permite usar /argus check para emitir un Screen Share
     default: op
   argus.ss.bypass:
-    description: Exime al jugador de poder ser objetivo de /ss
+    description: Exime al jugador de poder ser objetivo de /argus check
+    default: false
+  argus.ss.notify:
+    description: Recibe el broadcast cuando otro staff ejecuta /argus check
+    default: false
+  argus.alerts:
+    description: Recibe alertas en chat cuando el anti-cheat detecta violations
+    default: op
+  argus.ac.bypass:
+    description: Exime al jugador del anti-cheat (NO acumula violations)
     default: false
   argus.admin:
     description: Permite recargar la config y ver info del plugin

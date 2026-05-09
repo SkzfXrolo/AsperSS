@@ -1,11 +1,11 @@
 # ============================================================
-#  Argus MC — Plugin de Screen Share
+#  Argus MC — Plugin Anti-Cheat + Screen Share
 #  https://argusprojects.com
 # ============================================================
 #
 # Como obtener tu API key:
-#   1. Entra al panel staff (https://asperss.onrender.com/panel)
-#   2. Si eres admin de empresa, ve a "Plugin keys" y crea una nueva.
+#   1. Entra al panel super-admin: https://asperss.onrender.com/aspers-sa
+#   2. Baja a la seccion "Plugin Keys Minecraft" y crea una nueva.
 #   3. La key SE MUESTRA UNA SOLA VEZ. Guardala aqui inmediatamente.
 #   4. Recarga el plugin con  /argus reload
 #
@@ -23,10 +23,13 @@ api:
   # Timeout en segundos para las llamadas HTTP.
   timeout_seconds: 12
 
-# ── Comportamiento del comando /ss ────────────────────────────
+# ── Comportamiento del comando /argus check ───────────────────
+# (anteriormente /ss — renombrado para no chocar con plugins de
+#  freeze que usan /ss. Aliases del subcomando: ss, screenshare,
+#  scan. Ej: /argus check Pepe hablando raro)
 ss:
   # Si true, el target tambien recibe el codigo y la URL en chat
-  # privado. Si false, solo el staff que ejecuto /ss lo ve.
+  # privado. Si false, solo el staff que ejecuto /argus check lo ve.
   notify_target: true
 
   # Tiempo (en minutos) que el plugin recordara al staff en
@@ -38,11 +41,90 @@ ss:
   # todos los staff con el permiso 'argus.ss.notify'.
   broadcast_to_staff: true
 
-  # Mensaje opcional al ejecutar /ss <player> sin razon — pide razon.
+  # Si true, exige una razon para todos los SS manuales.
   require_reason: false
 
   # Numero minimo de chars de la razon cuando se exige.
   min_reason_length: 4
+
+# ── ANTI-CHEAT ────────────────────────────────────────────────
+# Detecta cheats por comportamiento. Cada check produce
+# "violations" con un nivel (LOW / MID / HIGH / CRITICAL).
+#
+# Reglas globales del manager (umbral acumulado por minuto):
+#   - LOW:      solo log + alerta in-game al staff con argus.alerts.
+#   - MID:      kick automatico con razon legible + alerta + Discord.
+#   - HIGH:     kick + auto-emision de SS forzado al volver + Discord.
+#   - CRITICAL: ban temporal (configurable abajo) + alerta urgente.
+#
+# Los jugadores con permiso 'argus.ac.bypass' nunca acumulan
+# violations (util para staff/owners en modo creative volando).
+anticheat:
+  enabled: true
+
+  # Si false, el plugin solo loguea sin kickear/banear (modo observador
+  # ideal para los primeros dias en un server nuevo, mientras ajustas
+  # thresholds si tienes muchos falsos positivos).
+  enforcement: true
+
+  # Acciones por nivel acumulado de violations en una ventana de
+  # 60 segundos. Si quieres deshabilitar una accion concreta, deja 0.
+  thresholds:
+    low_alert_at:    1   # 1 LOW basta para alertar a staff
+    mid_kick_at:     1   # 1 MID = kick inmediato
+    high_force_ss:   1   # 1 HIGH = kick + auto-SS al reconectar
+    critical_ban_at: 1   # 1 CRITICAL = ban temporal
+
+  # Duracion del ban temporal en CRITICAL (en minutos).
+  critical_ban_minutes: 60
+
+  # Acumulador resetea cada N segundos (sliding window).
+  violation_window_seconds: 60
+
+  # Manda violations al backend para que aparezcan en el panel.
+  # Requiere api.key valida.
+  report_to_backend: true
+
+  # Opcional: webhook de Discord para alertas HIGH y CRITICAL.
+  # Dejar vacio para deshabilitar.
+  discord_webhook_url: ""
+
+  # Permite desactivar checks individualmente o ajustar sus
+  # umbrales por defecto. Cualquier check no listado usa sus
+  # defaults internos.
+  checks:
+    reach:
+      enabled: true
+      max_distance: 4.5      # bloques (vainilla = 3.0 melee, dejamos margen)
+    killaura_angle:
+      enabled: true
+      max_angle_deg: 60      # angulo entre cabeza-target en hit
+    autoclicker:
+      enabled: true
+      max_cps: 20            # clicks por segundo sostenidos
+    fly:
+      enabled: true
+      max_air_ticks: 60      # ticks en aire sin caer ni saltar
+    speed:
+      enabled: true
+      max_blocks_per_sec: 8.0
+    scaffold:
+      enabled: true
+    nofall:
+      enabled: true
+    jesus:
+      enabled: true          # caminar sobre agua sin hundirse
+    fasteat:
+      enabled: true
+      min_eat_ms: 1400       # comer en menos de esto = fastEat
+    chat_spam:
+      enabled: true
+      max_msgs_per_5s: 5
+    cmd_spam:
+      enabled: true
+      max_cmds_per_5s: 8
+    inventory_move:
+      enabled: true          # mover inventario mientras camina rapido
 
 # ── Mensajes (puedes traducir libremente) ─────────────────────
 messages:
@@ -61,7 +143,7 @@ messages:
     &6&l[ ARGUS SS ]&r &7Codigo emitido para &e{target}&7:
     &fCodigo: &e&l{code}    &7Expira en: &c30 min
     &7Descarga: &b{download}
-    &7Si el target no descarga en 30 min, vuelve a ejecutar /ss.
+    &7Si el target no descarga en 30 min, repite /argus check.
     &7&m──────────────────────────────────────────&r
   ss_issued_target: |
     &7&m──────────────────────────────────────────&r
@@ -83,3 +165,19 @@ messages:
     &7Estado:   {status}
     &7Empresa:  &f{company}
     &7Quota:    &e{used}/{quota} &7emisiones hoy.
+
+  # ── Anti-Cheat ─────────────────────────────────────────────
+  ac_alert_low: "&8[&6AC&8] &7{player} &8> &e{check} &8({details})"
+  ac_alert_mid: "&8[&6AC&8] &cMID &7{player} &8> &c{check} &8({details}) &7- kick"
+  ac_alert_high: "&8[&6AC&8] &4&lHIGH &7{player} &8> &4{check} &8({details}) &7- kick + SS forzado"
+  ac_alert_critical: "&8[&6AC&8] &4&lCRITICAL &7{player} &8> &4{check} &8({details}) &7- BAN temporal"
+  ac_kick_message: |
+    &cFuiste expulsado por sospecha de cheats.
+    &7Check: &f{check}
+    &7Detalle: &f{details}
+    &7Si crees que es un error, abre ticket en el Discord del server.
+  ac_ban_message: |
+    &cBaneado temporalmente por uso de cheats.
+    &7Check: &f{check}
+    &7Detalle: &f{details}
+    &7Termina en {minutes} minutos. Apela en Discord.
