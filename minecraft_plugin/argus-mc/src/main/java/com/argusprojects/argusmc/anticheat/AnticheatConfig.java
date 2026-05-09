@@ -30,12 +30,16 @@ public final class AnticheatConfig {
         this.root = cfg;
         this.enabled              = cfg.getBoolean("anticheat.enabled", true);
         this.enforcement          = cfg.getBoolean("anticheat.enforcement", true);
-        this.lowAlertAt           = Math.max(1, cfg.getInt("anticheat.thresholds.low_alert_at", 1));
-        this.midKickAt            = Math.max(1, cfg.getInt("anticheat.thresholds.mid_kick_at", 1));
-        this.highForceSs          = Math.max(1, cfg.getInt("anticheat.thresholds.high_force_ss", 1));
-        this.criticalBanAt        = Math.max(1, cfg.getInt("anticheat.thresholds.critical_ban_at", 1));
+        // Defaults Pack 44.2: thresholds CONSERVADORES para evitar false
+        // positives. Es preferible un cheater que se cuela 30 segundos a un
+        // jugador legitimo kickeado erroneamente. Para servers PvP estrictos,
+        // bajar manualmente en config.yml.
+        this.lowAlertAt           = Math.max(1, cfg.getInt("anticheat.thresholds.low_alert_at", 3));
+        this.midKickAt            = Math.max(1, cfg.getInt("anticheat.thresholds.mid_kick_at", 3));
+        this.highForceSs          = Math.max(1, cfg.getInt("anticheat.thresholds.high_force_ss", 2));
+        this.criticalBanAt        = Math.max(1, cfg.getInt("anticheat.thresholds.critical_ban_at", 2));
         this.criticalBanMinutes   = Math.max(1, cfg.getInt("anticheat.critical_ban_minutes", 60));
-        this.violationWindowSeconds = Math.max(10, cfg.getInt("anticheat.violation_window_seconds", 60));
+        this.violationWindowSeconds = Math.max(10, cfg.getInt("anticheat.violation_window_seconds", 90));
         this.reportToBackend      = cfg.getBoolean("anticheat.report_to_backend", true);
         this.discordWebhookUrl    = cfg.getString("anticheat.discord_webhook_url", "").trim();
         this.aiOracleEnabled      = cfg.getBoolean("anticheat.ai_oracle_enabled", true);

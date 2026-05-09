@@ -149,21 +149,45 @@ public final class AnticheatListener implements Listener {
         PlayerState s = state(attacker);
         long now = System.currentTimeMillis();
 
+        // Skipear ataques contra item entities, area effect clouds, etc.
+        // Esos no son hits "reales" y no deben gatillar checks de combate.
+        org.bukkit.entity.EntityType tt = target.getType();
+        if (tt == org.bukkit.entity.EntityType.ITEM
+            || tt == org.bukkit.entity.EntityType.AREA_EFFECT_CLOUD
+            || tt == org.bukkit.entity.EntityType.EXPERIENCE_ORB
+            || tt == org.bukkit.entity.EntityType.LIGHTNING_BOLT) return;
+        // Skipear self-attack (suicidio con bow al aire, etc.)
+        if (target.getUniqueId().equals(attacker.getUniqueId())) return;
+
+        // El damage puede venir indirectamente de un proyectil (arrow, trident,
+        // snowball). En esos casos, EntityDamageByEntityEvent.getDamager() es
+        // el ATTACKER pero el hit fisico no es un swing — ningun packet de
+        // animation acompaña. Los checks de killaura no aplican aca.
+        boolean isMeleeHit = (e.getCause() == EntityDamageEvent.DamageCause.ENTITY_ATTACK
+                           || e.getCause() == EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK);
+
         // 0) Killaura — sin swing previo. Cliente vainilla SIEMPRE envia
         // PlayerAnimationEvent (swing main hand) antes de un EntityDamage.
-        // Si paso > 400ms desde el ultimo swing, o nunca swingeo, es cheat
-        // killaura "silent" que olvida replicar la animation.
-        if (cfg.isCheckEnabled("killaura_no_swing")) {
-            long swingAge = s.lastSwingMs == 0 ? Long.MAX_VALUE : now - s.lastSwingMs;
+        // Si paso > 400ms desde el ultimo swing, es cheat killaura "silent".
+        // Skipeamos:
+        //   - El PRIMER hit del jugador en su sesion (lastSwingMs==0): puede
+        //     que el AnimationEvent y el DamageEvent lleguen invertidos (orden
+        //     de event dispatch no garantizado). 1 falso negativo es preferible
+        //     a 1 falso positivo.
+        //   - Hits que NO son melee directo (proyectiles, sweep collateral).
+        //   - Sweep attack collateral: cuando un hit melee golpea varios
+        //     mobs por el sweep enchant, solo el target principal tiene el
+        //     swing asociado.
+        if (cfg.isCheckEnabled("killaura_no_swing") && isMeleeHit && s.lastSwingMs > 0
+            && e.getCause() != EntityDamageEvent.DamageCause.ENTITY_SWEEP_ATTACK) {
             ConfigurationSection sec = cfg.checkSection("killaura_no_swing");
-            long maxAge = sec != null ? sec.getLong("max_swing_age_ms", 400L) : 400L;
+            long maxAge = sec != null ? sec.getLong("max_swing_age_ms", 600L) : 600L;
+            long swingAge = now - s.lastSwingMs;
             if (swingAge > maxAge) {
                 ViolationLevel lvl = swingAge > 5000 ? ViolationLevel.HIGH
                                                      : ViolationLevel.MID;
                 mgr.flag(new Violation(attacker, "killaura_no_swing", lvl,
-                    swingAge == Long.MAX_VALUE
-                        ? "hit sin swing previo"
-                        : "swing fue hace " + swingAge + "ms (max " + maxAge + "ms)"));
+                    "swing fue hace " + swingAge + "ms (max " + maxAge + "ms)"));
             }
         }
 
@@ -179,88 +203,125 @@ public final class AnticheatListener implements Listener {
                 dist, angle, swingAge, cps + 1, attacker.getLocation().getYaw()));
         }
 
-        // 1) Reach (mas estricto que antes — default 4.0)
-        if (cfg.isCheckEnabled("reach")) {
+        // 1) Reach — Solo aplica para melee, no para proyectiles.
+        //    Default 4.5b (vainilla 1.8 PvP estandar es 3.0 survival pero 4.5
+        //    es lo aceptado en la mayoria de servers). Compensacion de ping:
+        //    100ms de ping = ~1.0 bloque de tolerancia extra (porque el target
+        //    se movio en el intervalo entre client-side hit y server-side check).
+        if (cfg.isCheckEnabled("reach") && isMeleeHit) {
             ConfigurationSection sec = cfg.checkSection("reach");
-            double maxDist = sec != null ? sec.getDouble("max_distance", 4.0) : 4.0;
-            // Distancia entre el ojo del attacker y el punto MAS CERCANO de la
-            // bounding box del target (no del centro). Mas justo y mas dificil
-            // de bypassear con cheats que apuntan al borde de la hitbox.
+            double maxDist = sec != null ? sec.getDouble("max_distance", 4.5) : 4.5;
             double dist = closestDistanceToEntity(attacker.getEyeLocation(), target);
-            if (dist > maxDist) {
+            // Compensacion de ping: hasta +1.5b extra para players con ping alto.
+            double pingComp = 0;
+            try {
+                int ping = attacker.getPing();
+                pingComp = Math.min(1.5, Math.max(0, ping / 100.0));
+            } catch (Throwable ignored) {}
+            double tolerance = maxDist + pingComp;
+            if (dist > tolerance) {
+                double over = dist - tolerance;
                 ViolationLevel lvl;
-                if (dist > maxDist + 2.5)      lvl = ViolationLevel.CRITICAL;
-                else if (dist > maxDist + 1.5) lvl = ViolationLevel.HIGH;
-                else if (dist > maxDist + 0.7) lvl = ViolationLevel.MID;
-                else                            lvl = ViolationLevel.LOW;
+                if (over > 2.5)       lvl = ViolationLevel.CRITICAL;
+                else if (over > 1.5)  lvl = ViolationLevel.HIGH;
+                else if (over > 0.7)  lvl = ViolationLevel.MID;
+                else                  lvl = ViolationLevel.LOW;
                 mgr.flag(new Violation(attacker, "reach", lvl,
-                    String.format("dist=%.2fb al borde (max=%.2fb)", dist, maxDist)));
+                    String.format("dist=%.2fb (max=%.2fb +%.1fb ping)", dist, maxDist, pingComp)));
             }
         }
 
-        // 2) Killaura por angulo — calculado contra TODA la hitbox, no solo el centro.
-        // Vape & co. apuntan al borde de la hitbox para reducir el angulo, asi que
-        // medimos contra el punto MAS CERCANO del bounding box al ray de mirada.
-        if (cfg.isCheckEnabled("killaura_angle")) {
+        // 2) Killaura por angulo — calculado contra TODA la hitbox.
+        //    Solo aplica a hits melee (proyectiles no requieren mirar al target).
+        //    Default 90deg: es FACIL girar 60-80deg en plena pelea PvP entre
+        //    el momento del click y el server-side measurement. 90deg es el
+        //    threshold donde realmente "no se puede haber visto el target".
+        //    Solo flageamos si killaura_angle EN COMBINACION con killaura_no_swing
+        //    o killaura_yaw_snap suman en ViolationManager — solo es señal LOW.
+        if (cfg.isCheckEnabled("killaura_angle") && isMeleeHit) {
             ConfigurationSection sec = cfg.checkSection("killaura_angle");
-            double maxAngle = sec != null ? sec.getDouble("max_angle_deg", 50.0) : 50.0;
+            double maxAngle = sec != null ? sec.getDouble("max_angle_deg", 90.0) : 90.0;
             double angle = minAngleToHitbox(attacker.getEyeLocation(), target);
             if (angle > maxAngle) {
-                ViolationLevel lvl = (angle > 110) ? ViolationLevel.HIGH
-                                   : (angle > 80)  ? ViolationLevel.MID
+                ViolationLevel lvl = (angle > 150) ? ViolationLevel.HIGH
+                                   : (angle > 120) ? ViolationLevel.MID
                                                    : ViolationLevel.LOW;
                 mgr.flag(new Violation(attacker, "killaura_angle", lvl,
                     String.format("angulo=%.0fdeg (max=%.0fdeg)", angle, maxAngle)));
             }
         }
 
-        // 3) Killaura — multi-target (Vape switchea entre N mobs en pocos ms)
-        if (cfg.isCheckEnabled("killaura_multi")) {
+        // 3) Killaura — multi-target. Vape switchea entre N mobs en pocos ms
+        //    para multi-hit. PERO la espada vainilla con Sweeping Edge enchant
+        //    tambien golpea hasta 4 mobs adyacentes en un solo swing (sweep
+        //    attack). Detectamos eso por el cause ENTITY_SWEEP_ATTACK y por
+        //    si el item en mano es una sword con sweeping edge.
+        //    Tampoco contamos hits con cause distinto a ENTITY_ATTACK
+        //    (proyectiles, sweeps son diferentes events).
+        if (cfg.isCheckEnabled("killaura_multi")
+            && e.getCause() == EntityDamageEvent.DamageCause.ENTITY_ATTACK
+            && isHumanLikeTarget(target)) {
             ConfigurationSection sec = cfg.checkSection("killaura_multi");
-            long windowMs = sec != null ? sec.getLong("window_ms", 300L) : 300L;
-            int  minTargets = sec != null ? sec.getInt("min_distinct_targets", 2) : 2;
+            long windowMs = sec != null ? sec.getLong("window_ms", 250L) : 250L;
+            int  minTargets = sec != null ? sec.getInt("min_distinct_targets", 4) : 4;
             UUID tid = target.getUniqueId();
             s.recentTargets.addLast(new long[]{now, tid.getMostSignificantBits(), tid.getLeastSignificantBits()});
             while (!s.recentTargets.isEmpty() && now - s.recentTargets.peekFirst()[0] > windowMs) {
                 s.recentTargets.pollFirst();
             }
-            // Contar distintos UUIDs en la ventana
             java.util.HashSet<Long> uniq = new java.util.HashSet<>();
             for (long[] t : s.recentTargets) uniq.add(t[1] ^ (t[2] << 1));
             if (uniq.size() >= minTargets) {
                 int n = uniq.size();
-                ViolationLevel lvl = n >= 4 ? ViolationLevel.HIGH
-                                   : n >= 3 ? ViolationLevel.MID
+                ViolationLevel lvl = n >= 6 ? ViolationLevel.HIGH
+                                   : n >= 5 ? ViolationLevel.MID
                                             : ViolationLevel.LOW;
                 mgr.flag(new Violation(attacker, "killaura_multi", lvl,
                     n + " targets distintos en " + windowMs + "ms"));
             }
         }
 
-        // 4) Killaura — yaw snap detection. Comparamos el yaw del attacker AHORA
-        // con el yaw "estable" del ultimo PlayerMoveEvent. Si difiere mucho y
-        // hace muy poco, fue un snap silent rotation (Vape, etc.).
-        if (cfg.isCheckEnabled("killaura_yaw_snap")) {
+        // 4) Killaura — yaw snap detection. Comparamos el yaw "estable"
+        //    (ultimo MoveEvent) con el yaw AHORA. Si difiere mucho y hace
+        //    muy poco, sospechoso de silent rotation.
+        //
+        //    PERO: girarse rapido a un enemigo en PvP es totalmente normal.
+        //    Solo flageamos si el snap NO esta orientado HACIA el target (es
+        //    decir, despues del snap el attacker mira en otra direccion que
+        //    no es donde esta el target). Killaura cheats reales hacen snap
+        //    PARA el hit y luego back, asi que medimos la direccion final.
+        if (cfg.isCheckEnabled("killaura_yaw_snap") && isMeleeHit) {
             ConfigurationSection sec = cfg.checkSection("killaura_yaw_snap");
-            double maxDelta = sec != null ? sec.getDouble("max_delta_deg", 70.0) : 70.0;
-            long maxAgeMs   = sec != null ? sec.getLong("max_age_ms", 250L) : 250L;
+            double maxDelta = sec != null ? sec.getDouble("max_delta_deg", 130.0) : 130.0;
+            long maxAgeMs   = sec != null ? sec.getLong("max_age_ms", 200L) : 200L;
             if (s.lastYawSampleMs > 0 && now - s.lastYawSampleMs <= maxAgeMs) {
                 float currentYaw = attacker.getLocation().getYaw();
                 double delta = Math.abs(yawDelta(s.lastMoveYaw, currentYaw));
                 if (delta > maxDelta) {
-                    ViolationLevel lvl = delta > 130 ? ViolationLevel.HIGH
-                                       : delta > 100 ? ViolationLevel.MID
-                                                     : ViolationLevel.LOW;
-                    mgr.flag(new Violation(attacker, "killaura_yaw_snap", lvl,
-                        String.format("yaw delta=%.0fdeg en %dms", delta, now - s.lastYawSampleMs)));
+                    // Calcular el yaw esperado HACIA el target.
+                    double dxT = target.getLocation().getX() - attacker.getLocation().getX();
+                    double dzT = target.getLocation().getZ() - attacker.getLocation().getZ();
+                    float expectedYaw = (float) (Math.toDegrees(Math.atan2(-dxT, dzT)));
+                    double misalign = Math.abs(yawDelta(currentYaw, expectedYaw));
+                    // Si ahora SI esta mirando al target (misalign < 30deg), el snap
+                    // fue legitimo (giro a por el enemigo). Solo flag si despues del
+                    // snap NO esta mirando al target — eso es killaura silent.
+                    if (misalign > 45) {
+                        ViolationLevel lvl = delta > 160 ? ViolationLevel.HIGH
+                                           : ViolationLevel.MID;
+                        mgr.flag(new Violation(attacker, "killaura_yaw_snap", lvl,
+                            String.format("yaw delta=%.0fdeg en %dms (misalign=%.0fdeg)",
+                                delta, now - s.lastYawSampleMs, misalign)));
+                    }
                 }
             }
         }
 
         // 5) Hit through wall — ray-trace desde el ojo hacia el target.
-        // Si encuentra un bloque solido a una distancia menor que la distancia
-        // al target, hay pared entre medio.
-        if (cfg.isCheckEnabled("hit_through_wall")) {
+        //    Solo aplica a melee. Whitelist amplia de bloques que NO son
+        //    pared completa (transparentes, de altura parcial, etc.) — Bukkit
+        //    los marca como solid pero se puede pegar a traves visualmente.
+        if (cfg.isCheckEnabled("hit_through_wall") && isMeleeHit) {
             try {
                 Vector to = target.getLocation().add(0, target.getHeight() / 2.0, 0)
                     .toVector().subtract(attacker.getEyeLocation().toVector());
@@ -270,15 +331,26 @@ public final class AnticheatListener implements Listener {
                     RayTraceResult rt = attacker.getWorld().rayTraceBlocks(
                         attacker.getEyeLocation(), dir, dist - 0.3,
                         org.bukkit.FluidCollisionMode.NEVER, true);
-                    if (rt != null && rt.getHitBlock() != null
-                        && rt.getHitBlock().getType().isSolid()
-                        && !rt.getHitBlock().isPassable()) {
-                        double hitDist = rt.getHitPosition().distance(attacker.getEyeLocation().toVector());
-                        if (hitDist < dist - 0.2) {
-                            mgr.flag(new Violation(attacker, "hit_through_wall", ViolationLevel.HIGH,
-                                String.format("hit a %s a %.1fb a traves de %s",
-                                    target.getType().name().toLowerCase(),
-                                    dist, rt.getHitBlock().getType().name().toLowerCase())));
+                    if (rt != null && rt.getHitBlock() != null) {
+                        Block hitBlock = rt.getHitBlock();
+                        Material bm = hitBlock.getType();
+                        String bn = bm.name();
+                        boolean isPartial =
+                            bn.contains("STAIRS") || bn.contains("SLAB") || bn.contains("FENCE")
+                            || bn.contains("WALL") || bn.contains("GLASS") || bn.contains("BARS")
+                            || bn.contains("DOOR") || bn.contains("TRAPDOOR") || bn.contains("CARPET")
+                            || bn.contains("PANE") || bn.contains("CHAIN") || bn.contains("LANTERN")
+                            || bn.contains("CANDLE") || bn.contains("AMETHYST") || bn.contains("LADDER")
+                            || bn.contains("SCAFFOLDING") || bn.contains("SIGN") || bn.contains("BUTTON")
+                            || bn.contains("PRESSURE_PLATE") || bn.contains("LEAVES");
+                        if (bm.isSolid() && !hitBlock.isPassable() && !isPartial) {
+                            double hitDist = rt.getHitPosition().distance(attacker.getEyeLocation().toVector());
+                            if (hitDist < dist - 0.2) {
+                                mgr.flag(new Violation(attacker, "hit_through_wall", ViolationLevel.HIGH,
+                                    String.format("hit a %s a %.1fb a traves de %s",
+                                        target.getType().name().toLowerCase(),
+                                        dist, bn.toLowerCase())));
+                            }
                         }
                     }
                 }
@@ -286,12 +358,16 @@ public final class AnticheatListener implements Listener {
         }
 
         // 6) Auto-clicker — CPS + varianza de intervalos. Atrapa cheats humanizados.
-        if (cfg.isCheckEnabled("autoclicker")) {
+        //    Solo aplica a melee. Subimos defaults: max_cps=22 (algunos jugadores
+        //    butterfly clickers humanos llegan a 18-20). Variance pivot=12
+        //    (no medir varianza si CPS<12, porque a CPS bajo cualquiera puede
+        //    ser regular). min_stddev=25ms (humanos tipicos: 30-80ms stddev).
+        if (cfg.isCheckEnabled("autoclicker") && isMeleeHit) {
             ConfigurationSection sec = cfg.checkSection("autoclicker");
-            int maxCps = sec != null ? sec.getInt("max_cps", 20) : 20;
-            int variancePivotCps = sec != null ? sec.getInt("variance_min_cps", 8) : 8;
-            double minStdDevMs = sec != null ? sec.getDouble("min_stddev_ms", 15.0) : 15.0;
-            int    minSamples  = sec != null ? sec.getInt("min_samples", 8) : 8;
+            int maxCps = sec != null ? sec.getInt("max_cps", 22) : 22;
+            int variancePivotCps = sec != null ? sec.getInt("variance_min_cps", 12) : 12;
+            double minStdDevMs = sec != null ? sec.getDouble("min_stddev_ms", 25.0) : 25.0;
+            int    minSamples  = sec != null ? sec.getInt("min_samples", 12) : 12;
 
             // Track del intervalo desde el ultimo hit
             if (s.lastAttackMs > 0) {
@@ -307,13 +383,15 @@ public final class AnticheatListener implements Listener {
             }
             int cps = s.attackTimes.size();
             if (cps > maxCps) {
-                ViolationLevel lvl = cps > maxCps + 10 ? ViolationLevel.HIGH
-                                   : cps > maxCps + 5  ? ViolationLevel.MID
+                ViolationLevel lvl = cps > maxCps + 12 ? ViolationLevel.HIGH
+                                   : cps > maxCps + 6  ? ViolationLevel.MID
                                                        : ViolationLevel.LOW;
                 mgr.flag(new Violation(attacker, "autoclicker", lvl,
                     "cps=" + cps + " (max=" + maxCps + ")"));
             }
-            // Varianza: si el player clickea de forma demasiado regular, es bot.
+            // Varianza: si el player clickea con stddev MUY bajo, es bot.
+            //  Solo evaluamos si CPS alto Y muestras suficientes — y aun asi
+            //  el level es solo LOW (señal contributoria, no decisiva).
             else if (cps >= variancePivotCps && s.attackIntervals.size() >= minSamples) {
                 double mean = 0;
                 for (long iv : s.attackIntervals) mean += iv;
@@ -323,9 +401,7 @@ public final class AnticheatListener implements Listener {
                 variance /= s.attackIntervals.size();
                 double stddev = Math.sqrt(variance);
                 if (stddev < minStdDevMs) {
-                    ViolationLevel lvl = stddev < minStdDevMs / 2 ? ViolationLevel.MID
-                                                                  : ViolationLevel.LOW;
-                    mgr.flag(new Violation(attacker, "autoclicker_variance", lvl,
+                    mgr.flag(new Violation(attacker, "autoclicker_variance", ViolationLevel.LOW,
                         String.format("cps=%d stddev=%.1fms (min=%.1fms)", cps, stddev, minStdDevMs)));
                 }
             }
@@ -391,6 +467,18 @@ public final class AnticheatListener implements Listener {
 
     private static double clamp(double v, double lo, double hi) {
         return Math.max(lo, Math.min(hi, v));
+    }
+
+    /**
+     * Si target es un Player o Monster (zombie, pillager, etc.) cuenta como
+     * "humano-like". Items, armor stands, paintings, vehicles no — esos no
+     * son targets validos para killaura.
+     */
+    private static boolean isHumanLikeTarget(Entity t) {
+        if (t instanceof Player) return true;
+        if (t instanceof org.bukkit.entity.Monster) return true;
+        if (t instanceof org.bukkit.entity.Animals) return true;
+        return false;
     }
 
     /** Envia un mensaje de debug a consola + staff con permiso 'argus.alerts'. */
@@ -489,23 +577,46 @@ public final class AnticheatListener implements Listener {
             s.lastFallDistance = p.getFallDistance();
         }
 
-        // Jesus check (caminar sobre agua sin sumergirse)
+        // Jesus — caminar sobre agua sin sumergirse.
+        //
+        // FALSE POSITIVES comunes que tenemos que skipear:
+        //  - Lily pad sobre agua (bloque solido pisable encima del agua).
+        //  - Frost Walker enchant (convierte agua adyacente en hielo).
+        //  - Bloques solidos puestos encima del agua (ej: cualquier bridge).
+        //  - Ice / packed ice / blue ice / frosted ice en contacto.
+        //  - Bubble columns elevando al jugador.
+        //  - Boats fuera del water (ya skipeamos vehicle pero por las dudas).
+        //
+        // Solo flageamos si efectivamente NO hay nada solido entre los pies y
+        // el agua, no esta en un bote, no tiene Frost Walker.
         if (cfg.isCheckEnabled("jesus")) {
-            Block below = to.clone().add(0, -0.05, 0).getBlock();
-            Block at    = to.getBlock();
-            boolean liquidBelow = below.isLiquid();
+            Block below   = to.clone().add(0, -0.05, 0).getBlock();
+            Block belowDeep = to.clone().add(0, -0.5, 0).getBlock();
+            Block at      = to.getBlock();
+            boolean liquidBelow = below.isLiquid() || belowDeep.isLiquid();
             boolean inLiquid    = at.isLiquid();
-            if (liquidBelow && !inLiquid && horizSq > 0.001) {
-                // El jugador esta caminando POR ENCIMA del liquido
-                if (!p.isGliding()
-                    && p.getVehicle() == null
-                    && !p.hasPotionEffect(PotionEffectType.WATER_BREATHING)) {
-                    s.jesusTicks++;
-                    if (s.jesusTicks > 5) {
-                        mgr.flag(new Violation(p, "jesus", ViolationLevel.MID,
-                            "caminando sobre liquido " + s.jesusTicks + " ticks"));
-                        s.jesusTicks = 0;
-                    }
+            // Si el bloque debajo es un lily pad / hielo / cualquier solido,
+            // NO es jesus.
+            String belowName = below.getType().name();
+            boolean solidBelow = !below.getType().isAir() && !below.isLiquid();
+            boolean iceLike = belowName.contains("ICE") || belowName.equals("LILY_PAD")
+                           || belowName.contains("FROSTED");
+            boolean hasFrostWalker = false;
+            try {
+                org.bukkit.inventory.ItemStack boots = p.getInventory().getBoots();
+                if (boots != null && boots.containsEnchantment(org.bukkit.enchantments.Enchantment.FROST_WALKER)) {
+                    hasFrostWalker = true;
+                }
+            } catch (Throwable ignored) {}
+            if (liquidBelow && !inLiquid && horizSq > 0.001
+                && !solidBelow && !iceLike && !hasFrostWalker
+                && !p.isGliding() && p.getVehicle() == null
+                && !p.hasPotionEffect(PotionEffectType.WATER_BREATHING)) {
+                s.jesusTicks++;
+                if (s.jesusTicks > 8) {
+                    mgr.flag(new Violation(p, "jesus", ViolationLevel.MID,
+                        "caminando sobre liquido " + s.jesusTicks + " ticks"));
+                    s.jesusTicks = 0;
                 }
             } else {
                 s.jesusTicks = 0;
@@ -814,17 +925,30 @@ public final class AnticheatListener implements Listener {
     public void onConsume(PlayerItemConsumeEvent e) {
         if (!cfg.isCheckEnabled("fasteat")) return;
         Player p = e.getPlayer();
+        if (p.hasPermission("argus.ac.bypass")) return;
         PlayerState s = state(p);
         if (s.eatStartedMs <= 0) return;
         long elapsed = System.currentTimeMillis() - s.eatStartedMs;
         s.eatStartedMs = 0;
+        Material itemType = e.getItem().getType();
+        String n = itemType.name();
+        // Whitelist: items que se "consumen" instantaneo o casi:
+        //  - Totem of Undying (uso, no eat) - pero ya filtramos por isEdible
+        //  - Honey bottle es 40 ticks (2s)
+        //  - Milk bucket es 32 ticks (1.6s)
+        //  - Potions (drinkable) son 32 ticks
+        //  - Suspicious stew, cake (no se "comen" en mano), etc.
+        if (n.contains("BUCKET") || n.contains("POTION")) return;
         ConfigurationSection sec = cfg.checkSection("fasteat");
-        long min = sec != null ? sec.getLong("min_eat_ms", 1400L) : 1400L;
+        long min = sec != null ? sec.getLong("min_eat_ms", 1200L) : 1200L;
+        // Threshold mas bajo (1200ms) — algunos items legitimos demoran ~1300ms
+        // por jitter de red. Solo flagamos si elapsed es REALMENTE bajo.
         if (elapsed < min) {
-            ViolationLevel lvl = elapsed < min / 2 ? ViolationLevel.HIGH
-                                                   : ViolationLevel.MID;
+            ViolationLevel lvl = elapsed < min / 3 ? ViolationLevel.HIGH
+                              : elapsed < min / 2 ? ViolationLevel.MID
+                                                  : ViolationLevel.LOW;
             mgr.flag(new Violation(p, "fasteat", lvl,
-                "comio " + e.getItem().getType().name() + " en " + elapsed + "ms"));
+                "comio " + itemType.name() + " en " + elapsed + "ms"));
         }
     }
 
@@ -848,7 +972,10 @@ public final class AnticheatListener implements Listener {
             s.chatTimes.pollFirst();
         }
         ConfigurationSection sec = cfg.checkSection("chat_spam");
-        int max = sec != null ? sec.getInt("max_msgs_per_5s", 5) : 5;
+        // Subido a 7 msgs/5s: en una conversacion intensa o discusion en
+        // chat publico se pueden enviar 5-6 mensajes cortos en 5s
+        // legitimamente. Ya bot mass-spam suele ser >10/5s.
+        int max = sec != null ? sec.getInt("max_msgs_per_5s", 7) : 7;
         if (s.chatTimes.size() > max) {
             ViolationLevel lvl = s.chatTimes.size() > max * 2 ? ViolationLevel.MID
                                                               : ViolationLevel.LOW;
@@ -862,6 +989,12 @@ public final class AnticheatListener implements Listener {
         if (!cfg.isCheckEnabled("cmd_spam")) return;
         Player p = e.getPlayer();
         if (p.hasPermission("argus.ac.bypass")) return;
+        // Skip commands del propio AC, /msg, /reply (legitimas), y /spawn-like
+        // que un jugador puede ejecutar varias veces en pelea.
+        String cmd = e.getMessage().split(" ", 2)[0].toLowerCase();
+        if (cmd.startsWith("/argus") || cmd.equals("/msg") || cmd.equals("/r")
+            || cmd.equals("/tell") || cmd.equals("/w") || cmd.equals("/reply")
+            || cmd.equals("/spawn") || cmd.equals("/sethome") || cmd.equals("/home")) return;
         PlayerState s = state(p);
         long now = System.currentTimeMillis();
         s.cmdTimes.addLast(now);
@@ -869,7 +1002,9 @@ public final class AnticheatListener implements Listener {
             s.cmdTimes.pollFirst();
         }
         ConfigurationSection sec = cfg.checkSection("cmd_spam");
-        int max = sec != null ? sec.getInt("max_cmds_per_5s", 8) : 8;
+        // Subido a 12 cmds/5s. Macros legitimos (/feed, /heal, /near, /tpa)
+        // pueden hacer ratios altos en 1-2s.
+        int max = sec != null ? sec.getInt("max_cmds_per_5s", 12) : 12;
         if (s.cmdTimes.size() > max) {
             ViolationLevel lvl = s.cmdTimes.size() > max * 2 ? ViolationLevel.MID
                                                              : ViolationLevel.LOW;
@@ -887,18 +1022,24 @@ public final class AnticheatListener implements Listener {
         if (!cfg.isCheckEnabled("inventory_move")) return;
         if (!(e.getWhoClicked() instanceof Player p)) return;
         if (p.hasPermission("argus.ac.bypass")) return;
+        // Solo evaluamos clicks en el propio inventario del player. Si abre
+        // un chest/furnace/etc, no aplica.
         if (e.getInventory().getHolder() != null && !(e.getInventory().getHolder() instanceof Player)) return;
 
         PlayerState s = state(p);
-        // Si en la ultima ventana de 500ms se movió mucho, flag.
         long now = System.currentTimeMillis();
+        // Distancia recorrida en los ultimos 300ms (la ventana corta filtra
+        // movimiento previo a abrir el inventario).
         double recentDist = 0;
         for (double[] sample : s.distSamples) {
-            if (now - (long)sample[0] < 500L) recentDist += sample[1];
+            if (now - (long)sample[0] < 300L) recentDist += sample[1];
         }
-        if (recentDist > 2.0) { // > 2 bloques en 500ms = sprinting
+        // En PvP 1.8 (clientes Lunar/Vape clientes), hacer "fast pearl/gap"
+        // requiere mover items mientras corres. Es legitimo. 5 bloques en
+        // 300ms (~16 b/s) es ya fast-mode bunny hop con cheats.
+        if (recentDist > 5.0) {
             mgr.flag(new Violation(p, "inventory_move", ViolationLevel.LOW,
-                String.format("clicked inv mientras movia %.1fb/0.5s", recentDist)));
+                String.format("inv click + %.1fb en 0.3s", recentDist)));
         }
     }
 

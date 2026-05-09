@@ -67,19 +67,21 @@ anticheat:
   # thresholds si tienes muchos falsos positivos).
   enforcement: true
 
-  # Acciones por nivel acumulado de violations en una ventana de
-  # 60 segundos. Si quieres deshabilitar una accion concreta, deja 0.
+  # Acciones por nivel ACUMULADO de violations en la ventana abajo.
+  # Defaults Pack 44.2: tolerantes para evitar false-positives. Si tu
+  # server es PvP estricto (sin lag, sin clientes 1.8 raros), bajalos.
   thresholds:
-    low_alert_at:    1   # 1 LOW basta para alertar a staff
-    mid_kick_at:     1   # 1 MID = kick inmediato
-    high_force_ss:   1   # 1 HIGH = kick + auto-SS al reconectar
-    critical_ban_at: 1   # 1 CRITICAL = ban temporal
+    low_alert_at:    3   # 3 LOWs distintas para alertar a staff
+    mid_kick_at:     3   # 3 MID acumulados = kick (1 mid solo NO kickea)
+    high_force_ss:   2   # 2 HIGH acumulados = kick + auto-SS al volver
+    critical_ban_at: 2   # 2 CRITICAL acumulados = ban temporal
 
   # Duracion del ban temporal en CRITICAL (en minutos).
   critical_ban_minutes: 60
 
-  # Acumulador resetea cada N segundos (sliding window).
-  violation_window_seconds: 60
+  # Acumulador resetea cada N segundos (sliding window). Si subes esto,
+  # el AC tiene "memoria mas larga" y un cheater intermitente se cae.
+  violation_window_seconds: 90
 
   # Manda violations al backend para que aparezcan en el panel.
   # Requiere api.key valida.
@@ -107,32 +109,36 @@ anticheat:
   checks:
     reach:
       enabled: true
-      max_distance: 4.0      # bloques (vainilla = 3.0 melee). Distancia AL BORDE
-                             # de la hitbox, no al centro — mas estricto.
+      max_distance: 4.5      # 4.5b vainilla 1.8 PvP. Compensa ping automaticamente
+                             # (hasta +1.5b extra para players con ping >100ms).
     killaura_angle:
       enabled: true
-      max_angle_deg: 50      # angulo MIN entre look y hitbox del target.
-                             # 50deg ya es muy permisivo (la cara humana ve ~60deg
-                             # peripheral). Vape "reach behind" suele dar 60-90deg.
+      max_angle_deg: 90      # solo flag si miras a 90+deg del target. Fast turn
+                             # legitimo en PvP llega facil a 60-80deg.
+                             # Solo aplica a hits melee.
     killaura_multi:
       enabled: true
-      window_ms: 300         # ventana para contar targets distintos
-      min_distinct_targets: 2 # 2 targets en 300ms = imposible humano
+      window_ms: 250
+      min_distinct_targets: 4 # 4 targets en 250ms es bot. Sweep enchant vainilla
+                              # NO cuenta (event distinto). Skip si target es item/etc.
     killaura_yaw_snap:
       enabled: true
-      max_delta_deg: 70      # diferencia entre yaw "publico" (move event) y server
-      max_age_ms: 250        # solo si el snap fue muy reciente (<= 250ms del hit)
+      max_delta_deg: 130     # subido a 130deg + check de mis-alignment (solo flag
+      max_age_ms: 200        # si despues del snap NO esta mirando al target).
     killaura_no_swing:
-      enabled: true          # cliente vainilla swingea SIEMPRE antes de pegar
-      max_swing_age_ms: 400  # si paso > 400ms desde el ultimo swing, killaura
+      enabled: true
+      max_swing_age_ms: 600  # 600ms tolera ViaVersion lag. Skipea primer hit del
+                             # jugador y sweep collateral.
     hit_through_wall:
-      enabled: true          # ray-trace desde el ojo al target en cada hit
+      enabled: true          # ray-trace + whitelist de bloques parciales
+                             # (stairs, slabs, fences, glass, doors, leaves, etc.)
     autoclicker:
       enabled: true
-      max_cps: 20            # clicks por segundo sostenidos
-      variance_min_cps: 8    # a partir de este CPS, mide la varianza de intervalos
-      min_stddev_ms: 15.0    # < 15ms de stddev en CPS>=8 = bot humanizado
-      min_samples: 8         # cantidad minima de hits para evaluar varianza
+      max_cps: 22            # 20 era ajustado para butterfly clickers humanos
+      variance_min_cps: 12   # solo medir varianza si CPS alto (humano regular puede
+                             # sostener 8-10 cps)
+      min_stddev_ms: 25.0    # 25ms — humanos tipicos miden 30-80ms stddev
+      min_samples: 12        # mas muestras para ser estadisticamente significativo
     fly:
       enabled: true
       # HOVER REAL = Y casi constante (|dy| < 0.15 b/s). Saltos, parkour y
@@ -145,24 +151,35 @@ anticheat:
       min_air_seconds_before_flag: 5
     speed:
       enabled: true
-      max_blocks_per_sec: 8.0
+      max_blocks_per_sec: 10.0  # whitelist completa: speed potion (+4),
+                                # elytra (+30), vehicle (+20), ice variants
+                                # (+10/+15/+40), slime block (skip).
     scaffold:
       enabled: true
+      min_pitch_deg: 70      # solo flag si mira casi recto al suelo
+      window_ms: 2000        # ventana de 2s
+      min_hits: 6            # 6 placements en aire suspendido en 2s
     nofall:
-      enabled: true
+      enabled: true          # delayed task 4-tick + whitelist (water, slime,
+                             # hay, honey, cobweb, scaffolding, ladder, vines,
+                             # powder snow, kelp, slow falling, levitation,
+                             # gliding, vehicle).
     jesus:
-      enabled: true          # caminar sobre agua sin hundirse
+      enabled: true          # whitelist: lily pad, frost walker enchant,
+                             # ice blocks, bubble columns, vehicles. Threshold
+                             # subido a 8 ticks para evitar transitorios.
     fasteat:
       enabled: true
-      min_eat_ms: 1400       # comer en menos de esto = fastEat
+      min_eat_ms: 1200       # whitelist: buckets, potions (drink time legitimo).
     chat_spam:
       enabled: true
-      max_msgs_per_5s: 5
+      max_msgs_per_5s: 7     # subido para conversaciones intensas legitimas
     cmd_spam:
       enabled: true
-      max_cmds_per_5s: 8
+      max_cmds_per_5s: 12    # subido + whitelist /msg /r /spawn /home /argus*
     inventory_move:
-      enabled: true          # mover inventario mientras camina rapido
+      enabled: true          # threshold subido a 5b/300ms (era 2b/500ms);
+                             # PvP legitimo en 1.8 con fast pearl no triggers.
 
 # ── Mensajes (puedes traducir libremente) ─────────────────────
 messages:
