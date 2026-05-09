@@ -2833,15 +2833,30 @@ const STAFF_ROLE_LABELS = { helper: 'Helper', moderador: 'Moderador', admin: 'Ad
 async function loadStaffUsers() {
     const tbody = document.getElementById('staff-table-body');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Cargando...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="loading-cell">Cargando...</td></tr>';
     try {
         const res = await fetch('/api/staff/users');
-        if (!res.ok) { tbody.innerHTML = `<tr><td colspan="6" class="loading-cell">Sin acceso</td></tr>`; return; }
+        if (!res.ok) { tbody.innerHTML = `<tr><td colspan="7" class="loading-cell">Sin acceso</td></tr>`; return; }
         const data = await res.json();
         if (!data.users || !data.users.length) {
-            tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Sin usuarios</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="loading-cell">Sin usuarios</td></tr>';
             return;
         }
+        const myCompanyId = data.my_company_id || null;
+
+        // Banner de huérfanos
+        const orphans = data.users.filter(u => !u.company_id);
+        const alertBox = document.getElementById('equipo-orphan-alert');
+        const orphanCountEl = document.getElementById('equipo-orphan-count');
+        if (alertBox) {
+            if (orphans.length > 0 && myCompanyId) {
+                alertBox.style.display = 'flex';
+                if (orphanCountEl) orphanCountEl.textContent = String(orphans.length);
+            } else {
+                alertBox.style.display = 'none';
+            }
+        }
+
         const _roleOrder = { owner: 0, admin: 1, moderador: 2, helper: 3 };
         data.users.sort((a, b) => (_roleOrder[a.staff_role] ?? 99) - (_roleOrder[b.staff_role] ?? 99) || a.username.localeCompare(b.username));
         tbody.innerHTML = data.users.map(u => {
@@ -2853,10 +2868,20 @@ async function loadStaffUsers() {
                        onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
                    <div style="display:none;width:32px;height:32px;border-radius:50%;background:var(--accent-bg);border:2px solid var(--border-m);align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--accent);">${u.username[0].toUpperCase()}</div>`
                 : `<div style="width:32px;height:32px;border-radius:50%;background:var(--accent-bg);border:2px solid var(--border-m);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--accent);">${u.username[0].toUpperCase()}</div>`;
+            let companyCell;
+            if (u.in_my_company) {
+                companyCell = `<span class="badge badge-success" title="Pertenece a tu empresa">✓ Mi empresa</span>`;
+            } else if (!u.company_id) {
+                companyCell = `<span class="badge badge-warning" title="No pertenece a ninguna empresa: por eso aparece como individual en SuperAdmin">⚠ Sin empresa</span>
+                    ${myCompanyId ? `<button class="btn btn-xs btn-primary" style="margin-left:6px;" onclick="attachUserToMyCompany(${u.id})" title="Vincular a tu empresa">🔗 Vincular</button>` : ''}`;
+            } else {
+                companyCell = `<span class="badge badge-secondary" title="Empresa #${u.company_id}">Empresa #${u.company_id}</span>`;
+            }
             return `<tr>
                 <td style="width:44px;padding:6px 8px;">${avatarHtml}</td>
                 <td><strong>${u.username}</strong>${u.email ? `<div style="font-size:11px;color:var(--text-d);">${u.email}</div>` : ''}</td>
                 <td><span class="badge badge-${_staffBadge(u.staff_role)}">${STAFF_ROLE_LABELS[u.staff_role] || u.staff_role}</span></td>
+                <td>${companyCell}</td>
                 <td>${u.is_active ? '✅' : '❌'}</td>
                 <td style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                     <select id="role-sel-${u.id}" class="filter-select" style="min-width:110px;font-size:12px;padding:5px 8px;">${roleOptions}</select>
@@ -2866,7 +2891,7 @@ async function loadStaffUsers() {
             </tr>`;
         }).join('');
     } catch(e) {
-        tbody.innerHTML = `<tr><td colspan="5" class="loading-cell">Error: ${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="loading-cell">Error: ${e.message}</td></tr>`;
     }
 }
 
@@ -2885,11 +2910,53 @@ async function updateStaffRole(userId) {
     });
     const data = await res.json();
     if (data.success) {
+        if (window.showToast) {
+            const msg = data.company_attached
+                ? `✅ Rol actualizado y vinculado a tu empresa`
+                : `✅ Rol actualizado`;
+            window.showToast(msg, 'success', { duration: 2500 });
+        }
         loadStaffUsers();
     } else {
         alert('Error: ' + (data.error || 'No se pudo actualizar'));
     }
 }
+
+async function attachUserToMyCompany(userId) {
+    if (!confirm('¿Vincular este usuario a tu empresa?\n\nA partir de aquí aparecerá en "Mi Empresa" y dejará de figurar como individual en SuperAdmin.')) return;
+    try {
+        const res = await fetch(`/api/staff/users/${userId}/attach-to-my-company`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            if (window.showToast) window.showToast('✅ Usuario vinculado a tu empresa', 'success');
+            loadStaffUsers();
+        } else {
+            alert('Error: ' + (data.error || 'No se pudo vincular'));
+        }
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+    }
+}
+window.attachUserToMyCompany = attachUserToMyCompany;
+
+async function attachAllOrphanStaff() {
+    if (!confirm('¿Vincular TODOS los miembros staff sin empresa a tu empresa?\n\nNo se tocarán los que ya pertenecen a otra empresa ni los Owner.')) return;
+    try {
+        const res = await fetch('/api/staff/users/attach-all-orphan-staff', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            const msg = `✅ ${data.adopted} usuario(s) vinculados a tu empresa`;
+            if (window.showToast) window.showToast(msg, 'success', { duration: 4000 });
+            else alert(msg);
+            loadStaffUsers();
+        } else {
+            alert('Error: ' + (data.error || 'No se pudo vincular'));
+        }
+    } catch (e) {
+        alert('Error de red: ' + e.message);
+    }
+}
+window.attachAllOrphanStaff = attachAllOrphanStaff;
 
 // ── Screenshot display ─────────────────────────────────────────────────────
 

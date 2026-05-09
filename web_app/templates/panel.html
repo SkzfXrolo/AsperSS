@@ -679,6 +679,17 @@
             <!-- Tab: Miembros (Staff) -->
             {% if staff_role in ('admin','owner') %}
             <div class="equipo-tab-content" id="equipo-tab-miembros">
+                {% if user and user.company_id %}
+                <div id="equipo-orphan-alert" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;border:1px solid var(--border-m);background:var(--accent-bg);font-size:12.5px;color:var(--text);align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                    <span>
+                        <strong style="color:var(--accent);">⚠ Hay <span id="equipo-orphan-count">0</span> miembro(s) staff sin empresa.</strong>
+                        Por eso no aparecen en "Mi Empresa" y SuperAdmin los muestra como individuales.
+                    </span>
+                    <button type="button" class="btn btn-sm btn-primary" onclick="attachAllOrphanStaff()" title="Vincula todos los staff sin empresa a tu empresa">
+                        🔗 Vincular todos a mi empresa
+                    </button>
+                </div>
+                {% endif %}
                 <div style="overflow-x:auto;">
                     <table class="data-table" id="staff-table">
                         <thead>
@@ -686,13 +697,14 @@
                                 <th style="width:44px;"></th>
                                 <th>Usuario</th>
                                 <th>Rol actual</th>
+                                <th>Empresa</th>
                                 <th>Activo</th>
                                 <th>Cambiar rol</th>
                                 <th>Avatar</th>
                             </tr>
                         </thead>
                         <tbody id="staff-table-body">
-                            <tr><td colspan="6" class="loading-cell">Cargando miembros...</td></tr>
+                            <tr><td colspan="7" class="loading-cell">Cargando miembros...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -2382,7 +2394,7 @@
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
     </script>
     <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=17"></script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=72"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=73"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────
