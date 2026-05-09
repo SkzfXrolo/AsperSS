@@ -12,8 +12,8 @@
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/logo.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=8">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=24">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel-bronze-premium.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=25">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel-bronze-premium.css') }}?v=3">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-ui.css') }}?v=17">
     <!-- Mobile responsive overrides (Pack 27) — DEBE cargarse último para sobrescribir paddings/footer/dropdowns -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-mobile-fix.css') }}?v=1">
@@ -187,33 +187,17 @@
                 <!-- Visual #17 trigger: search bar visible que abre el quicksearch -->
                 <button id="argus-quicksearch-trigger"
                         type="button"
+                        class="argus-quicksearch-trigger"
                         title="Búsqueda rápida — Ctrl+K (o Cmd+K en Mac)"
                         aria-label="Abrir búsqueda rápida"
-                        onclick="if(window.argusUI&&typeof window.argusUI.openQuickSearch==='function'){window.argusUI.openQuickSearch();}else{document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true}));}"
-                        style="
-                            display:flex;align-items:center;gap:9px;
-                            background:linear-gradient(135deg, rgba(184,115,51,0.10), rgba(20,14,8,0.40));
-                            border:1px solid rgba(184,115,51,0.32);
-                            border-radius:var(--radius-sm);
-                            color:rgba(241,230,211,0.72);
-                            height:36px;padding:0 12px;
-                            font-size:12.5px;font-weight:500;letter-spacing:0.2px;
-                            cursor:pointer;transition:var(--trans);
-                            min-width:230px;
-                        "
-                        onmouseover="this.style.background='linear-gradient(135deg, rgba(184,115,51,0.20), rgba(20,14,8,0.55))';this.style.borderColor='rgba(212,145,90,0.55)';this.style.color='#f3e0c5';"
-                        onmouseout="this.style.background='linear-gradient(135deg, rgba(184,115,51,0.10), rgba(20,14,8,0.40))';this.style.borderColor='rgba(184,115,51,0.32)';this.style.color='rgba(241,230,211,0.72)';">
+                        onclick="if(window.argusUI&&typeof window.argusUI.openQuickSearch==='function'){window.argusUI.openQuickSearch();}else{document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true}));}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <circle cx="11" cy="11" r="7"></circle>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
-                    <span style="flex:1;text-align:left;opacity:0.85;">Buscar scans, jugadores…</span>
-                    <kbd style="background:rgba(184,115,51,0.18);border:1px solid rgba(184,115,51,0.35);
-                                color:#f3e0c5;border-radius:4px;padding:1px 6px;font-size:10.5px;
-                                font-family:ui-monospace,Consolas,monospace;font-weight:600;letter-spacing:0.4px;">
-                        Ctrl K
-                    </kbd>
+                    <span class="argus-quicksearch-hint">Buscar scans, jugadores…</span>
+                    <kbd>Ctrl K</kbd>
                 </button>
                 <!-- Discord -->
                 <a href="{{ discord_invite }}" target="_blank" rel="noopener" title="Servidor de Discord" style="
@@ -275,7 +259,7 @@
                 <div class="user-info">
                     <span class="user-name">{{ user.username if user else 'Usuario' }}</span>
                     {% if user and 'admin' in user.roles %}
-                    <span class="user-role" style="background: linear-gradient(135deg,#B87333,#7A4824); color: white; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; margin-left: 8px; letter-spacing: 0.3px;">ADMIN</span>
+                    <span class="user-role-pill-accent">ADMIN</span>
                     {% elif user and 'administrador' in user.roles %}
                     <span class="user-role" style="background: linear-gradient(135deg,#3B82F6,#1D4ED8); color: white; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; margin-left: 8px;">EMPRESA ADM</span>
                     {% elif user and 'empresa' in user.roles %}
