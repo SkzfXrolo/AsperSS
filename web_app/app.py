@@ -615,20 +615,28 @@ def api_version():
     else:
         uptime_human = f"{mins}m"
     db_ok = True
+    db_backend = 'sqlite'
+    db_error = None
+    if _USE_PG:
+        db_backend = 'postgresql'
+    elif _USE_MYSQL:
+        db_backend = 'mysql'
     try:
-        conn = get_db_connection()
-        cur  = conn.cursor()
-        cur.execute('SELECT 1')
-        cur.fetchone()
-    except Exception:
+        with get_api_db_cursor() as _cur:
+            _cur.execute('SELECT 1')
+            _cur.fetchone()
+    except Exception as _e:
         db_ok = False
+        db_error = str(_e)[:200]
     return jsonify({
-        'version':       _ARGUS_VERSION,
+        'version':         _ARGUS_VERSION,
         'scanner_version': CURRENT_SCANNER_VERSION,
-        'uptime_seconds': uptime_seconds,
-        'uptime_human':  uptime_human,
-        'db_ok':         db_ok,
-        'started_at':    int(_APP_START_TIME),
+        'uptime_seconds':  uptime_seconds,
+        'uptime_human':    uptime_human,
+        'db_ok':           db_ok,
+        'db_backend':      db_backend,
+        'db_error':        db_error,
+        'started_at':      int(_APP_START_TIME),
     })
 
 @app.route('/api/public_stats', methods=['GET'])

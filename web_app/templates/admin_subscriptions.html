@@ -1380,7 +1380,11 @@ async function loadAIHealth() {
         setHealth('ai-f1',        fmt(m.f1),        colorVal(m.f1));
         setHealth('ai-accuracy',  fmt(m.accuracy),  colorVal(m.accuracy));
         setHealth('ai-drift',     fmt(m.drift_score), colorDrift(m.drift_score));
-        $('#ai-evaluated').textContent = `${m.total_evaluated || 0} verdicts evaluados (últimos ${m.since_days || days}d) · TP=${m.tp||0} FP=${m.fp||0} FN=${m.fn||0} TN=${m.tn||0} ambig=${m.ambiguous||0}`;
+        const evalCount = m.total_evaluated || 0;
+        const hint = evalCount === 0
+            ? ` · <span style="color:#FBBF24">no hay verdicts cerrados aún en esta ventana — las métricas se llenan cuando staff cierre scans como hack/clean</span>`
+            : '';
+        $('#ai-evaluated').innerHTML = `${evalCount} verdicts evaluados (últimos ${m.since_days || days}d) · TP=${m.tp||0} FP=${m.fp||0} FN=${m.fn||0} TN=${m.tn||0} ambig=${m.ambiguous||0}${hint}`;
         $('#cm-tp').textContent = m.tp ?? '—';
         $('#cm-fp').textContent = m.fp ?? '—';
         $('#cm-fn').textContent = m.fn ?? '—';
@@ -1439,7 +1443,18 @@ async function loadStaffTrust() {
         }
         const tb = $('#tbl-trust');
         if (!d.rows || !d.rows.length) {
-            tb.innerHTML = '<tr><td colspan="8" class="empty">Sin staff con trust score aún</td></tr>';
+            tb.innerHTML = `<tr><td colspan="8" class="empty" style="text-align:left;padding:24px 28px;line-height:1.7">
+                <div style="font-weight:600;color:var(--text);margin-bottom:6px">Aún no hay staff con histórico de trust</div>
+                <div style="color:var(--text-m);font-size:13px;max-width:760px">
+                    El trust score (Bayesian-lite) se calcula automáticamente cuando:
+                    <ol style="margin:8px 0 0 18px;color:var(--text-m)">
+                        <li>El staff cierra verdicts <span class="mono">hack/clean</span> en el panel.</li>
+                        <li>Otros staff o vos (admin) confirman/corrigen esas decisiones (botones <span class="mono">+ correcto</span> / <span class="mono">− incorrecto</span> de abajo).</li>
+                        <li>El sistema acumula al menos 3-5 verdicts cerrados por staff para calcular un score estable.</li>
+                    </ol>
+                    Si recién deployaste, esto se llena solo a medida que el staff use el panel. Si llevás semanas y sigue vacío, posiblemente el staff no esté cerrando verdicts (pista: revisá <span class="mono">/aspers-sa/api/overview</span> · campo <span class="mono">scans_30d</span> vs <span class="mono">hacks_30d + cleans_30d</span>).
+                </div>
+            </td></tr>`;
             return;
         }
         $('#trust-summary').textContent = `${d.count} staff con histórico`;
@@ -1493,7 +1508,18 @@ async function loadPatterns() {
         }
         const tb = $('#tbl-patterns');
         if (!d.rows || !d.rows.length) {
-            tb.innerHTML = '<tr><td colspan="9" class="empty">Sin patterns auto-aprendidos aún</td></tr>';
+            tb.innerHTML = `<tr><td colspan="9" class="empty" style="text-align:left;padding:24px 28px;line-height:1.7">
+                <div style="font-weight:600;color:var(--text);margin-bottom:6px">La IA aún no ha auto-aprendido patrones</div>
+                <div style="color:var(--text-m);font-size:13px;max-width:760px">
+                    Los patterns se generan automáticamente desde los verdicts confirmados de staff con trust ≥ 60. Necesitás que ocurran las 3 cosas:
+                    <ol style="margin:8px 0 0 18px;color:var(--text-m)">
+                        <li>Que haya staff con <strong>trust score ≥ 60</strong> (ver tab <span class="mono">Staff Trust</span>).</li>
+                        <li>Que ese staff cierre al menos <strong>2-3 verdicts hack</strong> que compartan algún path/hash en común.</li>
+                        <li>Que pase el cron de <span class="mono">ai-maintenance</span> (corre desde <span class="mono">Mantenimiento → Ejecutar</span>) o se dispare por umbral.</li>
+                    </ol>
+                    También podés sembrar patterns manualmente vía <span class="mono">POST /aspers-sa/api/maintenance/run</span>.
+                </div>
+            </td></tr>`;
             $('#patterns-summary').textContent = '0 activos';
             return;
         }
@@ -1538,7 +1564,18 @@ async function loadCooldowns() {
         }
         const tb = $('#tbl-cooldowns');
         if (!d.rows || !d.rows.length) {
-            tb.innerHTML = '<tr><td colspan="6" class="empty">Sin cooldowns activos — todas las empresas estables</td></tr>';
+            tb.innerHTML = `<tr><td colspan="6" class="empty" style="text-align:left;padding:24px 28px;line-height:1.7">
+                <div style="font-weight:600;color:var(--text);margin-bottom:6px">✓ Sin cooldowns activos — todas las empresas estables</div>
+                <div style="color:var(--text-m);font-size:13px;max-width:760px">
+                    Los cooldowns se aplican automáticamente cuando una empresa acumula muchos falsos positivos en 24h:
+                    <ul style="margin:8px 0 0 18px;color:var(--text-m)">
+                        <li>≥ 3 verdicts <span class="mono">clean</span> sobre scans que la IA marcó <span class="mono">hack</span> (FP) → <span class="bump-pill bump-5">+5</span> al threshold</li>
+                        <li>≥ 5 FPs en 24h → <span class="bump-pill bump-10">+10</span></li>
+                        <li>≥ 8 FPs en 24h → <span class="bump-pill bump-15">+15</span> (la empresa se marca como "ruidosa")</li>
+                    </ul>
+                    Se resetean solos a las 24h o vos podés resetear manual con el botón <span class="mono">↺ reset</span>. Que esté vacío es <strong>buena señal</strong>: ninguna empresa está acumulando overrides de staff sobre la IA.
+                </div>
+            </td></tr>`;
             $('#cd-summary').textContent = '0 empresas';
             return;
         }
@@ -1575,7 +1612,18 @@ async function loadOffenders() {
         if (!d.available) { $('#tbl-offenders').innerHTML = '<tr><td colspan="5" class="empty">Módulo ai_maint no cargado</td></tr>'; return; }
         const tb = $('#tbl-offenders');
         if (!d.rows || !d.rows.length) {
-            tb.innerHTML = '<tr><td colspan="5" class="empty">Sin reincidentes en este período</td></tr>';
+            tb.innerHTML = `<tr><td colspan="5" class="empty" style="text-align:left;padding:24px 28px;line-height:1.7">
+                <div style="font-weight:600;color:var(--text);margin-bottom:6px">Sin reincidentes en los últimos ${days}d</div>
+                <div style="color:var(--text-m);font-size:13px;max-width:760px">
+                    Esta sección lista players con <strong>≥ 2 verdicts <span class="mono">hack</span></strong> en la ventana seleccionada. Está vacío si:
+                    <ul style="margin:8px 0 0 18px;color:var(--text-m)">
+                        <li>El staff aún no ha cerrado verdicts <span class="mono">hack</span> en este período (bootstrap normal post-deploy).</li>
+                        <li>O el deploy es reciente y no hay scans con verdicto cerrado.</li>
+                        <li>O cada player ha sido scaneado solo 1 vez (lo cual es <strong>buena señal</strong>: el SS único limpia y no vuelven).</li>
+                    </ul>
+                    Probá ampliar la ventana a <span class="mono">90d</span> arriba si crees que falta histórico.
+                </div>
+            </td></tr>`;
             $('#off-summary').textContent = '0 jugadores';
             return;
         }
