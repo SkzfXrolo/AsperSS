@@ -856,6 +856,152 @@
                     }
                 })();
             </script>
+
+            <!-- ── PLUGIN KEYS MINECRAFT (/ss) ── -->
+            <div class="card" id="plugin-keys-card" style="margin-top:18px;">
+                <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                    <span class="card-title">Plugin Keys Minecraft <span id="pk-count" style="opacity:.7;">(…)</span></span>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                        <input id="pk-label" type="text" class="filter-select" placeholder="Label (ej: Aternos test)" style="min-width:180px;font-size:12px;padding:6px 10px;">
+                        <select id="pk-company" class="filter-select" style="min-width:200px;font-size:12px;padding:6px 10px;">
+                            <option value="">— Empresa destino —</option>
+                        </select>
+                        <input id="pk-quota" type="number" class="filter-select" min="10" max="10000" value="200" title="Quota diaria de /ss" style="width:90px;font-size:12px;padding:6px 10px;">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="pkCreate()">+ Crear key</button>
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="pkLoad()" title="Recargar">↻</button>
+                    </div>
+                </div>
+                <div style="padding:0 16px 8px;font-size:12px;color:var(--text-d, #888);">
+                    Cada key autoriza al plugin <code>argus-mc.jar</code> instalado en un server Minecraft a llamar
+                    <code>/api/plugin/issue-token</code> (lo que dispara el comando <code>/ss</code> in-game).
+                    La key full <strong>solo se muestra UNA vez</strong> al crearla — guárdala inmediatamente en
+                    <code>plugins/ArgusMC/config.yml → api.key</code>.
+                </div>
+                <div class="tbl-wrap">
+                    <table>
+                        <thead><tr>
+                            <th>ID</th><th>Empresa</th><th>Label</th><th>Preview</th>
+                            <th>Estado</th><th>Quota hoy</th><th>Última IP</th><th>Última uso</th><th>Creada</th><th></th>
+                        </tr></thead>
+                        <tbody id="pk-tbody">
+                            <tr><td colspan="10" class="empty">Cargando…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <script>
+                (function(){
+                    function _esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+                    async function pkLoad(){
+                        var tb  = document.getElementById('pk-tbody');
+                        var cnt = document.getElementById('pk-count');
+                        var sel = document.getElementById('pk-company');
+                        if (tb) tb.innerHTML = '<tr><td colspan="10" class="empty">Cargando…</td></tr>';
+                        try {
+                            var r = await fetch('/api/admin/plugin-keys', {credentials:'same-origin'});
+                            if (!r.ok) {
+                                tb.innerHTML = '<tr><td colspan="10" class="empty">Sin acceso o error: HTTP '+r.status+'</td></tr>';
+                                return;
+                            }
+                            var d = await r.json();
+                            var keys = d.keys || [];
+                            if (cnt) cnt.textContent = '('+keys.length+')';
+                            if (!keys.length) {
+                                tb.innerHTML = '<tr><td colspan="10" class="empty">No hay plugin keys creadas todavía. Crea una para empezar a usar /ss desde Minecraft.</td></tr>';
+                            } else {
+                                tb.innerHTML = keys.map(function(k){
+                                    var statusBadge = k.is_active
+                                        ? '<span class="badge" style="background:rgba(34,197,94,.18);color:#86efac">activa</span>'
+                                        : '<span class="badge" style="background:rgba(239,68,68,.18);color:#fca5a5">revocada</span>';
+                                    return '<tr>' +
+                                        '<td class="mono">#'+k.id+'</td>' +
+                                        '<td>#'+(k.company_id||'—')+'</td>' +
+                                        '<td>'+_esc(k.label||'—')+'</td>' +
+                                        '<td class="mono" style="font-size:11px">'+_esc(k.api_key_preview||'')+'</td>' +
+                                        '<td>'+statusBadge+'</td>' +
+                                        '<td class="mono">'+(k.used_today||0)+' / '+(k.daily_quota||0)+'</td>' +
+                                        '<td class="mono" style="font-size:11px">'+_esc(k.last_used_ip||'—')+'</td>' +
+                                        '<td class="mono" style="font-size:11px">'+_esc(k.last_used_at||'nunca')+'</td>' +
+                                        '<td class="mono" style="font-size:11px">'+_esc(k.created_at||'—')+'</td>' +
+                                        '<td><button type="button" class="btn btn-ghost btn-sm" onclick="pkRevoke('+k.id+')" title="Revocar">✕</button></td>' +
+                                        '</tr>';
+                                }).join('');
+                            }
+                            // Cargar empresas (reusamos /aspers-sa/api/orphan-staff que ya devuelve companies)
+                            try {
+                                var rc = await fetch('/aspers-sa/api/orphan-staff', {credentials:'same-origin'});
+                                if (rc.ok) {
+                                    var dc = await rc.json();
+                                    if (sel && dc.companies) {
+                                        var current = sel.value;
+                                        sel.innerHTML = '<option value="">— Empresa destino —</option>' +
+                                            dc.companies.map(function(c){
+                                                return '<option value="'+c.id+'">'+_esc(c.name||('Empresa #'+c.id))+' (#'+c.id+')</option>';
+                                            }).join('');
+                                        if (current) sel.value = current;
+                                    }
+                                }
+                            } catch(_e){}
+                        } catch(e){
+                            tb.innerHTML = '<tr><td colspan="10" class="empty">Error: '+_esc(e.message)+'</td></tr>';
+                        }
+                    }
+                    async function pkCreate(){
+                        var lbl = (document.getElementById('pk-label').value || '').trim();
+                        var cid = parseInt(document.getElementById('pk-company').value, 10);
+                        var quota = parseInt(document.getElementById('pk-quota').value, 10) || 200;
+                        if (!cid) { alert('Selecciona una empresa destino'); return; }
+                        if (!lbl) { lbl = 'Plugin key '+(new Date().toISOString().slice(0,16).replace('T',' ')); }
+                        try {
+                            var r = await fetch('/api/admin/plugin-keys', {
+                                method:'POST', credentials:'same-origin',
+                                headers:{'Content-Type':'application/json'},
+                                body: JSON.stringify({ label: lbl, company_id: cid, daily_quota: quota })
+                            });
+                            var d = await r.json();
+                            if (!r.ok || d.error) { alert('Error: '+(d.error||r.status)); return; }
+                            // Mostrar la key una sola vez con UI de copiar
+                            var k = d.api_key || '';
+                            var box = document.createElement('div');
+                            box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+                            box.innerHTML = '<div style="background:#1a1814;border:1px solid #b87333;border-radius:12px;max-width:640px;width:100%;padding:22px;box-shadow:0 24px 64px rgba(0,0,0,.6);">' +
+                                '<h3 style="margin:0 0 8px;color:#ead8c0;font-size:16px;">Plugin key creada (#'+d.key_id+')</h3>' +
+                                '<p style="margin:0 0 14px;font-size:12px;color:#b48a62;">Copiá esta key AHORA. No se mostrará de nuevo.</p>' +
+                                '<textarea readonly style="width:100%;font-family:monospace;font-size:13px;padding:12px;background:#0e0c08;color:#ead8c0;border:1px solid #b87333;border-radius:6px;min-height:90px;resize:none;">'+_esc(k)+'</textarea>' +
+                                '<div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end;">' +
+                                '  <button type="button" class="btn btn-outline btn-sm" id="pk-copy-btn">Copiar</button>' +
+                                '  <button type="button" class="btn btn-primary btn-sm" id="pk-close-btn">Listo</button>' +
+                                '</div></div>';
+                            document.body.appendChild(box);
+                            box.querySelector('#pk-copy-btn').addEventListener('click', function(){
+                                navigator.clipboard?.writeText(k);
+                                this.textContent = 'Copiado ✓';
+                            });
+                            box.querySelector('#pk-close-btn').addEventListener('click', function(){
+                                document.body.removeChild(box);
+                            });
+                            pkLoad();
+                        } catch(e){ alert('Error de red: '+e.message); }
+                    }
+                    async function pkRevoke(id){
+                        if (!confirm('Revocar plugin key #'+id+'? El plugin del server dejara de funcionar.')) return;
+                        try {
+                            var r = await fetch('/api/admin/plugin-keys/'+id, { method:'DELETE', credentials:'same-origin' });
+                            var d = await r.json();
+                            if (!r.ok || d.error) { alert('Error: '+(d.error||r.status)); return; }
+                            pkLoad();
+                        } catch(e){ alert('Error de red: '+e.message); }
+                    }
+                    window.pkLoad = pkLoad;
+                    window.pkCreate = pkCreate;
+                    window.pkRevoke = pkRevoke;
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', pkLoad);
+                    } else {
+                        pkLoad();
+                    }
+                })();
+            </script>
         </section>
 
         <!-- ── NUEVA EMPRESA ── -->
