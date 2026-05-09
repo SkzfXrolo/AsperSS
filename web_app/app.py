@@ -1,5 +1,5 @@
 """
-Aplicación Web Flask para Panel del Staff de ASPERS Projects
+AplicaciÃ³n Web Flask para Panel del Staff de ASPERS Projects
 """
 import sys as _sys
 _sys.stdout.reconfigure(line_buffering=True)  # forzar stdout unbuffered
@@ -13,7 +13,7 @@ import secrets
 import traceback
 from functools import wraps
 
-# Importar sistema de autenticación
+# Importar sistema de autenticaciÃ³n
 from auth import (
     init_auth_db, authenticate_user, create_user, create_registration_token,
     verify_registration_token, login_required, admin_required, company_admin_required,
@@ -24,8 +24,8 @@ from auth import (
     STAFF_ROLE_HIERARCHY
 )
 
-# Pack 32 — Sistema de Trust + Cooldown (F#54, F#55, F#60).
-# Se importa en try/except por compatibilidad: si el archivo no está
+# Pack 32 â€” Sistema de Trust + Cooldown (F#54, F#55, F#60).
+# Se importa en try/except por compatibilidad: si el archivo no estÃ¡
 # (deploy parcial, rollback), el resto de la app sigue funcionando.
 try:
     import ai_trust as _ai_trust
@@ -35,7 +35,7 @@ except Exception as _ai_trust_err:
     _AI_TRUST_AVAILABLE = False
     print(f'[boot] ai_trust no disponible: {_ai_trust_err}')
 
-# Pack 35 — AI Quality + Adaptive Thresholds + RF Retraining trigger.
+# Pack 35 â€” AI Quality + Adaptive Thresholds + RF Retraining trigger.
 try:
     import ai_quality as _ai_quality
     _AI_QUALITY_AVAILABLE = True
@@ -44,7 +44,7 @@ except Exception as _ai_quality_err:
     _AI_QUALITY_AVAILABLE = False
     print(f'[boot] ai_quality no disponible: {_ai_quality_err}')
 
-# Pack 36 — Auto-learn de patterns de hack desde verdicts confirmados
+# Pack 36 â€” Auto-learn de patterns de hack desde verdicts confirmados
 # por staff con alto trust + Player Risk Profile.
 try:
     import ai_autolearn as _ai_autolearn
@@ -54,8 +54,8 @@ except Exception as _ai_autolearn_err:
     _AI_AUTOLEARN_AVAILABLE = False
     print(f'[boot] ai_autolearn no disponible: {_ai_autolearn_err}')
 
-# Pack 37 — Mantenimiento automático (decay, recompute, cleanup) +
-# ranking de reincidentes + sugerencias de índices DB.
+# Pack 37 â€” Mantenimiento automÃ¡tico (decay, recompute, cleanup) +
+# ranking de reincidentes + sugerencias de Ã­ndices DB.
 try:
     import ai_maintenance as _ai_maint
     _AI_MAINT_AVAILABLE = True
@@ -89,7 +89,7 @@ def _make_session_permanent():
 
 CORS(app)
 
-# Inicializar base de datos de autenticación al iniciar (en background para no bloquear)
+# Inicializar base de datos de autenticaciÃ³n al iniciar (en background para no bloquear)
 _ARGUS_VERSION = '1.6.50'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
 # URL de invitacion permanente al Discord oficial. Se inyecta en todos los
@@ -111,26 +111,26 @@ def _inject_globals():
 
 
 def _notify_new_deploy():
-    """Detecta si es un deploy nuevo comparando RENDER_GIT_COMMIT con el último
-    commit almacenado en BD. Si es nuevo, envía embed a Discord vía webhook.
+    """Detecta si es un deploy nuevo comparando RENDER_GIT_COMMIT con el Ãºltimo
+    commit almacenado en BD. Si es nuevo, envÃ­a embed a Discord vÃ­a webhook.
     Solo se ejecuta en Render (RENDER_GIT_COMMIT presente).
 
     Variable de entorno requerida:
-      DISCORD_DEPLOY_WEBHOOK — URL completa del webhook de Discord
+      DISCORD_DEPLOY_WEBHOOK â€” URL completa del webhook de Discord
     """
     commit  = os.environ.get('RENDER_GIT_COMMIT', '').strip()
     branch  = os.environ.get('RENDER_GIT_BRANCH', 'main').strip()
     service = os.environ.get('RENDER_SERVICE_NAME', 'argus-web').strip()
     webhook = os.environ.get('DISCORD_DEPLOY_WEBHOOK', '').strip()
 
-    print(f'[Deploy] DEBUG commit={commit[:7] if commit else "VACÍO"} branch={branch} service={service}')
+    print(f'[Deploy] DEBUG commit={commit[:7] if commit else "VACÃO"} branch={branch} service={service}')
     print(f'[Deploy] DEBUG webhook={"SET ("+webhook[:30]+"...)" if webhook else "NO CONFIGURADO"}')
 
     if not commit:
-        print('[Deploy] Sin RENDER_GIT_COMMIT — entorno local, saliendo')
+        print('[Deploy] Sin RENDER_GIT_COMMIT â€” entorno local, saliendo')
         return
     if not webhook:
-        print('[Deploy] ❌ DISCORD_DEPLOY_WEBHOOK no está configurado como variable de entorno en Render')
+        print('[Deploy] âŒ DISCORD_DEPLOY_WEBHOOK no estÃ¡ configurado como variable de entorno en Render')
         return
 
     try:
@@ -148,7 +148,7 @@ def _notify_new_deploy():
             print(f'[Deploy] DEBUG last_commit_en_bd={last_commit[:7] if last_commit else "NINGUNO"}')
 
             if last_commit == commit:
-                print(f'[Deploy] Mismo commit ({commit[:7]}) — restart sin deploy nuevo, no se notifica')
+                print(f'[Deploy] Mismo commit ({commit[:7]}) â€” restart sin deploy nuevo, no se notifica')
                 return
 
             cur.execute('''
@@ -159,10 +159,10 @@ def _notify_new_deploy():
             print(f'[Deploy] BD actualizada con nuevo commit {commit[:7]}')
 
     except Exception as e:
-        print(f'[Deploy] ❌ Error leyendo/escribiendo BD: {e}')
+        print(f'[Deploy] âŒ Error leyendo/escribiendo BD: {e}')
         return
 
-    # Guardar webhook pendiente en BD — el scheduler lo reintentará cada 10 min
+    # Guardar webhook pendiente en BD â€” el scheduler lo reintentarÃ¡ cada 10 min
     # hasta que el ban de Cloudflare expire (error 1015 puede durar horas).
     try:
         import json as _json_d
@@ -181,15 +181,15 @@ def _notify_new_deploy():
                 VALUES (%s, %s, NOW())
                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
             ''', ('pending_deploy_webhook', pending_val))
-        print('[Deploy] Notificación guardada en BD — el scheduler reintentará cada 10 min')
+        print('[Deploy] NotificaciÃ³n guardada en BD â€” el scheduler reintentarÃ¡ cada 10 min')
     except Exception as e:
-        print(f'[Deploy] ❌ No se pudo guardar notificación pendiente: {e}')
+        print(f'[Deploy] âŒ No se pudo guardar notificaciÃ³n pendiente: {e}')
 
     # Primer intento inmediato en background (puede fallar por 429 de CF)
     threading.Thread(target=_try_send_deploy_webhook, daemon=True).start()
-    # Telegram — backup instantáneo (no tiene el problema de IP ban de Cloudflare)
+    # Telegram â€” backup instantÃ¡neo (no tiene el problema de IP ban de Cloudflare)
     _tg_msg = (
-        f'🚀 <b>Nuevo Deploy</b> — Argus {_ARGUS_VERSION}\n'
+        f'ðŸš€ <b>Nuevo Deploy</b> â€” Argus {_ARGUS_VERSION}\n'
         f'Servicio: {service} | Rama: {branch}\n'
         f'Commit: <code>{commit[:7]}</code>'
     )
@@ -234,7 +234,7 @@ def _try_send_deploy_webhook():
         except Exception:
             pass
         if attempts >= max_att:
-            print(f'[Deploy] ❌ Webhook fallido tras {max_att} intentos — abandonando')
+            print(f'[Deploy] âŒ Webhook fallido tras {max_att} intentos â€” abandonando')
         return
 
     short   = meta.get('commit', '')[:7]
@@ -245,18 +245,18 @@ def _try_send_deploy_webhook():
 
     payload = {
         'embeds': [{
-            'title': '🚀 ArgusScanner desplegado',
-            'description': 'El sistema de detección de hacks ha sido desplegado exitosamente en producción.',
+            'title': 'ðŸš€ ArgusScanner desplegado',
+            'description': 'El sistema de detecciÃ³n de hacks ha sido desplegado exitosamente en producciÃ³n.',
             'color': 0x7C3AED,
             'fields': [
-                {'name': '📦 Versión',   'value': f'`{version}`', 'inline': True},
-                {'name': '🔖 Commit',    'value': f'`{short}`',   'inline': True},
-                {'name': '🌿 Rama',      'value': f'`{branch}`',  'inline': True},
-                {'name': '🖥️ Servicio', 'value': f'`{service}`', 'inline': True},
-                {'name': '✅ Estado',    'value': 'Operativo',    'inline': True},
-                {'name': '🕐 Hora',      'value': now,            'inline': True},
+                {'name': 'ðŸ“¦ VersiÃ³n',   'value': f'`{version}`', 'inline': True},
+                {'name': 'ðŸ”– Commit',    'value': f'`{short}`',   'inline': True},
+                {'name': 'ðŸŒ¿ Rama',      'value': f'`{branch}`',  'inline': True},
+                {'name': 'ðŸ–¥ï¸ Servicio', 'value': f'`{service}`', 'inline': True},
+                {'name': 'âœ… Estado',    'value': 'Operativo',    'inline': True},
+                {'name': 'ðŸ• Hora',      'value': now,            'inline': True},
             ],
-            'footer': {'text': 'ASPERS Projects — Sistema Argus'},
+            'footer': {'text': 'ASPERS Projects â€” Sistema Argus'},
         }]
     }
 
@@ -270,19 +270,19 @@ def _try_send_deploy_webhook():
     try:
         req = _urlreq.Request(webhook, data=body, headers=headers, method='POST')
         with _urlreq.urlopen(req, timeout=12) as resp:
-            print(f'✅ [Deploy] Webhook enviado — HTTP {resp.status} — commit {short}')
-            # Éxito: borrar de BD
+            print(f'âœ… [Deploy] Webhook enviado â€” HTTP {resp.status} â€” commit {short}')
+            # Ã‰xito: borrar de BD
             with get_api_db_cursor() as cur:
                 cur.execute('DELETE FROM app_meta WHERE key = %s', ('pending_deploy_webhook',))
             return
     except _urlerr.HTTPError as e:
         body_preview = e.read(200).decode('utf-8', errors='replace').strip()
         retry_after  = e.headers.get('Retry-After', '?')
-        print(f'⚠️ [Deploy] HTTP {e.code} (Retry-After: {retry_after}s) — {body_preview[:120]}')
+        print(f'âš ï¸ [Deploy] HTTP {e.code} (Retry-After: {retry_after}s) â€” {body_preview[:120]}')
     except Exception as e:
-        print(f'⚠️ [Deploy] Error de red: {e}')
+        print(f'âš ï¸ [Deploy] Error de red: {e}')
 
-    # Fracasó — incrementar contador en BD para el próximo intento del scheduler
+    # FracasÃ³ â€” incrementar contador en BD para el prÃ³ximo intento del scheduler
     meta['attempts'] = attempts + 1
     try:
         with get_api_db_cursor() as cur:
@@ -296,22 +296,22 @@ def _try_send_deploy_webhook():
 
 
 def init_db_async():
-    """Inicializa la BD de forma asíncrona para no bloquear el inicio"""
+    """Inicializa la BD de forma asÃ­ncrona para no bloquear el inicio"""
     try:
         init_auth_db()
-        print("✅ Base de datos de autenticación inicializada correctamente")
+        print("âœ… Base de datos de autenticaciÃ³n inicializada correctamente")
     except Exception as e:
-        print(f"⚠️ Error al inicializar base de datos: {e}")
-        print("⚠️ La aplicación continuará, pero algunas funciones pueden no funcionar")
-    # Migración: columna short_code en scan_tokens (códigos de 6 chars)
+        print(f"âš ï¸ Error al inicializar base de datos: {e}")
+        print("âš ï¸ La aplicaciÃ³n continuarÃ¡, pero algunas funciones pueden no funcionar")
+    # MigraciÃ³n: columna short_code en scan_tokens (cÃ³digos de 6 chars)
     try:
         with get_api_db_cursor() as _cur:
             _cur.execute("ALTER TABLE scan_tokens ADD COLUMN IF NOT EXISTS short_code VARCHAR(8) UNIQUE")
             _cur.execute("CREATE INDEX IF NOT EXISTS idx_st_short_code ON scan_tokens(short_code)")
-        print("✅ Columna short_code en scan_tokens verificada/creada")
+        print("âœ… Columna short_code en scan_tokens verificada/creada")
     except Exception as _e:
-        print(f"⚠️ Error migrando short_code: {_e}")
-    # Migración de seguridad: crear download_links en PostgreSQL si no existe
+        print(f"âš ï¸ Error migrando short_code: {_e}")
+    # MigraciÃ³n de seguridad: crear download_links en PostgreSQL si no existe
     try:
         with get_api_db_cursor() as _cur:
             _cur.execute('''
@@ -329,10 +329,10 @@ def init_db_async():
                 )
             ''')
             _cur.execute('CREATE INDEX IF NOT EXISTS idx_dl_token ON download_links(token)')
-        print("✅ Tabla download_links verificada/creada en PostgreSQL")
+        print("âœ… Tabla download_links verificada/creada en PostgreSQL")
     except Exception as _e:
-        print(f"⚠️ Error verificando download_links: {_e}")
-    # Tabla hack_blacklist — hashes confirmados como hacks en 3+ scans
+        print(f"âš ï¸ Error verificando download_links: {_e}")
+    # Tabla hack_blacklist â€” hashes confirmados como hacks en 3+ scans
     try:
         with get_api_db_cursor() as _cur:
             _cur.execute('''
@@ -343,17 +343,17 @@ def init_db_async():
                     times_confirmed INTEGER DEFAULT 1
                 )
             ''')
-        print("✅ Tabla hack_blacklist verificada/creada")
+        print("âœ… Tabla hack_blacklist verificada/creada")
     except Exception as _e:
-        print(f"⚠️ Error creando hack_blacklist: {_e}")
-    # Migración: columna ensemble_data en scans (veredicto 6-sistemas)
+        print(f"âš ï¸ Error creando hack_blacklist: {_e}")
+    # MigraciÃ³n: columna ensemble_data en scans (veredicto 6-sistemas)
     try:
         with get_api_db_cursor() as _cur:
             _cur.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS ensemble_data TEXT")
-        print("✅ Columna ensemble_data en scans verificada/creada")
+        print("âœ… Columna ensemble_data en scans verificada/creada")
     except Exception as _e:
-        print(f"⚠️ Error migrando ensemble_data: {_e}")
-    # Migración: tablas/columnas para sistema de plugin keys (Minecraft).
+        print(f"âš ï¸ Error migrando ensemble_data: {_e}")
+    # MigraciÃ³n: tablas/columnas para sistema de plugin keys (Minecraft).
     # IMPORTANTE: ejecutar UNA SOLA VEZ al startup. Antes esto se ejecutaba
     # on-demand desde @before_request via _plugin_schema_guard(), lo cual
     # provocaba DEADLOCKs entre el ALTER TABLE scan_tokens (AccessExclusiveLock)
@@ -362,32 +362,32 @@ def init_db_async():
         _ensure_plugin_keys_schema()
         global _PLUGIN_SCHEMA_READY
         _PLUGIN_SCHEMA_READY = True
-        print("✅ Schema de plugin_keys verificado/creado")
+        print("âœ… Schema de plugin_keys verificado/creado")
     except Exception as _e:
-        print(f"⚠️ Error migrando plugin_keys schema: {_e}")
-    # Notificación de deploy nuevo — se dispara una sola vez por commit
+        print(f"âš ï¸ Error migrando plugin_keys schema: {_e}")
+    # NotificaciÃ³n de deploy nuevo â€” se dispara una sola vez por commit
     _notify_new_deploy()
 
 # Inicializar en un thread separado para no bloquear el inicio.
-# IMPORTANTE: el Thread.start() real está al FINAL del módulo (justo antes
+# IMPORTANTE: el Thread.start() real estÃ¡ al FINAL del mÃ³dulo (justo antes
 # de `if __name__ == '__main__':`) para evitar una race condition de import:
-# init_db_async() llama get_api_db_cursor() (definida en línea ~1091) y
-# _ensure_plugin_keys_schema() (línea ~2203). Si arrancamos el thread aquí,
-# Python aún no ha evaluado esas defs y falla con NameError, rompiendo TODAS
+# init_db_async() llama get_api_db_cursor() (definida en lÃ­nea ~1091) y
+# _ensure_plugin_keys_schema() (lÃ­nea ~2203). Si arrancamos el thread aquÃ­,
+# Python aÃºn no ha evaluado esas defs y falla con NameError, rompiendo TODAS
 # las migraciones (short_code, download_links, hack_blacklist, ensemble_data,
-# plugin_keys schema) y la notificación de deploy a Discord.
+# plugin_keys schema) y la notificaciÃ³n de deploy a Discord.
 # Hotfix Pack 41 (v1.6.50, post-rebuild): el .start() vive al final.
 import threading
 
 def _autonomous_daily_learning():
-    """Pipeline de aprendizaje autónomo — corre cada día a las 2:00 UTC.
+    """Pipeline de aprendizaje autÃ³nomo â€” corre cada dÃ­a a las 2:00 UTC.
 
     Pasos en orden:
-      1. Hash consensus  — detecta hashes maliciosos por frecuencia estadística
-      2. Auto-labels     — genera pseudo-etiquetas para scans extremos sin veredicto humano
-      3. RF retrain      — reentrena Random Forest con humanos + auto-labels
-      4. Isolation Forest— reentrena detector de anomalías con todos los scans
-    No requiere ningún input externo ni veredicto humano para operar.
+      1. Hash consensus  â€” detecta hashes maliciosos por frecuencia estadÃ­stica
+      2. Auto-labels     â€” genera pseudo-etiquetas para scans extremos sin veredicto humano
+      3. RF retrain      â€” reentrena Random Forest con humanos + auto-labels
+      4. Isolation Forestâ€” reentrena detector de anomalÃ­as con todos los scans
+    No requiere ningÃºn input externo ni veredicto humano para operar.
     """
     try:
         from ml_classifier import get_classifier
@@ -419,11 +419,11 @@ def _autonomous_daily_learning():
 
     except Exception as e:
         import traceback
-        print(f"[ML Auto] Error en pipeline autónomo: {e}")
+        print(f"[ML Auto] Error en pipeline autÃ³nomo: {e}")
         print(traceback.format_exc())
 
 def _daily_summary_job():
-    """P3 #25 — Resumen diario de scans del día anterior, enviado a Discord a las 9:00 UTC."""
+    """P3 #25 â€” Resumen diario de scans del dÃ­a anterior, enviado a Discord a las 9:00 UTC."""
     try:
         import datetime as _dts
         yesterday = (_dts.datetime.utcnow() - _dts.timedelta(days=1)).strftime('%Y-%m-%d')
@@ -469,7 +469,7 @@ def _daily_summary_job():
                     WHERE s.verdict = 'hack' AND DATE(s.started_at) = ?
                     GROUP BY issue_type ORDER BY n DESC LIMIT 3
                 ''', (yesterday,))
-            top_types = [f"{_row_get(r, 0, 'issue_type')} ×{int(_row_get(r, 1, 'n') or 0)}" for r in (cur.fetchall() or [])]
+            top_types = [f"{_row_get(r, 0, 'issue_type')} Ã—{int(_row_get(r, 1, 'n') or 0)}" for r in (cur.fetchall() or [])]
 
         from web_app.discord_bot import notify_daily_summary
         notify_daily_summary(
@@ -489,7 +489,7 @@ try:
     _scheduler.add_job(_try_send_deploy_webhook, 'interval', minutes=10,
                        id='deploy_webhook_retry', replace_existing=True)
     _scheduler.start()
-    print('[Scheduler] ML autónomo diario (2:00 UTC) + resumen diario + deploy webhook retry activados')
+    print('[Scheduler] ML autÃ³nomo diario (2:00 UTC) + resumen diario + deploy webhook retry activados')
 except Exception as _sch_err:
     print(f'[Scheduler] APScheduler no disponible: {_sch_err}')
 
@@ -502,19 +502,19 @@ except Exception as _disc_err:
 
 # Health check endpoints (simplificado - sin import externo)
 
-# Configuración
+# ConfiguraciÃ³n
 # Detectar si estamos en Render o en desarrollo local
 RENDER_EXTERNAL_URL = os.environ.get('RENDER_EXTERNAL_URL')  # Render proporciona esta variable
 IS_RENDER = bool(RENDER_EXTERNAL_URL)
 
 if IS_RENDER:
-    # La API está integrada en esta misma app — usar la propia URL de Render
+    # La API estÃ¡ integrada en esta misma app â€” usar la propia URL de Render
     api_url_env = os.environ.get('API_URL')
     if api_url_env:
         API_BASE_URL = api_url_env.rstrip('/')
     else:
         API_BASE_URL = RENDER_EXTERNAL_URL.rstrip('/')
-        print(f"✅ API_URL apunta a esta misma app: {API_BASE_URL}")
+        print(f"âœ… API_URL apunta a esta misma app: {API_BASE_URL}")
 else:
     # En desarrollo local, usar localhost:5000
     API_BASE_URL = os.environ.get('API_URL', 'http://localhost:5000')
@@ -530,16 +530,16 @@ def get_api_url(endpoint):
     if not endpoint.startswith('api/'):
         endpoint = f"api/{endpoint}"
     
-    # Si API_URL está configurado explícitamente, usarlo
+    # Si API_URL estÃ¡ configurado explÃ­citamente, usarlo
     api_url_env = os.environ.get('API_URL')
     if api_url_env:
         return f"{api_url_env.rstrip('/')}/{endpoint}"
     
-    # Usar API_BASE_URL (que ya tiene el valor correcto según el entorno)
+    # Usar API_BASE_URL (que ya tiene el valor correcto segÃºn el entorno)
     if API_BASE_URL:
         return f"{API_BASE_URL.rstrip('/')}/{endpoint}"
     
-    # Fallback: si nada está configurado, usar el valor por defecto según el entorno
+    # Fallback: si nada estÃ¡ configurado, usar el valor por defecto segÃºn el entorno
     if IS_RENDER:
         default_url = 'https://ssapi-cfni.onrender.com'
     else:
@@ -551,15 +551,15 @@ def require_api_key(f):
     """Decorador para requerir API key"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # En producción, verificar API key del staff
+        # En producciÃ³n, verificar API key del staff
         return f(*args, **kwargs)
     return decorated_function
 
 @app.route('/')
 def index():
-    """Página principal - Sobre ASPERS"""
+    """PÃ¡gina principal - Sobre ASPERS"""
     response = make_response(render_template('index.html'))
-    # Agregar headers de caché para recursos estáticos
+    # Agregar headers de cachÃ© para recursos estÃ¡ticos
     response.headers['Cache-Control'] = 'public, max-age=300'  # 5 minutos
     return response
 
@@ -586,9 +586,9 @@ def discord_interactions():
 @app.route('/healthz', methods=['GET'])
 @app.route('/ping', methods=['GET'])
 def health_check():
-    """Health check endpoint para Render - Optimizado para ser ultra-rápido"""
-    # Respuesta mínima y rápida para evitar spinning down
-    # Este endpoint se puede llamar periódicamente para mantener el servicio activo
+    """Health check endpoint para Render - Optimizado para ser ultra-rÃ¡pido"""
+    # Respuesta mÃ­nima y rÃ¡pida para evitar spinning down
+    # Este endpoint se puede llamar periÃ³dicamente para mantener el servicio activo
     response = make_response('OK', 200)
     response.headers['Content-Type'] = 'text/plain'
     response.headers['Cache-Control'] = 'no-cache'
@@ -602,10 +602,10 @@ _APP_START_TIME = _time_mod.time()
 
 @app.route('/healthz', methods=['GET'])
 def healthz():
-    """Healthcheck mínimo SIN tocar la BD. Sirve para distinguir entre:
-      * worker caído (TCP OK pero esto da timeout)        → problema de proceso
+    """Healthcheck mÃ­nimo SIN tocar la BD. Sirve para distinguir entre:
+      * worker caÃ­do (TCP OK pero esto da timeout)        â†’ problema de proceso
       * worker vivo pero BD muerta (esto OK + /api/version db_ok=False)
-    Útil cuando el servicio parece caído para diagnosticar la causa real
+    Ãštil cuando el servicio parece caÃ­do para diagnosticar la causa real
     sin bloquearse 30s+ esperando a la BD.
     """
     return jsonify({
@@ -617,9 +617,9 @@ def healthz():
 
 @app.route('/api/db-stats', methods=['GET'])
 def api_db_stats():
-    """Diagnóstico de espacio de BD. Útil para saber si Render Postgres está
-    cerca del límite (1 GB en plan Free). Acceso público sólo al tamaño total
-    y al # de filas top — sin datos sensibles.
+    """DiagnÃ³stico de espacio de BD. Ãštil para saber si Render Postgres estÃ¡
+    cerca del lÃ­mite (1 GB en plan Free). Acceso pÃºblico sÃ³lo al tamaÃ±o total
+    y al # de filas top â€” sin datos sensibles.
     """
     info = {
         'backend': 'postgresql' if _USE_PG else ('mysql' if _USE_MYSQL else 'sqlite'),
@@ -690,8 +690,8 @@ def _human_bytes(n):
 
 @app.route('/api/version', methods=['GET'])
 def api_version():
-    """Devuelve versión, uptime y estado de la API. Usado por el footer del
-    panel para mostrar 'Argus v1.6.36 · uptime 2d 4h · ✓ DB OK'."""
+    """Devuelve versiÃ³n, uptime y estado de la API. Usado por el footer del
+    panel para mostrar 'Argus v1.6.36 Â· uptime 2d 4h Â· âœ“ DB OK'."""
     uptime_seconds = int(_time_mod.time() - _APP_START_TIME)
     days  = uptime_seconds // 86400
     hours = (uptime_seconds % 86400) // 3600
@@ -729,11 +729,11 @@ def api_version():
 
 @app.route('/api/public_stats', methods=['GET'])
 def api_public_stats():
-    """Stats públicas agregadas para el live counter del index. NUNCA devuelve
-    datos privados (no nombres de jugadores, empresas, etc.) — solo totales
-    para el efecto 'Argus está vivo'.
+    """Stats pÃºblicas agregadas para el live counter del index. NUNCA devuelve
+    datos privados (no nombres de jugadores, empresas, etc.) â€” solo totales
+    para el efecto 'Argus estÃ¡ vivo'.
 
-    Visual #39 — alimenta el live counter del index. Cacheado en memoria 30s
+    Visual #39 â€” alimenta el live counter del index. Cacheado en memoria 30s
     para no martillar la DB con cada visita.
     """
     global _public_stats_cache, _public_stats_cache_at
@@ -792,7 +792,7 @@ def api_public_stats():
 
 def _first_value(row):
     """Devuelve el primer valor de un row de cursor sin importar si es
-    RealDictCursor (dict) o cursor estándar (tuple)."""
+    RealDictCursor (dict) o cursor estÃ¡ndar (tuple)."""
     if row is None:
         return None
     if isinstance(row, dict):
@@ -811,7 +811,7 @@ _public_stats_cache_at = 0
 
 @app.route('/diagnostico-login')
 def diagnostico_login():
-    """Página de diagnóstico para problemas de login"""
+    """PÃ¡gina de diagnÃ³stico para problemas de login"""
     return render_template('diagnostico_login.html')
 
 @app.route('/api/test-login', methods=['POST'])
@@ -867,7 +867,7 @@ def api_check_user():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Página de login"""
+    """PÃ¡gina de login"""
     if request.method == 'POST':
         data = request.form
         username = data.get('username', '').strip()
@@ -875,9 +875,9 @@ def login():
         login_type = data.get('login_type', 'individual')
         company_name = data.get('company_name', '').strip()
         
-        # Validación básica
+        # ValidaciÃ³n bÃ¡sica
         if not username or not password:
-            error_msg = 'Usuario y contraseña son requeridos'
+            error_msg = 'Usuario y contraseÃ±a son requeridos'
             if request.is_json:
                 return jsonify({'success': False, 'error': error_msg}), 400
             return render_template('login.html', error=error_msg)
@@ -885,7 +885,7 @@ def login():
         try:
             result = authenticate_user(username, password)
         except Exception as e:
-            print(f"❌ Error en authenticate_user: {e}")
+            print(f"âŒ Error en authenticate_user: {e}")
             error_msg = 'Error interno al conectar con la base de datos. Intenta de nuevo.'
             if request.is_json:
                 return jsonify({'success': False, 'error': error_msg}), 500
@@ -894,7 +894,7 @@ def login():
         if result['success']:
             user = result['user']
             
-            # Validación de tipo de login
+            # ValidaciÃ³n de tipo de login
             if login_type == 'empresa':
                 # Si es login empresarial, verificar que el usuario tenga empresa
                 if not user.get('company_id'):
@@ -923,7 +923,7 @@ def login():
             
             session['user_id'] = user['id']
             session['username'] = user['username']
-            session['roles'] = user['roles']  # Múltiples roles
+            session['roles'] = user['roles']  # MÃºltiples roles
             session['company_id'] = user.get('company_id')
             
             if request.is_json:
@@ -936,7 +936,7 @@ def login():
             
             return render_template('login.html', error=result['error'])
     
-    # Si ya está logueado, redirigir al panel
+    # Si ya estÃ¡ logueado, redirigir al panel
     if 'user_id' in session:
         return redirect(url_for('panel'))
     
@@ -944,7 +944,7 @@ def login():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    """Página de registro con token"""
+    """PÃ¡gina de registro con token"""
     if request.method == 'POST':
         data = request.form
         token = data.get('token', '')
@@ -959,7 +959,7 @@ def register():
                 return jsonify({'success': False, 'error': token_result['error']}), 400
             return render_template('register.html', error=token_result['error'])
         
-        # Determinar roles según el tipo de token
+        # Determinar roles segÃºn el tipo de token
         company_id = token_result.get('company_id')
         is_admin_token = token_result.get('is_admin_token', False)
         
@@ -1010,14 +1010,14 @@ def register():
 
 @app.route('/logout')
 def logout():
-    """Cerrar sesión"""
+    """Cerrar sesiÃ³n"""
     session.clear()
     return redirect(url_for('index'))
 
 @app.route('/panel')
 @login_required
 def panel():
-    """Panel del staff - Requiere autenticación"""
+    """Panel del staff - Requiere autenticaciÃ³n"""
     user = get_user_by_id(session.get('user_id'))
     # Asegurar que user tiene roles como lista para el template
     if user and isinstance(user.get('roles'), str):
@@ -1031,10 +1031,10 @@ def panel():
 
 @app.route('/aspers-sa', methods=['GET', 'POST'])
 def admin_subscriptions():
-    """Panel SuperAdmin — acceso solo mediante URL directa (no linkada públicamente).
+    """Panel SuperAdmin â€” acceso solo mediante URL directa (no linkada pÃºblicamente).
 
     Credenciales: env vars SUPER_ADMIN_USER / SUPER_ADMIN_PASS (con fallback al
-    valor histórico hardcoded para no romper el deploy actual; en producción
+    valor histÃ³rico hardcoded para no romper el deploy actual; en producciÃ³n
     DEBEN definirse en Render para evitar exponer creds en el repo).
     """
     if request.method == 'POST':
@@ -1069,7 +1069,7 @@ def admin_subscriptions():
     except Exception as _e:
         import traceback as _tb
         _err = _tb.format_exc()
-        print(f"❌ Error en /aspers-sa: {_e}\n{_err}")
+        print(f"âŒ Error en /aspers-sa: {_e}\n{_err}")
         return f"<pre style='color:red;padding:20px'>Error interno en Super Admin:\n{_err}</pre>", 500
 
 @app.route('/aspers-sa/logout')
@@ -1187,12 +1187,12 @@ except Exception:
 # Placeholder SQL fijo para todo el proceso
 _PH = '%s' if (_USE_PG or _USE_MYSQL) else '?'
 
-# La BD del scanner está INTEGRADA en la misma BD que auth (un único archivo/servicio)
+# La BD del scanner estÃ¡ INTEGRADA en la misma BD que auth (un Ãºnico archivo/servicio)
 API_DB_AVAILABLE_LOCALLY = True
 
 @contextmanager
 def get_api_db_cursor():
-    """Cursor para tablas del scanner — usa la misma BD que auth (SQLite o PostgreSQL/MySQL)"""
+    """Cursor para tablas del scanner â€” usa la misma BD que auth (SQLite o PostgreSQL/MySQL)"""
     if _USE_PG or _USE_MYSQL:
         from db_mysql import get_db_cursor
         with get_db_cursor() as cursor:
@@ -1227,24 +1227,24 @@ def _insert_id(cursor, sql, params):
     cursor.execute(sql, params)
     return cursor.lastrowid
 
-# Caché simple en memoria para estadísticas
+# CachÃ© simple en memoria para estadÃ­sticas
 _stats_cache = {}
 _stats_cache_time = {}
 
 @app.route('/api/statistics', methods=['GET'])
 @login_required
 def get_statistics():
-    """Obtiene estadísticas - OPTIMIZADO: Acceso directo a BD sin HTTP"""
+    """Obtiene estadÃ­sticas - OPTIMIZADO: Acceso directo a BD sin HTTP"""
     import time
     
-    # Verificar caché (30 segundos TTL)
+    # Verificar cachÃ© (30 segundos TTL)
     cache_key = 'statistics'
     if cache_key in _stats_cache:
         if time.time() - _stats_cache_time.get(cache_key, 0) < 30:
             return jsonify(_stats_cache[cache_key]), 200
     
     try:
-        # Acceso directo a la base de datos (SIN HTTP - MUCHO MÁS RÁPIDO)
+        # Acceso directo a la base de datos (SIN HTTP - MUCHO MÃS RÃPIDO)
         with get_api_db_cursor() as cursor:
             stats = {
                 'total_scans': 0,
@@ -1275,7 +1275,7 @@ def get_statistics():
             
             stats['timestamp'] = datetime.datetime.now().isoformat()
             
-            # Guardar en caché
+            # Guardar en cachÃ©
             _stats_cache[cache_key] = stats
             _stats_cache_time[cache_key] = time.time()
             
@@ -1289,7 +1289,7 @@ def get_statistics():
 @app.route('/api/dashboard/extended', methods=['GET'])
 @login_required
 def get_dashboard_extended():
-    """Estadísticas extendidas para el dashboard: veredictos, top hacks, tiempo promedio."""
+    """EstadÃ­sticas extendidas para el dashboard: veredictos, top hacks, tiempo promedio."""
     import time
     cache_key = 'dashboard_extended'
     if cache_key in _stats_cache:
@@ -1365,8 +1365,8 @@ def get_dashboard_extended():
 @app.route('/api/statistics/recidivism', methods=['GET'])
 @login_required
 def get_recidivism():
-    """Máquinas con múltiples veredictos 'hack' en los últimos N días.
-    Útil para identificar jugadores reincidentes."""
+    """MÃ¡quinas con mÃºltiples veredictos 'hack' en los Ãºltimos N dÃ­as.
+    Ãštil para identificar jugadores reincidentes."""
     import time
     days    = request.args.get('days', 90, type=int)
     min_h   = request.args.get('min_hacks', 2, type=int)
@@ -1411,8 +1411,8 @@ def get_recidivism():
 @app.route('/api/statistics/issue_types', methods=['GET'])
 @login_required
 def get_issue_type_stats():
-    """Top issue_types por frecuencia y hack_rate. Útil para entender
-    qué tipos de hacks están circulando en el servidor."""
+    """Top issue_types por frecuencia y hack_rate. Ãštil para entender
+    quÃ© tipos de hacks estÃ¡n circulando en el servidor."""
     import time
     days  = request.args.get('days', 30, type=int)
     limit = min(request.args.get('limit', 15, type=int), 50)
@@ -1458,7 +1458,7 @@ def get_issue_type_stats():
 
 
 # ============================================================
-# API DE AUTENTICACIÓN
+# API DE AUTENTICACIÃ“N
 # ============================================================
 
 @app.route('/api/auth/login', methods=['POST'])
@@ -1489,7 +1489,7 @@ def api_logout():
 @app.route('/api/auth/me', methods=['GET'])
 @login_required
 def api_me():
-    """Obtiene información del usuario actual"""
+    """Obtiene informaciÃ³n del usuario actual"""
     user = get_user_by_id(session.get('user_id'))
     if user:
         return jsonify({'success': True, 'user': user})
@@ -1509,7 +1509,7 @@ def api_register():
     if not token_result['success']:
         return jsonify({'success': False, 'error': token_result['error']}), 400
     
-    # Determinar roles según el tipo de token
+    # Determinar roles segÃºn el tipo de token
     company_id = token_result.get('company_id')
     is_admin_token = token_result.get('is_admin_token', False)
     
@@ -1539,7 +1539,7 @@ def api_register():
         return jsonify({'success': False, 'error': user_result['error']}), 400
 
 # ============================================================
-# API DE ADMINISTRACIÓN (Solo para admins)
+# API DE ADMINISTRACIÃ“N (Solo para admins)
 # ============================================================
 
 @app.route('/api/admin/registration-tokens', methods=['GET'])
@@ -1593,13 +1593,13 @@ def api_list_users():
     return jsonify({'success': True, 'users': users})
 
 # ============================================================
-# API DE GESTIÓN DE EMPRESAS
+# API DE GESTIÃ“N DE EMPRESAS
 # ============================================================
 
 @app.route('/api/servers', methods=['GET'])
 @login_required
 def list_servers():
-    """P5 #29 — Lista servidores a los que el usuario tiene acceso.
+    """P5 #29 â€” Lista servidores a los que el usuario tiene acceso.
     Admin ve todos; empresa-admin ve solo el suyo.
     Un 'servidor' corresponde a una company en la BD.
     """
@@ -1625,7 +1625,7 @@ def list_servers():
 @app.route('/api/servers/select', methods=['POST'])
 @login_required
 def select_server():
-    """P5 #29 — Selecciona el servidor activo para filtrar vistas del panel."""
+    """P5 #29 â€” Selecciona el servidor activo para filtrar vistas del panel."""
     data = request.json or {}
     server_id = data.get('server_id')
     user = get_user_by_id(session.get('user_id'))
@@ -1676,7 +1676,7 @@ def api_create_company():
 @app.route('/api/admin/companies/<int:company_id>', methods=['GET'])
 @admin_required
 def api_get_company(company_id):
-    """Obtiene información de una empresa"""
+    """Obtiene informaciÃ³n de una empresa"""
     company = get_company_by_id(company_id)
     if company:
         return jsonify({'success': True, 'company': company})
@@ -1783,7 +1783,7 @@ def api_deactivate_company_user(user_id):
     if target_user.get('company_id') != user['company_id']:
         return jsonify({'success': False, 'error': 'No tienes permiso para modificar este usuario'}), 403
     
-    # No permitir desactivarse a sí mismo
+    # No permitir desactivarse a sÃ­ mismo
     if user_id == user['id']:
         return jsonify({'success': False, 'error': 'No puedes desactivar tu propia cuenta'}), 400
     
@@ -1833,7 +1833,7 @@ def api_delete_company_user(user_id):
     if target_user.get('company_id') != user['company_id']:
         return jsonify({'success': False, 'error': 'No tienes permiso para eliminar este usuario'}), 403
     
-    # No permitir eliminarse a sí mismo
+    # No permitir eliminarse a sÃ­ mismo
     if user_id == user['id']:
         return jsonify({'success': False, 'error': 'No puedes eliminar tu propia cuenta'}), 400
     
@@ -1847,7 +1847,7 @@ def api_delete_company_user(user_id):
 @app.route('/api/company/info', methods=['GET'])
 @company_user_required
 def api_get_company_info():
-    """Obtiene información de la empresa del usuario"""
+    """Obtiene informaciÃ³n de la empresa del usuario"""
     user = get_user_by_id(session.get('user_id'))
     if not user or not user.get('company_id'):
         return jsonify({'success': False, 'error': 'Usuario no pertenece a una empresa'}), 403
@@ -1875,7 +1875,7 @@ def api_list_company_scan_tokens():
         if not usernames:
             return jsonify({'success': True, 'tokens': []})
         
-        # Intentar acceso directo a BD si está disponible localmente
+        # Intentar acceso directo a BD si estÃ¡ disponible localmente
         if API_DB_AVAILABLE_LOCALLY:
             try:
                 with get_api_db_cursor() as cursor:
@@ -1909,7 +1909,7 @@ def api_list_company_scan_tokens():
             except Exception as e:
                 print(f"Error accediendo BD local para tokens de empresa, usando HTTP: {str(e)}")
         
-        # Si no está disponible localmente, usar HTTP
+        # Si no estÃ¡ disponible localmente, usar HTTP
         headers = {}
         if API_KEY:
             headers['X-API-Key'] = API_KEY
@@ -1939,11 +1939,11 @@ def api_list_company_scan_tokens():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ============================================================
-# API DE ADMINISTRACIÓN DE SUSCRIPCIONES (Página Secreta)
+# API DE ADMINISTRACIÃ“N DE SUSCRIPCIONES (PÃ¡gina Secreta)
 # ============================================================
 
 def admin_subscriptions_required(f):
-    """Decorador para requerir autenticación de admin de suscripciones"""
+    """Decorador para requerir autenticaciÃ³n de admin de suscripciones"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get('admin_subscriptions'):
@@ -1954,7 +1954,7 @@ def admin_subscriptions_required(f):
 @app.route('/api/admin/create-subscription', methods=['POST'])
 @admin_subscriptions_required
 def api_create_subscription():
-    """Crea una nueva suscripción (individual o empresarial)"""
+    """Crea una nueva suscripciÃ³n (individual o empresarial)"""
     data = request.json or {}
     
     subscription_type = data.get('subscription_type', 'individual')
@@ -1981,11 +1981,11 @@ def api_create_subscription():
                 max_users=8,
                 max_admins=3,
                 created_by=None,
-                notes=f'Suscripción creada desde panel admin. Duración: {duration} meses'
+                notes=f'SuscripciÃ³n creada desde panel admin. DuraciÃ³n: {duration} meses'
             )
             
             if result['success']:
-                # Calcular fecha de expiración
+                # Calcular fecha de expiraciÃ³n
                 if duration > 0:
                     from datetime import datetime, timedelta
                     end_date = datetime.now() + timedelta(days=duration * 30)
@@ -1997,7 +1997,7 @@ def api_create_subscription():
                 return jsonify({
                     'success': True,
                     'company_id': result['company_id'],
-                    'message': 'Suscripción empresarial creada'
+                    'message': 'SuscripciÃ³n empresarial creada'
                 })
             else:
                 return jsonify({'success': False, 'error': result['error']}), 400
@@ -2010,7 +2010,7 @@ def api_create_subscription():
             if not username:
                 return jsonify({'success': False, 'error': 'Nombre de usuario requerido'}), 400
             
-            # Generar contraseña temporal
+            # Generar contraseÃ±a temporal
             import secrets
             temp_password = secrets.token_urlsafe(12)
             
@@ -2028,7 +2028,7 @@ def api_create_subscription():
                     'success': True,
                     'user_id': result['user_id'],
                     'temp_password': temp_password,
-                    'message': f'Suscripción individual creada. Contraseña temporal: {temp_password}'
+                    'message': f'SuscripciÃ³n individual creada. ContraseÃ±a temporal: {temp_password}'
                 })
             else:
                 return jsonify({'success': False, 'error': result['error']}), 400
@@ -2039,7 +2039,7 @@ def api_create_subscription():
 @app.route('/api/admin/make-free', methods=['POST'])
 @admin_subscriptions_required
 def api_make_free():
-    """Marca una suscripción como gratuita"""
+    """Marca una suscripciÃ³n como gratuita"""
     data = request.json or {}
     sub_id = data.get('id')
     sub_type = data.get('type')  # 'company' o 'user'
@@ -2054,7 +2054,7 @@ def api_make_free():
             if result['success']:
                 return jsonify({'success': True, 'message': 'Empresa marcada como gratuita'})
         else:  # user
-            # Para usuarios individuales, podríamos crear una "empresa" especial o solo marcarlos
+            # Para usuarios individuales, podrÃ­amos crear una "empresa" especial o solo marcarlos
             # Por ahora, solo confirmamos
             return jsonify({'success': True, 'message': 'Usuario individual marcado como gratuito'})
         
@@ -2066,7 +2066,7 @@ def api_make_free():
 @app.route('/api/admin/update-company', methods=['POST'])
 @admin_subscriptions_required
 def api_admin_update_company():
-    """Actualiza una empresa desde el panel de administración secreto"""
+    """Actualiza una empresa desde el panel de administraciÃ³n secreto"""
     data = request.json or {}
     company_id = data.get('company_id')
     
@@ -2097,7 +2097,7 @@ def api_admin_update_company():
 @app.route('/api/admin/update-subscription', methods=['POST'])
 @login_required
 def api_update_subscription():
-    """Actualiza suscripción de empresa (precio, estado, extensión). Solo para admins."""
+    """Actualiza suscripciÃ³n de empresa (precio, estado, extensiÃ³n). Solo para admins."""
     user = get_user_by_id(session.get('user_id'))
     if not user or 'admin' not in user.get('roles', []):
         return jsonify({'success': False, 'error': 'No autorizado'}), 403
@@ -2132,7 +2132,7 @@ def api_update_subscription():
 
         result = update_company(company_id=company_id, **update_kwargs)
         if result['success']:
-            return jsonify({'success': True, 'message': 'Suscripción actualizada'})
+            return jsonify({'success': True, 'message': 'SuscripciÃ³n actualizada'})
         return jsonify({'success': False, 'error': result.get('error', 'Error')}), 400
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -2142,26 +2142,26 @@ def api_update_subscription():
 # API PROXY - Conecta con la API REST
 # ============================================================
 
-# IMPORTANTE: Separación COMPLETA de tokens
+# IMPORTANTE: SeparaciÃ³n COMPLETA de tokens
 # 
-# TOKENS DE ESCANEO (para la aplicación .exe SS):
+# TOKENS DE ESCANEO (para la aplicaciÃ³n .exe SS):
 # - Endpoint: /api/tokens (GET/POST/DELETE)
 # - Tabla: scan_tokens (en BD de la API)
 # - Permisos: CUALQUIER usuario autenticado puede crear/listar/eliminar sus propios tokens
 #             Los admins pueden ver/eliminar todos los tokens
-# - Uso: Autenticación en la aplicación cliente SS (.exe)
+# - Uso: AutenticaciÃ³n en la aplicaciÃ³n cliente SS (.exe)
 #
 # TOKENS DE REGISTRO (para crear usuarios):
 # - Endpoints: /api/admin/registration-tokens (solo admin)
 #              /api/company/registration-tokens (admin de empresa)
-# - Tabla: registration_tokens (en BD de autenticación)
+# - Tabla: registration_tokens (en BD de autenticaciÃ³n)
 # - Permisos: Solo admins y admins de empresa pueden crear tokens de registro
 # - Uso: Registro de nuevos usuarios en el sistema web
 
 @app.route('/api/tokens', methods=['GET'])
 @login_required
 def list_tokens():
-    """Lista tokens de ESCANEO (para la aplicación SS) - Cualquier usuario autenticado puede ver sus tokens"""
+    """Lista tokens de ESCANEO (para la aplicaciÃ³n SS) - Cualquier usuario autenticado puede ver sus tokens"""
     try:
         user = get_user_by_id(session.get('user_id'))
         if not user:
@@ -2222,7 +2222,7 @@ def create_token():
 
         created_by = user.get('username', 'web_app')
 
-        # Asegurar columna short_code existe (migración síncrona por si el background thread aún no corrió)
+        # Asegurar columna short_code existe (migraciÃ³n sÃ­ncrona por si el background thread aÃºn no corriÃ³)
         try:
             with get_api_db_cursor() as cursor:
                 cursor.execute("ALTER TABLE scan_tokens ADD COLUMN IF NOT EXISTS short_code VARCHAR(8)")
@@ -2236,7 +2236,7 @@ def create_token():
         expires_at = (datetime.datetime.now() + datetime.timedelta(minutes=30)).isoformat()
         max_uses = 1
 
-        # Generar código único de 6 caracteres
+        # Generar cÃ³digo Ãºnico de 6 caracteres
         for _ in range(20):
             short_code = ''.join(secrets.choice(_CODE_CHARS) for _ in range(6))
             try:
@@ -2274,8 +2274,8 @@ def create_token():
         return jsonify({'success': False, 'error': f'Error al crear token: {str(e)}'}), 500
 
 
-# ════════════════════════════════════════════════════════════════════════════
-#  PLUGIN KEYS — sistema multi-tenant para servidores Minecraft
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+#  PLUGIN KEYS â€” sistema multi-tenant para servidores Minecraft
 #  -----------------------------------------------------------------
 #  Cada empresa puede emitir N "plugin keys" (una por servidor MC). El plugin
 #  Java que va dentro del server las usa para llamar a /api/plugin/issue-token
@@ -2285,7 +2285,7 @@ def create_token():
 #
 #  Compatibilidad: NO toca scan_tokens existentes; solo agrega columnas
 #  nullable mediante ALTER TABLE IF NOT EXISTS.
-# ════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 _PLUGIN_SCHEMA_READY = False
 _PLUGIN_SCHEMA_LOCK = threading.Lock() if 'threading' in globals() else None
@@ -2310,7 +2310,7 @@ def _ensure_plugin_keys_schema():
     en PostgreSQL toma AccessExclusiveLock sobre scan_tokens incluso cuando la
     columna ya existe (es no-op pero el lock se sigue tomando). Eso causaba
     DEADLOCK con SELECTs concurrentes que hacen LEFT JOIN scan_tokens (necesitan
-    AccessShareLock) — caso tipico: get_scan() en /api/scans/<id>.
+    AccessShareLock) â€” caso tipico: get_scan() en /api/scans/<id>.
 
     Solucion: chequear primero con information_schema (solo share lock) y
     ejecutar el ALTER unicamente si la columna realmente NO existe."""
@@ -2321,7 +2321,7 @@ def _ensure_plugin_keys_schema():
     with _PLUGIN_SCHEMA_LOCK:
         try:
             with get_api_db_cursor() as cursor:
-                # Tabla nueva — CREATE IF NOT EXISTS no toma locks fuertes
+                # Tabla nueva â€” CREATE IF NOT EXISTS no toma locks fuertes
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS company_plugin_keys (
                         id SERIAL PRIMARY KEY,
@@ -2366,7 +2366,7 @@ def _ensure_plugin_keys_schema():
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_pv_level ON plugin_violations(level)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_pv_created ON plugin_violations(created_at DESC)")
 
-                # ─── Pack 44: Argus AI Oracle ────────────────────────────────
+                # â”€â”€â”€ Pack 44: Argus AI Oracle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 # Estado vigente por jugador. Una sola fila por (company_id, player_uuid).
                 # last_action: none | watch | ss_issued | kicked | banned
                 cursor.execute("""
@@ -2412,7 +2412,7 @@ def _ensure_plugin_keys_schema():
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_adl_created ON ai_decisions_log(created_at DESC)")
 
                 # Pesos del modelo. Una sola fila por company_id (0 = pesos
-                # globales — no usamos NULL para que UNIQUE funcione en ambos
+                # globales â€” no usamos NULL para que UNIQUE funcione en ambos
                 # dialectos sin necesidad de indices funcionales).
                 # Se actualizan desde el panel super-admin sin redeploy.
                 cursor.execute("""
@@ -2426,7 +2426,7 @@ def _ensure_plugin_keys_schema():
                     )
                 """)
 
-                # Columnas adicionales en scan_tokens — solo ALTER si no existen
+                # Columnas adicionales en scan_tokens â€” solo ALTER si no existen
                 _migrations = [
                     ('plugin_key_id', "ALTER TABLE scan_tokens ADD COLUMN plugin_key_id INTEGER"),
                     ('minecraft_staff', "ALTER TABLE scan_tokens ADD COLUMN minecraft_staff VARCHAR(160)"),
@@ -2572,7 +2572,7 @@ def api_create_plugin_key():
         return jsonify({
             'success': True,
             'key_id': new_id,
-            'api_key': api_key,            # FULL key — solo se muestra esta vez
+            'api_key': api_key,            # FULL key â€” solo se muestra esta vez
             'label': label,
             'company_id': target_company_id,
             'daily_quota': daily_quota,
@@ -2958,9 +2958,9 @@ def api_violations_stats():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #  Pack 44: Argus AI Oracle
-# ─────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 # Cache de pesos por company_id para no machacar la BD en cada eval.
 _AI_WEIGHTS_CACHE: dict = {}
@@ -2973,7 +2973,7 @@ def _get_ai_weights(company_id: int) -> dict:
     Si la empresa no tiene pesos custom, usa los globales (company_id=0).
     Si tampoco hay globales en BD, usa los hardcoded de argus_ai_oracle."""
     import time as _t
-    from web_app import argus_ai_oracle as _oracle
+    import argus_ai_oracle as _oracle
     cache_key = company_id or 0
     now = _t.time()
     cached = _AI_WEIGHTS_CACHE.get(cache_key)
@@ -3190,7 +3190,7 @@ def api_plugin_ai_evaluate():
     plugin_action = body.get('plugin_action')
 
     try:
-        from web_app import argus_ai_oracle as _oracle
+        import argus_ai_oracle as _oracle
         with get_api_db_cursor() as cursor:
             cursor.execute(
                 f"SELECT id, company_id, label, is_active "
@@ -3466,7 +3466,7 @@ def delete_token(token_id):
 def _validate_scan_token_direct(token):
     """Valida un token de escaneo en la BD. Retorna (token_id, error_msg, created_by, allowed_mods)."""
     try:
-        # Códigos cortos (≤8 chars) se buscan en short_code; tokens largos en token
+        # CÃ³digos cortos (â‰¤8 chars) se buscan en short_code; tokens largos en token
         use_short = len(token) <= 8
         with get_api_db_cursor() as cursor:
             col = 'short_code' if use_short else 'token'
@@ -3522,7 +3522,7 @@ def _validate_scan_token_direct(token):
 
 @app.route('/setup-admin-aspers2024', methods=['GET'])
 def setup_admin():
-    """Endpoint de setup único para crear el admin inicial. Solo funciona si no existe."""
+    """Endpoint de setup Ãºnico para crear el admin inicial. Solo funciona si no existe."""
     try:
         import hashlib as _hl
         with get_api_db_cursor() as cursor:
@@ -3548,14 +3548,14 @@ def setup_admin():
                 f'INSERT INTO users (username, email, password_hash, roles, company_id, created_by) VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH})',
                 ('arefy_admin', 'admin@arefy.com', password_hash, '["admin", "empresa", "administrador"]', company_id, 'system')
             )
-        return jsonify({'status': 'ok', 'message': 'Usuario arefy_admin creado. Contraseña: arefy2024!'}), 200
+        return jsonify({'status': 'ok', 'message': 'Usuario arefy_admin creado. ContraseÃ±a: arefy2024!'}), 200
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.route('/api/db-status', methods=['GET'])
 def api_db_status():
-    """Muestra qué backend de BD está activo — útil para verificar deploys"""
+    """Muestra quÃ© backend de BD estÃ¡ activo â€” Ãºtil para verificar deploys"""
     try:
         with get_api_db_cursor() as cursor:
             cursor.execute('SELECT COUNT(*) as count FROM users')
@@ -3579,7 +3579,7 @@ def api_db_status():
 
 @app.route('/api/validate-token', methods=['POST'])
 def validate_token_endpoint():
-    """Valida un token de escaneo (usado por el cliente .exe) — sin login requerido"""
+    """Valida un token de escaneo (usado por el cliente .exe) â€” sin login requerido"""
     try:
         data = request.json or {}
         token = data.get('token', '').strip()
@@ -3602,7 +3602,7 @@ def validate_token_endpoint():
 
 @app.route('/api/debug/last-scan')
 def debug_last_scan():
-    """Endpoint de diagnóstico — muestra el último scan en bruto desde la BD"""
+    """Endpoint de diagnÃ³stico â€” muestra el Ãºltimo scan en bruto desde la BD"""
     try:
         with get_api_db_cursor() as cursor:
             # Estado de columnas disponibles en la tabla scans
@@ -3612,7 +3612,7 @@ def debug_last_scan():
             """)
             cols = [r['column_name'] if hasattr(r, 'keys') else r[0] for r in cursor.fetchall()]
 
-            # Último scan
+            # Ãšltimo scan
             cursor.execute('SELECT * FROM scans ORDER BY id DESC LIMIT 3')
             scans_raw = cursor.fetchall()
             scans_out = []
@@ -3626,7 +3626,7 @@ def debug_last_scan():
                 else:
                     scans_out.append(list(row))
 
-            # Resultados del último scan
+            # Resultados del Ãºltimo scan
             results_count = 0
             if scans_raw:
                 last_id = scans_raw[0]['id'] if hasattr(scans_raw[0], 'keys') else scans_raw[0][0]
@@ -3645,7 +3645,7 @@ def debug_last_scan():
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
-# Current released scanner version — update this when distributing a new build
+# Current released scanner version â€” update this when distributing a new build
 CURRENT_SCANNER_VERSION = "1.6.50"
 
 @app.route('/sw.js')
@@ -3658,7 +3658,7 @@ def service_worker():
     return resp
 
 
-# ── P5 #16 — Web Push Notifications ──────────────────────────────────────────
+# â”€â”€ P5 #16 â€” Web Push Notifications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _get_vapid_keys():
     """Returns (private_key_b64, public_key_b64) from env or generates them."""
@@ -3848,7 +3848,7 @@ def scanner_version():
 
 @app.route('/api/scans', methods=['POST'])
 def start_scan():
-    """Inicia un nuevo escaneo (usado por el cliente .exe) — sin login requerido"""
+    """Inicia un nuevo escaneo (usado por el cliente .exe) â€” sin login requerido"""
     try:
         data = request.json or {}
         scan_token   = data.get('token', '').strip()
@@ -3862,7 +3862,7 @@ def start_scan():
         print(f"[DEBUG start_scan] token={scan_token[:12]}..., machine={machine_name}, ip={ip_address}")
         token_id, error, _created_by, _allowed_mods = _validate_scan_token_direct(scan_token)
         if error:
-            print(f"[DEBUG start_scan] token inválido: {error}")
+            print(f"[DEBUG start_scan] token invÃ¡lido: {error}")
             return jsonify({'error': error}), 401
 
         mc_info = None
@@ -3906,7 +3906,7 @@ def start_scan():
                     cursor.execute('ROLLBACK TO SAVEPOINT os_save')
                 except Exception:
                     pass
-            # Visual #50 — guardar la versión del scanner que generó este scan
+            # Visual #50 â€” guardar la versiÃ³n del scanner que generÃ³ este scan
             scanner_ver = (data.get('scanner_version') or '')[:40]
             if scanner_ver:
                 try:
@@ -3926,8 +3926,8 @@ def start_scan():
         return jsonify({'error': f'Error iniciando escaneo: {str(e)}'}), 500
 
 
-# Rutas/nombres de software legítimo que el scanner client puede mandar como falsos positivos.
-# Aplicado server-side para que funcione con cualquier versión del exe.
+# Rutas/nombres de software legÃ­timo que el scanner client puede mandar como falsos positivos.
+# Aplicado server-side para que funcione con cualquier versiÃ³n del exe.
 _SERVER_FP_FRAGMENTS = [
     # Sistema Windows
     'windows\\system32', 'windows\\syswow64', 'windows\\winsxs',
@@ -3938,7 +3938,7 @@ _SERVER_FP_FRAGMENTS = [
     'program files (x86)\\common files',
     'programdata\\microsoft', 'programdata\\package cache',
     'programdata\\windows', 'programdata\\nvidia',
-    # AppData — apps legítimas
+    # AppData â€” apps legÃ­timas
     'webview2runtime', 'trust protection lists', 'pspc_sdk',
     'appdata\\local\\packages',        # Windows Store apps (firmadas, sandboxed)
     'appdata\\local\\origin',          # EA Origin
@@ -3954,12 +3954,12 @@ _SERVER_FP_FRAGMENTS = [
     'appdata\\local\\microsoft\\office',
     'appdata\\local\\microsoft\\powertoys',
     'electronic arts\\ea desktop',
-    'site-packages',                   # librerías Python instaladas
-    'node_modules',                    # módulos JS de proyectos
-    # Windows AppRepository — paquetes firmados del sistema, jamás hacks
+    'site-packages',                   # librerÃ­as Python instaladas
+    'node_modules',                    # mÃ³dulos JS de proyectos
+    # Windows AppRepository â€” paquetes firmados del sistema, jamÃ¡s hacks
     'apprepository\\packages', 'microsoft\\windows\\apprepository',
     'activationstore.dat', 'credentialstore', '.pckgdep',
-    # Navegadores — rutas de datos del perfil
+    # Navegadores â€” rutas de datos del perfil
     'appdata\\local\\google\\chrome',
     'appdata\\local\\microsoft\\edge',
     'appdata\\local\\brave-browser',
@@ -3968,16 +3968,16 @@ _SERVER_FP_FRAGMENTS = [
     'appdata\\local\\opera software\\opera',
     'appdata\\roaming\\mozilla\\firefox',
     'appdata\\roaming\\waterfox', 'appdata\\roaming\\librewolf',
-    # Launchers / clientes legítimos de Minecraft
+    # Launchers / clientes legÃ­timos de Minecraft
     'lunar client', 'lunarclient',
     'steam\\steamapps', 'epicgames', 'origin games',
     'tlauncher', 'prismlauncher', 'badlion client',
     'gdlauncher', 'multimc', 'atlauncher', 'curseforgeapp',
-    'feather launcher', 'feathermc',   # Feather — launcher legítimo
+    'feather launcher', 'feathermc',   # Feather â€” launcher legÃ­timo
     'modrinth-app', 'modrinth.app',    # Modrinth official launcher
     'minecraftlauncher.exe',           # launcher oficial Mojang
     'xboxlivegames', 'minecraft launcher\\',
-    # Anti-cheats y herramientas de seguridad legítimas
+    # Anti-cheats y herramientas de seguridad legÃ­timas
     'easyanticheat',                   # anti-cheat de juegos (EAC)
     'battleye', 'vanguard', 'faceit',  # otros anti-cheats
     'riot vanguard', 'riotclientservices',
@@ -3991,9 +3991,9 @@ _SERVER_FP_FRAGMENTS = [
     'searchapp.exe', 'searchhost.exe', 'startmenuexperiencehost',
     'shellexperiencehost', 'runtimebroker.exe',
     'wmiprvse.exe', 'audiodg.exe', 'winlogon.exe',
-    # El propio scanner — no flaggear sus propias copias borradas
+    # El propio scanner â€” no flaggear sus propias copias borradas
     'argusscanner', 'minecraftsstool',
-    # Java oficial / OpenJDK / temurin — runtime legítimo
+    # Java oficial / OpenJDK / temurin â€” runtime legÃ­timo
     'java\\jdk', 'java\\jre', 'temurin', 'corretto',
     'eclipse adoptium', 'openjdk',
     'oracle\\java', 'azul zulu',
@@ -4012,7 +4012,7 @@ _SERVER_FP_FRAGMENTS = [
     'nvidia.com', 'amd.com', 'intel.com',
     'mediafire.com', 'mega.nz', 'drive.google.com',
     'docs.google.com', 'gmail.com',
-    # Mods / datapacks legítimos conocidos
+    # Mods / datapacks legÃ­timos conocidos
     'optifine', 'fabricmc', 'quiltmc', 'sodium', 'lithium', 'phosphor',
     'iris', 'indium', 'ferritecore', 'lazydfu', 'starlight',
     'journeymap', 'just enough items', 'jei-', 'rei-',
@@ -4023,25 +4023,25 @@ _SERVER_FP_FRAGMENTS = [
     'distanthorizons', 'embeddium-', 'rubidium-',
     'oculus-', 'continuity-', 'lambdynamiclights-',
     'voicechat-', 'simplevoicechat-',
-    # JNA — archivos temporales normales de Java/Minecraft
+    # JNA â€” archivos temporales normales de Java/Minecraft
     'jna', 'jna-',
-    # Otros programas legítimos
+    # Otros programas legÃ­timos
     'voicemod',
     # Drivers y software de hardware
     'nvidia corporation', 'amd\\radeon', 'intel corporation',
     'discord\\app-', 'teamspeak 3 client',
     'logitech\\logi options', 'razer\\synapse',
     'corsair\\icue', 'steelseries\\engine',
-    # LabyMod — cliente legítimo de Minecraft
+    # LabyMod â€” cliente legÃ­timo de Minecraft
     'labymod', 'labymodlauncher', 'labymod-neo',
-    # Fabric API processed mods y librerías de Minecraft
+    # Fabric API processed mods y librerÃ­as de Minecraft
     '.fabric\\processedmods', '.minecraft\\.fabric', '.minecraft\\libraries',
     '.minecraft\\assets', '.minecraft\\versions',
     '.minecraft\\bin\\natives', '.minecraft\\natives',
     '.minecraft\\crash-reports', '.minecraft\\logs\\debug',
     # Grabadores de clips
     'medal\\', 'medal.tv',
-    # Juegos y apps legítimas
+    # Juegos y apps legÃ­timas
     'roblox\\', 'innersloth', 'vseeface',
     'epic games\\launcher', 'riot games\\',
     'ubisoft connect', 'gog galaxy',
@@ -4053,7 +4053,7 @@ _SERVER_FP_FRAGMENTS = [
     # Servidores Minecraft populares (no son C2)
     '.hypixel.net', 'mc.hypixel.net', 'mineplex.com',
     'cubecraft.net', '.cubecraft.net',
-    # IDE y herramientas de desarrollo (modders legítimos)
+    # IDE y herramientas de desarrollo (modders legÃ­timos)
     'jetbrains\\intellij', 'jetbrains\\toolbox', 'pycharm',
     'visual studio code', 'microsoft vs code', 'cursor\\',
     'eclipse\\', 'netbeans\\',
@@ -4061,9 +4061,9 @@ _SERVER_FP_FRAGMENTS = [
     # OBS y streaming (no es evidencia per se, salvo que se grabe el SS)
     'obs-studio\\bin', 'streamlabs',
 
-    # ── Filter #13 — Discord (todas las variantes oficiales y forks comunes) ──
+    # â”€â”€ Filter #13 â€” Discord (todas las variantes oficiales y forks comunes) â”€â”€
     # Discord original + canales beta + mods de cliente. Estos hookean overlay,
-    # captura de ventana, etc — heurísticas viejas los confunden con inyectores.
+    # captura de ventana, etc â€” heurÃ­sticas viejas los confunden con inyectores.
     'discord.exe', 'discordptb.exe', 'discordcanary.exe',
     'discord_voice.exe', 'discord_overlay', 'discord_overlay2',
     'discordoverlay.exe', 'discord_helper', 'discord_crashhandler',
@@ -4073,12 +4073,12 @@ _SERVER_FP_FRAGMENTS = [
     'appdata\\local\\discordptb',
     'appdata\\local\\discordcanary',
     'discord\\modules', 'discord\\resources', 'discord\\update.exe',
-    # Mods de cliente Discord — son legítimos pero hookean el client local
+    # Mods de cliente Discord â€” son legÃ­timos pero hookean el client local
     'betterdiscord', 'better-discord', 'bdpluginlibrary',
     'vencord', 'arrpc.exe', 'replugged',
     'discord_arrpc', 'discord_rpc', 'discord rich presence',
 
-    # ── Filter #14 — Periféricos: software oficial de mouse/teclado/audio ────
+    # â”€â”€ Filter #14 â€” PerifÃ©ricos: software oficial de mouse/teclado/audio â”€â”€â”€â”€
     # Estos tools capturan teclas / mueven el mouse / cargan profiles, lo que
     # se confunde con macros de hack. Whitelist por path y por nombre.
     # Razer
@@ -4111,22 +4111,22 @@ _SERVER_FP_FRAGMENTS = [
     'sonar.exe',  # SteelSeries Sonar
     'discord_voice', 'voicemeeter',
 
-    # ── Filter #15 — Macros legales firmados ─────────────────────────────────
-    # JoyToKey, Xpadder, AntiMicro/AntiMicroX (gamepad → keyboard mappers).
-    # Son legítimos pero generan eventos de input sintéticos que parecen macros.
+    # â”€â”€ Filter #15 â€” Macros legales firmados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # JoyToKey, Xpadder, AntiMicro/AntiMicroX (gamepad â†’ keyboard mappers).
+    # Son legÃ­timos pero generan eventos de input sintÃ©ticos que parecen macros.
     'joytokey', 'joy2key', 'xpadder.exe',
     'antimicro', 'antimicrox',
-    'controllercompanion', 'rewasd.exe',  # reWASD — gamepad mapper firmado
+    'controllercompanion', 'rewasd.exe',  # reWASD â€” gamepad mapper firmado
     'ds4windows', 'ds4-windows',          # DualShock 4 driver popular
 
-    # ── Filter #16 — AutoHotkey ──────────────────────────────────────────────
-    # AutoHotkey runtime y compiler. Los .ahk en sí podrían ser hack, pero el
+    # â”€â”€ Filter #16 â€” AutoHotkey â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # AutoHotkey runtime y compiler. Los .ahk en sÃ­ podrÃ­an ser hack, pero el
     # runtime ".exe" del propio AHK no es la evidencia.
     'autohotkey\\autohotkey.exe', 'autohotkey64.exe', 'autohotkey32.exe',
     'autohotkeyu64.exe', 'autohotkeyu32.exe', 'ahk2exe.exe',
     'autohotkey\\compiler', 'autohotkey\\autohotkey.chm',
 
-    # ── Filter #17 — OBS Studio + plugins legítimos ──────────────────────────
+    # â”€â”€ Filter #17 â€” OBS Studio + plugins legÃ­timos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # OBS hookea captura de ventanas (game capture), su plugin loader y
     # plugins firmados como StreamFX, NDI, advanced-scene-switcher.
     'obs-studio\\obs64.exe', 'obs-studio\\obs32.exe',
@@ -4147,14 +4147,14 @@ _SERVER_FP_FRAGMENTS = [
     'screen recorder', 'bandicam', 'fraps.exe',
     'lossless cut', 'shotcut',
 
-    # ── Bonus: emuladores firmados ─────────────────────────────────────────
+    # â”€â”€ Bonus: emuladores firmados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Algunos hacks se han camuflado como emus. Los oficiales son seguros.
     'parsec\\parsec', 'parsecd.exe',         # remote play
     'moonlight\\moonlight', 'moonlight-qt',  # game streaming
     'sunshine\\sunshine.exe',                # host de moonlight
 
-    # ── Filter #23 — UWP / MSIX (Microsoft Store apps firmadas) ─────────────
-    # WindowsApps/ ya estaba parcial. Acá añadimos rutas más explícitas y
+    # â”€â”€ Filter #23 â€” UWP / MSIX (Microsoft Store apps firmadas) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # WindowsApps/ ya estaba parcial. AcÃ¡ aÃ±adimos rutas mÃ¡s explÃ­citas y
     # patrones del AppRepository/StateRepository que aparecen como fp.
     'program files\\windowsapps\\microsoft.',
     'program files\\windowsapps\\xbox',
@@ -4174,11 +4174,11 @@ _SERVER_FP_FRAGMENTS = [
     'microsoft.xboxgamingoverlay', 'microsoft.xboxidentityprovider',
     'microsoft.xboxlive.', 'microsoft.gamebar',
 
-    # ── Filter #56 — Remote support tools autorizados ─────────────────────
+    # â”€â”€ Filter #56 â€” Remote support tools autorizados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # TeamViewer / AnyDesk / Chrome Remote / Splashtop. Estos hookean
-    # input y captura, lo que las heurísticas viejas marcaban como cheat
-    # backdoor. Si están en su carpeta canónica (Program Files), legit.
-    # NOTA: también podrían usarse en ataques sociales — el staff debe
+    # input y captura, lo que las heurÃ­sticas viejas marcaban como cheat
+    # backdoor. Si estÃ¡n en su carpeta canÃ³nica (Program Files), legit.
+    # NOTA: tambiÃ©n podrÃ­an usarse en ataques sociales â€” el staff debe
     # cruzar este FP filter con el contexto del scan (lo dejamos como
     # whitelist de path para reducir ruido, no un absuelve total).
     'teamviewer.exe', 'tv_w32.exe', 'tv_x64.exe',
@@ -4187,29 +4187,29 @@ _SERVER_FP_FRAGMENTS = [
     'program files\\anydesk',
     'chrome remote desktop', 'remoting_host.exe',
     'splashtop\\splashtop business', 'srservice.exe',
-    'remotepc.exe', 'rustdesk.exe',  # RustDesk — open source remote
+    'remotepc.exe', 'rustdesk.exe',  # RustDesk â€” open source remote
     'logmein\\logmein hamachi', 'logmein\\logmeinrescue',
     'gotomypc', 'gotomeeting',
     # Microsoft propio para soporte
     'quickassist.exe',                       # Quick Assist (Windows 11)
     'microsoft\\windows\\quickassist',
     'remoteassistance.exe', 'msra.exe',
-    # Atajos de gestión empresarial
+    # Atajos de gestiÃ³n empresarial
     'connectwise control', 'screenconnect.client',
     'kaseya', 'ninja-remote', 'ninjaremote',
     'datto.rmm', 'syncro.live',
 
-    # ── Filter #29 — TLauncher contextual (advisory, no FP duro) ──────────
+    # â”€â”€ Filter #29 â€” TLauncher contextual (advisory, no FP duro) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # TLauncher es FP recurrente en zonas de bajo poder adquisitivo. Sus
     # binarios y carpetas se whitelist por path; si el filename es hack
-    # explícito, igual reportamos (no se arriesga falso negativo).
+    # explÃ­cito, igual reportamos (no se arriesga falso negativo).
     'tlauncher.exe', 'tlauncher\\bin', 'tlauncher\\game',
     'tlauncher\\properties', 'tlauncher_repo',
 
-    # ── Filter #34 — Mods en folders de launchers (CurseForge, Lunar...) ──
+    # â”€â”€ Filter #34 â€” Mods en folders de launchers (CurseForge, Lunar...) â”€â”€
     # Ampliamos el whitelist existente: las carpetas mods/cache/instances
-    # de los launchers más comunes. F#53 ya cubre paths de update —
-    # esto cubre el storage estático.
+    # de los launchers mÃ¡s comunes. F#53 ya cubre paths de update â€”
+    # esto cubre el storage estÃ¡tico.
     'curseforge\\minecraft\\instances', 'curseforge\\minecraft\\install',
     'overwolf\\packages\\extensions',
     'multimc\\instances', 'prismlauncher\\instances',
@@ -4219,19 +4219,19 @@ _SERVER_FP_FRAGMENTS = [
     'badlion client\\bcc', 'badlionclient\\bcc',
     'modrinth-app\\meta', 'modrinth.app\\profiles',
 
-    # ── Filter #47 — Steam Workshop subscriptions ──────────────────────────
+    # â”€â”€ Filter #47 â€” Steam Workshop subscriptions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     'steam\\steamapps\\workshop', 'steam\\workshop',
     'steam\\steamapps\\common',          # juegos instalados (no son hack)
     'steam\\steamapps\\downloading',     # downloads en curso
     'steam\\appcache', 'steam\\config',
 
-    # ══════════════════════════════════════════════════════════════════════
-    # PACK 29 — Lote masivo de whitelists server-side adicionales.
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # PACK 29 â€” Lote masivo de whitelists server-side adicionales.
     # Aplicado retroactivamente a scans antiguos via _scrub_results_for_display.
-    # ══════════════════════════════════════════════════════════════════════
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-    # ── Filter #5 (extensión) — Launchers MC oficiales/third-party adicionales
-    'xmcl-launcher', 'x minecraft launcher',  # XMCL — open-source, popular en CN
+    # â”€â”€ Filter #5 (extensiÃ³n) â€” Launchers MC oficiales/third-party adicionales
+    'xmcl-launcher', 'x minecraft launcher',  # XMCL â€” open-source, popular en CN
     'hmcl', 'hmcl-launcher', 'huangminecraftlauncher',  # HMCL Java (no Android variant)
     'magiclauncher', 'magic launcher',
     'fjordlauncher', 'fjord launcher',
@@ -4239,16 +4239,16 @@ _SERVER_FP_FRAGMENTS = [
     'mclauncher\\', 'mclauncher.exe',
     'voidclient', 'voidlauncher',
     'salwyrr', 'salwyrr launcher',
-    'pcl2\\', 'pcl-launcher',         # Plain Craft Launcher 2 — popular CN
+    'pcl2\\', 'pcl-launcher',         # Plain Craft Launcher 2 â€” popular CN
     'cmclauncher\\', 'cmcl',
     'easymc',
-    'pojavlauncher\\',                 # Pojav (también usado en desktop por algunos)
+    'pojavlauncher\\',                 # Pojav (tambiÃ©n usado en desktop por algunos)
     'tlauncher 2',                     # TLauncher v2 modern
     'novalauncher\\', 'nova launcher minecraft',
-    # Forks legítimos abiertos
+    # Forks legÃ­timos abiertos
     'siged-launcher', 'olive launcher', 'olivelauncher',
 
-    # ── Filter #7 — Reputación por path: rutas inherentemente firmadas ─────
+    # â”€â”€ Filter #7 â€” ReputaciÃ³n por path: rutas inherentemente firmadas â”€â”€â”€â”€â”€
     'program files\\windowsapps\\microsoft.',    # UWP firmados Microsoft
     'program files\\windowsapps\\xboxgaming',    # Xbox apps
     'program files\\windowsapps\\spotifyab.',    # Spotify UWP
@@ -4262,18 +4262,18 @@ _SERVER_FP_FRAGMENTS = [
     'microsoft.vclibs.140', 'microsoft.netnative',
     'microsoft.ui.xaml', 'microsoft.windowsappruntime',
 
-    # ── Filter #10 — Patrones genéricos test/demo/sample en filename ───────
+    # â”€â”€ Filter #10 â€” Patrones genÃ©ricos test/demo/sample en filename â”€â”€â”€â”€â”€â”€â”€
     # Si el path/nombre contiene estos tokens, MUY probable que sea archivo
     # de prueba personal del usuario, no un cheat real (los cheats no se
-    # llaman a sí mismos "test"). Solo aplica como segmento de path —
-    # si el filename completo es 'test.exe' aún se reporta porque puede
+    # llaman a sÃ­ mismos "test"). Solo aplica como segmento de path â€”
+    # si el filename completo es 'test.exe' aÃºn se reporta porque puede
     # ser un binario malicioso renombrado.
     '\\demos\\', '\\demo\\', '\\samples\\', '\\examples\\',
     '\\tests\\', '\\test_', '\\proyectos demo\\',
     '\\tutorial\\', '\\tutoriales\\',
 
-    # ── Filter #28 — Paths localizados (es-AR/es-MX/es-ES) ─────────────────
-    # Windows con idioma español traduce "Documents" a "Documentos", etc.
+    # â”€â”€ Filter #28 â€” Paths localizados (es-AR/es-MX/es-ES) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # Windows con idioma espaÃ±ol traduce "Documents" a "Documentos", etc.
     # Estos paths son carpetas del usuario, no instalaciones de cheats.
     'usuarios\\public\\', 'usuarios\\publico\\',
     '\\mis documentos\\', '\\documentos\\favoritos\\',
@@ -4281,8 +4281,8 @@ _SERVER_FP_FRAGMENTS = [
     '\\escritorio\\backups',
     '\\imagenes\\', '\\videos\\', '\\musica\\',
 
-    # ── Filter #32 — Caches de package managers (no contienen ejecutables ──
-    # propios; son cachés de Maven/Gradle/npm/pip/cargo/yarn).
+    # â”€â”€ Filter #32 â€” Caches de package managers (no contienen ejecutables â”€â”€
+    # propios; son cachÃ©s de Maven/Gradle/npm/pip/cargo/yarn).
     '\\.gradle\\caches', '\\.gradle\\wrapper\\dists',
     '\\.m2\\repository', '\\.ivy2\\cache',
     'appdata\\local\\npm-cache',
@@ -4292,7 +4292,7 @@ _SERVER_FP_FRAGMENTS = [
     '\\.cache\\pip', '\\.cache\\yarn', '\\.cache\\go-build',
     '\\.nuget\\packages', '\\packages\\.nuget',
 
-    # ── Filter #35 — Cache de modpacks de CurseForge / Modrinth ────────────
+    # â”€â”€ Filter #35 â€” Cache de modpacks de CurseForge / Modrinth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Mods descargados auto por el launcher cuando el usuario suscribe a un
     # modpack. Mismos archivos en N PCs, no cuenta como "hack instalado".
     '.minecraft\\mods\\caches', '.minecraft\\modpacks\\',
@@ -4304,21 +4304,21 @@ _SERVER_FP_FRAGMENTS = [
     'multimc\\meta\\', 'prismlauncher\\meta\\',
     'overwolf\\packages\\extensions\\onjbihaipdjlphmlpedhdpgpaihjeofg\\',  # CurseForge ext stable id
 
-    # ── Filter #52 — Reinstalaciones legítimas (cache/installer paths) ─────
-    # Carpetas de instaladores típicos. Si un mismo binario aparece en N
-    # scans del mismo usuario, es reinstalación, no nuevo evento.
+    # â”€â”€ Filter #52 â€” Reinstalaciones legÃ­timas (cache/installer paths) â”€â”€â”€â”€â”€
+    # Carpetas de instaladores tÃ­picos. Si un mismo binario aparece en N
+    # scans del mismo usuario, es reinstalaciÃ³n, no nuevo evento.
     '\\appdata\\local\\package cache\\',     # Visual Studio installer cache
     '\\package cache\\{',                    # GUID-based installer cache
     'softwaredistribution\\download',        # Windows Update
     'wuredist\\', 'wuredownloads\\',
     '\\msocache\\', 'mshtmedit',
 
-    # ── Filter #60 — Cooldown markers: paths donde la empresa ya marcó FP ──
-    # Soportado a nivel de fragmento aprendido (learned_legit_paths) —
-    # solo agregamos aquí defaults globales para acelerar. La lógica de
+    # â”€â”€ Filter #60 â€” Cooldown markers: paths donde la empresa ya marcÃ³ FP â”€â”€
+    # Soportado a nivel de fragmento aprendido (learned_legit_paths) â€”
+    # solo agregamos aquÃ­ defaults globales para acelerar. La lÃ³gica de
     # cooldown por empresa va en el endpoint /api/staff/learn-fp ya existente.
 
-    # ── Bonus extra: programas legítimos comunes mal-flageados ──────────────
+    # â”€â”€ Bonus extra: programas legÃ­timos comunes mal-flageados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     'jdownloader', 'jdownloader2',           # download manager
     'qbittorrent', 'utorrent',               # torrent (legal o no, no es MC hack)
     'transmission-qt',
@@ -4338,7 +4338,7 @@ _SERVER_FP_FRAGMENTS = [
     'putty.exe', 'mobaxterm', 'winscp',
     'filezilla\\',
     'spotify.exe', 'apple music\\', 'apple\\itunes',
-    # Repos de scripts personales del usuario (proyectos legítimos suyos)
+    # Repos de scripts personales del usuario (proyectos legÃ­timos suyos)
     '\\onedrive\\documents\\github\\',
     '\\users\\public\\desktop\\',
     '\\projects\\', '\\proyectos\\',
@@ -4346,16 +4346,16 @@ _SERVER_FP_FRAGMENTS = [
 ]
 
 
-# ── Filter #43, #44 — Settings por empresa (threshold dinámico + modo) ──────
-# Permite que cada empresa configure su política:
-#   * mode: 'tournament' (más estricto, threshold default -10), 'normal',
-#           'casual' (más permisivo, threshold default +10).
+# â”€â”€ Filter #43, #44 â€” Settings por empresa (threshold dinÃ¡mico + modo) â”€â”€â”€â”€â”€â”€
+# Permite que cada empresa configure su polÃ­tica:
+#   * mode: 'tournament' (mÃ¡s estricto, threshold default -10), 'normal',
+#           'casual' (mÃ¡s permisivo, threshold default +10).
 #   * threshold_critical / threshold_suspicious: umbrales custom (override
 #           del default {70, 30}).
-# Cargado on-demand con cache 60s por empresa. Si la empresa no configuró
+# Cargado on-demand con cache 60s por empresa. Si la empresa no configurÃ³
 # nada, devuelve los defaults.
 _company_settings_cache = {}    # {company_id: (settings_dict, ts)}
-_COMPANY_SETTINGS_TTL = 60.0     # 1 min — staff verá los cambios pronto
+_COMPANY_SETTINGS_TTL = 60.0     # 1 min â€” staff verÃ¡ los cambios pronto
 
 def _get_company_settings(company_id):
     if not company_id:
@@ -4395,10 +4395,10 @@ def _get_company_settings(company_id):
     except Exception as e:
         print(f'[CompanySettings] error: {e}')
 
-    # Pack 32 F#60 — Aplicar threshold_bump del cooldown si existe.
+    # Pack 32 F#60 â€” Aplicar threshold_bump del cooldown si existe.
     # No mutamos los valores guardados en BD; sumamos en memoria por
     # request. Si la empresa hizo muchos overturns o learn-fp, sus
-    # thresholds suben para forzar revisión más estricta.
+    # thresholds suben para forzar revisiÃ³n mÃ¡s estricta.
     if _AI_TRUST_AVAILABLE:
         try:
             with get_api_db_cursor() as _ccur:
@@ -4453,7 +4453,7 @@ def set_company_settings_endpoint():
         crit = int(data.get('threshold_critical', 70))
         susp = int(data.get('threshold_suspicious', 30))
     except (TypeError, ValueError):
-        return jsonify({'error': 'thresholds inválidos'}), 400
+        return jsonify({'error': 'thresholds invÃ¡lidos'}), 400
     if not (1 <= susp < crit <= 99):
         return jsonify({'error': 'thresholds: suspicious < critical, ambos 1..99'}), 400
     try:
@@ -4486,7 +4486,7 @@ def set_company_settings_endpoint():
                     f'VALUES ({_PH}, {_PH}, {_PH}, {_PH}, {_PH})',
                     (company_id, mode, crit, susp, user_id)
                 )
-        # Invalidar caché
+        # Invalidar cachÃ©
         _company_settings_cache.pop(company_id, None)
         try:
             _log_staff_action('company_settings_update',
@@ -4502,7 +4502,7 @@ def set_company_settings_endpoint():
 _ZERO_RISK_ISSUE_TYPES = {
     'texture_pack', 'texture_pack_xray', 'texture_pack_analysis',
     'resource_pack', 'resource_pack_xray',
-    'event_logs',   # cambios fecha/hora: los dispara Windows NTP automáticamente
+    'event_logs',   # cambios fecha/hora: los dispara Windows NTP automÃ¡ticamente
 }
 
 
@@ -4511,7 +4511,7 @@ _LP_CACHE_TTL = 300  # 5 minutos
 
 
 def _get_learned_legit_paths() -> list:
-    """Devuelve lista de rutas legítimas aprendidas por el staff (caché 5 min)."""
+    """Devuelve lista de rutas legÃ­timas aprendidas por el staff (cachÃ© 5 min)."""
     import time as _time
     if _time.time() - _lp_cache['ts'] < _LP_CACHE_TTL:
         return _lp_cache['paths']
@@ -4527,15 +4527,15 @@ def _get_learned_legit_paths() -> list:
         _lp_cache['paths'] = paths
         _lp_cache['ts']    = _time.time()
     except Exception:
-        pass  # si falla la BD usamos la caché vieja o lista vacía
+        pass  # si falla la BD usamos la cachÃ© vieja o lista vacÃ­a
     return _lp_cache['paths']
 
 
 import re as _re_fp
-# Categorías que solo existían en EXEs viejos con parsers buggeados — 100% FP
+# CategorÃ­as que solo existÃ­an en EXEs viejos con parsers buggeados â€” 100% FP
 # APPCOMPAT y USN_FORENSICS ya no se filtran: el nuevo scanner los usa correctamente
 _LEGACY_FP_CATEGORIES = {'EXECUTED_DELETED'}
-# Patrones de basura binaria en nombres — parser viejo decodificaba .pf como UTF-16
+# Patrones de basura binaria en nombres â€” parser viejo decodificaba .pf como UTF-16
 _BINARY_GARBAGE_RE = _re_fp.compile(
     r'\bLMEM\b|Windows\.Data\.|Matrix3x2|\.CenterX|\.CenterY|'
     r'ItemReference|MEOW\b|CloudData|RevealBrush|XamlAnim|'
@@ -4544,14 +4544,14 @@ _BINARY_GARBAGE_RE = _re_fp.compile(
     r'^[\x00-\x08\x0b\x0c\x0e-\x1f]{2,}|[\xc0-\xff]{6,}',
     _re_fp.IGNORECASE
 )
-# Strings de control / no-imprimibles típicos de basura binaria
+# Strings de control / no-imprimibles tÃ­picos de basura binaria
 _NONPRINTABLE_RE = _re_fp.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 # Caracteres "raros" no-ASCII que aparecen al decodificar UTF-16 incorrectamente
 _HIGH_BYTE_RUN_RE = _re_fp.compile(r'[\u0080-\uFFFF]{4,}')
 
 
 def _normalize_path(p: str) -> str:
-    """Normaliza una ruta para comparación robusta:
+    """Normaliza una ruta para comparaciÃ³n robusta:
        - lowercase
        - separadores unificados a '\\'
        - quitar prefijos extendidos '\\\\?\\' y '\\\\.\\'
@@ -4577,12 +4577,12 @@ def _is_garbage_string(s: str) -> bool:
     # Caracteres de control no-imprimibles
     if len(_NONPRINTABLE_RE.findall(s_str)) >= 2:
         return True
-    # Run largo de caracteres no-ASCII (típico de UTF-16 mal decodificado)
+    # Run largo de caracteres no-ASCII (tÃ­pico de UTF-16 mal decodificado)
     if _HIGH_BYTE_RUN_RE.search(s_str):
         return True
     if _BINARY_GARBAGE_RE.search(s_str):
         return True
-    # Ratio de caracteres alfanuméricos: si <30% es probable basura
+    # Ratio de caracteres alfanumÃ©ricos: si <30% es probable basura
     alnum = sum(1 for c in s_str if c.isalnum() or c in ' .\\/_-:()[]')
     if len(s_str) >= 12 and alnum / max(1, len(s_str)) < 0.30:
         return True
@@ -4595,13 +4595,13 @@ def _is_server_false_positive(result: dict) -> bool:
     descarta confidence cero, y aplica matching robusto contra fragmentos seguros.
     """
     # FILE_ACTIVITY (tab Logs del Explore): historial informacional
-    # de archivos creados/modificados/borrados/ejecutados desde el último boot.
-    # NUNCA aplicar el filtro de FPs aquí — pueden caer perfectamente en
+    # de archivos creados/modificados/borrados/ejecutados desde el Ãºltimo boot.
+    # NUNCA aplicar el filtro de FPs aquÃ­ â€” pueden caer perfectamente en
     # rutas de "fragmentos seguros" (AppData, Windows, etc.) y eso NO las
     # convierte en FPs: son justamente lo que queremos mostrar como historial.
     categoria = (result.get('categoria') or result.get('issue_category') or '').upper()
     if categoria == 'FILE_ACTIVITY':
-        # Solo descartar basura binaria (parsers rotos), nada más
+        # Solo descartar basura binaria (parsers rotos), nada mÃ¡s
         ruta_raw = result.get('ruta', '') or result.get('issue_path', '') or ''
         nombre = (result.get('nombre', '') or result.get('archivo', '')
                   or result.get('issue_name', '') or '')
@@ -4614,7 +4614,7 @@ def _is_server_false_positive(result: dict) -> bool:
     if tipo in _ZERO_RISK_ISSUE_TYPES:
         return True
 
-    # Categorías de EXE antiguo con parsers buggeados
+    # CategorÃ­as de EXE antiguo con parsers buggeados
     if categoria in _LEGACY_FP_CATEGORIES:
         return True
 
@@ -4624,7 +4624,7 @@ def _is_server_false_positive(result: dict) -> bool:
     ruta     = _normalize_path(ruta_raw)
     combined = ruta + '|' + (nombre or '').lower()
 
-    # Confidence numéricamente nula y sin patrones detectados → ruido
+    # Confidence numÃ©ricamente nula y sin patrones detectados â†’ ruido
     try:
         c = float(result.get('confidence', 0) or 0)
         if c > 1.0:
@@ -4645,7 +4645,7 @@ def _is_server_false_positive(result: dict) -> bool:
     if not (nombre or '').strip() and not (ruta or '').strip():
         return True
 
-    # Hallazgos con descripción genérica de fecha/hora del sistema (NTP) — FP histórico
+    # Hallazgos con descripciÃ³n genÃ©rica de fecha/hora del sistema (NTP) â€” FP histÃ³rico
     desc = (result.get('descripcion') or result.get('issue_description') or '').lower()
     if 'cambio de hora' in desc or 'time-service' in desc or 'w32time' in desc:
         return True
@@ -4653,21 +4653,21 @@ def _is_server_false_positive(result: dict) -> bool:
     if any(frag in combined for frag in _SERVER_FP_FRAGMENTS):
         return True
 
-    # Filter #37 — `.rise` extensión vs folder.
+    # Filter #37 â€” `.rise` extensiÃ³n vs folder.
     # Rise client tiene su carpeta de config en %appdata%\.rise (o similar).
-    # Si el path es una CARPETA `.rise\` (no termina en .rise como extensión
-    # real de archivo), descartar — solo el archivo con extensión .rise
+    # Si el path es una CARPETA `.rise\` (no termina en .rise como extensiÃ³n
+    # real de archivo), descartar â€” solo el archivo con extensiÃ³n .rise
     # cuenta como evidencia (raro de ver fuera del cheat real).
-    # Heurística: si '.rise' aparece como segmento de directorio (con
-    # separador después), es config folder; si es la extensión final del
-    # archivo (nombre.rise) o nombre completo, sigue evaluándose.
+    # HeurÃ­stica: si '.rise' aparece como segmento de directorio (con
+    # separador despuÃ©s), es config folder; si es la extensiÃ³n final del
+    # archivo (nombre.rise) o nombre completo, sigue evaluÃ¡ndose.
     try:
-        # Nombre de archivo (último segmento de la ruta)
+        # Nombre de archivo (Ãºltimo segmento de la ruta)
         last_seg = (nombre or '').lower().strip()
-        # Si es CARPETA .rise (típico de Rise/Vape config legítima del propio
-        # usuario que ya desinstaló y solo dejó la config) → soft FP.
-        # Solo skipea si el filename NO termina en .rise como extensión
-        # real (último .rise antes del fin del string).
+        # Si es CARPETA .rise (tÃ­pico de Rise/Vape config legÃ­tima del propio
+        # usuario que ya desinstalÃ³ y solo dejÃ³ la config) â†’ soft FP.
+        # Solo skipea si el filename NO termina en .rise como extensiÃ³n
+        # real (Ãºltimo .rise antes del fin del string).
         is_rise_folder_path = (
             ('\\.rise\\' in combined) or ('/.rise/' in combined) or
             ('\\.rise/' in combined) or ('/.rise\\' in combined)
@@ -4678,10 +4678,10 @@ def _is_server_false_positive(result: dict) -> bool:
     except Exception:
         pass
 
-    # Filter #11 — Aprendizaje incremental por feedback. Las rutas marcadas
-    # como 'legitimate_path' por el staff (vía learned_patterns) se aplican
-    # ahora retroactivamente a TODOS los scans servidos. La función ya
-    # existía pero no se llamaba. Cache de 5 min en _get_learned_legit_paths
+    # Filter #11 â€” Aprendizaje incremental por feedback. Las rutas marcadas
+    # como 'legitimate_path' por el staff (vÃ­a learned_patterns) se aplican
+    # ahora retroactivamente a TODOS los scans servidos. La funciÃ³n ya
+    # existÃ­a pero no se llamaba. Cache de 5 min en _get_learned_legit_paths
     # evita el round-trip a BD por cada result.
     try:
         learned = _get_learned_legit_paths()
@@ -4690,18 +4690,18 @@ def _is_server_false_positive(result: dict) -> bool:
     except Exception:
         pass
 
-    # ════════════════════════════════════════════════════════════════════
-    # PACK 29 — heurísticas inline (sin tabla / sin red) que filtran
-    # categorías obvias de FP que no se pueden capturar solo con fragmentos.
-    # ════════════════════════════════════════════════════════════════════
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # PACK 29 â€” heurÃ­sticas inline (sin tabla / sin red) que filtran
+    # categorÃ­as obvias de FP que no se pueden capturar solo con fragmentos.
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     try:
         name_lower = (nombre or '').lower().strip()
 
-        # Filter #3 — "killaura" / "aimbot" / etc como nombre LITERAL del archivo
-        # en path de usuario (Documents/Escritorio/Downloads), con extensión
-        # de imagen/texto/video/pdf → es nota personal o screenshot, no el
+        # Filter #3 â€” "killaura" / "aimbot" / etc como nombre LITERAL del archivo
+        # en path de usuario (Documents/Escritorio/Downloads), con extensiÃ³n
+        # de imagen/texto/video/pdf â†’ es nota personal o screenshot, no el
         # cheat real. Los cheats reales SIEMPRE son .exe/.jar/.dll en paths
-        # de instalación (no en Documents).
+        # de instalaciÃ³n (no en Documents).
         _user_path_segs = (
             '\\desktop\\', '\\downloads\\', '\\documents\\',
             '\\documentos\\', '\\descargas\\', '\\escritorio\\',
@@ -4730,7 +4730,7 @@ def _is_server_false_positive(result: dict) -> bool:
             # Ej: "killaura tutorial.txt", "vape_screenshot.png" en Downloads
             return True
 
-        # Filter #10 — patrones test/demo/sample/example/tutorial/proyecto en
+        # Filter #10 â€” patrones test/demo/sample/example/tutorial/proyecto en
         # nombre del archivo (no solo path) y en path de usuario. Estos suelen
         # ser proyectos personales/test del usuario, no cheats reales.
         _self_test_tokens = (
@@ -4743,11 +4743,11 @@ def _is_server_false_positive(result: dict) -> bool:
             if nivel not in ('CRITICAL',):
                 return True
 
-        # ════════════════════════════════════════════════════════════════
-        # PACK 40 — Filter F#1 cierre (instaladores legítimos por filename
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+        # PACK 40 â€” Filter F#1 cierre (instaladores legÃ­timos por filename
         # + publisher pattern). Server-side, sin DB de hashes externa.
-        # Cubre el último 30% que faltaba después del path-whitelist Pack 29.
-        # ════════════════════════════════════════════════════════════════
+        # Cubre el Ãºltimo 30% que faltaba despuÃ©s del path-whitelist Pack 29.
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         if is_known_legit_installer(name_lower, combined):
             return True
     except Exception:
@@ -4756,24 +4756,24 @@ def _is_server_false_positive(result: dict) -> bool:
     return False
 
 
-# ────────────────────────────────────────────────────────────────────────────
-# Filter F#1 — Whitelist de instaladores legítimos por filename pattern
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Filter F#1 â€” Whitelist de instaladores legÃ­timos por filename pattern
 # (server-side, sin VirusTotal Intelligence ni Microsoft Catalog).
 #
-# Estrategia: en lugar de mantener una tabla de hashes (carísimo de poblar
-# y mantener), reconocemos el filename + estructura típica de los instaladores
+# Estrategia: en lugar de mantener una tabla de hashes (carÃ­simo de poblar
+# y mantener), reconocemos el filename + estructura tÃ­pica de los instaladores
 # de software popular. Los cheats reales NO se distribuyen como
-# "EpicGamesLauncherInstaller.exe" en Downloads — vienen como `vape.jar`
+# "EpicGamesLauncherInstaller.exe" en Downloads â€” vienen como `vape.jar`
 # en `.minecraft\mods` o `client.exe` en una carpeta sin firma.
 #
 # Reglas:
 #   1. Filename matchea uno de los patterns conocidos.
-#   2. Path típico de instalador (Downloads, Temp, %TEMP%, Cache, AppData,
+#   2. Path tÃ­pico de instalador (Downloads, Temp, %TEMP%, Cache, AppData,
 #      Program Files, Recycle, MSOCache, package cache...).
-#   3. Extensión .exe o .msi (los cheats raramente usan .msi).
+#   3. ExtensiÃ³n .exe o .msi (los cheats raramente usan .msi).
 #
-# Si los 3 se cumplen → es un instalador reconocido y se descarta como FP.
-# ────────────────────────────────────────────────────────────────────────────
+# Si los 3 se cumplen â†’ es un instalador reconocido y se descarta como FP.
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import re as _re_legit_installer
 
 _KNOWN_INSTALLER_PATTERNS = [
@@ -4849,7 +4849,7 @@ _KNOWN_INSTALLER_PATTERNS = [
     # Antivirus (instaladores oficiales)
     _re_legit_installer.compile(r'^(?:malwarebytes|mbam|mb3|mb4)[-_ ]?(?:installer|setup)?[-_ \d\.\w]*\.exe$'),
     _re_legit_installer.compile(r'^(?:avast|avg|kaspersky|bitdefender|eset|norton|mcafee|sophos)[-_ ]?(?:setup|installer|free|antivirus)?[-_ \d\.\w]*\.exe$'),
-    # Drivers genéricos (HID, audio realtek, etc.)
+    # Drivers genÃ©ricos (HID, audio realtek, etc.)
     _re_legit_installer.compile(r'^realtek[-_ ]?(?:audio|hd|wireless|setup)?[-_ \d\.\w]*\.exe$'),
     # NVidia/AMD legacy DCH installers
     _re_legit_installer.compile(r'^\d{3,4}\.\d{1,3}[-_ ]?(?:desktop|notebook|game|studio|dch)[-_ ]?(?:notebook|win\d+|x64|us|setup|international)?[-_ \d\.\w]*\.exe$'),
@@ -4871,8 +4871,8 @@ _INSTALLER_PATH_HINTS = (
 
 
 def is_known_legit_installer(name_lower: str, combined_lower: str) -> bool:
-    """True si el filename matchea un installer reconocido Y está en path
-    típico de instalador. Diseñado para tener 0 FN sobre instaladores reales
+    """True si el filename matchea un installer reconocido Y estÃ¡ en path
+    tÃ­pico de instalador. DiseÃ±ado para tener 0 FN sobre instaladores reales
     populares y ~0 FP sobre cheats (los cheats no se llaman como installers
     de NVIDIA / Office).
 
@@ -4893,10 +4893,10 @@ def is_known_legit_installer(name_lower: str, combined_lower: str) -> bool:
             continue
     if not matched_pattern:
         return False
-    # Confirmar con un path hint razonable (los cheats típicos aparecen en
+    # Confirmar con un path hint razonable (los cheats tÃ­picos aparecen en
     # .minecraft/mods, no en C:\Windows\Installer ni en Downloads como
-    # GeForceExperience-Setup.exe). Si el path es ambiguo (sin ningún hint),
-    # SOLO descartamos si el filename es muy específico de installer
+    # GeForceExperience-Setup.exe). Si el path es ambiguo (sin ningÃºn hint),
+    # SOLO descartamos si el filename es muy especÃ­fico de installer
     # (contiene "setup" / "installer" / "redist" / "runtime").
     path_ok = any(hint in combined_lower for hint in _INSTALLER_PATH_HINTS)
     explicit_installer_token = any(
@@ -4908,23 +4908,23 @@ def is_known_legit_installer(name_lower: str, combined_lower: str) -> bool:
     return path_ok or explicit_installer_token
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# Filter #42 — Heurística "Primera vez visto" (first-seen tracking).
-# ════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Filter #42 â€” HeurÃ­stica "Primera vez visto" (first-seen tracking).
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Cada evidencia (file_hash o name_norm+tipo) se trackea en evidence_fingerprints
 # con contador acumulado. Cuando un scan llega:
-#   - Si el fingerprint no existe → first_seen=true (revisión humana sugerida).
-#   - Si seen_count crece → ya fue visto antes en otros scans/empresas.
-# El panel muestra badge "🆕 Primera vez visto" o "👁 Visto Nx" en cada hallazgo.
+#   - Si el fingerprint no existe â†’ first_seen=true (revisiÃ³n humana sugerida).
+#   - Si seen_count crece â†’ ya fue visto antes en otros scans/empresas.
+# El panel muestra badge "ðŸ†• Primera vez visto" o "ðŸ‘ Visto Nx" en cada hallazgo.
 # Auditable y NO destructivo: nunca cambia el verdict, solo decora metadata.
-# ════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 import re as _re_fp42
 _NAME_NORM_RE = _re_fp42.compile(r'[\d\s_\-\.\(\)\[\]\{\}]+')
 
 
 def _compute_evidence_fingerprint(r: dict) -> str | None:
     """Genera un fingerprint estable para un result de scan.
-    Prioridad: file_hash (sha256 real del binario) → name_norm+tipo.
+    Prioridad: file_hash (sha256 real del binario) â†’ name_norm+tipo.
     Devuelve None si no hay datos suficientes para identificar la evidencia.
     """
     if not r or not isinstance(r, dict):
@@ -4944,7 +4944,7 @@ def _compute_evidence_fingerprint(r: dict) -> str | None:
 
 def _ensure_evidence_fingerprints_table(cur) -> bool:
     """Crea evidence_fingerprints si no existe. Idempotente, seguro de llamar
-    múltiples veces. Devuelve True si la tabla está disponible.
+    mÃºltiples veces. Devuelve True si la tabla estÃ¡ disponible.
     """
     try:
         cur.execute(
@@ -4970,7 +4970,7 @@ def _upsert_evidence_fingerprints(cur, scan_id: int, results: list) -> dict:
     """UPSERT por cada result en evidence_fingerprints. Devuelve dict
     {fingerprint: {'seen_count': N, 'was_first': bool}} para que el caller
     pueda decorar la respuesta con esa info.
-    Idempotente, tolera fallos de BD (devuelve dict vacío si la tabla cae).
+    Idempotente, tolera fallos de BD (devuelve dict vacÃ­o si la tabla cae).
     """
     out: dict = {}
     if not results:
@@ -5030,7 +5030,7 @@ def _upsert_evidence_fingerprints(cur, scan_id: int, results: list) -> dict:
 
 def _query_evidence_seen_counts(cur, results: list) -> dict:
     """Variante read-only para GET: devuelve dict {fingerprint: seen_count}
-    sin escribir. Si la tabla no existe, devuelve dict vacío (decorate falla
+    sin escribir. Si la tabla no existe, devuelve dict vacÃ­o (decorate falla
     silenciosamente y todos quedan como first_seen=true, lo cual es seguro).
     """
     out: dict = {}
@@ -5045,7 +5045,7 @@ def _query_evidence_seen_counts(cur, results: list) -> dict:
     if not fps:
         return out
     try:
-        # Construimos un IN (...) con placeholders dinámicos
+        # Construimos un IN (...) con placeholders dinÃ¡micos
         placeholders = ','.join([_PH] * len(fps))
         cur.execute(
             f"SELECT fingerprint, seen_count FROM evidence_fingerprints "
@@ -5059,7 +5059,7 @@ def _query_evidence_seen_counts(cur, results: list) -> dict:
             else:
                 out[row[0]] = int(row[1] or 0)
     except Exception:
-        # Tabla aún no existe (deploys nuevos), todos quedan en 0 → first_seen
+        # Tabla aÃºn no existe (deploys nuevos), todos quedan en 0 â†’ first_seen
         return {fp: 0 for fp in fps}
     return out
 
@@ -5069,10 +5069,10 @@ def _decorate_results_with_first_seen(results: list, seen_map: dict) -> list:
     (bool) en cada result. Mutates en sitio y devuelve la misma lista.
     Conserva resultados sin fingerprint (los marca como first_seen=False).
 
-    Filter #12 — Consenso global: si un fingerprint apareció >=50 veces
-    sin que se haya verificado como hack en histórico, lo marcamos como
+    Filter #12 â€” Consenso global: si un fingerprint apareciÃ³ >=50 veces
+    sin que se haya verificado como hack en histÃ³rico, lo marcamos como
     'globally_common' para que el panel ofrezca al staff aprenderlo
-    como FP de un solo click. NO degrada el verdict automáticamente.
+    como FP de un solo click. NO degrada el verdict automÃ¡ticamente.
     """
     if not results:
         return results
@@ -5097,8 +5097,8 @@ def _decorate_results_with_first_seen(results: list, seen_map: dict) -> list:
 
 def _scrub_results_for_display(results: list) -> list:
     """Aplica el filtro server-side a una lista de resultados ya almacenados,
-    devolviendo solo los que NO son FP. Útil para sanear scans antiguos al servirlos.
-    Conserva el orden original y nunca elimina más de un 95% de los resultados como
+    devolviendo solo los que NO son FP. Ãštil para sanear scans antiguos al servirlos.
+    Conserva el orden original y nunca elimina mÃ¡s de un 95% de los resultados como
     medida de seguridad (evita ocultar todos los hallazgos por un bug del filtro).
     """
     if not results:
@@ -5111,15 +5111,15 @@ def _scrub_results_for_display(results: list) -> list:
         except Exception:
             keep.append(r)  # ante error, conservar
     if len(keep) == 0 and len(results) > 0:
-        return results  # safety: nunca devolver lista vacía si había datos
+        return results  # safety: nunca devolver lista vacÃ­a si habÃ­a datos
     if len(results) >= 6 and len(keep) / len(results) < 0.05:
         return results  # safety: filtro demasiado agresivo, devolver original
     return keep
 
 
 def _calculate_risk_score(results, return_breakdown=False):
-    """Calcula el risk score de un scan según las evidencias encontradas.
-    Retorna score 0–100. Con return_breakdown=True devuelve (score, breakdown_list).
+    """Calcula el risk score de un scan segÃºn las evidencias encontradas.
+    Retorna score 0â€“100. Con return_breakdown=True devuelve (score, breakdown_list).
     """
     score = 0
     breakdown = []
@@ -5158,9 +5158,9 @@ def _calculate_risk_score(results, return_breakdown=False):
         'POCO_SOSPECHOSO':  10,
     }
 
-    # Tipos/categorías que no aportan nada al risk score:
-    # - texture_pack: muy fácil de confundir, demasiados FPs
-    # - event_logs de fecha/hora: lo dispara Windows NTP automáticamente
+    # Tipos/categorÃ­as que no aportan nada al risk score:
+    # - texture_pack: muy fÃ¡cil de confundir, demasiados FPs
+    # - event_logs de fecha/hora: lo dispara Windows NTP automÃ¡ticamente
     ZERO_RISK_TYPES = {
         'texture_pack', 'texture_pack_xray', 'texture_pack_analysis',
         'resource_pack', 'resource_pack_xray',
@@ -5179,7 +5179,7 @@ def _calculate_risk_score(results, return_breakdown=False):
         if tipo == 'event_logs' and 'fecha' in nombre.lower():
             continue
 
-        # Bonus por categoría/tipo (una sola vez por categoría)
+        # Bonus por categorÃ­a/tipo (una sola vez por categorÃ­a)
         for key, pts in CATEGORY_SCORES.items():
             if key in tipo or key in cat:
                 if key not in _counted:
@@ -5194,7 +5194,7 @@ def _calculate_risk_score(results, return_breakdown=False):
             score += alert_pts
             breakdown.append({'source': nombre, 'points': alert_pts, 'reason': f'Nivel de alerta: {alerta}'})
 
-        # Pack 36 — Autolearn boost: si el result matchea un pattern
+        # Pack 36 â€” Autolearn boost: si el result matchea un pattern
         # confirmado por staff con alto trust (Pack 36), suma puntos
         # extra escalados por la confidence del pattern (max +30).
         boost = float(r.get('_autolearn_boost') or 0.0)
@@ -5216,8 +5216,8 @@ def _calculate_risk_score(results, return_breakdown=False):
 
 
 def _ensemble_risk_score(results):
-    """Ensemble autónomo: 50% heurístico + 30% RF + 20% Isolation Forest.
-    Si un modelo no está disponible, sus pesos se redistribuyen a heurístico.
+    """Ensemble autÃ³nomo: 50% heurÃ­stico + 30% RF + 20% Isolation Forest.
+    Si un modelo no estÃ¡ disponible, sus pesos se redistribuyen a heurÃ­stico.
     """
     heuristic = _calculate_risk_score(results)
 
@@ -5264,10 +5264,10 @@ def _ensemble_risk_score(results):
             iso_pred = clf.predict_iso(scan_feats)
             if iso_pred.get('available'):
                 # score_samples returns negative values near 0 for anomalies,
-                # more negative = more anomalous. Normalize to 0–100 hack probability.
+                # more negative = more anomalous. Normalize to 0â€“100 hack probability.
                 raw = iso_pred.get('score', 0.0)
                 # Typical range is roughly -0.20 (anomaly) to +0.10 (normal).
-                # Map: -0.20 → 100, 0.0 → 50, +0.10 → 0
+                # Map: -0.20 â†’ 100, 0.0 â†’ 50, +0.10 â†’ 0
                 iso_hack = max(0, min(100, round((-raw / 0.20) * 50 + 50)))
                 iso_score = iso_hack
 
@@ -5322,10 +5322,10 @@ def _compute_ensemble_verdict(results, cursor=None, machine_id=None,
       4. Hash Reputation     0.20
       5. Temporality         0.10
       6. ML                  0.05
-      7. Prior Consensus     0.10  (Pack 32 F#55 — verdicts previos del
+      7. Prior Consensus     0.10  (Pack 32 F#55 â€” verdicts previos del
                                    mismo machine_id/player). Solo se
                                    aplica si machine_id o
-                                   minecraft_username están presentes.
+                                   minecraft_username estÃ¡n presentes.
 
     All systems return 0-4; final score is weighted average scaled to 0-100.
     """
@@ -5446,7 +5446,7 @@ def _compute_ensemble_verdict(results, cursor=None, machine_id=None,
     elif score >= 15: verdict = 'POCO_SOSPECHOSO'
     else:             verdict = 'LIMPIO'
 
-    # -- Gate: no in-instance evidence → cap at SOSPECHOSO, not sanctionable --
+    # -- Gate: no in-instance evidence â†’ cap at SOSPECHOSO, not sanctionable --
     gate_capped = not sanctionable and _VERDICT_ORDER.index(verdict) > _VERDICT_ORDER.index('SOSPECHOSO')
     if gate_capped:
         verdict = 'SOSPECHOSO'
@@ -5458,7 +5458,7 @@ def _compute_ensemble_verdict(results, cursor=None, machine_id=None,
         reasons.append('Sin evidencia en instancia')
     if client_signals:
         top_client = max(client_signals, key=lambda k: len(client_signals[k]))
-        reasons.append(f'{top_client} ({len(client_signals[top_client])} señal(es))')
+        reasons.append(f'{top_client} ({len(client_signals[top_client])} seÃ±al(es))')
 
     s7_active = _AI_TRUST_AVAILABLE and (machine_id or minecraft_username)
     if s7_active and s7_meta.get('count', 0) > 0:
@@ -5478,12 +5478,12 @@ def _compute_ensemble_verdict(results, cursor=None, machine_id=None,
             'ml':                 {'score': s6, 'weight': 0.05},
             'prior_consensus':    {'score': s7, 'weight': 0.10 if s7_active else 0.0, 'active': bool(s7_active), **s7_meta},
         },
-        'reason': ' · '.join(reasons) if reasons else '',
+        'reason': ' Â· '.join(reasons) if reasons else '',
     }
 
 
 def _compare_consecutive_scans(cursor, scan_id, machine_id, current_results):
-    """P2 #43 — Compara scan actual con el anterior del mismo machine_id.
+    """P2 #43 â€” Compara scan actual con el anterior del mismo machine_id.
     Inserta notas de 'new_finding' en scan_results para hallazgos que no estaban antes.
     Devuelve (new_types, disappeared_types) para logging.
     """
@@ -5540,7 +5540,7 @@ def _compare_consecutive_scans(cursor, scan_id, machine_id, current_results):
 
 @app.route('/api/scans/<int:scan_id>/results', methods=['POST'])
 def submit_scan_results(scan_id):
-    """Recibe y almacena resultados de escaneo (usado por el cliente .exe) — sin login requerido"""
+    """Recibe y almacena resultados de escaneo (usado por el cliente .exe) â€” sin login requerido"""
     print(f"\n[DEBUG submit_scan_results] ===== RECIBIENDO RESULTADOS =====")
     print(f"[DEBUG] scan_id={scan_id}, IP={request.remote_addr}")
     data = request.json
@@ -5605,8 +5605,8 @@ def submit_scan_results(scan_id):
             before = len(results)
             results = [r for r in results if not _is_server_false_positive(r)]
             if len(results) < before:
-                print(f"[DEBUG] FP filter: {before} → {len(results)} resultados ({before - len(results)} descartados)")
-            # Pack 36 — Boost results con learned_hack_patterns (autolearn).
+                print(f"[DEBUG] FP filter: {before} â†’ {len(results)} resultados ({before - len(results)} descartados)")
+            # Pack 36 â€” Boost results con learned_hack_patterns (autolearn).
             # Inyecta `_autolearn_boost` en results que matchean patterns
             # confirmados por staff con alto trust. _calculate_risk_score
             # los considera para subir confidence efectivo.
@@ -5622,9 +5622,9 @@ def submit_scan_results(scan_id):
                         cursor.execute('ROLLBACK TO SAVEPOINT autolearn_boost_save')
                     except Exception:
                         pass
-                    print(f'[DEBUG] autolearn boost falló: {_b_e}')
-            # Filter #42 — Upsert evidence_fingerprints para tracking "first-seen"
-            # Tolera fallos: si la tabla aún no existe, simplemente no se decora.
+                    print(f'[DEBUG] autolearn boost fallÃ³: {_b_e}')
+            # Filter #42 â€” Upsert evidence_fingerprints para tracking "first-seen"
+            # Tolera fallos: si la tabla aÃºn no existe, simplemente no se decora.
             try:
                 cursor.execute('SAVEPOINT efp_upsert_save')
                 _upsert_evidence_fingerprints(cursor, scan_id, results)
@@ -5634,11 +5634,11 @@ def submit_scan_results(scan_id):
                     cursor.execute('ROLLBACK TO SAVEPOINT efp_upsert_save')
                 except Exception:
                     pass
-                print(f"[DEBUG] evidence_fingerprints upsert falló silenciosamente: {_efp_e}")
+                print(f"[DEBUG] evidence_fingerprints upsert fallÃ³ silenciosamente: {_efp_e}")
             print(f"[DEBUG] Insertando {len(results)} resultados en scan_results")
             if results:
                 def _norm_conf(v):
-                    """Normaliza confidence a rango 0-1 independientemente de si el exe lo mandó como 0-1 o 0-100."""
+                    """Normaliza confidence a rango 0-1 independientemente de si el exe lo mandÃ³ como 0-1 o 0-100."""
                     try:
                         f = float(v or 0)
                         return f / 100.0 if f > 1.0 else f
@@ -5667,8 +5667,8 @@ def submit_scan_results(scan_id):
                     print(f"[DEBUG] Primer resultado: tipo={results[0].get('tipo')}, "
                           f"nombre={results[0].get('nombre') or results[0].get('archivo')}, "
                           f"alerta={results[0].get('alerta')}")
-                # Intento INSERT con columna 'extra'; si la columna aún no existe en
-                # esta DB (migración pendiente), reintenta sin ella.
+                # Intento INSERT con columna 'extra'; si la columna aÃºn no existe en
+                # esta DB (migraciÃ³n pendiente), reintenta sin ella.
                 try:
                     cursor.execute('SAVEPOINT extra_save')
                     cursor.executemany(
@@ -5685,7 +5685,7 @@ def submit_scan_results(scan_id):
                         cursor.execute('ROLLBACK TO SAVEPOINT extra_save')
                     except Exception:
                         pass
-                    print(f"[DEBUG] INSERT con extra falló ({_e}); reintentando sin columna extra")
+                    print(f"[DEBUG] INSERT con extra fallÃ³ ({_e}); reintentando sin columna extra")
                     fallback_batch = [row[:-1] for row in batch]
                     cursor.executemany(
                         f'INSERT INTO scan_results'
@@ -5697,7 +5697,7 @@ def submit_scan_results(scan_id):
                     )
                 print(f"[DEBUG] executemany completado")
 
-            # Calcular y guardar risk_score (P3 #7 ensemble: heurístico + RF)
+            # Calcular y guardar risk_score (P3 #7 ensemble: heurÃ­stico + RF)
             try:
                 cursor.execute('SAVEPOINT risk_score_save')
                 risk_score = _ensemble_risk_score(results)
@@ -5754,7 +5754,7 @@ def submit_scan_results(scan_id):
                             (_capped_rs, scan_id)
                         )
                         risk_score = _capped_rs
-                        print(f"[DEBUG] risk_score cappado por gate_capped → {_capped_rs}")
+                        print(f"[DEBUG] risk_score cappado por gate_capped â†’ {_capped_rs}")
                     except Exception:
                         pass
             except Exception:
@@ -5763,7 +5763,7 @@ def submit_scan_results(scan_id):
                 except Exception:
                     pass
 
-            # P2 #43 — Comparación con scan anterior del mismo machine
+            # P2 #43 â€” ComparaciÃ³n con scan anterior del mismo machine
             try:
                 _compare_consecutive_scans(cursor, scan_id, data.get('machine_id', ''), results)
             except Exception:
@@ -5783,11 +5783,11 @@ def submit_scan_results(scan_id):
         except Exception:
             pass
 
-        # P5 #16 — Web Push a todos los staff suscritos
+        # P5 #16 â€” Web Push a todos los staff suscritos
         _rs = locals().get('risk_score', 0)
         _mn = data.get('machine_name', 'Jugador')
-        _push_title = '🔴 Argus — Nuevo scan con hacks' if _rs >= 70 else '🟡 Argus — Nuevo scan' if _rs >= 30 else '✅ Argus — Scan limpio'
-        _push_body  = f'{_mn} · Risk {_rs} · {len(results)} hallazgos'
+        _push_title = 'ðŸ”´ Argus â€” Nuevo scan con hacks' if _rs >= 70 else 'ðŸŸ¡ Argus â€” Nuevo scan' if _rs >= 30 else 'âœ… Argus â€” Scan limpio'
+        _push_body  = f'{_mn} Â· Risk {_rs} Â· {len(results)} hallazgos'
         import threading as _pt
         _pt.Thread(target=_send_push_to_all, args=(_push_title, _push_body, f'/panel?scan={scan_id}'), daemon=True).start()
 
@@ -5799,12 +5799,12 @@ def submit_scan_results(scan_id):
         return jsonify({'error': f'Error almacenando resultados: {str(e)}'}), 500
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# ENDPOINT TEMPORAL DE DIAGNOSTICO — sin login, replica TODA la logica de
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ENDPOINT TEMPORAL DE DIAGNOSTICO â€” sin login, replica TODA la logica de
 # get_scan() paso a paso, devolviendo en que paso fallo si falla. Permite
 # diagnosticar 500's del endpoint real sin acceso a logs.
 # Eliminar cuando el bug este resuelto.
-# ──────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.route('/api/debug/scan/<int:scan_id>', methods=['GET'])
 def debug_scan_summary(scan_id):
     import traceback as _tb
@@ -5953,7 +5953,7 @@ def debug_scan_summary(scan_id):
 @app.route('/api/scans', methods=['GET'])
 @login_required
 def list_scans():
-    """Lista escaneos - Usa BD directa si está disponible, sino HTTP"""
+    """Lista escaneos - Usa BD directa si estÃ¡ disponible, sino HTTP"""
     import time
     
     limit       = request.args.get('limit', 50, type=int)
@@ -5970,18 +5970,18 @@ def list_scans():
 
     has_filters = bool(search or verdict_f or date_from or date_to or machine_name_f or country_f or risk_f or os_f or staff_f)
 
-    # Caché solo cuando no hay filtros activos
+    # CachÃ© solo cuando no hay filtros activos
     cache_key = f'scans_list_{limit}_{offset}'
     if not has_filters and cache_key in _stats_cache:
         if time.time() - _stats_cache_time.get(cache_key, 0) < 10:
             return jsonify(_stats_cache[cache_key]), 200
 
-    # Intentar acceso directo a BD primero (más rápido) - BD unificada siempre disponible
+    # Intentar acceso directo a BD primero (mÃ¡s rÃ¡pido) - BD unificada siempre disponible
     if API_DB_AVAILABLE_LOCALLY:
         try:
-            print(f"🔄 Intentando obtener escaneos directamente de la BD local...")
+            print(f"ðŸ”„ Intentando obtener escaneos directamente de la BD local...")
             with get_api_db_cursor() as cursor:
-                # Construir WHERE dinámico
+                # Construir WHERE dinÃ¡mico
                 conditions = []
                 params = []
                 if machine_name_f:
@@ -6020,12 +6020,12 @@ def list_scans():
                 where = ('WHERE ' + ' AND '.join(conditions)) if conditions else ''
                 params += [limit, offset]
 
-                # scanner_version puede no existir aún en deploys viejos — fallback NULL.
+                # scanner_version puede no existir aÃºn en deploys viejos â€” fallback NULL.
                 # IMPORTANTE: PostgreSQL aborta la TX entera si la query del try falla
                 # (ej. UndefinedColumn). Sin SAVEPOINT, la query del except hereda la
                 # TX aborted y revienta con "current transaction is aborted, commands
-                # ignored until end of transaction block" → list_scans cae a fallback
-                # HTTP roto. Causa del 500 en Pack 25 cuando Render upgradeó Python.
+                # ignored until end of transaction block" â†’ list_scans cae a fallback
+                # HTTP roto. Causa del 500 en Pack 25 cuando Render upgradeÃ³ Python.
                 try:
                     cursor.execute('SAVEPOINT scn_ver_probe')
                 except Exception:
@@ -6049,7 +6049,7 @@ def list_scans():
                     except Exception:
                         pass
                 except Exception as _scn_err:
-                    print(f"⚠️ list_scans: probe scanner_version falló ({_scn_err.__class__.__name__}: {_scn_err}); usando query sin esa columna")
+                    print(f"âš ï¸ list_scans: probe scanner_version fallÃ³ ({_scn_err.__class__.__name__}: {_scn_err}); usando query sin esa columna")
                     try:
                         cursor.execute('ROLLBACK TO SAVEPOINT scn_ver_probe')
                     except Exception:
@@ -6112,7 +6112,7 @@ def list_scans():
                         'scanner_version': _scn_ver,
                     })
                 
-                print(f"📊 Escaneos encontrados en BD local: {len(scans)}")
+                print(f"ðŸ“Š Escaneos encontrados en BD local: {len(scans)}")
                 
                 # Calcular preview de severidad (una sola query optimizada)
                 if scan_ids:
@@ -6181,30 +6181,30 @@ def list_scans():
 
                 result = {'scans': scans}
                 
-                # Guardar en caché
+                # Guardar en cachÃ©
                 _stats_cache[cache_key] = result
                 _stats_cache_time[cache_key] = time.time()
                 
-                print(f"✅ Escaneos obtenidos directamente de BD. Total: {len(scans)}")
+                print(f"âœ… Escaneos obtenidos directamente de BD. Total: {len(scans)}")
                 return jsonify(result), 200
         except Exception as e:
-            print(f"⚠️ Error accediendo BD directamente en list_scans: {str(e)}")
+            print(f"âš ï¸ Error accediendo BD directamente en list_scans: {str(e)}")
             print(traceback.format_exc())
             print("Intentando via HTTP como fallback...")
     
     # Fallback: usar HTTP para obtener escaneos desde la API
-    print(f"🔄 Obteniendo escaneos vía HTTP desde: {get_api_url('/api/scans')}")
+    print(f"ðŸ”„ Obteniendo escaneos vÃ­a HTTP desde: {get_api_url('/api/scans')}")
     try:
         api_url = get_api_url('/api/scans')
-        print(f"🌐 URL completa: {api_url}")
-        print(f"🌐 Parámetros: limit={limit}, offset={offset}")
+        print(f"ðŸŒ URL completa: {api_url}")
+        print(f"ðŸŒ ParÃ¡metros: limit={limit}, offset={offset}")
         
         headers = {}
         if API_KEY:
             headers['X-API-Key'] = API_KEY
-            print(f"🔑 Enviando API Key en headers")
+            print(f"ðŸ”‘ Enviando API Key en headers")
         else:
-            print(f"⚠️ No hay API_KEY configurada, la API puede rechazar la petición")
+            print(f"âš ï¸ No hay API_KEY configurada, la API puede rechazar la peticiÃ³n")
         
         response = requests.get(
             api_url,
@@ -6213,60 +6213,60 @@ def list_scans():
             timeout=15  # Aumentado timeout para Render
         )
         
-        print(f"📡 Respuesta de API: Status {response.status_code}")
-        print(f"📡 Headers de respuesta: {dict(response.headers)}")
+        print(f"ðŸ“¡ Respuesta de API: Status {response.status_code}")
+        print(f"ðŸ“¡ Headers de respuesta: {dict(response.headers)}")
         
         if response.status_code == 200:
             result = response.json()
             scans_count = len(result.get('scans', []))
-            print(f"✅ Obtenidos {scans_count} escaneos desde la API")
+            print(f"âœ… Obtenidos {scans_count} escaneos desde la API")
             
             # Log detallado de los primeros escaneos
             if scans_count > 0:
-                print(f"📋 Primeros escaneos recibidos:")
+                print(f"ðŸ“‹ Primeros escaneos recibidos:")
                 for i, scan in enumerate(result.get('scans', [])[:3]):
                     print(f"   [{i+1}] Scan ID: {scan.get('id')}, Machine: {scan.get('machine_name')}, Issues: {scan.get('issues_found')}, Status: {scan.get('status')}")
             else:
-                print(f"⚠️ La API devolvió 200 pero sin escaneos en la respuesta")
-                print(f"📋 Respuesta completa: {result}")
+                print(f"âš ï¸ La API devolviÃ³ 200 pero sin escaneos en la respuesta")
+                print(f"ðŸ“‹ Respuesta completa: {result}")
             
-            # Guardar en caché
+            # Guardar en cachÃ©
             _stats_cache[cache_key] = result
             _stats_cache_time[cache_key] = time.time()
             return jsonify(result), 200
         else:
-            print(f"❌ Error obteniendo escaneos: {response.status_code}")
-            print(f"❌ Respuesta completa: {response.text[:500]}")
+            print(f"âŒ Error obteniendo escaneos: {response.status_code}")
+            print(f"âŒ Respuesta completa: {response.text[:500]}")
             return jsonify({'error': f'Error obteniendo escaneos: {response.status_code}', 'scans': []}), response.status_code
     except requests.exceptions.Timeout as te:
-        print(f"❌ Timeout al obtener escaneos desde la API: {te}")
+        print(f"âŒ Timeout al obtener escaneos desde la API: {te}")
         return jsonify({'error': 'Timeout al conectar con la API', 'scans': []}), 504
     except requests.exceptions.ConnectionError as ce:
-        print(f"❌ Error de conexión con la API: {ce}")
+        print(f"âŒ Error de conexiÃ³n con la API: {ce}")
         return jsonify({'error': f'No se pudo conectar con la API: {str(ce)}', 'scans': []}), 503
     except Exception as e:
-        print(f"❌ Error inesperado en list_scans (HTTP): {str(e)}")
-        print(f"❌ Traceback:")
+        print(f"âŒ Error inesperado en list_scans (HTTP): {str(e)}")
+        print(f"âŒ Traceback:")
         print(traceback.format_exc())
         return jsonify({'error': f'Error inesperado: {str(e)}', 'scans': []}), 500
 
 @app.route('/api/scans/<int:scan_id>', methods=['GET'])
 @login_required
 def get_scan(scan_id):
-    """Obtiene un escaneo específico - Usa BD directa si está disponible, sino HTTP"""
+    """Obtiene un escaneo especÃ­fico - Usa BD directa si estÃ¡ disponible, sino HTTP"""
     import time
     
-    # Caché por scan_id (5 segundos TTL)
+    # CachÃ© por scan_id (5 segundos TTL)
     cache_key = f'scan_{scan_id}'
     if cache_key in _stats_cache:
         if time.time() - _stats_cache_time.get(cache_key, 0) < 5:
             return jsonify(_stats_cache[cache_key]), 200
     
-    # Intentar acceso directo a BD primero (más rápido)
+    # Intentar acceso directo a BD primero (mÃ¡s rÃ¡pido)
     if API_DB_AVAILABLE_LOCALLY:
         try:
             with get_api_db_cursor() as cursor:
-                # Columnas base (siempre existen desde la primera versión del schema)
+                # Columnas base (siempre existen desde la primera versiÃ³n del schema)
                 cursor.execute(f'''
                     SELECT id, token_id, scan_token, started_at, completed_at, status,
                            total_files_scanned, issues_found, scan_duration,
@@ -6303,7 +6303,7 @@ def get_scan(scan_id):
                 }
 
                 # Columnas opcionales: total_dirs_scanned, verdict, screenshot, mc_info, ensemble_data
-                # Usa SAVEPOINT para que un fallo (columna inexistente) no aborte la transacción
+                # Usa SAVEPOINT para que un fallo (columna inexistente) no aborte la transacciÃ³n
                 scan['screenshot'] = None
                 scan['mc_info'] = None
                 scan['risk_score'] = 0
@@ -6311,7 +6311,7 @@ def get_scan(scan_id):
                 scan['scanner_version'] = ''
                 try:
                     cursor.execute('SAVEPOINT opt_cols')
-                    # Visual #50 — leer scanner_version. Tolerante a deploys sin la columna.
+                    # Visual #50 â€” leer scanner_version. Tolerante a deploys sin la columna.
                     try:
                         cursor.execute(f'''
                             SELECT total_dirs_scanned, verdict, verdict_reason, verdict_by, verdict_at,
@@ -6392,7 +6392,7 @@ def get_scan(scan_id):
                         scan['scanned_by'] = _row_get(srow, 0, 'created_by')
                     cursor.execute('RELEASE SAVEPOINT scanned_by_save')
                 except Exception as _e_sb:
-                    print(f"⚠️ get_scan scanned_by query fallida (id={scan_id}): {type(_e_sb).__name__}: {_e_sb}")
+                    print(f"âš ï¸ get_scan scanned_by query fallida (id={scan_id}): {type(_e_sb).__name__}: {_e_sb}")
                     try:
                         cursor.execute('ROLLBACK TO SAVEPOINT scanned_by_save')
                     except Exception:
@@ -6467,18 +6467,18 @@ def get_scan(scan_id):
                 # (no toca la BD, solo lo que ve el staff)
                 results = _scrub_results_for_display(results)
 
-                # Filter #42 — Decorar con first_seen + seen_count antes de servir.
+                # Filter #42 â€” Decorar con first_seen + seen_count antes de servir.
                 # 1 query para todo el scan (IN ...). Si la tabla cae, todos quedan
-                # en first_seen=true que es "más alarmante" y por tanto seguro.
+                # en first_seen=true que es "mÃ¡s alarmante" y por tanto seguro.
                 try:
                     _seen_map = _query_evidence_seen_counts(cursor, results)
                     _decorate_results_with_first_seen(results, _seen_map)
                 except Exception as _fs_e:
-                    print(f"⚠️ first-seen decorate falló: {_fs_e}")
+                    print(f"âš ï¸ first-seen decorate fallÃ³: {_fs_e}")
 
                 scan['results'] = results
 
-                # Filter #43, #44 — incluir thresholds dinámicos de la
+                # Filter #43, #44 â€” incluir thresholds dinÃ¡micos de la
                 # empresa del staff. El frontend los usa para colorear
                 # el risk_score y para los filtros del listado. Si el
                 # staff no tiene company_id (admin global), defaults.
@@ -6492,7 +6492,7 @@ def get_scan(scan_id):
                         'threshold_suspicious': 30,
                     }
 
-                # Guardar en caché
+                # Guardar en cachÃ©
                 _stats_cache[cache_key] = scan
                 _stats_cache_time[cache_key] = time.time()
                 
@@ -6501,7 +6501,7 @@ def get_scan(scan_id):
             # Logueamos el traceback completo (Render lo capta) y resetamos
             # la conexion thread-local si quedo en estado abortado para que el
             # proximo request del mismo worker no herede la transaccion rota.
-            print(f"⚠️ Error accediendo BD directamente en get_scan({scan_id}): {type(e).__name__}: {e}")
+            print(f"âš ï¸ Error accediendo BD directamente en get_scan({scan_id}): {type(e).__name__}: {e}")
             print(traceback.format_exc())
             try:
                 from db_mysql import _local as _db_local
@@ -6518,9 +6518,9 @@ def get_scan(scan_id):
                         del _db_local.connection
                     except Exception:
                         pass
-                    print(f"🔁 Conexion thread-local reseteada tras error en get_scan")
+                    print(f"ðŸ” Conexion thread-local reseteada tras error en get_scan")
             except Exception as _re:
-                print(f"⚠️ No se pudo resetear conexion: {_re}")
+                print(f"âš ï¸ No se pudo resetear conexion: {_re}")
             # Devolvemos el error real al frontend (con 500) para diagnosticar
             # rapido sin tener que mirar logs de Render. Antes esto se iba a un
             # fallback HTTP que loopeaba contra la misma instancia.
@@ -6552,7 +6552,7 @@ def get_feedback(result_id):
 
 @app.route('/api/update-model', methods=['POST'])
 def update_model():
-    """Retorna estadísticas de patrones aprendidos directamente desde BD"""
+    """Retorna estadÃ­sticas de patrones aprendidos directamente desde BD"""
     try:
         with get_api_db_cursor() as cursor:
             cursor.execute("SELECT COUNT(*) as c FROM learned_patterns WHERE is_active = TRUE AND pattern_type != 'legitimate_path'")
@@ -6563,7 +6563,7 @@ def update_model():
             hashes_count = _row_get(cursor.fetchone(), 0, 'c') or 0
         return jsonify({
             'success': True,
-            'message': 'Modelo actualizado. Los clientes descargarán automáticamente los nuevos patrones al iniciar.',
+            'message': 'Modelo actualizado. Los clientes descargarÃ¡n automÃ¡ticamente los nuevos patrones al iniciar.',
             'version': '1.0',
             'patterns_count': patterns_count,
             'hashes_count': hashes_count,
@@ -6578,16 +6578,16 @@ def update_model():
 @app.route('/api/ml/trigger', methods=['POST'])
 @admin_required
 def trigger_autonomous_learning():
-    """Dispara el pipeline de aprendizaje autónomo manualmente (sin esperar al cron)."""
+    """Dispara el pipeline de aprendizaje autÃ³nomo manualmente (sin esperar al cron)."""
     import threading
     def _run():
         _autonomous_daily_learning()
     threading.Thread(target=_run, daemon=True).start()
-    return jsonify({'success': True, 'message': 'Pipeline autónomo iniciado en segundo plano'})
+    return jsonify({'success': True, 'message': 'Pipeline autÃ³nomo iniciado en segundo plano'})
 
 @app.route('/api/learning-stats', methods=['GET'])
 def get_learning_stats():
-    """Estadísticas del sistema de aprendizaje autónomo."""
+    """EstadÃ­sticas del sistema de aprendizaje autÃ³nomo."""
     try:
         from ml_classifier import get_classifier
         clf = get_classifier()
@@ -6657,7 +6657,7 @@ def purge_garbage_results():
         return jsonify({'error': 'Se requiere rol admin'}), 403
     try:
         with get_api_db_cursor() as cursor:
-            # Eliminar por categoría legacy
+            # Eliminar por categorÃ­a legacy
             cursor.execute(
                 f"DELETE FROM scan_results WHERE issue_category IN ('EXECUTED_DELETED','APPCOMPAT','USN_FORENSICS')"
             )
@@ -6682,14 +6682,14 @@ def get_learned_patterns():
     """Obtiene patrones aprendidos - OPTIMIZADO: Acceso directo a BD sin HTTP"""
     import time
     
-    # Caché (60 segundos TTL - los patrones no cambian tan frecuentemente)
+    # CachÃ© (60 segundos TTL - los patrones no cambian tan frecuentemente)
     cache_key = 'learned_patterns'
     if cache_key in _stats_cache:
         if time.time() - _stats_cache_time.get(cache_key, 0) < 60:
             return jsonify(_stats_cache[cache_key]), 200
     
     try:
-        # Acceso directo a BD (SIN HTTP - MUCHO MÁS RÁPIDO)
+        # Acceso directo a BD (SIN HTTP - MUCHO MÃS RÃPIDO)
         with get_api_db_cursor() as cursor:
             # Verificar si la tabla existe y tiene la columna is_active
             try:
@@ -6710,7 +6710,7 @@ def get_learned_patterns():
                         ORDER BY learned_from_count DESC, confidence DESC
                     ''')
                 except sqlite3.OperationalError:
-                    # Si la tabla no existe, retornar vacío
+                    # Si la tabla no existe, retornar vacÃ­o
                     result = {'patterns': [], 'total': 0}
                     _stats_cache[cache_key] = result
                     _stats_cache_time[cache_key] = time.time()
@@ -6730,7 +6730,7 @@ def get_learned_patterns():
             
             result = {'patterns': patterns, 'total': len(patterns)}
             
-            # Guardar en caché
+            # Guardar en cachÃ©
             _stats_cache[cache_key] = result
             _stats_cache_time[cache_key] = time.time()
             
@@ -6738,22 +6738,22 @@ def get_learned_patterns():
     except Exception as e:
         print(f"Error en get_learned_patterns: {str(e)}")
         print(traceback.format_exc())
-        # Retornar respuesta vacía en lugar de error para no romper la app
+        # Retornar respuesta vacÃ­a en lugar de error para no romper la app
         return jsonify({'patterns': [], 'total': 0, 'error': str(e)}), 200
 
 @app.route('/api/ai-model/latest', methods=['GET'])
 def get_latest_ai_model():
-    """Obtiene el modelo de IA más reciente - OPTIMIZADO: Acceso directo a BD sin HTTP"""
+    """Obtiene el modelo de IA mÃ¡s reciente - OPTIMIZADO: Acceso directo a BD sin HTTP"""
     import time
     
-    # Caché (300 segundos TTL - el modelo no cambia tan frecuentemente)
+    # CachÃ© (300 segundos TTL - el modelo no cambia tan frecuentemente)
     cache_key = 'ai_model_latest'
     if cache_key in _stats_cache:
         if time.time() - _stats_cache_time.get(cache_key, 0) < 300:
             return jsonify(_stats_cache[cache_key]), 200
     
     try:
-        # Acceso directo a BD (SIN HTTP - MUCHO MÁS RÁPIDO)
+        # Acceso directo a BD (SIN HTTP - MUCHO MÃS RÃPIDO)
         with get_api_db_cursor() as cursor:
             # Obtener patrones aprendidos
             try:
@@ -6813,7 +6813,7 @@ def get_latest_ai_model():
                 'hashes_count': len(hashes)
             }
             
-            # Guardar en caché
+            # Guardar en cachÃ©
             _stats_cache[cache_key] = result
             _stats_cache_time[cache_key] = time.time()
             
@@ -6821,7 +6821,7 @@ def get_latest_ai_model():
     except Exception as e:
         print(f"Error en get_latest_ai_model: {str(e)}")
         print(traceback.format_exc())
-        # Retornar modelo vacío en lugar de error
+        # Retornar modelo vacÃ­o en lugar de error
         return jsonify({
             'version': '1.0.0',
             'updated_at': None,
@@ -6834,19 +6834,19 @@ def get_latest_ai_model():
 @app.route('/api/generate-app', methods=['POST'])
 @admin_required
 def generate_app():
-    """Genera una nueva versión de la aplicación.
+    """Genera una nueva versiÃ³n de la aplicaciÃ³n.
     En Render: sirve el exe pre-compilado + muestra modelo actualizado.
     En local Windows: compila con PyInstaller.
     """
     # En Render no se puede compilar (Linux, sin PyInstaller).
     # En cambio, servimos el exe pre-compilado que viene en el repo
-    # y mostramos las estadísticas del modelo (que el scanner descarga en runtime).
+    # y mostramos las estadÃ­sticas del modelo (que el scanner descarga en runtime).
     if IS_RENDER:
         def generate_render():
             try:
-                yield f"data: {json.dumps({'step': '🔍 Verificando modelo de IA...', 'progress': 20})}\n\n"
+                yield f"data: {json.dumps({'step': 'ðŸ” Verificando modelo de IA...', 'progress': 20})}\n\n"
 
-                # Leer estadísticas del modelo
+                # Leer estadÃ­sticas del modelo
                 try:
                     with get_api_db_cursor() as _cur:
                         _cur.execute('SELECT COUNT(*) as c FROM learned_patterns WHERE is_active = TRUE')
@@ -6856,8 +6856,8 @@ def generate_app():
                 except Exception:
                     patterns_count = hashes_count = 0
 
-                yield f"data: {json.dumps({'step': f'✅ Modelo activo: {patterns_count} patrones aprendidos, {hashes_count} hashes confirmados', 'progress': 40})}\n\n"
-                yield f"data: {json.dumps({'step': '📡 El scanner descarga automáticamente el modelo actualizado en cada inicio — no requiere recompilar.', 'progress': 60})}\n\n"
+                yield f"data: {json.dumps({'step': f'âœ… Modelo activo: {patterns_count} patrones aprendidos, {hashes_count} hashes confirmados', 'progress': 40})}\n\n"
+                yield f"data: {json.dumps({'step': 'ðŸ“¡ El scanner descarga automÃ¡ticamente el modelo actualizado en cada inicio â€” no requiere recompilar.', 'progress': 60})}\n\n"
 
                 # Buscar el exe pre-compilado en el repo
                 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -6869,10 +6869,10 @@ def generate_app():
                 exe_path = next((p for p in exe_candidates if os.path.exists(p)), None)
 
                 if not exe_path:
-                    _msg = ('⚠️ No se encontró un ejecutable pre-compilado en el repositorio.\n\n'
+                    _msg = ('âš ï¸ No se encontrÃ³ un ejecutable pre-compilado en el repositorio.\n\n'
                             'Para distribuir el scanner:\n1. Compila localmente: pyinstaller ArgusScanner.spec\n'
                             '2. Haz commit de source/dist/ArgusScanner.exe\n'
-                            '3. Pushea a GitHub — Render lo incluirá en el siguiente deploy.')
+                            '3. Pushea a GitHub â€” Render lo incluirÃ¡ en el siguiente deploy.')
                     yield "data: " + json.dumps({'step': _msg, 'progress': 100, 'error': True}) + "\n\n"
                     return
 
@@ -6882,9 +6882,9 @@ def generate_app():
                     file_hash = hashlib.sha256(f.read()).hexdigest()
                 exe_name = os.path.basename(exe_path)
 
-                yield f"data: {json.dumps({'step': f'✅ Ejecutable listo: {exe_name} ({file_size / (1024*1024):.1f} MB)', 'progress': 90})}\n\n"
+                yield f"data: {json.dumps({'step': f'âœ… Ejecutable listo: {exe_name} ({file_size / (1024*1024):.1f} MB)', 'progress': 90})}\n\n"
 
-                # Registrar en BD como versión disponible
+                # Registrar en BD como versiÃ³n disponible
                 import datetime as _dt
                 version = _dt.datetime.now().strftime('%Y%m%d_%H%M%S')
                 try:
@@ -6892,16 +6892,16 @@ def generate_app():
                         _cur.execute(
                             f'INSERT INTO app_versions (version, download_url, changelog, file_size, file_hash) VALUES ({_PH},{_PH},{_PH},{_PH},{_PH}) ON CONFLICT (version) DO NOTHING',
                             (f'1.{version}', f'/download/{exe_name}',
-                             f'Modelo: {patterns_count} patrones, {hashes_count} hashes. IA se actualiza automáticamente en runtime.',
+                             f'Modelo: {patterns_count} patrones, {hashes_count} hashes. IA se actualiza automÃ¡ticamente en runtime.',
                              file_size, file_hash)
                         )
                 except Exception:
                     pass
 
-                _done_msg = (f'✅ Listo para distribuir.\n\nArchivo: {exe_name}\n'
-                             f'Tamaño: {file_size / (1024*1024):.1f} MB\n'
+                _done_msg = (f'âœ… Listo para distribuir.\n\nArchivo: {exe_name}\n'
+                             f'TamaÃ±o: {file_size / (1024*1024):.1f} MB\n'
                              f'Modelo: {patterns_count} patrones + {hashes_count} hashes\n\n'
-                             '💡 El modelo de IA se actualiza automáticamente sin recompilar.')
+                             'ðŸ’¡ El modelo de IA se actualiza automÃ¡ticamente sin recompilar.')
                 yield "data: " + json.dumps({'step': _done_msg, 'progress': 100, 'success': True, 'download_url': f'/download/{exe_name}', 'filename': exe_name}) + "\n\n"
 
             except Exception as e:
@@ -6921,14 +6921,14 @@ def generate_app():
             yield f"data: {json.dumps({'step': 'Actualizando modelo de IA con patrones aprendidos...', 'progress': 20})}\n\n"
             time.sleep(0.5)
             
-            # Obtener estadísticas del modelo directamente desde BD
+            # Obtener estadÃ­sticas del modelo directamente desde BD
             try:
                 with get_api_db_cursor() as _cur:
                     _cur.execute('SELECT COUNT(*) as c FROM learned_patterns WHERE is_active = TRUE')
                     patterns_count = _row_get(_cur.fetchone(), 0, 'c') or 0
                     _cur.execute('SELECT COUNT(*) as c FROM learned_hashes')
                     hashes_count = _row_get(_cur.fetchone(), 0, 'c') or 0
-                step_message = f'✅ Modelo: {patterns_count} patrones, {hashes_count} hashes. Los clientes descargarán automáticamente.'
+                step_message = f'âœ… Modelo: {patterns_count} patrones, {hashes_count} hashes. Los clientes descargarÃ¡n automÃ¡ticamente.'
                 yield f"data: {json.dumps({'step': step_message, 'progress': 50})}\n\n"
                 model_data = {'patterns_count': patterns_count, 'hashes_count': hashes_count}
             except Exception as e:
@@ -6949,10 +6949,10 @@ def generate_app():
             spec_file = next((os.path.join(source_dir, s) for s in spec_candidates if os.path.exists(os.path.join(source_dir, s))), None)
 
             if not spec_file:
-                yield f"data: {json.dumps({'step': 'ERROR: No se encontró ArgusScanner.spec en source/', 'progress': 100, 'error': True})}\n\n"
+                yield f"data: {json.dumps({'step': 'ERROR: No se encontrÃ³ ArgusScanner.spec en source/', 'progress': 100, 'error': True})}\n\n"
                 return
 
-            yield f"data: {json.dumps({'step': f'✅ Spec encontrado: {os.path.basename(spec_file)}', 'progress': 58})}\n\n"
+            yield f"data: {json.dumps({'step': f'âœ… Spec encontrado: {os.path.basename(spec_file)}', 'progress': 58})}\n\n"
             yield f"data: {json.dumps({'step': 'Ejecutando PyInstaller (puede tardar varios minutos)...', 'progress': 60})}\n\n"
 
             process = subprocess.Popen(
@@ -6972,11 +6972,11 @@ def generate_app():
             last_update = time.time()
             
             while process.poll() is None:
-                # Leer salida línea por línea
+                # Leer salida lÃ­nea por lÃ­nea
                 line = process.stdout.readline()
                 if line:
                     output_lines.append(line.strip())
-                    # Mostrar últimas líneas importantes
+                    # Mostrar Ãºltimas lÃ­neas importantes
                     if any(keyword in line.lower() for keyword in ['compilando', 'building', 'creating', 'success', 'error', 'completado', 'pyinstaller', 'copying']):
                         yield f"data: {json.dumps({'step': f'Compilando: {line.strip()[:100]}', 'progress': progress})}\n\n"
                 
@@ -7000,13 +7000,13 @@ def generate_app():
             
             if return_code != 0:
                 error_msg = output_text[-500:] if len(output_text) > 500 else output_text
-                yield f"data: {json.dumps({'step': f'ERROR en compilación (código {return_code}): {error_msg}', 'progress': 100, 'error': True})}\n\n"
+                yield f"data: {json.dumps({'step': f'ERROR en compilaciÃ³n (cÃ³digo {return_code}): {error_msg}', 'progress': 100, 'error': True})}\n\n"
                 return
             
             # Verificar si hay mensajes de error en la salida
             if 'error' in output_text.lower() or 'failed' in output_text.lower():
                 error_msg = output_text[-500:] if len(output_text) > 500 else output_text
-                yield f"data: {json.dumps({'step': f'Advertencia en compilación: {error_msg}', 'progress': 95})}\n\n"
+                yield f"data: {json.dumps({'step': f'Advertencia en compilaciÃ³n: {error_msg}', 'progress': 95})}\n\n"
             
             # Paso 3: Buscar ejecutable compilado
             yield f"data: {json.dumps({'step': 'Buscando ejecutable compilado...', 'progress': 92})}\n\n"
@@ -7018,10 +7018,10 @@ def generate_app():
             ]
             exe_path = next((p for p in exe_candidates_local if os.path.exists(p)), None)
             if not exe_path:
-                yield f"data: {json.dumps({'step': 'ERROR: Ejecutable no encontrado después de compilación', 'progress': 100, 'error': True})}\n\n"
+                yield f"data: {json.dumps({'step': 'ERROR: Ejecutable no encontrado despuÃ©s de compilaciÃ³n', 'progress': 100, 'error': True})}\n\n"
                 return
             
-            # Paso 4: Calcular hash y tamaño
+            # Paso 4: Calcular hash y tamaÃ±o
             yield f"data: {json.dumps({'step': 'Verificando integridad del ejecutable...', 'progress': 95})}\n\n"
             time.sleep(0.5)
             
@@ -7041,20 +7041,20 @@ def generate_app():
             import shutil
             shutil.copy2(exe_path, download_path)
             
-            # Paso 6: Registrar versión en BD directamente
+            # Paso 6: Registrar versiÃ³n en BD directamente
             try:
                 with get_api_db_cursor() as _cur:
                     _cur.execute(
                         f'INSERT INTO app_versions (version, download_url, changelog, file_size, file_hash) VALUES ({_PH},{_PH},{_PH},{_PH},{_PH}) ON CONFLICT (version) DO NOTHING',
                         (f'1.{version}', f'/download/{download_filename}',
-                         f'Versión generada con {model_data.get("patterns_count", 0)} patrones aprendidos',
+                         f'VersiÃ³n generada con {model_data.get("patterns_count", 0)} patrones aprendidos',
                          file_size, file_hash)
                     )
             except Exception:
                 pass
             
             # Paso 7: Completado
-            step_message = f'✅ Aplicación generada exitosamente.\n\nArchivo: {download_filename}\nTamaño: {file_size / (1024*1024):.1f} MB\nHash: {file_hash[:16]}...\n\nNOTA: Las actualizaciones de IA se descargan automáticamente sin necesidad de recompilar.'
+            step_message = f'âœ… AplicaciÃ³n generada exitosamente.\n\nArchivo: {download_filename}\nTamaÃ±o: {file_size / (1024*1024):.1f} MB\nHash: {file_hash[:16]}...\n\nNOTA: Las actualizaciones de IA se descargan automÃ¡ticamente sin necesidad de recompilar.'
             yield f"data: {json.dumps({'step': step_message, 'progress': 100, 'success': True, 'download_url': f'/download/{download_filename}', 'filename': download_filename})}\n\n"
             
         except Exception as e:
@@ -7064,7 +7064,7 @@ def generate_app():
 
 @app.route('/download/<filename>')
 def download_file(filename):
-    """Endpoint para descargar el ejecutable generado - Requiere autenticación o token"""
+    """Endpoint para descargar el ejecutable generado - Requiere autenticaciÃ³n o token"""
     import os
     from flask import send_file, request
     
@@ -7074,12 +7074,12 @@ def download_file(filename):
         # Usar el endpoint con token
         return download_with_token(token)
     
-    # Si no hay token, requerir autenticación (comportamiento anterior)
+    # Si no hay token, requerir autenticaciÃ³n (comportamiento anterior)
     from auth import login_required
     return login_required(lambda: _send_file_download(filename))()
 
 def _send_file_download(filename):
-    """Función auxiliar para enviar el archivo"""
+    """FunciÃ³n auxiliar para enviar el archivo"""
     import os
     from flask import send_file, jsonify
     
@@ -7093,7 +7093,7 @@ def _send_file_download(filename):
         os.path.join(project_root, filename),
     ]
     
-    # Buscar el primer archivo que exista (evita múltiples checks)
+    # Buscar el primer archivo que exista (evita mÃºltiples checks)
     file_path = None
     for path in possible_paths:
         if path and os.path.exists(path) and os.path.isfile(path):
@@ -7107,7 +7107,7 @@ def _send_file_download(filename):
 
 @app.route('/d/<token>')
 def download_with_token(token):
-    """Endpoint público para descargar usando token temporal (similar a Ocean)"""
+    """Endpoint pÃºblico para descargar usando token temporal (similar a Ocean)"""
     import os
     from datetime import datetime
 
@@ -7122,7 +7122,7 @@ def download_with_token(token):
             link = cursor.fetchone()
 
             if not link:
-                return jsonify({'error': 'Enlace de descarga inválido o expirado'}), 404
+                return jsonify({'error': 'Enlace de descarga invÃ¡lido o expirado'}), 404
 
             link_id       = _row_get(link, 0, 'id')
             filename      = _row_get(link, 1, 'filename')
@@ -7130,7 +7130,7 @@ def download_with_token(token):
             max_downloads = _row_get(link, 3, 'max_downloads')
             download_count= _row_get(link, 4, 'download_count')
 
-            # Obtener el token de escaneo del parámetro de la URL (si existe)
+            # Obtener el token de escaneo del parÃ¡metro de la URL (si existe)
             scan_token = request.args.get('token', None)
 
             try:
@@ -7140,24 +7140,24 @@ def download_with_token(token):
                 max_downloads = -1
                 download_count = 0
 
-            print(f"🔍 Verificando enlace: ID={link_id}, max={max_downloads}, count={download_count}")
+            print(f"ðŸ” Verificando enlace: ID={link_id}, max={max_downloads}, count={download_count}")
 
-            # Verificar expiración
+            # Verificar expiraciÃ³n
             if expires_at:
                 if isinstance(expires_at, str):
                     expires_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
                 else:
                     expires_dt = expires_at  # psycopg2 ya devuelve datetime
                 if datetime.now() > expires_dt.replace(tzinfo=None):
-                    print(f"❌ Enlace expirado: {expires_at}")
+                    print(f"âŒ Enlace expirado: {expires_at}")
                     return jsonify({'error': 'Este enlace de descarga ha expirado'}), 410
 
-            # Verificar límite de descargas (-1 = ilimitado)
+            # Verificar lÃ­mite de descargas (-1 = ilimitado)
             if max_downloads != -1 and download_count >= max_downloads:
-                print(f"❌ Límite alcanzado: {download_count} >= {max_downloads}")
-                return jsonify({'error': 'Este enlace ha alcanzado el límite de descargas'}), 403
+                print(f"âŒ LÃ­mite alcanzado: {download_count} >= {max_downloads}")
+                return jsonify({'error': 'Este enlace ha alcanzado el lÃ­mite de descargas'}), 403
 
-            print(f"✅ Enlace válido, procediendo con descarga")
+            print(f"âœ… Enlace vÃ¡lido, procediendo con descarga")
 
             # Incrementar contador
             cursor.execute(
@@ -7176,7 +7176,7 @@ def download_with_token(token):
             os.path.join(project_root, 'downloads', filename),
             os.path.join(project_root, 'source', 'dist', filename),
             os.path.join(project_root, filename),
-            # Fallback: buscar ArgusScanner.exe si se pidió el nombre viejo
+            # Fallback: buscar ArgusScanner.exe si se pidiÃ³ el nombre viejo
             os.path.join(project_root, 'source', 'dist', 'ArgusScanner.exe') if filename == 'MinecraftSSTool.exe' else None,
         ]
         
@@ -7222,37 +7222,37 @@ def download_with_token(token):
                         # Agregar el config.json
                         zipf.writestr('config.json', json_lib.dumps(config_data, indent=2))
                     
-                    print(f"✅ ZIP creado con ejecutable y config.json: {zip_path}")
-                    print(f"🔑 Token incluido en config: {scan_token[:20]}...")
+                    print(f"âœ… ZIP creado con ejecutable y config.json: {zip_path}")
+                    print(f"ðŸ”‘ Token incluido en config: {scan_token[:20]}...")
                     
                     # Enviar el ZIP
                     response = send_file(zip_path, as_attachment=True, download_name='ArgusScanner.zip', mimetype='application/zip')
                     
-                    # Limpiar el archivo temporal después de enviarlo (en un thread separado)
+                    # Limpiar el archivo temporal despuÃ©s de enviarlo (en un thread separado)
                     def cleanup_temp_file():
                         import time
                         time.sleep(5)  # Esperar 5 segundos antes de eliminar
                         try:
                             if os.path.exists(zip_path):
                                 os.remove(zip_path)
-                                print(f"🗑️ Archivo temporal eliminado: {zip_path}")
+                                print(f"ðŸ—‘ï¸ Archivo temporal eliminado: {zip_path}")
                         except Exception as e:
-                            print(f"⚠️ Error eliminando archivo temporal: {e}")
+                            print(f"âš ï¸ Error eliminando archivo temporal: {e}")
                     
                     import threading
                     threading.Thread(target=cleanup_temp_file, daemon=True).start()
                     
                     return response
                 except Exception as e:
-                    print(f"⚠️ Error creando ZIP con token: {e}")
+                    print(f"âš ï¸ Error creando ZIP con token: {e}")
                     traceback.print_exc()
-                    # Continuar con la descarga normal si falla la creación del ZIP
+                    # Continuar con la descarga normal si falla la creaciÃ³n del ZIP
             
             return send_file(file_path, as_attachment=True, download_name=filename)
         else:
             return jsonify({'error': f'Archivo no encontrado: {filename}'}), 404
     except Exception as e:
-        print(f"❌ Error en download_with_token: {e}")
+        print(f"âŒ Error en download_with_token: {e}")
         print(traceback.format_exc())
         return jsonify({'error': f'Error al procesar descarga: {str(e)}'}), 500
 
@@ -7317,10 +7317,10 @@ def descargar_page():
 
 @app.route('/descargar/exe')
 def descargar_exe():
-    """Endpoint público permanente para descargar ArgusScanner.exe sin autenticación."""
+    """Endpoint pÃºblico permanente para descargar ArgusScanner.exe sin autenticaciÃ³n."""
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     possible_paths = [
-        os.path.join(project_root, 'dist', 'ArgusScanner.exe'),          # versión compilada en git (prioridad)
+        os.path.join(project_root, 'dist', 'ArgusScanner.exe'),          # versiÃ³n compilada en git (prioridad)
         os.path.join(project_root, 'downloads', 'ArgusScanner.exe'),      # fallback: subida manual
         os.path.join(project_root, 'source', 'dist', 'ArgusScanner.exe'),
         os.path.join(project_root, 'ArgusScanner.exe'),
@@ -7328,12 +7328,12 @@ def descargar_exe():
     for path in possible_paths:
         if os.path.exists(path):
             return send_file(path, as_attachment=True, download_name='ArgusScanner.exe')
-    return jsonify({'error': 'Ejecutable no disponible aún. Contacta a un administrador.'}), 404
+    return jsonify({'error': 'Ejecutable no disponible aÃºn. Contacta a un administrador.'}), 404
 
 
 @app.route('/descargar/linux')
 def descargar_linux():
-    """Plataforma Linux #13 — sirve el paquete `argus_linux/` como tar.gz.
+    """Plataforma Linux #13 â€” sirve el paquete `argus_linux/` como tar.gz.
 
     Empaqueta on-the-fly el directorio source/argus_linux/ con scanner.py,
     run-argus.sh, README, etc. El tester solo tiene que extraer y correr:
@@ -7347,9 +7347,9 @@ def descargar_linux():
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     src_dir = os.path.join(project_root, 'source', 'argus_linux')
     if not os.path.isdir(src_dir):
-        return jsonify({'error': 'Paquete Linux no disponible aún en el servidor.'}), 404
+        return jsonify({'error': 'Paquete Linux no disponible aÃºn en el servidor.'}), 404
 
-    # Construir tar.gz en memoria — el directorio es pequeño (<50KB), no
+    # Construir tar.gz en memoria â€” el directorio es pequeÃ±o (<50KB), no
     # vale la pena cachear en disco. Si crece a >1MB conviene refactor.
     buf = io.BytesIO()
     excluded_names = {'__pycache__', '.pytest_cache', '.mypy_cache'}
@@ -7382,11 +7382,11 @@ def descargar_linux():
     )
 
 
-# ── Plataforma Android #13 — endpoint de descarga ────────────────────────────
+# â”€â”€ Plataforma Android #13 â€” endpoint de descarga â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Tag rolling del release de GitHub que el workflow .github/workflows/
 # android-build.yml mantiene actualizado en cada push a main. La URL del
-# asset es estable y pública (no requiere token), por lo que podemos
-# redirigir aquí sin gastar bandwidth de Render.
+# asset es estable y pÃºblica (no requiere token), por lo que podemos
+# redirigir aquÃ­ sin gastar bandwidth de Render.
 ANDROID_RELEASE_TAG = 'android-latest'
 ANDROID_RELEASE_ASSET = 'argus-android.apk'
 ANDROID_RELEASE_URL = (
@@ -7399,17 +7399,17 @@ ANDROID_RELEASE_API = (
 )
 
 # Cache simple en proceso para no martillar la API de GitHub (60 req/h
-# sin auth). TTL 5min — coincide con el ritmo realista de re-deploys.
+# sin auth). TTL 5min â€” coincide con el ritmo realista de re-deploys.
 _android_version_cache: dict = {'data': None, 'fetched_at': 0.0}
 _ANDROID_VERSION_TTL_S = 300
 
 
 def _android_version_payload() -> dict:
-    """Item Android #15 — meta del último APK publicado.
+    """Item Android #15 â€” meta del Ãºltimo APK publicado.
 
     Devuelve {latest_commit, short_commit, apk_url, published_at,
     release_name, size_bytes, release_notes}. Si la API de GitHub falla,
-    cae a un payload mínimo con apk_url estable.
+    cae a un payload mÃ­nimo con apk_url estable.
     """
     now = _time_mod.time()
     cached = _android_version_cache.get('data')
@@ -7462,16 +7462,16 @@ def _android_version_payload() -> dict:
 
 @app.route('/api/android-version')
 def api_android_version():
-    """Item Android #15 — endpoint que la app Argus consulta al iniciar
-    para detectar versión nueva.
+    """Item Android #15 â€” endpoint que la app Argus consulta al iniciar
+    para detectar versiÃ³n nueva.
 
-    Cliente típico: la app envía su BuildConfig.ARGUS_BUILD_COMMIT como
+    Cliente tÃ­pico: la app envÃ­a su BuildConfig.ARGUS_BUILD_COMMIT como
     ?current=abc1234. Si no coincide con `short_commit` y la release
-    es más reciente, la app muestra "Hay versión nueva" + botón
+    es mÃ¡s reciente, la app muestra "Hay versiÃ³n nueva" + botÃ³n
     Actualizar (que abre apk_url en el navegador para que el usuario
     descargue e instale el APK firmado).
 
-    Sin parámetro `current`, devuelve solo la meta del último build.
+    Sin parÃ¡metro `current`, devuelve solo la meta del Ãºltimo build.
     """
     payload = _android_version_payload()
     current = (request.args.get('current') or '').strip().lower()
@@ -7486,20 +7486,20 @@ def api_android_version():
 
 @app.route('/descargar/android')
 def descargar_android():
-    """Plataforma Android #13 — sirve el APK Argus Android.
+    """Plataforma Android #13 â€” sirve el APK Argus Android.
 
     Estrategia de servidos en cascada:
-      1) Si el operador del servidor copió manualmente un APK firmado a
+      1) Si el operador del servidor copiÃ³ manualmente un APK firmado a
          `web_app/static/dist/argus-android.apk`, lo servimos directo
          (use case: dev local, on-prem, o release firmado con keystore).
       2) Si no, redirigimos 302 al asset estable de GitHub Releases
          (rolling tag `android-latest`) que el workflow CI mantiene al
-         día con cada push a `main`. Esto cubre el caso por defecto de
-         Render: GH Actions buildea → publica release → este endpoint
+         dÃ­a con cada push a `main`. Esto cubre el caso por defecto de
+         Render: GH Actions buildea â†’ publica release â†’ este endpoint
          redirige sin necesidad de redeploy.
 
-    El parámetro `?direct=1` permite forzar la URL absoluta del release
-    (útil para QR / chat apps que no toleran redirects).
+    El parÃ¡metro `?direct=1` permite forzar la URL absoluta del release
+    (Ãºtil para QR / chat apps que no toleran redirects).
     """
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     apk_path = os.path.join(project_root, 'web_app', 'static', 'dist',
@@ -7513,17 +7513,17 @@ def descargar_android():
             download_name='argus-android.apk',
         )
 
-    # Fallback: redirect al release público de GitHub. 302 (Found) con
+    # Fallback: redirect al release pÃºblico de GitHub. 302 (Found) con
     # ?direct=1 da la URL "as-is" para clientes que no siguen redirects.
     if request.args.get('direct') == '1':
         return jsonify({'url': ANDROID_RELEASE_URL}), 200
     return redirect(ANDROID_RELEASE_URL, code=302)
 
 
-# ── Plugin Minecraft (/ss) — endpoint de descarga ──────────────────────────
-# Mismo patrón que Android: el workflow .github/workflows/build-plugin.yml
+# â”€â”€ Plugin Minecraft (/ss) â€” endpoint de descarga â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Mismo patrÃ³n que Android: el workflow .github/workflows/build-plugin.yml
 # compila el .jar en cada push y lo publica como release "plugin-latest".
-# Esta URL es estable y pública (no requiere token), redirigimos sin
+# Esta URL es estable y pÃºblica (no requiere token), redirigimos sin
 # gastar bandwidth de Render.
 PLUGIN_RELEASE_TAG = 'plugin-latest'
 PLUGIN_RELEASE_ASSET = 'argus-mc-1.0.0.jar'
@@ -7541,7 +7541,7 @@ _PLUGIN_VERSION_TTL_S = 300
 
 
 def _plugin_version_payload() -> dict:
-    """Meta del último .jar publicado en el release plugin-latest."""
+    """Meta del Ãºltimo .jar publicado en el release plugin-latest."""
     now = _time_mod.time()
     cached = _plugin_version_cache.get('data')
     if cached and now - _plugin_version_cache['fetched_at'] < _PLUGIN_VERSION_TTL_S:
@@ -7594,8 +7594,8 @@ def _plugin_version_payload() -> dict:
 
 @app.route('/api/plugin-version')
 def api_plugin_version():
-    """Endpoint público con la meta del último .jar (commit, tamaño, URL).
-    Útil para mostrar 'Última versión: 1.0.0 (#abc1234, 12 KB)' en la UI.
+    """Endpoint pÃºblico con la meta del Ãºltimo .jar (commit, tamaÃ±o, URL).
+    Ãštil para mostrar 'Ãšltima versiÃ³n: 1.0.0 (#abc1234, 12 KB)' en la UI.
     """
     return jsonify(_plugin_version_payload())
 
@@ -7606,12 +7606,12 @@ def descargar_plugin():
 
     Estrategia en cascada:
       1) Si hay un .jar buildado a mano en `web_app/static/dist/argus-mc.jar`,
-         lo servimos directo (útil para dev local / on-prem).
+         lo servimos directo (Ãºtil para dev local / on-prem).
       2) Si no, redirigimos al asset estable del release de GitHub que el
-         workflow CI mantiene al día con cada push a `main` que toque
+         workflow CI mantiene al dÃ­a con cada push a `main` que toque
          `minecraft_plugin/`.
 
-    `?direct=1` devuelve la URL absoluta como JSON (útil para clientes que
+    `?direct=1` devuelve la URL absoluta como JSON (Ãºtil para clientes que
     no toleran redirects, p. ej. paneles de Aternos via webhook).
     """
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -7633,9 +7633,9 @@ def descargar_plugin():
 
 @app.route('/descargar/android-source')
 def descargar_android_source():
-    """Plataforma Android #13 — empaqueta el proyecto Android como tar.gz.
+    """Plataforma Android #13 â€” empaqueta el proyecto Android como tar.gz.
 
-    Útil para que devs / CI / contributors lo compilen localmente. Excluye
+    Ãštil para que devs / CI / contributors lo compilen localmente. Excluye
     build/, .gradle/, *.iml, .DS_Store.
     """
     import io
@@ -7679,13 +7679,13 @@ def descargar_android_source():
 @app.route('/api/scans/<int:scan_id>/report-html', methods=['GET'])
 @login_required
 def get_scan_report_html(scan_id):
-    """Genera un reporte HTML descargable para un escaneo específico - OPTIMIZADO: Acceso directo a BD"""
+    """Genera un reporte HTML descargable para un escaneo especÃ­fico - OPTIMIZADO: Acceso directo a BD"""
     from datetime import datetime
     
     try:
-        # Acceso directo a BD (SIN HTTP - MUCHO MÁS RÁPIDO)
+        # Acceso directo a BD (SIN HTTP - MUCHO MÃS RÃPIDO)
         with get_api_db_cursor() as cursor:
-            # Obtener información del escaneo
+            # Obtener informaciÃ³n del escaneo
             cursor.execute('''
                 SELECT id, started_at, completed_at, status,
                        total_files_scanned, issues_found, scan_duration, machine_id, machine_name
@@ -7914,7 +7914,7 @@ def get_scan_report_html(scan_id):
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔍 ASPERS Projects - Reporte de Escaneo</h1>
+            <h1>ðŸ” ASPERS Projects - Reporte de Escaneo</h1>
             <p>Generado el {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}</p>
         </div>
         
@@ -7924,7 +7924,7 @@ def get_scan_report_html(scan_id):
                 <div class="value">#{scan['id']}</div>
             </div>
             <div class="summary-card">
-                <h3>Máquina</h3>
+                <h3>MÃ¡quina</h3>
                 <div class="value">{scan['machine_name'] or 'N/A'}</div>
             </div>
             <div class="summary-card">
@@ -7936,7 +7936,7 @@ def get_scan_report_html(scan_id):
                 <div class="value">{scan['issues_found'] or 0}</div>
             </div>
             <div class="summary-card">
-                <h3>Duración</h3>
+                <h3>DuraciÃ³n</h3>
                 <div class="value">{scan['scan_duration'] or 0:.1f}s</div>
             </div>
             <div class="summary-card">
@@ -7963,17 +7963,17 @@ def get_scan_report_html(scan_id):
                 <div>
                     <span class="badge badge-{badge_class}">{result['alert_level'] or 'N/A'}</span>
                     {f'<span class="badge badge-info">{result["confidence"]}%</span>' if result.get('confidence') else ''}
-                    {f'<span class="badge badge-success">✓ Verificado: {result["feedback"]}</span>' if result.get('feedback') else ''}
+                    {f'<span class="badge badge-success">âœ“ Verificado: {result["feedback"]}</span>' if result.get('feedback') else ''}
                 </div>
             </div>
             <div class="issue-details">
                 {f'<div><strong>Tipo:</strong> {result["issue_type"]}</div>' if result.get('issue_type') else ''}
-                {f'<div><strong>Categoría:</strong> {result["issue_category"]}</div>' if result.get('issue_category') else ''}
-                {f'<div><strong>Análisis IA:</strong> {result["ai_analysis"]}</div>' if result.get('ai_analysis') else ''}
+                {f'<div><strong>CategorÃ­a:</strong> {result["issue_category"]}</div>' if result.get('issue_category') else ''}
+                {f'<div><strong>AnÃ¡lisis IA:</strong> {result["ai_analysis"]}</div>' if result.get('ai_analysis') else ''}
                 {f'<div><strong>Confianza IA:</strong> {result["ai_confidence"]}%</div>' if result.get('ai_confidence') else ''}
                 {f'<div><strong>Patrones detectados:</strong> {", ".join(result["detected_patterns"])}</div>' if result.get('detected_patterns') and len(result['detected_patterns']) > 0 else ''}
                 {f'<div><strong>Hash:</strong> <code>{result["file_hash"]}</code></div>' if result.get('file_hash') else ''}
-                {f'<div><strong>Ofuscación detectada:</strong> {"Sí" if result["obfuscation_detected"] else "No"}</div>'}
+                {f'<div><strong>OfuscaciÃ³n detectada:</strong> {"SÃ­" if result["obfuscation_detected"] else "No"}</div>'}
             </div>
 '''
             
@@ -7981,7 +7981,7 @@ def get_scan_report_html(scan_id):
                 html += f'''
             <div class="feedback-section">
                 <h4>Feedback del Staff</h4>
-                <div><strong>Verificación:</strong> {result['feedback']}</div>
+                <div><strong>VerificaciÃ³n:</strong> {result['feedback']}</div>
                 {f'<div><strong>Notas:</strong> {result["feedback_notes"]}</div>' if result.get('feedback_notes') else ''}
                 {f'<div><strong>Fecha:</strong> {result["feedback_date"]}</div>' if result.get('feedback_date') else ''}
             </div>
@@ -7991,8 +7991,8 @@ def get_scan_report_html(scan_id):
         
         html += f'''
         <div class="footer">
-            <p>Reporte generado por ASPERS Projects - Sistema de Detección Avanzada</p>
-            <p>Este reporte puede ser compartido con el staff superior para revisión de archivos sospechosos.</p>
+            <p>Reporte generado por ASPERS Projects - Sistema de DetecciÃ³n Avanzada</p>
+            <p>Este reporte puede ser compartido con el staff superior para revisiÃ³n de archivos sospechosos.</p>
         </div>
     </div>
 </body>
@@ -8009,7 +8009,7 @@ def get_scan_report_html(scan_id):
 
 @app.route('/api/get-latest-exe', methods=['GET'])
 def get_latest_exe():
-    """Obtiene el ejecutable más reciente disponible (ya compilado)"""
+    """Obtiene el ejecutable mÃ¡s reciente disponible (ya compilado)"""
     import os
     from datetime import datetime
     
@@ -8045,7 +8045,7 @@ def get_latest_exe():
                 latest_filename = candidate
                 break
 
-    # También buscar en la raíz del proyecto
+    # TambiÃ©n buscar en la raÃ­z del proyecto
     if not latest_file:
         for candidate in ['ArgusScanner.exe', 'MinecraftSSTool.exe']:
             p = os.path.join(project_root, candidate)
@@ -8067,18 +8067,18 @@ def get_latest_exe():
             'modified_at': datetime.fromtimestamp(latest_time).isoformat()
         })
     else:
-        error_msg = 'No se encontró ejecutable compilado.'
+        error_msg = 'No se encontrÃ³ ejecutable compilado.'
         if IS_RENDER:
             error_msg += '\n\nEl archivo .exe debe estar en GitHub en una de estas ubicaciones:\n'
-            error_msg += '• source/dist/MinecraftSSTool.exe\n'
-            error_msg += '• downloads/MinecraftSSTool.exe\n\n'
+            error_msg += 'â€¢ source/dist/MinecraftSSTool.exe\n'
+            error_msg += 'â€¢ downloads/MinecraftSSTool.exe\n\n'
             error_msg += 'Pasos para solucionarlo:\n'
             error_msg += '1. Compila el .exe localmente\n'
             error_msg += '2. Ejecuta SUBIR_EXE_A_GITHUB.bat\n'
             error_msg += '3. Sube los cambios a GitHub\n'
-            error_msg += '4. Render se actualizará automáticamente'
+            error_msg += '4. Render se actualizarÃ¡ automÃ¡ticamente'
         else:
-            error_msg += ' Asegúrate de que el archivo .exe esté en la carpeta downloads/, source/dist/, o en la raíz del proyecto.'
+            error_msg += ' AsegÃºrate de que el archivo .exe estÃ© en la carpeta downloads/, source/dist/, o en la raÃ­z del proyecto.'
         
         return jsonify({
             'success': False,
@@ -8093,14 +8093,14 @@ def create_download_link():
     import secrets
     from datetime import datetime, timedelta
 
-    print(f"🔗 Solicitud de creación de enlace de descarga recibida")
-    print(f"📋 Datos recibidos: {request.json}")
+    print(f"ðŸ”— Solicitud de creaciÃ³n de enlace de descarga recibida")
+    print(f"ðŸ“‹ Datos recibidos: {request.json}")
 
     # Verificar permisos (solo admin)
     user_id = session.get('user_id')
     current_user = get_user_by_id(user_id)
     if not is_admin(current_user):
-        print(f"❌ Usuario {user_id} no tiene permisos de admin")
+        print(f"âŒ Usuario {user_id} no tiene permisos de admin")
         return jsonify({'error': 'No tienes permisos para crear enlaces de descarga'}), 403
 
     data = request.json or {}
@@ -8109,7 +8109,7 @@ def create_download_link():
     max_downloads = data.get('max_downloads', 1)
     description   = data.get('description', '')
 
-    print(f"📁 Archivo: {filename}, ⏰ {expires_hours}h, 📊 max={max_downloads}")
+    print(f"ðŸ“ Archivo: {filename}, â° {expires_hours}h, ðŸ“Š max={max_downloads}")
 
     token      = secrets.token_urlsafe(32)
     expires_at = datetime.now() + timedelta(hours=expires_hours)
@@ -8123,7 +8123,7 @@ def create_download_link():
                 (token, filename, str(user_id), expires_at.isoformat(), max_downloads, description)
             )
 
-        print(f"✅ Enlace guardado en BD con ID: {link_id}")
+        print(f"âœ… Enlace guardado en BD con ID: {link_id}")
         
         # Generar URL completa
         base_url = request.host_url.rstrip('/')
@@ -8133,7 +8133,7 @@ def create_download_link():
                 base_url = render_url.rstrip('/')
         download_url = f"{base_url}/d/{token}"
         
-        print(f"🌐 URL generada: {download_url}")
+        print(f"ðŸŒ URL generada: {download_url}")
         
         return jsonify({
             'success': True,
@@ -8146,7 +8146,7 @@ def create_download_link():
         }), 201
         
     except Exception as e:
-        print(f"❌ Error creando enlace de descarga: {e}")
+        print(f"âŒ Error creando enlace de descarga: {e}")
         print(traceback.format_exc())
         return jsonify({'error': f'Error al crear enlace: {str(e)}'}), 500
 
@@ -8198,7 +8198,7 @@ def list_download_links():
         return jsonify({'success': True, 'links': links}), 200
         
     except Exception as e:
-        print(f"❌ Error listando enlaces: {e}")
+        print(f"âŒ Error listando enlaces: {e}")
         print(traceback.format_exc())
         return jsonify({'error': f'Error al listar enlaces: {str(e)}'}), 500
 
@@ -8222,7 +8222,7 @@ def delete_download_link(link_id):
 @app.route('/api/import/echo', methods=['POST'])
 @login_required
 def import_echo_scan():
-    """Importa resultados históricos de Echo Scanner"""
+    """Importa resultados histÃ³ricos de Echo Scanner"""
     try:
         data = request.json or {}
         
@@ -8296,20 +8296,20 @@ def export_scan_csv(scan_id):
         # Header metadata
         w.writerow(['# Reporte de Escaneo - ASPERS Projects'])
         w.writerow(['# Scan ID', scan_id])
-        w.writerow(['# Máquina', g(1,'machine_name')])
+        w.writerow(['# MÃ¡quina', g(1,'machine_name')])
         w.writerow(['# Minecraft Username', g(2,'minecraft_username') or 'No detectado'])
         w.writerow(['# Fecha inicio', g(3,'started_at')])
         w.writerow(['# Fecha fin', g(4,'completed_at')])
         w.writerow(['# Archivos escaneados', g(6,'total_files_scanned')])
         w.writerow(['# Issues totales', g(7,'issues_found')])
         w.writerow(['# Veredicto', g(11,'verdict') or 'pendiente'])
-        w.writerow(['# Razón veredicto', g(12,'verdict_reason') or ''])
+        w.writerow(['# RazÃ³n veredicto', g(12,'verdict_reason') or ''])
         w.writerow([])
 
         # Column headers
-        w.writerow(['Tipo', 'Nombre', 'Ruta', 'Categoría', 'Nivel de alerta',
-                    'Confianza %', 'Ofuscación detectada', 'Hash SHA256',
-                    'Análisis IA', 'Confianza IA %'])
+        w.writerow(['Tipo', 'Nombre', 'Ruta', 'CategorÃ­a', 'Nivel de alerta',
+                    'Confianza %', 'OfuscaciÃ³n detectada', 'Hash SHA256',
+                    'AnÃ¡lisis IA', 'Confianza IA %'])
 
         for r in results:
             w.writerow([
@@ -8319,7 +8319,7 @@ def export_scan_csv(scan_id):
                 _row_get(r, 3, 'issue_category'),
                 _row_get(r, 4, 'alert_level'),
                 _row_get(r, 5, 'confidence'),
-                'Sí' if _row_get(r, 6, 'obfuscation_detected') else 'No',
+                'SÃ­' if _row_get(r, 6, 'obfuscation_detected') else 'No',
                 _row_get(r, 7, 'file_hash'),
                 _row_get(r, 8, 'ai_analysis'),
                 _row_get(r, 9, 'ai_confidence'),
@@ -8383,7 +8383,7 @@ def export_scan_pdf(scan_id):
             )
             results = cursor.fetchall()
 
-        # ── Build PDF ──
+        # â”€â”€ Build PDF â”€â”€
         _LOGO_PATH = os.path.join(os.path.dirname(__file__), 'static', 'img', 'logo.png')
         _has_logo  = os.path.isfile(_LOGO_PATH)
 
@@ -8426,7 +8426,7 @@ def export_scan_pdf(scan_id):
         pdf.set_xy(18, 22)
         pdf.set_font('Helvetica', 'B', 16)
         pdf.set_text_color(20, 20, 50)
-        pdf.cell(0, 8, f'Reporte de Escaneo — {machine}', ln=True)
+        pdf.cell(0, 8, f'Reporte de Escaneo â€” {machine}', ln=True)
         pdf.set_font('Helvetica', '', 10)
         pdf.set_text_color(100, 100, 130)
         pdf.set_x(18)
@@ -8549,14 +8549,14 @@ def set_scan_verdict(scan_id):
     verdict = (data.get('verdict') or '').strip().lower()
     reason  = (data.get('reason') or '').strip()
     if verdict not in ('clean', 'hack', 'pending'):
-        return jsonify({'error': 'Veredicto inválido. Usar: clean, hack, pending'}), 400
+        return jsonify({'error': 'Veredicto invÃ¡lido. Usar: clean, hack, pending'}), 400
     if not reason:
-        return jsonify({'error': 'La razón del veredicto es obligatoria'}), 400
+        return jsonify({'error': 'La razÃ³n del veredicto es obligatoria'}), 400
     user = session.get('username', 'staff')
     user_id = session.get('user_id')
     try:
         with get_api_db_cursor() as cursor:
-            # Pack 32 — Capturar ensemble verdict, prior verdict y company
+            # Pack 32 â€” Capturar ensemble verdict, prior verdict y company
             # ANTES de overwriteear, para alimentar staff_trust + cooldown.
             prior_verdict = None
             ensemble_verdict_str = None
@@ -8593,9 +8593,9 @@ def set_scan_verdict(scan_id):
                 (scan_id, verdict, reason, user)
             )
 
-            # Pack 32 F#54 — Actualizar staff_trust comparando humano vs
+            # Pack 32 F#54 â€” Actualizar staff_trust comparando humano vs
             # ensemble. Idempotente, dentro de SAVEPOINT por si la tabla
-            # está corrupta no rompe el verdict.
+            # estÃ¡ corrupta no rompe el verdict.
             if _AI_TRUST_AVAILABLE and user_id and ensemble_verdict_str:
                 try:
                     cursor.execute('SAVEPOINT staff_trust_save')
@@ -8613,9 +8613,9 @@ def set_scan_verdict(scan_id):
                     except Exception:
                         pass
 
-            # Pack 36 — Auto-learn de patterns desde verdict='hack' por
+            # Pack 36 â€” Auto-learn de patterns desde verdict='hack' por
             # staff con alto trust. Solo si tenemos ai_autolearn + el
-            # staff llegó a >=65 trust en F#54.
+            # staff llegÃ³ a >=65 trust en F#54.
             if (_AI_AUTOLEARN_AVAILABLE and verdict == 'hack' and
                 user_id and _AI_TRUST_AVAILABLE):
                 try:
@@ -8645,8 +8645,8 @@ def set_scan_verdict(scan_id):
                         pass
                     print(f'[set_verdict.autolearn] {_e_al}')
 
-            # Pack 32 F#60 — Si el verdict actual es 'clean' y el prior
-            # era 'hack' (o el ensemble decía hack), incrementar
+            # Pack 32 F#60 â€” Si el verdict actual es 'clean' y el prior
+            # era 'hack' (o el ensemble decÃ­a hack), incrementar
             # overturn cooldown de la empresa.
             if _AI_TRUST_AVAILABLE and scan_company_id:
                 is_overturn_to_clean = (
@@ -8676,7 +8676,7 @@ def set_scan_verdict(scan_id):
             srow = cursor.fetchone()
         machine  = (_row_get(srow, 0, 'machine_name')       or 'N/A') if srow else 'N/A'
         username = (_row_get(srow, 1, 'minecraft_username')  or 'N/A') if srow else 'N/A'
-        # Invalidar caché de estadísticas
+        # Invalidar cachÃ© de estadÃ­sticas
         if 'statistics' in _stats_cache: del _stats_cache['statistics']
         if 'dashboard_extended' in _stats_cache: del _stats_cache['dashboard_extended']
         try:
@@ -8746,7 +8746,7 @@ def add_scan_note(scan_id):
     data = request.json or {}
     body = (data.get('body') or '').strip()
     if not body:
-        return jsonify({'error': 'El cuerpo de la nota no puede estar vacío'}), 400
+        return jsonify({'error': 'El cuerpo de la nota no puede estar vacÃ­o'}), 400
     user = session.get('username', 'staff')
     try:
         with get_api_db_cursor() as cursor:
@@ -8793,7 +8793,7 @@ def delete_scan_note(scan_id, note_id):
 
 @app.route('/api/hashes', methods=['GET'])
 def get_hack_hashes():
-    """Returns all known hack hashes — used by the scanner at startup."""
+    """Returns all known hack hashes â€” used by the scanner at startup."""
     try:
         with get_api_db_cursor() as cursor:
             cursor.execute(
@@ -8824,7 +8824,7 @@ def add_hack_hash():
     sha256 = (data.get('sha256') or '').strip().lower()
     hack_name = (data.get('hack_name') or '').strip()
     if len(sha256) != 64 or not all(c in '0123456789abcdef' for c in sha256):
-        return jsonify({'error': 'SHA256 inválido (debe ser 64 hex chars)'}), 400
+        return jsonify({'error': 'SHA256 invÃ¡lido (debe ser 64 hex chars)'}), 400
     added_by = current_user.get('username', '') if current_user else ''
     try:
         with get_api_db_cursor() as cursor:
@@ -8870,12 +8870,12 @@ def delete_hack_hash(sha256):
         return jsonify({'error': str(e)}), 500
 
 
-# ── P3 #4 — Clustering de perfiles de scan ───────────────────────────────────
+# â”€â”€ P3 #4 â€” Clustering de perfiles de scan â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/ml/cluster', methods=['POST'])
 @login_required
 def ml_cluster():
-    """K-Means clustering sobre los últimos N scans completados.
+    """K-Means clustering sobre los Ãºltimos N scans completados.
     Detecta grupos de scans con patrones similares y alerta si un cluster nuevo emerge.
     Body: {days: 30, n_clusters: 5}
     """
@@ -8921,7 +8921,7 @@ def ml_cluster():
             rows = cursor.fetchall() or []
 
         if len(rows) < n_clusters * 2:
-            return jsonify({'error': f'Insuficientes scans: {len(rows)} (mín {n_clusters*2})'}), 200
+            return jsonify({'error': f'Insuficientes scans: {len(rows)} (mÃ­n {n_clusters*2})'}), 200
 
         scan_ids = []
         X = []
@@ -8974,14 +8974,14 @@ def ml_cluster():
             'clusters': result_clusters,
             'high_risk_clusters': len(high_risk_clusters),
             'alert': len(high_risk_clusters) > 0,
-            'alert_message': (f'⚠ {len(high_risk_clusters)} cluster(s) de alto riesgo detectados con risk_score promedio ≥ 60'
+            'alert_message': (f'âš  {len(high_risk_clusters)} cluster(s) de alto riesgo detectados con risk_score promedio â‰¥ 60'
                              if high_risk_clusters else None),
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-# ── P3 #1 — Clasificador Random Forest ───────────────────────────────────────
+# â”€â”€ P3 #1 â€” Clasificador Random Forest â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/ml/train', methods=['POST'])
 @login_required
@@ -9020,7 +9020,7 @@ def ml_predict():
 @app.route('/api/ml/status', methods=['GET'])
 @login_required
 def ml_status():
-    """Estado del clasificador ML: si está disponible y con cuántas muestras."""
+    """Estado del clasificador ML: si estÃ¡ disponible y con cuÃ¡ntas muestras."""
     try:
         from ml_classifier import get_classifier
         clf = get_classifier()
@@ -9038,8 +9038,8 @@ def ml_status():
 @app.route('/api/ml/drift', methods=['GET'])
 @login_required
 def ml_drift_check():
-    """P3 #9 — Detección de concept drift: compara concordancia del modelo con veredictos recientes.
-    Si concordancia <70% en los últimos 30 scans con veredicto → alerta de reentrenamiento.
+    """P3 #9 â€” DetecciÃ³n de concept drift: compara concordancia del modelo con veredictos recientes.
+    Si concordancia <70% en los Ãºltimos 30 scans con veredicto â†’ alerta de reentrenamiento.
     """
     try:
         from ml_classifier import get_classifier
@@ -9086,7 +9086,7 @@ def ml_drift_check():
         'drift':         drift,
         'concordance':   concordance,
         'samples_used':  total,
-        'reason': ('Concordancia del modelo con veredictos recientes por debajo del 70% — reentrenamiento recomendado'
+        'reason': ('Concordancia del modelo con veredictos recientes por debajo del 70% â€” reentrenamiento recomendado'
                    if drift else 'Concordancia aceptable'),
         'retrain_recommended': drift,
     }), 200
@@ -9095,8 +9095,8 @@ def ml_drift_check():
 @app.route('/api/ml/anomaly/<int:scan_id>', methods=['GET'])
 @login_required
 def ml_anomaly_detect(scan_id):
-    """P3 #3 — Isolation Forest para detectar si un scan es anómalo respecto al baseline.
-    Compara los hallazgos del scan actual contra el perfil histórico de scans limpios.
+    """P3 #3 â€” Isolation Forest para detectar si un scan es anÃ³malo respecto al baseline.
+    Compara los hallazgos del scan actual contra el perfil histÃ³rico de scans limpios.
     Devuelve: {anomaly_score: float, is_anomaly: bool, reason: str}
     """
     try:
@@ -9122,7 +9122,7 @@ def ml_anomaly_detect(scan_id):
                 float(_row_get(row, 2, 'scan_duration') or 0),
                 int(_row_get(row, 3, 'total_files_scanned') or 0),
             ]
-            # Baseline: últimos 200 scans con veredicto limpio
+            # Baseline: Ãºltimos 200 scans con veredicto limpio
             cur.execute(
                 f"SELECT issues_found, risk_score, scan_duration, total_files_scanned "
                 f"FROM scans WHERE verdict='clean' ORDER BY id DESC LIMIT 200"
@@ -9133,7 +9133,7 @@ def ml_anomaly_detect(scan_id):
 
     if len(baseline_rows) < 20:
         return jsonify({'anomaly_score': 0.0, 'is_anomaly': False,
-                        'reason': 'Insuficientes scans limpios para baseline (mín 20)'}), 200
+                        'reason': 'Insuficientes scans limpios para baseline (mÃ­n 20)'}), 200
 
     baseline = [
         [int(_row_get(r, 0, 'issues_found') or 0),
@@ -9161,9 +9161,9 @@ def ml_anomaly_detect(scan_id):
         if current[1] > float(np.percentile(X_base[:, 1], 90)):
             reason += f'Risk score ({current[1]}) anormalmente alto. '
         if current[3] < float(np.percentile(X_base[:, 3], 10)) and current[3] > 0:
-            reason += f'Muy pocos archivos escaneados ({current[3]}), posible evasión. '
+            reason += f'Muy pocos archivos escaneados ({current[3]}), posible evasiÃ³n. '
         if not reason:
-            reason = 'Perfil del scan estadísticamente inusual.'
+            reason = 'Perfil del scan estadÃ­sticamente inusual.'
 
     return jsonify({
         'anomaly_score': round(-score, 4),  # positive = more anomalous
@@ -9175,9 +9175,9 @@ def ml_anomaly_detect(scan_id):
 
 @app.route('/api/predict', methods=['POST'])
 def api_predict():
-    """P3 #35 — Predicción de riesgo pre-scan.
-    El scanner envía features básicas del sistema antes de escanear.
-    Devuelve risk_level y si el staff quiere scan completo o rápido.
+    """P3 #35 â€” PredicciÃ³n de riesgo pre-scan.
+    El scanner envÃ­a features bÃ¡sicas del sistema antes de escanear.
+    Devuelve risk_level y si el staff quiere scan completo o rÃ¡pido.
     Body: { token, machine_id, prev_verdicts (list), mc_versions (int),
             suspicious_dirs (list of found dirs), os_version }
     """
@@ -9191,7 +9191,7 @@ def api_predict():
         with get_api_db_cursor() as cur:
             cur.execute(f'SELECT id FROM scan_tokens WHERE token={_PH} AND (expires_at IS NULL OR expires_at > NOW())', (token,))
             if not cur.fetchone():
-                return jsonify({'error': 'token inválido o expirado'}), 403
+                return jsonify({'error': 'token invÃ¡lido o expirado'}), 403
 
             # Historial de veredictos previos del mismo machine_id
             prev_hack  = 0
@@ -9207,7 +9207,7 @@ def api_predict():
                 row = cur.fetchone()
                 prev_total = int((row[0] if isinstance(row, (list, tuple)) else row.get('count', 0)) or 0)
 
-        # Calcular risk_level pre-scan basado en señales simples
+        # Calcular risk_level pre-scan basado en seÃ±ales simples
         risk = 0
         reasons = []
 
@@ -9241,7 +9241,7 @@ def api_predict():
         return jsonify({'error': str(e)}), 500
 
 
-# ── P2 #1 — Whitelist dinámica de mods legítimos ─────────────────────────────
+# â”€â”€ P2 #1 â€” Whitelist dinÃ¡mica de mods legÃ­timos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/mod_whitelist', methods=['GET'])
 def get_mod_whitelist():
@@ -9270,7 +9270,7 @@ def add_mod_whitelist():
     sha256   = (data.get('sha256') or '').strip().lower()
     mod_name = (data.get('mod_name') or '').strip()
     if len(sha256) != 64 or not all(c in '0123456789abcdef' for c in sha256):
-        return jsonify({'error': 'SHA256 inválido'}), 400
+        return jsonify({'error': 'SHA256 invÃ¡lido'}), 400
     if not mod_name:
         return jsonify({'error': 'mod_name es obligatorio'}), 400
     try:
@@ -9303,12 +9303,12 @@ def delete_mod_whitelist(sha256):
         return jsonify({'error': str(e)}), 500
 
 
-# ── P3 #17 — Dynamic hash blacklist (auto-propagated from verdict history) ────
+# â”€â”€ P3 #17 â€” Dynamic hash blacklist (auto-propagated from verdict history) â”€â”€â”€â”€
 
 @app.route('/api/hack_blacklist', methods=['GET'])
 def get_hack_blacklist():
     """Returns SHA256 hashes confirmed as hacks across all servers.
-    Auto-populated by /api/hack_blacklist/sync — scanner fetches on startup.
+    Auto-populated by /api/hack_blacklist/sync â€” scanner fetches on startup.
     """
     try:
         with get_api_db_cursor() as cursor:
@@ -9389,7 +9389,7 @@ def sync_hack_blacklist():
         return jsonify({'error': str(e)}), 500
 
 
-# ── P3 #18 — Score breakdown (SHAP-style explanation) ────────────────────────
+# â”€â”€ P3 #18 â€” Score breakdown (SHAP-style explanation) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/scans/<int:scan_id>/score_breakdown', methods=['GET'])
 @login_required
@@ -9417,13 +9417,13 @@ def get_score_breakdown(scan_id):
         ]
         score, breakdown = _calculate_risk_score(results, return_breakdown=True)
 
-        # P3 #12 — Intervalo de confianza basado en varianza de confidence de los hallazgos
+        # P3 #12 â€” Intervalo de confianza basado en varianza de confidence de los hallazgos
         confidences = [r['confidence'] for r in results if r.get('confidence', 0) > 0]
         if len(confidences) >= 2:
             avg_conf = sum(confidences) / len(confidences)
             variance = sum((c - avg_conf)**2 for c in confidences) / len(confidences)
             std_dev  = variance ** 0.5
-            # Margen ±15 puntos de risk_score cuando std_dev es alto
+            # Margen Â±15 puntos de risk_score cuando std_dev es alto
             margin = round(min(25, std_dev * 30), 1)
             ci = {'low': max(0, score - margin), 'high': min(100, score + margin), 'margin': margin}
             needs_review = margin > 12  # Alta incertidumbre
@@ -9441,7 +9441,7 @@ def get_score_breakdown(scan_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ── P2 #30 — Umbrales de confianza por tipo (feedback loop) ──────────────────
+# â”€â”€ P2 #30 â€” Umbrales de confianza por tipo (feedback loop) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/thresholds', methods=['GET'])
 def get_confidence_thresholds():
@@ -9464,7 +9464,7 @@ def get_confidence_thresholds():
         return jsonify({'thresholds': {}, 'error': str(e)}), 200  # 200 so scanner doesn't abort
 
 
-# ── P3 #5 — Perfil de jugador / baseline ─────────────────────────────────────
+# â”€â”€ P3 #5 â€” Perfil de jugador / baseline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/player_baseline/<string:machine_id>', methods=['GET'])
 def get_player_baseline(machine_id):
@@ -9474,7 +9474,7 @@ def get_player_baseline(machine_id):
     """
     machine_id = machine_id.strip()
     if not machine_id or len(machine_id) > 200:
-        return jsonify({'error': 'machine_id inválido'}), 400
+        return jsonify({'error': 'machine_id invÃ¡lido'}), 400
     try:
         with get_api_db_cursor() as cursor:
             # Last 10 completed scans for this machine
@@ -9521,7 +9521,7 @@ def get_player_baseline(machine_id):
 @login_required
 def compare_scans(scan_a, scan_b):
     """Compara dos scans del mismo jugador y retorna el diff de hallazgos.
-    Útil para detectar qué apareció o desapareció entre sesiones."""
+    Ãštil para detectar quÃ© apareciÃ³ o desapareciÃ³ entre sesiones."""
     try:
         with get_api_db_cursor() as cursor:
             def _fetch_scan(sid):
@@ -9605,7 +9605,7 @@ def compare_scans(scan_a, scan_b):
         return jsonify({'error': str(e)}), 500
 
 
-# ── P3 #2 — Scoring por rareza ────────────────────────────────────────────────
+# â”€â”€ P3 #2 â€” Scoring por rareza â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/rarity', methods=['GET'])
 def get_issue_rarity():
@@ -9664,7 +9664,7 @@ def get_issue_rarity():
         return jsonify({'error': str(e)}), 500
 
 
-# ── P3 #16 — Patrones de bans (cruce con historial) ──────────────────────────
+# â”€â”€ P3 #16 â€” Patrones de bans (cruce con historial) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/ban_patterns', methods=['GET'])
 def get_ban_patterns():
@@ -9718,11 +9718,11 @@ def get_ban_patterns():
         return jsonify({'error': str(e)}), 500
 
 
-# ── Items 37/38/39 — Auto-whitelist / auto-blacklist from verdict history ─────
+# â”€â”€ Items 37/38/39 â€” Auto-whitelist / auto-blacklist from verdict history â”€â”€â”€â”€â”€
 
 @app.route('/api/learning/auto_weights', methods=['GET'])
 def get_auto_weights():
-    """#38/#39 — Returns dynamically computed confidence weights per issue_type
+    """#38/#39 â€” Returns dynamically computed confidence weights per issue_type
     based on historical verdict ratios (no manual input needed).
     hack_rate = count_in_hack_scans / total_scans_with_this_type
     Response: {weights: [{issue_type, hack_rate, weight_multiplier}]}
@@ -9782,8 +9782,8 @@ def get_auto_weights():
 
 @app.route('/api/learning/auto_whitelist', methods=['GET'])
 def get_auto_whitelist():
-    """#37 — Returns issue_type + path patterns that appear in >=30 clean scans
-    and never (or rarely, <5%) in hack scans — these are systematic FPs.
+    """#37 â€” Returns issue_type + path patterns that appear in >=30 clean scans
+    and never (or rarely, <5%) in hack scans â€” these are systematic FPs.
     The scanner can fetch this on startup to extend its whitelist dynamically.
     """
     try:
@@ -9839,7 +9839,7 @@ def get_auto_whitelist():
 
 
 # ============================================================
-# GESTIÓN DE STAFF / ROLES
+# GESTIÃ“N DE STAFF / ROLES
 # ============================================================
 
 @app.route('/api/staff/users', methods=['GET'])
@@ -9850,11 +9850,11 @@ def list_staff_users():
     AISLAMIENTO ESTRICTO ENTRE EMPRESAS (P42):
     - Super-admin global ('admin'): ve todos los usuarios.
     - Admin/Owner de empresa (company_id != NULL): SOLO ve los usuarios con
-      su mismo company_id. NUNCA ve staff de otras empresas ni huérfanos
+      su mismo company_id. NUNCA ve staff de otras empresas ni huÃ©rfanos
       cross-empresa.
     - Staff individual (company_id NULL): SOLO ve a otros usuarios sin
       empresa (otros individuales). Nunca ve staff de empresas.
-    La adopción de staff huérfanos legacy ahora es responsabilidad exclusiva
+    La adopciÃ³n de staff huÃ©rfanos legacy ahora es responsabilidad exclusiva
     del SuperAdmin (panel /aspers-sa).
     """
     current_user = get_user_by_id(session.get('user_id'))
@@ -9901,12 +9901,12 @@ def update_staff_role(user_id):
     AISLAMIENTO ENTRE EMPRESAS (P42):
     - Super-admin global ('admin'): puede modificar a cualquier usuario.
     - Admin/Owner de empresa: SOLO puede modificar a usuarios de su empresa.
-      No puede tocar huérfanos (company_id NULL) ni usuarios de otras empresas.
+      No puede tocar huÃ©rfanos (company_id NULL) ni usuarios de otras empresas.
     - Staff individual (sin company_id): SOLO puede modificar a otros sin
       company_id.
 
-    Si el target no tiene company_id y el caller sí, se le asigna company_id
-    automáticamente, manteniéndose el aislamiento.
+    Si el target no tiene company_id y el caller sÃ­, se le asigna company_id
+    automÃ¡ticamente, manteniÃ©ndose el aislamiento.
     """
     current_user = get_user_by_id(session.get('user_id'))
     if not can_manage_staff(current_user):
@@ -9914,7 +9914,7 @@ def update_staff_role(user_id):
     data = request.json or {}
     new_role = (data.get('role') or '').strip().lower()
     if new_role not in STAFF_ROLE_HIERARCHY:
-        return jsonify({'error': f'Rol inválido. Opciones: {", ".join(STAFF_ROLE_HIERARCHY)}'}), 400
+        return jsonify({'error': f'Rol invÃ¡lido. Opciones: {", ".join(STAFF_ROLE_HIERARCHY)}'}), 400
     if new_role == 'owner' and get_staff_role(current_user) != 'owner':
         return jsonify({'error': 'Solo un Owner puede asignar el rol de Owner'}), 403
     target = get_user_by_id(user_id)
@@ -9968,10 +9968,10 @@ def update_staff_role(user_id):
 
 
 # NOTA (P42): los endpoints /api/staff/users/.../attach* fueron retirados.
-# La asignación de staff huérfanos (legacy con company_id NULL) ahora es
+# La asignaciÃ³n de staff huÃ©rfanos (legacy con company_id NULL) ahora es
 # responsabilidad EXCLUSIVA del SuperAdmin desde /aspers-sa, para evitar que
 # admins de una empresa puedan "adoptar" usuarios de otra empresa o staff
-# individual. Ver: /aspers-sa/api/orphan-staff y .../assign más abajo.
+# individual. Ver: /aspers-sa/api/orphan-staff y .../assign mÃ¡s abajo.
 
 
 @app.route('/api/staff/users/<int:user_id>/avatar', methods=['PUT'])
@@ -9983,16 +9983,16 @@ def update_user_avatar(user_id):
         return jsonify({'error': 'Se requiere rol Admin o superior'}), 403
     data = request.json or {}
     avatar_url = (data.get('avatar_url') or '').strip()
-    # Validar tamaño: máx 600 KB de texto (cubre imágenes base64 de ~430 KB originales)
+    # Validar tamaÃ±o: mÃ¡x 600 KB de texto (cubre imÃ¡genes base64 de ~430 KB originales)
     if len(avatar_url) > 614_400:
-        return jsonify({'error': 'Imagen demasiado grande (máx 450 KB)'}), 413
+        return jsonify({'error': 'Imagen demasiado grande (mÃ¡x 450 KB)'}), 413
     # Validar que sea URL o data URL de imagen
     if avatar_url and not (
         avatar_url.startswith('http://') or
         avatar_url.startswith('https://') or
         avatar_url.startswith('data:image/')
     ):
-        return jsonify({'error': 'Formato no válido: se esperaba URL o data URL de imagen'}), 400
+        return jsonify({'error': 'Formato no vÃ¡lido: se esperaba URL o data URL de imagen'}), 400
     try:
         from auth import _auth_cursor, _ph
         ph = _ph()
@@ -10006,14 +10006,14 @@ def update_user_avatar(user_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ── Staff AI Chat ─────────────────────────────────────────────────────────────
+# â”€â”€ Staff AI Chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-# ── Staff AI Chat — ensemble: Claude + Groq + Gemini + DuckDuckGo ─────────────
+# â”€â”€ Staff AI Chat â€” ensemble: Claude + Groq + Gemini + DuckDuckGo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _CHAT_SYSTEM = (
     'Eres Argus AI, asistente experto en seguridad de Minecraft para el staff de ASPERS Projects. '
     'Ayudas a entender hallazgos del scanner Argus, identificar falsos positivos y responder sobre '
-    'hacks y cheats de Minecraft. Responde en español, directo y técnico. Bullet points si aplica.'
+    'hacks y cheats de Minecraft. Responde en espaÃ±ol, directo y tÃ©cnico. Bullet points si aplica.'
 )
 
 
@@ -10025,7 +10025,7 @@ def _ai_web_search(query, n=4):
         if not hits:
             return ''
         return '\n\n'.join(
-            f"[{h.get('title','')}] {h.get('body','')[:300]} — {h.get('href','')}"
+            f"[{h.get('title','')}] {h.get('body','')[:300]} â€” {h.get('href','')}"
             for h in hits
         )
     except Exception as e:
@@ -10071,7 +10071,7 @@ def _ai_call_groq(key, system, messages):
 def _ai_call_gemini(key, system, history, user_msg):
     try:
         contents = []
-        for m in history[:-1]:  # historial previo (sin el último user_msg)
+        for m in history[:-1]:  # historial previo (sin el Ãºltimo user_msg)
             role = 'user' if m['role'] == 'user' else 'model'
             contents.append({'role': role, 'parts': [{'text': m['content']}]})
         # Primer turno incluye el system prompt
@@ -10101,10 +10101,10 @@ def _ai_synthesize(responses, question, synth_fn):
         f'[IA {i+1}]: {r}' for i, r in enumerate(responses)
     )
     prompt = (
-        f'El staff preguntó: "{question}"\n\n'
+        f'El staff preguntÃ³: "{question}"\n\n'
         f'Estas son las respuestas de {len(responses)} modelos de IA:\n\n{joined}\n\n'
-        'Sintetiza la respuesta más certera y completa combinando los puntos más '
-        'precisos de cada una. Elimina redundancias. Responde en español, máx 250 palabras.'
+        'Sintetiza la respuesta mÃ¡s certera y completa combinando los puntos mÃ¡s '
+        'precisos de cada una. Elimina redundancias. Responde en espaÃ±ol, mÃ¡x 250 palabras.'
     )
     return synth_fn([{'role': 'user', 'content': prompt}])
 
@@ -10112,15 +10112,15 @@ def _ai_synthesize(responses, question, synth_fn):
 @app.route('/api/staff/chat', methods=['POST'])
 @login_required
 def staff_chat():
-    """Chat de IA para staff — ensemble Claude + Groq + Gemini con búsqueda web."""
+    """Chat de IA para staff â€” ensemble Claude + Groq + Gemini con bÃºsqueda web."""
     import concurrent.futures as _cf
 
-    # Rate limit: 20 mensajes/hora por sesión
+    # Rate limit: 20 mensajes/hora por sesiÃ³n
     now_ts = datetime.datetime.utcnow().timestamp()
     rate_log = session.get('chat_rate_log', [])
     rate_log = [ts for ts in rate_log if now_ts - ts < 3600]
     if len(rate_log) >= 20:
-        return jsonify({'error': 'Límite de 20 mensajes/hora alcanzado.'}), 429
+        return jsonify({'error': 'LÃ­mite de 20 mensajes/hora alcanzado.'}), 429
     rate_log.append(now_ts)
     session['chat_rate_log'] = rate_log
 
@@ -10128,9 +10128,9 @@ def staff_chat():
     user_msg = (data.get('message') or '').strip()
     scan_id  = data.get('scan_id')
     if not user_msg:
-        return jsonify({'error': 'Mensaje vacío'}), 400
+        return jsonify({'error': 'Mensaje vacÃ­o'}), 400
 
-    # Detectar qué providers están configurados
+    # Detectar quÃ© providers estÃ¡n configurados
     k_claude = os.environ.get('ANTHROPIC_API_KEY')
     k_groq   = os.environ.get('GROQ_API_KEY')
     k_gemini = os.environ.get('GEMINI_API_KEY')
@@ -10153,7 +10153,7 @@ def staff_chat():
                     verdict  = _row_get(row, 2, 'verdict') or 'pendiente'
                     n_issues = _row_get(row, 3, 'issues_found') or 0
                     scan_context = (
-                        f'\n\n[SCAN #{scan_id}] Jugador: {mc_user} | Máquina: {machine} | '
+                        f'\n\n[SCAN #{scan_id}] Jugador: {mc_user} | MÃ¡quina: {machine} | '
                         f'Veredicto: {verdict} | Hallazgos: {n_issues}\n'
                     )
                     cur.execute(
@@ -10176,13 +10176,13 @@ def staff_chat():
     history  = list(session.get('chat_history', []))
     history.append({'role': 'user', 'content': user_msg})
 
-    # Búsqueda web compartida (en paralelo con las llamadas a IA)
+    # BÃºsqueda web compartida (en paralelo con las llamadas a IA)
     search_text = ''
     search_query = user_msg[:120]
 
     system_full = _CHAT_SYSTEM + scan_context
 
-    # Lanzar búsqueda web + llamadas a IA TODO en paralelo
+    # Lanzar bÃºsqueda web + llamadas a IA TODO en paralelo
     futures = {}
     with _cf.ThreadPoolExecutor(max_workers=4) as pool:
         futures['search'] = pool.submit(_ai_web_search, search_query)
@@ -10207,18 +10207,18 @@ def staff_chat():
     if not ai_responses:
         return jsonify({'error': 'Todos los modelos fallaron. Verifica las API keys.'}), 503
 
-    # Si hay resultados web, añadirlos a un segundo round si se necesita
-    # (ya incluidos en el contexto de las IAs vía system prompt + search_text)
-    # Para la síntesis, incluir el contexto de búsqueda en el system
+    # Si hay resultados web, aÃ±adirlos a un segundo round si se necesita
+    # (ya incluidos en el contexto de las IAs vÃ­a system prompt + search_text)
+    # Para la sÃ­ntesis, incluir el contexto de bÃºsqueda en el system
     if search_text:
-        system_full += f'\n\n[BÚSQUEDA WEB]\n{search_text[:1200]}'
+        system_full += f'\n\n[BÃšSQUEDA WEB]\n{search_text[:1200]}'
 
-    # Síntesis: si hay 2+ respuestas, fusionar con el modelo más rápido disponible
+    # SÃ­ntesis: si hay 2+ respuestas, fusionar con el modelo mÃ¡s rÃ¡pido disponible
     final_reply = ''
     if len(ai_responses) == 1:
         final_reply = ai_responses[0]
     else:
-        # Elegir sintetizador: Groq (gratis+rápido) > Gemini > Claude
+        # Elegir sintetizador: Groq (gratis+rÃ¡pido) > Gemini > Claude
         if k_groq:
             synth_fn = lambda msgs: _ai_call_groq(k_groq, system_full, msgs)
         elif k_gemini:
@@ -10242,7 +10242,7 @@ def staff_chat():
 @app.route('/api/staff/chat/clear', methods=['POST'])
 @login_required
 def staff_chat_clear():
-    """Borra el historial del chat de IA para la sesión actual."""
+    """Borra el historial del chat de IA para la sesiÃ³n actual."""
     session.pop('chat_history', None)
     session.pop('chat_rate_log', None)
     return jsonify({'success': True})
@@ -10251,7 +10251,7 @@ def staff_chat_clear():
 @app.route('/api/staff/ai/suggest-verdict/<int:scan_id>', methods=['GET'])
 @login_required
 def ai_suggest_verdict(scan_id):
-    """Analiza los hallazgos de un scan y sugiere veredicto con justificación."""
+    """Analiza los hallazgos de un scan y sugiere veredicto con justificaciÃ³n."""
     k_groq   = os.environ.get('GROQ_API_KEY')
     k_gemini = os.environ.get('GEMINI_API_KEY')
     k_claude = os.environ.get('ANTHROPIC_API_KEY')
@@ -10284,7 +10284,7 @@ def ai_suggest_verdict(scan_id):
         return jsonify({'verdict': 'LIMPIO', 'confidence': 90,
                         'reasons': ['No se encontraron hallazgos en el scan.',
                                     'Sin evidencia de hacks instalados o ejecutados.',
-                                    'Risk score bajo — comportamiento esperado de un usuario limpio.']})
+                                    'Risk score bajo â€” comportamiento esperado de un usuario limpio.']})
 
     findings_text = '\n'.join(
         f"  [{_row_get(r, 2, 'alert_level')}] {_row_get(r, 0, 'issue_name')} "
@@ -10297,13 +10297,13 @@ def ai_suggest_verdict(scan_id):
         f'Analiza los siguientes hallazgos del scanner Argus para el jugador "{mc_user}" '
         f'(scan #{scan_id}, risk score: {risk}/100, total hallazgos: {n_issues}):\n\n'
         f'{findings_text}\n\n'
-        'Determina si el jugador tiene hacks o está limpio. '
-        'Responde ÚNICAMENTE con este JSON válido (sin texto extra):\n'
-        '{"verdict":"HACK","confidence":85,"reasons":["razón 1","razón 2","razón 3"]}\n'
-        'verdict = "HACK" o "LIMPIO", confidence = 0-100, reasons = 3 strings cortos en español.'
+        'Determina si el jugador tiene hacks o estÃ¡ limpio. '
+        'Responde ÃšNICAMENTE con este JSON vÃ¡lido (sin texto extra):\n'
+        '{"verdict":"HACK","confidence":85,"reasons":["razÃ³n 1","razÃ³n 2","razÃ³n 3"]}\n'
+        'verdict = "HACK" o "LIMPIO", confidence = 0-100, reasons = 3 strings cortos en espaÃ±ol.'
     )
 
-    system = 'Eres un experto en detección de hacks de Minecraft. Responde solo con JSON válido.'
+    system = 'Eres un experto en detecciÃ³n de hacks de Minecraft. Responde solo con JSON vÃ¡lido.'
     messages = [{'role': 'user', 'content': prompt}]
 
     raw = None
@@ -10334,11 +10334,11 @@ def ai_suggest_verdict(scan_id):
 @app.route('/api/staff/ai/explain', methods=['GET'])
 @login_required
 def ai_explain_finding():
-    """Devuelve una explicación de 1-2 líneas de un hallazgo específico."""
+    """Devuelve una explicaciÃ³n de 1-2 lÃ­neas de un hallazgo especÃ­fico."""
     name  = (request.args.get('name')  or '').strip()[:120]
     level = (request.args.get('level') or 'SOSPECHOSO').strip()
     if not name:
-        return jsonify({'error': 'Parámetro name requerido'}), 400
+        return jsonify({'error': 'ParÃ¡metro name requerido'}), 400
 
     k_groq   = os.environ.get('GROQ_API_KEY')
     k_gemini = os.environ.get('GEMINI_API_KEY')
@@ -10347,11 +10347,11 @@ def ai_explain_finding():
         return jsonify({'explanation': 'Sin API keys configuradas.'}), 200
 
     prompt = (
-        f'En máximo 2 oraciones cortas, explica qué es "{name}" '
+        f'En mÃ¡ximo 2 oraciones cortas, explica quÃ© es "{name}" '
         f'(nivel de alerta: {level}) en el contexto de trampas en Minecraft '
-        f'y por qué es sospechoso. Sé técnico y directo. Solo el texto, sin bullet points.'
+        f'y por quÃ© es sospechoso. SÃ© tÃ©cnico y directo. Solo el texto, sin bullet points.'
     )
-    system   = 'Eres un experto en seguridad de Minecraft. Responde en español, máx 2 oraciones.'
+    system   = 'Eres un experto en seguridad de Minecraft. Responde en espaÃ±ol, mÃ¡x 2 oraciones.'
     messages = [{'role': 'user', 'content': prompt}]
 
     expl = None
@@ -10362,14 +10362,14 @@ def ai_explain_finding():
     if not expl and k_claude:
         expl = _ai_call_claude(k_claude, system, messages)
 
-    return jsonify({'explanation': expl or 'No se pudo generar explicación.'})
+    return jsonify({'explanation': expl or 'No se pudo generar explicaciÃ³n.'})
 
 
 @app.route('/api/staff/ai/scan-summary/<int:scan_id>', methods=['GET'])
 @login_required
 def ai_scan_summary(scan_id):
-    """P3 #12 — Genera un resumen en lenguaje natural del scan para el staff.
-    Returns: {summary: str}  — párrafo de 3-5 oraciones en español.
+    """P3 #12 â€” Genera un resumen en lenguaje natural del scan para el staff.
+    Returns: {summary: str}  â€” pÃ¡rrafo de 3-5 oraciones en espaÃ±ol.
     """
     k_groq   = os.environ.get('GROQ_API_KEY')
     k_gemini = os.environ.get('GEMINI_API_KEY')
@@ -10403,7 +10403,7 @@ def ai_scan_summary(scan_id):
         return jsonify({'error': str(e)}), 500
 
     if not findings_rows:
-        return jsonify({'summary': f'El scan del jugador {mc_user} no arrojó hallazgos relevantes.'}), 200
+        return jsonify({'summary': f'El scan del jugador {mc_user} no arrojÃ³ hallazgos relevantes.'}), 200
 
     findings_lines = '\n'.join(
         f'  [{_row_get(r, 2, "alert_level")}] {_row_get(r, 0, "issue_name")} '
@@ -10416,13 +10416,13 @@ def ai_scan_summary(scan_id):
         f'Soy staff de un servidor de Minecraft revisando el scan del jugador "{mc_user}". '
         f'Risk score: {risk}/100. Veredicto actual: {verdict}.\n\n'
         f'Hallazgos principales:\n{findings_lines}\n\n'
-        'Escribe un resumen ejecutivo de 3-5 oraciones en español que explique claramente:\n'
-        '1. Qué evidencia concreta existe de hacks\n'
-        '2. Cuáles son los hallazgos más importantes\n'
-        '3. Tu conclusión sobre si el jugador es sospechoso o no\n'
-        'Sé directo y técnico. No uses bullet points.'
+        'Escribe un resumen ejecutivo de 3-5 oraciones en espaÃ±ol que explique claramente:\n'
+        '1. QuÃ© evidencia concreta existe de hacks\n'
+        '2. CuÃ¡les son los hallazgos mÃ¡s importantes\n'
+        '3. Tu conclusiÃ³n sobre si el jugador es sospechoso o no\n'
+        'SÃ© directo y tÃ©cnico. No uses bullet points.'
     )
-    system   = 'Eres un experto en análisis forense de hacks en Minecraft. Responde en español.'
+    system   = 'Eres un experto en anÃ¡lisis forense de hacks en Minecraft. Responde en espaÃ±ol.'
     messages = [{'role': 'user', 'content': prompt}]
 
     summary = None
@@ -10439,7 +10439,7 @@ def ai_scan_summary(scan_id):
 @app.route('/api/staff/ai/inconsistencies/<int:scan_id>', methods=['GET'])
 @login_required
 def ai_detect_inconsistencies(scan_id):
-    """P3 #23 — IA detecta inconsistencias en el conjunto de hallazgos de un scan."""
+    """P3 #23 â€” IA detecta inconsistencias en el conjunto de hallazgos de un scan."""
     k_groq   = os.environ.get('GROQ_API_KEY')
     k_gemini = os.environ.get('GEMINI_API_KEY')
     k_claude = os.environ.get('ANTHROPIC_API_KEY')
@@ -10466,14 +10466,14 @@ def ai_detect_inconsistencies(scan_id):
     prompt = (
         f'Analiza estos hallazgos del scanner Argus (scan #{scan_id}):\n{findings_text}\n\n'
         'Identifica SOLO inconsistencias reales, contradicciones o patrones inusuales entre los hallazgos. '
-        'Ejemplos: "Tiene Forge instalado pero también agentlib (inusual)", '
+        'Ejemplos: "Tiene Forge instalado pero tambiÃ©n agentlib (inusual)", '
         '"Detectado Vape pero no hay historial de visitas a vape.gg", '
-        '"Múltiples ghost clients instalados simultáneamente". '
-        'Responde SOLO con JSON: {"inconsistencies": ["descripción 1", "descripción 2"]} '
+        '"MÃºltiples ghost clients instalados simultÃ¡neamente". '
+        'Responde SOLO con JSON: {"inconsistencies": ["descripciÃ³n 1", "descripciÃ³n 2"]} '
         'Si no hay inconsistencias, devuelve {"inconsistencies": []}. '
-        'Máximo 3 inconsistencias. Sin texto extra fuera del JSON.'
+        'MÃ¡ximo 3 inconsistencias. Sin texto extra fuera del JSON.'
     )
-    system   = 'Eres un experto en análisis forense de hacks de Minecraft. Responde solo con JSON.'
+    system   = 'Eres un experto en anÃ¡lisis forense de hacks de Minecraft. Responde solo con JSON.'
     messages = [{'role': 'user', 'content': prompt}]
     raw = None
     if k_groq:
@@ -10547,16 +10547,16 @@ def internal_scan_review(scan_id):
         return jsonify({'error': str(exc), 'trace': _tb.format_exc()}), 500
 
 
-# ── P3 #19 — Reputación cross-server por machine_id ──────────────────────────
+# â”€â”€ P3 #19 â€” ReputaciÃ³n cross-server por machine_id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/player_reputation/<string:machine_id>', methods=['GET'])
 @login_required
 def player_reputation(machine_id):
-    """P3 #19 — Reputación histórica agregada de un jugador por machine_id.
-    Devuelve veredictos, risk_score promedio y tipos de hallazgos más frecuentes.
+    """P3 #19 â€” ReputaciÃ³n histÃ³rica agregada de un jugador por machine_id.
+    Devuelve veredictos, risk_score promedio y tipos de hallazgos mÃ¡s frecuentes.
     """
     if not machine_id or len(machine_id) > 128:
-        return jsonify({'error': 'machine_id inválido'}), 400
+        return jsonify({'error': 'machine_id invÃ¡lido'}), 400
     try:
         with get_api_db_cursor() as cur:
             cur.execute(
@@ -10607,13 +10607,13 @@ def player_reputation(machine_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ── P2 #31 — TF-IDF sobre nombres de archivos en scans históricos ─────────────
+# â”€â”€ P2 #31 â€” TF-IDF sobre nombres de archivos en scans histÃ³ricos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/ml/tfidf-names', methods=['GET'])
 @login_required
 def ml_tfidf_names():
-    """P2 #31 — TF-IDF sobre issue_name de scans con veredicto hack.
-    Retorna los términos más discriminantes entre scans hack vs clean.
+    """P2 #31 â€” TF-IDF sobre issue_name de scans con veredicto hack.
+    Retorna los tÃ©rminos mÃ¡s discriminantes entre scans hack vs clean.
     """
     try:
         from sklearn.feature_extraction.text import TfidfVectorizer
@@ -10656,19 +10656,19 @@ def ml_tfidf_names():
         return jsonify({'error': str(e)}), 500
 
 
-# ── P3 #32 — Feature store: precomputar features por machine_id ───────────────
+# â”€â”€ P3 #32 â€” Feature store: precomputar features por machine_id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/ml/feature-store/<string:machine_id>', methods=['GET'])
 @login_required
 def feature_store_get(machine_id):
-    """P3 #32 — Devuelve features precalculadas para un machine_id.
-    Si no están en caché, las calcula y las guarda para futuras consultas.
+    """P3 #32 â€” Devuelve features precalculadas para un machine_id.
+    Si no estÃ¡n en cachÃ©, las calcula y las guarda para futuras consultas.
     """
     if not machine_id or len(machine_id) > 128:
-        return jsonify({'error': 'machine_id inválido'}), 400
+        return jsonify({'error': 'machine_id invÃ¡lido'}), 400
     try:
         with get_api_db_cursor() as cur:
-            # Intentar leer de caché (tabla feature_cache si existe)
+            # Intentar leer de cachÃ© (tabla feature_cache si existe)
             try:
                 cur.execute(
                     f'SELECT features, updated_at FROM feature_cache WHERE machine_id={_PH}',
@@ -10683,7 +10683,7 @@ def feature_store_get(machine_id):
                     return jsonify({'machine_id': machine_id, 'features': features,
                                     'cached': True, 'updated_at': updated}), 200
             except Exception:
-                pass  # tabla no existe aún → calcular igualmente
+                pass  # tabla no existe aÃºn â†’ calcular igualmente
 
             # Calcular features desde cero
             cur.execute(
@@ -10710,7 +10710,7 @@ def feature_store_get(machine_id):
                 'recent_hack':      int(verdicts[0] == 'hack') if verdicts else 0,
             }
 
-            # Guardar en caché si la tabla existe
+            # Guardar en cachÃ© si la tabla existe
             try:
                 import json as _j
                 cur.execute(
@@ -10727,12 +10727,12 @@ def feature_store_get(machine_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ── P3 #24 — Preguntas de seguimiento para el staff ───────────────────────────
+# â”€â”€ P3 #24 â€” Preguntas de seguimiento para el staff â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/staff/ai/followup-questions/<int:scan_id>', methods=['GET'])
 @login_required
 def ai_followup_questions(scan_id):
-    """P3 #24 — Genera preguntas de seguimiento que el staff debería hacerle al jugador."""
+    """P3 #24 â€” Genera preguntas de seguimiento que el staff deberÃ­a hacerle al jugador."""
     try:
         with get_api_db_cursor() as cur:
             cur.execute(
@@ -10762,10 +10762,10 @@ def ai_followup_questions(scan_id):
 
         prompt = (
             f"Eres un moderador senior de Minecraft analizando un reporte de anti-cheat.\n\n"
-            f"Jugador: {username} | Máquina: {machine}\n"
+            f"Jugador: {username} | MÃ¡quina: {machine}\n"
             f"Risk Score: {risk}/100 | Hallazgos: {n_issues} | Veredicto actual: {verdict}\n\n"
             f"Hallazgos principales:\n{findings_summary}\n\n"
-            f"Genera 5 preguntas específicas y directas que el staff debería hacerle al jugador "
+            f"Genera 5 preguntas especÃ­ficas y directas que el staff deberÃ­a hacerle al jugador "
             f"para clarificar los hallazgos. Las preguntas deben ser concretas, basadas en los "
             f"hallazgos encontrados, y ayudar a distinguir entre falsos positivos y hacks reales. "
             f"Formato: lista numerada, sin explicaciones adicionales."
@@ -10802,13 +10802,13 @@ def ai_followup_questions(scan_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ── P2 #33 — Distribución de tamaños de archivos sospechosos ─────────────────
+# â”€â”€ P2 #33 â€” DistribuciÃ³n de tamaÃ±os de archivos sospechosos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/ml/size-distribution', methods=['GET'])
 @login_required
 def ml_size_distribution():
-    """P2 #33 — Analiza distribución de tamaños (confidence proxy) de hallazgos hack vs clean.
-    Detecta si hay un rango de tamaño/confidence que discrimina bien entre categorías.
+    """P2 #33 â€” Analiza distribuciÃ³n de tamaÃ±os (confidence proxy) de hallazgos hack vs clean.
+    Detecta si hay un rango de tamaÃ±o/confidence que discrimina bien entre categorÃ­as.
     """
     try:
         with get_api_db_cursor() as cur:
@@ -10845,13 +10845,13 @@ def ml_size_distribution():
         return jsonify({'error': str(e)}), 500
 
 
-# ── P2 #40 — A/B testing de filtros con veredictos históricos ────────────────
+# â”€â”€ P2 #40 â€” A/B testing de filtros con veredictos histÃ³ricos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/ml/ab-test', methods=['GET'])
 @login_required
 def ml_ab_test():
-    """P2 #40 — Compara dos conjuntos de alert_level thresholds usando veredictos históricos.
-    threshold_a y threshold_b son valores 0–100. Calcula precision/recall para cada uno.
+    """P2 #40 â€” Compara dos conjuntos de alert_level thresholds usando veredictos histÃ³ricos.
+    threshold_a y threshold_b son valores 0â€“100. Calcula precision/recall para cada uno.
     """
     try:
         threshold_a = int(request.args.get('threshold_a', 50))
@@ -10897,13 +10897,13 @@ def ml_ab_test():
         return jsonify({'error': str(e)}), 500
 
 
-# ── P3 #2 — Embeddings semánticos ligeros (TF-IDF cosine, sin sentence-transformers) ──
+# â”€â”€ P3 #2 â€” Embeddings semÃ¡nticos ligeros (TF-IDF cosine, sin sentence-transformers) â”€â”€
 
 @app.route('/api/ml/semantic-similarity', methods=['POST'])
 @login_required
 def ml_semantic_similarity():
-    """P3 #2 — Calcula similitud semántica entre un nombre de archivo y corpus de hacks conocidos.
-    Usa TF-IDF + cosine similarity como aproximación ligera a embeddings.
+    """P3 #2 â€” Calcula similitud semÃ¡ntica entre un nombre de archivo y corpus de hacks conocidos.
+    Usa TF-IDF + cosine similarity como aproximaciÃ³n ligera a embeddings.
     Body: { name: str, top_n: int }
     """
     try:
@@ -10957,13 +10957,13 @@ def ml_semantic_similarity():
         return jsonify({'error': str(e)}), 500
 
 
-# ── P3 #34 — Pipeline de ingesta de inteligencia de hacks (scraper) ───────────
+# â”€â”€ P3 #34 â€” Pipeline de ingesta de inteligencia de hacks (scraper) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/admin/ingest-hack-intel', methods=['POST'])
 @login_required
 def ingest_hack_intel():
-    """P3 #34 — Scraper pasivo de inteligencia sobre nuevos hack clients.
-    Consulta fuentes públicas (GitHub releases, SpigotMC) para detectar nuevos names/hashes.
+    """P3 #34 â€” Scraper pasivo de inteligencia sobre nuevos hack clients.
+    Consulta fuentes pÃºblicas (GitHub releases, SpigotMC) para detectar nuevos names/hashes.
     Requiere rol admin. Resultados se guardan en hack_intel_log.
     """
     if not session.get('is_admin'):
@@ -10972,7 +10972,7 @@ def ingest_hack_intel():
         import threading as _thr
         results = []
 
-        # Source 1: known GitHub repos — buscar release names de hack clients conocidos
+        # Source 1: known GitHub repos â€” buscar release names de hack clients conocidos
         GITHUB_REPOS = [
             ('CCBlueX',   'LiquidBounce'),
             ('MeteorDevelopment', 'meteor-client'),
@@ -11024,7 +11024,7 @@ def ingest_hack_intel():
         return jsonify({'error': str(e)}), 500
 
 
-# ── P3 #14 — Extracción de IOCs de texto libre ────────────────────────────────
+# â”€â”€ P3 #14 â€” ExtracciÃ³n de IOCs de texto libre â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/staff/extract-iocs', methods=['POST'])
 def extract_iocs():
@@ -11053,7 +11053,7 @@ def extract_iocs():
     all_ips    = list(dict.fromkeys(raw_ips))
     public_ips = [ip for ip in all_ips if _is_public(ip)]
 
-    # Hashes (SHA-256 = 64 hex, SHA-1 = 40, MD5 = 32 — en orden para evitar subsets)
+    # Hashes (SHA-256 = 64 hex, SHA-1 = 40, MD5 = 32 â€” en orden para evitar subsets)
     sha256 = list(dict.fromkeys(_re.findall(r'\b[0-9a-fA-F]{64}\b', text)))
     # Quitar hashes SHA-256 para no incluirlos en SHA-1/MD5
     text_no256 = _re.sub(r'\b[0-9a-fA-F]{64}\b', '', text)
@@ -11085,12 +11085,12 @@ def extract_iocs():
     }), 200
 
 
-# ── P2 #10 — AbuseIPDB — reputación de IPs ────────────────────────────────────
+# â”€â”€ P2 #10 â€” AbuseIPDB â€” reputaciÃ³n de IPs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/ml/check-ip-reputation', methods=['POST'])
 def check_ip_reputation():
     """Consulta AbuseIPDB para obtener el historial de abuso de una IP.
-    Requiere la variable de entorno ABUSEIPDB_API_KEY (tier gratuito: 1000 req/día).
+    Requiere la variable de entorno ABUSEIPDB_API_KEY (tier gratuito: 1000 req/dÃ­a).
     """
     if not _is_staff_authenticated():
         return jsonify({'error': 'unauthorized'}), 403
@@ -11129,13 +11129,13 @@ def check_ip_reputation():
         return jsonify({'error': str(e)}), 500
 
 
-# ── P2 #9 — IP ASN / hosting check vía ip-api.com (gratis, sin API key) ──────
+# â”€â”€ P2 #9 â€” IP ASN / hosting check vÃ­a ip-api.com (gratis, sin API key) â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/ml/check-ip-asn', methods=['POST'])
 def check_ip_asn():
     """Consulta ip-api.com para obtener ASN, ISP y si la IP es hosting/proxy.
-    Aproximación gratuita de Shodan: detecta IPs de proveedores típicos de C2.
-    Límite: 45 req/min sin API key.
+    AproximaciÃ³n gratuita de Shodan: detecta IPs de proveedores tÃ­picos de C2.
+    LÃ­mite: 45 req/min sin API key.
     """
     if not _is_staff_authenticated():
         return jsonify({'error': 'unauthorized'}), 403
@@ -11193,13 +11193,13 @@ def check_ip_asn():
         return jsonify({'error': str(e)}), 500
 
 
-# ── P3 #33 — SimHash: similitud de archivos por hash local ────────────────────
+# â”€â”€ P3 #33 â€” SimHash: similitud de archivos por hash local â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/ml/simhash', methods=['POST'])
 def simhash_similarity():
     """Calcula la similitud entre el hash de un archivo y la base de datos de hacks
     usando SimHash (Hamming distance sobre SHA-256 bits). Sin modelos de ML externos.
-    También acepta múltiples hashes para encontrar clusters de archivos similares.
+    TambiÃ©n acepta mÃºltiples hashes para encontrar clusters de archivos similares.
     """
     if not _is_staff_authenticated():
         return jsonify({'error': 'unauthorized'}), 403
@@ -11221,7 +11221,7 @@ def simhash_similarity():
 
     try:
         with get_api_db_cursor() as cur:
-            # Obtener hashes de scans con veredicto "hack" de los últimos 90 días
+            # Obtener hashes de scans con veredicto "hack" de los Ãºltimos 90 dÃ­as
             cur.execute(f'''
                 SELECT DISTINCT sr.file_hash
                 FROM scan_results sr
@@ -11250,7 +11250,7 @@ def simhash_similarity():
             continue
         distances = [_hamming(qbits, kb) for kb in known_hack_bits]
         min_dist  = min(distances)
-        near_count = sum(1 for d in distances if d <= 8)  # ≤8 bits diferentes de 64 = muy similar
+        near_count = sum(1 for d in distances if d <= 8)  # â‰¤8 bits diferentes de 64 = muy similar
         is_suspicious = min_dist <= 12 or near_count >= 3
         results.append({
             'hash':          h,
@@ -11263,7 +11263,7 @@ def simhash_similarity():
     return jsonify({'results': results, 'known_hack_hashes': len(known_hack_bits)}), 200
 
 
-# ── P5 #30 — System health dashboard ─────────────────────────────────────────
+# â”€â”€ P5 #30 â€” System health dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/admin/health', methods=['GET'])
 @login_required
@@ -11301,16 +11301,16 @@ def system_health():
             health['last_error'] = (row[0] if isinstance(row, (list,tuple)) else row.get('value')) if row else None
     except Exception:
         health['last_error'] = None
-    # Versión
+    # VersiÃ³n
     health['argus_version'] = _ARGUS_VERSION
     health['timestamp'] = datetime.datetime.utcnow().isoformat() + 'Z'
     return jsonify(health), 200
 
 
-# ── P5 #17 — Staff Audit Log ─────────────────────────────────────────────────
+# â”€â”€ P5 #17 â€” Staff Audit Log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _log_staff_action(action: str, target_scan_id=None, detail: str = '', user_id=None):
-    """Registra una acción del staff en la tabla staff_audit_log."""
+    """Registra una acciÃ³n del staff en la tabla staff_audit_log."""
     uid = user_id or session.get('user_id')
     if not uid:
         return
@@ -11337,15 +11337,15 @@ def _log_staff_action(action: str, target_scan_id=None, detail: str = '', user_i
         print(f'[AuditLog] Error: {e}')
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# Pack 32 — F#54/F#55/F#60 endpoints
-# ═══════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Pack 32 â€” F#54/F#55/F#60 endpoints
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 @app.route('/api/staff/my-trust', methods=['GET'])
 @login_required
 def get_my_trust():
     """Trust score del staff logueado (F#54).
-    Cualquier staff lo ve para sí mismo; admin ve cualquiera.
+    Cualquier staff lo ve para sÃ­ mismo; admin ve cualquiera.
     """
     if not _AI_TRUST_AVAILABLE:
         return jsonify({'available': False, 'reason': 'ai_trust no cargado'}), 200
@@ -11472,8 +11472,8 @@ def get_admin_company_cooldowns():
 @app.route('/api/admin/staff-trust/confirm', methods=['POST'])
 @login_required
 def confirm_staff_trust():
-    """Admin confirma o desmiente una decisión post-facto del staff
-    (F#54 — confirmed_correct / confirmed_wrong pesan doble en el score).
+    """Admin confirma o desmiente una decisiÃ³n post-facto del staff
+    (F#54 â€” confirmed_correct / confirmed_wrong pesan doble en el score).
 
     body: {user_id: int, was_correct: bool}
     """
@@ -11499,16 +11499,16 @@ def confirm_staff_trust():
         return jsonify({'error': str(e)}), 500
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# Pack 35 — AI Quality Dashboard + Adaptive Thresholds + RF retrain
-# ═══════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Pack 35 â€” AI Quality Dashboard + Adaptive Thresholds + RF retrain
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 @app.route('/api/ai-quality/metrics', methods=['GET'])
 @login_required
 def ai_quality_metrics():
-    """Métricas de calidad del ensemble: precision/recall/f1/drift.
+    """MÃ©tricas de calidad del ensemble: precision/recall/f1/drift.
     Scope: si el usuario es admin, se puede pasar ?company_id=N para
-    métricas globales o de una empresa puntual; non-admin siempre ve
+    mÃ©tricas globales o de una empresa puntual; non-admin siempre ve
     solo su propia empresa.
     """
     if not _AI_QUALITY_AVAILABLE:
@@ -11588,13 +11588,13 @@ def ai_quality_learn_fp_suggestions():
         return jsonify({'error': str(e)}), 500
 
 
-# Pack 36 — Player Risk Profile (histórico)
+# Pack 36 â€” Player Risk Profile (histÃ³rico)
 @app.route('/api/players/<path:username>/risk-profile', methods=['GET'])
 @login_required
 def get_player_risk_profile(username):
-    """Perfil histórico de risk del jugador: avg, min, max, recent,
+    """Perfil histÃ³rico de risk del jugador: avg, min, max, recent,
     trend (rising/stable/falling), regression alert si era clean
-    histórico y ahora hack reciente.
+    histÃ³rico y ahora hack reciente.
     Pack 36."""
     if not _AI_AUTOLEARN_AVAILABLE:
         return jsonify({'available': False}), 200
@@ -11656,14 +11656,14 @@ def get_learned_hack_patterns():
         return jsonify({'error': str(e)}), 500
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# Pack 37 — Mantenimiento IA + ranking sancionables + index suggestions
-# ═══════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Pack 37 â€” Mantenimiento IA + ranking sancionables + index suggestions
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 @app.route('/api/admin/ai-maintenance', methods=['GET'])
 @login_required
 def get_ai_maintenance_dryrun():
-    """DRY RUN: muestra qué se haría sin tocar nada (admin only)."""
+    """DRY RUN: muestra quÃ© se harÃ­a sin tocar nada (admin only)."""
     if not is_admin(session.get('user_id')):
         return jsonify({'error': 'Acceso denegado'}), 403
     if not _AI_MAINT_AVAILABLE:
@@ -11679,7 +11679,7 @@ def get_ai_maintenance_dryrun():
 @app.route('/api/admin/ai-maintenance/run', methods=['POST'])
 @login_required
 def run_ai_maintenance():
-    """EJECUTA mantenimiento (decay + cleanup + recompute) — admin only.
+    """EJECUTA mantenimiento (decay + cleanup + recompute) â€” admin only.
     body opcional: {notify_discord: true, include_metrics: true}
     """
     if not is_admin(session.get('user_id')):
@@ -11738,7 +11738,7 @@ def run_ai_maintenance():
 @app.route('/api/repeat-offenders', methods=['GET'])
 @login_required
 def get_repeat_offenders():
-    """Top jugadores con >=2 verdicts hack en últimos N días.
+    """Top jugadores con >=2 verdicts hack en Ãºltimos N dÃ­as.
     Admin: global o por company; non-admin: solo su company.
     """
     if not _AI_MAINT_AVAILABLE:
@@ -11811,7 +11811,7 @@ def ai_quality_apply_threshold():
     except Exception:
         delta = 0
     if not (-20 <= delta <= 20) or delta == 0:
-        return jsonify({'error': 'delta inválido (-20..20, no cero)'}), 400
+        return jsonify({'error': 'delta invÃ¡lido (-20..20, no cero)'}), 400
 
     # Lee settings actuales y aplica delta clampeado.
     try:
@@ -11910,13 +11910,13 @@ def get_staff_audit_log():
         return jsonify({'error': str(e)}), 500
 
 
-# ── Filter #11 — Aprendizaje incremental: enseñar un path como FP ──────────
+# â”€â”€ Filter #11 â€” Aprendizaje incremental: enseÃ±ar un path como FP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # El staff abre un scan, ve un FP claro (ej: "Game.exe" en
 # "C:\Apps\MiAppLegit\bin\Game.exe") y lo marca como FP. El backend guarda
 # un fragmento del path (la carpeta padre normalizada) en learned_patterns
-# con type='legitimate_path'. _is_server_false_positive() lo aplicará a
+# con type='legitimate_path'. _is_server_false_positive() lo aplicarÃ¡ a
 # TODOS los scans futuros y a los actuales via _scrub_results_for_display.
-# Cache de _get_learned_legit_paths se invalida automáticamente en 5 min.
+# Cache de _get_learned_legit_paths se invalida automÃ¡ticamente en 5 min.
 @app.route('/api/staff/learn-fp', methods=['POST'])
 @login_required
 def learn_fp_path():
@@ -11928,23 +11928,23 @@ def learn_fp_path():
     raw_name = (data.get('name') or '').strip()
     fragment = (data.get('fragment') or '').strip().lower()
     if not fragment:
-        # Auto-deriva el fragmento: tomamos el último directorio del path
+        # Auto-deriva el fragmento: tomamos el Ãºltimo directorio del path
         # y el nombre del archivo, p.ej "lunarclient\\game.exe".
         src = (raw_path or raw_name).replace('/', '\\').lower()
         if not src:
             return jsonify({'error': 'Falta path/name/fragment'}), 400
         parts = src.split('\\')
-        # Tomamos los últimos 2 componentes (carpeta + archivo) para tener
-        # un fragmento descriptivo pero específico.
+        # Tomamos los Ãºltimos 2 componentes (carpeta + archivo) para tener
+        # un fragmento descriptivo pero especÃ­fico.
         fragment = '\\'.join(parts[-2:]) if len(parts) >= 2 else parts[-1]
     if len(fragment) < 4:
-        return jsonify({'error': 'Fragmento demasiado corto (mín 4 chars)'}), 400
+        return jsonify({'error': 'Fragmento demasiado corto (mÃ­n 4 chars)'}), 400
     fragment = fragment[:255]
     try:
         with get_api_db_cursor() as cur:
-            # Schema: learned_patterns sin company_id, así que el patrón es
+            # Schema: learned_patterns sin company_id, asÃ­ que el patrÃ³n es
             # global. Esto es intencional para acelerar el aprendizaje
-            # cross-empresa, pero lo registramos quien lo enseñó vía
+            # cross-empresa, pero lo registramos quien lo enseÃ±Ã³ vÃ­a
             # staff_audit_log para auditabilidad.
             cur.execute(
                 "SELECT id FROM learned_patterns WHERE pattern_type = 'legitimate_path' "
@@ -11970,7 +11970,7 @@ def learn_fp_path():
                 )
                 action = 'inserted'
 
-        # Invalidar caché in-memory para que aplique YA al próximo scan
+        # Invalidar cachÃ© in-memory para que aplique YA al prÃ³ximo scan
         try:
             _lp_cache['ts'] = 0.0
         except Exception:
@@ -11981,10 +11981,10 @@ def learn_fp_path():
         except Exception:
             pass
 
-        # Pack 32 F#60 — Incrementar cooldown de la empresa.
-        # Detecta volúmenes anómalos de FP-learning como señal de
-        # corrupción o filtro mal calibrado, y sube los thresholds
-        # del cliente para forzar revisión más estricta.
+        # Pack 32 F#60 â€” Incrementar cooldown de la empresa.
+        # Detecta volÃºmenes anÃ³malos de FP-learning como seÃ±al de
+        # corrupciÃ³n o filtro mal calibrado, y sube los thresholds
+        # del cliente para forzar revisiÃ³n mÃ¡s estricta.
         if _AI_TRUST_AVAILABLE and session.get('company_id'):
             try:
                 with get_api_db_cursor() as _ccur:
@@ -11998,17 +11998,17 @@ def learn_fp_path():
             'ok': True,
             'fragment': fragment,
             'action': action,
-            'note': 'Aplicará a scans futuros y se filtrará retroactivamente al servirlos.',
+            'note': 'AplicarÃ¡ a scans futuros y se filtrarÃ¡ retroactivamente al servirlos.',
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-# ── Visual #46 — Comparador lado-a-lado: scans del mismo jugador ────────────
+# â”€â”€ Visual #46 â€” Comparador lado-a-lado: scans del mismo jugador â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Devuelve scans anteriores al `scan_id` actual del MISMO MC username (y/o
 # machine_id), ordenados desc. Pensado para el comparador lado-a-lado del
 # panel: el JS pide los anteriores y arma el diff. NO trae results detallados,
-# solo metadata + conteos para el comparador rápido.
+# solo metadata + conteos para el comparador rÃ¡pido.
 @app.route('/api/scans/<int:scan_id>/related', methods=['GET'])
 @login_required
 def get_related_scans(scan_id):
@@ -12035,7 +12035,7 @@ def get_related_scans(scan_id):
             if not mc_user and not machine_id:
                 return jsonify({'scans': [], 'anchor_id': scan_id}), 200
 
-            # 2) Buscar otros scans del mismo MC user O misma máquina
+            # 2) Buscar otros scans del mismo MC user O misma mÃ¡quina
             #    excluyendo el actual. Ordenamos por created_at DESC.
             conditions, params = [], []
             if mc_user:
@@ -12089,10 +12089,10 @@ def get_related_scans(scan_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ════════════════════════════════════════════════════════════════════════
-# Pack 33 — V#47 Timeline visual del jugador
-# ════════════════════════════════════════════════════════════════════════
-# Devuelve eventos cronológicos del jugador (scans + verdict changes +
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Pack 33 â€” V#47 Timeline visual del jugador
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Devuelve eventos cronolÃ³gicos del jugador (scans + verdict changes +
 # notas + first-seen evidencia + overturns) ordenados desc. El frontend
 # los pinta como timeline vertical con icono+timestamp+resumen+CTA.
 #
@@ -12252,7 +12252,7 @@ def get_player_timeline(username):
                     'body':    (body or '')[:280],  # cap para timeline
                 })
 
-        # Ordenar todo por timestamp desc, fechas inválidas al final
+        # Ordenar todo por timestamp desc, fechas invÃ¡lidas al final
         def _ts_key(ev):
             ts = ev.get('ts') or ''
             return ts
@@ -12285,15 +12285,15 @@ def get_player_timeline(username):
         return jsonify({'error': str(e)}), 500
 
 
-# ── Visual #11 — Staff activity heatmap (GitHub-style) ──────────────────────
-# Devuelve la actividad del staff loggeado durante los últimos N días (default
+# â”€â”€ Visual #11 â€” Staff activity heatmap (GitHub-style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Devuelve la actividad del staff loggeado durante los Ãºltimos N dÃ­as (default
 # 365). Cuenta dos cosas en paralelo:
 #   1) Acciones registradas en staff_audit_log (verdicts, exports, etc).
 #   2) Verdicts puestos en la tabla scans donde verdict_by = staff.username.
-# Las dos sumas se combinan por día para que el heatmap refleje TODA la
+# Las dos sumas se combinan por dÃ­a para que el heatmap refleje TODA la
 # actividad del staff, no solo las acciones audit. Resultado:
 #   { 'days': [{date, count}], 'total_count': N, 'days_active': M, 'streak': K }
-# La generación de la grilla 7×52 se hace client-side; aquí solo damos el
+# La generaciÃ³n de la grilla 7Ã—52 se hace client-side; aquÃ­ solo damos el
 # diccionario de fechas con contadores no nulos.
 @app.route('/api/staff/my-activity-heatmap', methods=['GET'])
 @login_required
@@ -12312,8 +12312,8 @@ def get_my_activity_heatmap():
         with get_api_db_cursor() as cur:
             buckets = {}
 
-            # Audit log buckets (CREATE IF NOT EXISTS por si la tabla aún no
-            # existe en este deployment — devolvemos vacío sin romper).
+            # Audit log buckets (CREATE IF NOT EXISTS por si la tabla aÃºn no
+            # existe en este deployment â€” devolvemos vacÃ­o sin romper).
             try:
                 cur.execute('''
                     SELECT DATE(created_at) AS d, COUNT(*) AS c
@@ -12358,7 +12358,7 @@ def get_my_activity_heatmap():
         total = sum(d['count'] for d in days)
         active = len(days)
 
-        # Streak actual: días consecutivos hasta hoy con count > 0
+        # Streak actual: dÃ­as consecutivos hasta hoy con count > 0
         streak = 0
         cur_d = today
         while True:
@@ -12367,7 +12367,7 @@ def get_my_activity_heatmap():
                 cur_d = cur_d - timedelta(days=1)
             else:
                 break
-        # Mejor streak histórico
+        # Mejor streak histÃ³rico
         best_streak = 0
         run = 0
         prev = None
@@ -12394,9 +12394,9 @@ def get_my_activity_heatmap():
         return jsonify({'error': str(e)}), 500
 
 
-# ── Visual #13 — Stats agregados del staff (achievements + line chart) ────────
-# Devuelve métricas que alimentan tanto el sistema de logros como el line chart
-# de risk score histórico. Combina staff_audit_log + scans (verdict_by).
+# â”€â”€ Visual #13 â€” Stats agregados del staff (achievements + line chart) â”€â”€â”€â”€â”€â”€â”€â”€
+# Devuelve mÃ©tricas que alimentan tanto el sistema de logros como el line chart
+# de risk score histÃ³rico. Combina staff_audit_log + scans (verdict_by).
 # Cache lite por usuario, 60s.
 _staff_stats_cache = {}
 _STAFF_STATS_TTL = 60.0
@@ -12421,7 +12421,7 @@ def get_my_stats():
         'streak':         0,
         'best_streak':    0,
         'avg_risk_30d':   0,
-        'history':        [],   # [{date, value}] — risk score promedio por día
+        'history':        [],   # [{date, value}] â€” risk score promedio por dÃ­a
     }
     try:
         from datetime import date, timedelta, datetime as _dt
@@ -12473,7 +12473,7 @@ def get_my_stats():
                     streak += 1
                     cur_d = cur_d - timedelta(days=1)
                 stats['streak'] = streak
-                # Mejor streak histórico
+                # Mejor streak histÃ³rico
                 if seen_days:
                     sorted_days = sorted(_dt.strptime(s, '%Y-%m-%d').date()
                                          for s in seen_days)
@@ -12487,7 +12487,7 @@ def get_my_stats():
                         best = max(best, run)
                         prev = d2
                     stats['best_streak'] = best
-                # Histórico últimos 30 días — risk score promedio diario
+                # HistÃ³rico Ãºltimos 30 dÃ­as â€” risk score promedio diario
                 history = []
                 sum30, count30 = 0, 0
                 for i in range(29, -1, -1):
@@ -12497,8 +12497,8 @@ def get_my_stats():
                         avg = round(b['sum'] / b['n'])
                         history.append({'date': str(dd), 'value': avg, 'label': dd.strftime('%d/%m')})
                         sum30 += avg; count30 += 1
-                    # Si no hay datos ese día, no se incluye en history pero
-                    # tampoco rompe la línea (el chart conecta los puntos
+                    # Si no hay datos ese dÃ­a, no se incluye en history pero
+                    # tampoco rompe la lÃ­nea (el chart conecta los puntos
                     # disponibles).
                 stats['history'] = history
                 stats['avg_risk_30d'] = round(sum30 / count30) if count30 else 0
@@ -12510,12 +12510,12 @@ def get_my_stats():
         return jsonify({'error': str(e)}), 500
 
 
-# ── P5 #19 — Auto-generate ban message ────────────────────────────────────────
+# â”€â”€ P5 #19 â€” Auto-generate ban message â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/staff/ai/generate-ban-message', methods=['POST'])
 @login_required
 def generate_ban_message():
-    """Genera un mensaje de ban con las evidencias más relevantes del scan."""
+    """Genera un mensaje de ban con las evidencias mÃ¡s relevantes del scan."""
     data    = request.get_json(silent=True) or {}
     scan_id = data.get('scan_id')
     if not scan_id:
@@ -12547,7 +12547,7 @@ def generate_ban_message():
         return jsonify({'error': f'Error de BD: {e}'}), 500
 
     if not rows:
-        return jsonify({'error': 'Sin hallazgos críticos en este scan'}), 404
+        return jsonify({'error': 'Sin hallazgos crÃ­ticos en este scan'}), 404
 
     player = ''
     if scan_row:
@@ -12565,11 +12565,11 @@ def generate_ban_message():
         f'Jugador: {player or "desconocido"}. '
         f'Evidencias encontradas por el scanner anti-hack:\n{findings_text}\n\n'
         f'El mensaje debe:\n'
-        f'1. Ser profesional y en español\n'
-        f'2. Mencionar las 3 evidencias más fuertes\n'
-        f'3. Indicar que el ban es permanente si hay múltiples indicadores CRITICAL\n'
-        f'4. No exceder 5 líneas\n'
-        f'5. Incluir el nombre del escáner (Argus Scanner)\n'
+        f'1. Ser profesional y en espaÃ±ol\n'
+        f'2. Mencionar las 3 evidencias mÃ¡s fuertes\n'
+        f'3. Indicar que el ban es permanente si hay mÃºltiples indicadores CRITICAL\n'
+        f'4. No exceder 5 lÃ­neas\n'
+        f'5. Incluir el nombre del escÃ¡ner (Argus Scanner)\n'
         f'Solo el texto del mensaje, sin explicaciones adicionales.'
     )
 
@@ -12601,7 +12601,7 @@ def generate_ban_message():
     return jsonify({'ban_message': ai_response, 'scan_id': scan_id, 'player': player}), 200
 
 
-# ── P5 #27 — Player clustering with DBSCAN ───────────────────────────────────
+# â”€â”€ P5 #27 â€” Player clustering with DBSCAN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/ml/player-clusters', methods=['GET'])
 @login_required
@@ -12667,7 +12667,7 @@ def player_clusters():
         return jsonify({'error': str(e)}), 500
 
 
-# ── P5 #28 — Player timeline ──────────────────────────────────────────────────
+# â”€â”€ P5 #28 â€” Player timeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/player/timeline/<machine_id>', methods=['GET'])
 @login_required
@@ -12699,7 +12699,7 @@ def player_timeline(machine_id):
         else:
             points.append({'ts': str(r[0]), 'score': r[1], 'verdict': r[2], 'player': r[3]})
 
-    # Tendencia lineal simple (regresión mínimos cuadrados)
+    # Tendencia lineal simple (regresiÃ³n mÃ­nimos cuadrados)
     n = len(points)
     trend = None
     if n >= 2:
@@ -12717,7 +12717,7 @@ def player_timeline(machine_id):
                     'machine_id': machine_id, 'total_scans': n}), 200
 
 
-# ── P5 #23 — Scan diff endpoint ───────────────────────────────────────────────
+# â”€â”€ P5 #23 â€” Scan diff endpoint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route('/api/scan/diff/<int:id_a>/<int:id_b>', methods=['GET'])
 @login_required
@@ -12777,11 +12777,11 @@ def scan_diff(id_a, id_b):
     }), 200
 
 
-# ── P5 #24 — Telegram webhook alternative ────────────────────────────────────
+# â”€â”€ P5 #24 â€” Telegram webhook alternative â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _notify_telegram(message: str):
-    """Envía notificación al canal de Telegram si TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID
-    están configurados. No bloquea — se ejecuta en background thread."""
+    """EnvÃ­a notificaciÃ³n al canal de Telegram si TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID
+    estÃ¡n configurados. No bloquea â€” se ejecuta en background thread."""
     token   = os.environ.get('TELEGRAM_BOT_TOKEN', '').strip()
     chat_id = os.environ.get('TELEGRAM_CHAT_ID', '').strip()
     if not token or not chat_id:
@@ -12802,19 +12802,19 @@ def _notify_telegram(message: str):
                 else:
                     print(f'[Telegram] Error: {rd}')
         except Exception as e:
-            print(f'[Telegram] Error de envío: {e}')
+            print(f'[Telegram] Error de envÃ­o: {e}')
 
     import threading
     threading.Thread(target=_send, daemon=True).start()
 
 
-# ── P5 #26 — Rate limiting on public API endpoints ───────────────────────────
+# â”€â”€ P5 #26 â€” Rate limiting on public API endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 import time as _time_rl
 _rate_limit_store = {}  # ip -> list of timestamps
 
 def _check_rate_limit(ip: str, max_requests: int = 10, window_seconds: int = 60) -> bool:
-    """Devuelve True si la IP está dentro del límite, False si lo excedió."""
+    """Devuelve True si la IP estÃ¡ dentro del lÃ­mite, False si lo excediÃ³."""
     now = _time_rl.time()
     window_start = now - window_seconds
     hits = _rate_limit_store.get(ip, [])
@@ -12829,20 +12829,20 @@ def _check_rate_limit(ip: str, max_requests: int = 10, window_seconds: int = 60)
 
 @app.before_request
 def _apply_rate_limit():
-    """Rate limit en endpoints públicos sensibles."""
+    """Rate limit en endpoints pÃºblicos sensibles."""
     PUBLIC_LIMITED = {'/api/submit', '/api/predict', '/api/scan/submit'}
     path = request.path
     if path in PUBLIC_LIMITED:
         ip = request.headers.get('X-Forwarded-For', request.remote_addr or 'unknown').split(',')[0].strip()
         if not _check_rate_limit(ip, max_requests=20, window_seconds=60):
-            return jsonify({'error': 'Rate limit excedido. Máximo 20 requests/minuto por IP.'}), 429
+            return jsonify({'error': 'Rate limit excedido. MÃ¡ximo 20 requests/minuto por IP.'}), 429
 
 
 @app.route('/api/admin/scan-heatmap', methods=['GET'])
 @login_required
 def scan_heatmap():
-    """P5 #18 — Heatmap de actividad de scans por día de semana y hora del día.
-    Retorna una matriz 7×24 con el conteo de scans iniciados en cada celda.
+    """P5 #18 â€” Heatmap de actividad de scans por dÃ­a de semana y hora del dÃ­a.
+    Retorna una matriz 7Ã—24 con el conteo de scans iniciados en cada celda.
     """
     days_back = int(request.args.get('days', 30))
     try:
@@ -12857,7 +12857,7 @@ def scan_heatmap():
         cur.close()
         conn.close()
 
-        # Build 7×24 matrix (day_of_week × hour)
+        # Build 7Ã—24 matrix (day_of_week Ã— hour)
         matrix = [[0]*24 for _ in range(7)]
         detections_matrix = [[0]*24 for _ in range(7)]
 
@@ -12875,7 +12875,7 @@ def scan_heatmap():
             try:
                 dt_str = str(row[0] if isinstance(row, (list, tuple)) else row['started_at'])
                 dt = datetime.fromisoformat(dt_str[:19])
-                dow = dt.weekday()   # 0=Mon … 6=Sun
+                dow = dt.weekday()   # 0=Mon â€¦ 6=Sun
                 hour = dt.hour
                 matrix[dow][hour] += 1
                 verdict = (row[1] if isinstance(row, (list, tuple)) else row.get('verdict', ''))
@@ -12884,7 +12884,7 @@ def scan_heatmap():
             except Exception:
                 continue
 
-        day_names = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+        day_names = ['Lun', 'Mar', 'MiÃ©', 'Jue', 'Vie', 'SÃ¡b', 'Dom']
         return jsonify({
             'matrix': matrix,
             'detections_matrix': detections_matrix,
@@ -12899,12 +12899,12 @@ def scan_heatmap():
 @app.route('/api/player/mojang-profile', methods=['GET'])
 @login_required
 def mojang_profile():
-    """P5 #20 — Buscar perfil de Mojang por UUID o nickname.
+    """P5 #20 â€” Buscar perfil de Mojang por UUID o nickname.
     Proxy seguro para evitar CORS: el frontend llama a este endpoint.
     """
     identifier = request.args.get('q', '').strip()
     if not identifier:
-        return jsonify({'error': 'Parámetro q requerido'}), 400
+        return jsonify({'error': 'ParÃ¡metro q requerido'}), 400
     import urllib.request as _ur
     import json as _json
     try:
@@ -12912,7 +12912,7 @@ def mojang_profile():
         is_uuid = len(identifier.replace('-', '')) == 32 and all(c in '0123456789abcdefABCDEF-' for c in identifier)
         if is_uuid:
             uuid_clean = identifier.replace('-', '')
-            # UUID → profile
+            # UUID â†’ profile
             url = f'https://sessionserver.mojang.com/session/minecraft/profile/{uuid_clean}'
             with _ur.urlopen(url, timeout=5) as r:
                 profile = _json.loads(r.read())
@@ -12922,7 +12922,7 @@ def mojang_profile():
                 'source': 'mojang_session',
             })
         else:
-            # Username → UUID
+            # Username â†’ UUID
             url = f'https://api.mojang.com/users/profiles/minecraft/{identifier}'
             with _ur.urlopen(url, timeout=5) as r:
                 data = _json.loads(r.read())
@@ -12938,9 +12938,9 @@ def mojang_profile():
 @app.route('/api/ml/coordinated-cheating', methods=['GET'])
 @login_required
 def coordinated_cheating():
-    """P5 #25 — Detectar cheating coordinado: múltiples jugadores del mismo equipo
+    """P5 #25 â€” Detectar cheating coordinado: mÃºltiples jugadores del mismo equipo
     que tienen hallazgos del mismo tipo en un rango de tiempo cercano.
-    Busca clusters de máquinas con hacks similares enviados en la misma ventana de 24h.
+    Busca clusters de mÃ¡quinas con hacks similares enviados en la misma ventana de 24h.
     """
     days_back = int(request.args.get('days', 7))
     min_cluster = int(request.args.get('min_players', 2))
@@ -13005,39 +13005,39 @@ def coordinated_cheating():
         return jsonify({'error': str(e)}), 500
 
 
-# ════════════════════════════════════════════════════════════════════════
-# PACK 39 — Super Admin Panel API (/aspers-sa/api/*)
-# ════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# PACK 39 â€” Super Admin Panel API (/aspers-sa/api/*)
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 #
-# Endpoints dedicados al panel /aspers-sa para que el dueño tenga control
+# Endpoints dedicados al panel /aspers-sa para que el dueÃ±o tenga control
 # completo sobre la IA y las operaciones de la plataforma SIN depender de
-# tener cuenta de staff activa. Todos protegidos por la sesión existente
+# tener cuenta de staff activa. Todos protegidos por la sesiÃ³n existente
 # admin_subscriptions_required.
 #
-# Composición:
-#   /overview              → KPIs globales (revenue, scans, hacks, FP rate, drift)
-#   /ai-health             → métricas P/R/F1/drift + retrain flag + suggestion
-#   /staff-trust           → ranking trust con username
-#   /staff-trust/confirm   → confirma decisión post-facto (correct/wrong)
-#   /cooldowns             → empresas con threshold_bump activo
-#   /cooldowns/reset       → resetear cooldown de una empresa
-#   /learned-patterns      → patterns auto-aprendidos (hack)
-#   /learned-patterns/<id> → DELETE para borrar pattern manualmente
-#   /repeat-offenders      → top jugadores reincidentes
-#   /audit-log             → últimas 100 acciones de staff
-#   /system-info           → versión, env (masked), DB info, modules availability
-#   /maintenance/dryrun    → preview del mantenimiento
-#   /maintenance/run       → ejecuta mantenimiento (con notify_discord opcional)
-#   /learn-fp/suggestions  → top FP candidatos
-#   /learn-fp/apply        → aplica un fragment como learn-fp
-#   /scans/recent          → últimos 50 scans (para feed live)
-#   /companies/<id>/health → salud agregada de una empresa puntual
-# ════════════════════════════════════════════════════════════════════════
+# ComposiciÃ³n:
+#   /overview              â†’ KPIs globales (revenue, scans, hacks, FP rate, drift)
+#   /ai-health             â†’ mÃ©tricas P/R/F1/drift + retrain flag + suggestion
+#   /staff-trust           â†’ ranking trust con username
+#   /staff-trust/confirm   â†’ confirma decisiÃ³n post-facto (correct/wrong)
+#   /cooldowns             â†’ empresas con threshold_bump activo
+#   /cooldowns/reset       â†’ resetear cooldown de una empresa
+#   /learned-patterns      â†’ patterns auto-aprendidos (hack)
+#   /learned-patterns/<id> â†’ DELETE para borrar pattern manualmente
+#   /repeat-offenders      â†’ top jugadores reincidentes
+#   /audit-log             â†’ Ãºltimas 100 acciones de staff
+#   /system-info           â†’ versiÃ³n, env (masked), DB info, modules availability
+#   /maintenance/dryrun    â†’ preview del mantenimiento
+#   /maintenance/run       â†’ ejecuta mantenimiento (con notify_discord opcional)
+#   /learn-fp/suggestions  â†’ top FP candidatos
+#   /learn-fp/apply        â†’ aplica un fragment como learn-fp
+#   /scans/recent          â†’ Ãºltimos 50 scans (para feed live)
+#   /companies/<id>/health â†’ salud agregada de una empresa puntual
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 def _sa_required(f):
     """Wrapper local para devolver JSON 401 en endpoints SA-API.
     El `admin_subscriptions_required` global devuelve 401 OK pero queremos
-    también un mensaje consistente."""
+    tambiÃ©n un mensaje consistente."""
     from functools import wraps as _wraps
     @_wraps(f)
     def _w(*a, **kw):
@@ -13061,7 +13061,7 @@ def _sa_count(cursor, sql, params=()):
 
 
 def _sa_interval_clause(field: str, days: int) -> tuple:
-    """Devuelve dos cláusulas (PG, SQLite) para WHERE field >= now - N days.
+    """Devuelve dos clÃ¡usulas (PG, SQLite) para WHERE field >= now - N days.
     Usar try/except afuera para alternar entre dialectos."""
     return (
         f"{field} >= CURRENT_TIMESTAMP - INTERVAL '{int(days)} days'",
@@ -13271,7 +13271,7 @@ def sa_api_overview():
                 except Exception:
                     pass
 
-            # Drift y FP rate (de ai_quality si está disponible)
+            # Drift y FP rate (de ai_quality si estÃ¡ disponible)
             if _AI_QUALITY_AVAILABLE:
                 try:
                     m = _ai_quality.get_quality_metrics(cur, company_id=None, since_days=30)
@@ -13372,7 +13372,7 @@ def sa_api_staff_trust():
 @app.route('/aspers-sa/api/staff-trust/confirm', methods=['POST'])
 @_sa_required
 def sa_api_staff_trust_confirm():
-    """Confirma o desmiente decisión post-facto del staff (pesa doble)."""
+    """Confirma o desmiente decisiÃ³n post-facto del staff (pesa doble)."""
     if not _AI_TRUST_AVAILABLE:
         return jsonify({'error': 'ai_trust no cargado'}), 503
     data = request.get_json(silent=True) or {}
@@ -13498,7 +13498,7 @@ def sa_api_learned_patterns():
 @app.route('/aspers-sa/api/learned-patterns/<int:pid>', methods=['DELETE'])
 @_sa_required
 def sa_api_delete_pattern(pid):
-    """Borra un pattern auto-aprendido (típicamente FP que se coló)."""
+    """Borra un pattern auto-aprendido (tÃ­picamente FP que se colÃ³)."""
     if not _AI_AUTOLEARN_AVAILABLE:
         return jsonify({'error': 'ai_autolearn no cargado'}), 503
     try:
@@ -13519,7 +13519,7 @@ def sa_api_delete_pattern(pid):
 @app.route('/aspers-sa/api/repeat-offenders', methods=['GET'])
 @_sa_required
 def sa_api_repeat_offenders():
-    """Top jugadores reincidentes (>=2 hacks en N días). Global o por empresa."""
+    """Top jugadores reincidentes (>=2 hacks en N dÃ­as). Global o por empresa."""
     if not _AI_MAINT_AVAILABLE:
         return jsonify({'available': False, 'rows': []}), 200
     try:
@@ -13544,7 +13544,7 @@ def sa_api_repeat_offenders():
 @app.route('/aspers-sa/api/audit-log', methods=['GET'])
 @_sa_required
 def sa_api_audit_log():
-    """Últimas 100 acciones de staff (audit log)."""
+    """Ãšltimas 100 acciones de staff (audit log)."""
     try:
         limit = max(10, min(500, int(request.args.get('limit', 100))))
     except Exception:
@@ -13585,7 +13585,7 @@ def sa_api_audit_log():
 @app.route('/aspers-sa/api/system-info', methods=['GET'])
 @_sa_required
 def sa_api_system_info():
-    """Versión, env (masked), DB info, módulos disponibles, uptime aproximado."""
+    """VersiÃ³n, env (masked), DB info, mÃ³dulos disponibles, uptime aproximado."""
     import sys as _sys
     import platform as _plat
     out = {
@@ -13716,7 +13716,7 @@ def sa_api_learn_fp_suggestions():
 @app.route('/aspers-sa/api/scans/recent', methods=['GET'])
 @_sa_required
 def sa_api_scans_recent():
-    """Últimos N scans para feed live."""
+    """Ãšltimos N scans para feed live."""
     try:
         limit = max(5, min(200, int(request.args.get('limit', 30))))
     except Exception:
@@ -13761,7 +13761,7 @@ def sa_api_scans_recent():
 @app.route('/aspers-sa/api/scans/timeseries', methods=['GET'])
 @_sa_required
 def sa_api_scans_timeseries():
-    """Serie temporal de scans por día (últimos N días) para sparkline."""
+    """Serie temporal de scans por dÃ­a (Ãºltimos N dÃ­as) para sparkline."""
     try:
         days = max(7, min(90, int(request.args.get('days', 30))))
     except Exception:
@@ -13802,17 +13802,17 @@ def sa_api_scans_timeseries():
         return jsonify({'error': str(e), 'series': []}), 500
 
 
-# ════════════════════════════════════════════════════════════════════════
-# Pack 40 — Bonus pre-anuncio:
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Pack 40 â€” Bonus pre-anuncio:
 #   * /aspers-sa/api/companies/<id>/health (deep-dive por empresa)
 #   * /aspers-sa/api/export/<kind>.csv     (export CSV de las tablas)
-# ════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 @app.route('/aspers-sa/api/companies/<int:cid>/health', methods=['GET'])
 @_sa_required
 def sa_api_company_health(cid):
     """Deep-dive de UNA empresa: scans, hacks/cleans/pendings, top players,
-    cooldown, métricas IA propias, top FP candidatos para ESTA empresa."""
+    cooldown, mÃ©tricas IA propias, top FP candidatos para ESTA empresa."""
     out = {'company_id': cid}
     try:
         from auth import list_companies as _lc
@@ -13829,7 +13829,7 @@ def sa_api_company_health(cid):
         pass
     try:
         with get_api_db_cursor() as cur:
-            ph = '%s'  # PG por defecto; SQLite acepta también con _sa_dual_count si fuera necesario
+            ph = '%s'  # PG por defecto; SQLite acepta tambiÃ©n con _sa_dual_count si fuera necesario
             try:
                 cur.execute(f"SELECT COUNT(*) FROM scans WHERE company_id = {ph}", (cid,))
                 r = cur.fetchone()
@@ -14155,19 +14155,19 @@ def sa_api_export_csv(kind):
     )
 
 
-# ════════════════════════════════════════════════════════════════════════
-# Pack 42 — Aislamiento entre empresas: gestión de staff huérfanos
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Pack 42 â€” Aislamiento entre empresas: gestiÃ³n de staff huÃ©rfanos
 # (legacy con company_id NULL) desde el SuperAdmin.
-# Antes cualquier admin de empresa podía "adoptar" huérfanos a un clic, lo
-# que permitía robar staff de otras empresas o de la pool individual. Ahora
-# solo el SuperAdmin puede asignarlos, eligiendo explícitamente la empresa
+# Antes cualquier admin de empresa podÃ­a "adoptar" huÃ©rfanos a un clic, lo
+# que permitÃ­a robar staff de otras empresas o de la pool individual. Ahora
+# solo el SuperAdmin puede asignarlos, eligiendo explÃ­citamente la empresa
 # destino (o null para mantenerlos como individuales).
-# ════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 @app.route('/aspers-sa/api/orphan-staff', methods=['GET'])
 @_sa_required
 def sa_api_orphan_staff_list():
-    """Lista usuarios staff con company_id NULL (huérfanos) y todas las
+    """Lista usuarios staff con company_id NULL (huÃ©rfanos) y todas las
     empresas disponibles, para poder asignar manualmente desde el panel SA.
     """
     try:
@@ -14207,16 +14207,16 @@ def sa_api_orphan_staff_list():
 @app.route('/aspers-sa/api/orphan-staff/assign', methods=['POST'])
 @_sa_required
 def sa_api_orphan_staff_assign():
-    """Asigna uno o varios staff huérfanos a una empresa concreta.
+    """Asigna uno o varios staff huÃ©rfanos a una empresa concreta.
     Body JSON: { "user_ids": [int, ...], "target_company_id": int|null }
-    Si target_company_id es null, los deja explícitamente como individuales
-    (no cambia nada útil, pero permite consultar el caso). Si no es null,
+    Si target_company_id es null, los deja explÃ­citamente como individuales
+    (no cambia nada Ãºtil, pero permite consultar el caso). Si no es null,
     debe existir en la BD.
     """
     data = request.json or {}
     raw_ids = data.get('user_ids') or []
     if not isinstance(raw_ids, list) or not raw_ids:
-        return jsonify({'error': 'user_ids debe ser lista no vacía'}), 400
+        return jsonify({'error': 'user_ids debe ser lista no vacÃ­a'}), 400
     try:
         user_ids = [int(x) for x in raw_ids]
     except Exception:
@@ -14227,7 +14227,7 @@ def sa_api_orphan_staff_assign():
         try:
             target_company_id = int(target_company_id)
         except Exception:
-            return jsonify({'error': 'target_company_id inválido'}), 400
+            return jsonify({'error': 'target_company_id invÃ¡lido'}), 400
         from auth import get_company_by_id as _gc
         if not _gc(target_company_id):
             return jsonify({'error': f'Empresa {target_company_id} no existe'}), 404
@@ -14265,31 +14265,31 @@ def sa_api_orphan_staff_assign():
         return jsonify({'error': str(e)}), 500
 
 
-# ════════════════════════════════════════════════════════════════════════
-# Fin Pack 39 — Super Admin Panel API
-# ════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Fin Pack 39 â€” Super Admin Panel API
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Hotfix Pack 41 — arrancar init_db_async() AQUÍ, AHORA que TODAS las
-# funciones del módulo están definidas (get_api_db_cursor en ~1091,
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Hotfix Pack 41 â€” arrancar init_db_async() AQUÃ, AHORA que TODAS las
+# funciones del mÃ³dulo estÃ¡n definidas (get_api_db_cursor en ~1091,
 # _ensure_plugin_keys_schema en ~2203, _notify_new_deploy en ~113, etc).
-# Antes el .start() vivía en línea ~373 y arrancaba el thread durante el
-# import del módulo, antes de que esas defs existieran. Eso provocaba
+# Antes el .start() vivÃ­a en lÃ­nea ~373 y arrancaba el thread durante el
+# import del mÃ³dulo, antes de que esas defs existieran. Eso provocaba
 # NameError: name 'get_api_db_cursor' is not defined en cada deploy y
-# rompía TODAS las migraciones (short_code, download_links, hack_blacklist,
-# ensemble_data, plugin_keys schema) más la notificación a Discord.
-# Esto se ejecuta cuando gunicorn importa el módulo (no requiere __main__).
-# ──────────────────────────────────────────────────────────────────────
+# rompÃ­a TODAS las migraciones (short_code, download_links, hack_blacklist,
+# ensemble_data, plugin_keys schema) mÃ¡s la notificaciÃ³n a Discord.
+# Esto se ejecuta cuando gunicorn importa el mÃ³dulo (no requiere __main__).
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 threading.Thread(target=init_db_async, daemon=True).start()
 
 
 if __name__ == '__main__':
-    print("🌐 Iniciando aplicación web de ASPERS Projects...")
+    print("ðŸŒ Iniciando aplicaciÃ³n web de ASPERS Projects...")
     api_url_display = os.environ.get('API_URL') or (API_BASE_URL if IS_RENDER else API_BASE_URL)
-    print(f"📡 Conectado a API: {api_url_display}")
-    print(f"🔑 API Key configurada: {'Sí' if API_KEY != 'change-this-in-production' else 'No (usar valor por defecto)'}")
-    print("⚠️  NOTA: Asegúrate de que la API esté corriendo en http://localhost:5000")
-    print("⚠️  NOTA: La API Key debe coincidir con la configurada en api_server.py")
+    print(f"ðŸ“¡ Conectado a API: {api_url_display}")
+    print(f"ðŸ”‘ API Key configurada: {'SÃ­' if API_KEY != 'change-this-in-production' else 'No (usar valor por defecto)'}")
+    print("âš ï¸  NOTA: AsegÃºrate de que la API estÃ© corriendo en http://localhost:5000")
+    print("âš ï¸  NOTA: La API Key debe coincidir con la configurada en api_server.py")
     app.run(host='0.0.0.0', port=8080, debug=True)
 

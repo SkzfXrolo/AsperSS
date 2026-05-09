@@ -441,7 +441,7 @@ public final class AnticheatListener implements Listener {
         // Speed check
         if (cfg.isCheckEnabled("speed")) {
             ConfigurationSection sec = cfg.checkSection("speed");
-            double maxBps = sec != null ? sec.getDouble("max_blocks_per_sec", 8.0) : 8.0;
+            double maxBps = sec != null ? sec.getDouble("max_blocks_per_sec", 10.0) : 10.0;
             // Acumular distancia en la ventana de 1 segundo
             long now = System.currentTimeMillis();
             s.distSamples.addLast(new double[]{now, Math.sqrt(horizSq)});
@@ -450,11 +450,31 @@ public final class AnticheatListener implements Listener {
             }
             double accum = 0;
             for (double[] sample : s.distSamples) accum += sample[1];
-            // Permite excepciones: sprint+jump+ice = ~7.6 bps, elytra fly altisimo
+            // Whitelist de excepciones legitimas:
+            //   - Speed potion: hasta +4 b/s extra (Speed II vainilla = 8.97)
+            //   - Elytra: hasta +30 b/s (gliding)
+            //   - Vehiculos (caballo, bote, minecart): hasta +20 b/s
+            //   - Hielo / hielo empacado / hielo azul: hasta +10 / +15 / +40 b/s
+            //   - Soul Speed III sobre soul sand: hasta +3 b/s
+            //   - Bouncing en slime: ignorado completamente (skip)
             boolean elytra = p.isGliding();
             boolean speedPotion = p.hasPotionEffect(PotionEffectType.SPEED);
-            double effectiveMax = maxBps + (speedPotion ? 4.0 : 0) + (elytra ? 30 : 0);
-            if (accum > effectiveMax) {
+            boolean vehicle = p.getVehicle() != null;
+            org.bukkit.Material below = p.getLocation().clone().add(0, -0.1, 0).getBlock().getType();
+            String belowName = below.name();
+            boolean onSlime = belowName.equals("SLIME_BLOCK");
+            double iceBonus = 0;
+            if (belowName.equals("BLUE_ICE")) iceBonus = 40;
+            else if (belowName.equals("PACKED_ICE")) iceBonus = 15;
+            else if (belowName.equals("ICE") || belowName.equals("FROSTED_ICE")) iceBonus = 10;
+            double effectiveMax = maxBps
+                + (speedPotion ? 4.0 : 0)
+                + (elytra ? 30 : 0)
+                + (vehicle ? 20 : 0)
+                + iceBonus;
+            // Slime bouncing tiene picos enormes pero impredecibles, skipeamos
+            // por completo el check para evitar falsos positivos.
+            if (!onSlime && accum > effectiveMax) {
                 ViolationLevel lvl;
                 if (accum > effectiveMax * 2.0)   lvl = ViolationLevel.HIGH;
                 else if (accum > effectiveMax * 1.4) lvl = ViolationLevel.MID;
