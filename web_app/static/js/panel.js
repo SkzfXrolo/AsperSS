@@ -140,6 +140,11 @@ async function _initPushState() {
 }
 
 function _loadSavedPalette() {
+    let bgCfg = {};
+    try { bgCfg = JSON.parse(localStorage.getItem('argus_bg') || '{}'); } catch(_) {}
+    if (bgCfg && bgCfg.preset && bgCfg.preset !== 'default') {
+        return;
+    }
     const saved = localStorage.getItem('argus_palette');
     if (saved && ARGUS_PALETTES[saved]) applyPalette(saved);
 }
@@ -7359,6 +7364,12 @@ function _saveBgCfg(patch) {
 
 function setBgPreset(preset) {
     const cfg = _saveBgCfg({ preset, customUrl: preset !== 'custom' ? undefined : _loadBgCfg().customUrl });
+    if (preset && preset !== 'default') {
+        try {
+            ['--accent','--accent-d','--accent-rgb','--accent-bg','--accent-glow','--border','--border-m','--border-h']
+                .forEach(v => document.documentElement.style.removeProperty(v));
+        } catch(_) {}
+    }
     _applyBg(cfg);
     _syncBgUI();
 }
