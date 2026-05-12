@@ -113,6 +113,7 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
         String sub = args[1].toLowerCase();
         switch (sub) {
             case "reload":           handleAdminReload(sender);          break;
+            case "debug":            handleAdminDebug(sender, args);     break;
             case "help":             sendAdminHelp(sender);              break;
             default:
                 sender.sendMessage(msg.prefix() + Messages.color("&cSub-comando admin desconocido: &f" + sub));
@@ -132,6 +133,66 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
     /** #501 — /argus admin reload */
     private void handleAdminReload(CommandSender sender) {
         handleReload(sender);
+    }
+
+    /**
+     * #502 — /argus admin debug [jugador].
+     *
+     * <p>Sin argumento: toggle del modo debug global (igual que /argus debug).
+     * Con jugador: dump de telemetria packet-based del PacketDataStore para
+     * ese jugador (ping, ultimas posiciones, contadores, timestamps).
+     */
+    private void handleAdminDebug(CommandSender sender, String[] args) {
+        Messages msg = plugin.getMessages();
+        if (args.length < 3) {
+            handleDebug(sender);
+            return;
+        }
+        String targetName = args[2];
+        Player target = Bukkit.getPlayerExact(targetName);
+        if (target == null) {
+            msg.sendPrefixed(sender, "player_not_found", Messages.ph("player", targetName));
+            return;
+        }
+        var bootstrap = plugin.getPacketEventsBootstrap();
+        if (bootstrap == null || !bootstrap.isInitialized() || bootstrap.getDataStore() == null) {
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&7Packet anti-cheat NO inicializado (instala PacketEvents)."));
+            return;
+        }
+        var state = bootstrap.getDataStore().peek(target.getUniqueId());
+        if (state == null) {
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&7No hay estado packet para &e" + target.getName() + "&7. Pidele que se mueva una vez."));
+            return;
+        }
+        long now = System.currentTimeMillis();
+        sender.sendMessage(Messages.color("&7&m─────────────────────────────────────────"));
+        sender.sendMessage(Messages.color("&8[&b&lArgus AC Debug&8] &f" + target.getName()));
+        sender.sendMessage(Messages.color(String.format(
+            "&7pos: &fX=%.2f Y=%.2f Z=%.2f &7yaw=&f%.1f &7pitch=&f%.1f",
+            state.lastX, state.lastY, state.lastZ, state.lastYaw, state.lastPitch)));
+        sender.sendMessage(Messages.color(String.format(
+            "&7ping: &f%dms &7onGround: &f%s &7lastDy: &f%.3f",
+            state.pingMs, String.valueOf(state.lastOnGround), state.lastDeltaY)));
+        sender.sendMessage(Messages.color(String.format(
+            "&7cps(1s): &f%d &7swing-age: &f%dms &7attack-age: &f%dms",
+            state.recentAttacksWithin(1_000L, now),
+            state.lastSwingMs > 0 ? (now - state.lastSwingMs) : -1L,
+            state.lastAttackMs > 0 ? (now - state.lastAttackMs) : -1L)));
+        sender.sendMessage(Messages.color(String.format(
+            "&7places(1s): &f%d &7breaks(1s): &f%d &7speed-overflow: &f%d",
+            state.recentPlacesWithin(1_000L, now),
+            state.recentBreaksWithin(1_000L, now),
+            state.speedOverflowCounter)));
+        sender.sendMessage(Messages.color(String.format(
+            "&7teleporting: &f%s &7inv-open: &f%s &7damage-age: &f%dms",
+            String.valueOf(state.teleporting),
+            String.valueOf(state.inventoryOpen),
+            state.lastDamageTakenMs > 0 ? (now - state.lastDamageTakenMs) : -1L)));
+        int vios = plugin.getViolationManager().countRecent(target.getUniqueId());
+        sender.sendMessage(Messages.color("&7violations en window: &e" + vios));
+        sender.sendMessage(Messages.color("&7&m─────────────────────────────────────────"));
     }
 
     /**

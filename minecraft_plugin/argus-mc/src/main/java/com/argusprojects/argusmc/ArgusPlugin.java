@@ -145,6 +145,7 @@ public final class ArgusPlugin extends JavaPlugin {
     public ArgusApiClient getApiClient()          { return apiClient; }
     public Messages getMessages()                 { return messages; }
     public ViolationManager getViolationManager() { return violationManager; }
+    public PacketEventsBootstrap getPacketEventsBootstrap() { return packetEventsBootstrap; }
 
     private void registerCommand(String name, org.bukkit.command.CommandExecutor exec) {
         PluginCommand cmd = getCommand(name);
