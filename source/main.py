@@ -15111,11 +15111,14 @@ class ArgusApp:
                                 if svc_type not in (1, 2):
                                     continue
                                 svc_lower = svc_name.lower()
-                                if any(kw in svc_lower for kw in HACK_DRIVER_KW):
-                                    try:
-                                        img_path, _ = winreg.QueryValueEx(sk, 'ImagePath')
-                                    except FileNotFoundError:
-                                        img_path = svc_name
+                                try:
+                                    img_path, _ = winreg.QueryValueEx(sk, 'ImagePath')
+                                except FileNotFoundError:
+                                    img_path = svc_name
+                                img_lower = str(img_path).lower()
+                                if any(v in img_lower for v in LEGIT_DRIVER_VENDORS):
+                                    continue
+                                if any(kw in svc_lower for kw in HACK_DRIVER_KW) or any(kw in img_lower for kw in HACK_DRIVER_KW):
                                     found.append((svc_name, str(img_path)))
                             except FileNotFoundError:
                                 pass
