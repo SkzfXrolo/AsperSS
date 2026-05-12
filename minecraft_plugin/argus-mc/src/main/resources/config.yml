@@ -427,6 +427,165 @@ anticheat:
       max_stddev_ms: 6.0
       extreme_stddev_ms: 2.0
       min_cps: 8
+    # ─── Pack 48 round 3 ──────────────────────────────────────
+    killaura_rotation:
+      enabled: true
+      max_yaw_step_deg: 170.0
+      min_step_interval_ms: 50
+      required_hits: 2
+    killaura_noswing:
+      enabled: true
+      max_swing_lag_ms: 100
+      consec_mid: 3
+      consec_high: 5
+    killaura_thruwall:
+      enabled: true
+      ray_step: 0.2
+      allowed_solids: 0
+      consec_high: 3
+    scaffold_rotation:
+      enabled: true
+      min_pitch_deg: 80.0
+      consec_mid: 4
+      consec_high: 7
+    scaffold_tower:
+      enabled: true
+      max_interval_ms: 250
+      consec_mid: 3
+      consec_high: 5
+    timer_jitter:
+      enabled: true
+      window_size: 20
+      min_stddev_ms: 5.0
+      max_stddev_ms: 35.0
+      min_avg_ms: 35.0
+    noslowdown:
+      enabled: true
+      max_horizontal_bps: 4.0
+      consec_mid: 3
+      consec_high: 6
+    fasteat:
+      enabled: true
+      min_eat_ms: 1500
+      extreme_ms: 800
+    fastbow:
+      enabled: true
+      min_full_draw_ms: 900
+      extreme_ms: 500
+      min_force: 0.95
+    autoeat:
+      enabled: true
+      window_ms: 800
+      min_pattern_hits: 4
+    regen:
+      enabled: true
+      max_hp_per_sec: 0.5
+      min_interval_ms: 1500
+      consec_high: 3
+    antikb:
+      enabled: true
+      window_ms: 500
+      max_ratio: 0.3
+      consec_mid: 2
+      consec_high: 4
+    aimbot:
+      enabled: true
+      min_skip_distance: 3.5
+      min_skipped_targets: 2
+      consec_high: 3
+    reach3d:
+      enabled: true
+      max_survival: 3.05
+      max_creative: 5.05
+      extreme: 4.5
+      consec_high: 3
+    liquidjesus:
+      enabled: true
+      consec_mid: 4
+      consec_high: 8
+      max_abs_dy: 0.05
+    phaseclip:
+      enabled: true
+      consec_high: 4
+    noslowsneak:
+      enabled: true
+      max_sneak_bps: 1.5
+      consec_mid: 5
+      consec_high: 10
+    autoarmor:
+      enabled: true
+      combat_window_ms: 3000
+      min_change_interval_ms: 300
+    autopotion:
+      enabled: true
+      max_reaction_ms: 200
+      extreme_ms: 80
+    tracers:
+      enabled: true
+      max_fov_deg: 5.0
+      max_distance: 20.0
+      consec_high: 6
+
+# ── Pack 48 round 3 — TUNING: lag-compensation / warmup / whitelist / FP log ─
+# Reduce false positives en servers con lag o players con clients legit.
+tuning:
+  lag_compensation:
+    enabled: true
+    min_tps: 18.5
+    max_ping_ms: 250
+    # Lista de checks que se suprimen bajo lag (movement principalmente).
+    # Killaura / BlockReach / Phase / Scaffold NO se suprimen — son
+    # detecciones de "acciones discretas" que el lag NO produce.
+    checks:
+      - "speed_packet"
+      - "velocity"
+      - "jetpack"
+      - "spider"
+      - "step"
+      - "vclip"
+      - "timer_jitter"
+      - "antikb"
+      - "noslowsneak"
+      - "boat_fly"
+      - "boat_fly_advanced"
+  warmup:
+    enabled: true
+    join_grace_ms: 5000
+    teleport_grace_ms: 2000
+    affected_checks: []   # vacio = todos los movement checks
+  client_whitelist:
+    enabled: false        # opt-in: el brand del cliente es spoofable
+    relaxation_multiplier: 1.10
+    brands:
+      - "vanilla"
+      - "fabric"
+      - "forge"
+      - "optifine"
+      - "lunarclient"
+      - "badlion"
+
+# ── Pack 48 round 3 — ORACLE ML INTEGRATION ───────────────────
+# Llamadas async al backend Argus para que un modelo ML pondere
+# cada violation antes del enforcement. Opt-in. Si el endpoint
+# esta caido, los violations pasan con weight neutro (1.0).
+oracle:
+  enabled: false
+  url: ""
+  api_key: ""
+  timeout_ms: 1500
+  cache_ttl_ms: 30000
+  weight_floor: 0.6
+  weight_ceiling: 1.5
+  heartbeat_interval_s: 60
+  heartbeat_url: ""
+  applier:
+    upgrade_above: 1.2
+    downgrade_below: 0.7
+    suppress_below: 0.4
+
+# ── Logging opcional verbose ──────────────────────────────────
+logging:
+  fp_verbose: false   # si true loguea cada FP cancelado a FINE
 
 # ── Web Dashboard / REST API / Prometheus (Pack 48 round 2) ──
 # Servidor HTTP embebido que expone stats, players, violations y

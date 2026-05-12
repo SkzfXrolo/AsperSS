@@ -4,7 +4,27 @@ import com.argusprojects.argusmc.ArgusPlugin;
 import com.argusprojects.argusmc.anticheat.Violation;
 import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.checks.AimSnapPacketCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.AimbotCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.AntiKnockbackCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.AutoArmorCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.AutoClickerAdvancedCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.AutoEatCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.AutoPotionCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.FastBowCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.FastEatCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.KillauraNoSwingCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.KillauraRotationCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.KillauraThruWallCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.LiquidJesusCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.NoSlowDownCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.NoSlowSneakCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.PhaseClipCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.Reach3DCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.RegenCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.ScaffoldRotationCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.ScaffoldTowerCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.TimerJitterCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.TracersCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.AutoTotemCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.BackstabCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.BlockGlitchCheck;
@@ -115,6 +135,27 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final ChatMacroCheck            chatMacroCheck;
     private final NamedItemSpamCheck        namedItemSpamCheck;
     private final AutoClickerAdvancedCheck  autoClickerAdvancedCheck;
+    // Round 3
+    private final KillauraRotationCheck  killauraRotationCheck;
+    private final KillauraNoSwingCheck   killauraNoSwingCheck;
+    private final KillauraThruWallCheck  killauraThruWallCheck;
+    private final ScaffoldRotationCheck  scaffoldRotationCheck;
+    private final ScaffoldTowerCheck     scaffoldTowerCheck;
+    private final TimerJitterCheck       timerJitterCheck;
+    private final NoSlowDownCheck        noSlowDownCheck;
+    private final FastEatCheck           fastEatCheck;
+    private final FastBowCheck           fastBowCheck;
+    private final AutoEatCheck           autoEatCheck;
+    private final RegenCheck             regenCheck;
+    private final AntiKnockbackCheck     antiKnockbackCheck;
+    private final AimbotCheck            aimbotCheck;
+    private final Reach3DCheck           reach3DCheck;
+    private final LiquidJesusCheck       liquidJesusCheck;
+    private final PhaseClipCheck         phaseClipCheck;
+    private final NoSlowSneakCheck       noSlowSneakCheck;
+    private final AutoArmorCheck         autoArmorCheck;
+    private final AutoPotionCheck        autoPotionCheck;
+    private final TracersCheck           tracersCheck;
 
     /**
      * #512 — Cache entityId -> Entity para evitar el linear scan de
@@ -174,7 +215,35 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.chatMacroCheck       = new ChatMacroCheck(plugin);
         this.namedItemSpamCheck   = new NamedItemSpamCheck(plugin);
         this.autoClickerAdvancedCheck = new AutoClickerAdvancedCheck(plugin);
+        // Round 3
+        this.killauraRotationCheck = new KillauraRotationCheck(plugin);
+        this.killauraNoSwingCheck  = new KillauraNoSwingCheck(plugin);
+        this.killauraThruWallCheck = new KillauraThruWallCheck(plugin);
+        this.scaffoldRotationCheck = new ScaffoldRotationCheck(plugin);
+        this.scaffoldTowerCheck    = new ScaffoldTowerCheck(plugin);
+        this.timerJitterCheck      = new TimerJitterCheck(plugin);
+        this.noSlowDownCheck       = new NoSlowDownCheck(plugin);
+        this.fastEatCheck          = new FastEatCheck(plugin);
+        this.fastBowCheck          = new FastBowCheck(plugin);
+        this.autoEatCheck          = new AutoEatCheck(plugin);
+        this.regenCheck            = new RegenCheck(plugin);
+        this.antiKnockbackCheck    = new AntiKnockbackCheck(plugin);
+        this.aimbotCheck           = new AimbotCheck(plugin);
+        this.reach3DCheck          = new Reach3DCheck(plugin);
+        this.liquidJesusCheck      = new LiquidJesusCheck(plugin);
+        this.phaseClipCheck        = new PhaseClipCheck(plugin);
+        this.noSlowSneakCheck      = new NoSlowSneakCheck(plugin);
+        this.autoArmorCheck        = new AutoArmorCheck(plugin);
+        this.autoPotionCheck       = new AutoPotionCheck(plugin);
+        this.tracersCheck          = new TracersCheck(plugin);
     }
+
+    public FastEatCheck   getFastEatCheck()   { return fastEatCheck; }
+    public AutoEatCheck   getAutoEatCheck()   { return autoEatCheck; }
+    public FastBowCheck   getFastBowCheck()   { return fastBowCheck; }
+    public RegenCheck     getRegenCheck()     { return regenCheck; }
+    public AutoArmorCheck getAutoArmorCheck() { return autoArmorCheck; }
+    public AutoPotionCheck getAutoPotionCheck() { return autoPotionCheck; }
 
     public CritCheck getCritCheck() { return critCheck; }
     public ProjectileAimCheck getProjectileAimCheck() { return projectileAimCheck; }
@@ -256,6 +325,13 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         // Round 2: InventoryTeleport / LiquidWalk.
                         inventoryTeleportCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
                         liquidWalkCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
+                        // Round 3: TimerJitter / NoSlowDown / AntiKB / NoSlowSneak / LiquidJesus / PhaseClip.
+                        timerJitterCheck.handlePositionPacket(player, s, now, sink());
+                        noSlowDownCheck.handlePositionPacket(player, s, nx, nz, now, sink());
+                        antiKnockbackCheck.handlePositionPacket(player, s, nx, nz, now, sink());
+                        noSlowSneakCheck.handlePositionPacket(player, s, nx, nz, now, sink());
+                        liquidJesusCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
+                        phaseClipCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
 
                         s.lastDeltaY = ny - s.lastY;
                         s.lastX = nx;
@@ -274,6 +350,9 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         s.pushRotation(ny, npi, now);
                         s.lastYaw   = ny;
                         s.lastPitch = npi;
+                        // Round 3: KillauraRotation snap detection + Tracers.
+                        killauraRotationCheck.handleRotation(player, s, ny, npi, now, sink());
+                        tracersCheck.handleRotation(player, s, now, sink());
                     }
                 }
 
@@ -301,6 +380,11 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         hitboxExpansionCheck.handleAttack(player, target, s, sink());
                         backstabCheck.handleAttack(player, target, s, sink());
                         meleeFlyCheck.handleAttack(player, target, s, now, sink());
+                        // Round 3: KillauraNoSwing / ThruWall / Aimbot / Reach3D.
+                        killauraNoSwingCheck.handleAttack(player, target, s, now, sink());
+                        killauraThruWallCheck.handleAttack(player, target, s, sink());
+                        aimbotCheck.handleAttack(player, target, s, sink());
+                        reach3DCheck.handleAttack(player, target, s, sink());
                     }
                     // CPS verdadero a nivel packet.
                     cpsCheck.handleAttack(player, s, now, sink());
@@ -339,6 +423,9 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                     if (pos != null) {
                         blockReachCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), sink());
                         blockGlitchCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), sink());
+                        // Round 3: Scaffold patterns.
+                        scaffoldRotationCheck.handleBlockPlacement(player, s, pos.getX(), pos.getY(), pos.getZ(), now, sink());
+                        scaffoldTowerCheck.handleBlockPlacement(player, s, pos.getX(), pos.getY(), pos.getZ(), now, sink());
                     }
                 } catch (Throwable ignored) {}
 

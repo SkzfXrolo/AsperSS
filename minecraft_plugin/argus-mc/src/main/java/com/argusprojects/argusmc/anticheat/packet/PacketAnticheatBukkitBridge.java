@@ -80,6 +80,12 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         s.serverVelZ = e.getVelocity().getZ();
         s.serverVelAssignedAtMs = System.currentTimeMillis();
         s.serverVelConsumed = false;
+        // Round 3 — para AntiKnockbackCheck (magnitud horizontal del KB asignado).
+        double mag = Math.sqrt(s.serverVelX * s.serverVelX + s.serverVelZ * s.serverVelZ);
+        if (mag > 0.05) {
+            s.lastKnockbackExpectedMs  = s.serverVelAssignedAtMs;
+            s.lastKnockbackExpectedMag = mag;
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -149,7 +155,93 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         if (!(e.getEntity() instanceof org.bukkit.entity.Player p)) return;
         if (p.hasPermission("argus.ac.bypass")) return;
         PacketDataStore.State s = store.get(p.getUniqueId());
-        listener.getBowAimCheck().handleShoot(p, s, System.currentTimeMillis(), listener.getSink());
+        long now = System.currentTimeMillis();
+        listener.getBowAimCheck().handleShoot(p, s, now, listener.getSink());
+        // Round 3 — FastBow: chargeMs = now - useItemStartMs (set en onInteract).
+        long chargeMs = s.useItemStartMs == 0L ? 0L : (now - s.useItemStartMs);
+        listener.getFastBowCheck().handleBowShoot(p, s, chargeMs, e.getForce(), listener.getSink());
+        s.useItemStartMs = 0L;
+        s.useItemMaterial = null;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    //  Round 3 — eat/use-item / sneak / armor / regen / brand
+    // ──────────────────────────────────────────────────────────────────────
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onInteract(org.bukkit.event.player.PlayerInteractEvent e) {
+        org.bukkit.entity.Player p = e.getPlayer();
+        if (p.hasPermission("argus.ac.bypass")) return;
+        if (e.getAction() != org.bukkit.event.block.Action.RIGHT_CLICK_AIR
+            && e.getAction() != org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) return;
+        ItemStack item = e.getItem();
+        if (item == null) return;
+        org.bukkit.Material m = item.getType();
+        // Solo trackeamos items con use-time (food, bow, shield, pot).
+        boolean tracked = m.isEdible()
+            || m == org.bukkit.Material.BOW
+            || m == org.bukkit.Material.CROSSBOW
+            || m == org.bukkit.Material.SHIELD
+            || m == org.bukkit.Material.POTION
+            || m == org.bukkit.Material.SPLASH_POTION
+            || m == org.bukkit.Material.LINGERING_POTION
+            || m == org.bukkit.Material.MILK_BUCKET
+            || m == org.bukkit.Material.GOAT_HORN;
+        if (!tracked) return;
+        PacketDataStore.State s = store.get(p.getUniqueId());
+        long now = System.currentTimeMillis();
+        s.useItemStartMs  = now;
+        s.useItemMaterial = m.name();
+        listener.getAutoPotionCheck().handleUseStart(p, s, m.name(), now, listener.getSink());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onItemConsume(org.bukkit.event.player.PlayerItemConsumeEvent e) {
+        org.bukkit.entity.Player p = e.getPlayer();
+        if (p.hasPermission("argus.ac.bypass")) return;
+        PacketDataStore.State s = store.get(p.getUniqueId());
+        long now = System.currentTimeMillis();
+        listener.getFastEatCheck().handleEatFinish(p, s, now, listener.getSink());
+        listener.getAutoEatCheck().handleEatFinish(p, s, now, listener.getSink());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onSneak(org.bukkit.event.player.PlayerToggleSneakEvent e) {
+        org.bukkit.entity.Player p = e.getPlayer();
+        if (p.hasPermission("argus.ac.bypass")) return;
+        PacketDataStore.State s = store.get(p.getUniqueId());
+        s.sneakActive = e.isSneaking();
+        if (e.isSneaking()) s.sneakStartMs = System.currentTimeMillis();
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onArmorChange(org.bukkit.event.inventory.InventoryClickEvent e) {
+        if (!(e.getWhoClicked() instanceof org.bukkit.entity.Player p)) return;
+        if (p.hasPermission("argus.ac.bypass")) return;
+        int slot = e.getSlot();
+        // Armor slots en PlayerInventory: 36-39 (boots..helmet) o slotType ARMOR.
+        if (e.getSlotType() != org.bukkit.event.inventory.InventoryType.SlotType.ARMOR
+            && (slot < 36 || slot > 39)) return;
+        PacketDataStore.State s = store.get(p.getUniqueId());
+        Bukkit.getScheduler().runTask(plugin, () ->
+            listener.getAutoArmorCheck().handleArmorChange(p, s,
+                System.currentTimeMillis(), listener.getSink()));
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onRegen(org.bukkit.event.entity.EntityRegainHealthEvent e) {
+        if (!(e.getEntity() instanceof org.bukkit.entity.Player p)) return;
+        if (p.hasPermission("argus.ac.bypass")) return;
+        PacketDataStore.State s = store.get(p.getUniqueId());
+        long now = System.currentTimeMillis();
+        listener.getRegenCheck().handleHealthChange(p, s, p.getHealth() + e.getAmount(), now, listener.getSink());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onResourcePackStatus(org.bukkit.event.player.PlayerResourcePackStatusEvent e) {
+        // Best-effort: leemos el brand del Channel "minecraft:brand" via Paper API si esta.
+        // Aca solo marcamos timestamp; el brand real lo capturamos via PluginMessage listener
+        // (Paper-only) — fallback: dejar null y que LegitClientWhitelist devuelva 1.0.
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
