@@ -5,7 +5,74 @@ on:
   pull_request:
 
 jobs:
-  pytest:
+  unit:
+    name: Unit (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+          cache-dependency-path: |
+            tests/requirements-test.txt
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+
+      - name: Run unit/property/security suite
+        run: |
+          python -m pytest tests/ --ignore=tests/integration --ignore=tests/perf --cov=argus_ai_oracle --cov=argus_ai_features --cov=argus_ai_trainer --cov=argus_ai_labeler --cov=argus_ai_assistant --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit-${{ matrix.python-version }}
+          path: |
+            coverage.xml
+
+  integration:
+    name: Integration (${{ matrix.python-version }})
+    needs: unit
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+          cache-dependency-path: |
+            tests/requirements-test.txt
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+
+      - name: Run integration tests
+        run: |
+          python -m pytest --no-cov tests/integration -q
+
+  perf:
+    name: Perf (3.11)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: unit
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,6 +91,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r tests/requirements-test.txt
 
-      - name: Run pytest with coverage
+      - name: Run perf tests
         run: |
-          python -m pytest tests/
+          python -m pytest --no-cov -m perf tests/perf -q
