@@ -400,6 +400,38 @@ def init_db_async():
         print("âœ… Columna ensemble_data en scans verificada/creada")
     except Exception as _e:
         print(f"âš ï¸ Error migrando ensemble_data: {_e}")
+    # Migración H-001: company_id en scans para reportes multi-empresa.
+    try:
+        with get_api_db_cursor() as _cur:
+            _cur.execute(
+                "ALTER TABLE scans ADD COLUMN IF NOT EXISTS company_id INTEGER "
+                "REFERENCES companies(id) ON DELETE SET NULL"
+            )
+            # Backfill por token->created_by(username)->users.company_id.
+            try:
+                _cur.execute(
+                    f"UPDATE scans s "
+                    f"SET company_id = u.company_id "
+                    f"FROM scan_tokens st "
+                    f"JOIN users u ON LOWER(u.username) = LOWER(st.created_by) "
+                    f"WHERE s.company_id IS NULL "
+                    f"  AND s.token_id = st.id "
+                    f"  AND u.company_id IS NOT NULL"
+                )
+            except Exception:
+                _cur.execute(
+                    "UPDATE scans "
+                    "SET company_id = ("
+                    "  SELECT u.company_id FROM scan_tokens st "
+                    "  JOIN users u ON LOWER(u.username) = LOWER(st.created_by) "
+                    "  WHERE st.id = scans.token_id LIMIT 1"
+                    ") "
+                    "WHERE company_id IS NULL"
+                )
+            _cur.execute("CREATE INDEX IF NOT EXISTS idx_scans_company_id ON scans(company_id)")
+        print("âœ… Columna company_id en scans verificada/creada + backfill")
+    except Exception as _e:
+        print(f"âš ï¸ Error migrando scans.company_id: {_e}")
     # MigraciÃ³n: tablas/columnas para sistema de plugin keys (Minecraft).
     # IMPORTANTE: ejecutar UNA SOLA VEZ al startup. Antes esto se ejecutaba
     # on-demand desde @before_request via _plugin_schema_guard(), lo cual
@@ -5912,6 +5944,17 @@ def start_scan():
             })
 
         with get_api_db_cursor() as cursor:
+            company_id = None
+            try:
+                if _created_by:
+                    cursor.execute(
+                        f"SELECT company_id FROM users WHERE LOWER(username) = LOWER({_PH}) LIMIT 1",
+                        (_created_by,)
+                    )
+                    _urow = cursor.fetchone()
+                    company_id = int(_row_get(_urow, 0, 'company_id') or 0) or None
+            except Exception:
+                company_id = None
             cursor.execute(
                 f'UPDATE scan_tokens SET used_count = used_count + 1,'
                 f' is_active = CASE WHEN max_uses > 0 AND (used_count + 1) >= max_uses THEN FALSE ELSE is_active END'
@@ -5920,9 +5963,9 @@ def start_scan():
             )
             scan_id = _insert_id(
                 cursor,
-                f'INSERT INTO scans (token_id, scan_token, status, machine_id, machine_name, ip_address, country, minecraft_username)'
-                f" VALUES ({_PH},{_PH},'running',{_PH},{_PH},{_PH},{_PH},{_PH})",
-                (token_id, scan_token, machine_id, machine_name, ip_address, country, mc_username)
+                f'INSERT INTO scans (token_id, scan_token, status, machine_id, machine_name, ip_address, country, minecraft_username, company_id)'
+                f" VALUES ({_PH},{_PH},'running',{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})",
+                (token_id, scan_token, machine_id, machine_name, ip_address, country, mc_username, company_id)
             )
             if mc_info:
                 try:

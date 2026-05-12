@@ -311,13 +311,23 @@ def init_mysql_db():
                 ip_address VARCHAR(45),
                 country VARCHAR(100),
                 minecraft_username VARCHAR(255),
+                company_id INT NULL,
                 FOREIGN KEY (token_id) REFERENCES scan_tokens(id) ON DELETE SET NULL,
                 INDEX idx_token_id (token_id),
                 INDEX idx_scan_token (scan_token),
                 INDEX idx_status (status),
-                INDEX idx_started_at (started_at)
+                INDEX idx_started_at (started_at),
+                INDEX idx_scans_company_id (company_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ''')
+        try:
+            cursor.execute("ALTER TABLE scans ADD COLUMN company_id INT NULL")
+        except Exception:
+            pass
+        try:
+            cursor.execute("CREATE INDEX idx_scans_company_id ON scans(company_id)")
+        except Exception:
+            pass
         
         # Tabla de historial de bans
         cursor.execute('''

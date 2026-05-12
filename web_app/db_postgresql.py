@@ -137,6 +137,7 @@ def init_postgresql_db():
                 ip_address VARCHAR(45),
                 country VARCHAR(100),
                 minecraft_username VARCHAR(255),
+                company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL,
                 FOREIGN KEY (token_id) REFERENCES scan_tokens(id) ON DELETE SET NULL
             )
         ''')
@@ -145,9 +146,11 @@ def init_postgresql_db():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_scan_token ON scans(scan_token)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_status ON scans(status)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_started_at ON scans(started_at)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_scans_company_id ON scans(company_id)')
 
         # Migraciones: añadir/modificar columnas en tablas existentes
         cursor.execute('ALTER TABLE scans ADD COLUMN IF NOT EXISTS total_dirs_scanned INTEGER DEFAULT 0')
+        cursor.execute('ALTER TABLE scans ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL')
         # Ampliar VARCHAR(255) a TEXT en scan_results para rutas/nombres largos
         cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_type TYPE TEXT")
         cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_name TYPE TEXT")

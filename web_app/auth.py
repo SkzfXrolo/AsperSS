@@ -361,8 +361,13 @@ def _init_scanner_tables_sqlite():
         ip_address TEXT,
         country TEXT,
         minecraft_username TEXT,
+        company_id INTEGER,
         FOREIGN KEY (token_id) REFERENCES scan_tokens(id)
     )''')
+    try:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_scans_company_id ON scans(company_id)")
+    except Exception:
+        pass
 
     cursor.execute('''CREATE TABLE IF NOT EXISTS scan_results (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
