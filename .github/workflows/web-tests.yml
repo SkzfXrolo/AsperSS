@@ -94,3 +94,114 @@ jobs:
       - name: Run perf tests
         run: |
           python -m pytest --no-cov -m perf tests/perf -q
+
+  snapshot:
+    name: Snapshot (3.11)
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: tests/requirements-test.txt
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+      - name: Verify snapshots
+        run: |
+          python -m pytest --no-cov tests/snapshot -q
+
+  contract:
+    name: Contract (3.11)
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: tests/requirements-test.txt
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+      - name: Run contract tests
+        run: |
+          python -m pytest --no-cov -m contract tests/contract -q
+
+  chaos:
+    name: Chaos (3.11)
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: tests/requirements-test.txt
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+      - name: Run chaos tests
+        run: |
+          python -m pytest --no-cov -m chaos tests/chaos -q
+
+  e2e:
+    name: E2E Playwright (3.11)
+    needs: integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: tests/requirements-test.txt
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+      - name: Install Playwright browser
+        run: |
+          python -m playwright install chromium
+      - name: Run e2e tests
+        run: |
+          python -m pytest --no-cov -m e2e tests/e2e tests/a11y -q
+
+  smoke:
+    name: Smoke post-deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [unit, integration]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: tests/requirements-test.txt
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+      - name: Run smoke tests
+        env:
+          ARGUS_PROD_URL: https://asperss.onrender.com
+        run: |
+          python -m pytest --no-cov -m smoke tests/smoke -q
