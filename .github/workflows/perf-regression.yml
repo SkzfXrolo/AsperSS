@@ -1,0 +1,26 @@
+name: Perf regression
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  perf-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+      - name: Run perf regression
+        run: |
+          python -m pytest --no-cov -m perf tests/perf/test_regression.py -q
+      - name: Upload perf report
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-regression
+          path: tests/perf/baselines/oracle_v1.0.json
