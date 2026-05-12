@@ -199,6 +199,87 @@ public final class ArgusApiClient {
     }
 
     /**
+     * Pack 46 — Chat conversacional con el Oracle.
+     *
+     * <p>Envia texto libre del staff a {@code POST /api/plugin/assistant/query}
+     * y recibe respuesta humanizada del Oracle basada en datos reales.
+     *
+     * <p>Timeout: 6s (mas que evaluacion normal porque puede invocar
+     * resolver de player_ctx con multiples queries SQL).
+     */
+    public java.util.concurrent.CompletableFuture<AssistantResponse> askAssistantAsync(String text) {
+        return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            AssistantResponse out = new AssistantResponse();
+            try {
+                String url = cfg.getBaseUrl() + "/api/plugin/assistant/query";
+                String json = "{\"text\":\"" + JsonMini.escape(text == null ? "" : text) + "\"}";
+                HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(Math.max(6, cfg.getTimeoutSeconds())))
+                    .header("Content-Type", "application/json")
+                    .header("X-Argus-Plugin-Key", cfg.getApiKey())
+                    .header("User-Agent", "ArgusMC-Plugin/" + plugin.getDescription().getVersion())
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+                HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+                String body = resp.body();
+                if (resp.statusCode() >= 400) {
+                    plugin.getLogger().log(Level.FINE, "Assistant HTTP " + resp.statusCode() + ": " + body);
+                    out.success = false;
+                    out.error = "HTTP " + resp.statusCode();
+                    return out;
+                }
+                Boolean success = JsonMini.findBool(body, "success");
+                out.success = success != null && success;
+                out.intent = JsonMini.findString(body, "intent");
+                out.answer = JsonMini.findString(body, "answer");
+                Boolean miss = JsonMini.findBool(body, "missing_data");
+                out.missingData = miss != null && miss;
+                return out;
+            } catch (Exception ex) {
+                plugin.getLogger().log(Level.FINE, "Assistant query error: " + ex.getMessage());
+                out.success = false;
+                out.error = ex.getMessage();
+                return out;
+            }
+        }, executor);
+    }
+
+    /**
+     * Pack 46 — Pide al backend sugerencias proactivas para staff conectado.
+     *
+     * <p>El plugin llama a este endpoint cada N min (configurado en
+     * config.yml). Las suggestions son mensajes pre-formateados para
+     * whisper al staff. Devuelve null si no hay sugerencias activas
+     * (server limpio).
+     *
+     * <p>Endpoint: {@code GET /api/plugin/assistant/proactive-suggestions}.
+     * Cada item del array tiene {player_name, score, message}.
+     *
+     * <p>El plugin parsea solo el array de messages para reducir parsing.
+     */
+    public java.util.concurrent.CompletableFuture<java.util.List<String>> getProactiveSuggestionsAsync() {
+        return java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            try {
+                String url = cfg.getBaseUrl() + "/api/plugin/assistant/proactive-suggestions";
+                HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(cfg.getTimeoutSeconds()))
+                    .header("X-Argus-Plugin-Key", cfg.getApiKey())
+                    .header("User-Agent", "ArgusMC-Plugin/" + plugin.getDescription().getVersion())
+                    .GET()
+                    .build();
+                HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() >= 400) {
+                    return java.util.Collections.<String>emptyList();
+                }
+                return JsonMini.extractMessagesFromSuggestions(resp.body());
+            } catch (Exception ex) {
+                plugin.getLogger().log(Level.FINE, "Proactive suggestions error: " + ex.getMessage());
+                return java.util.Collections.<String>emptyList();
+            }
+        }, executor);
+    }
+
+    /**
      * Envia un embed a un webhook de Discord con la violation.
      * El color depende del nivel (LOW=amarillo, MID=naranja, HIGH=rojo, CRITICAL=morado oscuro).
      */

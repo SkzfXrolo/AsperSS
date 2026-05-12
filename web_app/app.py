@@ -4631,6 +4631,634 @@ def _run_auto_labeling_for(company_id: int, limit: int = 200) -> dict:
     return out
 
 
+# ──────────────────────────────────────────────────────────────────────
+#  Pack 46: Assistant — chat conversacional + briefs + msgs in-game
+# ──────────────────────────────────────────────────────────────────────
+
+def _build_assistant_player_ctx(cursor, company_id: int, player_name: str) -> dict | None:
+    """
+    Resuelve un nombre de jugador a un context dict para el assistant.
+    Busca por player_name en ai_player_scores. Si no encuentra, fallback
+    a búsqueda fuzzy (LIKE) en plugin_violations.
+    """
+    if not player_name:
+        return None
+    try:
+        cursor.execute(
+            f"SELECT player_uuid, player_name, score, confidence, last_action, "
+            f"last_reasoning, last_evidence_json, evaluations_count, "
+            f"last_evaluated_at "
+            f"FROM ai_player_scores "
+            f"WHERE company_id = {_PH} AND LOWER(player_name) = LOWER({_PH}) "
+            f"ORDER BY last_evaluated_at DESC LIMIT 1",
+            (company_id, player_name)
+        )
+        row = cursor.fetchone()
+        if not row:
+            # Fuzzy fallback
+            cursor.execute(
+                f"SELECT player_uuid, player_name, score, confidence, last_action, "
+                f"last_reasoning, last_evidence_json, evaluations_count, "
+                f"last_evaluated_at "
+                f"FROM ai_player_scores "
+                f"WHERE company_id = {_PH} AND LOWER(player_name) LIKE LOWER({_PH}) "
+                f"ORDER BY last_evaluated_at DESC LIMIT 1",
+                (company_id, f"%{player_name}%")
+            )
+            row = cursor.fetchone()
+        if not row:
+            return None
+        row = dict(row) if not isinstance(row, dict) else row
+
+        # Violations stats
+        viol_stats = {'total': 0, 'distinct': 0,
+                      'low': 0, 'mid': 0, 'high': 0, 'critical': 0,
+                      'top_check': ''}
+        try:
+            cursor.execute(
+                f"SELECT level, COUNT(*) AS c, COUNT(DISTINCT check_name) AS dc "
+                f"FROM plugin_violations "
+                f"WHERE company_id = {_PH} AND player_uuid = {_PH} "
+                f"AND created_at > CURRENT_TIMESTAMP - INTERVAL '7 days' "
+                f"GROUP BY level"
+                if _USE_PG else
+                f"SELECT level, COUNT(*) AS c, COUNT(DISTINCT check_name) AS dc "
+                f"FROM plugin_violations "
+                f"WHERE company_id = {_PH} AND player_uuid = {_PH} "
+                f"AND created_at > datetime('now', '-7 days') "
+                f"GROUP BY level",
+                (company_id, row['player_uuid'])
+            )
+            for vr in cursor.fetchall() or []:
+                vr = dict(vr) if not isinstance(vr, dict) else vr
+                lvl = (vr.get('level') or '').upper()
+                cnt = int(vr.get('c') or 0)
+                viol_stats['total'] += cnt
+                if lvl == 'LOW': viol_stats['low'] = cnt
+                elif lvl == 'MID': viol_stats['mid'] = cnt
+                elif lvl == 'HIGH': viol_stats['high'] = cnt
+                elif lvl == 'CRITICAL': viol_stats['critical'] = cnt
+                viol_stats['distinct'] = max(viol_stats['distinct'], int(vr.get('dc') or 0))
+            # Top check name
+            cursor.execute(
+                f"SELECT check_name, COUNT(*) AS c FROM plugin_violations "
+                f"WHERE company_id = {_PH} AND player_uuid = {_PH} "
+                f"GROUP BY check_name ORDER BY c DESC LIMIT 1",
+                (company_id, row['player_uuid'])
+            )
+            tc = cursor.fetchone()
+            if tc:
+                tc = dict(tc) if not isinstance(tc, dict) else tc
+                viol_stats['top_check'] = tc.get('check_name') or ''
+        except Exception:
+            pass
+
+        # Top factor + ml_components from last evidence_json
+        top_factor = ''
+        ml_components = {}
+        try:
+            ej = json.loads(row.get('last_evidence_json') or '{}')
+            top_factor = ej.get('top_factor', '') or ''
+            ml_components = ej.get('ensemble_components') or {}
+        except Exception:
+            pass
+
+        # last_evaluated_at -> timestamp
+        last_eval_ts = 0.0
+        try:
+            le = row.get('last_evaluated_at')
+            if hasattr(le, 'timestamp'):
+                last_eval_ts = le.timestamp()
+            elif le:
+                import datetime as _dt
+                last_eval_ts = _dt.datetime.fromisoformat(str(le)).timestamp()
+        except Exception:
+            pass
+
+        # Neighbors via KNN si disponible
+        neighbors = []
+        try:
+            knn = _load_ml_model(cursor, company_id, 'knn')
+            if knn:
+                cursor.execute(
+                    f"SELECT feature_vector_json FROM ai_player_profiles "
+                    f"WHERE company_id = {_PH} AND player_uuid = {_PH}",
+                    (company_id, row['player_uuid'])
+                )
+                pr = cursor.fetchone()
+                if pr:
+                    pr = dict(pr) if not isinstance(pr, dict) else pr
+                    fv = json.loads(pr.get('feature_vector_json') or '[]')
+                    pred = knn.predict(fv)
+                    neighbors = pred.get('neighbors') or []
+        except Exception:
+            pass
+
+        return {
+            'player_uuid': row.get('player_uuid'),
+            'player_name': row.get('player_name'),
+            'score': float(row.get('score') or 0),
+            'confidence': float(row.get('confidence') or 0),
+            'last_action': row.get('last_action') or 'none',
+            'reasoning': row.get('last_reasoning') or '',
+            'top_factor': top_factor,
+            'top_check': viol_stats['top_check'] or top_factor,
+            'violations_total': viol_stats['total'],
+            'distinct_checks': viol_stats['distinct'],
+            'low_count': viol_stats['low'],
+            'mid_count': viol_stats['mid'],
+            'high_count': viol_stats['high'],
+            'critical_count': viol_stats['critical'],
+            'evaluations_count': int(row.get('evaluations_count') or 0),
+            'last_evaluated_at_ts': last_eval_ts,
+            'ml_components': ml_components,
+            'neighbors_list': neighbors,
+        }
+    except Exception as e:
+        print(f"[assistant_ctx] error: {e}")
+        return None
+
+
+def _list_top_suspects_for_assistant(cursor, company_id: int, limit: int = 5) -> list[dict]:
+    try:
+        cursor.execute(
+            f"SELECT player_name, score FROM ai_player_scores "
+            f"WHERE company_id = {_PH} AND score > 0.3 "
+            f"ORDER BY score DESC LIMIT {int(limit)}",
+            (company_id,)
+        )
+        out = []
+        for r in cursor.fetchall() or []:
+            r = dict(r) if not isinstance(r, dict) else r
+            out.append({'player_name': r.get('player_name'), 'score': r.get('score')})
+        return out
+    except Exception:
+        return []
+
+
+def _get_daily_stats_for_assistant(cursor, company_id: int, days: int = 1) -> dict:
+    """Stats agregadas para daily_brief / weekly_brief."""
+    out: dict = {
+        'date': time.strftime('%Y-%m-%d'),
+        'evaluations_count': 0, 'bans_count': 0, 'kicks_count': 0,
+        'ss_count': 0, 'watch_count': 0,
+        'top_player': None, 'ml_samples': 0, 'ml_accuracy': 0,
+        'pending_count': 0,
+    }
+    interval_sql = (f"CURRENT_TIMESTAMP - INTERVAL '{int(days)} days'"
+                    if _USE_PG else f"datetime('now', '-{int(days)} days')")
+    try:
+        cursor.execute(
+            f"SELECT action, COUNT(*) AS c FROM ai_decisions_log "
+            f"WHERE company_id = {_PH} AND created_at > {interval_sql} "
+            f"GROUP BY action",
+            (company_id,)
+        )
+        for r in cursor.fetchall() or []:
+            r = dict(r) if not isinstance(r, dict) else r
+            a = (r.get('action') or '').lower()
+            c = int(r.get('c') or 0)
+            out['evaluations_count'] += c
+            if a == 'ban': out['bans_count'] = c
+            elif a == 'kick': out['kicks_count'] = c
+            elif a == 'ss': out['ss_count'] = c
+            elif a == 'watch': out['watch_count'] = c
+        # Top player
+        cursor.execute(
+            f"SELECT player_name, score FROM ai_decisions_log "
+            f"WHERE company_id = {_PH} AND created_at > {interval_sql} "
+            f"AND action IN ('ban','kick','ss') "
+            f"ORDER BY score DESC LIMIT 1",
+            (company_id,)
+        )
+        r = cursor.fetchone()
+        if r:
+            r = dict(r) if not isinstance(r, dict) else r
+            out['top_player'] = {
+                'player_name': r.get('player_name'),
+                'score': float(r.get('score') or 0),
+                'top_check': '',
+            }
+            # Top check para ese player
+            try:
+                cursor.execute(
+                    f"SELECT check_name FROM plugin_violations "
+                    f"WHERE company_id = {_PH} AND player_name = {_PH} "
+                    f"GROUP BY check_name ORDER BY COUNT(*) DESC LIMIT 1",
+                    (company_id, r.get('player_name'))
+                )
+                tc = cursor.fetchone()
+                if tc:
+                    tc = dict(tc) if not isinstance(tc, dict) else tc
+                    out['top_player']['top_check'] = tc.get('check_name') or ''
+            except Exception:
+                pass
+        # ML stats
+        cursor.execute(
+            f"SELECT accuracy, samples_trained FROM ai_model_state "
+            f"WHERE model_kind = 'logreg' AND (company_id = {_PH} OR company_id = 0) "
+            f"ORDER BY company_id DESC LIMIT 1",
+            (company_id,)
+        )
+        r = cursor.fetchone()
+        if r:
+            r = dict(r) if not isinstance(r, dict) else r
+            out['ml_samples'] = int(r.get('samples_trained') or 0)
+            out['ml_accuracy'] = float(r.get('accuracy') or 0)
+        # Pending count
+        cursor.execute(
+            f"SELECT COUNT(*) AS c FROM ai_decisions_log d "
+            f"WHERE d.company_id = {_PH} AND d.action IN ('ss','kick','ban') "
+            f"AND d.created_at > {interval_sql} "
+            f"AND NOT EXISTS (SELECT 1 FROM ai_feedback f WHERE f.decision_id = d.id) "
+            f"AND NOT EXISTS (SELECT 1 FROM ai_auto_labels al WHERE al.decision_id = d.id)",
+            (company_id,)
+        )
+        r = cursor.fetchone()
+        if r:
+            r = dict(r) if not isinstance(r, dict) else r
+            out['pending_count'] = int(r.get('c') or 0)
+    except Exception as e:
+        print(f"[assistant_stats] error: {e}")
+    return out
+
+
+@app.route('/api/ai/assistant/ask', methods=['POST'])
+@login_required
+def api_ai_assistant_ask():
+    """
+    Chat conversacional con el Oracle. Body: {text: str, tone?: 'neutral'|'sarcastic'}.
+    Devuelve: {intent, answer, missing_data}.
+    """
+    _plugin_schema_guard()
+    try:
+        body = request.get_json(silent=True) or {}
+        text = (body.get('text') or '').strip()[:500]
+        tone = body.get('tone') or 'neutral'
+        if not text:
+            return jsonify({'success': False, 'error': 'text requerido'}), 400
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        company_id = int(user.get('company_id') or 0)
+
+        import argus_ai_assistant as A
+        with get_api_db_cursor() as cursor:
+            def resolver(name: str):
+                return _build_assistant_player_ctx(cursor, company_id, name)
+            def top_susp():
+                return _list_top_suspects_for_assistant(cursor, company_id)
+            def daily_stats(days: int = 1):
+                return _get_daily_stats_for_assistant(cursor, company_id, days)
+
+            result = A.ask(text, resolver, top_susp, daily_stats, tone=tone)
+
+        # Polish con LLM si hay key configurada
+        if result.get('answer') and result.get('intent') not in (
+            'daily_summary', 'weekly_summary', 'help'  # estos ya están bien formados
+        ):
+            try:
+                result['answer'] = A.llm_polish(result['answer'])
+            except Exception:
+                pass
+
+        return jsonify({'success': True, **result}), 200
+    except Exception as e:
+        print(f"ERROR api_ai_assistant_ask: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ai/assistant/daily-brief', methods=['GET'])
+@login_required
+def api_ai_assistant_daily_brief():
+    """Brief narrativo del día (últimas 24h)."""
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        company_id = int(user.get('company_id') or 0)
+        if user.get('is_super_admin'):
+            company_id = int(request.args.get('company_id', company_id))
+        days = max(1, min(30, int(request.args.get('days', 1))))
+        tone = request.args.get('tone', 'neutral')
+
+        import argus_ai_assistant as A
+        with get_api_db_cursor() as cursor:
+            stats = _get_daily_stats_for_assistant(cursor, company_id, days)
+        if days == 7:
+            answer = A.weekly_brief(stats, tone=tone)
+        else:
+            answer = A.daily_brief(stats, tone=tone)
+        return jsonify({'success': True, 'answer': answer, 'stats': stats, 'days': days}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ai/assistant/warn-message', methods=['POST'])
+@login_required
+def api_ai_assistant_warn_message():
+    """Genera texto humanizado para warn/kick/ban a un jugador."""
+    _plugin_schema_guard()
+    try:
+        body = request.get_json(silent=True) or {}
+        player = (body.get('player_name') or '').strip()[:64]
+        kind = (body.get('kind') or 'warn').lower()
+        if not player:
+            return jsonify({'success': False, 'error': 'player_name requerido'}), 400
+        user = get_user_by_id(session.get('user_id'))
+        company_id = int(user.get('company_id') or 0)
+
+        import argus_ai_assistant as A
+        with get_api_db_cursor() as cursor:
+            ctx = _build_assistant_player_ctx(cursor, company_id, player)
+            if not ctx:
+                # Sin data, generar mensaje genérico con player_name only
+                ctx = {'player_name': player, 'top_check': 'patrón genérico',
+                       'score': 0.5, 'confidence': 0.4}
+
+        if kind == 'kick':
+            answer = A.generate_kick_message(ctx)
+        elif kind == 'ban':
+            answer = A.generate_ban_message(ctx)
+        else:
+            answer = A.generate_warning(ctx)
+        return jsonify({'success': True, 'message': answer, 'kind': kind}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ai/assistant/compare/<player_uuid>', methods=['GET'])
+@login_required
+def api_ai_assistant_compare(player_uuid: str):
+    """Narrativa: compara este jugador con perfiles confirmados (vía KNN)."""
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        company_id = int(user.get('company_id') or 0)
+
+        import argus_ai_assistant as A
+        with get_api_db_cursor() as cursor:
+            # Resolver feature vector
+            cursor.execute(
+                f"SELECT player_name, feature_vector_json FROM ai_player_profiles "
+                f"WHERE company_id = {_PH} AND player_uuid = {_PH}",
+                (company_id, player_uuid[:40])
+            )
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'success': False, 'error': 'sin perfil'}), 404
+            row = dict(row) if not isinstance(row, dict) else row
+            fv = json.loads(row.get('feature_vector_json') or '[]')
+            knn = _load_ml_model(cursor, company_id, 'knn')
+            if not knn:
+                return jsonify({
+                    'success': True,
+                    'answer': 'El modelo KNN aún no está entrenado.',
+                    'neighbors': [],
+                }), 200
+            pred = knn.predict(fv)
+            neighbors = pred.get('neighbors') or []
+            ctx = {'player_name': row.get('player_name')}
+        answer = A.compare_with_neighbors(ctx, neighbors)
+        return jsonify({
+            'success': True,
+            'answer': answer,
+            'neighbors': neighbors,
+            'score': pred.get('score'),
+            'confidence': pred.get('confidence'),
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ai/assistant/proactive', methods=['GET'])
+@login_required
+def api_ai_assistant_proactive():
+    """
+    Lista alertas proactivas: jugadores que escalaron rápido en última hora
+    y vecinos KNN con label=cheater de alta similitud.
+    """
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        company_id = int(user.get('company_id') or 0)
+        if user.get('is_super_admin'):
+            company_id = int(request.args.get('company_id', company_id))
+
+        import argus_ai_assistant as A
+        alerts: list[dict] = []
+        with get_api_db_cursor() as cursor:
+            # 1. Escalation: jugadores que tuvieron >= 3 violations en última hora
+            #    y score subió en últimas evaluaciones
+            interval_sql = ("CURRENT_TIMESTAMP - INTERVAL '60 minutes'"
+                            if _USE_PG else "datetime('now', '-60 minutes')")
+            cursor.execute(
+                f"SELECT player_name, player_uuid, score, last_evaluated_at "
+                f"FROM ai_player_scores "
+                f"WHERE company_id = {_PH} AND score > 0.35 "
+                f"AND last_evaluated_at > {interval_sql} "
+                f"ORDER BY score DESC LIMIT 5",
+                (company_id,)
+            )
+            for r in cursor.fetchall() or []:
+                r = dict(r) if not isinstance(r, dict) else r
+                # Violations en 5min
+                interval_short = ("CURRENT_TIMESTAMP - INTERVAL '5 minutes'"
+                                  if _USE_PG else "datetime('now', '-5 minutes')")
+                cursor.execute(
+                    f"SELECT check_name, COUNT(*) AS c FROM plugin_violations "
+                    f"WHERE company_id = {_PH} AND player_uuid = {_PH} "
+                    f"AND created_at > {interval_short} "
+                    f"GROUP BY check_name ORDER BY c DESC LIMIT 1",
+                    (company_id, r.get('player_uuid'))
+                )
+                tc = cursor.fetchone()
+                if not tc:
+                    continue
+                tc = dict(tc) if not isinstance(tc, dict) else tc
+                cnt = int(tc.get('c') or 0)
+                if cnt < 3:
+                    continue
+                msg = A.proactive_alert({
+                    'player_name': r.get('player_name'),
+                    'top_check': tc.get('check_name'),
+                    'violations_recent': cnt,
+                    'window_min': 5,
+                    'prev_score': max(0, float(r.get('score') or 0) - 0.2),
+                    'new_score': float(r.get('score') or 0),
+                }, urgency='escalation')
+                alerts.append({
+                    'kind': 'escalation',
+                    'player_name': r.get('player_name'),
+                    'player_uuid': r.get('player_uuid'),
+                    'score': float(r.get('score') or 0),
+                    'message': msg,
+                })
+            # 2. KNN confirmed-neighbor: profiles cuyo vecino más cercano es cheater con sim > 0.92
+            knn = _load_ml_model(cursor, company_id, 'knn')
+            if knn:
+                cursor.execute(
+                    f"SELECT player_name, player_uuid, feature_vector_json "
+                    f"FROM ai_player_profiles "
+                    f"WHERE company_id = {_PH} AND (last_label IS NULL OR last_label < 0.5) "
+                    f"AND last_updated_at > {interval_sql} "
+                    f"ORDER BY last_updated_at DESC LIMIT 30",
+                    (company_id,)
+                )
+                for r in cursor.fetchall() or []:
+                    r = dict(r) if not isinstance(r, dict) else r
+                    try:
+                        fv = json.loads(r.get('feature_vector_json') or '[]')
+                        pred = knn.predict(fv)
+                        neigh = (pred.get('neighbors') or [])
+                        if not neigh:
+                            continue
+                        top = neigh[0]
+                        if top.get('similarity', 0) >= 0.92 and top.get('label', 0) >= 0.7:
+                            msg = A.proactive_alert({
+                                'player_name': r.get('player_name'),
+                                'similarity': top['similarity'],
+                                'neighbor_name': top.get('player_name', '?'),
+                            }, urgency='confirmed_neighbor')
+                            alerts.append({
+                                'kind': 'confirmed_neighbor',
+                                'player_name': r.get('player_name'),
+                                'player_uuid': r.get('player_uuid'),
+                                'similarity': top['similarity'],
+                                'neighbor_name': top.get('player_name'),
+                                'message': msg,
+                            })
+                    except Exception:
+                        continue
+        return jsonify({'success': True, 'alerts': alerts, 'count': len(alerts)}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# Endpoint plugin: el plugin manda texto del usuario in-game, recibe respuesta
+@app.route('/api/plugin/assistant/query', methods=['POST'])
+def api_plugin_assistant_query():
+    """Plugin in-game pregunta al Oracle. Auth via X-Argus-Plugin-Key."""
+    _plugin_schema_guard()
+    api_key = (
+        request.headers.get('X-Argus-Plugin-Key')
+        or request.headers.get('Authorization', '').replace('Bearer ', '').strip()
+    )
+    if not api_key:
+        return jsonify({'success': False, 'error': 'API key requerida'}), 401
+    try:
+        body = request.get_json(silent=True) or {}
+        text = (body.get('text') or '').strip()[:500]
+        if not text:
+            return jsonify({'success': False, 'error': 'text requerido'}), 400
+
+        import argus_ai_assistant as A
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT company_id, is_active FROM company_plugin_keys WHERE api_key = {_PH}",
+                (api_key,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'success': False, 'error': 'API key invalida'}), 401
+            row = dict(row) if not isinstance(row, dict) else row
+            if not row.get('is_active'):
+                return jsonify({'success': False, 'error': 'API key revocada'}), 403
+            company_id = int(row['company_id'])
+
+            def resolver(name: str):
+                return _build_assistant_player_ctx(cursor, company_id, name)
+            def top_susp():
+                return _list_top_suspects_for_assistant(cursor, company_id)
+            def daily_stats(days: int = 1):
+                return _get_daily_stats_for_assistant(cursor, company_id, days)
+
+            result = A.ask(text, resolver, top_susp, daily_stats, tone='neutral')
+        return jsonify({'success': True, **result}), 200
+    except Exception as e:
+        print(f"ERROR api_plugin_assistant_query: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/plugin/assistant/proactive-suggestions', methods=['GET'])
+def api_plugin_assistant_proactive_suggestions():
+    """
+    Plugin pide sugerencias proactivas (las que el Oracle quiere comunicar a
+    staff conectado). Auth via plugin key. Devuelve max 3 alertas activas
+    para que el plugin las whisper al staff.
+    """
+    _plugin_schema_guard()
+    api_key = (
+        request.headers.get('X-Argus-Plugin-Key')
+        or request.headers.get('Authorization', '').replace('Bearer ', '').strip()
+    )
+    if not api_key:
+        return jsonify({'success': False, 'error': 'API key requerida'}), 401
+    try:
+        import argus_ai_assistant as A
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT company_id, is_active FROM company_plugin_keys WHERE api_key = {_PH}",
+                (api_key,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'success': False, 'error': 'API key invalida'}), 401
+            row = dict(row) if not isinstance(row, dict) else row
+            if not row.get('is_active'):
+                return jsonify({'success': False, 'error': 'API key revocada'}), 403
+            company_id = int(row['company_id'])
+
+            # Reuse la logica del endpoint /api/ai/assistant/proactive
+            interval_sql = ("CURRENT_TIMESTAMP - INTERVAL '15 minutes'"
+                            if _USE_PG else "datetime('now', '-15 minutes')")
+            cursor.execute(
+                f"SELECT player_name, player_uuid, score "
+                f"FROM ai_player_scores "
+                f"WHERE company_id = {_PH} AND score > 0.45 "
+                f"AND last_evaluated_at > {interval_sql} "
+                f"ORDER BY score DESC LIMIT 3",
+                (company_id,)
+            )
+            suggestions = []
+            for r in cursor.fetchall() or []:
+                r = dict(r) if not isinstance(r, dict) else r
+                interval_short = ("CURRENT_TIMESTAMP - INTERVAL '10 minutes'"
+                                  if _USE_PG else "datetime('now', '-10 minutes')")
+                cursor.execute(
+                    f"SELECT check_name, COUNT(*) AS c FROM plugin_violations "
+                    f"WHERE company_id = {_PH} AND player_uuid = {_PH} "
+                    f"AND created_at > {interval_short} "
+                    f"GROUP BY check_name ORDER BY c DESC LIMIT 1",
+                    (company_id, r.get('player_uuid'))
+                )
+                tc = cursor.fetchone()
+                if not tc:
+                    continue
+                tc = dict(tc) if not isinstance(tc, dict) else tc
+                msg = A.proactive_alert({
+                    'player_name': r.get('player_name'),
+                    'top_check': tc.get('check_name'),
+                    'violations_recent': int(tc.get('c') or 0),
+                    'window_min': 10,
+                    'prev_score': max(0, float(r.get('score') or 0) - 0.2),
+                    'new_score': float(r.get('score') or 0),
+                }, urgency='escalation')
+                suggestions.append({
+                    'player_name': r.get('player_name'),
+                    'score': float(r.get('score') or 0),
+                    'message': msg,
+                })
+        return jsonify({'success': True, 'suggestions': suggestions}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/ai/feature-importance', methods=['GET'])
 @login_required
 def api_ai_feature_importance():
@@ -15622,6 +16250,64 @@ def _ml_background_loop():
 
 
 threading.Thread(target=_ml_background_loop, daemon=True).start()
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Pack 46: Daily brief notifier (cada 24h, mid-noche)
+# ──────────────────────────────────────────────────────────────────────
+
+def _daily_brief_loop():
+    """
+    Cada 24h aprox (3:00 AM hora del server), genera el brief del día
+    para cada empresa con actividad y lo persiste para que el panel lo
+    muestre + notifica via Discord webhook si esta configurado.
+    """
+    import time as _t
+    print("[daily_brief] thread iniciado, primer brief en ~3h")
+    _t.sleep(60 * 60 * 3)  # esperar 3h tras boot
+    while True:
+        try:
+            import argus_ai_assistant as _A
+            with get_api_db_cursor() as cursor:
+                # Listar companies con decisiones en ultimas 24h
+                interval_sql = ("CURRENT_TIMESTAMP - INTERVAL '24 hours'"
+                                if _USE_PG else "datetime('now', '-24 hours')")
+                cursor.execute(
+                    f"SELECT DISTINCT company_id FROM ai_decisions_log "
+                    f"WHERE created_at > {interval_sql}"
+                )
+                companies = []
+                for r in cursor.fetchall() or []:
+                    r = dict(r) if not isinstance(r, dict) else r
+                    cid = int(r.get('company_id') or 0)
+                    if cid:
+                        companies.append(cid)
+                if not companies:
+                    companies = [0]  # generar al menos el global
+                for cid in companies:
+                    stats = _get_daily_stats_for_assistant(cursor, cid, days=1)
+                    brief = _A.daily_brief(stats)
+                    # Guardar como "decision sintetica" para que aparezca
+                    # en el log de decisiones del panel
+                    try:
+                        cursor.execute(
+                            f"INSERT INTO ai_decisions_log "
+                            f"(company_id, player_uuid, player_name, score, confidence, "
+                            f"action, reasoning, evidence_json, triggered_by) "
+                            f"VALUES ({_PH},{_PH},{_PH},0,0,'brief',{_PH},{_PH},'daily_brief_cron')",
+                            (cid, 'system', 'Argus AI Brief', brief, json.dumps(stats))
+                        )
+                    except Exception as e:
+                        print(f"[daily_brief] insert error company={cid}: {e}")
+                    print(f"[daily_brief] generado para company={cid}: "
+                          f"{stats.get('evaluations_count')} evals, "
+                          f"{stats.get('bans_count')} bans")
+        except Exception as e:
+            print(f"[daily_brief] loop error: {e}")
+        _t.sleep(60 * 60 * 24)  # 24h
+
+
+threading.Thread(target=_daily_brief_loop, daemon=True).start()
 
 
 if __name__ == '__main__':

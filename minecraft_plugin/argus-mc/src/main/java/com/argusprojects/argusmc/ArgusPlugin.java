@@ -73,6 +73,33 @@ public final class ArgusPlugin extends JavaPlugin {
                 }
             });
         }
+
+        // Pack 46 — proactive alerts cada 5 min (asincrono, no bloquea tick)
+        // El backend resume jugadores que estan escalando y devuelve mensajes
+        // pre-formateados para whisper al staff con permiso 'argus.alerts'.
+        getServer().getScheduler().runTaskTimerAsynchronously(this, () -> {
+            try {
+                if (argusConfig.isMisconfigured()) return;
+                apiClient.getProactiveSuggestionsAsync().thenAccept(suggestions -> {
+                    if (suggestions == null || suggestions.isEmpty()) return;
+                    // Volver al thread principal para tocar jugadores
+                    getServer().getScheduler().runTask(this, () -> {
+                        for (org.bukkit.entity.Player p : getServer().getOnlinePlayers()) {
+                            if (!p.hasPermission("argus.alerts")) continue;
+                            for (String msg : suggestions) {
+                                if (msg == null || msg.isEmpty()) continue;
+                                p.sendMessage(
+                                    com.argusprojects.argusmc.util.Messages.color(
+                                        "&8[&b&lArgus AI&8] &7" + msg));
+                            }
+                        }
+                    });
+                });
+            } catch (Exception ex) {
+                getLogger().fine("proactive-alerts loop error: " + ex.getMessage());
+            }
+        }, 20L * 60 * 2,   // delay inicial: 2min para no spamear en restart
+           20L * 60 * 5);  // periodo: cada 5min
     }
 
     @Override

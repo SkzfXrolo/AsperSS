@@ -39,7 +39,7 @@ import java.util.List;
 public final class ArgusCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SS_ALIASES   = Arrays.asList("check", "ss", "screenshare", "scan");
-    private static final List<String> ADMIN_SUBS   = Arrays.asList("reload", "info", "test", "debug", "violations", "duda");
+    private static final List<String> ADMIN_SUBS   = Arrays.asList("reload", "info", "test", "debug", "violations", "duda", "pregunta", "ask");
 
     private final ArgusPlugin plugin;
     private final SsService ssService;
@@ -75,6 +75,8 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
             case "debug":      handleDebug(sender);      break;
             case "violations": handleViolations(sender, args); break;
             case "duda":       handleDuda(sender, args); break;
+            case "pregunta":
+            case "ask":        handlePregunta(sender, args); break;
             case "help":       sendHelp(sender);         break;
             default:
                 sender.sendMessage(msg.prefix() + Messages.color("&cSubcomando desconocido: &f" + sub));
@@ -156,6 +158,58 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
     }
 
     /**
+     * /argus pregunta &lt;texto libre&gt; — chat conversacional con el Oracle.
+     *
+     * <p>Ejemplos:
+     * <ul>
+     *   <li><code>/argus pregunta como esta Pinkraft</code></li>
+     *   <li><code>/argus pregunta historial de Mateo</code></li>
+     *   <li><code>/argus pregunta resumen del dia</code></li>
+     *   <li><code>/argus pregunta top sospechosos</code></li>
+     *   <li><code>/argus pregunta que hago con Juan</code></li>
+     * </ul>
+     *
+     * <p>El Oracle responde en lenguaje humano basado en datos reales
+     * de la BD (violations, scans, decisiones previas, modelo ML).
+     */
+    private void handlePregunta(CommandSender sender, String[] args) {
+        Messages msg = plugin.getMessages();
+        if (args.length < 2) {
+            sender.sendMessage(msg.prefix() + Messages.color("&7Uso: &f/argus pregunta <texto>"));
+            sender.sendMessage(Messages.color("&7Ejemplos: 'como esta Pinkraft', 'resumen del dia', 'top sospechosos'"));
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 1; i < args.length; i++) {
+            if (i > 1) sb.append(' ');
+            sb.append(args[i]);
+        }
+        String text = sb.toString().trim();
+        if (text.isEmpty()) {
+            sender.sendMessage(msg.prefix() + Messages.color("&7Uso: &f/argus pregunta <texto>"));
+            return;
+        }
+        sender.sendMessage(msg.prefix() + Messages.color("&7Consultando al Oracle..."));
+        plugin.getApiClient().askAssistantAsync(text)
+            .whenComplete((response, err) -> org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> {
+                if (err != null || response == null || !response.success) {
+                    sender.sendMessage(msg.prefix() + Messages.color(
+                        "&cNo se pudo consultar al Oracle. Verifica conexion."));
+                    return;
+                }
+                sender.sendMessage(Messages.color("&7&m─────────────────────────────────────────"));
+                sender.sendMessage(Messages.color("&8[&b&lArgus AI&8] &7Tu pregunta: &f" + text));
+                String answer = response.answer != null ? response.answer : "(sin respuesta)";
+                // Splitear en lineas para que se vea bien en chat
+                for (String line : answer.split("\n")) {
+                    if (line.trim().isEmpty()) continue;
+                    sender.sendMessage(Messages.color("&f" + line));
+                }
+                sender.sendMessage(Messages.color("&7&m─────────────────────────────────────────"));
+            }));
+    }
+
+    /**
      * /argus violations [jugador] — muestra cuantas violations recientes
      * tiene un jugador en la sliding window del manager.
      */
@@ -188,6 +242,7 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Messages.color("  &e/argus debug &7- toggle telemetria por hit"));
             sender.sendMessage(Messages.color("  &e/argus violations <jugador> &7- ver violations recientes"));
             sender.sendMessage(Messages.color("  &e/argus duda <jugador> &7- consulta al Argus AI Oracle"));
+            sender.sendMessage(Messages.color("  &e/argus pregunta <texto> &7- chat con el Oracle (lenguaje natural)"));
         }
     }
 

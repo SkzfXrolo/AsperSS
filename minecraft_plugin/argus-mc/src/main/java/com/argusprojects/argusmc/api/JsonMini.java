@@ -153,6 +153,82 @@ public final class JsonMini {
         }
     }
 
+    /**
+     * Pack 46 — extrae todos los valores de "message" dentro del array de
+     * "suggestions" del response del endpoint proactive-suggestions.
+     *
+     * <p>Response esperado: <code>{success:true, suggestions:[{player_name,
+     * score, message}, ...]}</code>
+     *
+     * <p>Devuelve lista vacia si no hay suggestions o si el parse falla.
+     * No es robusto a casos extremos, pero cubre el shape que sabemos que
+     * el backend produce.
+     */
+    public static java.util.List<String> extractMessagesFromSuggestions(String body) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        if (body == null) return out;
+        int arrayStart = body.indexOf("\"suggestions\"");
+        if (arrayStart < 0) return out;
+        int bracket = body.indexOf('[', arrayStart);
+        if (bracket < 0) return out;
+        int end = findMatchingBracket(body, bracket);
+        if (end < 0) return out;
+        String arr = body.substring(bracket + 1, end);
+        // Buscar todos los "message":"...." en arr
+        int i = 0;
+        while (i < arr.length()) {
+            int k = arr.indexOf("\"message\"", i);
+            if (k < 0) break;
+            int colon = arr.indexOf(':', k);
+            if (colon < 0) break;
+            int q = colon + 1;
+            while (q < arr.length() && Character.isWhitespace(arr.charAt(q))) q++;
+            if (q >= arr.length() || arr.charAt(q) != '"') { i = k + 9; continue; }
+            q++;
+            StringBuilder sb = new StringBuilder();
+            boolean esc = false;
+            while (q < arr.length()) {
+                char c = arr.charAt(q++);
+                if (esc) {
+                    switch (c) {
+                        case 'n': sb.append('\n'); break;
+                        case 't': sb.append('\t'); break;
+                        case 'r': sb.append('\r'); break;
+                        case '"': sb.append('"'); break;
+                        case '\\': sb.append('\\'); break;
+                        default: sb.append(c); break;
+                    }
+                    esc = false;
+                } else if (c == '\\') {
+                    esc = true;
+                } else if (c == '"') {
+                    break;
+                } else {
+                    sb.append(c);
+                }
+            }
+            out.add(sb.toString());
+            i = q;
+        }
+        return out;
+    }
+
+    private static int findMatchingBracket(String s, int open) {
+        int depth = 0;
+        boolean inStr = false;
+        boolean esc = false;
+        for (int i = open; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (esc) { esc = false; continue; }
+            if (c == '\\' && inStr) { esc = true; continue; }
+            if (c == '"') { inStr = !inStr; continue; }
+            if (inStr) continue;
+            if (c == '[') depth++;
+            else if (c == ']') { depth--; if (depth == 0) return i; }
+        }
+        return -1;
+    }
+
     public static String escape(String raw) {
         if (raw == null) return "";
         StringBuilder sb = new StringBuilder(raw.length() + 8);
