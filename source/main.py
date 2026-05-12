@@ -46,6 +46,10 @@ try:
     import requests
 except ImportError:
     requests = None
+try:
+    from tqdm import tqdm as _tqdm
+except ImportError:
+    _tqdm = None
 
 # Importar el sistema de estilos moderno
 try:
@@ -5139,6 +5143,14 @@ class ArgusApp:
         """Actualiza progreso de forma segura sin recursión"""
         try:
             self.update_detailed_progress(value, message, detail)
+            if getattr(self, '_tqdm_bar', None):
+                try:
+                    _v = max(0, min(100, int(value)))
+                    self._tqdm_bar.n = _v
+                    self._tqdm_bar.set_postfix_str(str(detail or message)[:60], refresh=False)
+                    self._tqdm_bar.refresh()
+                except Exception:
+                    pass
             # #112 — callback opcional para integraciones externas/headless.
             cb = getattr(self, 'progress_callback', None)
             if callable(cb):
@@ -5153,6 +5165,31 @@ class ArgusApp:
                     pass
         except Exception as e:
             print(f"Error actualizando progreso: {e}")
+
+    def _init_console_progress_feedback(self):
+        """#117 — Feedback de progreso en consola para modo headless/CLI."""
+        try:
+            if getattr(self, '_tqdm_bar', None) is not None:
+                return
+            if not _tqdm:
+                return
+            use_tqdm = bool(getattr(self, '_headless_mode', False) or os.environ.get('ARGUS_TQDM') == '1')
+            if not use_tqdm:
+                return
+            self._tqdm_bar = _tqdm(total=100, desc='ArgusScan', unit='%', leave=False)
+        except Exception:
+            self._tqdm_bar = None
+
+    def _close_console_progress_feedback(self):
+        try:
+            if getattr(self, '_tqdm_bar', None):
+                self._tqdm_bar.n = 100
+                self._tqdm_bar.refresh()
+                self._tqdm_bar.close()
+        except Exception:
+            pass
+        finally:
+            self._tqdm_bar = None
 
     def _set_scan_phase(self, text):
         """Avanza el contador de fase y actualiza progreso — seguro desde cualquier hilo."""
@@ -5450,6 +5487,7 @@ class ArgusApp:
         self.forensic_findings = []
         self.total_files_scanned = 0
         self.total_dirs_scanned = 0
+        self._init_console_progress_feedback()
 
         # Resetear evento de cancelación y mostrar botón cancel
         if hasattr(self, '_scan_cancel_event'):
@@ -6135,6 +6173,7 @@ class ArgusApp:
             self._stop_usb_monitor()
             self.stop_scan_timer()
             self.cleanup_argus_temp_artifacts()
+            self._close_console_progress_feedback()
             self.scanning = False
             self._restore_window_title()
             if UI_STYLE_AVAILABLE:
@@ -21696,6 +21735,7 @@ def _run_headless(token: str, api_url: str | None, output_json: str | None):
     root.withdraw()
 
     app = ArgusApp(root)
+    app._init_console_progress_feedback()
     # Override token
     app.scan_token = token
     if api_url:
@@ -21723,6 +21763,10 @@ def _run_headless(token: str, api_url: str | None, output_json: str | None):
 
     try:
         app.cleanup_argus_temp_artifacts()
+    except Exception:
+        pass
+    try:
+        app._close_console_progress_feedback()
     except Exception:
         pass
     root.destroy()
