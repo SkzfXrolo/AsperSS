@@ -33,6 +33,7 @@ def test_hybrid_uses_ensemble_when_available(mocker):
         top_features=[("f1", 1.2)],
         knn_neighbors=[],
         temporal_llr=0.0,
+        skipped_reasons={},
         explanation="ok",
     )
     mocker.patch("argus_ai_trainer.ensemble_predict", return_value=fake)
