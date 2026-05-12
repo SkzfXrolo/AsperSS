@@ -11,4 +11,7 @@ class ScanFactory(factory.DictFactory):
     minecraft_username = factory.Faker("user_name")
     risk_score = factory.Faker("pyint", min_value=0, max_value=100)
     verdict = factory.Iterator(["pending", "clean", "hack"])
-    violations = factory.LazyFunction(lambda: [ViolationFactory() for _ in range(3)])
+    account_age_hours = factory.Faker("pyint", min_value=1, max_value=5000)
+    playtime_hours = factory.Faker("pyint", min_value=0, max_value=1000)
+    reports_in_chat = factory.Faker("pyint", min_value=0, max_value=20)
+    violations = factory.LazyFunction(lambda: [ViolationFactory(level="LOW") for _ in range(2)] + [ViolationFactory(level="MID") for _ in range(1)])
