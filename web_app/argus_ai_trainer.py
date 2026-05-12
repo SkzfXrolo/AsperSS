@@ -660,6 +660,7 @@ class EnsembleResult:
     knn_neighbors: list[dict[str, Any]]
     temporal_llr: float
     explanation: str
+    skipped_reasons: dict[str, str]
 
 
 def ensemble_predict(features: list[float],
@@ -709,16 +710,26 @@ def ensemble_predict(features: list[float],
         except Exception:
             pass
 
+    skipped_reasons: dict[str, str] = {}
+
     # KNN
-    if knn is not None and knn.size() >= knn.min_examples:
-        try:
-            r = knn.predict(features)
-            component_scores["knn"] = r["score"]
-            ramp = min(1.0, knn.size() / 30.0)
-            active_weights["knn"] = base_weights["knn"] * ramp * (0.4 + 0.6 * r["confidence"])
-            neighbors = r["neighbors"]
-        except Exception:
-            pass
+    if knn is None:
+        skipped_reasons["knn"] = "knn_unavailable"
+    else:
+        knn_profiles = int(knn.size())
+        if knn_profiles < 10:
+            skipped_reasons["knn"] = f"knn_skipped:n_profiles_lt_10({knn_profiles})"
+        elif knn_profiles < int(knn.min_examples):
+            skipped_reasons["knn"] = f"knn_skipped:min_examples({knn_profiles}/{int(knn.min_examples)})"
+        else:
+            try:
+                r = knn.predict(features)
+                component_scores["knn"] = r["score"]
+                ramp = min(1.0, knn_profiles / 30.0)
+                active_weights["knn"] = base_weights["knn"] * ramp * (0.4 + 0.6 * r["confidence"])
+                neighbors = r["neighbors"]
+            except Exception as e:
+                skipped_reasons["knn"] = f"knn_error:{type(e).__name__}"
 
     # Temporal
     if temporal is not None and temporal.samples_observed >= 10 and len(sequence) >= 2:
@@ -778,6 +789,7 @@ def ensemble_predict(features: list[float],
         knn_neighbors=neighbors,
         temporal_llr=temporal_llr,
         explanation=explanation,
+        skipped_reasons=skipped_reasons,
     )
 
 

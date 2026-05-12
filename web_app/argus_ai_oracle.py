@@ -631,6 +631,7 @@ def evaluate_hybrid(
             "ensemble_components": ens.component_scores,
             "ensemble_weights": ens.components,
             "knn_neighbors": ens.knn_neighbors[:3],
+            "ensemble_skips": ens.skipped_reasons,
             "temporal_llr": ens.temporal_llr,
             "heuristic_score": base.score,
             "ml_score": final_score,
