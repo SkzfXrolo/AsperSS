@@ -1,0 +1,12 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: argus
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: ./scripts/k8s/helm/argus
+      sourceRef:
+        kind: GitRepository
+        name: argus-repo

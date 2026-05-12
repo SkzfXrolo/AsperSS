@@ -1,0 +1,27 @@
+openapi: 3.0.3
+info:
+  title: Argus Public API
+  version: 1.0.0
+servers:
+  - url: https://api.argus.example.com
+paths:
+  /v1/health:
+    get:
+      summary: Healthcheck
+      responses:
+        "200":
+          description: OK
+  /v1/violations:
+    get:
+      summary: Lista violaciones
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Lista de violaciones
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
