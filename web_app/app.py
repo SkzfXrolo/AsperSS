@@ -90,26 +90,35 @@ def _make_session_permanent():
 
 
 csrf = CSRFProtect(app)
-_CSRF_EXEMPT_PREFIXES = (
-    '/api/plugin/',
-    '/api/scans',
-    '/api/validate-token',
-    '/api/auth/login',
-    '/api/auth/register',
-    '/setup-admin-aspers2024',
-)
+_CSRF_EXEMPT_ENDPOINTS = {
+    ('POST', '/api/auth/login'),
+    ('POST', '/api/auth/register'),
+    ('POST', '/api/validate-token'),
+    ('POST', '/setup-admin-aspers2024'),
+    ('POST', '/api/scans'),
+    ('POST', '/api/plugin/issue-token'),
+    ('POST', '/api/plugin/violation'),
+    ('POST', '/api/plugin/ai-evaluate'),
+    ('POST', '/api/plugin/assistant/query'),
+}
 
 
-def _is_csrf_exempt_path(path: str) -> bool:
-    return any(path.startswith(prefix) for prefix in _CSRF_EXEMPT_PREFIXES)
+def _is_csrf_exempt_path(path: str, method: str) -> bool:
+    if (method, path) in _CSRF_EXEMPT_ENDPOINTS:
+        return True
+    # Endpoint dinámico de entrega de resultados del scanner.
+    if method == 'POST' and path.startswith('/api/scans/') and path.endswith('/results'):
+        return True
+    return False
 
 
 @app.before_request
 def _csrf_protect_state_changes():
-    if request.method not in ('POST', 'PUT', 'PATCH', 'DELETE'):
+    method = request.method.upper()
+    if method not in ('POST', 'PUT', 'PATCH', 'DELETE'):
         return None
     path = request.path or ''
-    if _is_csrf_exempt_path(path):
+    if _is_csrf_exempt_path(path, method):
         return None
     if request.headers.get('X-Argus-Plugin-Key'):
         return None
