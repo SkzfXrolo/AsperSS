@@ -1,0 +1,51 @@
+openapi: 3.0.3
+info:
+  title: Argus API (stub)
+  version: "0.1.0"
+servers:
+  - url: http://127.0.0.1:8080
+paths:
+  /health:
+    get:
+      responses:
+        "200":
+          description: OK
+  /api/version:
+    get:
+      responses:
+        "200":
+          description: OK
+  /api/auth/login:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Login ok
+        "401":
+          description: Unauthorized
+  /api/scans:
+    get:
+      responses:
+        "200":
+          description: List scans
+        "401":
+          description: Unauthorized
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
