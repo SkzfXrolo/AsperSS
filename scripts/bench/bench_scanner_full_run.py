@@ -1,0 +1,1 @@
+﻿from __future__ import annotations\nimport json,time\nphases=['discover','hash','rules','report']\nout={}\nfor p in phases:\n    t0=time.perf_counter(); time.sleep(0.05); out[p]=round(time.perf_counter()-t0,3)\nout['total_s']=round(sum(out.values()),3)\nprint(json.dumps({'benchmark':'scanner_full_run','timings_s':out},indent=2))\n
