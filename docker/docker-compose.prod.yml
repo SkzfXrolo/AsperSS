@@ -1,0 +1,32 @@
+services:
+  web:
+    restart: always
+    environment:
+      ARGUS_ENV: production
+      ARGUS_SECRET_KEY_FILE: /run/secrets/argus_secret_key
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 1G
+    secrets:
+      - argus_secret_key
+
+  postgres:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 2G
+    secrets:
+      - postgres_password
+
+  redis:
+    restart: always
+
+secrets:
+  argus_secret_key:
+    file: ./secrets/argus_secret_key.txt
+  postgres_password:
+    file: ./secrets/postgres_password.txt
