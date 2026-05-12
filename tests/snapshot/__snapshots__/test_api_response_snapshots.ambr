@@ -1,0 +1,29 @@
+# serializer version: 1
+# name: test_api_response_snapshots
+  list([
+    dict({
+      'body_prefix': 'OK',
+      'content_type': 'text/plain',
+      'path': '/health',
+      'status': 200,
+    }),
+    dict({
+      'body_prefix': '{"db_backend":"sqlite","db_error":null,"db_ok":true,"scanner_version":"1.6.50","started_at":1778576925,"uptime_human":"0',
+      'content_type': 'application/json',
+      'path': '/api/version',
+      'status': 200,
+    }),
+    dict({
+      'body_prefix': '''
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width
+      ''',
+      'content_type': 'text/html; charset=utf-8',
+      'path': '/',
+      'status': 200,
+    }),
+  ])
+# ---
