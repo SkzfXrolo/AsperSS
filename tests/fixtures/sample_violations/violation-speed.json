@@ -1,0 +1,5 @@
+{
+  "check": "speed_a",
+  "vl": 5.0,
+  "severity": "MID"
+}
