@@ -55,6 +55,22 @@ DEFAULT_WEIGHTS: dict[str, Any] = {
         "chat_spam":            {"LOW": 0.02, "MID": 0.08, "HIGH": 0.20, "CRITICAL": 0.35},
         "cmd_spam":             {"LOW": 0.02, "MID": 0.08, "HIGH": 0.20, "CRITICAL": 0.35},
         "inventory_move":       {"LOW": 0.04, "MID": 0.12, "HIGH": 0.25, "CRITICAL": 0.40},
+        # Pack 47 — checks PACKET-BASED (PacketEvents). Son ~20% mas
+        # confiables que los Bukkit-based porque ven el packet crudo
+        # antes de que el server lo post-procese. Pesos calibrados al
+        # alza vs sus equivalentes Bukkit.
+        "timer_packet":             {"LOW": 0.10, "MID": 0.30, "HIGH": 0.55, "CRITICAL": 0.80},
+        "phase_packet":             {"LOW": 0.20, "MID": 0.45, "HIGH": 0.75, "CRITICAL": 0.95},
+        "velocity_packet":          {"LOW": 0.10, "MID": 0.30, "HIGH": 0.55, "CRITICAL": 0.75},
+        "invalid_rotation_packet":  {"LOW": 0.15, "MID": 0.40, "HIGH": 0.70, "CRITICAL": 0.90},
+        "reach_packet":             {"LOW": 0.10, "MID": 0.30, "HIGH": 0.55, "CRITICAL": 0.80},
+        "killaura_swing_packet":    {"LOW": 0.15, "MID": 0.40, "HIGH": 0.70, "CRITICAL": 0.90},
+        "killaura_no_swing_packet": {"LOW": 0.20, "MID": 0.45, "HIGH": 0.75, "CRITICAL": 0.90},
+        "killaura_fov_packet":      {"LOW": 0.15, "MID": 0.35, "HIGH": 0.60, "CRITICAL": 0.80},
+        "aim_snap_packet":          {"LOW": 0.10, "MID": 0.30, "HIGH": 0.55, "CRITICAL": 0.75},
+        "ping_spoof_packet":        {"LOW": 0.05, "MID": 0.15, "HIGH": 0.30, "CRITICAL": 0.50},
+        "cps_packet":               {"LOW": 0.08, "MID": 0.22, "HIGH": 0.45, "CRITICAL": 0.65},
+        "inv_move_packet":          {"LOW": 0.06, "MID": 0.18, "HIGH": 0.35, "CRITICAL": 0.55},
     },
     # Multiplicadores contextuales aplicados al score crudo.
     "multipliers": {
@@ -337,8 +353,20 @@ def evaluate(evidence: dict[str, Any], weights: dict[str, Any] | None = None) ->
         v_age = float(v.get("age_seconds") or 0)
         v_decay = 1.0 if v_age < 300 else max(0.1, 0.5 ** (v_age / 3600.0))
 
-        check_w = weights_v.get(check, weights_v.get("autoclicker", {}))
-        contrib = float(check_w.get(level, 0.05)) * v_decay
+        # Pack 48 #401/#402: si el check llega con sufijo _packet y no esta
+        # listado explicitamente, intentar el base check (sin sufijo) con un
+        # boost de confiabilidad (+20%), porque los packet-based ven datos
+        # crudos pre-procesamiento del server.
+        check_w = weights_v.get(check)
+        packet_boost = 1.0
+        if check_w is None and check.endswith("_packet"):
+            base = check[: -len("_packet")]
+            check_w = weights_v.get(base)
+            if check_w is not None:
+                packet_boost = 1.20
+        if check_w is None:
+            check_w = weights_v.get("autoclicker", {})
+        contrib = float(check_w.get(level, 0.05)) * v_decay * packet_boost
         incremental += contrib
 
         violation_summary[check] = violation_summary.get(check, 0) + 1
