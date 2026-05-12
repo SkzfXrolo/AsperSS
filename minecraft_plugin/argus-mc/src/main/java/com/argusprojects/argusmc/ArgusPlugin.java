@@ -47,6 +47,18 @@ public final class ArgusPlugin extends JavaPlugin {
 
         registerCommand("argus", new ArgusCommand(this));
 
+        // Pack 48 round 2 — AdminMenu chest GUI (registra Listener para clicks).
+        try {
+            // Instancia "dummy" solo para registrar el listener; el GUI real
+            // se construye en cada /argus admin menu (cada instancia es su
+            // propio InventoryHolder).
+            getServer().getPluginManager().registerEvents(
+                new com.argusprojects.argusmc.gui.AdminMenu(this,
+                    com.argusprojects.argusmc.gui.AdminMenu.View.ROOT, null), this);
+        } catch (Throwable t) {
+            getLogger().warning("AdminMenu listener registration fallo: " + t.getMessage());
+        }
+
         // Anti-cheat
         this.violationManager = new ViolationManager(this);
         if (anticheatConfig.isEnabled()) {

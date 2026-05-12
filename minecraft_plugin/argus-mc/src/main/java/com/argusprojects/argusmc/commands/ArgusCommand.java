@@ -15,6 +15,7 @@ import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Comando unificado /argus &lt;subcomando&gt;.
@@ -40,8 +41,10 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SS_ALIASES   = Arrays.asList("check", "ss", "screenshare", "scan");
     private static final List<String> ADMIN_SUBS   = Arrays.asList("reload", "info", "test", "debug", "violations", "duda", "pregunta", "ask", "admin");
-    /** Sub-subcomandos bajo /argus admin (Pack 48 bloque 4). */
-    private static final List<String> ADMIN_NESTED = Arrays.asList("reload", "debug", "testpacket", "clearviolations");
+    /** Sub-subcomandos bajo /argus admin (Pack 48 bloque 4 + round 2). */
+    private static final List<String> ADMIN_NESTED = Arrays.asList(
+        "reload", "debug", "testpacket", "clearviolations",
+        "watch", "profile", "stats", "export", "replay", "menu");
 
     private final ArgusPlugin plugin;
     private final SsService ssService;
@@ -116,6 +119,12 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
             case "debug":            handleAdminDebug(sender, args);     break;
             case "testpacket":       handleAdminTestPacket(sender, args); break;
             case "clearviolations":  handleAdminClear(sender, args);     break;
+            case "watch":            handleAdminWatch(sender, args);     break;
+            case "profile":          handleAdminProfile(sender, args);   break;
+            case "stats":            handleAdminStats(sender);           break;
+            case "export":           handleAdminExport(sender, args);    break;
+            case "replay":           handleAdminReplay(sender, args);    break;
+            case "menu":             handleAdminMenu(sender);            break;
             case "help":             sendAdminHelp(sender);              break;
             default:
                 sender.sendMessage(msg.prefix() + Messages.color("&cSub-comando admin desconocido: &f" + sub));
@@ -130,6 +139,12 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Messages.color("  &e/argus admin debug [jugador] &7- debug global o telemetria de jugador"));
         sender.sendMessage(Messages.color("  &e/argus admin testpacket <jugador> &7- emite test packet violation"));
         sender.sendMessage(Messages.color("  &e/argus admin clearviolations [jugador] &7- limpia violations"));
+        sender.sendMessage(Messages.color("  &e/argus admin watch <jugador|off> &7- modo VERBOSE de un jugador"));
+        sender.sendMessage(Messages.color("  &e/argus admin profile <jugador> &7- perfil completo + trust"));
+        sender.sendMessage(Messages.color("  &e/argus admin stats &7- estadisticas globales"));
+        sender.sendMessage(Messages.color("  &e/argus admin export <jugador> &7- dump JSON del packet datastore"));
+        sender.sendMessage(Messages.color("  &e/argus admin replay <jugador> &7- timestamps recientes de packets"));
+        sender.sendMessage(Messages.color("  &e/argus admin menu &7- abre GUI in-game"));
     }
 
     /** #501 — /argus admin reload */
@@ -282,6 +297,274 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
         }
         sender.sendMessage(msg.prefix() + Messages.color(
             "&aViolations limpiadas para &e" + count + " &ajugadores online."));
+    }
+
+    /**
+     * Round 2 — /argus admin watch &lt;jugador|off&gt;.
+     *
+     * <p>Marca a un jugador para envio de TODAS sus violations en modo
+     * verbose al admin que ejecuto el comando. {@code off} apaga el watch.
+     */
+    private void handleAdminWatch(CommandSender sender, String[] args) {
+        Messages msg = plugin.getMessages();
+        if (args.length < 3) {
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&7Uso: &f/argus admin watch <jugador|off>"));
+            return;
+        }
+        if (!(sender instanceof Player admin)) {
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&cSolo jugadores pueden usar watch (se necesita una identidad UUID)."));
+            return;
+        }
+        var bootstrap = plugin.getPacketEventsBootstrap();
+        if (bootstrap == null || bootstrap.getDataStore() == null) {
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&7Packet anti-cheat NO inicializado (instala PacketEvents)."));
+            return;
+        }
+        String t = args[2];
+        if (t.equalsIgnoreCase("off") || t.equalsIgnoreCase("none")) {
+            int cleared = 0;
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                var s = bootstrap.getDataStore().peek(p.getUniqueId());
+                if (s != null && admin.getUniqueId().equals(s.watchedBy)) {
+                    s.watchedBy = null;
+                    cleared++;
+                }
+            }
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&aWatch apagado en &e" + cleared + " &ajugadores."));
+            return;
+        }
+        Player target = Bukkit.getPlayerExact(t);
+        if (target == null) {
+            msg.sendPrefixed(sender, "player_not_found", Messages.ph("player", t));
+            return;
+        }
+        var s = bootstrap.getDataStore().get(target.getUniqueId());
+        s.watchedBy = admin.getUniqueId();
+        sender.sendMessage(msg.prefix() + Messages.color(
+            "&aWatching &e" + target.getName() + " &aen modo verbose. Usa &f/argus admin watch off &apara apagar."));
+    }
+
+    /**
+     * Round 2 — /argus admin profile &lt;jugador&gt;.
+     *
+     * <p>Perfil completo del jugador: violations recientes, trust score,
+     * latencia, datos del packet datastore.
+     */
+    private void handleAdminProfile(CommandSender sender, String[] args) {
+        Messages msg = plugin.getMessages();
+        if (args.length < 3) {
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&7Uso: &f/argus admin profile <jugador>"));
+            return;
+        }
+        Player target = Bukkit.getPlayerExact(args[2]);
+        if (target == null) {
+            msg.sendPrefixed(sender, "player_not_found", Messages.ph("player", args[2]));
+            return;
+        }
+        var bootstrap = plugin.getPacketEventsBootstrap();
+        var state = (bootstrap != null && bootstrap.getDataStore() != null)
+            ? bootstrap.getDataStore().peek(target.getUniqueId()) : null;
+        int vios = plugin.getViolationManager().countRecent(target.getUniqueId());
+        long now = System.currentTimeMillis();
+
+        sender.sendMessage(Messages.color("&7&m─────────────────────────────────────────"));
+        sender.sendMessage(Messages.color("&8[&b&lProfile&8] &f" + target.getName()
+            + " &7(" + target.getUniqueId().toString().substring(0, 8) + "…)"));
+        sender.sendMessage(Messages.color("&7Game mode: &f" + target.getGameMode().name()
+            + " &7| Permisos bypass: &f" + target.hasPermission("argus.ac.bypass")));
+        if (state != null) {
+            sender.sendMessage(Messages.color(String.format(
+                "&7Trust score: &b%.1f/100 &7| Ping: &f%dms &7| OnGround: &f%s",
+                state.trustScore, state.pingMs, String.valueOf(state.lastOnGround))));
+            sender.sendMessage(Messages.color(String.format(
+                "&7Inv-open: &f%s &7TP: &f%s &7Sesion: &f%.1fs",
+                String.valueOf(state.inventoryOpen),
+                String.valueOf(state.teleporting),
+                state.joinMs > 0 ? (now - state.joinMs) / 1000.0 : 0.0)));
+            sender.sendMessage(Messages.color(String.format(
+                "&7Watch: &f%s",
+                state.watchedBy != null ? Bukkit.getOfflinePlayer(state.watchedBy).getName() : "—")));
+        }
+        sender.sendMessage(Messages.color("&7Violations (window): &e" + vios));
+        sender.sendMessage(Messages.color("&7&m─────────────────────────────────────────"));
+    }
+
+    /**
+     * Round 2 — /argus admin stats.
+     *
+     * <p>Estadisticas globales del servidor: jugadores con state, total de
+     * violations en window, top 5 violadores.
+     */
+    private void handleAdminStats(CommandSender sender) {
+        Messages msg = plugin.getMessages();
+        var bootstrap = plugin.getPacketEventsBootstrap();
+        int onlineCount = Bukkit.getOnlinePlayers().size();
+        int datastoreSize = (bootstrap != null && bootstrap.getDataStore() != null)
+            ? bootstrap.getDataStore().size() : 0;
+        // Top violadores (en ventana actual).
+        java.util.List<Map.Entry<String, Integer>> top = new java.util.ArrayList<>();
+        int totalVios = 0;
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            int v = plugin.getViolationManager().countRecent(p.getUniqueId());
+            totalVios += v;
+            if (v > 0) top.add(Map.entry(p.getName(), v));
+        }
+        top.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
+        sender.sendMessage(Messages.color("&7&m─────────────────────────────────────────"));
+        sender.sendMessage(Messages.color("&8[&b&lArgus Stats&8] &f" + Bukkit.getServer().getName()));
+        sender.sendMessage(Messages.color("&7Players online: &f" + onlineCount
+            + " &7| Packet states: &f" + datastoreSize));
+        sender.sendMessage(Messages.color("&7Total violations (window): &e" + totalVios));
+        sender.sendMessage(Messages.color("&7Top violadores:"));
+        if (top.isEmpty()) {
+            sender.sendMessage(Messages.color("  &8(sin violations activas)"));
+        } else {
+            for (int i = 0; i < Math.min(5, top.size()); i++) {
+                var e = top.get(i);
+                sender.sendMessage(Messages.color(String.format(
+                    "  &7%d. &f%s &7- &e%d &7vios", i + 1, e.getKey(), e.getValue())));
+            }
+        }
+        sender.sendMessage(Messages.color("&7&m─────────────────────────────────────────"));
+    }
+
+    /**
+     * Round 2 — /argus admin export &lt;jugador&gt;.
+     *
+     * <p>Dump JSON del estado del PacketDataStore para analisis offline.
+     */
+    private void handleAdminExport(CommandSender sender, String[] args) {
+        Messages msg = plugin.getMessages();
+        if (args.length < 3) {
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&7Uso: &f/argus admin export <jugador>"));
+            return;
+        }
+        Player target = Bukkit.getPlayerExact(args[2]);
+        if (target == null) {
+            msg.sendPrefixed(sender, "player_not_found", Messages.ph("player", args[2]));
+            return;
+        }
+        var bootstrap = plugin.getPacketEventsBootstrap();
+        if (bootstrap == null || bootstrap.getDataStore() == null) {
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&7Packet anti-cheat NO inicializado."));
+            return;
+        }
+        var s = bootstrap.getDataStore().peek(target.getUniqueId());
+        if (s == null) {
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&7No hay state para &e" + target.getName()));
+            return;
+        }
+        StringBuilder json = new StringBuilder();
+        synchronized (s) {
+            json.append("{")
+                .append("\"player\":\"").append(target.getName()).append("\",")
+                .append("\"uuid\":\"").append(target.getUniqueId()).append("\",")
+                .append("\"trustScore\":").append(s.trustScore).append(',')
+                .append("\"pingMs\":").append(s.pingMs).append(',')
+                .append("\"lastX\":").append(s.lastX).append(',')
+                .append("\"lastY\":").append(s.lastY).append(',')
+                .append("\"lastZ\":").append(s.lastZ).append(',')
+                .append("\"lastYaw\":").append(s.lastYaw).append(',')
+                .append("\"lastPitch\":").append(s.lastPitch).append(',')
+                .append("\"lastOnGround\":").append(s.lastOnGround).append(',')
+                .append("\"inventoryOpen\":").append(s.inventoryOpen).append(',')
+                .append("\"jetpackConsec\":").append(s.jetpackConsec).append(',')
+                .append("\"spiderConsec\":").append(s.spiderConsec).append(',')
+                .append("\"liquidWalkConsec\":").append(s.liquidWalkConsec).append(',')
+                .append("\"meleeFlyConsec\":").append(s.meleeFlyConsec).append(',')
+                .append("\"speedOverflow\":").append(s.speedOverflowCounter).append(',')
+                .append("\"moveCount\":").append(s.moveTimestamps.size()).append(',')
+                .append("\"attackCount\":").append(s.attackTimestamps.size()).append(',')
+                .append("\"swingCount\":").append(s.swingTimestamps.size()).append(',')
+                .append("\"placeCount\":").append(s.placeTimestamps.size()).append(',')
+                .append("\"breakCount\":").append(s.breakTimestamps.size()).append(',')
+                .append("\"rotationCount\":").append(s.recentRotations.size()).append(',')
+                .append("\"chatCount\":").append(s.recentChat.size())
+                .append("}");
+        }
+        sender.sendMessage(msg.prefix() + Messages.color(
+            "&aJSON export para &e" + target.getName() + "&a (copialo del log de consola):"));
+        plugin.getLogger().info("[ArgusExport] " + json.toString());
+        // Tambien en chat (linea unica).
+        sender.sendMessage(Messages.color("&8" + json));
+    }
+
+    /**
+     * Round 2 — /argus admin replay &lt;jugador&gt;.
+     *
+     * <p>Replay simplificado: timestamps relativos de los ultimos packets
+     * de movimiento / attack / swing / place / break del jugador para
+     * debugging visual del comportamiento reciente.
+     */
+    private void handleAdminReplay(CommandSender sender, String[] args) {
+        Messages msg = plugin.getMessages();
+        if (args.length < 3) {
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&7Uso: &f/argus admin replay <jugador>"));
+            return;
+        }
+        Player target = Bukkit.getPlayerExact(args[2]);
+        if (target == null) {
+            msg.sendPrefixed(sender, "player_not_found", Messages.ph("player", args[2]));
+            return;
+        }
+        var bootstrap = plugin.getPacketEventsBootstrap();
+        if (bootstrap == null || bootstrap.getDataStore() == null) {
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&7Packet anti-cheat NO inicializado."));
+            return;
+        }
+        var s = bootstrap.getDataStore().peek(target.getUniqueId());
+        if (s == null) {
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&7No hay state para &e" + target.getName()));
+            return;
+        }
+        long now = System.currentTimeMillis();
+        sender.sendMessage(Messages.color("&7&m─────────────────────────────────────────"));
+        sender.sendMessage(Messages.color("&8[&b&lReplay&8] &f" + target.getName()
+            + " &7- timestamps relativos (ms desde ahora):"));
+        synchronized (s) {
+            sender.sendMessage(Messages.color("&7moves: &f" + relativeTs(s.moveTimestamps, now)));
+            sender.sendMessage(Messages.color("&7attacks: &f" + relativeTs(s.attackTimestamps, now)));
+            sender.sendMessage(Messages.color("&7swings: &f" + relativeTs(s.swingTimestamps, now)));
+            sender.sendMessage(Messages.color("&7places: &f" + relativeTs(s.placeTimestamps, now)));
+            sender.sendMessage(Messages.color("&7breaks: &f" + relativeTs(s.breakTimestamps, now)));
+        }
+        sender.sendMessage(Messages.color("&7&m─────────────────────────────────────────"));
+    }
+
+    private static String relativeTs(java.util.Collection<Long> ts, long now) {
+        if (ts.isEmpty()) return "(vacio)";
+        StringBuilder sb = new StringBuilder();
+        int i = 0;
+        for (Long t : ts) {
+            if (i++ > 0) sb.append(", ");
+            sb.append("-").append(now - t).append("ms");
+            if (i >= 10) { sb.append(", ..."); break; }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Round 2 — /argus admin menu — abre el chest GUI in-game.
+     */
+    private void handleAdminMenu(CommandSender sender) {
+        Messages msg = plugin.getMessages();
+        if (!(sender instanceof Player p)) {
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&cSolo jugadores pueden abrir el menu."));
+            return;
+        }
+        com.argusprojects.argusmc.gui.AdminMenu.open(plugin, p);
     }
 
     /**

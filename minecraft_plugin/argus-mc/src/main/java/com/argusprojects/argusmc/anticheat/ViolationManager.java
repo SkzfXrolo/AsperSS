@@ -287,6 +287,21 @@ public final class ViolationManager {
             }
         }
         Bukkit.getConsoleSender().sendMessage(text);
+
+        // /argus admin watch — feed VERBOSO al admin que esta observando.
+        try {
+            var bootstrap = plugin.getPacketEventsBootstrap();
+            if (bootstrap != null && bootstrap.getDataStore() != null) {
+                var s = bootstrap.getDataStore().peek(v.playerUuid);
+                if (s != null && s.watchedBy != null) {
+                    Player watcher = Bukkit.getPlayer(s.watchedBy);
+                    if (watcher != null && watcher.isOnline()) {
+                        watcher.sendMessage("§8[§b§lWATCH§8] §f" + v.playerName
+                            + " §7" + v.checkName + " §8(§7" + v.level.name() + "§8) §8" + v.details);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
     }
 
     private void kickPlayer(Player player, Violation v, String msgKey) {
