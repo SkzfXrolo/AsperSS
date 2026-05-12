@@ -2185,6 +2185,93 @@
                     </div>
                 </div>
 
+                <!-- ───────── Pack 45: Modelo ML entrenable ───────── -->
+                <div class="card" style="margin-bottom:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h3 class="card-title">🧠 Cerebro entrenable (LogReg + KNN + Markov + Heurística)</h3>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span id="ai-ml-version" style="font-size:11px;color:var(--muted);">—</span>
+                            <button onclick="aiLoadMlStats()" style="background:var(--bg-s);color:var(--text);border:1px solid var(--border);padding:4px 10px;border-radius:4px;font-size:12px;cursor:pointer;">↻</button>
+                            {% if user and 'admin' in user.roles %}
+                            <button onclick="aiRetrain()" style="background:var(--accent);color:#000;border:none;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;">Re-entrenar</button>
+                            <button onclick="aiRunAutoLabel()" style="background:#8b5cf6;color:#fff;border:none;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;">Auto-label</button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px;">
+                        <div style="background:var(--bg-s);border:1px solid var(--border);border-radius:6px;padding:10px;">
+                            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Accuracy</div>
+                            <div id="ai-ml-accuracy" style="font-size:22px;font-weight:800;color:#10b981;">—</div>
+                        </div>
+                        <div style="background:var(--bg-s);border:1px solid var(--border);border-radius:6px;padding:10px;">
+                            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Precision</div>
+                            <div id="ai-ml-precision" style="font-size:22px;font-weight:800;color:#3b82f6;">—</div>
+                        </div>
+                        <div style="background:var(--bg-s);border:1px solid var(--border);border-radius:6px;padding:10px;">
+                            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Recall</div>
+                            <div id="ai-ml-recall" style="font-size:22px;font-weight:800;color:#8b5cf6;">—</div>
+                        </div>
+                        <div style="background:var(--bg-s);border:1px solid var(--border);border-radius:6px;padding:10px;">
+                            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">F1</div>
+                            <div id="ai-ml-f1" style="font-size:22px;font-weight:800;color:#f59e0b;">—</div>
+                        </div>
+                        <div style="background:var(--bg-s);border:1px solid var(--border);border-radius:6px;padding:10px;">
+                            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Samples</div>
+                            <div id="ai-ml-samples" style="font-size:22px;font-weight:800;color:var(--text);">—</div>
+                        </div>
+                        <div style="background:var(--bg-s);border:1px solid var(--border);border-radius:6px;padding:10px;">
+                            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Feedback humano</div>
+                            <div id="ai-ml-feedback" style="font-size:22px;font-weight:800;color:#06b6d4;">—</div>
+                        </div>
+                        <div style="background:var(--bg-s);border:1px solid var(--border);border-radius:6px;padding:10px;">
+                            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Auto-labels</div>
+                            <div id="ai-ml-autolabels" style="font-size:22px;font-weight:800;color:#10b981;">—</div>
+                        </div>
+                        <div style="background:var(--bg-s);border:1px solid var(--border);border-radius:6px;padding:10px;">
+                            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;">Pendientes review</div>
+                            <div id="ai-ml-pending" style="font-size:22px;font-weight:800;color:#ef4444;">—</div>
+                        </div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;">
+                        <!-- Top features -->
+                        <div style="background:var(--bg-s);border:1px solid var(--border);border-radius:6px;padding:12px;">
+                            <h4 style="margin:0 0 8px 0;font-size:13px;color:var(--text);">📊 Top features que el modelo usa</h4>
+                            <div id="ai-ml-features" style="display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto;font-family:'Cascadia Code',Consolas,monospace;font-size:11px;">
+                                <div style="color:var(--muted);text-align:center;padding:20px 0;">Cargando...</div>
+                            </div>
+                        </div>
+                        <!-- Auto-label sources breakdown -->
+                        <div style="background:var(--bg-s);border:1px solid var(--border);border-radius:6px;padding:12px;">
+                            <h4 style="margin:0 0 8px 0;font-size:13px;color:var(--text);">🤖 Auto-labels por fuente</h4>
+                            <div id="ai-ml-sources" style="display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto;font-size:12px;">
+                                <div style="color:var(--muted);text-align:center;padding:20px 0;">Sin datos.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:14px;background:var(--bg-s);border:1px solid var(--border);border-radius:6px;padding:12px;">
+                        <h4 style="margin:0 0 8px 0;font-size:13px;color:var(--text);">📜 Historial de entrenamientos (últimos 10)</h4>
+                        <div id="ai-ml-history" style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;font-size:11px;font-family:'Cascadia Code',Consolas,monospace;">
+                            <div style="color:var(--muted);text-align:center;padding:20px 0;">Sin runs aún.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Decisiones pendientes de review (feedback rápido) -->
+                <div class="card" style="margin-bottom:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h3 class="card-title">🔍 Decisiones esperando tu juicio</h3>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="font-size:11px;color:var(--muted);">El modelo aprende con cada respuesta</span>
+                            <button onclick="aiLoadPendingReview()" style="background:var(--bg-s);color:var(--text);border:1px solid var(--border);padding:4px 10px;border-radius:4px;font-size:12px;cursor:pointer;">↻</button>
+                        </div>
+                    </div>
+                    <div id="ai-pending-list" style="display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;">
+                        <div style="color:var(--muted);text-align:center;padding:20px 0;font-size:13px;">Cargando...</div>
+                    </div>
+                </div>
+
                 {% if user and 'admin' in user.roles %}
                 <!-- Pesos del modelo (solo super-admin) -->
                 <div class="card" style="border:1px dashed var(--border);">
@@ -2354,6 +2441,168 @@
                   .catch(function(){ alert('Error de red'); });
             };
 
+            // ─── Pack 45: ML Stats + feedback + pending review ─────────
+            window.aiLoadMlStats = function(){
+                fetch('/api/ai/model-stats')
+                  .then(function(r){ return r.json(); })
+                  .then(function(d){
+                    if(!d.success){ return; }
+                    var lr = (d.models && d.models.logreg) || {};
+                    var setN = function(id, val){
+                        var el = document.getElementById(id);
+                        if(el) el.textContent = (val === null || val === undefined) ? '—' : val;
+                    };
+                    var pct = function(v){ return (v===null||v===undefined||isNaN(v)) ? '—' : Math.round(v*100)+'%'; };
+                    setN('ai-ml-accuracy', pct(lr.accuracy));
+                    setN('ai-ml-precision', pct(lr.precision));
+                    setN('ai-ml-recall', pct(lr.recall));
+                    setN('ai-ml-f1', pct(lr.f1));
+                    setN('ai-ml-samples', (lr.samples_trained||0).toLocaleString());
+                    setN('ai-ml-feedback', (d.feedback_count||0).toLocaleString());
+                    setN('ai-ml-autolabels', (d.auto_label_total||0).toLocaleString());
+                    setN('ai-ml-pending', (d.decisions_pending_review||0).toLocaleString());
+                    var verEl = document.getElementById('ai-ml-version');
+                    if(verEl){
+                        var trained = lr.trained_at ? new Date(lr.trained_at).toLocaleString('es-ES', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : 'sin training';
+                        verEl.textContent = 'v' + (lr.version||0) + ' · ' + trained;
+                    }
+                    // Top features
+                    var feats = d.top_features || [];
+                    var maxW = feats.reduce(function(a, f){ return Math.max(a, f.weight||0); }, 0.01);
+                    var fHtml = feats.map(function(f){
+                        var w = f.weight || 0;
+                        var pct = Math.round((w / maxW) * 100);
+                        return '<div style="display:flex;align-items:center;gap:6px;">' +
+                            '<span style="flex:1;color:var(--muted);">'+f.name+'</span>' +
+                            '<div style="width:100px;background:var(--border);height:8px;border-radius:4px;overflow:hidden;">' +
+                              '<div style="width:'+pct+'%;background:linear-gradient(90deg,#06b6d4,#8b5cf6);height:100%;"></div>' +
+                            '</div>' +
+                            '<span style="color:var(--text);min-width:42px;text-align:right;">'+w.toFixed(3)+'</span>' +
+                        '</div>';
+                    }).join('');
+                    var fEl = document.getElementById('ai-ml-features');
+                    if(fEl) fEl.innerHTML = fHtml || '<div style="color:var(--muted);text-align:center;padding:20px 0;">Sin features (modelo no entrenado).</div>';
+                    // Sources
+                    var srcs = d.auto_label_counts || {};
+                    var sKeys = Object.keys(srcs).sort(function(a,b){ return srcs[b]-srcs[a]; });
+                    var sHtml = sKeys.map(function(k){
+                        return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">' +
+                            '<span style="color:var(--text);">'+k+'</span>' +
+                            '<span style="color:var(--accent);font-weight:700;">'+srcs[k]+'</span>' +
+                        '</div>';
+                    }).join('');
+                    var sEl = document.getElementById('ai-ml-sources');
+                    if(sEl) sEl.innerHTML = sHtml || '<div style="color:var(--muted);text-align:center;padding:20px 0;">Sin auto-labels aún.</div>';
+                    // History
+                    var hist = d.training_history || [];
+                    var hHtml = hist.map(function(h){
+                        var when = h.created_at ? new Date(h.created_at).toLocaleString('es-ES', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '?';
+                        var acc = h.accuracy!==null && h.accuracy!==undefined ? Math.round(h.accuracy*100)+'%' : '—';
+                        return '<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid var(--border);">' +
+                            '<span style="min-width:120px;color:var(--muted);">'+when+'</span>' +
+                            '<span style="min-width:60px;color:var(--text);">'+h.model_kind+'</span>' +
+                            '<span style="min-width:55px;color:#10b981;">acc='+acc+'</span>' +
+                            '<span style="min-width:80px;color:var(--muted);">n='+h.samples_used+'</span>' +
+                            '<span style="color:#8b5cf6;">'+h.triggered_by+'</span>' +
+                        '</div>';
+                    }).join('');
+                    var hEl = document.getElementById('ai-ml-history');
+                    if(hEl) hEl.innerHTML = hHtml || '<div style="color:var(--muted);text-align:center;padding:20px 0;">Sin runs todavía.</div>';
+                  })
+                  .catch(function(e){ console.error('aiLoadMlStats', e); });
+            };
+
+            window.aiLoadPendingReview = function(){
+                fetch('/api/ai/decisions-pending-review?limit=20')
+                  .then(function(r){ return r.json(); })
+                  .then(function(d){
+                    if(!d.success){ return; }
+                    var list = document.getElementById('ai-pending-list');
+                    if(!list) return;
+                    if(!d.decisions || d.decisions.length === 0){
+                        list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px 0;font-size:13px;">Sin decisiones pendientes. Todo etiquetado.</div>';
+                        return;
+                    }
+                    list.innerHTML = d.decisions.map(function(dec){
+                        var when = fmtTime(dec.created_at);
+                        return '<div style="background:var(--bg-s);border:1px solid var(--border);border-radius:6px;padding:10px;">' +
+                            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+                              '<span style="font-weight:700;">'+(dec.player_name||'?')+'</span>' +
+                              actionBadge(dec.action) + ' ' + fmtScore(dec.score) +
+                              '<span style="color:var(--muted);font-size:11px;">'+when+'</span>' +
+                            '</div>' +
+                            '<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">'+(dec.reasoning||'').replace(/</g,'&lt;')+'</div>' +
+                            '<div style="display:flex;gap:6px;">' +
+                              '<button onclick="aiSendFeedback('+dec.id+',1,this)" style="flex:1;background:#dc2626;color:#fff;border:none;padding:6px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;">⚠ Era cheater</button>' +
+                              '<button onclick="aiSendFeedback('+dec.id+',0,this)" style="flex:1;background:#10b981;color:#fff;border:none;padding:6px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;">✓ Falso positivo</button>' +
+                              '<button onclick="aiSendFeedback('+dec.id+',0.5,this)" style="flex:1;background:#6b7280;color:#fff;border:none;padding:6px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;">? Incierto</button>' +
+                            '</div>' +
+                        '</div>';
+                    }).join('');
+                  })
+                  .catch(function(e){ console.error('aiLoadPendingReview', e); });
+            };
+
+            window.aiSendFeedback = function(decisionId, label, btn){
+                if(btn){ btn.disabled = true; btn.textContent = '...'; }
+                fetch('/api/ai/feedback', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({decision_id: decisionId, label: label})
+                })
+                  .then(function(r){ return r.json(); })
+                  .then(function(d){
+                    if(d && d.success){
+                        if(btn){
+                            var card = btn.closest('div').parentElement;
+                            if(card){ card.style.opacity = '0.4'; card.style.pointerEvents='none'; }
+                        }
+                        setTimeout(function(){ aiLoadPendingReview(); aiLoadMlStats(); }, 600);
+                    } else {
+                        if(btn){ btn.disabled = false; btn.textContent = '✗ error'; }
+                    }
+                  })
+                  .catch(function(){ if(btn){ btn.disabled = false; btn.textContent = '✗ red'; } });
+            };
+
+            window.aiRetrain = function(){
+                if(!confirm('Forzar re-entrenamiento del modelo? Puede tardar 30s.')) return;
+                fetch('/api/ai/retrain', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({company_id: 0})
+                })
+                  .then(function(r){ return r.json(); })
+                  .then(function(d){
+                    if(d && d.success){
+                        var lr = d.logreg || {};
+                        alert('Modelo re-entrenado.\nAccuracy: '+Math.round((lr.accuracy||0)*100)+'%\n'+
+                              'Samples reales: '+d.samples_real+'\nSintéticos: '+d.samples_synthetic+'\n'+
+                              'Duración: '+(d.duration_ms||0)+'ms');
+                        aiLoadMlStats();
+                    } else {
+                        alert('Error: '+(d.error||'desconocido'));
+                    }
+                  })
+                  .catch(function(e){ alert('Error de red'); });
+            };
+
+            window.aiRunAutoLabel = function(){
+                if(!confirm('Ejecutar los 12 pipelines de auto-labeling sobre decisiones pendientes?')) return;
+                fetch('/api/ai/auto-label-run', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({company_id: 0, limit: 300})
+                })
+                  .then(function(r){ return r.json(); })
+                  .then(function(d){
+                    if(d && d.success){
+                        alert('Auto-labels generados: '+d.labels_created+'\nDecisiones procesadas: '+d.decisions_processed+'\nPor fuente: '+JSON.stringify(d.by_source));
+                        aiLoadMlStats(); aiLoadPendingReview();
+                    } else {
+                        alert('Error: '+(d.error||'desconocido'));
+                    }
+                  })
+                  .catch(function(e){ alert('Error de red'); });
+            };
+
             // ─── Auto-refresh ───────────────────────────────────────────
             var aiRefreshInterval = null;
             function aiStartRefresh(){
@@ -2370,7 +2619,11 @@
             document.addEventListener('click', function(ev){
                 var nav = ev.target.closest('[data-section="argusai"]');
                 if(nav){
-                    setTimeout(function(){ aiLoadScores(); aiLoadDecisions(); aiStartRefresh(); }, 80);
+                    setTimeout(function(){
+                        aiLoadScores(); aiLoadDecisions();
+                        aiLoadMlStats(); aiLoadPendingReview();
+                        aiStartRefresh();
+                    }, 80);
                 }
             });
         })();

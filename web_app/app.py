@@ -2426,6 +2426,117 @@ def _ensure_plugin_keys_schema():
                     )
                 """)
 
+                # ──── Pack 45: ML hybrid (LogReg + KNN + Temporal + auto-labeling) ────
+                # Feedback explicito del staff sobre decisiones del AI.
+                # label: 0.0 = limpio, 1.0 = cheater confirmado, 0.5 = incierto.
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_feedback (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER NOT NULL,
+                        decision_id INTEGER,
+                        player_uuid VARCHAR(40),
+                        player_name VARCHAR(64),
+                        label REAL NOT NULL,
+                        confidence REAL DEFAULT 1.0,
+                        source VARCHAR(40) DEFAULT 'staff',
+                        staff_username VARCHAR(255),
+                        reasoning TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_af_company ON ai_feedback(company_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_af_decision ON ai_feedback(decision_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_af_player ON ai_feedback(player_uuid)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_af_created ON ai_feedback(created_at DESC)")
+
+                # Auto-labels generados por los 12 pipelines. source identifica
+                # cual pipeline lo produjo. Una misma decision puede tener varios.
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_auto_labels (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER NOT NULL,
+                        decision_id INTEGER,
+                        player_uuid VARCHAR(40),
+                        player_name VARCHAR(64),
+                        label REAL NOT NULL,
+                        confidence REAL NOT NULL,
+                        source VARCHAR(40) NOT NULL,
+                        reasoning TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_aal_company ON ai_auto_labels(company_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_aal_decision ON ai_auto_labels(decision_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_aal_source ON ai_auto_labels(source)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_aal_created ON ai_auto_labels(created_at DESC)")
+
+                # Estado serializado del modelo ML.
+                # model_kind: 'logreg' | 'knn' | 'temporal'
+                # state_json: JSON serializado del modelo (pesos, examples, etc).
+                # version se incrementa con cada training run.
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_model_state (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER NOT NULL DEFAULT 0,
+                        model_kind VARCHAR(32) NOT NULL,
+                        state_json TEXT NOT NULL,
+                        version INTEGER DEFAULT 1,
+                        samples_trained INTEGER DEFAULT 0,
+                        accuracy REAL DEFAULT 0,
+                        precision REAL DEFAULT 0,
+                        recall REAL DEFAULT 0,
+                        f1 REAL DEFAULT 0,
+                        last_loss REAL DEFAULT 0,
+                        trained_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT uq_aims_company_kind UNIQUE (company_id, model_kind)
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_aims_company ON ai_model_state(company_id)")
+
+                # Perfiles de jugador: vector de features, ultima actualizacion.
+                # Usado por KNN para clasificar por proximidad. Se refresca
+                # periodicamente desde violations + scan history.
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_player_profiles (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER NOT NULL,
+                        player_uuid VARCHAR(40) NOT NULL,
+                        player_name VARCHAR(64),
+                        feature_vector_json TEXT NOT NULL,
+                        last_label REAL,
+                        last_label_confidence REAL DEFAULT 0,
+                        last_label_source VARCHAR(40),
+                        last_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT uq_app_company_uuid UNIQUE (company_id, player_uuid)
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_app_company ON ai_player_profiles(company_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_app_updated ON ai_player_profiles(last_updated_at DESC)")
+
+                # Log de cada training run (cron de 10 min). Auditable y
+                # permite analisis de drift / mejoras.
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_training_history (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER NOT NULL DEFAULT 0,
+                        model_kind VARCHAR(32) NOT NULL,
+                        samples_used INTEGER DEFAULT 0,
+                        samples_synthetic INTEGER DEFAULT 0,
+                        samples_real INTEGER DEFAULT 0,
+                        epochs INTEGER DEFAULT 0,
+                        loss REAL DEFAULT 0,
+                        accuracy REAL DEFAULT 0,
+                        precision REAL DEFAULT 0,
+                        recall REAL DEFAULT 0,
+                        f1 REAL DEFAULT 0,
+                        duration_ms INTEGER DEFAULT 0,
+                        triggered_by VARCHAR(40) DEFAULT 'cron',
+                        notes TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_ath_company ON ai_training_history(company_id, created_at DESC)")
+
                 # Columnas adicionales en scan_tokens â€” solo ALTER si no existen
                 _migrations = [
                     ('plugin_key_id', "ALTER TABLE scan_tokens ADD COLUMN plugin_key_id INTEGER"),
@@ -3104,22 +3215,49 @@ def _build_ai_evidence(cursor, company_id: int, player_uuid: str, player_name: s
 
 def _persist_ai_decision(cursor, company_id: int, plugin_key_id: int | None,
                          player_uuid: str, player_name: str, decision,
-                         triggered_by: str = 'auto') -> None:
-    """Guarda la decision en ai_decisions_log + actualiza ai_player_scores."""
+                         triggered_by: str = 'auto') -> int | None:
+    """Guarda la decision en ai_decisions_log + actualiza ai_player_scores.
+
+    Devuelve el id de la decision insertada (o None si fallo).
+    """
+    decision_id: int | None = None
     try:
-        cursor.execute(
-            f"INSERT INTO ai_decisions_log "
-            f"(company_id, plugin_key_id, player_uuid, player_name, score, confidence, "
-            f"action, reasoning, evidence_json, triggered_by) "
-            f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})",
-            (company_id, plugin_key_id, player_uuid, player_name,
-             decision.score, decision.confidence, decision.action,
-             decision.reasoning, json.dumps({
-                 'top_factor': decision.top_factor,
-                 'evidence_used': decision.evidence_used,
-                 'multipliers_applied': decision.multipliers_applied,
-             }), triggered_by)
-        )
+        if _USE_PG:
+            cursor.execute(
+                f"INSERT INTO ai_decisions_log "
+                f"(company_id, plugin_key_id, player_uuid, player_name, score, confidence, "
+                f"action, reasoning, evidence_json, triggered_by) "
+                f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH}) "
+                f"RETURNING id",
+                (company_id, plugin_key_id, player_uuid, player_name,
+                 decision.score, decision.confidence, decision.action,
+                 decision.reasoning, json.dumps({
+                     'top_factor': decision.top_factor,
+                     'evidence_used': decision.evidence_used,
+                     'multipliers_applied': decision.multipliers_applied,
+                 }), triggered_by)
+            )
+            r = cursor.fetchone()
+            if r:
+                decision_id = int(r[0] if isinstance(r, (tuple, list)) else r.get('id'))
+        else:
+            cursor.execute(
+                f"INSERT INTO ai_decisions_log "
+                f"(company_id, plugin_key_id, player_uuid, player_name, score, confidence, "
+                f"action, reasoning, evidence_json, triggered_by) "
+                f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})",
+                (company_id, plugin_key_id, player_uuid, player_name,
+                 decision.score, decision.confidence, decision.action,
+                 decision.reasoning, json.dumps({
+                     'top_factor': decision.top_factor,
+                     'evidence_used': decision.evidence_used,
+                     'multipliers_applied': decision.multipliers_applied,
+                 }), triggered_by)
+            )
+            try:
+                decision_id = int(getattr(cursor, 'lastrowid', None) or 0) or None
+            except Exception:
+                decision_id = None
     except Exception as e:
         print(f"[ai_persist] error en log insert: {e}")
 
@@ -3154,6 +3292,418 @@ def _persist_ai_decision(cursor, company_id: int, plugin_key_id: int | None,
             )
     except Exception as e:
         print(f"[ai_persist] error en upsert score: {e}")
+
+    return decision_id
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Pack 45: ML model helpers (load/save/train)
+# ──────────────────────────────────────────────────────────────────────
+
+# Cache simple en memoria de modelos cargados (TTL 60s)
+_ML_MODEL_CACHE: dict[tuple[int, str], tuple[float, object]] = {}
+_ML_MODEL_CACHE_TTL_S = 60.0
+
+
+def _load_ml_model(cursor, company_id: int, model_kind: str):
+    """Carga modelo desde ai_model_state. Fallback global (company_id=0).
+    None si no existe entrenado todavia.
+    """
+    import time as _t
+    key = (company_id, model_kind)
+    now = _t.time()
+    cached = _ML_MODEL_CACHE.get(key)
+    if cached and (now - cached[0]) < _ML_MODEL_CACHE_TTL_S:
+        return cached[1]
+    state_json = None
+    try:
+        cursor.execute(
+            f"SELECT state_json FROM ai_model_state "
+            f"WHERE company_id = {_PH} AND model_kind = {_PH}",
+            (company_id, model_kind)
+        )
+        row = cursor.fetchone()
+        if row:
+            row = dict(row) if not isinstance(row, dict) else row
+            state_json = row.get('state_json')
+        if not state_json:
+            cursor.execute(
+                f"SELECT state_json FROM ai_model_state "
+                f"WHERE company_id = 0 AND model_kind = {_PH}",
+                (model_kind,)
+            )
+            row = cursor.fetchone()
+            if row:
+                row = dict(row) if not isinstance(row, dict) else row
+                state_json = row.get('state_json')
+    except Exception as e:
+        print(f"[ml_load] error consultando ai_model_state {model_kind}: {e}")
+        return None
+    if not state_json:
+        _ML_MODEL_CACHE[key] = (now, None)
+        return None
+    try:
+        if model_kind == 'logreg':
+            import argus_ai_trainer as _t
+            m = _t.LogisticRegression.from_json(state_json)
+        elif model_kind == 'knn':
+            import argus_ai_trainer as _t
+            m = _t.KNNCheaterClassifier.from_json(state_json)
+        elif model_kind == 'temporal':
+            import argus_ai_trainer as _t
+            m = _t.TemporalPatternDetector.from_json(state_json)
+        else:
+            m = None
+    except Exception as e:
+        print(f"[ml_load] error deserializando {model_kind}: {e}")
+        m = None
+    _ML_MODEL_CACHE[key] = (now, m)
+    return m
+
+
+def _save_ml_model(cursor, company_id: int, model_kind: str, model) -> bool:
+    """Persiste un modelo entrenado en ai_model_state (UPSERT)."""
+    try:
+        state_json = model.to_json()
+        version       = getattr(model, 'version', 1)
+        samples       = getattr(model, 'samples_trained', 0)
+        accuracy      = getattr(model, 'last_accuracy', 0.0)
+        precision_v   = getattr(model, 'last_precision', 0.0)
+        recall        = getattr(model, 'last_recall', 0.0)
+        f1            = getattr(model, 'last_f1', 0.0)
+        loss          = getattr(model, 'last_loss', 0.0)
+        cursor.execute(
+            f"SELECT id FROM ai_model_state WHERE company_id = {_PH} AND model_kind = {_PH}",
+            (company_id, model_kind)
+        )
+        row = cursor.fetchone()
+        if row:
+            cursor.execute(
+                f"UPDATE ai_model_state SET state_json = {_PH}, version = {_PH}, "
+                f"samples_trained = {_PH}, accuracy = {_PH}, precision = {_PH}, "
+                f"recall = {_PH}, f1 = {_PH}, last_loss = {_PH}, "
+                f"trained_at = CURRENT_TIMESTAMP "
+                f"WHERE company_id = {_PH} AND model_kind = {_PH}",
+                (state_json, version, samples, accuracy, precision_v,
+                 recall, f1, loss, company_id, model_kind)
+            )
+        else:
+            cursor.execute(
+                f"INSERT INTO ai_model_state "
+                f"(company_id, model_kind, state_json, version, samples_trained, "
+                f"accuracy, precision, recall, f1, last_loss) "
+                f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})",
+                (company_id, model_kind, state_json, version, samples,
+                 accuracy, precision_v, recall, f1, loss)
+            )
+        # Invalidar cache
+        _ML_MODEL_CACHE.pop((company_id, model_kind), None)
+        return True
+    except Exception as e:
+        print(f"[ml_save] error guardando {model_kind}: {e}")
+        return False
+
+
+def _upsert_player_profile(cursor, company_id: int, player_uuid: str,
+                            player_name: str, feature_vector: list[float],
+                            label: float | None = None,
+                            label_confidence: float = 0.0,
+                            label_source: str | None = None) -> None:
+    """Guarda o actualiza el perfil de feature vector del jugador."""
+    fv_json = json.dumps(feature_vector)
+    cursor.execute(
+        f"SELECT id FROM ai_player_profiles "
+        f"WHERE company_id = {_PH} AND player_uuid = {_PH}",
+        (company_id, player_uuid)
+    )
+    row = cursor.fetchone()
+    if row:
+        if label is not None:
+            cursor.execute(
+                f"UPDATE ai_player_profiles SET "
+                f"player_name = {_PH}, feature_vector_json = {_PH}, "
+                f"last_label = {_PH}, last_label_confidence = {_PH}, "
+                f"last_label_source = {_PH}, "
+                f"last_updated_at = CURRENT_TIMESTAMP "
+                f"WHERE company_id = {_PH} AND player_uuid = {_PH}",
+                (player_name, fv_json, label, label_confidence, label_source,
+                 company_id, player_uuid)
+            )
+        else:
+            cursor.execute(
+                f"UPDATE ai_player_profiles SET "
+                f"player_name = {_PH}, feature_vector_json = {_PH}, "
+                f"last_updated_at = CURRENT_TIMESTAMP "
+                f"WHERE company_id = {_PH} AND player_uuid = {_PH}",
+                (player_name, fv_json, company_id, player_uuid)
+            )
+    else:
+        cursor.execute(
+            f"INSERT INTO ai_player_profiles "
+            f"(company_id, player_uuid, player_name, feature_vector_json, "
+            f"last_label, last_label_confidence, last_label_source) "
+            f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})",
+            (company_id, player_uuid, player_name, fv_json,
+             label, label_confidence, label_source)
+        )
+
+
+def _collect_training_dataset(cursor, company_id: int,
+                              include_synthetic: bool = True,
+                              min_confidence: float = 0.45):
+    """
+    Junta todos los samples disponibles para training:
+      - feedback explicito del staff (weight = 1.0 * confidence)
+      - auto-labels combinados (weight = 0.6 * confidence)
+      - synthetic bootstrap (weight = 0.4)
+
+    Cada sample = (feature_vector, label, weight). Si un (company, player_uuid)
+    tiene MULTIPLES labels, se usa el agregado weighted.
+
+    Devuelve (X, y, weights, n_real, n_synthetic).
+    """
+    import argus_ai_features as F
+    import argus_ai_trainer as T
+
+    X: list[list[float]] = []
+    y: list[float] = []
+    w: list[float] = []
+    n_real = 0
+    n_synthetic = 0
+
+    # 1. Cargar feedback explicito
+    try:
+        cursor.execute(
+            f"SELECT decision_id, player_uuid, player_name, label, confidence "
+            f"FROM ai_feedback WHERE company_id = {_PH}",
+            (company_id,)
+        )
+        feedback_rows = cursor.fetchall() or []
+    except Exception as e:
+        print(f"[ml_train] error fetching feedback: {e}")
+        feedback_rows = []
+
+    # 2. Cargar auto-labels (combined)
+    try:
+        cursor.execute(
+            f"SELECT decision_id, player_uuid, player_name, label, confidence, source "
+            f"FROM ai_auto_labels WHERE company_id = {_PH} AND confidence >= {_PH}",
+            (company_id, min_confidence)
+        )
+        auto_rows = cursor.fetchall() or []
+    except Exception as e:
+        print(f"[ml_train] error fetching auto-labels: {e}")
+        auto_rows = []
+
+    # Mapear (decision_id | player_uuid) → label/conf
+    # feedback explicito siempre wins sobre auto-label
+    samples_by_key: dict[str, dict] = {}
+
+    for row in auto_rows:
+        row = dict(row) if not isinstance(row, dict) else row
+        key = f"d:{row.get('decision_id')}" if row.get('decision_id') else f"p:{row.get('player_uuid')}"
+        prev = samples_by_key.get(key)
+        if prev and prev.get('source') == 'feedback':
+            continue
+        if prev and prev.get('confidence', 0) > float(row.get('confidence') or 0):
+            continue
+        samples_by_key[key] = {
+            'decision_id': row.get('decision_id'),
+            'player_uuid': row.get('player_uuid'),
+            'player_name': row.get('player_name'),
+            'label': float(row.get('label') or 0),
+            'confidence': float(row.get('confidence') or 0),
+            'source': 'auto',
+        }
+
+    for row in feedback_rows:
+        row = dict(row) if not isinstance(row, dict) else row
+        key = f"d:{row.get('decision_id')}" if row.get('decision_id') else f"p:{row.get('player_uuid')}"
+        samples_by_key[key] = {
+            'decision_id': row.get('decision_id'),
+            'player_uuid': row.get('player_uuid'),
+            'player_name': row.get('player_name'),
+            'label': float(row.get('label') or 0),
+            'confidence': float(row.get('confidence') or 1.0),
+            'source': 'feedback',
+        }
+
+    # 3. Recuperar feature_vector para cada sample usando ai_player_profiles
+    #    o ai_decisions_log.evidence_json
+    decision_ids = [s['decision_id'] for s in samples_by_key.values() if s.get('decision_id')]
+    decisions_features: dict[int, list[float]] = {}
+    if decision_ids:
+        ph_list = ','.join([_PH] * len(decision_ids))
+        try:
+            cursor.execute(
+                f"SELECT id, evidence_json FROM ai_decisions_log "
+                f"WHERE id IN ({ph_list})",
+                tuple(decision_ids)
+            )
+            for r in cursor.fetchall() or []:
+                r = dict(r) if not isinstance(r, dict) else r
+                try:
+                    ev = json.loads(r.get('evidence_json') or '{}')
+                    eu = ev.get('evidence_used') or ev
+                    # evidence_used no tiene un raw evidence — para reentrenar
+                    # confiable, mejor extraer del player profile si esta.
+                    decisions_features[int(r['id'])] = None  # placeholder, usaremos profile
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # Cargar profiles de los uuids relevantes
+    uuids = [s['player_uuid'] for s in samples_by_key.values() if s.get('player_uuid')]
+    profiles_by_uuid: dict[str, list[float]] = {}
+    if uuids:
+        unique_uuids = list(set(uuids))
+        ph_list = ','.join([_PH] * len(unique_uuids))
+        try:
+            cursor.execute(
+                f"SELECT player_uuid, feature_vector_json FROM ai_player_profiles "
+                f"WHERE company_id = {_PH} AND player_uuid IN ({ph_list})",
+                (company_id, *unique_uuids)
+            )
+            for r in cursor.fetchall() or []:
+                r = dict(r) if not isinstance(r, dict) else r
+                try:
+                    profiles_by_uuid[r['player_uuid']] = json.loads(r['feature_vector_json'])
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    for s in samples_by_key.values():
+        fv = None
+        if s.get('player_uuid') and s['player_uuid'] in profiles_by_uuid:
+            fv = profiles_by_uuid[s['player_uuid']]
+        if fv is None or len(fv) != F.n_features():
+            continue
+        weight = s['confidence'] * (1.0 if s['source'] == 'feedback' else 0.65)
+        if weight < 0.15:
+            continue
+        X.append(fv)
+        y.append(float(s['label']))
+        w.append(weight)
+        n_real += 1
+
+    # 4. Synthetic bootstrap si esta habilitado y no tenemos suficiente data real
+    if include_synthetic:
+        # Si tenemos POCOS samples reales, hacer bootstrap completo (480 samples)
+        # Si tenemos MUCHOS reales, agregar bootstrap reducido para regularizar
+        if n_real < 50:
+            sx, sy, sw = T.generate_bootstrap_dataset(
+                F.extract_features,
+                n_cheaters=200, n_clean=200, n_borderline=80,
+                seed=42
+            )
+        else:
+            sx, sy, sw = T.generate_bootstrap_dataset(
+                F.extract_features,
+                n_cheaters=50, n_clean=50, n_borderline=20,
+                seed=42
+            )
+        X.extend(sx); y.extend(sy); w.extend(sw)
+        n_synthetic = len(sx)
+
+    return X, y, w, n_real, n_synthetic
+
+
+def _train_models_for(company_id: int = 0, triggered_by: str = 'cron') -> dict:
+    """
+    Re-entrena los 3 modelos (logreg, knn, temporal) para una company.
+    company_id=0 entrena modelos globales (defaults).
+
+    Retorna dict con metricas + flag de cuales modelos se actualizaron.
+    """
+    import time as _t
+    import argus_ai_features as F
+    import argus_ai_trainer as T
+
+    t0 = _t.time()
+    result = {
+        'company_id': company_id,
+        'started_at': t0,
+        'logreg': None, 'knn': None, 'temporal': None,
+        'samples_real': 0, 'samples_synthetic': 0,
+        'duration_ms': 0,
+    }
+
+    try:
+        with get_api_db_cursor() as cursor:
+            X, y, w, n_real, n_syn = _collect_training_dataset(cursor, company_id)
+            result['samples_real'] = n_real
+            result['samples_synthetic'] = n_syn
+            if len(X) < 20:
+                result['error'] = f'datos insuficientes: {len(X)} samples'
+                return result
+
+            # ── LogReg ─────────────────────────────────────────────
+            lr = T.LogisticRegression(feature_names=F.FEATURE_NAMES,
+                                       lr=0.05, l2=1e-4, seed=42)
+            metrics = lr.fit(X, y, sample_weights=w, epochs=40, verbose=False)
+            _save_ml_model(cursor, company_id, 'logreg', lr)
+            result['logreg'] = metrics
+
+            # Insertar history
+            try:
+                cursor.execute(
+                    f"INSERT INTO ai_training_history "
+                    f"(company_id, model_kind, samples_used, samples_synthetic, "
+                    f"samples_real, epochs, loss, accuracy, precision, recall, f1, "
+                    f"duration_ms, triggered_by) "
+                    f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})",
+                    (company_id, 'logreg', len(X), n_syn, n_real, 40,
+                     metrics.get('loss', 0), metrics.get('accuracy', 0),
+                     metrics.get('precision', 0), metrics.get('recall', 0),
+                     metrics.get('f1', 0),
+                     int((_t.time() - t0) * 1000), triggered_by)
+                )
+            except Exception:
+                pass
+
+            # ── KNN ────────────────────────────────────────────────
+            knn = T.KNNCheaterClassifier(feature_names=F.FEATURE_NAMES, k=7)
+            for i in range(len(X)):
+                if w[i] < 0.3:  # solo ejemplos con peso decente
+                    continue
+                knn.add_example(T.KNNExample(
+                    player_uuid=f'sample_{i}',
+                    player_name=f'sample_{i}',
+                    feature_vector=X[i],
+                    label=y[i],
+                    weight=w[i],
+                    source='training_set',
+                ))
+            _save_ml_model(cursor, company_id, 'knn', knn)
+            result['knn'] = {'size': knn.size(), **knn.class_counts()}
+
+            # ── Temporal Markov ────────────────────────────────────
+            tpd = T.TemporalPatternDetector()
+            # Observar secuencias del bootstrap (las sintéticas tienen sequence)
+            import random as _r
+            rng = _r.Random(42)
+            for _ in range(150):
+                ev = T._synth_cheater(rng)
+                seq = F.extract_sequence(ev)
+                tpd.observe(seq, 1.0)
+            for _ in range(150):
+                ev = T._synth_clean(rng)
+                seq = F.extract_sequence(ev)
+                tpd.observe(seq, 0.0)
+            _save_ml_model(cursor, company_id, 'temporal', tpd)
+            result['temporal'] = {
+                'samples': tpd.samples_observed,
+                'cheater_vocab': len(tpd.cheater_counts),
+                'clean_vocab': len(tpd.clean_counts),
+            }
+    except Exception as e:
+        result['error'] = f'{type(e).__name__}: {e}'
+        print(f"[ml_train] error: {e}")
+
+    result['duration_ms'] = int((_t.time() - t0) * 1000)
+    return result
 
 
 @app.route('/api/plugin/ai-evaluate', methods=['POST'])
@@ -3208,12 +3758,55 @@ def api_plugin_ai_evaluate():
 
             evidence = _build_ai_evidence(cursor, company_id, player_uuid, player_name, new_violation)
             weights = _get_ai_weights(company_id)
-            decision = _oracle.evaluate(evidence, weights)
+
+            # Pack 45: cargar modelos ML entrenados (si existen) para
+            # evaluacion hybrid. Si no estan entrenados, degrada a heuristica.
+            log_reg = _load_ml_model(cursor, company_id, 'logreg')
+            knn     = _load_ml_model(cursor, company_id, 'knn')
+            temporal = _load_ml_model(cursor, company_id, 'temporal')
+
+            try:
+                # Computar feature vector y secuencia ANTES de la evaluacion
+                # para persistirlos junto al log de decision (sirven para
+                # training futuro sin recomputar).
+                from argus_ai_features import extract_features, extract_sequence
+                ev_with_h = dict(evidence)
+                # heuristic_score sera completado tras evaluacion base
+                feature_vector = None
+                sequence = extract_sequence(evidence)
+            except Exception:
+                feature_vector = None
+                sequence = None
+
+            decision = _oracle.evaluate_hybrid(
+                evidence, weights,
+                log_reg=log_reg, knn=knn, temporal=temporal,
+                feature_vector=None,  # se computa adentro con heuristic_score correcto
+                sequence=sequence,
+            )
+
+            # Re-extraer feature vector con heuristic_score real para persistencia
+            try:
+                from argus_ai_features import extract_features
+                ev_with_h = dict(evidence)
+                ev_with_h['heuristic_score'] = decision.evidence_used.get('heuristic_score', decision.score)
+                feature_vector = extract_features(ev_with_h)
+            except Exception:
+                feature_vector = None
+
             merged_action = _oracle.merge_action_with_existing(decision.action, plugin_action)
 
-            _persist_ai_decision(cursor, company_id, plugin_key_id,
+            decision_id = _persist_ai_decision(cursor, company_id, plugin_key_id,
                                  player_uuid, player_name, decision,
                                  triggered_by=new_violation.get('check_name') if new_violation else 'manual')
+
+            # Actualizar player profile con el feature vector mas reciente
+            if feature_vector is not None:
+                try:
+                    _upsert_player_profile(cursor, company_id, player_uuid, player_name,
+                                           feature_vector)
+                except Exception as _e_pp:
+                    print(f"[ai_profile] error upsert: {_e_pp}")
 
         return jsonify({
             'success': True,
@@ -3223,6 +3816,8 @@ def api_plugin_ai_evaluate():
             'merged_action': merged_action,
             'reasoning': decision.reasoning,
             'top_factor': decision.top_factor,
+            'decision_id': decision_id,
+            'evidence_used': decision.evidence_used,
         }), 200
     except Exception as e:
         print(f"ERROR api_plugin_ai_evaluate: {type(e).__name__}: {e}")
@@ -3394,6 +3989,670 @@ def api_ai_weights_set():
         return jsonify({'success': True, 'company_id': company_id}), 200
     except Exception as e:
         print(f"ERROR api_ai_weights_set: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Pack 45: Endpoints ML — feedback, training, stats, profiles
+# ──────────────────────────────────────────────────────────────────────
+
+@app.route('/api/ai/feedback', methods=['POST'])
+@login_required
+def api_ai_feedback():
+    """Staff marca una decision como correcta/incorrecta.
+
+    Body: {decision_id, label: 0/0.5/1, reasoning?: str}
+    Label: 1 = era cheater, 0 = falso positivo / limpio, 0.5 = incierto
+    """
+    _plugin_schema_guard()
+    try:
+        body = request.get_json(silent=True) or {}
+        decision_id = body.get('decision_id')
+        try:
+            label = float(body.get('label'))
+        except Exception:
+            return jsonify({'success': False, 'error': 'label requerido (0..1)'}), 400
+        label = max(0.0, min(1.0, label))
+        reasoning = (body.get('reasoning') or '')[:500]
+
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        username = (user.get('username') or 'unknown')[:255]
+        # Si no es admin, solo puede marcar decisiones de su company
+        user_company = user.get('company_id') or 0
+
+        with get_api_db_cursor() as cursor:
+            # Validar que la decision existe y pertenece a la company
+            if decision_id:
+                cursor.execute(
+                    f"SELECT company_id, player_uuid, player_name "
+                    f"FROM ai_decisions_log WHERE id = {_PH}",
+                    (int(decision_id),)
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return jsonify({'success': False, 'error': 'decision no existe'}), 404
+                row = dict(row) if not isinstance(row, dict) else row
+                if (not user.get('is_super_admin')
+                    and row.get('company_id') != user_company):
+                    return jsonify({'success': False, 'error': 'sin permisos'}), 403
+                target_company = row.get('company_id') or 0
+                player_uuid = row.get('player_uuid')
+                player_name = row.get('player_name')
+            else:
+                player_uuid = (body.get('player_uuid') or '')[:40]
+                player_name = (body.get('player_name') or '')[:64]
+                if not player_uuid:
+                    return jsonify({'success': False, 'error': 'decision_id o player_uuid requerido'}), 400
+                target_company = user_company
+
+            cursor.execute(
+                f"INSERT INTO ai_feedback "
+                f"(company_id, decision_id, player_uuid, player_name, label, "
+                f"confidence, source, staff_username, reasoning) "
+                f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},'staff',{_PH},{_PH})",
+                (target_company, int(decision_id) if decision_id else None,
+                 player_uuid, player_name, label, 1.0, username, reasoning)
+            )
+            # Si el profile del jugador existe, marcarlo con este label
+            if player_uuid:
+                try:
+                    cursor.execute(
+                        f"UPDATE ai_player_profiles SET last_label = {_PH}, "
+                        f"last_label_confidence = {_PH}, last_label_source = 'staff' "
+                        f"WHERE company_id = {_PH} AND player_uuid = {_PH}",
+                        (label, 1.0, target_company, player_uuid)
+                    )
+                except Exception:
+                    pass
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        print(f"ERROR api_ai_feedback: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ai/model-stats', methods=['GET'])
+@login_required
+def api_ai_model_stats():
+    """Devuelve estado actual del modelo ML: accuracy, samples, last train, etc."""
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        company_id = 0 if user.get('is_super_admin') else int(user.get('company_id') or 0)
+        try:
+            company_id = int(request.args.get('company_id', company_id))
+        except Exception:
+            pass
+
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT model_kind, version, samples_trained, accuracy, precision, "
+                f"recall, f1, last_loss, trained_at "
+                f"FROM ai_model_state WHERE company_id = {_PH} OR company_id = 0 "
+                f"ORDER BY company_id DESC",
+                (company_id,)
+            )
+            rows = cursor.fetchall() or []
+            models: dict[str, dict] = {}
+            for r in rows:
+                r = dict(r) if not isinstance(r, dict) else r
+                kind = r['model_kind']
+                if kind not in models:  # company-specific first (descending order)
+                    models[kind] = {
+                        'kind': kind,
+                        'version': r.get('version'),
+                        'samples_trained': r.get('samples_trained'),
+                        'accuracy': r.get('accuracy'),
+                        'precision': r.get('precision'),
+                        'recall': r.get('recall'),
+                        'f1': r.get('f1'),
+                        'last_loss': r.get('last_loss'),
+                        'trained_at': str(r.get('trained_at')) if r.get('trained_at') else None,
+                    }
+
+            # Counts de feedback + auto-labels
+            cursor.execute(
+                f"SELECT COUNT(*) AS c FROM ai_feedback WHERE company_id = {_PH}",
+                (company_id,)
+            )
+            r = cursor.fetchone()
+            r = dict(r) if not isinstance(r, dict) else r
+            feedback_count = int(r.get('c') or 0) if r else 0
+
+            cursor.execute(
+                f"SELECT source, COUNT(*) AS c FROM ai_auto_labels "
+                f"WHERE company_id = {_PH} GROUP BY source",
+                (company_id,)
+            )
+            auto_counts = {}
+            for r in cursor.fetchall() or []:
+                r = dict(r) if not isinstance(r, dict) else r
+                auto_counts[r['source']] = int(r['c'])
+
+            # Decisions sin label
+            cursor.execute(
+                f"SELECT COUNT(*) AS c FROM ai_decisions_log d "
+                f"WHERE d.company_id = {_PH} AND NOT EXISTS ("
+                f"  SELECT 1 FROM ai_feedback f WHERE f.decision_id = d.id"
+                f") AND NOT EXISTS ("
+                f"  SELECT 1 FROM ai_auto_labels al WHERE al.decision_id = d.id"
+                f")",
+                (company_id,)
+            )
+            r = cursor.fetchone()
+            r = dict(r) if not isinstance(r, dict) else r
+            pending_count = int(r.get('c') or 0) if r else 0
+
+            # Top features (de logreg) si esta cargado
+            top_features = []
+            log_reg = _load_ml_model(cursor, company_id, 'logreg')
+            if log_reg:
+                top_features = [
+                    {'name': n, 'weight': round(w, 4)}
+                    for n, w in log_reg.feature_importance(top_k=15)
+                ]
+
+            # Training history (last 10)
+            cursor.execute(
+                f"SELECT model_kind, samples_used, samples_real, samples_synthetic, "
+                f"loss, accuracy, precision, recall, f1, duration_ms, "
+                f"triggered_by, created_at "
+                f"FROM ai_training_history WHERE company_id = {_PH} "
+                f"ORDER BY created_at DESC LIMIT 10",
+                (company_id,)
+            )
+            history = []
+            for r in cursor.fetchall() or []:
+                r = dict(r) if not isinstance(r, dict) else r
+                history.append({
+                    **{k: r.get(k) for k in ('model_kind', 'samples_used', 'samples_real',
+                                              'samples_synthetic', 'loss', 'accuracy',
+                                              'precision', 'recall', 'f1',
+                                              'duration_ms', 'triggered_by')},
+                    'created_at': str(r.get('created_at')) if r.get('created_at') else None,
+                })
+
+        return jsonify({
+            'success': True,
+            'company_id': company_id,
+            'models': models,
+            'feedback_count': feedback_count,
+            'auto_label_counts': auto_counts,
+            'auto_label_total': sum(auto_counts.values()),
+            'decisions_pending_review': pending_count,
+            'top_features': top_features,
+            'training_history': history,
+        }), 200
+    except Exception as e:
+        print(f"ERROR api_ai_model_stats: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ai/retrain', methods=['POST'])
+@admin_required
+def api_ai_retrain():
+    """Super-admin fuerza un retraining de modelos."""
+    _plugin_schema_guard()
+    try:
+        body = request.get_json(silent=True) or {}
+        company_id = int(body.get('company_id') or 0)
+        result = _train_models_for(company_id, triggered_by='manual')
+        return jsonify({'success': True, **result}), 200
+    except Exception as e:
+        print(f"ERROR api_ai_retrain: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ai/decisions-pending-review', methods=['GET'])
+@login_required
+def api_ai_decisions_pending_review():
+    """Lista decisiones sin label todavia (priorizadas por uncertainty)."""
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        company_id = int(user.get('company_id') or 0)
+        if user.get('is_super_admin'):
+            company_id = int(request.args.get('company_id', company_id))
+        limit = min(50, int(request.args.get('limit', 25)))
+
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT d.id, d.player_name, d.player_uuid, d.score, d.confidence, "
+                f"d.action, d.reasoning, d.triggered_by, d.created_at "
+                f"FROM ai_decisions_log d "
+                f"WHERE d.company_id = {_PH} AND d.action IN ('ss', 'kick', 'ban') "
+                f"AND NOT EXISTS (SELECT 1 FROM ai_feedback f WHERE f.decision_id = d.id) "
+                f"AND NOT EXISTS (SELECT 1 FROM ai_auto_labels al WHERE al.decision_id = d.id) "
+                f"ORDER BY d.confidence ASC, d.created_at DESC "
+                f"LIMIT {limit}",
+                (company_id,)
+            )
+            out = []
+            for r in cursor.fetchall() or []:
+                r = dict(r) if not isinstance(r, dict) else r
+                out.append({
+                    'id': r['id'],
+                    'player_name': r.get('player_name'),
+                    'player_uuid': r.get('player_uuid'),
+                    'score': r.get('score'),
+                    'confidence': r.get('confidence'),
+                    'action': r.get('action'),
+                    'reasoning': r.get('reasoning'),
+                    'triggered_by': r.get('triggered_by'),
+                    'created_at': str(r.get('created_at')) if r.get('created_at') else None,
+                })
+        return jsonify({'success': True, 'decisions': out, 'count': len(out)}), 200
+    except Exception as e:
+        print(f"ERROR api_ai_decisions_pending: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ai/player-profile/<player_uuid>', methods=['GET'])
+@login_required
+def api_ai_player_profile(player_uuid: str):
+    """Devuelve perfil completo de un jugador para que el panel lo muestre."""
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        company_id = int(user.get('company_id') or 0)
+        if user.get('is_super_admin'):
+            company_id = int(request.args.get('company_id', company_id))
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT * FROM ai_player_profiles "
+                f"WHERE company_id = {_PH} AND player_uuid = {_PH}",
+                (company_id, player_uuid[:40])
+            )
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'success': False, 'error': 'sin perfil'}), 404
+            row = dict(row) if not isinstance(row, dict) else row
+
+            # KNN neighbors si esta cargado
+            neighbors = []
+            try:
+                knn = _load_ml_model(cursor, company_id, 'knn')
+                if knn:
+                    fv = json.loads(row.get('feature_vector_json') or '[]')
+                    r = knn.predict(fv)
+                    neighbors = r.get('neighbors') or []
+            except Exception:
+                pass
+
+            # Recent violations del player
+            cursor.execute(
+                f"SELECT check_name, level, details, created_at "
+                f"FROM plugin_violations "
+                f"WHERE company_id = {_PH} AND player_uuid = {_PH} "
+                f"ORDER BY created_at DESC LIMIT 30",
+                (company_id, player_uuid[:40])
+            )
+            violations = []
+            for v in cursor.fetchall() or []:
+                v = dict(v) if not isinstance(v, dict) else v
+                violations.append({
+                    'check_name': v.get('check_name'),
+                    'level': v.get('level'),
+                    'details': v.get('details'),
+                    'created_at': str(v.get('created_at')) if v.get('created_at') else None,
+                })
+
+            # Ultima score / action del jugador
+            cursor.execute(
+                f"SELECT score, confidence, last_action, last_reasoning, "
+                f"evaluations_count, last_evaluated_at "
+                f"FROM ai_player_scores "
+                f"WHERE company_id = {_PH} AND player_uuid = {_PH}",
+                (company_id, player_uuid[:40])
+            )
+            score_row = cursor.fetchone()
+            current_score = None
+            if score_row:
+                sr = dict(score_row) if not isinstance(score_row, dict) else score_row
+                current_score = {
+                    'score': sr.get('score'),
+                    'confidence': sr.get('confidence'),
+                    'last_action': sr.get('last_action'),
+                    'last_reasoning': sr.get('last_reasoning'),
+                    'evaluations_count': sr.get('evaluations_count'),
+                    'last_evaluated_at': str(sr.get('last_evaluated_at')) if sr.get('last_evaluated_at') else None,
+                }
+
+        return jsonify({
+            'success': True,
+            'profile': {
+                'player_uuid': row.get('player_uuid'),
+                'player_name': row.get('player_name'),
+                'last_label': row.get('last_label'),
+                'last_label_confidence': row.get('last_label_confidence'),
+                'last_label_source': row.get('last_label_source'),
+                'last_updated_at': str(row.get('last_updated_at')) if row.get('last_updated_at') else None,
+            },
+            'current_score': current_score,
+            'recent_violations': violations,
+            'similar_players': neighbors[:5],
+        }), 200
+    except Exception as e:
+        print(f"ERROR api_ai_player_profile: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ai/auto-label-run', methods=['POST'])
+@admin_required
+def api_ai_auto_label_run():
+    """Ejecuta los 12 pipelines de auto-labeling sobre decisiones pendientes."""
+    _plugin_schema_guard()
+    try:
+        body = request.get_json(silent=True) or {}
+        company_id = int(body.get('company_id') or 0)
+        limit = min(500, int(body.get('limit') or 200))
+        result = _run_auto_labeling_for(company_id, limit=limit)
+        return jsonify({'success': True, **result}), 200
+    except Exception as e:
+        print(f"ERROR api_ai_auto_label_run: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _run_auto_labeling_for(company_id: int, limit: int = 200) -> dict:
+    """Ejecuta los pipelines de auto-labeling y persiste resultados.
+
+    Solo se evalua sobre decisiones SIN feedback explicito ni auto-label previo
+    (para no contaminar el training set con duplicados).
+    """
+    import time as _t
+    import argus_ai_labeler as _L
+
+    t0 = _t.time()
+    out = {
+        'company_id': company_id,
+        'decisions_processed': 0,
+        'labels_created': 0,
+        'by_source': {},
+    }
+    try:
+        with get_api_db_cursor() as cursor:
+            # 1. Cargar decisiones pendientes (sin feedback ni auto-label)
+            cursor.execute(
+                f"SELECT d.id, d.player_uuid, d.player_name, d.score, d.confidence, "
+                f"d.action, d.evidence_json, d.created_at "
+                f"FROM ai_decisions_log d "
+                f"WHERE d.company_id = {_PH} "
+                f"AND NOT EXISTS (SELECT 1 FROM ai_feedback f WHERE f.decision_id = d.id) "
+                f"AND NOT EXISTS (SELECT 1 FROM ai_auto_labels al WHERE al.decision_id = d.id) "
+                f"ORDER BY d.created_at DESC LIMIT {limit}",
+                (company_id,)
+            )
+            decisions = []
+            for r in cursor.fetchall() or []:
+                r = dict(r) if not isinstance(r, dict) else r
+                ev_json = r.get('evidence_json') or '{}'
+                try:
+                    ev = json.loads(ev_json)
+                except Exception:
+                    ev = {}
+                # Convert created_at a timestamp
+                ct = r.get('created_at')
+                created_ts = 0
+                try:
+                    if hasattr(ct, 'timestamp'):
+                        created_ts = ct.timestamp()
+                    elif ct:
+                        # tratar como string YYYY-MM-DD HH:MM:SS
+                        import datetime as _dt
+                        created_ts = _dt.datetime.fromisoformat(str(ct)).timestamp()
+                except Exception:
+                    pass
+                evidence_used = ev.get('evidence_used') or {}
+                # Necesitamos sintetizar parte del evidence_summary
+                # con scoresprev / counts / etc. para los pipelines.
+                violation_summary = evidence_used.get('violation_summary') or {}
+                distinct = evidence_used.get('distinct_checks') or len(violation_summary)
+                total = evidence_used.get('total_violations') or sum(violation_summary.values())
+                decisions.append({
+                    'id': r['id'],
+                    'player_uuid': r.get('player_uuid'),
+                    'player_name': r.get('player_name'),
+                    'action': r.get('action'),
+                    'score': r.get('score'),
+                    'confidence': r.get('confidence'),
+                    'created_at': created_ts,
+                    'evidence_summary': {
+                        'v_lows': 0, 'v_mids': 0, 'v_highs': 0, 'v_criticals': 0,
+                        'distinct_checks': distinct,
+                        'total_violations': total,
+                        'cluster_density': 0.0,
+                        **evidence_used,
+                    },
+                })
+            out['decisions_processed'] = len(decisions)
+            if not decisions:
+                out['duration_ms'] = int((_t.time() - t0) * 1000)
+                return out
+
+            # 2. Fetch contexto adicional para pipelines
+
+            # ss_results: scan_tokens.scan_at + did detect
+            uuids = list({d['player_uuid'] for d in decisions if d.get('player_uuid')})
+            ss_results: dict[str, dict] = {}
+            if uuids:
+                ph = ','.join([_PH] * len(uuids))
+                try:
+                    # Buscar la mas reciente por uuid (con minecraft_target = name)
+                    # Como scan_tokens es por NAME y no UUID, intentamos hacer match por name.
+                    names = list({d['player_name'] for d in decisions if d.get('player_name')})
+                    if names:
+                        ph_n = ','.join([_PH] * len(names))
+                        cursor.execute(
+                            f"SELECT minecraft_target, created_at, used_at, result_count "
+                            f"FROM scan_tokens "
+                            f"WHERE minecraft_target IN ({ph_n}) AND used_at IS NOT NULL",
+                            tuple(names)
+                        )
+                        # result_count > 0 = detecciones positivas
+                        for r in cursor.fetchall() or []:
+                            r = dict(r) if not isinstance(r, dict) else r
+                            tgt = r.get('minecraft_target')
+                            # Encontrar uuid asociado al name
+                            for d in decisions:
+                                if d.get('player_name') == tgt:
+                                    used_at = r.get('used_at')
+                                    used_ts = 0
+                                    try:
+                                        if hasattr(used_at, 'timestamp'):
+                                            used_ts = used_at.timestamp()
+                                    except Exception:
+                                        pass
+                                    ss_results[d['player_uuid']] = {
+                                        'scan_at': used_ts,
+                                        'detected_hacks': int(r.get('result_count') or 0) > 0,
+                                    }
+                                    break
+                except Exception as e:
+                    print(f"[auto_label] ss_results lookup failed: {e}")
+
+            # cross_server: violations del jugador en OTRAS companies
+            cross_server: dict[str, dict] = {}
+            for d in decisions:
+                uuid = d.get('player_uuid')
+                if not uuid:
+                    continue
+                try:
+                    cursor.execute(
+                        f"SELECT COUNT(*) AS c, COUNT(DISTINCT company_id) AS s "
+                        f"FROM plugin_violations "
+                        f"WHERE player_uuid = {_PH} AND level IN ('HIGH','CRITICAL') "
+                        f"AND company_id != {_PH}",
+                        (uuid, company_id)
+                    )
+                    r = cursor.fetchone()
+                    if r:
+                        r = dict(r) if not isinstance(r, dict) else r
+                        cnt = int(r.get('c') or 0)
+                        srv = int(r.get('s') or 0)
+                        if srv >= 2:
+                            cross_server[uuid] = {
+                                'banned_in_servers': [f'srv_{i}' for i in range(srv)],
+                                'clean_streak_days': 0,
+                            }
+                        elif cnt == 0 and srv > 0:
+                            cross_server[uuid] = {
+                                'banned_in_servers': [],
+                                'clean_streak_days': 60,
+                            }
+                except Exception:
+                    pass
+
+            # activity: last_seen_at / last_violation_at — del scan / violations
+            activity: dict[str, dict] = {}
+            for d in decisions:
+                uuid = d.get('player_uuid')
+                if not uuid:
+                    continue
+                try:
+                    cursor.execute(
+                        f"SELECT MAX(created_at) AS last_v FROM plugin_violations "
+                        f"WHERE player_uuid = {_PH} AND company_id = {_PH}",
+                        (uuid, company_id)
+                    )
+                    r = cursor.fetchone()
+                    last_v_ts = 0
+                    if r:
+                        r = dict(r) if not isinstance(r, dict) else r
+                        lv = r.get('last_v')
+                        try:
+                            if hasattr(lv, 'timestamp'):
+                                last_v_ts = lv.timestamp()
+                        except Exception:
+                            pass
+                    activity[uuid] = {
+                        'last_seen_at': last_v_ts or _t.time(),
+                        'last_violation_at': last_v_ts,
+                    }
+                except Exception:
+                    pass
+
+            # KNN para propagacion
+            knn = _load_ml_model(cursor, company_id, 'knn')
+            # Para usar KNN, necesitamos feature_vector en cada decision
+            # Cargamos profiles
+            if knn:
+                profiles_uuid = list({d['player_uuid'] for d in decisions if d.get('player_uuid')})
+                if profiles_uuid:
+                    ph = ','.join([_PH] * len(profiles_uuid))
+                    try:
+                        cursor.execute(
+                            f"SELECT player_uuid, feature_vector_json "
+                            f"FROM ai_player_profiles "
+                            f"WHERE company_id = {_PH} AND player_uuid IN ({ph})",
+                            (company_id, *profiles_uuid)
+                        )
+                        prof_map = {}
+                        for r in cursor.fetchall() or []:
+                            r = dict(r) if not isinstance(r, dict) else r
+                            try:
+                                prof_map[r['player_uuid']] = json.loads(r['feature_vector_json'])
+                            except Exception:
+                                pass
+                        for d in decisions:
+                            if d['player_uuid'] in prof_map:
+                                d['feature_vector'] = prof_map[d['player_uuid']]
+                    except Exception:
+                        pass
+
+            # 3. Ejecutar pipelines
+            all_labels: list = []
+            try:
+                all_labels.extend(_L.label_from_ss_outcomes(decisions, ss_results))
+            except Exception as e: print(f"[auto_label] ss_outcomes failed: {e}")
+            try:
+                all_labels.extend(_L.label_from_clean_history(decisions, activity))
+            except Exception as e: print(f"[auto_label] clean_history failed: {e}")
+            try:
+                all_labels.extend(_L.label_from_violation_clusters(decisions))
+            except Exception as e: print(f"[auto_label] clusters failed: {e}")
+            try:
+                if knn:
+                    all_labels.extend(_L.label_from_knn_propagation(decisions, knn))
+            except Exception as e: print(f"[auto_label] knn failed: {e}")
+            try:
+                all_labels.extend(_L.label_from_yaw_consistency(decisions))
+            except Exception as e: print(f"[auto_label] yaw failed: {e}")
+            try:
+                all_labels.extend(_L.label_from_age_stats_mismatch(decisions))
+            except Exception as e: print(f"[auto_label] age_stats failed: {e}")
+            try:
+                all_labels.extend(_L.label_from_hit_accept_rate(decisions))
+            except Exception as e: print(f"[auto_label] hit_rate failed: {e}")
+            try:
+                all_labels.extend(_L.label_from_cross_server_history(decisions, cross_server))
+            except Exception as e: print(f"[auto_label] cross_server failed: {e}")
+
+            # 4. Combinar (dedup por decision_id)
+            combined = _L.combine_labels(all_labels)
+
+            # 5. Persistir cada label combinado
+            for did, lbl in combined.items():
+                try:
+                    cursor.execute(
+                        f"INSERT INTO ai_auto_labels "
+                        f"(company_id, decision_id, player_uuid, player_name, "
+                        f"label, confidence, source, reasoning) "
+                        f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})",
+                        (company_id, did, lbl.player_uuid, lbl.player_name,
+                         lbl.label, lbl.confidence, lbl.source, lbl.reasoning[:500])
+                    )
+                    out['labels_created'] += 1
+                    out['by_source'][lbl.source] = out['by_source'].get(lbl.source, 0) + 1
+                    # Si el label es muy seguro (>0.85), actualizar el profile
+                    if lbl.confidence > 0.85 and lbl.player_uuid:
+                        try:
+                            cursor.execute(
+                                f"UPDATE ai_player_profiles SET last_label = {_PH}, "
+                                f"last_label_confidence = {_PH}, last_label_source = {_PH} "
+                                f"WHERE company_id = {_PH} AND player_uuid = {_PH}",
+                                (lbl.label, lbl.confidence, lbl.source,
+                                 company_id, lbl.player_uuid)
+                            )
+                        except Exception:
+                            pass
+                except Exception as e:
+                    print(f"[auto_label] error insert: {e}")
+    except Exception as e:
+        out['error'] = f'{type(e).__name__}: {e}'
+
+    out['duration_ms'] = int((_t.time() - t0) * 1000)
+    return out
+
+
+@app.route('/api/ai/feature-importance', methods=['GET'])
+@login_required
+def api_ai_feature_importance():
+    """Top features con sus pesos absolutos del modelo LogReg actual."""
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        company_id = 0 if user.get('is_super_admin') else int(user.get('company_id') or 0)
+        with get_api_db_cursor() as cursor:
+            lr = _load_ml_model(cursor, company_id, 'logreg')
+            if not lr:
+                return jsonify({'success': True, 'features': [], 'note': 'modelo no entrenado'}), 200
+            top = lr.feature_importance(top_k=int(request.args.get('top_k', 25)))
+        return jsonify({
+            'success': True,
+            'features': [{'name': n, 'weight': round(w, 4)} for n, w in top],
+            'samples_trained': lr.samples_trained,
+            'last_trained_at': lr.last_trained_at,
+        }), 200
+    except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -14282,6 +15541,87 @@ def sa_api_orphan_staff_assign():
 # Esto se ejecuta cuando gunicorn importa el mÃ³dulo (no requiere __main__).
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 threading.Thread(target=init_db_async, daemon=True).start()
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Pack 45: background jobs ML
+# ──────────────────────────────────────────────────────────────────────
+
+def _ml_background_loop():
+    """
+    Loop daemon que corre cada 10min:
+      1. Lista companies activas con decisiones recientes
+      2. Por cada company: ejecuta auto-labeling pipelines
+      3. Re-entrena modelos si hay suficiente data nueva
+      4. Modelo global (company_id=0) se re-entrena con bootstrap+todo el feedback
+
+    Se inicia tras un delay de 90s para que la BD este lista.
+    """
+    import time as _t
+    print("[ml_bg] thread iniciado, primer run en 90s")
+    _t.sleep(90)
+    # Primera corrida — bootstrap global del modelo si no existe
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) AS c FROM ai_model_state WHERE company_id = 0")
+            r = cursor.fetchone()
+            r = dict(r) if not isinstance(r, dict) else r
+            if not r or int(r.get('c') or 0) == 0:
+                print("[ml_bg] modelo global no existe, training inicial...")
+                result = _train_models_for(0, triggered_by='bootstrap')
+                print(f"[ml_bg] bootstrap train result: "
+                      f"logreg={(result.get('logreg') or {}).get('accuracy')}, "
+                      f"knn={(result.get('knn') or {}).get('size')}, "
+                      f"samples_real={result.get('samples_real')}")
+    except Exception as e:
+        print(f"[ml_bg] bootstrap error: {e}")
+
+    # Loop principal
+    while True:
+        try:
+            _t.sleep(600)  # 10 min entre iteraciones
+            companies: list[int] = [0]  # global siempre
+            try:
+                with get_api_db_cursor() as cursor:
+                    cursor.execute(
+                        "SELECT DISTINCT company_id FROM ai_decisions_log "
+                        "WHERE created_at > CURRENT_TIMESTAMP - INTERVAL '7 days'"
+                        if _USE_PG else
+                        "SELECT DISTINCT company_id FROM ai_decisions_log "
+                        "WHERE created_at > datetime('now', '-7 days')"
+                    )
+                    for r in cursor.fetchall() or []:
+                        r = dict(r) if not isinstance(r, dict) else r
+                        cid = int(r.get('company_id') or 0)
+                        if cid and cid not in companies:
+                            companies.append(cid)
+            except Exception as e:
+                print(f"[ml_bg] error listando companies: {e}")
+
+            for cid in companies:
+                # 1) Auto-labeling sobre decisiones pendientes
+                try:
+                    al_result = _run_auto_labeling_for(cid, limit=200)
+                    print(f"[ml_bg] auto-label company={cid}: "
+                          f"processed={al_result.get('decisions_processed')} "
+                          f"created={al_result.get('labels_created')}")
+                except Exception as e:
+                    print(f"[ml_bg] auto-label company={cid} error: {e}")
+
+                # 2) Re-entrenar si vale la pena (hay feedback/auto-labels nuevos)
+                try:
+                    train_result = _train_models_for(cid, triggered_by='cron')
+                    lr = train_result.get('logreg') or {}
+                    print(f"[ml_bg] retrain company={cid}: "
+                          f"acc={lr.get('accuracy')} samples={train_result.get('samples_real')}+{train_result.get('samples_synthetic')}")
+                except Exception as e:
+                    print(f"[ml_bg] retrain company={cid} error: {e}")
+        except Exception as e:
+            print(f"[ml_bg] loop error: {e}")
+            _t.sleep(60)
+
+
+threading.Thread(target=_ml_background_loop, daemon=True).start()
 
 
 if __name__ == '__main__':

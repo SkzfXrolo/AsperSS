@@ -481,6 +481,136 @@ def evaluate(evidence: dict[str, Any], weights: dict[str, Any] | None = None) ->
     )
 
 
+# ──────────────────────────────────────────────────────────────────────
+#  Pack 45: hybrid evaluation con modelo ML entrenable
+# ──────────────────────────────────────────────────────────────────────
+
+def evaluate_hybrid(
+    evidence: dict[str, Any],
+    weights: dict[str, Any] | None = None,
+    *,
+    log_reg=None,        # LogisticRegression | None
+    knn=None,            # KNNCheaterClassifier | None
+    temporal=None,       # TemporalPatternDetector | None
+    feature_vector: list[float] | None = None,
+    sequence: list[str] | None = None,
+) -> Decision:
+    """
+    Como `evaluate` pero combina la salida heurística con un ensemble ML.
+
+    Si log_reg/knn/temporal son None o están vacíos, degrada a `evaluate`
+    puro. Si están entrenados, el score final es un ensemble adaptativo.
+
+    Esto se usa desde el endpoint /api/plugin/ai-evaluate, que tiene
+    acceso a los modelos cargados desde DB y los pasa aquí.
+    """
+    base = evaluate(evidence, weights)
+
+    # Si no hay modelos disponibles, devolver decision heuristica pura
+    if log_reg is None and knn is None and temporal is None:
+        return base
+
+    # Importar acá adentro para no romper si el module no existe (degradacion)
+    try:
+        from argus_ai_trainer import ensemble_predict
+    except Exception:
+        return base
+
+    fv = feature_vector
+    seq = sequence
+    if fv is None or seq is None:
+        try:
+            from argus_ai_features import extract_features, extract_sequence
+            # Inyectar heuristic_score en evidence para que el feature lo capture
+            ev_with_h = dict(evidence)
+            ev_with_h["heuristic_score"] = base.score
+            if fv is None:
+                fv = extract_features(ev_with_h)
+            if seq is None:
+                seq = extract_sequence(ev_with_h)
+        except Exception:
+            return base
+
+    try:
+        ens = ensemble_predict(
+            features=fv,
+            sequence=seq,
+            heuristic_score=base.score,
+            log_reg=log_reg,
+            knn=knn,
+            temporal=temporal,
+        )
+    except Exception as e:
+        # Si el ensemble falla, retornar el base heuristic con tag
+        base.reasoning = base.reasoning + f" [ML degradado: {type(e).__name__}]"
+        return base
+
+    # Re-decidir acción según score del ensemble
+    actions_w = (weights or DEFAULT_WEIGHTS).get("actions", {})
+    final_score = float(ens.score)
+    confidence = float(ens.confidence)
+
+    if final_score >= float(actions_w.get("ban", 0.95)):
+        if confidence >= 0.60:
+            action, bucket = "ban", "ban"
+        else:
+            action, bucket = "kick", "kick"
+    elif final_score >= float(actions_w.get("kick", 0.78)):
+        if confidence >= 0.40:
+            action, bucket = "kick", "kick"
+        else:
+            action, bucket = "ss", "ss"
+    elif final_score >= float(actions_w.get("ss", 0.55)):
+        action, bucket = "ss", "ss"
+    elif final_score >= float(actions_w.get("watch", 0.35)):
+        action, bucket = "watch", "watch"
+    else:
+        action, bucket = "none", "clean"
+
+    # Construir reasoning ML-aware
+    parts: list[str] = []
+    parts.append(random.choice(PHRASES.get(bucket, PHRASES["clean"])))
+    if base.top_factor:
+        parts.append(f"Razón principal: {base.top_factor}.")
+    if ens.top_features:
+        names = ", ".join(f"{n}({s:+.2f})" for n, s in ens.top_features[:3])
+        parts.append(f"Modelo ML pesa: {names}.")
+    comp_scores = ens.component_scores or {}
+    if comp_scores:
+        comp_str = ", ".join(f"{k}={v:.2f}" for k, v in comp_scores.items() if k != "heuristic")
+        if comp_str:
+            parts.append(f"Componentes: {comp_str}.")
+    if base.evidence_used.get("total_violations", 0) > 0:
+        parts.append(
+            f"Acumuló {base.evidence_used['total_violations']} violations "
+            f"de {base.evidence_used['distinct_checks']} checks distintos."
+        )
+    if confidence >= 0.85 and bucket in ("kick", "ban"):
+        parts.append(random.choice(CLOSERS_HIGH_CONFIDENCE))
+    elif confidence < 0.45 and bucket in ("ss", "kick", "ban"):
+        parts.append(random.choice(CLOSERS_LOW_CONFIDENCE))
+
+    reasoning = " ".join(parts)
+
+    return Decision(
+        score=round(final_score, 4),
+        confidence=round(confidence, 4),
+        action=action,
+        reasoning=reasoning,
+        top_factor=base.top_factor,
+        evidence_used={
+            **base.evidence_used,
+            "ensemble_components": ens.component_scores,
+            "ensemble_weights": ens.components,
+            "knn_neighbors": ens.knn_neighbors[:3],
+            "temporal_llr": ens.temporal_llr,
+            "heuristic_score": base.score,
+            "ml_score": final_score,
+        },
+        multipliers_applied=base.multipliers_applied,
+    )
+
+
 def merge_action_with_existing(ai_action: str, plugin_action: str | None) -> str:
     """
     El plugin ya decide acciones via thresholds del ViolationManager.
