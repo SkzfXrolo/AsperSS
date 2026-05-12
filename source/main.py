@@ -15255,8 +15255,13 @@ class ArgusApp:
                     all_perms = perms | host_perms
                     dangerous = DANGEROUS_PERMS & all_perms
                     name_hit = any(kw in name for kw in HACK_EXT_KW)
-                    if name_hit or dangerous:
-                        confidence = 0.55 if name_hit else 0.40
+                    update_url = str(manifest.get('update_url', '')).lower()
+                    is_store_signed = ('clients2.google.com/service/update2/crx' in update_url
+                                       or 'addons.mozilla.org' in update_url
+                                       or 'microsoftedge.microsoft.com' in update_url)
+                    # #125 — reducir FPs: no alertar extensiones oficiales solo por permisos.
+                    if name_hit or (dangerous and not is_store_signed):
+                        confidence = 0.55 if name_hit else 0.36
                         self.issues_found.append({
                             'nombre': f'Extensión de navegador sospechosa: {manifest.get("name", ext_id)[:60]}',
                             'ruta': ext_path,
