@@ -1,0 +1,6 @@
+{
+  "action": "ban",
+  "confidence": 0.97,
+  "score": 0.99,
+  "reason": "critical pattern"
+}
