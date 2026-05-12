@@ -602,11 +602,16 @@ body.light-theme .sidebar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: rgba(9,9,28,0.75);
+    background: rgba(9,9,28,0.72);
     backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     position: sticky;
     top: 0;
     z-index: 50;
+}
+.panel-header.is-scrolled {
+    background: rgba(9,9,28,0.84);
+    border-bottom-color: rgba(var(--accent-rgb), 0.22);
 }
 
 .panel-title {
@@ -2184,6 +2189,9 @@ body.light-theme .toast-info    { background: rgba(255,255,255,0.98); }
 body.light-theme .panel-header {
     background: rgba(255,255,255,0.88);
     border-bottom-color: var(--border-m);
+}
+body.light-theme .panel-header.is-scrolled {
+    background: rgba(255,255,255,0.94);
 }
 body.light-theme .data-table thead { background: rgba(107,58,29,0.04); }
 body.light-theme .search-input,

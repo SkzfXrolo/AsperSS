@@ -6930,8 +6930,10 @@ window.toggleSidebarCollapse = toggleSidebarCollapse;
 (function _initScrollToTop() {
     window.addEventListener('scroll', () => {
         const btn = document.getElementById('scroll-to-top');
+        const header = document.querySelector('.panel-header');
         if (!btn) return;
         btn.classList.toggle('visible', window.scrollY > 300);
+        if (header) header.classList.toggle('is-scrolled', window.scrollY > 8);
     }, { passive: true });
 })();
 
