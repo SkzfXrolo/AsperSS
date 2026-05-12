@@ -1,0 +1,15 @@
+{
+  "registry_anomalies": "persistence",
+  "dns_artifacts": "network",
+  "browser_history": "user_activity",
+  "credential_stores": "credentials",
+  "wmi_subscriptions": "persistence",
+  "com_objects": "persistence",
+  "scheduled_task_xml": "persistence",
+  "print_drivers": "privilege_escalation",
+  "dll_search_order": "persistence",
+  "firewall_rules": "defense_evasion",
+  "lateral_movement_indicators": "lateral",
+  "anti_forensics": "anti_forensics"
+}
+
