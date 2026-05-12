@@ -5,7 +5,10 @@ import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityShootBowEvent;
+import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
@@ -115,6 +118,35 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         Bukkit.getScheduler().runTaskLater(plugin, () ->
             listener.getAutoTotemCheck().handleOffhandUpdate(
                 p, s, System.currentTimeMillis(), offhandAfter, listener.getSink()), 1L);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    //  Round 2 — Crit / ProjectileAim / BowAim via eventos Bukkit.
+    // ──────────────────────────────────────────────────────────────────────
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCombatDamage(EntityDamageByEntityEvent e) {
+        if (!(e.getDamager() instanceof org.bukkit.entity.Player p)) return;
+        if (p.hasPermission("argus.ac.bypass")) return;
+        PacketDataStore.State s = store.get(p.getUniqueId());
+        listener.getCritCheck().handleDamage(p, s, e, listener.getSink());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onProjectileHit(ProjectileHitEvent e) {
+        if (!(e.getEntity().getShooter() instanceof org.bukkit.entity.Player p)) return;
+        if (p.hasPermission("argus.ac.bypass")) return;
+        if (!(e.getHitEntity() instanceof org.bukkit.entity.Player)) return; // solo si hit a otro player
+        PacketDataStore.State s = store.get(p.getUniqueId());
+        listener.getProjectileAimCheck().handleHit(p, e.getEntity(), s, listener.getSink());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onShootBow(EntityShootBowEvent e) {
+        if (!(e.getEntity() instanceof org.bukkit.entity.Player p)) return;
+        if (p.hasPermission("argus.ac.bypass")) return;
+        PacketDataStore.State s = store.get(p.getUniqueId());
+        listener.getBowAimCheck().handleShoot(p, s, System.currentTimeMillis(), listener.getSink());
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

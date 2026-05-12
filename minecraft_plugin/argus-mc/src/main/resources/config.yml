@@ -343,6 +343,38 @@ anticheat:
       min_dy: 0.06
       consec_mid: 5
       consec_high: 9
+    multi_velocity:
+      enabled: true          # absorbed velocity N packets seguidos
+                             # (NoKB / KnockbackResist). Complementa velocity.
+      window_ms: 500
+      consec_mid: 3
+      consec_high: 6
+      absorbed_fraction: 0.25
+    block_reach:
+      enabled: true          # distancia ojos→bloque tocado >5.5 supervivencia,
+                             # >6.5 creative, >7.5 extremo (HIGH).
+      max_survival: 5.5
+      max_creative: 6.5
+      extreme: 7.5
+    crit:
+      enabled: true          # crit aplicado mientras player.isOnGround()=true
+                             # y fallDistance=0 → vanilla solo permite crit en caida.
+    projectile_aim:
+      enabled: true          # arrow/snowball hitting otro player con angulo
+                             # entre velocity y vector origin→target < umbral.
+      min_distance: 25.0
+      max_angle_deg: 1.5
+    bow_aim:
+      enabled: true          # snap de rotacion > snap_deg en los ultimos
+                             # window_ms antes del release del arco.
+      window_ms: 150
+      snap_deg: 25.0
+    boat_fly_advanced:
+      enabled: true          # version refinada de boat_fly: tolera grace_ms,
+                             # detecta movimiento horizontal en aire.
+      grace_ms: 300
+      sustained_ms: 2000
+      min_horizontal_bps_air: 4.0
 
 # ── Mensajes (puedes traducir libremente) ─────────────────────
 messages:

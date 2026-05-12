@@ -5,8 +5,12 @@ import com.argusprojects.argusmc.anticheat.Violation;
 import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.checks.AimSnapPacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.AutoTotemCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.BlockReachCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.BoatFlyAdvancedCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.BoatFlyCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.BowAimCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.CPSPacketCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.CritCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.FastBreakCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.FastPlaceCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.InvMovePacketCheck;
@@ -15,7 +19,9 @@ import com.argusprojects.argusmc.anticheat.packet.checks.JetpackCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.KillauraAimCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.KillauraBlockingCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.KillauraSwingPacketCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.MultiVelocityCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.NukerCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.ProjectileAimCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.PhaseCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.PingSpoofCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.ReachPacketCheck;
@@ -83,6 +89,12 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final BoatFlyCheck              boatFlyCheck;
     private final JetpackCheck              jetpackCheck;
     private final SpiderCheck               spiderCheck;
+    private final MultiVelocityCheck        multiVelocityCheck;
+    private final BlockReachCheck           blockReachCheck;
+    private final CritCheck                 critCheck;
+    private final ProjectileAimCheck        projectileAimCheck;
+    private final BowAimCheck               bowAimCheck;
+    private final BoatFlyAdvancedCheck      boatFlyAdvancedCheck;
 
     /**
      * #512 — Cache entityId -> Entity para evitar el linear scan de
@@ -126,7 +138,17 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.boatFlyCheck         = new BoatFlyCheck(plugin);
         this.jetpackCheck         = new JetpackCheck(plugin);
         this.spiderCheck          = new SpiderCheck(plugin);
+        this.multiVelocityCheck   = new MultiVelocityCheck(plugin);
+        this.blockReachCheck      = new BlockReachCheck(plugin);
+        this.critCheck            = new CritCheck(plugin);
+        this.projectileAimCheck   = new ProjectileAimCheck(plugin);
+        this.bowAimCheck          = new BowAimCheck(plugin);
+        this.boatFlyAdvancedCheck = new BoatFlyAdvancedCheck(plugin);
     }
+
+    public CritCheck getCritCheck() { return critCheck; }
+    public ProjectileAimCheck getProjectileAimCheck() { return projectileAimCheck; }
+    public BowAimCheck getBowAimCheck() { return bowAimCheck; }
 
     /** Acceso al sink para checks que disparan desde el bridge Bukkit. */
     public ViolationSink getSink() { return sink(); }
@@ -191,10 +213,12 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         stepCheck.handlePositionPacket(player, s, nx, ny, nz, nowOnGround, sink());
                         // Speed real horizontal (Pack 48 #484).
                         speedPacketCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
-                        // Round 2: BoatFly / Jetpack / Spider.
+                        // Round 2: BoatFly / Jetpack / Spider / MultiVelocity / BoatFlyAdv.
                         boatFlyCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
                         jetpackCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
                         spiderCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
+                        multiVelocityCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
+                        boatFlyAdvancedCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
 
                         s.lastDeltaY = ny - s.lastY;
                         s.lastX = nx;
@@ -265,6 +289,15 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
             } else if (type == PacketType.Play.Client.PLAYER_BLOCK_PLACEMENT) {
                 long now = System.currentTimeMillis();
                 fastPlaceCheck.handleBlockPlacement(player, s, now, sink());
+                // BlockReach (round 2) — distancia ojos→bloque target.
+                try {
+                    var wrapP = new com.github.retrooper.packetevents.wrapper.play.client
+                        .WrapperPlayClientPlayerBlockPlacement(event);
+                    var pos = wrapP.getBlockPosition();
+                    if (pos != null) {
+                        blockReachCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), sink());
+                    }
+                } catch (Throwable ignored) {}
 
             } else if (type == PacketType.Play.Client.PLAYER_DIGGING) {
                 WrapperPlayClientPlayerDigging wrap = new WrapperPlayClientPlayerDigging(event);
@@ -273,6 +306,10 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                 if (action == DiggingAction.START_DIGGING) {
                     org.bukkit.Material mat = resolveBlock(player, wrap);
                     fastBreakCheck.handleStartDigging(player, s, now, mat);
+                    var pos = wrap.getBlockPosition();
+                    if (pos != null) {
+                        blockReachCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), sink());
+                    }
                 } else if (action == DiggingAction.FINISHED_DIGGING) {
                     org.bukkit.Material mat = resolveBlock(player, wrap);
                     fastBreakCheck.handleFinishDigging(player, s, now, mat, sink());
