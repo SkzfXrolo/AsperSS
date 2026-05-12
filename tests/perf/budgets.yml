@@ -1,0 +1,13 @@
+version: 1
+thresholds:
+  warn_degradation_pct: 10
+  fail_degradation_pct: 20
+endpoints:
+  - name: oracle_evaluate
+    p95_ms: 100
+  - name: features_extract
+    p95_ms: 50
+pages:
+  - name: panel_home
+    lcp_ms: 2500
+    cls: 0.1
