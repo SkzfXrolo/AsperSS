@@ -1,0 +1,15 @@
+project: argus-pack48
+checks:
+  - name: uptime-root
+    url: https://asperss.onrender.com/
+    frequency: 1m
+    regions: [sa-east-1, us-east-1, eu-west-1]
+  - name: panel-browse
+    url: https://asperss.onrender.com/panel
+    frequency: 15m
+    regions: [sa-east-1, us-east-1]
+  - name: oracle-eval-endpoint
+    url: https://asperss.onrender.com/api/plugin/ai-evaluate
+    method: POST
+    frequency: 15m
+    regions: [sa-east-1]
