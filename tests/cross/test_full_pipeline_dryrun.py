@@ -11,4 +11,4 @@ def test_full_pipeline_dryrun():
     d = evaluate(ev)
     intent = classify_intent("que paso con mateo")
     assert d.action in {"none", "watch", "kick", "ban"}
-    assert isinstance(intent, str)
+    assert hasattr(intent, "name")
