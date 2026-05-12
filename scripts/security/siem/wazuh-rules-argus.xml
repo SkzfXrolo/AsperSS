@@ -1,0 +1,14 @@
+<group name="argus,custom,">
+  <rule id="110001" level="10">
+    <if_group>argus_events</if_group>
+    <match>failed_login_burst</match>
+    <description>Argus brute force suspected</description>
+    <mitre><id>T1110</id></mitre>
+  </rule>
+  <rule id="110002" level="12">
+    <if_group>argus_events</if_group>
+    <match>api_key_unexpected_ip</match>
+    <description>Argus API key misuse from new IP</description>
+    <mitre><id>T1078</id></mitre>
+  </rule>
+</group>

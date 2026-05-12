@@ -1,0 +1,10 @@
+<decoder name="argus-json">
+  <prematch>argus_event</prematch>
+  <plugin_decoder>JSON_Decoder</plugin_decoder>
+</decoder>
+
+<decoder name="argus-auth">
+  <parent>argus-json</parent>
+  <regex>"event":"([^"]+)","user":"([^"]+)","ip":"([^"]+)"</regex>
+  <order>event,user,srcip</order>
+</decoder>
