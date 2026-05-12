@@ -183,12 +183,13 @@ def extract_features(evidence: dict[str, Any]) -> list[float]:
 
     # 4) Account & history
     aac = evidence.get("account_age_hours")
-    if aac is not None and aac >= 0:
-        fv["account_age_log_hours"] = math.log1p(float(aac))
+    if aac is not None:
+        aac = max(0.0, float(aac))
+        fv["account_age_log_hours"] = math.log1p(aac)
         fv["account_age_lt_24h"]    = 1.0 if aac < 24 else 0.0
         fv["account_age_lt_168h"]   = 1.0 if aac < 168 else 0.0
 
-    pt = float(evidence.get("playtime_hours") or 0)
+    pt = max(0.0, float(evidence.get("playtime_hours") or 0))
     fv["playtime_log_hours"] = math.log1p(pt)
     fv["playtime_gt_50h"]   = 1.0 if pt > 50 else 0.0
     fv["playtime_gt_200h"]  = 1.0 if pt > 200 else 0.0
@@ -219,7 +220,7 @@ def extract_features(evidence: dict[str, Any]) -> list[float]:
     fv["scan_clean_ratio"]   = (sc_clean / sc_total) if sc_total > 0 else 0.5
 
     # 7) Reports & cross-server
-    rep = float(evidence.get("reports_in_chat") or 0)
+    rep = max(0.0, float(evidence.get("reports_in_chat") or 0))
     fv["reports_in_chat"] = rep
     fv["reports_log"]     = math.log1p(rep)
     fv["cross_server_violations"]    = float(evidence.get("cross_server_violations") or 0)
