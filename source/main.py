@@ -11688,8 +11688,8 @@ class ArgusApp:
                 print(f"Error en scan_installed_programs ({path}): {e}")
 
     def scan_bam_registry(self):
-        """Lee Background Activity Monitor (BAM) para detectar ejecutables con timestamps precisos."""
-        print("🔍 Escaneando BAM registry (Background Activity Monitor)...")
+        """Lee BAM/DAM para detectar ejecutables con timestamps precisos."""
+        print("🔍 Escaneando BAM/DAM registry...")
         import struct
         hack_terms = [
             'vape', 'vapelite', 'entropy', 'entropyclient',
@@ -11713,57 +11713,65 @@ class ArgusApp:
                 pass
             return 'Desconocida'
 
+        bases = [
+            ('BAM', r'SYSTEM\CurrentControlSet\Services\bam\State\UserSettings'),
+            ('DAM', r'SYSTEM\CurrentControlSet\Services\dam\State\UserSettings'),
+        ]
+        scanned_any = False
         try:
-            bam_base = r'SYSTEM\CurrentControlSet\Services\bam\State\UserSettings'
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, bam_base) as base_key:
-                sid_idx = 0
-                while True:
-                    try:
-                        sid = winreg.EnumKey(base_key, sid_idx)
-                        sid_idx += 1
-                        sid_path = bam_base + '\\' + sid
-                        try:
-                            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, sid_path) as sid_key:
-                                val_idx = 0
-                                all_entries = []
-                                while True:
-                                    try:
-                                        name, data, vtype = winreg.EnumValue(sid_key, val_idx)
-                                        val_idx += 1
-                                        if not isinstance(data, bytes) or not name.startswith('\\Device\\'):
-                                            continue
-                                        ts = parse_bam_ts(data)
-                                        exe_name = name.split('\\')[-1]
-                                        all_entries.append({'name': name, 'exe': exe_name, 'ts': ts})
-                                        # Check for hack terms
-                                        name_lower = name.lower()
-                                        for term in hack_terms:
-                                            if term in name_lower:
-                                                self.issues_found.append({
-                                                    'tipo': 'bam_suspicious',
-                                                    'nombre': f'BAM: ejecutable sospechoso detectado — {exe_name}',
-                                                    'ruta': name[:255],
-                                                    'archivo': name[:255],
-                                                    'categoria': 'EXECUTED_FILES',
-                                                    'alerta': 'CRITICAL',
-                                                    'confidence': 85,
-                                                    'detected_patterns': [term],
-                                                    'extra': {'last_run': ts, 'fuente': 'BAM'},
-                                                })
-                                                print(f"🚨 BAM SOSPECHOSO: {exe_name} @ {ts}")
+            for source_name, base_path in bases:
+                try:
+                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, base_path) as base_key:
+                        sid_idx = 0
+                        while True:
+                            try:
+                                sid = winreg.EnumKey(base_key, sid_idx)
+                                sid_idx += 1
+                                sid_path = base_path + '\\' + sid
+                                try:
+                                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, sid_path) as sid_key:
+                                        val_idx = 0
+                                        all_entries = []
+                                        while True:
+                                            try:
+                                                name, data, _vtype = winreg.EnumValue(sid_key, val_idx)
+                                                val_idx += 1
+                                                if not isinstance(data, bytes) or not name.startswith('\\Device\\'):
+                                                    continue
+                                                ts = parse_bam_ts(data)
+                                                exe_name = name.split('\\')[-1]
+                                                all_entries.append({'name': name, 'exe': exe_name, 'ts': ts})
+                                                scanned_any = True
+                                                name_lower = name.lower()
+                                                for term in hack_terms:
+                                                    if term in name_lower:
+                                                        self.issues_found.append({
+                                                            'tipo': 'bam_suspicious',
+                                                            'nombre': f'{source_name}: ejecutable sospechoso detectado — {exe_name}',
+                                                            'ruta': name[:255],
+                                                            'archivo': name[:255],
+                                                            'categoria': 'EXECUTED_FILES',
+                                                            'alerta': 'CRITICAL',
+                                                            'confidence': 85,
+                                                            'detected_patterns': [term, source_name.lower()],
+                                                            'extra': {'last_run': ts, 'fuente': source_name},
+                                                        })
+                                                        print(f"🚨 {source_name} SOSPECHOSO: {exe_name} @ {ts}")
+                                                        break
+                                            except OSError:
                                                 break
-                                    except OSError:
-                                        break
-                                if all_entries:
-                                    print(f"✅ BAM: {len(all_entries)} ejecutables en SID ...{sid[-8:]}")
-                        except (FileNotFoundError, PermissionError):
-                            pass
-                    except OSError:
-                        break
-        except (FileNotFoundError, PermissionError) as e:
-            print(f"BAM registry no disponible: {e}")
+                                        if all_entries:
+                                            print(f"✅ {source_name}: {len(all_entries)} ejecutables en SID ...{sid[-8:]}")
+                                except (FileNotFoundError, PermissionError):
+                                    pass
+                            except OSError:
+                                break
+                except (FileNotFoundError, PermissionError):
+                    continue
         except Exception as e:
             print(f"Error en scan_bam_registry: {e}")
+        if not scanned_any:
+            print("BAM/DAM no disponible o sin entradas legibles")
 
     def scan_recent_lnk(self):
         """Escanea archivos .lnk recientes en %APPDATA%\\Microsoft\\Windows\\Recent."""
