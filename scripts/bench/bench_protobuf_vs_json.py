@@ -1,0 +1,1 @@
+﻿from __future__ import annotations\nimport json,time\nobj={'id':1,'name':'argus','scores':[1,2,3,4,5]}\nN=200000\nt0=time.perf_counter()\nfor _ in range(N):\n    json.dumps(obj)\njson_t=time.perf_counter()-t0\nprint(json.dumps({'benchmark':'protobuf_vs_json','note':'protobuf placeholder unless proto generated','json_elapsed_s':json_t,'iterations':N},indent=2))\n
