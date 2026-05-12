@@ -854,19 +854,22 @@ def api_public_stats():
         except Exception:
             pass
         try:
-            cur.execute("SELECT COUNT(*) FROM scans WHERE fecha > NOW() - INTERVAL '24 hours'")
+            try:
+                cur.execute("SELECT COUNT(*) FROM scans WHERE started_at > NOW() - INTERVAL '24 hours'")
+            except Exception:
+                cur.execute("SELECT COUNT(*) FROM scans WHERE started_at > datetime('now', '-24 hours')")
             row = cur.fetchone()
             out['scans_24h'] = int(_first_value(row) or 0)
         except Exception:
             pass
         try:
-            cur.execute('SELECT COUNT(*) FROM scan_verdicts')
+            cur.execute("SELECT COUNT(*) FROM scans WHERE verdict IS NOT NULL AND verdict != ''")
             row = cur.fetchone()
             out['verdicts_total'] = int(_first_value(row) or 0)
         except Exception:
             pass
         try:
-            cur.execute('SELECT COUNT(*) FROM empresas')
+            cur.execute('SELECT COUNT(*) FROM companies')
             row = cur.fetchone()
             out['companies_total'] = int(_first_value(row) or 0)
         except Exception:

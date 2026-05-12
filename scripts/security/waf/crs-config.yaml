@@ -1,0 +1,11 @@
+crs:
+  paranoia_level: 2
+  anomaly_threshold_inbound: 10
+  anomaly_threshold_outbound: 8
+  exclusions:
+    - id: 942100
+      path: /api/scans
+      reason: "JSON payload with scanner artifacts may trigger false positives."
+    - id: 941130
+      path: /api/plugin/violation
+      reason: "Plugin detail strings can include suspicious symbols."
