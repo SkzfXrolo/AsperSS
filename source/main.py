@@ -9092,6 +9092,15 @@ class ArgusApp:
     def is_suspicious_process(self, process_name):
         """Verifica si un proceso es sospechoso - MEJORADO CON MÁS PATRONES"""
         process_name = process_name.lower()
+
+        # #127 — overlays y utilidades gaming legítimas (evitar falsos positivos).
+        legit_gaming_overlay = (
+            'gameoverlayui', 'rtss', 'rivatuner', 'msiafterburner', 'nvidia share',
+            'amdow', 'amdsoftware', 'obs', 'streamlabs', 'discord', 'overwolf',
+            'nahimic', 'sonicradar', 'steelseriesgg', 'medal',
+        )
+        if is_legit_overlay(process_name) or any(g in process_name for g in legit_gaming_overlay):
+            return False
         
         # Patrones críticos de procesos de hack
         critical_processes = [

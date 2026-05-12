@@ -3941,6 +3941,65 @@ def api_ai_scores():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/ai/evaluate-batch', methods=['POST'])
+@login_required
+def api_ai_evaluate_batch():
+    """Evalúa N jugadores en una sola request usando Oracle hybrid."""
+    data = request.get_json(silent=True) or {}
+    players = data.get('players') or []
+    if not isinstance(players, list) or not players:
+        return jsonify({'success': False, 'error': 'players debe ser un array no vacío'}), 400
+    if len(players) > 50:
+        return jsonify({'success': False, 'error': 'Máximo 50 jugadores por lote'}), 400
+
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        company_id = 0 if user.get('is_super_admin') else int(user.get('company_id') or 0)
+        import argus_ai_oracle as _oracle
+
+        out: list[dict] = []
+        with get_api_db_cursor() as cursor:
+            weights = _get_ai_weights(company_id)
+            log_reg = _load_ml_model(cursor, company_id, 'logreg')
+            knn = _load_ml_model(cursor, company_id, 'knn')
+            temporal = _load_ml_model(cursor, company_id, 'temporal')
+            for p in players:
+                if not isinstance(p, dict):
+                    continue
+                player_uuid = (p.get('player_uuid') or '').strip()[:40]
+                player_name = (p.get('player_name') or '').strip()[:64]
+                violation = p.get('violation') if isinstance(p.get('violation'), dict) else None
+                if not player_uuid or not player_name:
+                    out.append({
+                        'player_uuid': player_uuid,
+                        'player_name': player_name,
+                        'error': 'player_uuid y player_name requeridos',
+                    })
+                    continue
+                evidence = _build_ai_evidence(cursor, company_id, player_uuid, player_name, violation)
+                decision = _oracle.evaluate_hybrid(
+                    evidence, weights,
+                    log_reg=log_reg, knn=knn, temporal=temporal,
+                    feature_vector=None, sequence=None,
+                )
+                out.append({
+                    'player_uuid': player_uuid,
+                    'player_name': player_name,
+                    'score': decision.score,
+                    'confidence': decision.confidence,
+                    'action': decision.action,
+                    'reasoning': decision.reasoning,
+                    'top_factor': decision.top_factor,
+                    'evidence_used': decision.evidence_used,
+                })
+        return jsonify({'success': True, 'count': len(out), 'results': out}), 200
+    except Exception as e:
+        print(f"ERROR api_ai_evaluate_batch: {type(e).__name__}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/ai/decisions', methods=['GET'])
 @login_required
 def api_ai_decisions():
