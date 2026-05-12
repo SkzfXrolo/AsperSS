@@ -5665,6 +5665,9 @@ class ArgusApp:
                 _run_safe(self.scan_registry)
                 self._set_scan_phase("📜 Event logs...")
                 _run_safe(self.scan_event_logs)
+                self._set_scan_phase("🧪 Sysmon + Security 4688...")
+                _run_safe(self.scan_sysmon_operational)
+                _run_safe(self.scan_security_4688_events)
                 self._set_scan_phase("💻 Historial CMD / PowerShell...")
                 _run_safe(self.scan_cmd_history_full)
                 _run_safe(self.scan_powershell_history)
@@ -9131,6 +9134,59 @@ class ArgusApp:
                     pass
             except Exception:
                 pass
+
+    def scan_sysmon_operational(self):
+        """#107 — Escanea Sysmon Operational si está disponible."""
+        try:
+            result = subprocess.run(
+                ['wevtutil', 'qe', 'Microsoft-Windows-Sysmon/Operational',
+                 '/q:*[System[(EventID=1 or EventID=7)]]', '/c:40', '/rd:true', '/f:text'],
+                capture_output=True, timeout=12, creationflags=0x08000000
+            )
+            out = (result.stdout or b'').decode('utf-8', errors='ignore').lower()
+            if not out.strip():
+                return
+            hits = [k for k in ('inject', 'hollow', 'mimikatz', 'cheatengine', 'xenos', 'dllinject')
+                    if k in out]
+            if hits:
+                self.issues_found.append({
+                    'tipo': 'sysmon_operational_suspicious',
+                    'nombre': 'Sysmon Operational con eventos de proceso/módulo sospechosos',
+                    'ruta': 'Microsoft-Windows-Sysmon/Operational',
+                    'archivo': 'EventID 1/7',
+                    'categoria': 'FORENSE',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.72,
+                    'detected_patterns': [f'sysmon:{h}' for h in hits[:5]],
+                })
+        except Exception:
+            pass
+
+    def scan_security_4688_events(self):
+        """#108 — Heurística sobre creación de procesos en Security 4688."""
+        try:
+            result = subprocess.run(
+                ['wevtutil', 'qe', 'Security', '/q:*[System[(EventID=4688)]]', '/c:80', '/rd:true', '/f:text'],
+                capture_output=True, timeout=14, creationflags=0x08000000
+            )
+            out = (result.stdout or b'').decode('utf-8', errors='ignore').lower()
+            if not out.strip():
+                return
+            keywords = (' -enc ', 'frombase64string', 'mshta ', 'regsvr32 ', 'certutil ', 'powershell -w hidden')
+            matched = [k.strip() for k in keywords if k in out]
+            if matched:
+                self.issues_found.append({
+                    'tipo': 'security_4688_suspicious',
+                    'nombre': 'Security 4688 con argumentos de proceso sospechosos',
+                    'ruta': 'Security',
+                    'archivo': 'EventID 4688',
+                    'categoria': 'FORENSE',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.76,
+                    'detected_patterns': [f'4688:{m}' for m in matched[:5]],
+                })
+        except Exception:
+            pass
     
     def scan_processes(self):
         """Escanea procesos activos"""
