@@ -1,0 +1,29 @@
+name: macOS Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/macos/**"
+      - ".github/workflows/macos-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Build app bundle
+        run: |
+          set -euo pipefail
+          chmod +x scripts/macos/build-app.sh
+          scripts/macos/build-app.sh
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: argus-macos-app-${{ github.sha }}
+          path: dist/*.app
