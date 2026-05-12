@@ -176,6 +176,20 @@ public final class PacketDataStore {
         /** Hit-pattern reciente: secuencia de attacks alternados con eat (AutoEat). */
         public volatile int     autoEatPatternHits;
         public volatile long    autoEatLastEventMs;
+        /** Counters dedicados a checks de Round 3. */
+        public volatile int     noSwingConsec;
+        public volatile int     thruWallConsec;
+        public volatile int     scaffoldRotConsec;
+        public volatile int     scaffoldTowerConsec;
+        public volatile long    lastScaffoldPlaceMs;
+        public volatile int     lastScaffoldPlaceY;
+        public volatile int     phaseConsec;
+        public volatile int     antiKbConsec;
+        public volatile int     noSlowSneakConsec;
+        public volatile int     liquidJesusConsec;
+        public volatile int     reach3dConsec;
+        public volatile int     aimbotConsec;
+        public volatile int     tracersConsec;
 
         public synchronized void pushRotation(float yaw, float pitch, long now) {
             recentRotations.addLast(new RotationSample(yaw, pitch, now));
@@ -259,6 +273,19 @@ public final class PacketDataStore {
             lastKnockbackExpectedMag = 0.0;
             autoEatPatternHits = 0;
             autoEatLastEventMs = 0L;
+            noSwingConsec = 0;
+            thruWallConsec = 0;
+            scaffoldRotConsec = 0;
+            scaffoldTowerConsec = 0;
+            lastScaffoldPlaceMs = 0L;
+            lastScaffoldPlaceY = 0;
+            phaseConsec = 0;
+            antiKbConsec = 0;
+            noSlowSneakConsec = 0;
+            liquidJesusConsec = 0;
+            reach3dConsec = 0;
+            aimbotConsec = 0;
+            tracersConsec = 0;
         }
     }
 
