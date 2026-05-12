@@ -12424,11 +12424,15 @@ def ai_detect_inconsistencies(scan_id):
         return jsonify({'inconsistencies': []}), 200
 
 
-_REVIEW_SECRET = 'aspers-claude-review-2026'
+_REVIEW_SECRET = os.environ.get('ARGUS_INTERNAL_REVIEW_SECRET', '').strip()
+if not _REVIEW_SECRET:
+    _REVIEW_SECRET = secrets.token_urlsafe(32)
+    app.logger.warning('[security] ARGUS_INTERNAL_REVIEW_SECRET no configurado; generado secreto efímero de proceso')
 
 @app.route('/internal/scan-review/<int:scan_id>')
 def internal_scan_review(scan_id):
-    if request.args.get('token') != _REVIEW_SECRET:
+    token = request.args.get('token') or request.headers.get('X-Argus-Internal-Review-Secret') or ''
+    if not secrets.compare_digest(str(token), _REVIEW_SECRET):
         return 'Acceso denegado', 403
     import traceback as _tb
     try:
