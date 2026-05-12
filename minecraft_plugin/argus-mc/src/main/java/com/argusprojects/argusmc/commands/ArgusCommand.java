@@ -39,7 +39,9 @@ import java.util.List;
 public final class ArgusCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SS_ALIASES   = Arrays.asList("check", "ss", "screenshare", "scan");
-    private static final List<String> ADMIN_SUBS   = Arrays.asList("reload", "info", "test", "debug", "violations", "duda", "pregunta", "ask");
+    private static final List<String> ADMIN_SUBS   = Arrays.asList("reload", "info", "test", "debug", "violations", "duda", "pregunta", "ask", "admin");
+    /** Sub-subcomandos bajo /argus admin (Pack 48 bloque 4). */
+    private static final List<String> ADMIN_NESTED = Arrays.asList("reload", "debug", "testpacket", "clearviolations");
 
     private final ArgusPlugin plugin;
     private final SsService ssService;
@@ -77,6 +79,7 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
             case "duda":       handleDuda(sender, args); break;
             case "pregunta":
             case "ask":        handlePregunta(sender, args); break;
+            case "admin":      handleAdmin(sender, args); break;
             case "help":       sendHelp(sender);         break;
             default:
                 sender.sendMessage(msg.prefix() + Messages.color("&cSubcomando desconocido: &f" + sub));
@@ -84,6 +87,51 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
                 break;
         }
         return true;
+    }
+
+    /**
+     * /argus admin &lt;sub&gt; — namespace para operaciones administrativas.
+     *
+     * <p>Sub-subcomandos (Pack 48 bloque 4):
+     * <ul>
+     *   <li><b>reload</b> — recarga config.yml (alias de /argus reload). (#501)</li>
+     *   <li><b>debug [jugador]</b> — toggle debug global o telemetria de un
+     *       jugador especifico desde el packet datastore. (#502)</li>
+     *   <li><b>testpacket &lt;jugador&gt;</b> — inyecta una violation sintetica
+     *       a nivel packet para verificar el pipeline (sink, ViolationManager,
+     *       AI Oracle, Discord, etc.). (#503)</li>
+     *   <li><b>clearviolations [jugador]</b> — limpia el acumulador de la
+     *       sliding window y los buffers del packet datastore. (#506)</li>
+     * </ul>
+     */
+    private void handleAdmin(CommandSender sender, String[] args) {
+        Messages msg = plugin.getMessages();
+        if (args.length < 2) {
+            sendAdminHelp(sender);
+            return;
+        }
+        String sub = args[1].toLowerCase();
+        switch (sub) {
+            case "reload":           handleAdminReload(sender);          break;
+            case "help":             sendAdminHelp(sender);              break;
+            default:
+                sender.sendMessage(msg.prefix() + Messages.color("&cSub-comando admin desconocido: &f" + sub));
+                sendAdminHelp(sender);
+                break;
+        }
+    }
+
+    private void sendAdminHelp(CommandSender sender) {
+        sender.sendMessage(Messages.color("&7Subcomandos &e/argus admin&7:"));
+        sender.sendMessage(Messages.color("  &e/argus admin reload &7- recarga config.yml"));
+        sender.sendMessage(Messages.color("  &e/argus admin debug [jugador] &7- debug global o telemetria de jugador"));
+        sender.sendMessage(Messages.color("  &e/argus admin testpacket <jugador> &7- emite test packet violation"));
+        sender.sendMessage(Messages.color("  &e/argus admin clearviolations [jugador] &7- limpia violations"));
+    }
+
+    /** #501 — /argus admin reload */
+    private void handleAdminReload(CommandSender sender) {
+        handleReload(sender);
     }
 
     /**
@@ -243,6 +291,7 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Messages.color("  &e/argus violations <jugador> &7- ver violations recientes"));
             sender.sendMessage(Messages.color("  &e/argus duda <jugador> &7- consulta al Argus AI Oracle"));
             sender.sendMessage(Messages.color("  &e/argus pregunta <texto> &7- chat con el Oracle (lenguaje natural)"));
+            sender.sendMessage(Messages.color("  &e/argus admin &7- subcomandos admin (reload/debug/testpacket/clearviolations)"));
         }
     }
 
@@ -378,6 +427,28 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
         if (args.length == 2 && SS_ALIASES.contains(args[0].toLowerCase())
             && sender.hasPermission("argus.ss.use")) {
             String partial = args[1].toLowerCase();
+            List<String> matches = new ArrayList<>();
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase().startsWith(partial)) {
+                    matches.add(p.getName());
+                }
+            }
+            return matches;
+        }
+        // /argus admin <sub>  (Pack 48 #501-#506)
+        if (args.length == 2 && "admin".equalsIgnoreCase(args[0])
+            && sender.hasPermission("argus.admin")) {
+            String partial = args[1].toLowerCase();
+            List<String> out = new ArrayList<>();
+            for (String s : ADMIN_NESTED) {
+                if (s.startsWith(partial)) out.add(s);
+            }
+            return out;
+        }
+        // /argus admin <sub> <player>
+        if (args.length == 3 && "admin".equalsIgnoreCase(args[0])
+            && sender.hasPermission("argus.admin")) {
+            String partial = args[2].toLowerCase();
             List<String> matches = new ArrayList<>();
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (p.getName().toLowerCase().startsWith(partial)) {
