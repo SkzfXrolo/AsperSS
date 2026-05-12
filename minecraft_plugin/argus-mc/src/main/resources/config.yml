@@ -250,6 +250,13 @@ anticheat:
       hardness_threshold_very: 3.0
       min_ms_hard: 80
       min_ms_very_hard: 200
+    nuker:
+      enabled: true          # multiples FINISHED_DIGGING dentro de una ventana
+                             # corta. Cliente vanilla un break por tick (~50ms).
+                             # Skip creative y bloques instant-break.
+      window_ms: 60
+      min_breaks_mid: 3
+      min_breaks_high: 5
 
 # ── Mensajes (puedes traducir libremente) ─────────────────────
 messages:

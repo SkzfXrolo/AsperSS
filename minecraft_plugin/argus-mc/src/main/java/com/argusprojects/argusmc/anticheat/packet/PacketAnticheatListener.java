@@ -10,6 +10,7 @@ import com.argusprojects.argusmc.anticheat.packet.checks.FastPlaceCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.InvMovePacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.InvalidRotationCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.KillauraSwingPacketCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.NukerCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.PhaseCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.PingSpoofCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.ReachPacketCheck;
@@ -65,6 +66,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final SpeedPacketCheck          speedPacketCheck;
     private final FastPlaceCheck            fastPlaceCheck;
     private final FastBreakCheck            fastBreakCheck;
+    private final NukerCheck                nukerCheck;
 
     public PacketAnticheatListener(ArgusPlugin plugin, PacketDataStore store) {
         super(PacketListenerPriority.NORMAL);
@@ -86,6 +88,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.speedPacketCheck     = new SpeedPacketCheck(plugin);
         this.fastPlaceCheck       = new FastPlaceCheck(plugin);
         this.fastBreakCheck       = new FastBreakCheck(plugin);
+        this.nukerCheck           = new NukerCheck(plugin);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -217,6 +220,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                 } else if (action == WrapperPlayClientPlayerDigging.DiggingAction.FINISHED_DIGGING) {
                     org.bukkit.Material mat = resolveBlock(player, wrap);
                     fastBreakCheck.handleFinishDigging(player, s, now, mat, sink());
+                    nukerCheck.handleFinishDigging(player, s, now, mat, sink());
                 } else if (action == WrapperPlayClientPlayerDigging.DiggingAction.CANCELLED_DIGGING) {
                     s.currentBreakStartMs = 0L;
                     s.currentBreakBlockMaterial = null;
