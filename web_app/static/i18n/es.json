@@ -1,0 +1,7 @@
+{
+  "settings.webhooks": "Webhooks",
+  "settings.api_keys": "API Keys",
+  "settings.notif_prefs": "Preferencias de notificación",
+  "settings.privacy": "Privacidad y GDPR",
+  "search.global.placeholder": "Buscar en escaneos, usuarios, empresas..."
+}

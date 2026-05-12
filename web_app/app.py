@@ -15,6 +15,11 @@ import traceback
 from functools import wraps
 from cache import cache as _app_cache
 from cache import cached as _cached
+from api_keys import generate_api_key as _gen_api_key, hash_api_key as _hash_api_key
+from webhooks import deliver_with_retries as _deliver_webhook
+from trust_score import calculate_trust_score as _calculate_trust_score
+from admin_backup import encrypt_json_payload as _encrypt_backup_payload, save_backup as _save_backup, list_backups as _list_backups, read_backup as _read_backup, rotate_backups as _rotate_backups
+from gdpr import build_user_export_zip as _build_user_export_zip
 try:
     from utils.request_id import bind_request_id as _bind_request_id
 except Exception:
@@ -175,6 +180,40 @@ def _make_session_permanent():
             pass
 
 
+@app.before_request
+def _auth_with_api_key():
+    """Permite Authorization: Bearer argus_xxx en endpoints API."""
+    if session.get('user_id'):
+        return None
+    auth = (request.headers.get('Authorization') or '').strip()
+    if not auth.lower().startswith('bearer '):
+        return None
+    token = auth.split(' ', 1)[1].strip()
+    if not token.startswith('argus_'):
+        return None
+    key_hash = _hash_api_key(token)
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT id, user_id, company_id FROM api_keys WHERE key_hash = {_PH} AND revoked_at IS NULL LIMIT 1",
+                (key_hash,)
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            d = dict(row) if not isinstance(row, dict) else row
+            uid = int(d.get('user_id') or 0)
+            if uid <= 0:
+                return None
+            session['user_id'] = uid
+            session['company_id'] = int(d.get('company_id') or 0) or None
+            cur.execute(f"UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE id = {_PH}", (int(d.get('id') or 0),))
+            _write_audit('api_key.used', 'api_key', str(d.get('id') or ''), {'path': request.path})
+    except Exception:
+        return None
+    return None
+
+
 csrf = CSRFProtect(app)
 _CSRF_EXEMPT_ENDPOINTS = {
     ('POST', '/api/auth/login'),
@@ -270,11 +309,40 @@ def _emit_realtime_notification(user_id: int | None = None, company_id: int | No
     if socketio is None:
         return
     data = payload or {}
+    event_type = str((data or {}).get('kind') or 'security_alert').lower()
     try:
         if user_id:
-            socketio.emit('notification', data, room=f"user:{int(user_id)}")
+            allow = True
+            try:
+                with get_api_db_cursor() as cur:
+                    cur.execute(
+                        f"SELECT enabled FROM user_notification_prefs WHERE user_id = {_PH} AND channel = 'in_app' AND event_type = {_PH} LIMIT 1",
+                        (int(user_id), event_type)
+                    )
+                    rr = cur.fetchone()
+                    if rr is not None:
+                        allow = bool(_row_get(rr, 0, 'enabled'))
+            except Exception:
+                pass
+            if allow:
+                socketio.emit('notification', data, room=f"user:{int(user_id)}")
         if company_id:
-            socketio.emit('notification', data, room=f"company:{int(company_id)}")
+            # respetar prefs por usuario cuando emitimos por company
+            targets = []
+            try:
+                with get_api_db_cursor() as cur:
+                    cur.execute(
+                        f"SELECT id FROM users WHERE company_id = {_PH} AND (deleted_at IS NULL OR deleted_at IS NULL)",
+                        (int(company_id),)
+                    )
+                    targets = [int(_row_get(r, 0, 'id') or 0) for r in (cur.fetchall() or [])]
+            except Exception:
+                targets = []
+            if not targets:
+                socketio.emit('notification', data, room=f"company:{int(company_id)}")
+            else:
+                for uid in targets:
+                    _emit_realtime_notification(user_id=uid, payload=data)
     except Exception as e:
         print(f"[ws] emit notification error: {e}")
 
@@ -759,6 +827,8 @@ try:
                        id='audit_retention_cleanup', replace_existing=True)
     _scheduler.add_job(lambda: globals().get('purge_soft_deleted_older_than_90d', lambda: None)(), 'cron', hour=4, minute=45,
                        id='purge_soft_deleted_90d', replace_existing=True)
+    _scheduler.add_job(lambda: globals().get('recalc_all_trust_scores', lambda: None)(), 'cron', hour=3, minute=20,
+                       id='recalc_user_trust_scores', replace_existing=True)
     _scheduler.add_job(lambda: globals().get('scan_scheduler_tick', lambda: None)(), 'interval', minutes=5,
                        id='scan_scheduler_tick', replace_existing=True)
     _scheduler.add_job(_try_send_deploy_webhook, 'interval', minutes=10,
@@ -1834,6 +1904,15 @@ def api_register():
     )
     
     if user_result['success']:
+        try:
+            dispatch_webhook('user.created', {
+                'username': username,
+                'email': email,
+                'company_id': company_id,
+                'roles': roles,
+            }, company_id=int(company_id or 0) or None)
+        except Exception:
+            pass
         return jsonify({'success': True, 'message': 'Usuario creado exitosamente'})
     else:
         return jsonify({'success': False, 'error': user_result['error']}), 400
@@ -2955,6 +3034,88 @@ def _ensure_plugin_keys_schema():
                 except Exception:
                     pass
 
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER NOT NULL,
+                        url TEXT NOT NULL,
+                        secret TEXT NOT NULL,
+                        events TEXT NOT NULL,
+                        is_active BOOLEAN DEFAULT TRUE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS webhook_deliveries (
+                        id SERIAL PRIMARY KEY,
+                        subscription_id INTEGER NOT NULL,
+                        event_type VARCHAR(80) NOT NULL,
+                        payload TEXT NOT NULL,
+                        status VARCHAR(32) DEFAULT 'pending',
+                        response_code INTEGER,
+                        attempts INTEGER DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS api_keys (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        company_id INTEGER,
+                        name VARCHAR(120) NOT NULL,
+                        key_hash VARCHAR(128) NOT NULL,
+                        scopes TEXT NOT NULL,
+                        last_used_at TIMESTAMP,
+                        revoked_at TIMESTAMP,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                try:
+                    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_api_keys_hash ON api_keys(key_hash)")
+                except Exception:
+                    pass
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS user_notification_prefs (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        channel VARCHAR(32) NOT NULL,
+                        event_type VARCHAR(80) NOT NULL,
+                        enabled BOOLEAN DEFAULT TRUE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                try:
+                    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_unp ON user_notification_prefs(user_id, channel, event_type)")
+                except Exception:
+                    pass
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS invitations (
+                        id SERIAL PRIMARY KEY,
+                        email VARCHAR(255) NOT NULL,
+                        company_id INTEGER NOT NULL,
+                        role VARCHAR(64) NOT NULL,
+                        token VARCHAR(128) NOT NULL,
+                        expires_at TIMESTAMP NOT NULL,
+                        accepted_at TIMESTAMP,
+                        created_by INTEGER,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS user_trust_scores (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        score REAL DEFAULT 50,
+                        factors_json TEXT NOT NULL,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                try:
+                    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_user_trust ON user_trust_scores(user_id)")
+                except Exception:
+                    pass
+
                 # Seed profiles default
                 _seed_profiles = [
                     ('Minecraft', 'minecraft', json.dumps({'whitelist_checks': ['inventory_move'], 'allow_legit_clients': True})),
@@ -3229,6 +3390,11 @@ def _notify_suspicious_scan_diff(cursor, company_id: int, scan_id: int, diff: di
             'scan_id': scan_id,
             'message': f'Cambios sospechosos detectados en scan #{scan_id}',
         })
+        dispatch_webhook('scan.suspicious', {
+            'scan_id': scan_id,
+            'summary': diff.get('summary') if isinstance(diff, dict) else {},
+            'company_id': company_id,
+        }, company_id=company_id)
     except Exception as e:
         print(f"[dual_scanner] suspicious notify error: {e}")
 
@@ -4022,6 +4188,23 @@ def _persist_ai_decision(cursor, company_id: int, plugin_key_id: int | None,
         )
     except Exception as e:
         print(f"[oracle_notify] error dispatch: {e}")
+    try:
+        dispatch_webhook('oracle.decision', {
+            'decision_id': decision_id,
+            'company_id': company_id,
+            'player_name': player_name,
+            'action': str(getattr(decision, 'action', '') or ''),
+            'score': float(getattr(decision, 'score', 0.0) or 0.0),
+            'confidence': float(getattr(decision, 'confidence', 0.0) or 0.0),
+        }, company_id=company_id)
+        if str(getattr(decision, 'action', '') or '').lower() == 'ban':
+            dispatch_webhook('ban.created', {
+                'decision_id': decision_id,
+                'company_id': company_id,
+                'player_name': player_name,
+            }, company_id=company_id)
+    except Exception:
+        pass
 
     return decision_id
 
@@ -4537,6 +4720,462 @@ def api_shared_rules_rate(rule_id: int):
             (new_avg, new_n, rule_id)
         )
     return jsonify({'success': True, 'rating_avg': round(new_avg, 3), 'rating_count': new_n}), 200
+
+
+def dispatch_webhook(event_type: str, payload: dict, company_id: int | None = None):
+    try:
+        if not company_id:
+            company_id = int(payload.get('company_id') or 0)
+        if not company_id:
+            return
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT id, url, secret, events, is_active FROM webhook_subscriptions "
+                f"WHERE company_id = {_PH} AND is_active = TRUE",
+                (company_id,)
+            )
+            rows = cur.fetchall() or []
+            for r in rows:
+                d = dict(r) if not isinstance(r, dict) else r
+                events = []
+                try:
+                    events = json.loads(d.get('events') or '[]')
+                except Exception:
+                    events = []
+                if events and event_type not in events:
+                    continue
+                sub_id = int(d.get('id') or 0)
+                def _send_one(sid=sub_id, ev=event_type, pld=dict(payload), url=str(d.get('url') or ''), sec=str(d.get('secret') or '')):
+                    ok, status_code = _deliver_webhook(
+                        url=url,
+                        secret=sec,
+                        payload={'event_type': ev, 'payload': pld}
+                    )
+                    try:
+                        with get_api_db_cursor() as _c:
+                            _c.execute(
+                                f"INSERT INTO webhook_deliveries (subscription_id, event_type, payload, status, response_code, attempts) "
+                                f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH})",
+                                (sid, ev, json.dumps(pld), 'ok' if ok else 'failed', int(status_code or 0), 1)
+                            )
+                    except Exception:
+                        pass
+                threading.Thread(target=_send_one, daemon=True).start()
+    except Exception as e:
+        print(f"[webhooks] dispatch error: {e}")
+
+
+@app.route('/api/webhooks/subscriptions', methods=['GET', 'POST', 'PUT', 'DELETE'])
+@login_required
+@audit_action('webhooks.subscriptions.mutate', 'webhook_subscription')
+def api_webhook_subscriptions():
+    user = get_user_by_id(session.get('user_id'))
+    company_id = int(_resolve_company_id_for_user(user) or 0)
+    if company_id <= 0:
+        return jsonify({'success': False, 'error': 'Sin company_id'}), 400
+    if request.method == 'GET':
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT id, company_id, url, events, is_active, created_at FROM webhook_subscriptions "
+                f"WHERE company_id = {_PH} ORDER BY id DESC",
+                (company_id,)
+            )
+            rows = cur.fetchall() or []
+        items = []
+        for r in rows:
+            d = dict(r) if not isinstance(r, dict) else r
+            items.append({
+                'id': d.get('id'),
+                'company_id': d.get('company_id'),
+                'url': d.get('url'),
+                'events': json.loads(d.get('events') or '[]'),
+                'is_active': bool(d.get('is_active')),
+                'created_at': str(d.get('created_at') or ''),
+            })
+        return jsonify({'success': True, 'items': items}), 200
+    data = request.json or {}
+    with get_api_db_cursor() as cur:
+        if request.method == 'POST':
+            sid = _insert_id(
+                cur,
+                f"INSERT INTO webhook_subscriptions (company_id, url, secret, events, is_active) "
+                f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH})",
+                (company_id, str(data.get('url') or '').strip(), str(data.get('secret') or '').strip(),
+                 json.dumps(data.get('events') or []), bool(data.get('is_active', True)))
+            )
+            return jsonify({'success': True, 'id': sid}), 200
+        if request.method == 'PUT':
+            sid = int(data.get('id') or 0)
+            cur.execute(
+                f"UPDATE webhook_subscriptions SET url = {_PH}, secret = {_PH}, events = {_PH}, is_active = {_PH} "
+                f"WHERE id = {_PH} AND company_id = {_PH}",
+                (str(data.get('url') or '').strip(), str(data.get('secret') or '').strip(),
+                 json.dumps(data.get('events') or []), bool(data.get('is_active', True)), sid, company_id)
+            )
+            return jsonify({'success': True}), 200
+        sid = int(data.get('id') or request.args.get('id') or 0)
+        cur.execute(f"DELETE FROM webhook_subscriptions WHERE id = {_PH} AND company_id = {_PH}", (sid, company_id))
+        return jsonify({'success': True}), 200
+
+
+@app.route('/api/webhooks/deliveries', methods=['GET'])
+@login_required
+def api_webhook_deliveries():
+    sub_id = int(request.args.get('subscription_id') or 0)
+    if sub_id <= 0:
+        return jsonify({'success': False, 'error': 'subscription_id requerido'}), 400
+    with get_api_db_cursor() as cur:
+        cur.execute(
+            f"SELECT id, subscription_id, event_type, status, response_code, attempts, created_at "
+            f"FROM webhook_deliveries WHERE subscription_id = {_PH} ORDER BY id DESC LIMIT 200",
+            (sub_id,)
+        )
+        rows = cur.fetchall() or []
+    return jsonify({'success': True, 'items': [dict(r) if not isinstance(r, dict) else r for r in rows]}), 200
+
+
+@app.route('/api/keys', methods=['GET', 'POST'])
+@login_required
+@audit_action('api_keys.manage', 'api_key')
+def api_keys_list_create():
+    uid = int(session.get('user_id') or 0)
+    user = get_user_by_id(uid)
+    company_id = int(_resolve_company_id_for_user(user) or 0) if user else 0
+    if request.method == 'GET':
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT id, name, scopes, last_used_at, revoked_at, created_at FROM api_keys "
+                f"WHERE user_id = {_PH} ORDER BY id DESC",
+                (uid,)
+            )
+            rows = cur.fetchall() or []
+        out = []
+        for r in rows:
+            d = dict(r) if not isinstance(r, dict) else r
+            out.append({
+                'id': d.get('id'),
+                'name': d.get('name'),
+                'scopes': json.loads(d.get('scopes') or '[]'),
+                'last_used_at': str(d.get('last_used_at') or ''),
+                'revoked_at': str(d.get('revoked_at') or '') if d.get('revoked_at') else None,
+                'created_at': str(d.get('created_at') or ''),
+            })
+        return jsonify({'success': True, 'items': out}), 200
+    data = request.json or {}
+    name = str(data.get('name') or 'default')[:120]
+    scopes = data.get('scopes') or ['read:scans']
+    plain = _gen_api_key('argus')
+    key_hash = _hash_api_key(plain)
+    with get_api_db_cursor() as cur:
+        kid = _insert_id(
+            cur,
+            f"INSERT INTO api_keys (user_id, company_id, name, key_hash, scopes) VALUES ({_PH},{_PH},{_PH},{_PH},{_PH})",
+            (uid, company_id or None, name, key_hash, json.dumps(scopes))
+        )
+    _write_audit('api_key.created', 'api_key', str(kid or ''), {'name': name, 'scopes': scopes})
+    return jsonify({'success': True, 'id': kid, 'api_key': plain}), 200
+
+
+@app.route('/api/keys/<int:key_id>', methods=['DELETE'])
+@login_required
+@audit_action('api_key.revoked', 'api_key')
+def api_keys_delete(key_id: int):
+    uid = int(session.get('user_id') or 0)
+    with get_api_db_cursor() as cur:
+        cur.execute(
+            f"UPDATE api_keys SET revoked_at = CURRENT_TIMESTAMP WHERE id = {_PH} AND user_id = {_PH}",
+            (key_id, uid)
+        )
+    return jsonify({'success': True}), 200
+
+
+@app.route('/api/me/notifications/prefs', methods=['GET', 'PUT'])
+@login_required
+def api_me_notification_prefs():
+    uid = int(session.get('user_id') or 0)
+    if request.method == 'GET':
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT channel, event_type, enabled FROM user_notification_prefs WHERE user_id = {_PH}",
+                (uid,)
+            )
+            rows = cur.fetchall() or []
+        return jsonify({'success': True, 'items': [dict(r) if not isinstance(r, dict) else r for r in rows]}), 200
+    data = request.json or {}
+    items = data.get('items') or []
+    with get_api_db_cursor() as cur:
+        cur.execute(f"DELETE FROM user_notification_prefs WHERE user_id = {_PH}", (uid,))
+        for it in items[:200]:
+            ch = str((it or {}).get('channel') or '').strip().lower()
+            ev = str((it or {}).get('event_type') or '').strip().lower()
+            en = bool((it or {}).get('enabled', True))
+            if not ch or not ev:
+                continue
+            cur.execute(
+                f"INSERT INTO user_notification_prefs (user_id, channel, event_type, enabled, updated_at) "
+                f"VALUES ({_PH},{_PH},{_PH},{_PH},CURRENT_TIMESTAMP)",
+                (uid, ch, ev, en)
+            )
+    _write_audit('notification_prefs.updated', 'user', str(uid), {'count': len(items)})
+    return jsonify({'success': True}), 200
+
+
+@app.route('/api/search', methods=['GET'])
+@login_required
+@audit_action('search.global', 'search')
+def api_search_global():
+    q = str(request.args.get('q') or '').strip()
+    types = str(request.args.get('types') or 'scans,users,companies,violations').strip().lower().split(',')
+    if len(q) < 2:
+        return jsonify({'success': True, 'query': q, 'results': []}), 200
+    user = get_user_by_id(session.get('user_id'))
+    company_id = int(_resolve_company_id_for_user(user) or 0) if user else 0
+    results = []
+    with get_api_db_cursor() as cur:
+        if 'scans' in types:
+            cur.execute(
+                f"SELECT id, machine_name, minecraft_username, started_at FROM scans "
+                f"WHERE deleted_at IS NULL AND company_id = {_PH} AND (machine_name ILIKE {_PH} OR minecraft_username ILIKE {_PH}) "
+                f"ORDER BY id DESC LIMIT 20",
+                (company_id, f"%{q}%", f"%{q}%")
+            )
+            for r in (cur.fetchall() or []):
+                d = dict(r) if not isinstance(r, dict) else r
+                label = f"Scan #{d.get('id')} · {(d.get('machine_name') or '')} · {(d.get('minecraft_username') or '')}"
+                results.append({'type': 'scan', 'id': d.get('id'), 'label': label, 'highlight': q})
+        if 'users' in types:
+            cur.execute(
+                f"SELECT id, username, email FROM users WHERE deleted_at IS NULL AND company_id = {_PH} "
+                f"AND (username ILIKE {_PH} OR email ILIKE {_PH}) ORDER BY id DESC LIMIT 20",
+                (company_id, f"%{q}%", f"%{q}%")
+            )
+            for r in (cur.fetchall() or []):
+                d = dict(r) if not isinstance(r, dict) else r
+                results.append({'type': 'user', 'id': d.get('id'), 'label': f"{d.get('username')} <{d.get('email')}>", 'highlight': q})
+        if 'companies' in types and is_admin(user):
+            cur.execute(
+                f"SELECT id, name FROM companies WHERE deleted_at IS NULL AND name ILIKE {_PH} ORDER BY id DESC LIMIT 20",
+                (f"%{q}%",)
+            )
+            for r in (cur.fetchall() or []):
+                d = dict(r) if not isinstance(r, dict) else r
+                results.append({'type': 'company', 'id': d.get('id'), 'label': d.get('name'), 'highlight': q})
+        if 'violations' in types:
+            cur.execute(
+                f"SELECT id, check_name, level, player_name FROM plugin_violations "
+                f"WHERE company_id = {_PH} AND (check_name ILIKE {_PH} OR player_name ILIKE {_PH}) "
+                f"ORDER BY id DESC LIMIT 20",
+                (company_id, f"%{q}%", f"%{q}%")
+            )
+            for r in (cur.fetchall() or []):
+                d = dict(r) if not isinstance(r, dict) else r
+                results.append({'type': 'violation', 'id': d.get('id'), 'label': f"{d.get('player_name')} · {d.get('check_name')} · {d.get('level')}", 'highlight': q})
+    return jsonify({'success': True, 'query': q, 'results': results[:100]}), 200
+
+
+@app.route('/api/invitations', methods=['GET', 'POST'])
+@login_required
+@audit_action('invitations.manage', 'invitation')
+def api_invitations():
+    user = get_user_by_id(session.get('user_id'))
+    company_id = int(_resolve_company_id_for_user(user) or 0) if user else 0
+    if company_id <= 0:
+        return jsonify({'success': False, 'error': 'Sin company'}), 400
+    if request.method == 'GET':
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT id, email, role, token, expires_at, accepted_at, created_at FROM invitations "
+                f"WHERE company_id = {_PH} ORDER BY id DESC LIMIT 200",
+                (company_id,)
+            )
+            rows = cur.fetchall() or []
+        return jsonify({'success': True, 'items': [dict(r) if not isinstance(r, dict) else r for r in rows]}), 200
+    data = request.json or {}
+    email = str(data.get('email') or '').strip().lower()
+    role = str(data.get('role') or 'staff').strip().lower()
+    if '@' not in email:
+        return jsonify({'success': False, 'error': 'email inválido'}), 400
+    token = secrets.token_urlsafe(24)
+    expires_at = (datetime.datetime.utcnow() + datetime.timedelta(days=7)).isoformat()
+    with get_api_db_cursor() as cur:
+        iid = _insert_id(
+            cur,
+            f"INSERT INTO invitations (email, company_id, role, token, expires_at, created_by) "
+            f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH})",
+            (email, company_id, role, token, expires_at, int(session.get('user_id') or 0))
+        )
+    print(f"[invitation] send placeholder email={email} token={token}")
+    return jsonify({'success': True, 'id': iid, 'token': token}), 200
+
+
+@app.route('/api/invitations/accept/<token>', methods=['POST'])
+def api_invitations_accept(token: str):
+    with get_api_db_cursor() as cur:
+        cur.execute(
+            f"SELECT id, email, company_id, role, expires_at, accepted_at FROM invitations WHERE token = {_PH} LIMIT 1",
+            (token,)
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify({'success': False, 'error': 'Invitación no encontrada'}), 404
+        d = dict(row) if not isinstance(row, dict) else row
+        if d.get('accepted_at'):
+            return jsonify({'success': False, 'error': 'Invitación ya usada'}), 400
+        try:
+            if str(d.get('expires_at')) < datetime.datetime.utcnow().isoformat():
+                return jsonify({'success': False, 'error': 'Invitación expirada'}), 400
+        except Exception:
+            pass
+        cur.execute(f"UPDATE invitations SET accepted_at = CURRENT_TIMESTAMP WHERE id = {_PH}", (int(d.get('id') or 0),))
+    return jsonify({'success': True, 'company_id': d.get('company_id'), 'role': d.get('role'), 'email': d.get('email')}), 200
+
+
+def recalc_all_trust_scores():
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute("SELECT id, company_id, created_at, COALESCE(totp_enabled,FALSE) AS totp_enabled FROM users WHERE deleted_at IS NULL")
+            users = cur.fetchall() or []
+            for u in users:
+                d = dict(u) if not isinstance(u, dict) else u
+                uid = int(d.get('id') or 0)
+                cid = int(d.get('company_id') or 0)
+                created_at = d.get('created_at')
+                try:
+                    age_days = max(0.0, (datetime.datetime.utcnow() - (created_at if isinstance(created_at, datetime.datetime) else datetime.datetime.utcnow())).total_seconds() / 86400.0)
+                except Exception:
+                    age_days = 0.0
+                cur.execute(f"SELECT COUNT(*) AS c FROM scans WHERE deleted_at IS NULL AND company_id = {_PH} AND created_by = {_PH}", (cid, str(uid)))
+                scans_count = int((dict(cur.fetchone() or {}).get('c') or 0))
+                cur.execute(f"SELECT COUNT(*) AS c FROM ai_decisions_log WHERE company_id = {_PH} AND action IN ('ban','kick')", (cid,))
+                oracle_flags = int((dict(cur.fetchone() or {}).get('c') or 0))
+                score, factors = _calculate_trust_score({
+                    'account_age_days': age_days,
+                    'scans_count': scans_count,
+                    'oracle_flags': oracle_flags,
+                    'mfa_enabled': bool(d.get('totp_enabled') or False),
+                    'profile_complete': True,
+                })
+                cur.execute(f"SELECT id FROM user_trust_scores WHERE user_id = {_PH}", (uid,))
+                if cur.fetchone():
+                    cur.execute(
+                        f"UPDATE user_trust_scores SET score = {_PH}, factors_json = {_PH}, updated_at = CURRENT_TIMESTAMP WHERE user_id = {_PH}",
+                        (score, json.dumps(factors), uid)
+                    )
+                else:
+                    cur.execute(
+                        f"INSERT INTO user_trust_scores (user_id, score, factors_json, updated_at) VALUES ({_PH},{_PH},{_PH},CURRENT_TIMESTAMP)",
+                        (uid, score, json.dumps(factors))
+                    )
+    except Exception as e:
+        print(f"[trust_score] recalc error: {e}")
+
+
+@app.route('/api/users/<int:user_id>/trust-score', methods=['GET'])
+@login_required
+@admin_required
+def api_user_trust_score(user_id: int):
+    with get_api_db_cursor() as cur:
+        cur.execute(
+            f"SELECT user_id, score, factors_json, updated_at FROM user_trust_scores WHERE user_id = {_PH} LIMIT 1",
+            (user_id,)
+        )
+        row = cur.fetchone()
+    if not row:
+        return jsonify({'success': False, 'error': 'Trust score no disponible'}), 404
+    d = dict(row) if not isinstance(row, dict) else row
+    try:
+        factors = json.loads(d.get('factors_json') or '{}')
+    except Exception:
+        factors = {}
+    return jsonify({'success': True, 'user_id': d.get('user_id'), 'score': d.get('score'), 'factors': factors, 'updated_at': str(d.get('updated_at') or '')}), 200
+
+
+@app.route('/api/admin/backup/create', methods=['POST'])
+@login_required
+@require_superadmin
+@audit_action('admin.backup.create', 'backup')
+def api_admin_backup_create():
+    data = request.json or {}
+    password = str(data.get('password') or '').strip()
+    if len(password) < 8:
+        return jsonify({'success': False, 'error': 'password requerido (>=8 chars)'}), 400
+    with get_api_db_cursor() as cur:
+        cur.execute("SELECT id, username, email, company_id FROM users WHERE deleted_at IS NULL")
+        users = [dict(r) if not isinstance(r, dict) else r for r in (cur.fetchall() or [])]
+        cur.execute("SELECT id, machine_name, minecraft_username, company_id, started_at FROM scans WHERE deleted_at IS NULL ORDER BY id DESC LIMIT 5000")
+        scans = [dict(r) if not isinstance(r, dict) else r for r in (cur.fetchall() or [])]
+    payload = {'users': users, 'scans': scans}
+    doc = _encrypt_backup_payload(payload, password)
+    backup_id = _save_backup(doc)
+    _rotate_backups(30)
+    return jsonify({'success': True, 'backup_id': backup_id}), 200
+
+
+@app.route('/api/admin/backup/list', methods=['GET'])
+@login_required
+@require_superadmin
+def api_admin_backup_list():
+    return jsonify({'success': True, 'items': _list_backups()}), 200
+
+
+@app.route('/api/admin/backup/restore/<backup_id>', methods=['POST'])
+@login_required
+@require_superadmin
+@audit_action('admin.backup.restore', 'backup')
+def api_admin_backup_restore(backup_id: str):
+    data = request.json or {}
+    confirm = str(data.get('confirm_code') or '').strip()
+    if confirm != 'RESTORE_CONFIRM':
+        return jsonify({'success': False, 'error': 'confirm_code inválido'}), 400
+    doc = _read_backup(backup_id)
+    if not doc:
+        return jsonify({'success': False, 'error': 'backup no encontrado'}), 404
+    # Restauración real peligrosa: en esta fase devolvemos dry-run summary.
+    return jsonify({'success': True, 'mode': 'dry-run', 'backup_id': backup_id, 'keys': list(doc.keys())}), 200
+
+
+@app.route('/api/gdpr/export', methods=['POST'])
+@login_required
+@audit_action('gdpr.export', 'user')
+def api_gdpr_export():
+    uid = int(session.get('user_id') or 0)
+    user = get_user_by_id(uid)
+    company_id = int(_resolve_company_id_for_user(user) or 0) if user else 0
+    with get_api_db_cursor() as cur:
+        cur.execute(f"SELECT id, username, email, company_id FROM users WHERE id = {_PH}", (uid,))
+        user_rows = [dict(r) if not isinstance(r, dict) else r for r in (cur.fetchall() or [])]
+        cur.execute(f"SELECT id, machine_name, minecraft_username, started_at FROM scans WHERE company_id = {_PH} AND deleted_at IS NULL ORDER BY id DESC LIMIT 5000", (company_id,))
+        scan_rows = [dict(r) if not isinstance(r, dict) else r for r in (cur.fetchall() or [])]
+        cur.execute(f"SELECT id, timestamp, action, resource_type, details FROM audit_log_v2 WHERE user_id = {_PH} ORDER BY id DESC LIMIT 5000", (uid,))
+        audit_rows = [dict(r) if not isinstance(r, dict) else r for r in (cur.fetchall() or [])]
+    z = _build_user_export_zip({'user': user_rows, 'scans': scan_rows, 'audit': audit_rows})
+    return Response(z, mimetype='application/zip', headers={'Content-Disposition': 'attachment; filename=gdpr-export.zip'})
+
+
+@app.route('/api/gdpr/delete-request', methods=['POST'])
+@login_required
+@audit_action('gdpr.delete_request', 'user')
+def api_gdpr_delete_request():
+    uid = int(session.get('user_id') or 0)
+    with get_api_db_cursor() as cur:
+        cur.execute(
+            f"UPDATE users SET deleted_at = CURRENT_TIMESTAMP + INTERVAL '30 days' WHERE id = {_PH}",
+            (uid,)
+        )
+    return jsonify({'success': True, 'message': 'Delete request programada (30 días)'}), 200
+
+
+@app.route('/api/gdpr/cancel-delete', methods=['POST'])
+@login_required
+@audit_action('gdpr.cancel_delete', 'user')
+def api_gdpr_cancel_delete():
+    uid = int(session.get('user_id') or 0)
+    with get_api_db_cursor() as cur:
+        cur.execute(
+            f"UPDATE users SET deleted_at = NULL WHERE id = {_PH} AND deleted_at > CURRENT_TIMESTAMP",
+            (uid,)
+        )
+    return jsonify({'success': True}), 200
 
 
 @app.route('/api/filters/export', methods=['GET'])
@@ -9531,6 +10170,12 @@ def submit_scan_results(scan_id):
                 _cws.execute(f"SELECT company_id FROM scans WHERE id = {_PH}", (scan_id,))
                 _r = _cws.fetchone()
                 _cid = int((_r.get('company_id') if isinstance(_r, dict) else (_r[0] if _r else 0)) or 0)
+            dispatch_webhook('scan.completed', {
+                'scan_id': scan_id,
+                'risk_score': _rs,
+                'issues_count': len(results),
+                'company_id': _cid,
+            }, company_id=_cid if _cid > 0 else None)
             _emit_realtime_notification(company_id=_cid if _cid > 0 else None, payload={
                 'kind': 'scan_completed',
                 'scan_id': scan_id,

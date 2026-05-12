@@ -1726,6 +1726,87 @@ async function importFiltersConfig() {
 }
 window.importFiltersConfig = importFiltersConfig;
 
+async function loadWebhookSubscriptions() {
+    const box = document.getElementById('advanced-admin-preview');
+    if (box) box.textContent = 'Cargando webhooks...';
+    try {
+        const r = await fetch('/api/webhooks/subscriptions');
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'No disponible');
+        const items = d.items || [];
+        if (box) box.textContent = items.length ? items.map(x => `#${x.id} ${x.url} [${(x.events || []).join(', ')}] active=${x.is_active}`).join('\n') : 'Sin subscriptions';
+    } catch (e) {
+        if (box) box.textContent = `Error webhooks: ${e.message}`;
+    }
+}
+window.loadWebhookSubscriptions = loadWebhookSubscriptions;
+
+async function createApiKey() {
+    const name = prompt('Nombre de API key', 'default');
+    if (!name) return;
+    try {
+        const r = await fetch('/api/keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, scopes: ['read:scans', 'read:oracle'] })
+        });
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo crear');
+        await navigator.clipboard.writeText(d.api_key || '');
+        showToast('API key creada y copiada', 'success');
+        const box = document.getElementById('advanced-admin-preview');
+        if (box) box.textContent = `Nueva key creada (copiada): ${d.api_key || ''}`;
+    } catch (e) {
+        showToast(`Error API key: ${e.message}`, 'error');
+    }
+}
+window.createApiKey = createApiKey;
+
+async function loadApiKeys() {
+    const box = document.getElementById('advanced-admin-preview');
+    if (box) box.textContent = 'Cargando API keys...';
+    try {
+        const r = await fetch('/api/keys');
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'No disponible');
+        const items = d.items || [];
+        if (box) box.textContent = items.length ? items.map(x => `#${x.id} ${x.name} scopes=${(x.scopes || []).join(',')} revoked=${x.revoked_at || 'no'}`).join('\n') : 'Sin API keys';
+    } catch (e) {
+        if (box) box.textContent = `Error api keys: ${e.message}`;
+    }
+}
+window.loadApiKeys = loadApiKeys;
+
+async function loadNotifPrefs() {
+    const box = document.getElementById('advanced-admin-preview');
+    if (box) box.textContent = 'Cargando notification prefs...';
+    try {
+        const r = await fetch('/api/me/notifications/prefs');
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'No disponible');
+        const items = d.items || [];
+        if (box) box.textContent = items.length ? items.map(x => `${x.channel}:${x.event_type}=${x.enabled}`).join('\n') : 'Sin preferencias';
+    } catch (e) {
+        if (box) box.textContent = `Error prefs: ${e.message}`;
+    }
+}
+window.loadNotifPrefs = loadNotifPrefs;
+
+function open2FASetup() {
+    showToast('2FA setup pendiente en este corte (backend parcial)', 'info');
+}
+window.open2FASetup = open2FASetup;
+
+function gdprExport() {
+    showToast('GDPR export se implementa en siguiente corte', 'info');
+}
+window.gdprExport = gdprExport;
+
+function gdprDeleteRequest() {
+    showToast('GDPR delete request se implementa en siguiente corte', 'info');
+}
+window.gdprDeleteRequest = gdprDeleteRequest;
+
 async function loadSchedules() {
     const box = document.getElementById('schedules-list');
     if (!box) return;
@@ -7378,22 +7459,20 @@ async function _globalSearchInput(q) {
     }
     res.innerHTML = '<div style="padding:14px 20px;font-size:12px;color:var(--text-d);">Buscando...</div>';
     try {
-        const r = await fetch(`/api/scans?search=${encodeURIComponent(q)}&limit=8`);
+        const r = await fetch(`/api/search?q=${encodeURIComponent(q)}&types=scans,users,companies,violations`);
         const d = await r.json();
-        _globalSearchResults = d.scans || [];
+        _globalSearchResults = d.results || [];
         _globalSearchIndex   = -1;
         if (_globalSearchResults.length === 0) {
             res.innerHTML = '<div style="padding:14px 20px;font-size:12px;color:var(--text-d);">Sin resultados</div>';
             return;
         }
         res.innerHTML = _globalSearchResults.map((s, i) => {
-            const rs = s.risk_score;
-            const col = rs >= 70 ? '#ef4444' : rs >= 30 ? '#f59e0b' : '#10b981';
             return `<div class="global-search-result" data-idx="${i}" onclick="_globalSearchOpen(${i})">
-                <span style="font-size:18px;">${rs >= 70 ? '🔴' : rs >= 30 ? '🟠' : '🟢'}</span>
+                <span style="font-size:18px;">${s.type === 'scan' ? '🧪' : s.type === 'user' ? '👤' : s.type === 'company' ? '🏢' : '⚠️'}</span>
                 <div style="flex:1;min-width:0;">
-                    <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.machine_name || 'N/A'}</div>
-                    <div style="font-size:11px;color:var(--text-d);">${_timeAgo(s.started_at)} · <span style="color:${col};">${rs !== undefined ? rs + ' pts' : '—'}</span></div>
+                    <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.label || 'N/A'}</div>
+                    <div style="font-size:11px;color:var(--text-d);">${s.type || 'item'}</div>
                 </div>
             </div>`;
         }).join('');
@@ -7403,7 +7482,12 @@ async function _globalSearchInput(q) {
 }
 function _globalSearchOpen(idx) {
     const s = _globalSearchResults[idx];
-    if (s) { closeGlobalSearch(); viewScanDetails(s.id); }
+    if (!s) return;
+    closeGlobalSearch();
+    if (s.type === 'scan') viewScanDetails(s.id);
+    else if (s.type === 'user') showToast(`Usuario #${s.id}`, 'info');
+    else if (s.type === 'company') showToast(`Empresa #${s.id}`, 'info');
+    else showToast(String(s.label || ''), 'info');
 }
 function _globalSearchKey(e) {
     const items = document.querySelectorAll('.global-search-result');

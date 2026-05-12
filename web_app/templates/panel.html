@@ -2867,6 +2867,21 @@
                     </div>
                     <pre id="shared-rules-preview" style="white-space:pre-wrap;font-size:12px;color:var(--text-m);">Sin datos.</pre>
                 </div>
+                <div class="card" style="margin-bottom:16px;">
+                    <h3 class="card-title">🔌 Webhooks / 🔑 API Keys / 🔔 Prefs</h3>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                        <button class="btn btn-secondary" type="button" onclick="loadWebhookSubscriptions()">Ver webhooks</button>
+                        <button class="btn btn-secondary" type="button" onclick="createApiKey()">Crear API key</button>
+                        <button class="btn btn-secondary" type="button" onclick="loadApiKeys()">Listar API keys</button>
+                        <button class="btn btn-secondary" type="button" onclick="loadNotifPrefs()">Ver notif prefs</button>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                        <button class="btn btn-secondary" type="button" onclick="open2FASetup()">2FA setup</button>
+                        <button class="btn btn-secondary" type="button" onclick="gdprExport()">GDPR export</button>
+                        <button class="btn btn-secondary" type="button" onclick="gdprDeleteRequest()">GDPR delete request</button>
+                    </div>
+                    <pre id="advanced-admin-preview" style="white-space:pre-wrap;font-size:12px;color:var(--text-m);">Sin datos.</pre>
+                </div>
 
                 {% if user and 'admin' in user.roles %}
                 <!-- Contenido para Super Admin -->
