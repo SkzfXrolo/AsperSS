@@ -14,3 +14,5 @@ faker
 requests
 flask
 flask-wtf
+axe-playwright-python
+python-afl
