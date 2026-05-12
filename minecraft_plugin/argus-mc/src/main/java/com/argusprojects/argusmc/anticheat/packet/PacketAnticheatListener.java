@@ -33,6 +33,9 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
+import java.lang.ref.WeakReference;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -71,6 +74,21 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final NukerCheck                nukerCheck;
     private final AutoTotemCheck            autoTotemCheck;
 
+    /**
+     * #512 — Cache entityId -> Entity para evitar el linear scan de
+     * world.getEntities() en cada InteractEntity packet.
+     * Capacity-bounded: limpiamos mas viejas que el TTL al hacer lookup miss.
+     */
+    private final Map<Integer, CachedEntity> entityCache = new HashMap<>();
+    private static final long ENTITY_CACHE_TTL_MS = 2_000L;
+    private static final int  ENTITY_CACHE_MAX    = 256;
+
+    private static final class CachedEntity {
+        final WeakReference<Entity> ref;
+        final long resolvedAtMs;
+        CachedEntity(Entity e) { this.ref = new WeakReference<>(e); this.resolvedAtMs = System.currentTimeMillis(); }
+    }
+
     public PacketAnticheatListener(ArgusPlugin plugin, PacketDataStore store) {
         super(PacketListenerPriority.NORMAL);
         this.plugin = plugin;
@@ -105,6 +123,12 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     @Override
     public void onPacketPlayReceive(PacketPlayReceiveEvent event) {
         try {
+            // #511: short-circuit global. Si el AC esta off (config) no tocamos
+            // nada de packets — ahorra MUCHO CPU en servers grandes (cada
+            // packet de movimiento es ~20 invocaciones/segundo/jugador).
+            var ac = plugin.getAnticheatConfig();
+            if (ac == null || !ac.isEnabled()) return;
+
             UUID uuid = event.getUser() != null ? event.getUser().getUUID() : null;
             if (uuid == null) return;
 
@@ -235,8 +259,9 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                 }
             }
         } catch (Throwable t) {
-            // Defensivo: jamas dejar que un packet listener tire toda la cadena
-            plugin.getLogger().fine("[Argus/Packet] receive err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            // #514: defensivo + lazy log (no construye string si fine() esta off).
+            plugin.getLogger().fine(() -> "[Argus/Packet] receive err: "
+                + t.getClass().getSimpleName() + " " + t.getMessage());
         }
     }
 
@@ -261,8 +286,32 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
 
     private Entity resolveEntity(org.bukkit.World w, int entityId) {
         if (w == null) return null;
+        long now = System.currentTimeMillis();
+        synchronized (entityCache) {
+            CachedEntity cached = entityCache.get(entityId);
+            if (cached != null) {
+                Entity hit = cached.ref.get();
+                if (hit != null && hit.isValid() && (now - cached.resolvedAtMs) < ENTITY_CACHE_TTL_MS) {
+                    return hit;
+                }
+                entityCache.remove(entityId);
+            }
+            // Cap: limpia viejas si excede.
+            if (entityCache.size() > ENTITY_CACHE_MAX) {
+                entityCache.entrySet().removeIf(e -> (now - e.getValue().resolvedAtMs) > ENTITY_CACHE_TTL_MS);
+                if (entityCache.size() > ENTITY_CACHE_MAX) {
+                    entityCache.clear(); // last resort
+                }
+            }
+        }
+        // Cache miss: scan + cache hit
         for (Entity ent : w.getEntities()) {
-            if (ent.getEntityId() == entityId) return ent;
+            if (ent.getEntityId() == entityId) {
+                synchronized (entityCache) {
+                    entityCache.put(entityId, new CachedEntity(ent));
+                }
+                return ent;
+            }
         }
         return null;
     }
