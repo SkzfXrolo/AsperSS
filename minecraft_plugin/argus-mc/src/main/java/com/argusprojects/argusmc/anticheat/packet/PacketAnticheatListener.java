@@ -5,6 +5,7 @@ import com.argusprojects.argusmc.anticheat.Violation;
 import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.checks.AimSnapPacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.CPSPacketCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.FastPlaceCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.InvMovePacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.InvalidRotationCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.KillauraSwingPacketCheck;
@@ -60,6 +61,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final VClipCheck                vclipCheck;
     private final StepCheck                 stepCheck;
     private final SpeedPacketCheck          speedPacketCheck;
+    private final FastPlaceCheck            fastPlaceCheck;
 
     public PacketAnticheatListener(ArgusPlugin plugin, PacketDataStore store) {
         super(PacketListenerPriority.NORMAL);
@@ -79,6 +81,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.vclipCheck           = new VClipCheck(plugin);
         this.stepCheck            = new StepCheck(plugin);
         this.speedPacketCheck     = new SpeedPacketCheck(plugin);
+        this.fastPlaceCheck       = new FastPlaceCheck(plugin);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -195,6 +198,10 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                 long now = System.currentTimeMillis();
                 s.lastClickWindowMs = now;
                 invMoveCheck.handleClickWindow(player, s, now, sink());
+
+            } else if (type == PacketType.Play.Client.PLAYER_BLOCK_PLACEMENT) {
+                long now = System.currentTimeMillis();
+                fastPlaceCheck.handleBlockPlacement(player, s, now, sink());
             }
         } catch (Throwable t) {
             // Defensivo: jamas dejar que un packet listener tire toda la cadena

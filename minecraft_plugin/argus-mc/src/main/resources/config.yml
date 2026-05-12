@@ -234,6 +234,13 @@ anticheat:
                              # cap para tolerar lag spikes puntuales.
       max_bps: 6.5
       consecutive_to_flag: 3
+    fast_place:
+      enabled: true          # BlockPlacement packets/segundo. Vanilla cap real
+                             # es ~5/s (un placement por tick); LOW a 9/s, MID
+                             # a 14/s, HIGH a 22/s. Skip creative.
+      max_per_sec:  9
+      max_per_sec2: 14
+      max_per_sec3: 22
 
 # ── Mensajes (puedes traducir libremente) ─────────────────────
 messages:
