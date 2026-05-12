@@ -18,5 +18,6 @@ from argus_ai_assistant import classify_intent
 )
 def test_intent_classifier_handles_typos_and_mixed_lang(text):
     intent = classify_intent(text)
-    assert isinstance(intent, str)
-    assert len(intent) > 0
+    assert hasattr(intent, "name")
+    assert isinstance(intent.name, str)
+    assert len(intent.name) > 0
