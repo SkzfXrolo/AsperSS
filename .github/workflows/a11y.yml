@@ -1,0 +1,21 @@
+name: A11y tests
+
+on:
+  pull_request:
+
+jobs:
+  a11y:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+          python -m playwright install chromium
+      - name: Run a11y tests
+        run: |
+          python -m pytest --no-cov -m e2e tests/a11y -q
