@@ -7080,7 +7080,9 @@ window._notifClick = _notifClick;
 document.addEventListener('click', e => {
     const dd = document.getElementById('notif-dropdown');
     const btn = document.getElementById('notif-bell-btn');
-    if (dd && !dd.contains(e.target) && e.target !== btn) dd.classList.remove('open');
+    if (dd && btn && !dd.contains(e.target) && !btn.contains(e.target)) {
+        dd.classList.remove('open');
+    }
 });
 
 // ============================================================
