@@ -6115,6 +6115,7 @@ class ArgusApp:
             # Detener monitor USB y cronómetro
             self._stop_usb_monitor()
             self.stop_scan_timer()
+            self.cleanup_argus_temp_artifacts()
             self.scanning = False
             self._restore_window_title()
             if UI_STYLE_AVAILABLE:
@@ -21297,6 +21298,33 @@ class ArgusApp:
         #     
         # except Exception as e:
         #     print(f"Error configurando limpieza automática: {e}")
+
+    def cleanup_argus_temp_artifacts(self):
+        """#138 — Limpia temporales propios del scanner al finalizar."""
+        try:
+            tmp_root = os.environ.get('TEMP', r'C:\Windows\Temp')
+            if not os.path.isdir(tmp_root):
+                return
+            prefixes = ('argus_', 'argusscanner_', 'argus_hist_')
+            removed = 0
+            for name in os.listdir(tmp_root):
+                nlow = name.lower()
+                if not nlow.startswith(prefixes):
+                    continue
+                full = os.path.join(tmp_root, name)
+                try:
+                    if os.path.isdir(full):
+                        import shutil as _sh_tmp
+                        _sh_tmp.rmtree(full, ignore_errors=True)
+                    else:
+                        os.remove(full)
+                    removed += 1
+                except Exception:
+                    continue
+            if removed:
+                print(f"🧹 Limpieza de temporales Argus: {removed} artefacto(s)")
+        except Exception:
+            pass
     
     def setup_anti_detection(self):
         """Configura protección contra detección"""
@@ -21668,6 +21696,10 @@ def _run_headless(token: str, api_url: str | None, output_json: str | None):
         if done_event.wait(timeout=1):
             break
 
+    try:
+        app.cleanup_argus_temp_artifacts()
+    except Exception:
+        pass
     root.destroy()
 
     result = result_holder.get('result', {})
