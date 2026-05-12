@@ -106,6 +106,24 @@ anticheat:
   # Permite desactivar checks individualmente o ajustar sus
   # umbrales por defecto. Cualquier check no listado usa sus
   # defaults internos.
+  #
+  # ── Per-check enforcement overrides (Pack 48 #521-#526) ─────
+  # CADA check acepta los siguientes flags (todos opcionales):
+  #   enabled: true              # corre el check (default true)
+  #   enforce: true              # permite kick/ban/SS desde este check (#521)
+  #                              # si false, solo broadcast a staff
+  #   report_to_backend: true    # envia al backend Argus (#522)
+  #   discord: true              # envia al webhook Discord global (#523)
+  #   ai_oracle: true            # envia al AI Oracle (#524)
+  #   force_level: null          # forzar nivel: LOW/MID/HIGH/CRITICAL (#525)
+  #   max_action: null           # cap a la accion: watch/ss/kick/ban (#526)
+  #                              # ej: max_action: kick = nunca banea, aunque
+  #                              # el aggregate llegue a CRITICAL.
+  # Ejemplo: dejar fast_break como observer-only mientras se calibra:
+  #   fast_break:
+  #     enabled: true
+  #     enforce: false
+  #     ai_oracle: false
   checks:
     reach:
       enabled: true

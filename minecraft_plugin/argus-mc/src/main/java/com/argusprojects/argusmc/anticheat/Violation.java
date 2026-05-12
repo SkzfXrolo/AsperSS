@@ -29,6 +29,21 @@ public final class Violation {
         this.timestampMs = System.currentTimeMillis();
     }
 
+    /** Copia con un nivel distinto (Pack 48 #525: per-check level override). */
+    private Violation(UUID uuid, String name, String checkName, ViolationLevel level, String details, long ts) {
+        this.playerUuid  = uuid;
+        this.playerName  = name;
+        this.checkName   = checkName;
+        this.level       = level;
+        this.details     = details == null ? "" : details;
+        this.timestampMs = ts;
+    }
+
+    public Violation withLevel(ViolationLevel newLevel) {
+        if (newLevel == this.level) return this;
+        return new Violation(playerUuid, playerName, checkName, newLevel, details, timestampMs);
+    }
+
     @Override
     public String toString() {
         return "Violation{" + level + " " + checkName + " by " + playerName + " (" + details + ")}";

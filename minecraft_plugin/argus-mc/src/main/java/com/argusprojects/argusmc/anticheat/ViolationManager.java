@@ -69,6 +69,9 @@ public final class ViolationManager {
         if (player == null) return;
         if (player.hasPermission("argus.ac.bypass")) return;
 
+        // Pack 48 #525 — Per-check level override.
+        v = applyLevelOverride(v, cfg);
+
         // 1) Acumular en la cola y limpiar las viejas
         Deque<Violation> queue = recent.computeIfAbsent(v.playerUuid, k -> new ArrayDeque<>());
         synchronized (queue) {
@@ -103,27 +106,34 @@ public final class ViolationManager {
             handleLow(player, v, cfg);
         }
 
-        // 4) Reportar al backend y Discord (siempre, no solo cuando se aplica accion)
-        if (cfg.isReportToBackend()) {
+        // 4) Reportar al backend y Discord. Pack 48 #522/#523: respeta flags per-check.
+        if (cfg.isReportToBackendForCheck(v.checkName)) {
             reportToBackendAsync(v);
         }
-        if (cfg.hasDiscordWebhook() && v.level.atLeast(ViolationLevel.MID)) {
+        if (cfg.isDiscordForCheck(v.checkName) && v.level.atLeast(ViolationLevel.MID)) {
             sendDiscordWebhookAsync(v, cfg.getDiscordWebhookUrl());
         }
 
-        // 5) Pack 44: invocar al Argus AI Oracle si esta habilitado.
-        // El Oracle puede sobreescribir nuestra accion local con una MAS SEVERA
-        // (nunca menos). Si el plugin local ya kickeo/baneo, esto no agrega nada.
-        // El llamado es async y no bloquea el flow del listener.
-        if (plugin.getAnticheatConfig().isAiOracleEnabled()) {
+        // 5) Pack 44 + Pack 48 #524: AI Oracle si globalmente habilitado Y el
+        // check no tiene ai_oracle: false explicito. Si el plugin local ya
+        // kickeo/baneo, esto solo escala (nunca menos).
+        if (cfg.isAiOracleForCheck(v.checkName)) {
+            final Violation finalV = v;
             String localAction = decideLocalAction(low, mid, high, critical, cfg);
-            plugin.getApiClient().evaluateAiAsync(v, localAction)
+            plugin.getApiClient().evaluateAiAsync(finalV, localAction)
                 .whenComplete((verdict, err) -> {
                     if (verdict == null) return;
                     Bukkit.getScheduler().runTask(plugin,
-                        () -> handleAiVerdict(player, v, verdict, localAction));
+                        () -> handleAiVerdict(player, finalV, verdict, localAction));
                 });
         }
+    }
+
+    /** Pack 48 #525 — applies the per-check level override (if any). */
+    private Violation applyLevelOverride(Violation v, AnticheatConfig cfg) {
+        ViolationLevel forced = cfg.levelOverrideForCheck(v.checkName);
+        if (forced == null) return v;
+        return v.withLevel(forced);
     }
 
     private String decideLocalAction(int low, int mid, int high, int critical, AnticheatConfig cfg) {
@@ -171,7 +181,8 @@ public final class ViolationManager {
         int rankLocal = actionRank(localAction);
         int rankAi    = actionRank(aiAction);
         if (rankAi <= rankLocal) return;
-        if (!cfg.isEnforcement()) return;  // modo observador → no aplicamos nada
+        // Pack 48 #521 + #526 — respeta per-check enforce y action cap.
+        if (!canEnforce(cfg, v, aiAction)) return;
 
         switch (aiAction) {
             case "ban":
@@ -219,29 +230,42 @@ public final class ViolationManager {
     private void handleMid(Player player, Violation v, AnticheatConfig cfg) {
         broadcastStaffAlert("ac_alert_mid", v);
         plugin.getLogger().info("[AC] MID kick: " + v);
-        if (cfg.isEnforcement()) {
-            kickPlayer(player, v, "ac_kick_message");
-            clearViolations(player.getUniqueId());
-        }
+        if (!canEnforce(cfg, v, "kick")) return;
+        kickPlayer(player, v, "ac_kick_message");
+        clearViolations(player.getUniqueId());
     }
 
     private void handleHigh(Player player, Violation v, AnticheatConfig cfg) {
         broadcastStaffAlert("ac_alert_high", v);
         plugin.getLogger().warning("[AC] HIGH kick + force-SS: " + v);
-        if (cfg.isEnforcement()) {
-            pendingForcedSs.add(player.getUniqueId());
-            kickPlayer(player, v, "ac_kick_message");
-            clearViolations(player.getUniqueId());
-        }
+        if (!canEnforce(cfg, v, "kick")) return;
+        pendingForcedSs.add(player.getUniqueId());
+        kickPlayer(player, v, "ac_kick_message");
+        clearViolations(player.getUniqueId());
     }
 
     private void handleCritical(Player player, Violation v, AnticheatConfig cfg) {
         broadcastStaffAlert("ac_alert_critical", v);
         plugin.getLogger().severe("[AC] CRITICAL ban: " + v);
-        if (cfg.isEnforcement()) {
-            banPlayerTemporarily(player, v, cfg.getCriticalBanMinutes());
-            clearViolations(player.getUniqueId());
-        }
+        if (!canEnforce(cfg, v, "ban")) return;
+        banPlayerTemporarily(player, v, cfg.getCriticalBanMinutes());
+        clearViolations(player.getUniqueId());
+    }
+
+    /**
+     * Pack 48 #521 + #526 — Verifica si una accion concreta puede ejecutarse.
+     * Combina dos overrides:
+     * <ul>
+     *   <li>#521 per-check enforce flag (si false, ningun enforcement).</li>
+     *   <li>#526 per-check max_action cap (si la accion solicitada supera
+     *       el cap, no se ejecuta).</li>
+     * </ul>
+     */
+    private boolean canEnforce(AnticheatConfig cfg, Violation v, String desiredAction) {
+        if (!cfg.isEnforcementForCheck(v.checkName)) return false;
+        String cap = cfg.actionCapForCheck(v.checkName);
+        if (cap == null) return true;
+        return actionRank(desiredAction) <= actionRank(cap);
     }
 
     // ──────────────────────────────────────────────────────────────────────
