@@ -277,8 +277,8 @@ def suggest_db_indexes(cursor) -> list:
         },
         {
             'table':       'staff_audit_log',
-            'columns':     'user_id, action, timestamp',
-            'sql_create':  'CREATE INDEX IF NOT EXISTS idx_audit_user_action ON staff_audit_log (user_id, action, timestamp DESC)',
+            'columns':     'user_id, action, created_at',
+            'sql_create':  'CREATE INDEX IF NOT EXISTS idx_audit_user_action ON staff_audit_log (user_id, action, created_at DESC)',
             'reason':      'Staff activity heatmap + ranking de acciones.',
         },
         {
