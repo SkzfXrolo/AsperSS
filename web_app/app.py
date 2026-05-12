@@ -1011,8 +1011,21 @@ def register():
 @app.route('/logout')
 def logout():
     """Cerrar sesiÃ³n"""
+    return _build_logout_response(redirect(url_for('index')))
+
+
+def _build_logout_response(resp):
+    """Invalida sesión actual y borra cookie de sesión del navegador."""
     session.clear()
-    return redirect(url_for('index'))
+    session.modified = True
+    resp.delete_cookie(
+        app.config.get('SESSION_COOKIE_NAME', 'session'),
+        path=app.config.get('SESSION_COOKIE_PATH', '/'),
+        domain=app.config.get('SESSION_COOKIE_DOMAIN'),
+    )
+    # Evita cachear páginas autenticadas al cerrar sesión.
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return resp
 
 @app.route('/panel')
 @login_required
@@ -1483,8 +1496,7 @@ def api_login():
 @login_required
 def api_logout():
     """API endpoint para logout"""
-    session.clear()
-    return jsonify({'success': True})
+    return _build_logout_response(jsonify({'success': True}))
 
 @app.route('/api/auth/me', methods=['GET'])
 @login_required
