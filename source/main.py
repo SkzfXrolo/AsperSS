@@ -13168,6 +13168,26 @@ class ArgusApp:
                     consumers.append(_json.loads(line))
                 except Exception:
                     continue
+            # #P3-wmi — incluir bindings FilterToConsumer para evidenciar persistencia real.
+            try:
+                ps_bind = (
+                    "Get-WmiObject -Namespace root\\subscription -Class __FilterToConsumerBinding "
+                    "-ErrorAction SilentlyContinue | ForEach-Object { "
+                    "[ordered]@{Filter=$_.Filter;Consumer=$_.Consumer} | ConvertTo-Json -Compress }"
+                )
+                rb = subprocess.run(
+                    ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', ps_bind],
+                    capture_output=True, text=True, timeout=20,
+                )
+                bind_lines = [ln.strip() for ln in (rb.stdout or '').splitlines() if ln.strip().startswith('{')]
+                bindings = []
+                for ln in bind_lines:
+                    try:
+                        bindings.append(_json.loads(ln))
+                    except Exception:
+                        continue
+            except Exception:
+                bindings = []
             if not consumers:
                 print("  · WMI subs no parseables (skip)")
                 return
@@ -13215,6 +13235,7 @@ class ArgusApp:
                         'consumer_name': c.get('Name'),
                         'cmd_excerpt':   (c.get('Cmd') or '')[:300],
                         'hits':          hits,
+                        'bindings_seen': len(bindings),
                     },
                 })
             print(f"  · {len(consumers)} WMI consumer(s) inspeccionados, {suspicious} reportados")
