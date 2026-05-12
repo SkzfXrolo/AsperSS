@@ -1,0 +1,7 @@
+{
+  "title": "Argus DB",
+  "panels": [
+    { "type": "timeseries", "title": "DB connections" },
+    { "type": "timeseries", "title": "Slow queries" }
+  ]
+}

@@ -1,0 +1,9 @@
+route:
+  receiver: default
+receivers:
+  - name: default
+    webhook_configs:
+      - url: "https://hooks.slack.com/services/TBD"
+  - name: pagerduty
+    pagerduty_configs:
+      - routing_key: "TBD"

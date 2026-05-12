@@ -1,0 +1,7 @@
+{
+  "title": "Argus Plugin",
+  "panels": [
+    { "type": "timeseries", "title": "Violations/min" },
+    { "type": "timeseries", "title": "False positives est." }
+  ]
+}

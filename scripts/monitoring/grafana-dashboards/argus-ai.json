@@ -1,0 +1,7 @@
+{
+  "title": "Argus AI",
+  "panels": [
+    { "type": "timeseries", "title": "Inference latency p95" },
+    { "type": "stat", "title": "Model drift score" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "title": "Argus Overview",
+  "timezone": "browser",
+  "panels": [
+    { "type": "timeseries", "title": "Requests/s" },
+    { "type": "timeseries", "title": "Error rate %" }
+  ]
+}

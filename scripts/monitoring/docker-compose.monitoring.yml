@@ -1,0 +1,20 @@
+services:
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  grafana:
+    image: grafana/grafana
+    ports: ["3000:3000"]
+  loki:
+    image: grafana/loki
+    volumes:
+      - ./loki/config.yml:/etc/loki/config.yml:ro
+  tempo:
+    image: grafana/tempo
+    volumes:
+      - ./tempo/config.yml:/etc/tempo/config.yml:ro
+  alertmanager:
+    image: prom/alertmanager
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
