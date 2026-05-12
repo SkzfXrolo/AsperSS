@@ -87,6 +87,18 @@ def _make_session_permanent():
     _s.permanent = True
 
 
+def require_superadmin(f):
+    """Restringe endpoint a usuarios superadmin autenticados."""
+    @wraps(f)
+    def _wrapped(*args, **kwargs):
+        user_id = session.get('user_id')
+        user = get_user_by_id(user_id) if user_id else None
+        if not user or not is_super_admin(user):
+            return jsonify({'error': 'Acceso restringido a superadmin'}), 403
+        return f(*args, **kwargs)
+    return _wrapped
+
+
 CORS(app)
 
 # Inicializar base de datos de autenticaciÃ³n al iniciar (en background para no bloquear)
@@ -616,6 +628,8 @@ def healthz():
 
 
 @app.route('/api/db-stats', methods=['GET'])
+@login_required
+@require_superadmin
 def api_db_stats():
     """DiagnÃ³stico de espacio de BD. Ãštil para saber si Render Postgres estÃ¡
     cerca del lÃ­mite (1 GB en plan Free). Acceso pÃºblico sÃ³lo al tamaÃ±o total
@@ -5479,6 +5493,8 @@ def setup_admin():
 
 
 @app.route('/api/db-status', methods=['GET'])
+@login_required
+@require_superadmin
 def api_db_status():
     """Muestra quÃ© backend de BD estÃ¡ activo â€” Ãºtil para verificar deploys"""
     try:
@@ -5526,6 +5542,8 @@ def validate_token_endpoint():
 
 
 @app.route('/api/debug/last-scan')
+@login_required
+@require_superadmin
 def debug_last_scan():
     """Endpoint de diagnÃ³stico â€” muestra el Ãºltimo scan en bruto desde la BD"""
     try:
