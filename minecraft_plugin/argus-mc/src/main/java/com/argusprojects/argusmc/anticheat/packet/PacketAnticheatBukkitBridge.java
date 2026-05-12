@@ -7,11 +7,14 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.EntityShootBowEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
@@ -147,6 +150,33 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         if (p.hasPermission("argus.ac.bypass")) return;
         PacketDataStore.State s = store.get(p.getUniqueId());
         listener.getBowAimCheck().handleShoot(p, s, System.currentTimeMillis(), listener.getSink());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPickup(EntityPickupItemEvent e) {
+        if (!(e.getEntity() instanceof org.bukkit.entity.Player p)) return;
+        if (p.hasPermission("argus.ac.bypass")) return;
+        PacketDataStore.State s = store.get(p.getUniqueId());
+        listener.getItemPickupCheck().handlePickup(p, e.getItem(), s, listener.getSink());
+    }
+
+    @SuppressWarnings("deprecation")
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onChat(AsyncPlayerChatEvent e) {
+        org.bukkit.entity.Player p = e.getPlayer();
+        if (p.hasPermission("argus.ac.bypass")) return;
+        PacketDataStore.State s = store.get(p.getUniqueId());
+        listener.getChatMacroCheck().handleChat(p, s, e.getMessage(), System.currentTimeMillis(), listener.getSink());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onItemHeld(PlayerItemHeldEvent e) {
+        org.bukkit.entity.Player p = e.getPlayer();
+        if (p.hasPermission("argus.ac.bypass")) return;
+        PacketDataStore.State s = store.get(p.getUniqueId());
+        Bukkit.getScheduler().runTaskLater(plugin, () ->
+            listener.getNamedItemSpamCheck().handleHeldItemChange(p, s,
+                System.currentTimeMillis(), listener.getSink()), 1L);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

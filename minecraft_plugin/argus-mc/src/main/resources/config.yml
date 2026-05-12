@@ -376,6 +376,58 @@ anticheat:
       sustained_ms: 2000
       min_horizontal_bps_air: 4.0
 
+    # ── Pack 48 round 2 — combat deep ─────────────────────────────
+    hitbox_expansion:
+      enabled: true          # hit-vector llega a > reach_max + margen al BB
+                             # del target. MID a 0.20b extra, HIGH a 0.50b.
+      max_margin: 0.20
+      extreme_margin: 0.50
+    backstab:
+      enabled: true          # FOV attacker→target > 100° (vanilla ~90°).
+                             # CRITICAL si > 140°.
+      max_fov_deg: 100.0
+      extreme_fov_deg: 140.0
+    melee_fly:
+      enabled: true          # N attacks seguidos hovering en aire sin fall.
+                             # Indicador clasico de killaura con NoFall.
+      consec_mid: 4
+      consec_high: 8
+      max_abs_dy: 0.08
+
+    # ── Pack 48 round 2 — world interaction ──────────────────────
+    block_glitch:
+      enabled: true          # LoS check: place/break a traves de bloque solido.
+      step: 0.25
+      max_range: 6.0
+    item_pickup:
+      enabled: true          # pickup desde > 2.5 (MID) / > 5.0 (HIGH).
+      max_range: 2.5
+      extreme_range: 5.0
+    inventory_teleport:
+      enabled: true          # blink position > 2b en <80ms con inv abierto.
+      min_blink_blocks: 2.0
+      max_packet_interval_ms: 80
+    liquid_walk:
+      enabled: true          # on-ground sobre agua/lava sin frost walker.
+      consec_mid: 6
+      consec_high: 12
+
+    # ── Pack 48 round 2 — anti-bot ───────────────────────────────
+    chat_macro:
+      enabled: true          # mensajes repetidos con stddev temporal < 60ms.
+      min_repeats: 3
+      max_interval_variance_ms: 60.0
+    named_item_spam:
+      enabled: true          # rename del item en mano > 6 veces en 1.5s.
+      window_ms: 1500
+      min_changes: 6
+    autoclicker_advanced:
+      enabled: true          # CPS analisis con stddev: bots tienen jitter 0.
+      min_samples: 8
+      max_stddev_ms: 6.0
+      extreme_stddev_ms: 2.0
+      min_cps: 8
+
 # ── Mensajes (puedes traducir libremente) ─────────────────────
 messages:
   prefix: "&8[&6Argus&8]&r "

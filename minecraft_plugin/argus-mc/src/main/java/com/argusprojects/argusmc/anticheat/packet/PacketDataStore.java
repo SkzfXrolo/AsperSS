@@ -138,6 +138,8 @@ public final class PacketDataStore {
         /** Ultimo nombre custom de item visto en main hand (NamedItemSpamCheck). */
         public volatile String lastMainHandItemName;
         public volatile long   lastMainHandItemNameMs;
+        /** Contador de renames dentro de la ventana NamedItemSpamCheck. */
+        public volatile int    namedChangesInWindow;
         /** Trust score Argus (0-100). Se actualiza on backend response — defualt 50. */
         public volatile double trustScore = 50.0;
         /** Verbose watcher (UUID del admin observando) — null si nadie observa. */
@@ -212,6 +214,7 @@ public final class PacketDataStore {
             lastBowChargeStartMs = 0L;
             lastMainHandItemName = null;
             lastMainHandItemNameMs = 0L;
+            namedChangesInWindow = 0;
         }
     }
 

@@ -4,13 +4,23 @@ import com.argusprojects.argusmc.ArgusPlugin;
 import com.argusprojects.argusmc.anticheat.Violation;
 import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.checks.AimSnapPacketCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.AutoClickerAdvancedCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.AutoTotemCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.BackstabCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.BlockGlitchCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.BlockReachCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.BoatFlyAdvancedCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.BoatFlyCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.BowAimCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.CPSPacketCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.ChatMacroCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.CritCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.HitboxExpansionCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.InventoryTeleportCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.ItemPickupCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.LiquidWalkCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.MeleeFlyCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.NamedItemSpamCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.FastBreakCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.FastPlaceCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.InvMovePacketCheck;
@@ -95,6 +105,16 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final ProjectileAimCheck        projectileAimCheck;
     private final BowAimCheck               bowAimCheck;
     private final BoatFlyAdvancedCheck      boatFlyAdvancedCheck;
+    private final HitboxExpansionCheck      hitboxExpansionCheck;
+    private final BackstabCheck             backstabCheck;
+    private final MeleeFlyCheck             meleeFlyCheck;
+    private final BlockGlitchCheck          blockGlitchCheck;
+    private final ItemPickupCheck           itemPickupCheck;
+    private final InventoryTeleportCheck    inventoryTeleportCheck;
+    private final LiquidWalkCheck           liquidWalkCheck;
+    private final ChatMacroCheck            chatMacroCheck;
+    private final NamedItemSpamCheck        namedItemSpamCheck;
+    private final AutoClickerAdvancedCheck  autoClickerAdvancedCheck;
 
     /**
      * #512 — Cache entityId -> Entity para evitar el linear scan de
@@ -144,11 +164,25 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.projectileAimCheck   = new ProjectileAimCheck(plugin);
         this.bowAimCheck          = new BowAimCheck(plugin);
         this.boatFlyAdvancedCheck = new BoatFlyAdvancedCheck(plugin);
+        this.hitboxExpansionCheck = new HitboxExpansionCheck(plugin);
+        this.backstabCheck        = new BackstabCheck(plugin);
+        this.meleeFlyCheck        = new MeleeFlyCheck(plugin);
+        this.blockGlitchCheck     = new BlockGlitchCheck(plugin);
+        this.itemPickupCheck      = new ItemPickupCheck(plugin);
+        this.inventoryTeleportCheck = new InventoryTeleportCheck(plugin);
+        this.liquidWalkCheck      = new LiquidWalkCheck(plugin);
+        this.chatMacroCheck       = new ChatMacroCheck(plugin);
+        this.namedItemSpamCheck   = new NamedItemSpamCheck(plugin);
+        this.autoClickerAdvancedCheck = new AutoClickerAdvancedCheck(plugin);
     }
 
     public CritCheck getCritCheck() { return critCheck; }
     public ProjectileAimCheck getProjectileAimCheck() { return projectileAimCheck; }
     public BowAimCheck getBowAimCheck() { return bowAimCheck; }
+    public ItemPickupCheck getItemPickupCheck() { return itemPickupCheck; }
+    public ChatMacroCheck getChatMacroCheck() { return chatMacroCheck; }
+    public NamedItemSpamCheck getNamedItemSpamCheck() { return namedItemSpamCheck; }
+    public PacketDataStore getStore() { return store; }
 
     /** Acceso al sink para checks que disparan desde el bridge Bukkit. */
     public ViolationSink getSink() { return sink(); }
@@ -219,6 +253,9 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         spiderCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
                         multiVelocityCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
                         boatFlyAdvancedCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
+                        // Round 2: InventoryTeleport / LiquidWalk.
+                        inventoryTeleportCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
+                        liquidWalkCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
 
                         s.lastDeltaY = ny - s.lastY;
                         s.lastX = nx;
@@ -258,12 +295,17 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                     if (target != null) {
                         reachCheck.handleAttack(player, target, s, sink());
                         swingCheck.handleAttack(player, target, s, now, sink());
-                        // Round 2: KillauraAim / KillauraBlocking.
+                        // Round 2: KillauraAim / KillauraBlocking / Hitbox / Backstab / MeleeFly.
                         killauraAimCheck.handleAttack(player, target, s, now, sink());
                         killauraBlockingCheck.handleAttack(player, target, s, now, sink());
+                        hitboxExpansionCheck.handleAttack(player, target, s, sink());
+                        backstabCheck.handleAttack(player, target, s, sink());
+                        meleeFlyCheck.handleAttack(player, target, s, now, sink());
                     }
                     // CPS verdadero a nivel packet.
                     cpsCheck.handleAttack(player, s, now, sink());
+                    // CPS avanzado con varianza (round 2).
+                    autoClickerAdvancedCheck.handleAttack(player, s, now, sink());
                 }
 
             } else if (type == PacketType.Play.Client.ANIMATION) {
@@ -289,13 +331,14 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
             } else if (type == PacketType.Play.Client.PLAYER_BLOCK_PLACEMENT) {
                 long now = System.currentTimeMillis();
                 fastPlaceCheck.handleBlockPlacement(player, s, now, sink());
-                // BlockReach (round 2) — distancia ojos→bloque target.
+                // BlockReach + BlockGlitch (round 2) — distancia y LoS al bloque target.
                 try {
                     var wrapP = new com.github.retrooper.packetevents.wrapper.play.client
                         .WrapperPlayClientPlayerBlockPlacement(event);
                     var pos = wrapP.getBlockPosition();
                     if (pos != null) {
                         blockReachCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), sink());
+                        blockGlitchCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), sink());
                     }
                 } catch (Throwable ignored) {}
 
@@ -309,6 +352,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                     var pos = wrap.getBlockPosition();
                     if (pos != null) {
                         blockReachCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), sink());
+                        blockGlitchCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), sink());
                     }
                 } else if (action == DiggingAction.FINISHED_DIGGING) {
                     org.bukkit.Material mat = resolveBlock(player, wrap);
