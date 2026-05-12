@@ -1,0 +1,43 @@
+name: Tests On Push
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "source/**"
+      - "tests/**"
+      - "pytest.ini"
+      - ".github/workflows/tests-on-push.yml"
+  pull_request:
+    paths:
+      - "source/**"
+      - "tests/**"
+      - "pytest.ini"
+      - ".github/workflows/tests-on-push.yml"
+  workflow_dispatch:
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest
+
+      - name: Run tests
+        run: |
+          set -euo pipefail
+          pytest -q
