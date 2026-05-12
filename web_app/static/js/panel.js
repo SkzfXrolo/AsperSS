@@ -3671,7 +3671,7 @@ async function loadVerdictHistory() {
         panel.innerHTML = h.map(e =>
             `<div style="padding:5px 0;border-bottom:1px solid var(--border);last-child:border:none;">` +
             `<strong style="color:${e.verdict==='clean'?'#10b981':'#ef4444'}">${e.verdict==='clean'?'LIMPIO':'CON HACKS'}</strong>` +
-            ` — ${e.reason || '—'} <span style="color:var(--text-d);">por ${e.changed_by} · ${formatDate(e.changed_at)}</span></div>`
+            ` — ${escapeHtml(e.reason || '—')} <span style="color:var(--text-d);">por ${escapeHtml(e.changed_by || '?')} · ${formatDate(e.changed_at)}</span></div>`
         ).join('');
     } catch(e) { panel.innerHTML = 'Error cargando historial'; }
 }
@@ -4659,13 +4659,13 @@ async function loadScoreBreakdown(scanId) {
                 ${breakdown.map(b => `
                     <div style="margin-bottom:12px;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                            <span style="font-size:12px;color:var(--text);flex:1;margin-right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${b.source}">${b.source}</span>
+                            <span style="font-size:12px;color:var(--text);flex:1;margin-right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(b.source)}">${escapeHtml(b.source)}</span>
                             <span style="font-size:13px;font-weight:700;color:${scoreColor};min-width:36px;text-align:right;">+${b.points}</span>
                         </div>
                         <div style="background:var(--bg);border-radius:4px;height:6px;overflow:hidden;">
                             <div style="background:${scoreColor};height:100%;width:${Math.round(b.points/maxPts*100)}%;border-radius:4px;transition:width 0.4s;"></div>
                         </div>
-                        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${b.reason}</div>
+                        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${escapeHtml(b.reason || '')}</div>
                     </div>
                 `).join('')}
             </div>`;
@@ -4693,7 +4693,7 @@ async function loadScanNotes(scanId) {
         container.innerHTML = notes.map(n => `
             <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <span style="font-size:12px;font-weight:700;color:var(--accent);">${n.author}</span>
+                    <span style="font-size:12px;font-weight:700;color:var(--accent);">${escapeHtml(n.author || '?')}</span>
                     <div style="display:flex;align-items:center;gap:10px;">
                         <span style="font-size:11px;color:var(--text-d);">${formatDate(n.created_at)}</span>
                         <button onclick="deleteScanNote(${scanId},${n.id},this)"
@@ -4701,7 +4701,7 @@ async function loadScanNotes(scanId) {
                             title="Eliminar nota">✕</button>
                     </div>
                 </div>
-                <div style="font-size:13px;color:var(--text-s);white-space:pre-wrap;line-height:1.6;">${n.body.replace(/</g,'&lt;')}</div>
+                <div style="font-size:13px;color:var(--text-s);white-space:pre-wrap;line-height:1.6;">${escapeHtml(n.body || '')}</div>
             </div>`).join('');
     } catch (e) {
         container.innerHTML = '<div style="color:#ef4444;font-size:13px;">Error cargando notas</div>';
@@ -6414,7 +6414,8 @@ function _appendChatMsg(container, text, role, isTyping) {
 }
 
 function _formatAIReply(text) {
-    return text
+    const safe = escapeHtml(text || '');
+    return safe
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.+?)\*/g, '<em>$1</em>')
         .replace(/^- (.+)$/gm, '• $1')
