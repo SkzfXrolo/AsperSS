@@ -40,6 +40,7 @@ public final class ArgusPlugin extends JavaPlugin {
     private ViolationManager violationManager;
     private AnticheatListener anticheatListener;
     private PacketEventsBootstrap packetEventsBootstrap;
+    private com.argusprojects.argusmc.web.WebDashboardServer webServer;
 
     @Override
     public void onEnable() {
@@ -94,6 +95,16 @@ public final class ArgusPlugin extends JavaPlugin {
             com.argusprojects.argusmc.telemetry.MetricsBootstrap.init(this);
         } catch (Throwable t) {
             getLogger().fine(() -> "[Argus/Metrics] init failed: " + t.getMessage());
+        }
+
+        // Pack 48 round 2 — Web dashboard / REST API / Prometheus metrics (opcional).
+        try {
+            if (getConfig().getBoolean("web.enabled", false)) {
+                this.webServer = new com.argusprojects.argusmc.web.WebDashboardServer(this);
+                this.webServer.start();
+            }
+        } catch (Throwable t) {
+            getLogger().warning("[Argus/Web] fallo al levantar dashboard HTTP: " + t.getMessage());
         }
 
         // Pack 48 round 2 — proxy auto-detect (informativo, no cambia logica).
@@ -161,6 +172,9 @@ public final class ArgusPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (webServer != null) {
+            try { webServer.shutdown(); } catch (Throwable ignored) {}
+        }
         if (packetEventsBootstrap != null) {
             try { packetEventsBootstrap.shutdown(); } catch (Throwable ignored) {}
         }

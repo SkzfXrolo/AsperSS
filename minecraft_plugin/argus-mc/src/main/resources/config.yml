@@ -428,6 +428,28 @@ anticheat:
       extreme_stddev_ms: 2.0
       min_cps: 8
 
+# ── Web Dashboard / REST API / Prometheus (Pack 48 round 2) ──
+# Servidor HTTP embebido que expone stats, players, violations y
+# metrics Prometheus para scrapers locales (Grafana, etc).
+#
+# IMPORTANTE: por defecto NO esta levantado. Cambiar `enabled` a true
+# y poner una `api_key` larga y aleatoria.
+web:
+  enabled: false
+  port: 8765
+  # Generar con: openssl rand -hex 32  (o cualquier string secreto largo).
+  api_key: "REEMPLAZA_AQUI_UN_SECRETO_LARGO"
+  # IPs autorizadas. Default: solo loopback (127.0.0.1 + ::1). Para
+  # exponer al LAN usar ej: ["127.0.0.1", "192.168.1.0/24"] (CIDR ignorado;
+  # listar IPs concretas) o ["*"] para wildcard (NO recomendado salvo
+  # firewall externo).
+  ip_allowlist:
+    - "127.0.0.1"
+    - "::1"
+  # Si true, /metrics no requiere api_key (util para Prometheus local
+  # corriendo en la misma maquina con firewall).
+  public_metrics: false
+
 # ── Telemetria anonima opcional (bStats-compatible) ──────────
 # Reporta cada 30min stats agregadas (no info personal):
 #   - player count bucket

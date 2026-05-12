@@ -48,6 +48,14 @@ public final class ViolationManager {
     /** Cola de violations recientes por jugador (sliding window). */
     private final Map<UUID, Deque<Violation>> recent = new ConcurrentHashMap<>();
 
+    /** Ring buffer global de las ultimas N violations (Pack 48 round 2 — Web Dashboard). */
+    private static final int GLOBAL_RING_SIZE = 200;
+    private final Deque<Violation> globalRecent = new ArrayDeque<>();
+
+    /** Counters acumulados para /metrics Prometheus. */
+    private final Map<String, java.util.concurrent.atomic.AtomicLong> totalByCheck = new ConcurrentHashMap<>();
+    private final Map<String, java.util.concurrent.atomic.AtomicLong> totalByLevel = new ConcurrentHashMap<>();
+
     /** Jugadores que tienen un SS forzado pendiente al reconectar. */
     private final Set<UUID> pendingForcedSs = ConcurrentHashMap.newKeySet();
 
@@ -55,6 +63,23 @@ public final class ViolationManager {
         this.plugin = plugin;
         this.ssService = new SsService(plugin);
     }
+
+    /** Snapshot del ring buffer global (Pack 48 round 2 — Web Dashboard). */
+    public java.util.List<Violation> snapshotGlobalRecent(int limit) {
+        synchronized (globalRecent) {
+            java.util.List<Violation> out = new java.util.ArrayList<>(globalRecent);
+            if (limit > 0 && out.size() > limit) {
+                return out.subList(out.size() - limit, out.size());
+            }
+            return out;
+        }
+    }
+
+    /** Counters por check name (para Prometheus). */
+    public Map<String, java.util.concurrent.atomic.AtomicLong> totalByCheck() { return totalByCheck; }
+
+    /** Counters por level (para Prometheus). */
+    public Map<String, java.util.concurrent.atomic.AtomicLong> totalByLevel() { return totalByLevel; }
 
     /**
      * Reporta una violation. La unica entrada publica del sistema.
@@ -71,6 +96,16 @@ public final class ViolationManager {
 
         // Pack 48 #525 — Per-check level override.
         v = applyLevelOverride(v, cfg);
+
+        // Round 2 — feed ring buffer global + counters Prometheus.
+        synchronized (globalRecent) {
+            globalRecent.addLast(v);
+            while (globalRecent.size() > GLOBAL_RING_SIZE) globalRecent.pollFirst();
+        }
+        totalByCheck.computeIfAbsent(v.checkName, k -> new java.util.concurrent.atomic.AtomicLong())
+            .incrementAndGet();
+        totalByLevel.computeIfAbsent(v.level.name(), k -> new java.util.concurrent.atomic.AtomicLong())
+            .incrementAndGet();
 
         // 1) Acumular en la cola y limpiar las viejas
         Deque<Violation> queue = recent.computeIfAbsent(v.playerUuid, k -> new ArrayDeque<>());
