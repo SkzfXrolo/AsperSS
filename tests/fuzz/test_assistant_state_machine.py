@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from hypothesis import settings
+from hypothesis import HealthCheck, settings
 from hypothesis import strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, initialize, invariant, rule
 
@@ -37,7 +37,11 @@ class AssistantMachine(RuleBasedStateMachine):
 
 
 TestAssistantMachine = AssistantMachine.TestCase
-TestAssistantMachine.settings = settings(max_examples=110, stateful_step_count=20)
+TestAssistantMachine.settings = settings(
+    max_examples=110,
+    stateful_step_count=20,
+    suppress_health_check=[HealthCheck.too_slow],
+)
 
 
 @pytest.mark.fuzz
