@@ -218,6 +218,14 @@ anticheat:
       dy_mid: 0.65
       dy_high: 1.20
       dy_critical: 2.00
+    step:
+      enabled: true          # subir un bloque entero (+1.0b) en un solo packet
+                             # partiendo de on-ground. Cliente vanilla DEBE saltar
+                             # (curva 0.42 inicial). Whitelist: climbing, swimming,
+                             # vehicle, creative-fly, elytra, agua, bubble column.
+      min_dy: 0.95
+      max_dy: 1.10
+      from_ground_window_ms: 120
 
 # ── Mensajes (puedes traducir libremente) ─────────────────────
 messages:

@@ -11,6 +11,7 @@ import com.argusprojects.argusmc.anticheat.packet.checks.KillauraSwingPacketChec
 import com.argusprojects.argusmc.anticheat.packet.checks.PhaseCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.PingSpoofCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.ReachPacketCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.StepCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.TimerCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.VClipCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.VelocityCheck;
@@ -56,6 +57,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final CPSPacketCheck            cpsCheck;
     private final InvMovePacketCheck        invMoveCheck;
     private final VClipCheck                vclipCheck;
+    private final StepCheck                 stepCheck;
 
     public PacketAnticheatListener(ArgusPlugin plugin, PacketDataStore store) {
         super(PacketListenerPriority.NORMAL);
@@ -73,6 +75,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.cpsCheck             = new CPSPacketCheck(plugin);
         this.invMoveCheck         = new InvMovePacketCheck(plugin);
         this.vclipCheck           = new VClipCheck(plugin);
+        this.stepCheck            = new StepCheck(plugin);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -99,9 +102,18 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
 
                 long now = System.currentTimeMillis();
 
-                // PlayerFlying es un packet "no movement" (solo onGround flag).
+                // PlayerFlying es un packet "no movement" (solo onGround flag),
+                // pero los demas tambien llevan onGround. Lo usamos para checks
+                // que dependen de "venir del suelo".
+                WrapperPlayClientPlayerFlying wrap = new WrapperPlayClientPlayerFlying(event);
+                boolean nowOnGround;
+                try {
+                    nowOnGround = wrap.isOnGround();
+                } catch (Throwable t) {
+                    nowOnGround = s.lastOnGround;
+                }
+
                 if (type != PacketType.Play.Client.PLAYER_FLYING) {
-                    WrapperPlayClientPlayerFlying wrap = new WrapperPlayClientPlayerFlying(event);
                     if (wrap.hasPositionChanged()) {
                         double nx = wrap.getLocation().getX();
                         double ny = wrap.getLocation().getY();
@@ -115,7 +127,10 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         velocityCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
                         // VClip — delta Y impossible en un packet (Pack 48 #482).
                         vclipCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
+                        // Step — subir bloque sin curva de salto (Pack 48 #483).
+                        stepCheck.handlePositionPacket(player, s, nx, ny, nz, nowOnGround, sink());
 
+                        s.lastDeltaY = ny - s.lastY;
                         s.lastX = nx;
                         s.lastY = ny;
                         s.lastZ = nz;
@@ -132,6 +147,12 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         s.lastPitch = npi;
                     }
                 }
+
+                // Tracking de onGround para checks de step/fly/jump.
+                if (nowOnGround) {
+                    s.lastOnGroundMs = now;
+                }
+                s.lastOnGround = nowOnGround;
 
             } else if (type == PacketType.Play.Client.INTERACT_ENTITY) {
                 WrapperPlayClientInteractEntity wrap = new WrapperPlayClientInteractEntity(event);
