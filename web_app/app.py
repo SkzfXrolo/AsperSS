@@ -12402,6 +12402,74 @@ def _ai_synthesize(responses, question, synth_fn):
     return synth_fn([{'role': 'user', 'content': prompt}])
 
 
+def _ensure_oracle_conversations_schema():
+    """Crea la tabla de memoria conversacional del assistant (si no existe)."""
+    try:
+        with get_api_db_cursor() as cur:
+            try:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS oracle_conversations (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        company_id INTEGER,
+                        scan_id INTEGER,
+                        message TEXT NOT NULL,
+                        response TEXT,
+                        feedback SMALLINT,
+                        feedback_note TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_oracle_conv_user ON oracle_conversations(user_id, created_at DESC)")
+            except Exception:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS oracle_conversations (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        company_id INTEGER,
+                        scan_id INTEGER,
+                        message TEXT NOT NULL,
+                        response TEXT,
+                        feedback INTEGER,
+                        feedback_note TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_oracle_conv_user ON oracle_conversations(user_id, created_at DESC)")
+    except Exception as e:
+        print(f"[oracle_conversations] schema error: {e}")
+
+
+def _load_oracle_history(user_id: int, limit: int = 10) -> list[dict]:
+    out: list[dict] = []
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT id, message, response, created_at, scan_id, feedback, feedback_note "
+                f"FROM oracle_conversations WHERE user_id = {_PH} "
+                f"ORDER BY created_at DESC LIMIT {_PH}",
+                (int(user_id), int(limit))
+            )
+            for r in (cur.fetchall() or []):
+                d = dict(r) if not isinstance(r, dict) else r
+                out.append({
+                    'id': d.get('id'),
+                    'message': d.get('message') or '',
+                    'response': d.get('response') or '',
+                    'created_at': str(d.get('created_at')) if d.get('created_at') else None,
+                    'scan_id': d.get('scan_id'),
+                    'feedback': d.get('feedback'),
+                    'feedback_note': d.get('feedback_note'),
+                })
+    except Exception as e:
+        print(f"[oracle_conversations] load history error: {e}")
+    return out
+
+
 @app.route('/api/staff/chat', methods=['POST'])
 @login_required
 def staff_chat():
@@ -12422,6 +12490,63 @@ def staff_chat():
     scan_id  = data.get('scan_id')
     if not user_msg:
         return jsonify({'error': 'Mensaje vacÃ­o'}), 400
+    user_id = int(session.get('user_id') or 0)
+    _ensure_oracle_conversations_schema()
+
+    # Slash commands básicos (#415)
+    if user_msg.startswith('/'):
+        parts = user_msg.split()
+        cmd = parts[0].lower()
+        arg = ' '.join(parts[1:]).strip() if len(parts) > 1 else ''
+        if cmd == '/help':
+            reply = (
+                "Comandos disponibles:\n"
+                "/status <player>\n"
+                "/explain <decision_id>\n"
+                "/ban <player>\n"
+                "/help"
+            )
+            return jsonify({'reply': reply, 'providers_used': [], 'search_done': False, 'scan_id': scan_id}), 200
+        if cmd == '/status' and arg:
+            try:
+                import argus_ai_assistant as A
+                with get_api_db_cursor() as cur:
+                    user = get_user_by_id(user_id)
+                    company_id = int((user or {}).get('company_id') or 0)
+                    ctx = _build_assistant_player_ctx(cur, company_id, arg)
+                if not ctx:
+                    return jsonify({'reply': f'No encontré datos para {arg}.', 'providers_used': [], 'search_done': False, 'scan_id': scan_id}), 200
+                out = A.generate_response(f"status {arg}", lambda name: ctx if name.lower() == arg.lower() else None)
+                return jsonify({'reply': out.get('answer') or 'Sin respuesta.', 'providers_used': [], 'search_done': False, 'scan_id': scan_id}), 200
+            except Exception as e:
+                return jsonify({'error': f'Error en /status: {e}'}), 500
+        if cmd == '/explain' and arg.isdigit():
+            try:
+                decision_id = int(arg)
+                with get_api_db_cursor() as cur:
+                    cur.execute(
+                        f"SELECT action, score, confidence, reasoning FROM ai_decisions_log WHERE id = {_PH}",
+                        (decision_id,)
+                    )
+                    row = cur.fetchone()
+                if not row:
+                    return jsonify({'reply': f'No existe decisión #{decision_id}.', 'providers_used': [], 'search_done': False, 'scan_id': scan_id}), 200
+                row = dict(row) if not isinstance(row, dict) else row
+                reply = (
+                    f"Decisión #{decision_id}: acción={row.get('action')} | "
+                    f"score={row.get('score')} | confianza={row.get('confidence')}.\n"
+                    f"Razón: {row.get('reasoning') or 'sin detalle'}"
+                )
+                return jsonify({'reply': reply, 'providers_used': [], 'search_done': False, 'scan_id': scan_id}), 200
+            except Exception as e:
+                return jsonify({'error': f'Error en /explain: {e}'}), 500
+        if cmd == '/ban' and arg:
+            return jsonify({
+                'reply': f'Sugerencia: revisá {arg} con /status y /explain antes de aplicar ban manual.',
+                'providers_used': [],
+                'search_done': False,
+                'scan_id': scan_id
+            }), 200
 
     # Detectar quÃ© providers estÃ¡n configurados
     k_claude = os.environ.get('ANTHROPIC_API_KEY')
@@ -12466,7 +12591,13 @@ def staff_chat():
         except Exception as e:
             print(f'[staff_chat] scan ctx error: {e}')
 
-    history  = list(session.get('chat_history', []))
+    history = []
+    for h in reversed(_load_oracle_history(user_id, limit=10)):
+        if h.get('message'):
+            history.append({'role': 'user', 'content': h['message']})
+        if h.get('response'):
+            history.append({'role': 'assistant', 'content': h['response']})
+    history.extend(list(session.get('chat_history', [])))
     history.append({'role': 'user', 'content': user_msg})
 
     # BÃºsqueda web compartida (en paralelo con las llamadas a IA)
@@ -12523,12 +12654,26 @@ def staff_chat():
 
     history.append({'role': 'assistant', 'content': final_reply})
     session['chat_history'] = history[-20:]
+    conv_id = None
+    try:
+        user = get_user_by_id(user_id)
+        company_id = int((user or {}).get('company_id') or 0)
+        with get_api_db_cursor() as cur:
+            conv_id = _insert_id(
+                cur,
+                f"INSERT INTO oracle_conversations (user_id, company_id, scan_id, message, response) "
+                f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH})",
+                (user_id, company_id, scan_id if scan_id else None, user_msg, final_reply)
+            )
+    except Exception as e:
+        print(f"[oracle_conversations] persist error: {e}")
 
     return jsonify({
         'reply':          final_reply,
         'providers_used': providers_used,
         'search_done':    bool(search_text),
         'scan_id':        scan_id,
+        'conversation_id': conv_id,
     })
 
 
@@ -12539,6 +12684,18 @@ def staff_chat_clear():
     session.pop('chat_history', None)
     session.pop('chat_rate_log', None)
     return jsonify({'success': True})
+
+
+@app.route('/api/oracle/history', methods=['GET'])
+@login_required
+def api_oracle_history():
+    """Devuelve las últimas conversaciones Oracle del usuario actual."""
+    _ensure_oracle_conversations_schema()
+    uid = int(session.get('user_id') or 0)
+    if not uid:
+        return jsonify({'success': False, 'error': 'No autenticado'}), 401
+    rows = _load_oracle_history(uid, limit=10)
+    return jsonify({'success': True, 'history': rows}), 200
 
 
 @app.route('/api/staff/ai/suggest-verdict/<int:scan_id>', methods=['GET'])
