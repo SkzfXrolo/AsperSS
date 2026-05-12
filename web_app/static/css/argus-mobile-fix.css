@@ -74,8 +74,17 @@ html { -webkit-text-size-adjust: 100%; }
 
 /* Stats grid: 1 columna en pantallas muy chicas (≤420px) */
 @media (max-width: 420px) {
-    .stats-grid { grid-template-columns: 1fr !important; }
-    .stat-card { padding: 14px !important; }
+    .stats-grid {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+        align-items: stretch !important;
+    }
+    .stat-card {
+        padding: 14px !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        box-sizing: border-box !important;
+    }
     .stat-number, .stat-card .number { font-size: 24px !important; }
 }
 
