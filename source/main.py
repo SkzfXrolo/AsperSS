@@ -5708,6 +5708,8 @@ class ArgusApp:
                 _run_safe(self.scan_dns_cache_recent)
                 self._set_scan_phase("📂 RecentDocs (registry)...")
                 _run_safe(self.scan_recent_docs_registry)
+                self._set_scan_phase("🗃️ Office MRU (Word/Excel/PPT)...")
+                _run_safe(self.scan_office_mru_registry)
                 self._set_scan_phase("🌍 Historial de browsers (cheat keywords)...")
                 _run_safe(self.scan_browser_history_cheats)
                 self._set_scan_phase("🔬 Cross-check de procesos (psutil/WMI/tasklist)...")
@@ -13369,6 +13371,50 @@ class ArgusApp:
             print("✓ RecentDocs no existe en este perfil")
         except Exception as e:
             print(f"Error en scan_recent_docs_registry: {e}")
+
+    def scan_office_mru_registry(self):
+        """#102 — Escanea MRU de Office (Word/Excel/PowerPoint)."""
+        print("🔍 Escaneando Office MRU...")
+        office_paths = [
+            r'Software\Microsoft\Office\16.0\Word\File MRU',
+            r'Software\Microsoft\Office\16.0\Excel\File MRU',
+            r'Software\Microsoft\Office\16.0\PowerPoint\File MRU',
+            r'Software\Microsoft\Office\15.0\Word\File MRU',
+            r'Software\Microsoft\Office\15.0\Excel\File MRU',
+            r'Software\Microsoft\Office\15.0\PowerPoint\File MRU',
+        ]
+        suspicious_exts = ('.exe', '.dll', '.jar', '.bat', '.ps1', '.vbs', '.scr')
+        try:
+            for reg_path in office_paths:
+                try:
+                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path) as k:
+                        i = 0
+                        while True:
+                            try:
+                                _name, value, _ = winreg.EnumValue(k, i)
+                                i += 1
+                            except OSError:
+                                break
+                            v = str(value).lower()
+                            if not any(ext in v for ext in suspicious_exts):
+                                continue
+                            hit = next((h for h in _DEFINITE_HACK_NAMES if h in v), None)
+                            if not hit:
+                                continue
+                            self.issues_found.append({
+                                'tipo': 'office_mru_suspicious',
+                                'nombre': f'Office MRU sospechoso ({hit})',
+                                'ruta': f'HKCU\\{reg_path}',
+                                'archivo': str(value)[:255],
+                                'categoria': 'FORENSE',
+                                'alerta': 'SOSPECHOSO',
+                                'confidence': 0.68,
+                                'detected_patterns': [f'office_mru:{hit}'],
+                            })
+                except (FileNotFoundError, PermissionError):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_office_mru_registry: {e}")
 
 
     def scan_defender_quarantine(self):
