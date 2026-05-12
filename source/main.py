@@ -13149,6 +13149,26 @@ class ArgusApp:
                                     continue
                     except Exception:
                         continue
+                # También revisar valores directos en la raíz RecentDocs
+                try:
+                    j = 0
+                    while True:
+                        try:
+                            val_name, val_data, val_type = winreg.EnumValue(base, j)
+                            j += 1
+                        except OSError:
+                            break
+                        if val_name == 'MRUListEx' or val_type != winreg.REG_BINARY or not val_data:
+                            continue
+                        try:
+                            raw = bytes(val_data)
+                            fname = raw.decode('utf-16-le', errors='replace').split('\x00', 1)[0].strip()
+                            if fname:
+                                collected.append(('(root)', fname))
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
             finally:
                 try: base.Close()
                 except Exception: pass
