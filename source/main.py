@@ -15195,6 +15195,11 @@ class ArgusApp:
                         'inject', 'ghost', 'autoclicker', 'autoclick', 'xray', 'esp']
         DANGEROUS_PERMS = {'<all_urls>', 'webRequest', 'webRequestBlocking',
                            'nativeMessaging', 'debugger', 'proxy'}
+        SAFE_EXTENSION_NAME_TERMS = (
+            'ublock', 'adblock', 'dark reader', 'bitwarden', 'lastpass', '1password',
+            'grammarly', 'google translate', 'honey', 'tampermonkey', 'stylus',
+            'privacy badger', 'clearurls', 'metamask',
+        )
         SAFE_EXTENSION_IDS = {
             # uBlock / privacy / password managers / devtools
             'cjpalhdlnbpafiamejdnhcphjbkeiagm', 'ghbmnnjooekpmoecnnnilnnbdlolhkhi',
@@ -15259,6 +15264,8 @@ class ArgusApp:
                     is_store_signed = ('clients2.google.com/service/update2/crx' in update_url
                                        or 'addons.mozilla.org' in update_url
                                        or 'microsoftedge.microsoft.com' in update_url)
+                    if any(t in name for t in SAFE_EXTENSION_NAME_TERMS):
+                        continue
                     # #125 — reducir FPs: no alertar extensiones oficiales solo por permisos.
                     if name_hit or (dangerous and not is_store_signed):
                         confidence = 0.55 if name_hit else 0.36
