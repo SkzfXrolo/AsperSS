@@ -5632,12 +5632,19 @@ class ArgusApp:
                 _run_safe(self.scan_powershell_history)
                 self._set_scan_phase("👤 UserAssist (programas ejecutados)...")
                 _run_safe(self.scan_executed_userassist)
-                self._set_scan_phase("⏱️ BAM registry (ejecuciones con timestamp)...")
-                _run_safe(self.scan_bam_registry)
-                self._set_scan_phase("📈 SRUM (actividad histórica)...")
-                _run_safe(self.scan_srum_artifacts)
-                self._set_scan_phase("🔗 ShimCache / AppCompatCache...")
-                _run_safe(self.scan_appcompat_shimcache)
+                self._set_scan_phase("⏱️ BAM/SRUM/ShimCache en paralelo...")
+                with concurrent.futures.ThreadPoolExecutor(max_workers=4) as reg_exec:
+                    reg_futures = [
+                        reg_exec.submit(_run_safe, self.scan_bam_registry),
+                        reg_exec.submit(_run_safe, self.scan_srum_artifacts),
+                        reg_exec.submit(_run_safe, self.scan_appcompat_shimcache),
+                        reg_exec.submit(_run_safe, self.scan_amcache),
+                    ]
+                    for rf in concurrent.futures.as_completed(reg_futures, timeout=30):
+                        try:
+                            rf.result()
+                        except Exception as ex:
+                            print(f"⚠️ Error en subfase registry paralela: {ex}")
                 self._set_scan_phase("🎨 MUICache...")
                 _run_safe(self.scan_muicache)
                 self._set_scan_phase("📎 Archivos recientes (LNK)...")
@@ -5917,8 +5924,8 @@ class ArgusApp:
                 except Exception as ex:
                     print(f"⚠️ SS Forensics: {ex}")
 
-            # Ejecutar todos los grupos en paralelo (7 workers)
-            secondary_workers = min(7, psutil.cpu_count() or 4)
+            # Ejecutar todos los grupos en paralelo (ítem #111: tope de 4 workers)
+            secondary_workers = 4
             print(f"⚡ Ejecutando fases secundarias con {secondary_workers} workers en paralelo")
             with concurrent.futures.ThreadPoolExecutor(max_workers=secondary_workers) as sec_exec:
                 sec_futures = [
