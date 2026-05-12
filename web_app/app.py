@@ -6115,7 +6115,10 @@ _SERVER_FP_FRAGMENTS = [
     'gdlauncher\\instances', 'gdlauncher\\datastore',
     'atlauncher\\instances', 'atlauncher\\downloads',
     'lunarclient\\game-cache', 'lunarclient\\offline',
+    'lunarclient\\settings\\game', 'lunarclient\\profiles',
+    'lunarclient\\jre', 'lunar client\\jre',
     'badlion client\\bcc', 'badlionclient\\bcc',
+    'badlion client\\cache', 'badlion client\\logs\\launcher',
     'modrinth-app\\meta', 'modrinth.app\\profiles',
 
     # â”€â”€ Filter #47 â€” Steam Workshop subscriptions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
