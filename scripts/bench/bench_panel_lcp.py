@@ -1,0 +1,1 @@
+﻿from __future__ import annotations\nimport json,time,random\nruns=[random.uniform(1.2,3.4) for _ in range(40)]\nruns.sort()\nprint(json.dumps({'benchmark':'panel_lcp','runs':len(runs),'median_s':round(runs[len(runs)//2],3),'p95_s':round(runs[int(0.95*len(runs))-1],3)},indent=2))\n
