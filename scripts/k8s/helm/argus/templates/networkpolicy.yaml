@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: argus-web
+spec:
+  podSelector:
+    matchLabels:
+      app: argus-web
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - namespaceSelector: {}

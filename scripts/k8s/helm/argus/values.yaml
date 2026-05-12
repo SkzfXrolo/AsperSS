@@ -1,0 +1,11 @@
+image:
+  repository: ghcr.io/review/argus-web
+  tag: latest
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  host: argus.example.com
