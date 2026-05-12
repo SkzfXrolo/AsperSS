@@ -574,6 +574,8 @@ try:
                        id='autonomous_ml_daily', replace_existing=True)
     _scheduler.add_job(_daily_summary_job, 'cron', hour=9, minute=0,
                        id='daily_summary', replace_existing=True)
+    _scheduler.add_job(lambda: globals().get('_send_daily_digest_emails', lambda: None)(), 'cron', hour=8, minute=0,
+                       id='daily_digest_email', replace_existing=True)
     _scheduler.add_job(_try_send_deploy_webhook, 'interval', minutes=10,
                        id='deploy_webhook_retry', replace_existing=True)
     _scheduler.start()
@@ -2645,6 +2647,42 @@ def _ensure_plugin_keys_schema():
                 """)
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_ath_company ON ai_training_history(company_id, created_at DESC)")
 
+                # Notificaciones Oracle por empresa (Telegram/Discord webhook)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS company_notification_settings (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER NOT NULL,
+                        type VARCHAR(16) NOT NULL,
+                        webhook_url TEXT NOT NULL,
+                        enabled BOOLEAN DEFAULT TRUE,
+                        filter_min_level VARCHAR(16) DEFAULT 'HIGH',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_cns_company ON company_notification_settings(company_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_cns_type ON company_notification_settings(type)")
+                try:
+                    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_cns_company_type ON company_notification_settings(company_id, type)")
+                except Exception:
+                    pass
+
+                # Preferencias de usuario (tema, etc)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS user_preferences (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        pref_key VARCHAR(64) NOT NULL,
+                        pref_value TEXT,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                try:
+                    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_user_pref ON user_preferences(user_id, pref_key)")
+                except Exception:
+                    pass
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_pref_user ON user_preferences(user_id)")
+
                 # Columnas adicionales en scan_tokens â€” solo ALTER si no existen
                 _migrations = [
                     ('plugin_key_id', "ALTER TABLE scan_tokens ADD COLUMN plugin_key_id INTEGER"),
@@ -3401,8 +3439,378 @@ def _persist_ai_decision(cursor, company_id: int, plugin_key_id: int | None,
     except Exception as e:
         print(f"[ai_persist] error en upsert score: {e}")
 
+    try:
+        _dispatch_oracle_webhook_notifications(
+            cursor=cursor,
+            company_id=company_id,
+            player_name=player_name,
+            action=str(getattr(decision, 'action', '') or ''),
+            confidence=float(getattr(decision, 'confidence', 0.0) or 0.0),
+            score=float(getattr(decision, 'score', 0.0) or 0.0),
+            decision_id=decision_id,
+            reasoning=str(getattr(decision, 'reasoning', '') or ''),
+        )
+    except Exception as e:
+        print(f"[oracle_notify] error dispatch: {e}")
+
     return decision_id
 
+
+_NOTIF_LEVEL_MAP = {
+    'LOW': 1,
+    'MID': 2,
+    'MEDIUM': 2,
+    'HIGH': 3,
+    'CRITICAL': 4,
+}
+
+
+def _action_to_level(action: str, confidence: float = 0.0) -> str:
+    a = (action or '').strip().lower()
+    if a == 'ban':
+        return 'CRITICAL'
+    if a in ('kick', 'ss'):
+        return 'HIGH'
+    if a in ('watch', 'warn'):
+        return 'MID'
+    if confidence >= 0.85:
+        return 'HIGH'
+    return 'LOW'
+
+
+def _dispatch_oracle_webhook_notifications(cursor, company_id: int, player_name: str,
+                                           action: str, confidence: float, score: float,
+                                           decision_id: int | None, reasoning: str = '') -> None:
+    level = _action_to_level(action, confidence)
+    if _NOTIF_LEVEL_MAP.get(level, 0) < _NOTIF_LEVEL_MAP['HIGH']:
+        return
+    cursor.execute(
+        f"SELECT type, webhook_url, enabled, filter_min_level "
+        f"FROM company_notification_settings WHERE company_id = {_PH} AND enabled = TRUE",
+        (int(company_id),)
+    )
+    rows = cursor.fetchall() or []
+    if not rows:
+        return
+    payload_base = {
+        'event': 'oracle_decision',
+        'company_id': int(company_id),
+        'decision_id': decision_id,
+        'player_name': player_name,
+        'action': action,
+        'level': level,
+        'confidence': round(float(confidence or 0.0), 4),
+        'score': round(float(score or 0.0), 4),
+        'reasoning': (reasoning or '')[:600],
+        'ts': datetime.datetime.utcnow().isoformat() + 'Z',
+    }
+    for r in rows:
+        d = dict(r) if not isinstance(r, dict) else r
+        min_level = str(d.get('filter_min_level') or 'HIGH').upper()
+        if _NOTIF_LEVEL_MAP.get(level, 0) < _NOTIF_LEVEL_MAP.get(min_level, 3):
+            continue
+        webhook = str(d.get('webhook_url') or '').strip()
+        if not webhook:
+            continue
+        ntype = str(d.get('type') or '').strip().lower()
+        try:
+            if ntype == 'discord':
+                content = (
+                    f"🚨 Oracle {action.upper()} · {level}\n"
+                    f"Jugador: **{player_name}**\n"
+                    f"Confianza: {payload_base['confidence']:.2f} · Score: {payload_base['score']:.2f}\n"
+                    f"Decision ID: {decision_id or '-'}"
+                )
+                requests.post(webhook, json={'content': content}, timeout=4)
+            elif ntype == 'telegram':
+                txt = (
+                    f"🚨 Oracle {action.upper()} · {level}\n"
+                    f"Jugador: {player_name}\n"
+                    f"Confianza: {payload_base['confidence']:.2f} | Score: {payload_base['score']:.2f}\n"
+                    f"Decision ID: {decision_id or '-'}"
+                )
+                requests.post(webhook, json={'text': txt}, timeout=4)
+            else:
+                requests.post(webhook, json=payload_base, timeout=4)
+        except Exception as _e:
+            print(f"[oracle_notify] webhook error type={ntype}: {_e}")
+
+
+def generate_daily_digest(company_id: int) -> dict:
+    """Arma resumen diario de métricas Oracle para una empresa."""
+    out = {
+        'company_id': int(company_id),
+        'date': datetime.date.today().isoformat(),
+        'scans_today': 0,
+        'violations': {'low': 0, 'mid': 0, 'high': 0, 'critical': 0},
+        'top_violators': [],
+        'ai_accuracy': 0.0,
+    }
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT COUNT(*) AS c FROM scans WHERE company_id = {_PH} "
+                f"AND started_at >= CURRENT_DATE",
+                (int(company_id),)
+            )
+            r = cur.fetchone()
+            out['scans_today'] = int((dict(r) if r and not isinstance(r, dict) else (r or {})).get('c') or 0)
+            cur.execute(
+                f"SELECT UPPER(COALESCE(level,'LOW')) AS lvl, COUNT(*) AS c "
+                f"FROM plugin_violations WHERE company_id = {_PH} "
+                f"AND created_at >= CURRENT_DATE GROUP BY UPPER(COALESCE(level,'LOW'))",
+                (int(company_id),)
+            )
+            for row in (cur.fetchall() or []):
+                rr = dict(row) if not isinstance(row, dict) else row
+                lvl = str(rr.get('lvl') or '').lower()
+                key = 'mid' if lvl == 'medium' else lvl
+                if key in out['violations']:
+                    out['violations'][key] = int(rr.get('c') or 0)
+            cur.execute(
+                f"SELECT player_name, COUNT(*) AS c FROM plugin_violations "
+                f"WHERE company_id = {_PH} AND created_at >= CURRENT_DATE "
+                f"GROUP BY player_name ORDER BY c DESC LIMIT 5",
+                (int(company_id),)
+            )
+            out['top_violators'] = [
+                {
+                    'player_name': (dict(rw) if not isinstance(rw, dict) else rw).get('player_name') or '?',
+                    'count': int((dict(rw) if not isinstance(rw, dict) else rw).get('c') or 0),
+                }
+                for rw in (cur.fetchall() or [])
+            ]
+            try:
+                cur.execute(
+                    f"SELECT COALESCE(SUM(agreements),0) AS a, COALESCE(SUM(disagreements),0) AS d, "
+                    f"COALESCE(SUM(confirmed_correct),0) AS cc, COALESCE(SUM(confirmed_wrong),0) AS cw "
+                    f"FROM staff_trust_metrics WHERE company_id = {_PH}",
+                    (int(company_id),)
+                )
+                m = cur.fetchone()
+                m = dict(m) if m and not isinstance(m, dict) else (m or {})
+                a = int(m.get('a') or 0) + 2 * int(m.get('cc') or 0)
+                d = int(m.get('d') or 0) + 2 * int(m.get('cw') or 0)
+                out['ai_accuracy'] = round((a / (a + d)) * 100.0, 2) if (a + d) > 0 else 0.0
+            except Exception:
+                out['ai_accuracy'] = 0.0
+    except Exception as e:
+        print(f"[digest] generate error: {e}")
+    return out
+
+
+def _digest_to_text_html(digest: dict) -> tuple[str, str]:
+    top_rows = '\n'.join(
+        [f"- {x.get('player_name')}: {x.get('count')}" for x in (digest.get('top_violators') or [])]
+    ) or "- Sin datos"
+    text = (
+        f"Argus Daily Digest ({digest.get('date')})\n"
+        f"Company: {digest.get('company_id')}\n"
+        f"Scans hoy: {digest.get('scans_today')}\n"
+        f"Violations: LOW {digest['violations']['low']} | MID {digest['violations']['mid']} | "
+        f"HIGH {digest['violations']['high']} | CRITICAL {digest['violations']['critical']}\n"
+        f"Top violators:\n{top_rows}\n"
+        f"AI accuracy: {digest.get('ai_accuracy')}%\n"
+    )
+    html = (
+        "<h2>Argus Daily Digest</h2>"
+        f"<p><b>Fecha:</b> {digest.get('date')}<br><b>Company:</b> {digest.get('company_id')}</p>"
+        f"<p><b>Scans hoy:</b> {digest.get('scans_today')}</p>"
+        f"<p><b>Violations:</b> LOW {digest['violations']['low']} · MID {digest['violations']['mid']} · "
+        f"HIGH {digest['violations']['high']} · CRITICAL {digest['violations']['critical']}</p>"
+        "<p><b>Top violators</b></p><ul>"
+        + ''.join([f"<li>{x.get('player_name')}: {x.get('count')}</li>" for x in (digest.get('top_violators') or [])])
+        + "</ul>"
+        f"<p><b>AI accuracy:</b> {digest.get('ai_accuracy')}%</p>"
+    )
+    return text, html
+
+
+def _send_daily_digest_emails():
+    """Job diario: genera digest por company y envía a admins con email."""
+    smtp_host = os.environ.get('SMTP_HOST', '').strip()
+    smtp_user = os.environ.get('SMTP_USER', '').strip()
+    smtp_pass = os.environ.get('SMTP_PASS', '').strip()
+    smtp_from = os.environ.get('SMTP_FROM', 'argus@aspers.gg').strip()
+    smtp_port = int(os.environ.get('SMTP_PORT', '587') or 587)
+    if not smtp_host:
+        print('[digest] SMTP_HOST no configurado, se omite envío diario')
+        return
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute("SELECT DISTINCT company_id FROM users WHERE company_id IS NOT NULL")
+            companies = [int((dict(r) if not isinstance(r, dict) else r).get('company_id') or 0) for r in (cur.fetchall() or [])]
+        companies = [c for c in companies if c > 0]
+        for cid in companies:
+            digest = generate_daily_digest(cid)
+            text, html = _digest_to_text_html(digest)
+            with get_api_db_cursor() as cur:
+                cur.execute(
+                    f"SELECT email FROM users WHERE company_id = {_PH} "
+                    f"AND email IS NOT NULL AND email != ''",
+                    (cid,)
+                )
+                recipients = [str((dict(r) if not isinstance(r, dict) else r).get('email') or '').strip() for r in (cur.fetchall() or [])]
+            recipients = [e for e in recipients if '@' in e]
+            if not recipients:
+                continue
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"Argus Daily Digest · Company {cid}"
+            msg['From'] = smtp_from
+            msg['To'] = ', '.join(recipients[:20])
+            msg.attach(MIMEText(text, 'plain', 'utf-8'))
+            msg.attach(MIMEText(html, 'html', 'utf-8'))
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as srv:
+                srv.starttls()
+                if smtp_user:
+                    srv.login(smtp_user, smtp_pass)
+                srv.sendmail(smtp_from, recipients, msg.as_string())
+    except Exception as e:
+        print(f"[digest] send error: {e}")
+
+
+def _can_manage_company_notifications(user: dict | None, requested_company_id: int) -> bool:
+    if not user:
+        return False
+    roles = user.get('roles') or []
+    if isinstance(roles, str):
+        try:
+            roles = json.loads(roles)
+        except Exception:
+            roles = [roles]
+    roles = {str(r).lower() for r in roles}
+    if roles & {'admin', 'owner', 'super_admin'}:
+        return True
+    my_company = int(_resolve_company_id_for_user(user) or 0)
+    return my_company > 0 and my_company == int(requested_company_id)
+
+
+@app.route('/api/companies/<int:company_id>/notifications', methods=['GET', 'PUT'])
+@login_required
+def api_company_notifications(company_id: int):
+    _plugin_schema_guard()
+    user = get_user_by_id(session.get('user_id'))
+    if not _can_manage_company_notifications(user, company_id):
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    if request.method == 'GET':
+        try:
+            with get_api_db_cursor() as cur:
+                cur.execute(
+                    f"SELECT type, webhook_url, enabled, filter_min_level "
+                    f"FROM company_notification_settings WHERE company_id = {_PH}",
+                    (company_id,)
+                )
+                rows = []
+                for r in (cur.fetchall() or []):
+                    d = dict(r) if not isinstance(r, dict) else r
+                    rows.append({
+                        'type': d.get('type'),
+                        'webhook_url': d.get('webhook_url') or '',
+                        'enabled': bool(d.get('enabled')),
+                        'filter_min_level': (d.get('filter_min_level') or 'HIGH'),
+                    })
+            return jsonify({'success': True, 'items': rows}), 200
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    data = request.json or {}
+    items = data.get('items') or []
+    if not isinstance(items, list):
+        return jsonify({'success': False, 'error': 'items inválido'}), 400
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(f"DELETE FROM company_notification_settings WHERE company_id = {_PH}", (company_id,))
+            for it in items[:8]:
+                ntype = str((it or {}).get('type') or '').strip().lower()
+                if ntype not in ('telegram', 'discord'):
+                    continue
+                url = str((it or {}).get('webhook_url') or '').strip()
+                if not url:
+                    continue
+                en = bool((it or {}).get('enabled', True))
+                lvl = str((it or {}).get('filter_min_level') or 'HIGH').upper()
+                if lvl not in _NOTIF_LEVEL_MAP:
+                    lvl = 'HIGH'
+                cur.execute(
+                    f"INSERT INTO company_notification_settings "
+                    f"(company_id, type, webhook_url, enabled, filter_min_level, updated_at) "
+                    f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},CURRENT_TIMESTAMP)",
+                    (company_id, ntype, url, en, lvl)
+                )
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/digest/preview', methods=['GET'])
+@login_required
+def api_admin_digest_preview():
+    _plugin_schema_guard()
+    user = get_user_by_id(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'No autenticado'}), 401
+    requested = int(request.args.get('company_id') or 0)
+    if requested <= 0:
+        requested = int(_resolve_company_id_for_user(user) or 0)
+    if requested <= 0 or not _can_manage_company_notifications(user, requested):
+        return jsonify({'success': False, 'error': 'No autorizado para esa company'}), 403
+    digest = generate_daily_digest(requested)
+    text, html = _digest_to_text_html(digest)
+    return jsonify({'success': True, 'digest': digest, 'text_preview': text, 'html_preview': html}), 200
+
+
+@app.route('/api/me/preferences', methods=['GET', 'PUT'])
+@login_required
+def api_me_preferences():
+    _plugin_schema_guard()
+    uid = int(session.get('user_id') or 0)
+    if uid <= 0:
+        return jsonify({'success': False, 'error': 'No autenticado'}), 401
+    if request.method == 'GET':
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT pref_key, pref_value FROM user_preferences WHERE user_id = {_PH}",
+                (uid,)
+            )
+            prefs = {}
+            for r in (cur.fetchall() or []):
+                d = dict(r) if not isinstance(r, dict) else r
+                prefs[str(d.get('pref_key') or '')] = d.get('pref_value')
+        return jsonify({'success': True, 'preferences': prefs}), 200
+    data = request.json or {}
+    prefs = data.get('preferences') or {}
+    if not isinstance(prefs, dict):
+        return jsonify({'success': False, 'error': 'preferences inválido'}), 400
+    try:
+        with get_api_db_cursor() as cur:
+            for k, v in list(prefs.items())[:30]:
+                key = str(k or '').strip()[:64]
+                if not key:
+                    continue
+                val = str(v)[:300]
+                cur.execute(
+                    f"SELECT id FROM user_preferences WHERE user_id = {_PH} AND pref_key = {_PH}",
+                    (uid, key)
+                )
+                ex = cur.fetchone()
+                if ex:
+                    cur.execute(
+                        f"UPDATE user_preferences SET pref_value = {_PH}, updated_at = CURRENT_TIMESTAMP "
+                        f"WHERE user_id = {_PH} AND pref_key = {_PH}",
+                        (val, uid, key)
+                    )
+                else:
+                    cur.execute(
+                        f"INSERT INTO user_preferences (user_id, pref_key, pref_value, updated_at) "
+                        f"VALUES ({_PH},{_PH},{_PH},CURRENT_TIMESTAMP)",
+                        (uid, key, val)
+                    )
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ──────────────────────────────────────────────────────────────────────
 #  Pack 45: ML model helpers (load/save/train)

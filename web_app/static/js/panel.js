@@ -1482,6 +1482,7 @@ function showSection(sectionName) {
         loadDownloadLinks();
         loadUsers();
         loadCompanyUsersForAdmin();
+        loadCompanyNotifications();
     } else if (sectionName === 'mi-empresa') {
         loadCompanyInfo();
         loadCompanyTokens();
@@ -1514,6 +1515,80 @@ function showSection(sectionName) {
             break;
     }
 }
+
+async function loadCompanyNotifications() {
+    const companyId = Number(window.CURRENT_COMPANY_ID || 0);
+    if (!companyId) return;
+    try {
+        const r = await fetch(`/api/companies/${companyId}/notifications`);
+        const d = await r.json();
+        if (!d || !d.success) return;
+        const items = Array.isArray(d.items) ? d.items : [];
+        const discord = items.find(x => (x.type || '').toLowerCase() === 'discord') || {};
+        const telegram = items.find(x => (x.type || '').toLowerCase() === 'telegram') || {};
+        const minLevel = discord.filter_min_level || telegram.filter_min_level || 'HIGH';
+        const dUrl = document.getElementById('notif-discord-url');
+        const dEn = document.getElementById('notif-discord-enabled');
+        const tUrl = document.getElementById('notif-telegram-url');
+        const tEn = document.getElementById('notif-telegram-enabled');
+        const lvl = document.getElementById('notif-min-level');
+        if (dUrl) dUrl.value = discord.webhook_url || '';
+        if (dEn) dEn.checked = !!discord.enabled;
+        if (tUrl) tUrl.value = telegram.webhook_url || '';
+        if (tEn) tEn.checked = !!telegram.enabled;
+        if (lvl) lvl.value = minLevel;
+    } catch (_) {}
+}
+window.loadCompanyNotifications = loadCompanyNotifications;
+
+async function saveCompanyNotifications() {
+    const companyId = Number(window.CURRENT_COMPANY_ID || 0);
+    if (!companyId) { showToast('No hay company_id activo', 'error'); return; }
+    const minLevel = (document.getElementById('notif-min-level')?.value || 'HIGH').toUpperCase();
+    const items = [
+        {
+            type: 'discord',
+            webhook_url: (document.getElementById('notif-discord-url')?.value || '').trim(),
+            enabled: !!document.getElementById('notif-discord-enabled')?.checked,
+            filter_min_level: minLevel,
+        },
+        {
+            type: 'telegram',
+            webhook_url: (document.getElementById('notif-telegram-url')?.value || '').trim(),
+            enabled: !!document.getElementById('notif-telegram-enabled')?.checked,
+            filter_min_level: minLevel,
+        },
+    ];
+    try {
+        const r = await fetch(`/api/companies/${companyId}/notifications`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items }),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo guardar');
+        showToast('Notifications guardadas', 'success');
+    } catch (e) {
+        showToast(`Error guardando notifications: ${e.message}`, 'error');
+    }
+}
+window.saveCompanyNotifications = saveCompanyNotifications;
+
+async function previewCompanyDigest() {
+    const companyId = Number(window.CURRENT_COMPANY_ID || 0);
+    if (!companyId) return;
+    const out = document.getElementById('notif-preview');
+    if (out) out.textContent = 'Generando preview...';
+    try {
+        const r = await fetch(`/api/admin/digest/preview?company_id=${encodeURIComponent(companyId)}`);
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'No disponible');
+        if (out) out.textContent = d.text_preview || JSON.stringify(d.digest || {}, null, 2);
+    } catch (e) {
+        if (out) out.textContent = `Error preview: ${e.message}`;
+    }
+}
+window.previewCompanyDigest = previewCompanyDigest;
 
 // ============================================================
 // DASHBOARD
