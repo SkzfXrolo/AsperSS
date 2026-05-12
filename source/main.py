@@ -18567,7 +18567,8 @@ class ArgusApp:
         try:
             with open(hist_path, 'r', encoding='utf-8', errors='ignore') as f:
                 lines = f.readlines()
-            for line in lines:
+            seen = set()
+            for idx, line in enumerate(lines, start=1):
                 line_l = line.strip().lower()
                 if not line_l:
                     continue
@@ -18575,6 +18576,10 @@ class ArgusApp:
                     continue
                 matched = [kw for kw in HACK_KEYWORDS if kw in line_l]
                 if matched:
+                    sig = (line_l[:120], tuple(matched[:3]))
+                    if sig in seen:
+                        continue
+                    seen.add(sig)
                     self.issues_found.append({
                         'nombre': f'Comando sospechoso en historial PowerShell: {line.strip()[:80]}',
                         'ruta': os.path.dirname(hist_path),
@@ -18582,8 +18587,9 @@ class ArgusApp:
                         'tipo': 'powershell_history_hack',
                         'categoria': 'EVASION',
                         'alerta': 'SOSPECHOSO',
-                        'confidence': 0.78,
+                        'confidence': min(0.9, 0.72 + min(len(matched), 4) * 0.04),
                         'detected_patterns': matched[:5],
+                        'extra': {'line': idx},
                         'explicacion': (
                             f'El historial de PowerShell contiene el comando: "{line.strip()[:120]}", '
                             f'que coincide con patrones sospechosos: {matched[:3]}.'
