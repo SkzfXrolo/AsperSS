@@ -34,9 +34,20 @@ let _argusSocketPendingResolve = null;
 function initArgusSocket() {
     if (typeof io !== 'function') return;
     if (_argusSocket) return;
-    _argusSocket = io({ transports: ['websocket', 'polling'] });
+    _argusSocket = io({
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 500,
+        reconnectionDelayMax: 10000,
+        randomizationFactor: 0.5,
+        timeout: 8000
+    });
     _argusSocket.on('connect', () => { _argusSocketConnected = true; });
     _argusSocket.on('disconnect', () => { _argusSocketConnected = false; });
+    _argusSocket.on('reconnect_attempt', () => {
+        if (typeof showToast === 'function') showToast('Reconectando canal en tiempo real...', 'info');
+    });
     _argusSocket.on('oracle_response', (payload) => {
         if (typeof _argusSocketPendingResolve === 'function') {
             _argusSocketPendingResolve(payload || {});

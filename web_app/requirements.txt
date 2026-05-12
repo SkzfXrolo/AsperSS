@@ -22,3 +22,4 @@ flask-socketio>=5.3.6
 python-socketio>=5.11.2
 cachetools>=5.3.3
 redis>=5.0.0
+flask-limiter>=3.8.0

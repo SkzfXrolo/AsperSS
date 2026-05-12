@@ -33,6 +33,12 @@ except Exception:
     SocketIO = None
     emit = None
     join_room = None
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+except Exception:
+    Limiter = None
+    get_remote_address = None
 
 # Importar sistema de autenticaciÃ³n
 from auth import (
@@ -90,6 +96,47 @@ app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-produ
 app.config['WTF_CSRF_CHECK_DEFAULT'] = False
 _SOCKETIO_CORS = os.environ.get('SOCKETIO_CORS_ALLOWED_ORIGINS', '*')
 socketio = SocketIO(app, async_mode='threading', cors_allowed_origins=_SOCKETIO_CORS) if SocketIO else None
+_RATE_LIMIT_STORAGE = os.environ.get('REDIS_URL', 'memory://')
+
+
+def _rate_limit_user_or_ip():
+    uid = session.get('user_id')
+    if uid:
+        return f"user:{uid}"
+    if get_remote_address is not None:
+        return f"ip:{get_remote_address()}"
+    return f"ip:{request.remote_addr or 'unknown'}"
+
+
+def _limit(rule: str, key_func=None):
+    if limiter is None:
+        def _noop(fn):
+            return fn
+        return _noop
+    return limiter.limit(rule, key_func=key_func) if key_func else limiter.limit(rule)
+
+
+limiter = Limiter(
+    key_func=_rate_limit_user_or_ip,
+    app=app,
+    storage_uri=_RATE_LIMIT_STORAGE,
+    strategy="fixed-window",
+    default_limits=[]
+) if Limiter is not None else None
+
+
+@app.errorhandler(429)
+def _handle_rate_limit(e):
+    retry_after = 60
+    try:
+        retry_after = int(getattr(e, "retry_after", 60) or 60)
+    except Exception:
+        pass
+    return jsonify({
+        'success': False,
+        'error': 'Rate limit exceeded',
+        'retry_after_seconds': retry_after,
+    }), 429, {'Retry-After': str(retry_after)}
 try:
     from api_v2 import api_v2 as _api_v2_bp
     app.register_blueprint(_api_v2_bp)
@@ -189,6 +236,9 @@ if socketio is not None:
             return False
         if join_room is not None:
             join_room(f"user:{uid}")
+            cid = int(session.get('company_id') or 0)
+            if cid > 0:
+                join_room(f"company:{cid}")
         if emit is not None:
             emit('notification', {'kind': 'socket', 'message': 'Conectado a tiempo real'})
 
@@ -214,6 +264,19 @@ if socketio is not None:
             ans = f"Error Oracle WS: {e}"
         if emit is not None:
             emit('oracle_response', {'reply': ans, 'via': 'ws'})
+
+
+def _emit_realtime_notification(user_id: int | None = None, company_id: int | None = None, payload: dict | None = None):
+    if socketio is None:
+        return
+    data = payload or {}
+    try:
+        if user_id:
+            socketio.emit('notification', data, room=f"user:{int(user_id)}")
+        if company_id:
+            socketio.emit('notification', data, room=f"company:{int(company_id)}")
+    except Exception as e:
+        print(f"[ws] emit notification error: {e}")
 
 
 def require_superadmin(f):
@@ -694,6 +757,8 @@ try:
                        id='aggregate_fp_feedback', replace_existing=True)
     _scheduler.add_job(lambda: globals().get('audit_retention_cleanup', lambda: None)(), 'cron', hour=4, minute=15,
                        id='audit_retention_cleanup', replace_existing=True)
+    _scheduler.add_job(lambda: globals().get('purge_soft_deleted_older_than_90d', lambda: None)(), 'cron', hour=4, minute=45,
+                       id='purge_soft_deleted_90d', replace_existing=True)
     _scheduler.add_job(lambda: globals().get('scan_scheduler_tick', lambda: None)(), 'interval', minutes=5,
                        id='scan_scheduler_tick', replace_existing=True)
     _scheduler.add_job(_try_send_deploy_webhook, 'interval', minutes=10,
@@ -1693,6 +1758,8 @@ def get_issue_type_stats():
 # ============================================================
 
 @app.route('/api/auth/login', methods=['POST'])
+@_limit("5 per minute", key_func=lambda: f"ip:{request.remote_addr or 'unknown'}")
+@audit_action('auth.login', 'user')
 def api_login():
     """API endpoint para login"""
     data = request.json or {}
@@ -1712,6 +1779,7 @@ def api_login():
 
 @app.route('/api/auth/logout', methods=['POST'])
 @login_required
+@audit_action('auth.logout', 'user')
 def api_logout():
     """API endpoint para logout"""
     return _build_logout_response(jsonify({'success': True}))
@@ -1726,6 +1794,8 @@ def api_me():
     return jsonify({'success': False, 'error': 'Usuario no encontrado'}), 404
 
 @app.route('/api/auth/register', methods=['POST'])
+@_limit("3 per hour", key_func=lambda: f"ip:{request.remote_addr or 'unknown'}")
+@audit_action('auth.register', 'user')
 def api_register():
     """API endpoint para registro"""
     data = request.json or {}
@@ -1782,6 +1852,7 @@ def api_list_registration_tokens():
 
 @app.route('/api/admin/registration-tokens', methods=['POST'])
 @admin_required
+@audit_action('admin.registration_token.create', 'registration_token')
 def api_create_registration_token():
     """Crea un token de registro (solo admin) - Puede ser para empresa o general"""
     data = request.json or {}
@@ -1877,6 +1948,7 @@ def api_list_companies():
 
 @app.route('/api/admin/companies', methods=['POST'])
 @admin_required
+@audit_action('company.create', 'company')
 def api_create_company():
     """Crea una nueva empresa (solo super admin)"""
     data = request.json or {}
@@ -1914,6 +1986,7 @@ def api_get_company(company_id):
 
 @app.route('/api/admin/companies/<int:company_id>', methods=['PUT'])
 @admin_required
+@audit_action('company.update', 'company')
 def api_update_company(company_id):
     """Actualiza una empresa"""
     data = request.json or {}
@@ -1950,6 +2023,7 @@ def api_list_company_tokens():
 
 @app.route('/api/company/registration-tokens', methods=['POST'])
 @company_admin_required
+@audit_action('company.registration_token.create', 'registration_token')
 def api_create_company_token():
     """Crea un token de registro para la empresa (admin de empresa)"""
     user = get_user_by_id(session.get('user_id'))
@@ -1999,6 +2073,7 @@ def api_list_company_users():
 
 @app.route('/api/company/users/<int:user_id>/deactivate', methods=['POST'])
 @company_admin_required
+@audit_action('user.deactivate', 'user')
 def api_deactivate_company_user(user_id):
     """Desactiva un usuario de la empresa (admin de empresa)"""
     user = get_user_by_id(session.get('user_id'))
@@ -2026,6 +2101,7 @@ def api_deactivate_company_user(user_id):
 
 @app.route('/api/company/users/<int:user_id>/activate', methods=['POST'])
 @company_admin_required
+@audit_action('user.activate', 'user')
 def api_activate_company_user(user_id):
     """Activa un usuario de la empresa (admin de empresa)"""
     user = get_user_by_id(session.get('user_id'))
@@ -2049,6 +2125,7 @@ def api_activate_company_user(user_id):
 
 @app.route('/api/company/users/<int:user_id>/delete', methods=['DELETE'])
 @company_admin_required
+@audit_action('user.soft_delete', 'user')
 def api_delete_company_user(user_id):
     """Elimina un usuario de la empresa (admin de empresa)"""
     user = get_user_by_id(session.get('user_id'))
@@ -2069,8 +2146,8 @@ def api_delete_company_user(user_id):
     
     try:
         with get_api_db_cursor() as cursor:
-            cursor.execute(f'DELETE FROM users WHERE id = {_PH}', (user_id,))
-        return jsonify({'success': True, 'message': 'Usuario eliminado exitosamente'})
+            cursor.execute(f'UPDATE users SET deleted_at = CURRENT_TIMESTAMP WHERE id = {_PH}', (user_id,))
+        return jsonify({'success': True, 'message': 'Usuario marcado como eliminado'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -2519,6 +2596,7 @@ def create_token():
 
 _PLUGIN_SCHEMA_READY = False
 _PLUGIN_SCHEMA_LOCK = threading.Lock() if 'threading' in globals() else None
+_SOFT_DELETE_READY = False
 
 
 def _column_exists(cursor, table, column):
@@ -2949,11 +3027,33 @@ def _plugin_schema_guard():
     En produccion ya se ejecuta UNA VEZ desde init_db_async() al boot, asi que
     aqui es solo un fallback para entornos donde init_db_async no haya corrido
     o haya fallado. Es no-op si ya esta listo."""
-    global _PLUGIN_SCHEMA_READY
+    global _PLUGIN_SCHEMA_READY, _SOFT_DELETE_READY
     if _PLUGIN_SCHEMA_READY:
+        if not _SOFT_DELETE_READY:
+            _ensure_soft_delete_schema()
+            _SOFT_DELETE_READY = True
         return
     _ensure_plugin_keys_schema()
     _PLUGIN_SCHEMA_READY = True
+    if not _SOFT_DELETE_READY:
+        _ensure_soft_delete_schema()
+        _SOFT_DELETE_READY = True
+
+
+def _ensure_soft_delete_schema():
+    """Agrega columnas deleted_at en tablas clave (migración no destructiva)."""
+    targets = ['scans', 'users', 'companies', 'ai_decisions_log', 'ban_history', 'game_profiles', 'shared_filter_rules']
+    try:
+        with get_api_db_cursor() as cursor:
+            for table in targets:
+                try:
+                    if not _column_exists(cursor, table, 'deleted_at'):
+                        cursor.execute(f"ALTER TABLE {table} ADD COLUMN deleted_at TIMESTAMP NULL")
+                except Exception:
+                    # tabla puede no existir en algunos entornos
+                    pass
+    except Exception as e:
+        print(f"[soft_delete] schema error: {e}")
 
 
 def _ensure_dual_scanner_schema():
@@ -3124,6 +3224,11 @@ def _notify_suspicious_scan_diff(cursor, company_id: int, scan_id: int, diff: di
                     requests.post(webhook, json={'message': msg}, timeout=4)
             except Exception:
                 pass
+        _emit_realtime_notification(company_id=company_id, payload={
+            'kind': 'security_alert',
+            'scan_id': scan_id,
+            'message': f'Cambios sospechosos detectados en scan #{scan_id}',
+        })
     except Exception as e:
         print(f"[dual_scanner] suspicious notify error: {e}")
 
@@ -4537,6 +4642,7 @@ def api_filters_import():
 @app.route('/api/audit/search', methods=['GET'])
 @login_required
 @require_superadmin
+@_limit("30 per minute")
 def api_audit_search():
     limit = max(1, min(200, int(request.args.get('limit', 50) or 50)))
     cursor_id = int(request.args.get('cursor_id', 0) or 0)
@@ -5293,6 +5399,8 @@ def api_ai_scores():
 
 @app.route('/api/ai/evaluate-batch', methods=['POST'])
 @login_required
+@_limit("30 per minute")
+@audit_action('oracle.evaluate_batch', 'oracle')
 def api_ai_evaluate_batch():
     """Evalúa N jugadores en una sola request usando Oracle hybrid."""
     data = request.get_json(silent=True) or {}
@@ -7428,6 +7536,8 @@ def scanner_version():
 
 
 @app.route('/api/scans', methods=['POST'])
+@_limit("60 per hour")
+@audit_action('scan.create', 'scan')
 def start_scan():
     """Inicia un nuevo escaneo (usado por el cliente .exe) â€” sin login requerido"""
     try:
@@ -9416,6 +9526,20 @@ def submit_scan_results(scan_id):
         _push_body  = f'{_mn} Â· Risk {_rs} Â· {len(results)} hallazgos'
         import threading as _pt
         _pt.Thread(target=_send_push_to_all, args=(_push_title, _push_body, f'/panel?scan={scan_id}'), daemon=True).start()
+        try:
+            with get_api_db_cursor() as _cws:
+                _cws.execute(f"SELECT company_id FROM scans WHERE id = {_PH}", (scan_id,))
+                _r = _cws.fetchone()
+                _cid = int((_r.get('company_id') if isinstance(_r, dict) else (_r[0] if _r else 0)) or 0)
+            _emit_realtime_notification(company_id=_cid if _cid > 0 else None, payload={
+                'kind': 'scan_completed',
+                'scan_id': scan_id,
+                'risk_score': _rs,
+                'issues_count': len(results),
+                'message': f'Nuevo scan #{scan_id} completado',
+            })
+        except Exception:
+            pass
 
         return jsonify({'success': True, 'message': 'Resultados almacenados'})
     except Exception as e:
@@ -9608,7 +9732,7 @@ def list_scans():
             print(f"ðŸ”„ Intentando obtener escaneos directamente de la BD local...")
             with get_api_db_cursor() as cursor:
                 # Construir WHERE dinÃ¡mico
-                conditions = []
+                conditions = ["s.deleted_at IS NULL"]
                 params = []
                 if machine_name_f:
                     conditions.append(f's.machine_name ILIKE {_PH}')
@@ -9898,7 +10022,7 @@ def get_scan(scan_id):
                            total_files_scanned, issues_found, scan_duration,
                            machine_id, machine_name, ip_address, country, minecraft_username
                     FROM scans
-                    WHERE id = {_PH}
+                    WHERE id = {_PH} AND deleted_at IS NULL
                 ''', (scan_id,))
 
                 row = cursor.fetchone()
@@ -9942,7 +10066,7 @@ def get_scan(scan_id):
                         cursor.execute(f'''
                             SELECT total_dirs_scanned, verdict, verdict_reason, verdict_by, verdict_at,
                                    screenshot, mc_info, risk_score, ensemble_data, os, scanner_version
-                            FROM scans WHERE id = {_PH}
+                            FROM scans WHERE id = {_PH} AND deleted_at IS NULL
                         ''', (scan_id,))
                         _has_scn_ver_col = True
                     except Exception:
@@ -9950,7 +10074,7 @@ def get_scan(scan_id):
                         cursor.execute(f'''
                             SELECT total_dirs_scanned, verdict, verdict_reason, verdict_by, verdict_at,
                                    screenshot, mc_info, risk_score, ensemble_data, os
-                            FROM scans WHERE id = {_PH}
+                            FROM scans WHERE id = {_PH} AND deleted_at IS NULL
                         ''', (scan_id,))
                     vrow = cursor.fetchone()
                     if vrow:
@@ -10246,6 +10370,7 @@ def get_learning_stats():
 
 @app.route('/api/admin/scans/bulk-delete', methods=['POST'])
 @login_required
+@audit_action('scan.bulk_soft_delete', 'scan')
 def bulk_delete_scans():
     """Elimina scans de prueba por machine_name o machine_id. Solo admin."""
     current_user = get_user_by_id(session.get('user_id'))
@@ -10266,12 +10391,77 @@ def bulk_delete_scans():
             if not scan_ids:
                 return jsonify({'deleted': 0, 'message': 'No se encontraron scans para ese equipo'}), 200
             _ids_ph = ','.join([_PH] * len(scan_ids))
-            cursor.execute(f'DELETE FROM scan_results WHERE scan_id IN ({_ids_ph})', scan_ids)
-            cursor.execute(f'DELETE FROM staff_feedback WHERE scan_id IN ({_ids_ph})', scan_ids)
-            cursor.execute(f'DELETE FROM scans WHERE id IN ({_ids_ph})', scan_ids)
-        return jsonify({'deleted': len(scan_ids), 'message': f'{len(scan_ids)} scan(s) eliminados'}), 200
+            cursor.execute(f'UPDATE scans SET deleted_at = CURRENT_TIMESTAMP WHERE id IN ({_ids_ph})', scan_ids)
+        return jsonify({'deleted': len(scan_ids), 'message': f'{len(scan_ids)} scan(s) marcados como borrados'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/hard-delete/<resource>/<int:rid>', methods=['POST'])
+@login_required
+@require_superadmin
+@audit_action('admin.hard_delete', 'resource')
+def admin_hard_delete(resource: str, rid: int):
+    table_map = {
+        'scans': 'scans',
+        'users': 'users',
+        'companies': 'companies',
+        'oracle_decisions': 'ai_decisions_log',
+        'ban_history': 'ban_history',
+        'game_profiles': 'game_profiles',
+        'shared_filter_rules': 'shared_filter_rules',
+    }
+    table = table_map.get(resource)
+    if not table:
+        return jsonify({'success': False, 'error': 'resource inválido'}), 400
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(f"DELETE FROM {table} WHERE id = {_PH}", (rid,))
+        return jsonify({'success': True, 'resource': resource, 'id': rid}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/restore/<resource>/<int:rid>', methods=['POST'])
+@login_required
+@require_superadmin
+@audit_action('admin.restore_soft_deleted', 'resource')
+def admin_restore_soft_deleted(resource: str, rid: int):
+    table_map = {
+        'scans': 'scans',
+        'users': 'users',
+        'companies': 'companies',
+        'oracle_decisions': 'ai_decisions_log',
+        'ban_history': 'ban_history',
+        'game_profiles': 'game_profiles',
+        'shared_filter_rules': 'shared_filter_rules',
+    }
+    table = table_map.get(resource)
+    if not table:
+        return jsonify({'success': False, 'error': 'resource inválido'}), 400
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"UPDATE {table} SET deleted_at = NULL "
+                f"WHERE id = {_PH} AND deleted_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'",
+                (rid,)
+            )
+        return jsonify({'success': True, 'resource': resource, 'id': rid}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def purge_soft_deleted_older_than_90d():
+    targets = ['scans', 'users', 'companies', 'ai_decisions_log', 'ban_history', 'game_profiles', 'shared_filter_rules']
+    try:
+        with get_api_db_cursor() as cursor:
+            for t in targets:
+                try:
+                    cursor.execute(f"DELETE FROM {t} WHERE deleted_at IS NOT NULL AND deleted_at < CURRENT_TIMESTAMP - INTERVAL '90 days'")
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f"[soft_delete] purge error: {e}")
 
 
 @app.route('/api/admin/purge-garbage-results', methods=['POST'])
@@ -13921,6 +14111,8 @@ def _load_oracle_history(user_id: int, limit: int = 10) -> list[dict]:
 
 @app.route('/api/staff/chat', methods=['POST'])
 @login_required
+@_limit("30 per minute")
+@audit_action('oracle.chat', 'oracle')
 def staff_chat():
     """Chat de IA para staff â€” ensemble Claude + Groq + Gemini con bÃºsqueda web."""
     import concurrent.futures as _cf
