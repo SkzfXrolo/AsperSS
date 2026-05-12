@@ -10966,8 +10966,13 @@ class ArgusApp:
                                 name, data, _ = winreg.EnumValue(k, i)
                                 i += 1
                                 decoded = _safe_userassist_text(rot13(name))
+                                run_count = 0
                                 if len(data) >= 72:
                                     try:
+                                        # #95 — peso por frecuencia (run count) en UserAssist.
+                                        c1 = struct.unpack_from('<I', data, 4)[0] if len(data) >= 8 else 0
+                                        c2 = struct.unpack_from('<I', data, 8)[0] if len(data) >= 12 else 0
+                                        run_count = max(c1, c2)
                                         ft_raw = struct.unpack_from('<Q', data, 60)[0]
                                         if ft_raw > 0:
                                             EPOCH_DIFF = 116444736000000000
@@ -10982,7 +10987,7 @@ class ArgusApp:
                                         last_run = 'Desconocida'
                                 else:
                                     last_run = 'Desconocida'
-                                executed.append({'name': decoded, 'last_run': last_run})
+                                executed.append({'name': decoded, 'last_run': last_run, 'run_count': int(run_count or 0)})
                             except OSError:
                                 break
                 except (FileNotFoundError, PermissionError):
@@ -11004,11 +11009,11 @@ class ArgusApp:
                             'archivo': item['name'][:255],
                             'categoria': 'EXECUTED_FILES',
                             'alerta': 'CRITICAL',
-                            'confidence': 80,
+                            'confidence': min(0.95, 0.75 + min(item.get('run_count', 0), 20) * 0.01),
                             'detected_patterns': [term],
-                            'extra': {'last_run': item['last_run']},
+                            'extra': {'last_run': item['last_run'], 'run_count': item.get('run_count', 0)},
                         })
-                        print(f"🚨 USERASSIST SOSPECHOSO: {item['name'][:80]} @ {item['last_run']}")
+                        print(f"🚨 USERASSIST SOSPECHOSO: {item['name'][:80]} @ {item['last_run']} (runs={item.get('run_count', 0)})")
                         break
 
             if executed:
