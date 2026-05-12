@@ -4354,6 +4354,60 @@ def api_ai_model_stats():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/ai/agreement-rate', methods=['GET'])
+@login_required
+def api_ai_agreement_rate():
+    """KPI de acuerdo IA vs decisiones confirmadas por staff."""
+    if not _AI_TRUST_AVAILABLE:
+        return jsonify({'success': False, 'error': 'ai_trust no disponible'}), 503
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        company_id = 0 if user.get('is_super_admin') else int(user.get('company_id') or 0)
+        with get_api_db_cursor() as cursor:
+            if company_id > 0:
+                cursor.execute(
+                    f"SELECT COALESCE(SUM(agreements),0) AS a, "
+                    f"       COALESCE(SUM(disagreements),0) AS d, "
+                    f"       COALESCE(SUM(confirmed_correct),0) AS cc, "
+                    f"       COALESCE(SUM(confirmed_wrong),0) AS cw "
+                    f"FROM staff_trust WHERE user_id IN ("
+                    f"  SELECT id FROM users WHERE company_id = {_PH}"
+                    f")",
+                    (company_id,)
+                )
+            else:
+                cursor.execute(
+                    "SELECT COALESCE(SUM(agreements),0) AS a, "
+                    "       COALESCE(SUM(disagreements),0) AS d, "
+                    "       COALESCE(SUM(confirmed_correct),0) AS cc, "
+                    "       COALESCE(SUM(confirmed_wrong),0) AS cw "
+                    "FROM staff_trust"
+                )
+            row = cursor.fetchone()
+            agreements = int(_row_get(row, 0, 'a') or 0)
+            disagreements = int(_row_get(row, 1, 'd') or 0)
+            confirmed_correct = int(_row_get(row, 2, 'cc') or 0)
+            confirmed_wrong = int(_row_get(row, 3, 'cw') or 0)
+            weighted_ok = agreements + (2 * confirmed_correct)
+            weighted_bad = disagreements + (2 * confirmed_wrong)
+            sample_size = weighted_ok + weighted_bad
+            agreement_rate = round((weighted_ok / sample_size) * 100.0, 2) if sample_size > 0 else 0.0
+        return jsonify({
+            'success': True,
+            'company_id': company_id,
+            'agreement_rate': agreement_rate,
+            'sample_size': sample_size,
+            'agreements': agreements,
+            'disagreements': disagreements,
+            'confirmed_correct': confirmed_correct,
+            'confirmed_wrong': confirmed_wrong,
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/ai/retrain', methods=['POST'])
 @admin_required
 def api_ai_retrain():
