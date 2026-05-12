@@ -10827,6 +10827,12 @@ class ArgusApp:
         def rot13(s):
             return codecs.encode(s, 'rot_13')
 
+        def _safe_userassist_text(text):
+            try:
+                return str(text).encode('utf-16', 'surrogatepass').decode('utf-16', 'replace')
+            except Exception:
+                return str(text).encode('utf-8', 'replace').decode('utf-8', 'replace')
+
         ua_guids = [
             r'Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}\Count',
             r'Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{F4E57C4B-2036-45F0-A9AB-443BCFE33D9F}\Count',
@@ -10842,7 +10848,7 @@ class ArgusApp:
                             try:
                                 name, data, _ = winreg.EnumValue(k, i)
                                 i += 1
-                                decoded = rot13(name)
+                                decoded = _safe_userassist_text(rot13(name))
                                 if len(data) >= 72:
                                     try:
                                         ft_raw = struct.unpack_from('<Q', data, 60)[0]
