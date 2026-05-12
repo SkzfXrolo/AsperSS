@@ -1,0 +1,13 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: argus-web
+spec:
+  hosts: ["argus.example.com"]
+  http:
+    - timeout: 5s
+      retries:
+        attempts: 3
+      route:
+        - destination:
+            host: argus-web

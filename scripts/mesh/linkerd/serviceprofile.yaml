@@ -1,0 +1,10 @@
+apiVersion: linkerd.io/v1alpha2
+kind: ServiceProfile
+metadata:
+  name: argus-web.argus.svc.cluster.local
+spec:
+  routes:
+    - name: GET /health
+      condition:
+        method: GET
+        pathRegex: /health
