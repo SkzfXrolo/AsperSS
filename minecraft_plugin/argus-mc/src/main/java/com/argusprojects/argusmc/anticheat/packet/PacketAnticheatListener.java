@@ -11,6 +11,7 @@ import com.argusprojects.argusmc.anticheat.packet.checks.KillauraSwingPacketChec
 import com.argusprojects.argusmc.anticheat.packet.checks.PhaseCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.PingSpoofCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.ReachPacketCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.SpeedPacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.StepCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.TimerCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.VClipCheck;
@@ -58,6 +59,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final InvMovePacketCheck        invMoveCheck;
     private final VClipCheck                vclipCheck;
     private final StepCheck                 stepCheck;
+    private final SpeedPacketCheck          speedPacketCheck;
 
     public PacketAnticheatListener(ArgusPlugin plugin, PacketDataStore store) {
         super(PacketListenerPriority.NORMAL);
@@ -76,6 +78,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.invMoveCheck         = new InvMovePacketCheck(plugin);
         this.vclipCheck           = new VClipCheck(plugin);
         this.stepCheck            = new StepCheck(plugin);
+        this.speedPacketCheck     = new SpeedPacketCheck(plugin);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -129,6 +132,8 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         vclipCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
                         // Step — subir bloque sin curva de salto (Pack 48 #483).
                         stepCheck.handlePositionPacket(player, s, nx, ny, nz, nowOnGround, sink());
+                        // Speed real horizontal (Pack 48 #484).
+                        speedPacketCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
 
                         s.lastDeltaY = ny - s.lastY;
                         s.lastX = nx;

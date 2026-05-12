@@ -226,6 +226,14 @@ anticheat:
       min_dy: 0.95
       max_dy: 1.10
       from_ground_window_ms: 120
+    speed_packet:
+      enabled: true          # bps real medido entre packets. Compensa speed
+                             # potion (+20%/nivel), ice (+40%), soul speed (+40%).
+                             # Skip elytra, vehicle, swim, climb, creative-fly.
+                             # Flagea solo tras 3 packets consecutivos arriba del
+                             # cap para tolerar lag spikes puntuales.
+      max_bps: 6.5
+      consecutive_to_flag: 3
 
 # ── Mensajes (puedes traducir libremente) ─────────────────────
 messages:

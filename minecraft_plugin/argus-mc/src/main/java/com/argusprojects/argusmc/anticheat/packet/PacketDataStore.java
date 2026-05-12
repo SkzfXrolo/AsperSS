@@ -75,6 +75,8 @@ public final class PacketDataStore {
         public volatile double lastDeltaY;
         public volatile long   lastOnGroundMs;
         public volatile boolean lastOnGround;
+        /** Contador de packets consecutivos por encima del cap de speed (SpeedPacketCheck). */
+        public volatile int    speedOverflowCounter;
 
         /** Timestamps de los ultimos PlayerPosition packets (TimerCheck) — bounded. */
         public final Deque<Long> moveTimestamps = new ArrayDeque<>();
@@ -137,6 +139,7 @@ public final class PacketDataStore {
             serverVelConsumed = true;
             currentBreakStartMs = 0L;
             currentBreakBlockMaterial = null;
+            speedOverflowCounter = 0;
         }
     }
 
