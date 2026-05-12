@@ -35,6 +35,7 @@ public final class ArgusPlugin extends JavaPlugin {
     private ArgusConfig      argusConfig;
     private AnticheatConfig  anticheatConfig;
     private ArgusApiClient   apiClient;
+    private com.argusprojects.argusmc.api.ViolationBuffer violationBuffer;
     private Messages         messages;
     private ViolationManager violationManager;
     private AnticheatListener anticheatListener;
@@ -60,6 +61,9 @@ public final class ArgusPlugin extends JavaPlugin {
         }
 
         // Anti-cheat
+        if (this.apiClient != null) {
+            this.violationBuffer = new com.argusprojects.argusmc.api.ViolationBuffer(this, this.apiClient);
+        }
         this.violationManager = new ViolationManager(this);
         if (anticheatConfig.isEnabled()) {
             this.anticheatListener = new AnticheatListener(this, violationManager);
@@ -141,11 +145,19 @@ public final class ArgusPlugin extends JavaPlugin {
         if (packetEventsBootstrap != null) {
             try { packetEventsBootstrap.shutdown(); } catch (Throwable ignored) {}
         }
+        if (violationBuffer != null) {
+            try { violationBuffer.shutdown(); } catch (Throwable ignored) {}
+        }
         if (apiClient != null) {
             apiClient.shutdown();
         }
         // Desregistrar listeners para evitar leaks en /reload
         HandlerList.unregisterAll(this);
+    }
+
+    /** Pack 48 round 2 — buffer asincrono para violations (puede ser null si apiClient lo es). */
+    public com.argusprojects.argusmc.api.ViolationBuffer getViolationBuffer() {
+        return violationBuffer;
     }
 
     public void reloadConfigState() {

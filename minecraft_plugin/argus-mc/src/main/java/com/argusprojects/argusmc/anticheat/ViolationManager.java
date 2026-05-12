@@ -341,7 +341,14 @@ public final class ViolationManager {
         ArgusApiClient client = plugin.getApiClient();
         if (client == null) return;
         if (plugin.getArgusConfig().isMisconfigured()) return;
-        client.reportViolationAsync(v);
+        // Pack 48 round 2: si hay ViolationBuffer activo, enviamos por ahi
+        // (batched + back-pressure). Si no, fallback directo.
+        var buf = plugin.getViolationBuffer();
+        if (buf != null) {
+            buf.offer(v);
+        } else {
+            client.reportViolationAsync(v);
+        }
     }
 
     private void sendDiscordWebhookAsync(Violation v, String webhookUrl) {
