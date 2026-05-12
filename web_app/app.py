@@ -1046,15 +1046,17 @@ def panel():
 def admin_subscriptions():
     """Panel SuperAdmin â€” acceso solo mediante URL directa (no linkada pÃºblicamente).
 
-    Credenciales: env vars SUPER_ADMIN_USER / SUPER_ADMIN_PASS (con fallback al
-    valor histÃ³rico hardcoded para no romper el deploy actual; en producciÃ³n
-    DEBEN definirse en Render para evitar exponer creds en el repo).
+    Credenciales: env vars SUPER_ADMIN_USER / SUPER_ADMIN_PASS.
+    Si faltan, la vista falla en modo seguro.
     """
     if request.method == 'POST':
         username = request.form.get('username', '')
         password = request.form.get('password', '')
-        expected_user = (os.environ.get('SUPER_ADMIN_USER') or 'Rodrigo').strip()
-        expected_pass = (os.environ.get('SUPER_ADMIN_PASS') or 'Rodrigo@1').strip()
+        expected_user = (os.environ.get('SUPER_ADMIN_USER') or '').strip()
+        expected_pass = (os.environ.get('SUPER_ADMIN_PASS') or '').strip()
+        if not expected_user or not expected_pass:
+            app.logger.error('[security] SUPER_ADMIN_* no configuradas en entorno')
+            return render_template('admin_subscriptions_login.html', error='SuperAdmin no configurado en entorno')
         if username == expected_user and password == expected_pass:
             session['admin_subscriptions'] = True
             session['admin_subscriptions_login_at'] = datetime.datetime.now().isoformat()
