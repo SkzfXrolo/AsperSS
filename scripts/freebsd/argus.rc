@@ -1,0 +1,12 @@
+#!/bin/sh
+# PROVIDE: argus
+# REQUIRE: LOGIN
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+name=argus
+rcvar=argus_enable
+command="/usr/local/bin/ArgusScanner"
+load_rc_config $name
+: ${argus_enable:=NO}
+run_rc_command "$1"

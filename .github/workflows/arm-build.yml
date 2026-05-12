@@ -1,0 +1,23 @@
+name: ARM Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/arm/**"
+      - ".github/workflows/arm-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build-arm:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [arm64, armhf]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - name: Build ${{ matrix.arch }}
+        run: |
+          chmod +x scripts/arm/build-rpi.sh scripts/arm/build-armhf.sh
+          if [ "${{ matrix.arch }}" = "arm64" ]; then scripts/arm/build-rpi.sh; else scripts/arm/build-armhf.sh; fi
