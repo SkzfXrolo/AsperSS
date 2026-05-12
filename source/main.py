@@ -25,6 +25,7 @@ from pathlib import Path
 import time
 import ctypes
 from ctypes import wintypes
+import signal
 try:
     import matplotlib
     matplotlib.use('TkAgg')
@@ -21729,6 +21730,23 @@ def main():
 
         root = tk.Tk()
         app = ArgusApp(root)
+
+        # #115 — cierre graceful en Ctrl+C/SIGTERM durante escaneo.
+        def _graceful_signal_handler(signum, _frame):
+            try:
+                print(f"\n⚠️ Señal recibida ({signum}), cancelando escaneo de forma segura...")
+                if getattr(app, '_scan_cancel_event', None):
+                    app._scan_cancel_event.set()
+                root.after(200, root.destroy)
+            except Exception:
+                pass
+
+        try:
+            signal.signal(signal.SIGINT, _graceful_signal_handler)
+            if hasattr(signal, 'SIGTERM'):
+                signal.signal(signal.SIGTERM, _graceful_signal_handler)
+        except Exception:
+            pass
         root.mainloop()
     except KeyboardInterrupt:
         print("\n⚠️ Aplicación interrumpida por el usuario")
