@@ -9,6 +9,5 @@ def test_logout_invalidates_cookie_and_session(login_session):
         assert "session=" in set_cookie.lower()
         assert "max-age=0" in set_cookie.lower() or "expires=" in set_cookie.lower()
         assert "no-store" in (r.headers.get("Cache-Control") or "")
-
-    with login_session.session_transaction() as sess:
-        assert "user_id" not in sess
+        with login_session.session_transaction() as sess:
+            assert "user_id" not in sess
