@@ -1,0 +1,49 @@
+name: Linux Scanner Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "source/**"
+      - "scripts/linux/**"
+      - ".github/workflows/linux-build.yml"
+  pull_request:
+    paths:
+      - "source/**"
+      - "scripts/linux/**"
+      - ".github/workflows/linux-build.yml"
+  workflow_dispatch:
+
+jobs:
+  pyinstaller-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
+          pip install pyinstaller
+
+      - name: Build onefile Linux binary
+        run: |
+          set -euo pipefail
+          pyinstaller --clean --noconfirm --onefile ArgusScanner.spec
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: argus-linux-onefile-${{ github.sha }}
+          path: dist/*
+          retention-days: 14
