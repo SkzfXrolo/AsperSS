@@ -1,0 +1,230 @@
+# serializer version: 1
+# name: test_assistant_intent_and_response_snapshots
+  list([
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'greeting',
+      'slots': dict({
+      }),
+      'text': 'hola',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'greeting',
+      'slots': dict({
+      }),
+      'text': 'buenas',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'help',
+      'slots': dict({
+      }),
+      'text': 'ayuda',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'help',
+      'slots': dict({
+      }),
+      'text': 'help',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'daily_summary',
+      'slots': dict({
+      }),
+      'text': 'resumen del dia',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'weekly_summary',
+      'slots': dict({
+      }),
+      'text': 'reporte de la semana',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'top_suspects',
+      'slots': dict({
+      }),
+      'text': 'top sospechosos',
+    }),
+    dict({
+      'answer': 'Mateo: 6 evaluaciones totales, última ?. Acción más reciente: vigilancia. Score actual 62%.',
+      'intent': 'history',
+      'slots': dict({
+        'player': 'Mateo',
+      }),
+      'text': 'historial de Mateo',
+    }),
+    dict({
+      'answer': 'Yo te diría: vigila a Mateo. Score 62% con reach repitiéndose. No es para banear pero no lo pierdas de vista.',
+      'intent': 'advice',
+      'slots': dict({
+        'player': 'Mateo',
+      }),
+      'text': 'que hago con Mateo',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'compare',
+      'slots': dict({
+        'player': 'Mateo',
+      }),
+      'text': 'compara Mateo vs Juan',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'status_short',
+      'slots': dict({
+        'player': 'Mateo',
+      }),
+      'text': '@Mateo',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'status_short',
+      'slots': dict({
+        'player': 'Mateo',
+      }),
+      'text': 'Mateo',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: la decisión fue ? (62% confianza 72%). Razón principal: reach HIGH. ',
+      'intent': 'explain_decision',
+      'slots': dict({
+        'player': 'Pedro',
+      }),
+      'text': 'por que kickeaste a Pedro',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'status',
+      'slots': dict({
+        'player': 'X',
+      }),
+      'text': 'estado de X',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'status',
+      'slots': dict({
+        'player': 'Neo',
+      }),
+      'text': 'dime Neo',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'unknown',
+      'slots': dict({
+      }),
+      'text': 'unknown intent',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'compare',
+      'slots': dict({
+        'other': 'Zion',
+        'player': 'Neo',
+      }),
+      'text': 'se parece Neo a Zion',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'help',
+      'slots': dict({
+      }),
+      'text': 'que puedes hacer',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'status',
+      'slots': dict({
+        'player': 'Mateo',
+      }),
+      'text': 'como esta Mateo',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'status',
+      'slots': dict({
+        'player': 'Mateo',
+      }),
+      'text': 'que tal va Mateo',
+    }),
+    dict({
+      'answer': 'Mateo: 6 evaluaciones totales, última ?. Acción más reciente: vigilancia. Score actual 62%.',
+      'intent': 'history',
+      'slots': dict({
+        'player': 'Neo',
+      }),
+      'text': 'historia de Neo',
+    }),
+    dict({
+      'answer': 'Mateo: 6 evaluaciones totales, última ?. Acción más reciente: vigilancia. Score actual 62%.',
+      'intent': 'history',
+      'slots': dict({
+        'player': 'Zion',
+      }),
+      'text': 'antecedentes Zion',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: la decisión fue ? (62% confianza 72%). Razón principal: reach HIGH. ',
+      'intent': 'explain_decision',
+      'slots': dict({
+        'player': 'easte',
+      }),
+      'text': 'por que baneaste a X',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'daily_summary',
+      'slots': dict({
+      }),
+      'text': 'resumen',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'weekly_summary',
+      'slots': dict({
+      }),
+      'text': 'brief de la semana',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'top_suspects',
+      'slots': dict({
+      }),
+      'text': 'cheaters mas claros',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'help',
+      'slots': dict({
+      }),
+      'text': 'opciones',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'help',
+      'slots': dict({
+      }),
+      'text': 'comandos',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'greeting',
+      'slots': dict({
+      }),
+      'text': 'saludos',
+    }),
+    dict({
+      'answer': 'Sobre Mateo: lo estoy vigilando. 5 violations recientes, top: reach. No es para banear todavía.',
+      'intent': 'greeting',
+      'slots': dict({
+      }),
+      'text': 'hi',
+    }),
+  ])
+# ---
