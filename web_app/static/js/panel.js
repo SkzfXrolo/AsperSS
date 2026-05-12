@@ -7341,6 +7341,7 @@ window.setTableDensity = setTableDensity;
 // ============================================================
 // V37: KEYBOARD SHORTCUT HANDLER
 // ============================================================
+let _kbdChordGAt = 0;
 document.addEventListener('keydown', e => {
     const tag = (document.activeElement?.tagName || '').toLowerCase();
     const inInput = tag === 'input' || tag === 'textarea' || tag === 'select';
@@ -7353,6 +7354,13 @@ document.addEventListener('keydown', e => {
     }
     if (inInput) return;
 
+    // "/" -> foco directo al buscador de scans
+    if (e.key === '/') {
+        e.preventDefault();
+        document.getElementById('filter-search')?.focus();
+        return;
+    }
+
     if (e.key === '?') {
         const overlay = document.getElementById('kbd-overlay');
         if (overlay) overlay.classList.toggle('open');
@@ -7362,6 +7370,28 @@ document.addEventListener('keydown', e => {
         closeKbdOverlay();
         closeGlobalSearch();
         document.getElementById('critical-alert-banner')?.classList.remove('visible');
+        return;
+    }
+    // Chords: "g s", "g o", "g d"
+    const now = Date.now();
+    const isChordWindow = (now - _kbdChordGAt) < 900;
+    if (e.key === 'g' || e.key === 'G') {
+        _kbdChordGAt = now;
+        return;
+    }
+    if (isChordWindow) {
+        _kbdChordGAt = 0;
+        const k = String(e.key || '').toLowerCase();
+        if (k === 's') { document.querySelector('[data-section="resultados"]')?.click(); return; }
+        if (k === 'o') {
+            document.querySelector('[data-section="oracle"]')?.click()
+                || document.getElementById('ai-chat-btn')?.click();
+            return;
+        }
+        if (k === 'd') { document.querySelector('[data-section="dashboard"]')?.click(); return; }
+    }
+    if (e.key === 'n' || e.key === 'N') {
+        document.querySelector('#new-scan-btn,[data-action="new-scan"],[data-action="new"]')?.click();
         return;
     }
     if (e.key === '1') { const a = document.querySelector('[data-section="dashboard"]');  if (a) a.click(); }
