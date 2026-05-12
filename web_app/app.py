@@ -576,6 +576,8 @@ try:
                        id='daily_summary', replace_existing=True)
     _scheduler.add_job(lambda: globals().get('_send_daily_digest_emails', lambda: None)(), 'cron', hour=8, minute=0,
                        id='daily_digest_email', replace_existing=True)
+    _scheduler.add_job(lambda: globals().get('scan_scheduler_tick', lambda: None)(), 'interval', minutes=5,
+                       id='scan_scheduler_tick', replace_existing=True)
     _scheduler.add_job(_try_send_deploy_webhook, 'interval', minutes=10,
                        id='deploy_webhook_retry', replace_existing=True)
     _scheduler.start()
@@ -2719,6 +2721,178 @@ def _plugin_schema_guard():
         return
     _ensure_plugin_keys_schema()
     _PLUGIN_SCHEMA_READY = True
+
+
+def _ensure_dual_scanner_schema():
+    """Migrations no destructivas para dual-scanner."""
+    try:
+        with get_api_db_cursor() as cursor:
+            # scans.is_baseline
+            if not _column_exists(cursor, 'scans', 'is_baseline'):
+                try:
+                    cursor.execute("ALTER TABLE scans ADD COLUMN is_baseline BOOLEAN DEFAULT FALSE")
+                except Exception as e:
+                    print(f"[dual_scanner] no se pudo agregar is_baseline: {e}")
+            try:
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_scans_baseline ON scans(is_baseline)")
+            except Exception:
+                pass
+
+            # Programación de rescans
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS scan_schedules (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    host VARCHAR(255) NOT NULL,
+                    frequency_hours INTEGER NOT NULL DEFAULT 24,
+                    last_run TIMESTAMP,
+                    next_run TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    enabled BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            try:
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_sched_next ON scan_schedules(next_run)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_sched_user ON scan_schedules(user_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_sched_host ON scan_schedules(host)")
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"[dual_scanner] schema error: {e}")
+
+
+def _build_scan_diff(cursor, scan_a: int, scan_b: int) -> dict:
+    def _fetch_scan(sid):
+        cursor.execute(
+            f"SELECT id, machine_name, minecraft_username, started_at, risk_score, verdict, issues_found, "
+            f"COALESCE(is_baseline, FALSE) AS is_baseline "
+            f"FROM scans WHERE id = {_PH}",
+            (sid,)
+        )
+        r = cursor.fetchone()
+        if not r:
+            return None
+        return {
+            'id': _row_get(r, 0, 'id'),
+            'machine': _row_get(r, 1, 'machine_name') or '',
+            'username': _row_get(r, 2, 'minecraft_username') or '',
+            'date': str(_row_get(r, 3, 'started_at') or '')[:19],
+            'risk': int(_row_get(r, 4, 'risk_score') or 0),
+            'verdict': _row_get(r, 5, 'verdict') or 'pending',
+            'total': int(_row_get(r, 6, 'issues_found') or 0),
+            'is_baseline': bool(_row_get(r, 7, 'is_baseline') or False),
+        }
+
+    def _fetch_results(sid):
+        cursor.execute(
+            f"SELECT issue_type, issue_name, alert_level, confidence, issue_category "
+            f"FROM scan_results WHERE scan_id = {_PH}",
+            (sid,)
+        )
+        out = {}
+        for r in (cursor.fetchall() or []):
+            tipo = str(_row_get(r, 0, 'issue_type') or 'unknown')
+            out[tipo] = {
+                'name': str(_row_get(r, 1, 'issue_name') or '')[:100],
+                'alert': str(_row_get(r, 2, 'alert_level') or ''),
+                'confidence': float(_row_get(r, 3, 'confidence') or 0),
+                'category': str(_row_get(r, 4, 'issue_category') or 'misc'),
+            }
+        return out
+
+    meta_a = _fetch_scan(scan_a)
+    meta_b = _fetch_scan(scan_b)
+    if not meta_a or not meta_b:
+        raise ValueError('Uno o ambos scans no existen')
+    res_a = _fetch_results(scan_a)
+    res_b = _fetch_results(scan_b)
+    types_a = set(res_a.keys())
+    types_b = set(res_b.keys())
+    new_in_b = sorted(types_b - types_a)
+    gone_from_b = sorted(types_a - types_b)
+    common = sorted(types_a & types_b)
+    persistent = []
+    for t in common:
+        cur = dict(res_b[t])
+        cur['type'] = t
+        cur['conf_delta'] = round((res_b[t].get('confidence') or 0) - (res_a[t].get('confidence') or 0), 3)
+        cur['changed'] = (
+            (res_b[t].get('alert') != res_a[t].get('alert')) or
+            abs(cur['conf_delta']) >= 0.2
+        )
+        persistent.append(cur)
+    items_added = [{**res_b[t], 'type': t} for t in new_in_b]
+    items_removed = [{**res_a[t], 'type': t} for t in gone_from_b]
+    sectors = {}
+    for bucket, items in (('added', items_added), ('removed', items_removed), ('changed', [p for p in persistent if p.get('changed')])):
+        for it in items:
+            sec = str(it.get('category') or 'misc').strip().lower()[:48]
+            sectors.setdefault(sec, {'added': [], 'removed': [], 'changed': []})
+            sectors[sec][bucket].append(it)
+    return {
+        'scan_a': meta_a,
+        'scan_b': meta_b,
+        'risk_delta': meta_b['risk'] - meta_a['risk'],
+        'verdict_change': meta_a['verdict'] != meta_b['verdict'],
+        'new_findings': items_added,
+        'resolved_findings': items_removed,
+        'persistent_findings': persistent,
+        'summary': {
+            'new_count': len(items_added),
+            'resolved_count': len(items_removed),
+            'persistent_count': len(persistent),
+            'changed_count': len([p for p in persistent if p.get('changed')]),
+        },
+        'sectors': sectors,
+    }
+
+
+def detect_suspicious_changes(scan_diff: dict) -> bool:
+    """True si hay >5 hallazgos HIGH/CRITICAL nuevos."""
+    added = scan_diff.get('new_findings') or []
+    count_high = 0
+    for it in added:
+        lvl = str(it.get('alert') or '').upper()
+        if lvl in ('HIGH', 'CRITICAL', 'SOSPECHOSO', 'MUY_SOSPECHOSO'):
+            count_high += 1
+    return count_high > 5
+
+
+def _notify_suspicious_scan_diff(cursor, company_id: int, scan_id: int, diff: dict) -> None:
+    try:
+        if not detect_suspicious_changes(diff):
+            return
+        cursor.execute(
+            f"SELECT type, webhook_url, enabled FROM company_notification_settings "
+            f"WHERE company_id = {_PH} AND enabled = TRUE",
+            (company_id,)
+        )
+        rows = cursor.fetchall() or []
+        if not rows:
+            return
+        msg = (
+            f"⚠️ Dual-scan suspicious changes\n"
+            f"Scan #{scan_id}: +{(diff.get('summary') or {}).get('new_count', 0)} new findings, "
+            f"{(diff.get('summary') or {}).get('changed_count', 0)} changed."
+        )
+        for r in rows:
+            d = dict(r) if not isinstance(r, dict) else r
+            webhook = str(d.get('webhook_url') or '').strip()
+            if not webhook:
+                continue
+            ntype = str(d.get('type') or '').lower()
+            try:
+                if ntype == 'discord':
+                    requests.post(webhook, json={'content': msg}, timeout=4)
+                elif ntype == 'telegram':
+                    requests.post(webhook, json={'text': msg}, timeout=4)
+                else:
+                    requests.post(webhook, json={'message': msg}, timeout=4)
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"[dual_scanner] suspicious notify error: {e}")
 
 
 def _resolve_company_id_for_user(user):
@@ -8254,6 +8428,7 @@ def submit_scan_results(scan_id):
           f"results_count={len(data.get('results', []))}, "
           f"has_screenshot={'si' if data.get('screenshot') else 'no'}")
 
+    _ensure_dual_scanner_schema()
     try:
         with get_api_db_cursor() as cursor:
             print(f"[DEBUG] Ejecutando UPDATE scans WHERE id={scan_id}")
@@ -8469,6 +8644,33 @@ def submit_scan_results(scan_id):
                 _compare_consecutive_scans(cursor, scan_id, data.get('machine_id', ''), results)
             except Exception:
                 pass
+
+            # #291 — alerta automática ante cambios sospechosos vs scan anterior
+            try:
+                cursor.execute(
+                    f"SELECT id, company_id, machine_name, minecraft_username "
+                    f"FROM scans WHERE id = {_PH}",
+                    (scan_id,)
+                )
+                srow = cursor.fetchone()
+                if srow:
+                    srow = dict(srow) if not isinstance(srow, dict) else srow
+                    company_id = int(srow.get('company_id') or 0)
+                    host = str(srow.get('machine_name') or '').strip()
+                    usern = str(srow.get('minecraft_username') or '').strip()
+                    cursor.execute(
+                        f"SELECT id FROM scans WHERE company_id = {_PH} AND machine_name = {_PH} "
+                        f"AND minecraft_username = {_PH} AND id < {_PH} "
+                        f"ORDER BY id DESC LIMIT 1",
+                        (company_id, host, usern, scan_id)
+                    )
+                    prev = cursor.fetchone()
+                    prev_id = int(_row_get(prev, 0, 'id') or 0) if prev else 0
+                    if prev_id > 0:
+                        diff = _build_scan_diff(cursor, prev_id, scan_id)
+                        _notify_suspicious_scan_diff(cursor, company_id, scan_id, diff)
+            except Exception as _e_ds:
+                print(f"[dual_scanner] post-scan compare error: {_e_ds}")
 
         print(f"[DEBUG] ===== SCAN {scan_id} COMPLETADO OK: "
               f"{len(data.get('results',[]))} resultados, status={data.get('status','completed')} =====\n")
@@ -12223,87 +12425,201 @@ def get_player_baseline(machine_id):
 def compare_scans(scan_a, scan_b):
     """Compara dos scans del mismo jugador y retorna el diff de hallazgos.
     Ãštil para detectar quÃ© apareciÃ³ o desapareciÃ³ entre sesiones."""
+    _ensure_dual_scanner_schema()
     try:
         with get_api_db_cursor() as cursor:
-            def _fetch_scan(sid):
-                cursor.execute(
-                    f'SELECT id, machine_name, minecraft_username, started_at, risk_score,'
-                    f' verdict, issues_found FROM scans WHERE id = {_PH}',
-                    (sid,)
-                )
-                r = cursor.fetchone()
-                if not r:
-                    return None
-                return {
-                    'id':        _row_get(r, 0, 'id'),
-                    'machine':   _row_get(r, 1, 'machine_name') or '',
-                    'username':  _row_get(r, 2, 'minecraft_username') or '',
-                    'date':      str(_row_get(r, 3, 'started_at') or '')[:19],
-                    'risk':      int(_row_get(r, 4, 'risk_score') or 0),
-                    'verdict':   _row_get(r, 5, 'verdict') or 'pending',
-                    'total':     int(_row_get(r, 6, 'issues_found') or 0),
-                }
-
-            def _fetch_results(sid):
-                cursor.execute(
-                    f'SELECT issue_type, issue_name, alert_level, confidence, issue_category'
-                    f' FROM scan_results WHERE scan_id = {_PH}',
-                    (sid,)
-                )
-                out = {}
-                for r in (cursor.fetchall() or []):
-                    tipo = str(_row_get(r, 0, 'issue_type') or 'unknown')
-                    out[tipo] = {
-                        'name':       str(_row_get(r, 1, 'issue_name') or '')[:80],
-                        'alert':      str(_row_get(r, 2, 'alert_level') or ''),
-                        'confidence': float(_row_get(r, 3, 'confidence') or 0),
-                        'category':   str(_row_get(r, 4, 'issue_category') or ''),
-                    }
-                return out
-
-            meta_a = _fetch_scan(scan_a)
-            meta_b = _fetch_scan(scan_b)
-            if not meta_a or not meta_b:
-                return jsonify({'error': 'Uno o ambos scans no existen'}), 404
-
-            res_a = _fetch_results(scan_a)
-            res_b = _fetch_results(scan_b)
-
-        types_a = set(res_a.keys())
-        types_b = set(res_b.keys())
-
-        new_in_b    = sorted(types_b - types_a)   # appeared in B, not A
-        gone_from_b = sorted(types_a - types_b)   # was in A, gone in B
-        common      = sorted(types_a & types_b)
-
-        diff = {
-            'scan_a': meta_a,
-            'scan_b': meta_b,
-            'risk_delta':    meta_b['risk'] - meta_a['risk'],
-            'verdict_change': meta_a['verdict'] != meta_b['verdict'],
-            'new_findings': [
-                {**res_b[t], 'type': t} for t in new_in_b
-            ],
-            'resolved_findings': [
-                {**res_a[t], 'type': t} for t in gone_from_b
-            ],
-            'persistent_findings': [
-                {
-                    'type': t,
-                    **res_b[t],
-                    'conf_delta': round(res_b[t]['confidence'] - res_a[t]['confidence'], 3),
-                }
-                for t in common
-            ],
-            'summary': {
-                'new_count':        len(new_in_b),
-                'resolved_count':   len(gone_from_b),
-                'persistent_count': len(common),
-            }
-        }
+            diff = _build_scan_diff(cursor, int(scan_a), int(scan_b))
         return jsonify(diff), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/scans/compare', methods=['GET'])
+@login_required
+def compare_scans_query():
+    """Dual-scanner compare endpoint: /api/scans/compare?scan1=..&scan2=.."""
+    _ensure_dual_scanner_schema()
+    try:
+        scan1 = int(request.args.get('scan1') or 0)
+        scan2 = int(request.args.get('scan2') or 0)
+    except Exception:
+        scan1 = 0
+        scan2 = 0
+    if scan1 <= 0 or scan2 <= 0:
+        return jsonify({'error': 'scan1 y scan2 requeridos'}), 400
+    try:
+        with get_api_db_cursor() as cursor:
+            diff = _build_scan_diff(cursor, scan1, scan2)
+        return jsonify(diff), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/scans/<int:scan_id>/set-baseline', methods=['POST'])
+@login_required
+def set_scan_baseline(scan_id: int):
+    _ensure_dual_scanner_schema()
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT id, company_id, machine_name, minecraft_username FROM scans WHERE id = {_PH}",
+                (scan_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'success': False, 'error': 'Scan no encontrado'}), 404
+            d = dict(row) if not isinstance(row, dict) else row
+            company_id = int(d.get('company_id') or 0)
+            host = str(d.get('machine_name') or '').strip()
+            usern = str(d.get('minecraft_username') or '').strip()
+            cursor.execute(
+                f"UPDATE scans SET is_baseline = FALSE "
+                f"WHERE company_id = {_PH} AND machine_name = {_PH} AND minecraft_username = {_PH}",
+                (company_id, host, usern)
+            )
+            cursor.execute(
+                f"UPDATE scans SET is_baseline = TRUE WHERE id = {_PH}",
+                (scan_id,)
+            )
+        return jsonify({'success': True, 'scan_id': scan_id, 'is_baseline': True}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/scans/timeline', methods=['GET'])
+@login_required
+def scans_timeline():
+    _ensure_dual_scanner_schema()
+    user_q = str(request.args.get('user') or '').strip()
+    host_q = str(request.args.get('host') or '').strip()
+    limit = max(1, min(120, int(request.args.get('limit', 30) or 30)))
+    if not user_q and not host_q:
+        return jsonify({'success': False, 'error': 'user o host requerido'}), 400
+    try:
+        with get_api_db_cursor() as cursor:
+            where = []
+            params = []
+            if user_q:
+                where.append(f"(CAST(created_by AS TEXT) = {_PH} OR LOWER(minecraft_username) = LOWER({_PH}))")
+                params.extend([user_q, user_q])
+            if host_q:
+                where.append(f"LOWER(machine_name) = LOWER({_PH})")
+                params.append(host_q)
+            where_sql = " AND ".join(where) if where else "1=1"
+            cursor.execute(
+                f"SELECT id, started_at, issues_found, risk_score, verdict, machine_name, minecraft_username, "
+                f"COALESCE(is_baseline,FALSE) AS is_baseline "
+                f"FROM scans WHERE {where_sql} ORDER BY started_at DESC LIMIT {_PH}",
+                tuple(params + [limit])
+            )
+            rows = cursor.fetchall() or []
+        timeline = []
+        for r in rows:
+            d = dict(r) if not isinstance(r, dict) else r
+            timeline.append({
+                'scan_id': d.get('id'),
+                'timestamp': str(d.get('started_at') or ''),
+                'issues_found': int(d.get('issues_found') or 0),
+                'risk_score': float(d.get('risk_score') or 0.0),
+                'verdict': d.get('verdict') or 'pending',
+                'host': d.get('machine_name') or '',
+                'user': d.get('minecraft_username') or '',
+                'is_baseline': bool(d.get('is_baseline') or False),
+            })
+        timeline.reverse()
+        return jsonify({'success': True, 'timeline': timeline}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/schedules', methods=['GET', 'POST', 'PUT', 'DELETE'])
+@login_required
+def api_schedules():
+    _ensure_dual_scanner_schema()
+    uid = int(session.get('user_id') or 0)
+    if uid <= 0:
+        return jsonify({'success': False, 'error': 'No autenticado'}), 401
+    if request.method == 'GET':
+        try:
+            with get_api_db_cursor() as cursor:
+                cursor.execute(
+                    f"SELECT id, user_id, host, frequency_hours, last_run, next_run, enabled "
+                    f"FROM scan_schedules WHERE user_id = {_PH} ORDER BY next_run ASC",
+                    (uid,)
+                )
+                rows = cursor.fetchall() or []
+            return jsonify({'success': True, 'items': [dict(r) if not isinstance(r, dict) else r for r in rows]}), 200
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    data = request.json or {}
+    try:
+        with get_api_db_cursor() as cursor:
+            if request.method == 'POST':
+                host = str(data.get('host') or '').strip()[:255]
+                freq = max(1, min(168, int(data.get('frequency_hours') or 24)))
+                if not host:
+                    return jsonify({'success': False, 'error': 'host requerido'}), 400
+                sid = _insert_id(
+                    cursor,
+                    f"INSERT INTO scan_schedules (user_id, host, frequency_hours, next_run, enabled) "
+                    f"VALUES ({_PH},{_PH},{_PH},CURRENT_TIMESTAMP,{_PH})",
+                    (uid, host, freq, bool(data.get('enabled', True)))
+                )
+                return jsonify({'success': True, 'id': sid}), 200
+            if request.method == 'PUT':
+                sid = int(data.get('id') or 0)
+                if sid <= 0:
+                    return jsonify({'success': False, 'error': 'id requerido'}), 400
+                host = str(data.get('host') or '').strip()[:255]
+                freq = max(1, min(168, int(data.get('frequency_hours') or 24)))
+                enabled = bool(data.get('enabled', True))
+                cursor.execute(
+                    f"UPDATE scan_schedules SET host = {_PH}, frequency_hours = {_PH}, enabled = {_PH}, "
+                    f"updated_at = CURRENT_TIMESTAMP WHERE id = {_PH} AND user_id = {_PH}",
+                    (host, freq, enabled, sid, uid)
+                )
+                return jsonify({'success': True}), 200
+            # DELETE
+            sid = int(data.get('id') or request.args.get('id') or 0)
+            if sid <= 0:
+                return jsonify({'success': False, 'error': 'id requerido'}), 400
+            cursor.execute(f"DELETE FROM scan_schedules WHERE id = {_PH} AND user_id = {_PH}", (sid, uid))
+            return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def scan_scheduler_tick():
+    """Tick cada 5m: avanza next_run para schedules vencidos (placeholder trigger)."""
+    _ensure_dual_scanner_schema()
+    try:
+        now = datetime.datetime.utcnow()
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT id, user_id, host, frequency_hours FROM scan_schedules "
+                f"WHERE enabled = TRUE AND next_run IS NOT NULL AND next_run <= {_PH} "
+                f"ORDER BY next_run ASC LIMIT 100",
+                (now,)
+            )
+            due = cursor.fetchall() or []
+            for r in due:
+                d = dict(r) if not isinstance(r, dict) else r
+                sid = int(d.get('id') or 0)
+                freq = max(1, int(d.get('frequency_hours') or 24))
+                # Placeholder de trigger real: por ahora solo actualiza ventanas de ejecución
+                cursor.execute(
+                    f"UPDATE scan_schedules SET last_run = {_PH}, next_run = {_PH}, updated_at = CURRENT_TIMESTAMP "
+                    f"WHERE id = {_PH}",
+                    (now, now + datetime.timedelta(hours=freq), sid)
+                )
+        if due:
+            print(f"[scan_scheduler] tick ejecutado: {len(due)} schedules")
+    except Exception as e:
+        print(f"[scan_scheduler] error: {e}")
 
 
 # â”€â”€ P3 #2 â€” Scoring por rareza â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

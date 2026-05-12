@@ -1590,6 +1590,72 @@ async function previewCompanyDigest() {
 }
 window.previewCompanyDigest = previewCompanyDigest;
 
+async function loadSchedules() {
+    const box = document.getElementById('schedules-list');
+    if (!box) return;
+    box.textContent = 'Cargando schedules...';
+    try {
+        const r = await fetch('/api/schedules');
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'No disponible');
+        const items = Array.isArray(d.items) ? d.items : [];
+        if (!items.length) {
+            box.textContent = 'No hay schedules activos.';
+            return;
+        }
+        box.innerHTML = items.map(s => {
+            const id = s.id;
+            const host = escapeHtml(s.host || '');
+            const freq = Number(s.frequency_hours || 24);
+            const enabled = !!s.enabled;
+            const next = s.next_run ? new Date(s.next_run).toLocaleString() : '-';
+            return `<div style="padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;display:flex;gap:10px;align-items:center;justify-content:space-between;">
+                <div><strong>${host}</strong> · cada ${freq}h · next: ${next} · ${enabled ? 'activo' : 'pausado'}</div>
+                <button class="btn btn-secondary" type="button" onclick="deleteSchedule(${id})">Eliminar</button>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        box.textContent = `Error schedules: ${e.message}`;
+    }
+}
+window.loadSchedules = loadSchedules;
+
+async function createSchedule() {
+    const host = (document.getElementById('sched-host')?.value || '').trim();
+    const frequency_hours = Number(document.getElementById('sched-freq')?.value || 24);
+    if (!host) { showToast('Host requerido', 'error'); return; }
+    try {
+        const r = await fetch('/api/schedules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host, frequency_hours, enabled: true }),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo crear');
+        showToast('Schedule creado', 'success');
+        loadSchedules();
+    } catch (e) {
+        showToast(`Error creando schedule: ${e.message}`, 'error');
+    }
+}
+window.createSchedule = createSchedule;
+
+async function deleteSchedule(id) {
+    try {
+        const r = await fetch('/api/schedules', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo eliminar');
+        loadSchedules();
+    } catch (e) {
+        showToast(`Error eliminando schedule: ${e.message}`, 'error');
+    }
+}
+window.deleteSchedule = deleteSchedule;
+
 // ============================================================
 // DASHBOARD
 // ============================================================
@@ -4924,6 +4990,16 @@ async function loadPreviousScans(machineName) {
                                        border:1px solid rgba(184,115,51,0.4);color:var(--accent);border-radius:6px;cursor:pointer;">
                                 Comparar
                             </button>
+                            <button onclick="event.stopPropagation();markScanAsBaseline(${scan.id})"
+                                style="font-size:10px;padding:2px 8px;background:rgba(16,185,129,0.12);
+                                       border:1px solid rgba(16,185,129,0.35);color:#10b981;border-radius:6px;cursor:pointer;">
+                                Baseline
+                            </button>
+                            <button onclick="event.stopPropagation();openScanTrend(${scan.id})"
+                                style="font-size:10px;padding:2px 8px;background:rgba(59,130,246,0.12);
+                                       border:1px solid rgba(59,130,246,0.35);color:#60a5fa;border-radius:6px;cursor:pointer;">
+                                Trend
+                            </button>
                         </div>
                     </div>`;
             }).join('');
@@ -4944,6 +5020,59 @@ async function loadPreviousScans(machineName) {
     }
 }
 
+async function markScanAsBaseline(scanId) {
+    try {
+        const res = await fetch(`/api/scans/${scanId}/set-baseline`, { method: 'POST' });
+        const d = await res.json();
+        if (!res.ok || !d.success) throw new Error(d.error || 'No se pudo marcar baseline');
+        showToast(`Scan #${scanId} marcado como baseline`, 'success');
+        loadPreviousScans();
+    } catch (e) {
+        showToast(`Error baseline: ${e.message}`, 'error');
+    }
+}
+
+function renderScanDiff(diff) {
+    const ALERT_COLOR = { CRITICAL:'#ef4444', HIGH:'#ef4444', SOSPECHOSO:'#f59e0b', MUY_SOSPECHOSO:'#ea580c', POCO_SOSPECHOSO:'#6366f1' };
+    const riskDelta = diff.risk_delta || 0;
+    const riskColor = riskDelta > 0 ? '#ef4444' : riskDelta < 0 ? '#10b981' : 'var(--text-m)';
+    const riskSign = riskDelta > 0 ? '+' : '';
+    const renderIssueList = (items, bgColor) => (items || []).length === 0
+        ? `<p style="color:var(--text-d);font-size:12px;margin:0;">Ninguno</p>`
+        : (items || []).map(f => `
+            <div style="padding:6px 10px;border-radius:6px;background:${bgColor};margin-bottom:4px;font-size:12px;">
+                <span style="color:${ALERT_COLOR[f.alert]||'var(--text-m)'};font-weight:700;margin-right:6px;">${f.alert||''}</span>
+                <span style="color:var(--text);">${f.name||f.type}</span>
+                <span style="float:right;color:var(--text-d);">${Math.round((f.confidence||0)*100)}%</span>
+            </div>`).join('');
+    return `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+            <div style="background:var(--bg-s);border-radius:8px;padding:14px;">
+                <div style="font-size:11px;color:var(--text-d);margin-bottom:4px;">ESCANEO BASE</div>
+                <div style="font-weight:700;font-size:15px;">Scan #${diff.scan_a.id}</div>
+                <div style="font-size:12px;color:var(--text-m);">${diff.scan_a.date}</div>
+                <div style="font-size:13px;margin-top:6px;">Risk: <strong>${diff.scan_a.risk}</strong></div>
+            </div>
+            <div style="background:var(--bg-s);border-radius:8px;padding:14px;">
+                <div style="font-size:11px;color:var(--text-d);margin-bottom:4px;">ESCANEO COMPARADO</div>
+                <div style="font-weight:700;font-size:15px;">Scan #${diff.scan_b.id}</div>
+                <div style="font-size:12px;color:var(--text-m);">${diff.scan_b.date}</div>
+                <div style="font-size:13px;margin-top:6px;">Risk: <strong>${diff.scan_b.risk}</strong>
+                    <span style="color:${riskColor};margin-left:8px;font-weight:700;">${riskSign}${riskDelta} pts</span>
+                </div>
+            </div>
+        </div>
+        ${diff.verdict_change ? `<div style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:8px;padding:10px;margin-bottom:16px;font-size:13px;color:#f59e0b;">
+            Veredicto cambió: <strong>${diff.scan_a.verdict.toUpperCase()}</strong> → <strong>${diff.scan_b.verdict.toUpperCase()}</strong>
+        </div>` : ''}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+            <div><div style="font-size:13px;font-weight:700;color:#22c55e;margin-bottom:8px;">Nuevos (${diff.summary.new_count})</div>${renderIssueList(diff.new_findings, 'rgba(34,197,94,0.08)')}</div>
+            <div><div style="font-size:13px;font-weight:700;color:#ef4444;margin-bottom:8px;">Resueltos (${diff.summary.resolved_count})</div>${renderIssueList(diff.resolved_findings, 'rgba(239,68,68,0.08)')}</div>
+        </div>
+        <div><div style="font-size:13px;font-weight:700;color:#f59e0b;margin-bottom:8px;">Persistentes (${diff.summary.persistent_count})</div>${renderIssueList(diff.persistent_findings, 'rgba(245,158,11,0.08)')}</div>
+    `;
+}
+
 async function compareScanWith(scanIdB) {
     if (!currentScanId) return;
     const modal = document.getElementById('compare-modal');
@@ -4952,64 +5081,59 @@ async function compareScanWith(scanIdB) {
     body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-m);">Cargando comparación...</div>';
     modal.style.display = 'flex';
     try {
-        const res  = await fetch(`/api/scans/${currentScanId}/compare/${scanIdB}`);
+        const res  = await fetch(`/api/scans/compare?scan1=${encodeURIComponent(currentScanId)}&scan2=${encodeURIComponent(scanIdB)}`);
         const diff = await res.json();
         if (diff.error) { body.innerHTML = `<p style="color:#ef4444">${diff.error}</p>`; return; }
-
-        const ALERT_COLOR = { CRITICAL:'#ef4444', SOSPECHOSO:'#f59e0b', MUY_SOSPECHOSO:'#ea580c', POCO_SOSPECHOSO:'#6366f1' };
-        const riskDelta = diff.risk_delta;
-        const riskColor = riskDelta > 0 ? '#ef4444' : riskDelta < 0 ? '#10b981' : 'var(--text-m)';
-        const riskSign  = riskDelta > 0 ? '+' : '';
-
-        const renderIssueList = (items, bgColor) => items.length === 0
-            ? `<p style="color:var(--text-d);font-size:12px;margin:0;">Ninguno</p>`
-            : items.map(f => `
-                <div style="padding:6px 10px;border-radius:6px;background:${bgColor};margin-bottom:4px;font-size:12px;">
-                    <span style="color:${ALERT_COLOR[f.alert]||'var(--text-m)'};font-weight:700;margin-right:6px;">${f.alert||''}</span>
-                    <span style="color:var(--text);">${f.name||f.type}</span>
-                    <span style="float:right;color:var(--text-d);">${Math.round((f.confidence||0)*100)}%</span>
-                </div>`).join('');
-
-        body.innerHTML = `
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-                <div style="background:var(--bg-s);border-radius:8px;padding:14px;">
-                    <div style="font-size:11px;color:var(--text-d);margin-bottom:4px;">ESCANEO BASE</div>
-                    <div style="font-weight:700;font-size:15px;">Scan #${diff.scan_a.id}</div>
-                    <div style="font-size:12px;color:var(--text-m);">${diff.scan_a.date}</div>
-                    <div style="font-size:13px;margin-top:6px;">Risk: <strong>${diff.scan_a.risk}</strong></div>
-                </div>
-                <div style="background:var(--bg-s);border-radius:8px;padding:14px;">
-                    <div style="font-size:11px;color:var(--text-d);margin-bottom:4px;">ESCANEO COMPARADO</div>
-                    <div style="font-weight:700;font-size:15px;">Scan #${diff.scan_b.id}</div>
-                    <div style="font-size:12px;color:var(--text-m);">${diff.scan_b.date}</div>
-                    <div style="font-size:13px;margin-top:6px;">Risk: <strong>${diff.scan_b.risk}</strong>
-                        <span style="color:${riskColor};margin-left:8px;font-weight:700;">${riskSign}${riskDelta} pts</span>
-                    </div>
-                </div>
-            </div>
-            ${diff.verdict_change ? `<div style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);border-radius:8px;padding:10px;margin-bottom:16px;font-size:13px;color:#f59e0b;">
-                Veredicto cambió: <strong>${diff.scan_a.verdict.toUpperCase()}</strong> → <strong>${diff.scan_b.verdict.toUpperCase()}</strong>
-            </div>` : ''}
-            <div style="margin-bottom:16px;">
-                <div style="font-size:13px;font-weight:700;color:#ef4444;margin-bottom:8px;">
-                    Hallazgos nuevos (${diff.summary.new_count})
-                </div>
-                ${renderIssueList(diff.new_findings, 'rgba(220,38,38,0.08)')}
-            </div>
-            <div style="margin-bottom:16px;">
-                <div style="font-size:13px;font-weight:700;color:#10b981;margin-bottom:8px;">
-                    Hallazgos resueltos / desaparecidos (${diff.summary.resolved_count})
-                </div>
-                ${renderIssueList(diff.resolved_findings, 'rgba(16,185,129,0.08)')}
-            </div>
-            <div>
-                <div style="font-size:13px;font-weight:700;color:var(--text-m);margin-bottom:8px;">
-                    Persistentes en ambos scans (${diff.summary.persistent_count})
-                </div>
-                ${renderIssueList(diff.persistent_findings, 'var(--bg-s)')}
-            </div>`;
+        body.innerHTML = renderScanDiff(diff);
     } catch (e) {
         body.innerHTML = `<p style="color:#ef4444">Error: ${e.message}</p>`;
+    }
+}
+
+async function openScanTrend(scanId) {
+    try {
+        const s = await fetch(`/api/scans/${scanId}`);
+        const sd = await s.json();
+        const host = sd?.scan?.machine_name || sd?.scan?.machine_id || '';
+        const user = sd?.scan?.minecraft_username || '';
+        if (!host && !user) throw new Error('No hay host/user para timeline');
+        const q = new URLSearchParams();
+        if (host) q.set('host', host);
+        if (user) q.set('user', user);
+        q.set('limit', '30');
+        const r = await fetch(`/api/scans/timeline?${q.toString()}`);
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo cargar timeline');
+        const modal = document.getElementById('compare-modal');
+        const body = document.getElementById('compare-modal-body');
+        if (!modal || !body) return;
+        modal.style.display = 'flex';
+        body.innerHTML = `<div style="height:280px"><canvas id="dual-scan-trend-chart"></canvas></div>`;
+        const ctx = document.getElementById('dual-scan-trend-chart');
+        if (!ctx) return;
+        const labels = (d.timeline || []).map(x => new Date(x.timestamp).toLocaleString());
+        const values = (d.timeline || []).map(x => Number(x.issues_found || 0));
+        if (window._dualTrendChart) window._dualTrendChart.destroy();
+        window._dualTrendChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets: [{ label: 'Issues', data: values, borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,.18)', tension: .25, fill: true }] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: (c) => {
+                                const row = (d.timeline || [])[c.dataIndex] || {};
+                                return `Issues: ${row.issues_found} · Risk: ${row.risk_score} · Verdict: ${row.verdict}`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } catch (e) {
+        showToast(`Trend error: ${e.message}`, 'error');
     }
 }
 
