@@ -10422,9 +10422,11 @@ class ArgusApp:
         try:
             result = subprocess.run(
                 ['vssadmin', 'list', 'shadows', '/for=C:'],
-                capture_output=True, text=True, timeout=10
+                capture_output=True, timeout=10
             )
-            output = result.stdout or ''
+            output = (result.stdout or b'').decode('utf-8', errors='replace')
+            if not output.strip():
+                output = (result.stdout or b'').decode('cp1252', errors='replace')
             if 'Shadow Copy Volume' not in output and 'Volumen de copia' not in output:
                 print("ℹ️ Sin Shadow Copies activos en C:")
                 return
