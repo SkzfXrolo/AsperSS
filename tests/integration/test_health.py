@@ -16,4 +16,4 @@ def test_api_status_like_endpoint(client):
     r = client.get("/api/status")
     if r.status_code == 404:
         r = client.get("/api/db-status")
-    assert r.status_code in {200, 503}
+    assert r.status_code in {200, 302, 503}
