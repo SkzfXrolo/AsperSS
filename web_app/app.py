@@ -20,7 +20,7 @@ from auth import (
     company_user_required, get_user_by_id, list_registration_tokens, list_users,
     create_company, get_company_by_id, list_companies, update_company,
     has_role, is_admin, is_super_admin, is_company_admin, is_company_user,
-    get_staff_role, can_change_verdict, can_manage_tokens, can_manage_staff,
+    get_staff_role, can_change_verdict, can_manage_tokens, can_manage_staff, hash_password,
     STAFF_ROLE_HIERARCHY
 )
 
@@ -5421,17 +5421,37 @@ def _validate_scan_token_direct(token):
         return None, f'Error validando token: {str(e)}', None, None
 
 
-@app.route('/setup-admin-aspers2024', methods=['GET'])
+@app.route('/setup-admin-aspers2024', methods=['POST'])
 def setup_admin():
-    """Endpoint de setup Ãºnico para crear el admin inicial. Solo funciona si no existe."""
+    """Bootstrap one-shot de admin inicial protegido por token de entorno."""
+    ip = (request.headers.get('X-Forwarded-For', request.remote_addr or '') or '').split(',')[0].strip()
+    supplied = (
+        request.headers.get('X-Argus-Bootstrap-Token')
+        or (request.get_json(silent=True) or {}).get('token')
+        or request.form.get('token')
+        or ''
+    )
+    expected = os.environ.get('ARGUS_BOOTSTRAP_TOKEN', '').strip()
+    if not expected:
+        app.logger.error('[security] bootstrap_admin intento sin ARGUS_BOOTSTRAP_TOKEN configurado ip=%s', ip)
+        return jsonify({'status': 'disabled', 'message': 'Bootstrap deshabilitado'}), 403
+    if not secrets.compare_digest(str(supplied), expected):
+        app.logger.warning('[security] bootstrap_admin token inválido ip=%s', ip)
+        return jsonify({'status': 'forbidden', 'message': 'Token inválido'}), 403
+
     try:
-        import hashlib as _hl
         with get_api_db_cursor() as cursor:
-            cursor.execute(f'SELECT COUNT(*) as count FROM users WHERE username = {_PH}', ('arefy_admin',))
+            cursor.execute(
+                "SELECT COUNT(*) AS count FROM users "
+                "WHERE LOWER(COALESCE(roles,'')) LIKE '%admin%' "
+                "   OR LOWER(COALESCE(roles,'')) LIKE '%owner%' "
+                "   OR LOWER(COALESCE(roles,'')) LIKE '%super%'"
+            )
             row = cursor.fetchone()
             count = _row_get(row, 0, 'count')
             if count > 0:
-                return jsonify({'status': 'already_exists', 'message': 'El usuario arefy_admin ya existe'}), 200
+                app.logger.warning('[security] bootstrap_admin rechazado: ya existe admin ip=%s', ip)
+                return jsonify({'status': 'already_exists', 'message': 'Ya existe un administrador'}), 409
 
             cursor.execute(f'SELECT id FROM companies WHERE name = {_PH}', ('arefy',))
             company_row = cursor.fetchone()
@@ -5444,13 +5464,17 @@ def setup_admin():
                 company_row = cursor.fetchone()
 
             company_id = _row_get(company_row, 0, 'id')
-            password_hash = _hl.sha256('arefy2024!'.encode()).hexdigest()
+            username = os.environ.get('ARGUS_BOOTSTRAP_USER', 'arefy_admin').strip() or 'arefy_admin'
+            email = os.environ.get('ARGUS_BOOTSTRAP_EMAIL', 'admin@arefy.com').strip() or 'admin@arefy.com'
+            temp_password = secrets.token_urlsafe(18)
             _insert_id(cursor,
                 f'INSERT INTO users (username, email, password_hash, roles, company_id, created_by) VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH})',
-                ('arefy_admin', 'admin@arefy.com', password_hash, '["admin", "empresa", "administrador"]', company_id, 'system')
+                (username, email, hash_password(temp_password), '["admin", "empresa", "administrador"]', company_id, 'system')
             )
-        return jsonify({'status': 'ok', 'message': 'Usuario arefy_admin creado. ContraseÃ±a: arefy2024!'}), 200
+        app.logger.warning('[security] bootstrap_admin exitoso user=%s ip=%s', username, ip)
+        return jsonify({'status': 'ok', 'username': username, 'temporary_password': temp_password}), 201
     except Exception as e:
+        app.logger.exception('[security] bootstrap_admin error ip=%s', ip)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
