@@ -11869,8 +11869,10 @@ class ArgusApp:
                     entry_data = data[offset+8:offset+8+data_len]
                     # Path is UTF-16LE at start of entry_data
                     path_len = int.from_bytes(entry_data[0:2], 'little') if len(entry_data) >= 4 else 0
+                    if path_len % 2 != 0:
+                        path_len -= 1
                     if 0 < path_len <= len(entry_data) - 4:
-                        path = entry_data[4:4+path_len].decode('utf-16-le', errors='ignore')
+                        path = entry_data[4:4+path_len].decode('utf-16-le', errors='replace').strip('\x00 ')
                         if _valid_path(path):
                             entries.append(path)
                     offset += 8 + data_len
@@ -11886,7 +11888,12 @@ class ArgusApp:
                 '\\assets\\', '/assets/', '\\natives\\', '/natives/',
             )
             suspicious = []
+            seen_entries = set()
             for path in entries:
+                path_norm = path.lower()
+                if path_norm in seen_entries:
+                    continue
+                seen_entries.add(path_norm)
                 path_lower = path.lower()
                 # F32: skip vanilla MC paths in shimcache
                 if any(vp in path_lower for vp in _shim_vanilla_skip):
