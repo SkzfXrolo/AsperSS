@@ -8,7 +8,7 @@
       'status': 200,
     }),
     dict({
-      'body_prefix': '{"db_backend":"sqlite","db_error":null,"db_ok":true,"scanner_version":"1.6.50","started_at":1778576925,"uptime_human":"0',
+      'body_prefix': 'api_version_response',
       'content_type': 'application/json',
       'path': '/api/version',
       'status': 200,
