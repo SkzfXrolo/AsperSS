@@ -1,0 +1,1 @@
+﻿from __future__ import annotations\nimport gzip,json,time\ndata=(b'argus-data-'*50000)\nN=200\nt0=time.perf_counter()\nfor _ in range(N):\n    gzip.compress(data)\ngzip_t=time.perf_counter()-t0\nprint(json.dumps({'benchmark':'compression','gzip_elapsed_s':gzip_t,'note':'extend with zstd lz4 snappy if installed'},indent=2))\n
