@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://argusprojects.com/security/sast-schema.json",
+  "title": "Argus Unified SAST Finding",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["tool", "severity", "file", "line", "message"],
+    "properties": {
+      "tool": { "type": "string" },
+      "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+      "cwe": { "type": ["string", "null"] },
+      "file": { "type": "string" },
+      "line": { "type": "integer", "minimum": 1 },
+      "message": { "type": "string" },
+      "fix_hint": { "type": ["string", "null"] }
+    },
+    "additionalProperties": true
+  }
+}
