@@ -5698,6 +5698,8 @@ class ArgusApp:
                 _run_safe(self.scan_jump_lists)
                 self._set_scan_phase("📅 Tareas programadas...")
                 _run_safe(self.scan_scheduled_tasks)
+                self._set_scan_phase("🧾 Args sospechosos en tareas...")
+                _run_safe(self.scan_scheduled_tasks_suspicious_args)
                 self._set_scan_phase("⏰ Tareas programadas recientes (persistencia)...")
                 _run_safe(self.scan_recent_install_tasks)
                 self._set_scan_phase("🛡️ Exclusiones de Defender...")
@@ -12356,6 +12358,60 @@ class ArgusApp:
                         pass
         except Exception as e:
             print(f"Error en scan_scheduled_tasks: {e}")
+
+    def scan_scheduled_tasks_suspicious_args(self):
+        """#P3-sched-tasks — Parse XML de tareas y puntúa args sospechosos."""
+        print("🔍 Escaneando argumentos sospechosos en Scheduled Tasks...")
+        tasks_dir = r'C:\Windows\System32\Tasks'
+        if not os.path.isdir(tasks_dir):
+            return
+        patterns = {
+            'powershell_encoded': (' -enc ', ' -encodedcommand '),
+            'base64': ('frombase64string',),
+            'mshta': ('mshta ',),
+            'regsvr32': ('regsvr32 ',),
+            'susp_path': ('\\appdata\\', '\\temp\\', '\\users\\public\\', '\\downloads\\'),
+        }
+        try:
+            for root, _dirs, files in os.walk(tasks_dir):
+                for fname in files:
+                    fpath = os.path.join(root, fname)
+                    try:
+                        with open(fpath, 'r', encoding='utf-16-le', errors='ignore') as f:
+                            xml = f.read(65536)
+                    except Exception:
+                        try:
+                            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                                xml = f.read(65536)
+                        except Exception:
+                            continue
+                    low = xml.lower()
+                    cmds = _re_smart.findall(r'<command>([^<]+)</command>', low)
+                    args = _re_smart.findall(r'<arguments>([^<]+)</arguments>', low)
+                    joined = ' '.join(cmds + args)
+                    if not joined.strip():
+                        continue
+                    hits = []
+                    score = 0
+                    for tag, needles in patterns.items():
+                        if any(n in joined for n in needles):
+                            hits.append(tag)
+                            score += 1
+                    if score < 2:
+                        continue
+                    self.issues_found.append({
+                        'tipo': 'scheduled_task_args_suspicious',
+                        'nombre': f'Tarea con argumentos sospechosos: {fname}',
+                        'ruta': fpath[:255],
+                        'archivo': joined[:220],
+                        'categoria': 'PERSISTENCIA',
+                        'alerta': 'CRITICAL' if score >= 3 else 'SOSPECHOSO',
+                        'confidence': min(0.92, 0.55 + score * 0.1),
+                        'detected_patterns': [f'task_arg:{h}' for h in hits[:6]],
+                        'extra': {'score': score},
+                    })
+        except Exception as e:
+            print(f"Error en scan_scheduled_tasks_suspicious_args: {e}")
 
     def scan_recent_install_tasks(self):
         """Detecta tareas programadas creadas/modificadas en las últimas 72h
