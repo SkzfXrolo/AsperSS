@@ -5668,6 +5668,8 @@ class ArgusApp:
                 self._set_scan_phase("🧪 Sysmon + Security 4688...")
                 _run_safe(self.scan_sysmon_operational)
                 _run_safe(self.scan_security_4688_events)
+                self._set_scan_phase("🛠️ LOLBins avanzados...")
+                _run_safe(self.scan_lolbins_extra)
                 self._set_scan_phase("💻 Historial CMD / PowerShell...")
                 _run_safe(self.scan_cmd_history_full)
                 _run_safe(self.scan_powershell_history)
@@ -9190,6 +9192,50 @@ class ArgusApp:
                 })
         except Exception:
             pass
+
+    def scan_lolbins_extra(self):
+        """#P3-lolbins — Heurísticas ampliadas de LOLBins en Security 4688."""
+        print("🔍 Escaneando LOLBins avanzados (mshta/regsvr32/certutil/bitsadmin)...")
+        try:
+            result = subprocess.run(
+                ['wevtutil', 'qe', 'Security', '/q:*[System[(EventID=4688)]]', '/c:180', '/rd:true', '/f:text'],
+                capture_output=True, timeout=18, creationflags=0x08000000
+            )
+            out = (result.stdout or b'').decode('utf-8', errors='ignore').lower()
+            if not out.strip():
+                return
+            signatures = {
+                'mshta_remote': ('mshta', 'http'),
+                'mshta_js': ('mshta', 'javascript:'),
+                'regsvr32_squiblydoo': ('regsvr32', 'scrobj.dll'),
+                'certutil_decode': ('certutil', '-decode'),
+                'certutil_urlcache': ('certutil', '-urlcache'),
+                'bitsadmin_download': ('bitsadmin', '/transfer'),
+                'installutil_exec': ('installutil', '.exe'),
+                'wmic_process_call_create': ('wmic', 'process call create'),
+                'cmstp_inf': ('cmstp', '.inf'),
+                'esentutl_copy': ('esentutl', '/y'),
+                'forfiles_cmd': ('forfiles', '/c'),
+                'hh_chm': ('hh.exe', '.chm'),
+            }
+            hits = []
+            for tag, needles in signatures.items():
+                if all(n in out for n in needles):
+                    hits.append(tag)
+            if hits:
+                self.issues_found.append({
+                    'tipo': 'lolbins_extra_suspicious',
+                    'nombre': f'LOLBins avanzados detectados ({len(hits)} patrón/es)',
+                    'ruta': 'Security',
+                    'archivo': 'EventID 4688',
+                    'categoria': 'EVASION',
+                    'alerta': 'CRITICAL' if len(hits) >= 2 else 'SOSPECHOSO',
+                    'confidence': min(0.95, 0.65 + len(hits) * 0.05),
+                    'detected_patterns': [f'lolbin:{h}' for h in hits[:10]],
+                    'extra': {'count': len(hits)},
+                })
+        except Exception as e:
+            print(f"Error en scan_lolbins_extra: {e}")
     
     def scan_processes(self):
         """Escanea procesos activos"""
