@@ -18170,47 +18170,58 @@ class ArgusApp:
             subprocess.run(['reg', 'load', reg_key, tmp_hive],
                            capture_output=True, timeout=10, creationflags=0x08000000)
             import winreg
-            try:
-                base = f'ArgusAmcache_{pid}\\Root\\InventoryApplicationFile'
-                root_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, base, 0,
-                                           winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
-                num_subkeys = winreg.QueryInfoKey(root_key)[0]
-                for i in range(min(num_subkeys, 2000)):
-                    try:
-                        sub_name = winreg.EnumKey(root_key, i)
-                        sub_key = winreg.OpenKey(root_key, sub_name, 0,
-                                                  winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+            candidate_bases = [
+                f'ArgusAmcache_{pid}\\Root\\InventoryApplicationFile',
+                f'ArgusAmcache_{pid}\\Root\\InventoryApplication',
+            ]
+            for base in candidate_bases:
+                try:
+                    root_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, base, 0,
+                                              winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
+                except OSError:
+                    continue
+                try:
+                    num_subkeys = winreg.QueryInfoKey(root_key)[0]
+                    for i in range(min(num_subkeys, 3000)):
                         try:
-                            path_val, _ = winreg.QueryValueEx(sub_key, 'LowerCaseLongPath')
-                        except OSError:
+                            sub_name = winreg.EnumKey(root_key, i)
+                            sub_key = winreg.OpenKey(root_key, sub_name, 0,
+                                                     winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
                             try:
-                                path_val, _ = winreg.QueryValueEx(sub_key, 'Name')
-                            except OSError:
-                                path_val = sub_name
-                        winreg.CloseKey(sub_key)
-                        path_l = str(path_val).lower()
-                        matched = [m for m in HACK_MARKERS if m in path_l]
-                        if matched:
-                            self.issues_found.append({
-                                'nombre': f'Ejecución histórica de hack detectada: {os.path.basename(path_val)}',
-                                'ruta': os.path.dirname(path_val),
-                                'archivo': path_val,
-                                'tipo': 'amcache_hack_execution',
-                                'categoria': 'FORENSE',
-                                'alerta': 'CRITICAL',
-                                'confidence': 0.88,
-                                'detected_patterns': matched[:5],
-                                'explicacion': (
-                                    f'Amcache registra que este programa fue ejecutado: "{path_val}". '
-                                    f'Coincide con marcadores de hacks conocidos: {matched[:3]}. '
-                                    f'Este registro persiste aunque el archivo haya sido borrado.'
-                                ),
-                            })
-                    except OSError:
-                        continue
-                winreg.CloseKey(root_key)
-            except Exception:
-                pass
+                                path_val = None
+                                for value_name in ('LowerCaseLongPath', 'LongPath', 'RootDirPath', 'Name', 'ProgramId'):
+                                    try:
+                                        path_val, _ = winreg.QueryValueEx(sub_key, value_name)
+                                        if path_val:
+                                            break
+                                    except OSError:
+                                        continue
+                                if not path_val:
+                                    path_val = sub_name
+                            finally:
+                                winreg.CloseKey(sub_key)
+                            path_l = str(path_val).lower()
+                            matched = [m for m in HACK_MARKERS if m in path_l]
+                            if matched:
+                                self.issues_found.append({
+                                    'nombre': f'Ejecución histórica de hack detectada: {os.path.basename(str(path_val))}',
+                                    'ruta': os.path.dirname(str(path_val)),
+                                    'archivo': str(path_val),
+                                    'tipo': 'amcache_hack_execution',
+                                    'categoria': 'FORENSE',
+                                    'alerta': 'CRITICAL',
+                                    'confidence': 0.88,
+                                    'detected_patterns': matched[:5],
+                                    'explicacion': (
+                                        f'Amcache registra que este programa fue ejecutado: "{path_val}". '
+                                        f'Coincide con marcadores de hacks conocidos: {matched[:3]}. '
+                                        f'Este registro persiste aunque el archivo haya sido borrado.'
+                                    ),
+                                })
+                        except OSError:
+                            continue
+                finally:
+                    winreg.CloseKey(root_key)
         except Exception as e:
             print(f"Error en scan_amcache: {e}")
         finally:
