@@ -15141,7 +15141,12 @@ class ArgusApp:
         LEGIT_DRIVER_VENDORS = {
             'microsoft', 'nvidia', 'amd', 'intel', 'realtek', 'qualcomm',
             'broadcom', 'logitech', 'razer', 'corsair', 'steelseries',
+            'msi', 'rivatuner', 'obs', 'overwolf', 'discord',
         }
+        LEGIT_OVERLAY_DRIVER_TERMS = (
+            'rtcore64', 'rtcore32', 'nvlddmkm', 'atikmdag', 'amdkmdag',
+            'obs-virtualcam', 'avstream', 'nahimic', 'sonicstudio',
+        )
         found = []
         try:
             driver_key = r'SYSTEM\CurrentControlSet\Services'
@@ -15164,6 +15169,8 @@ class ArgusApp:
                                     img_path = svc_name
                                 img_lower = str(img_path).lower()
                                 if any(v in img_lower for v in LEGIT_DRIVER_VENDORS):
+                                    continue
+                                if any(t in svc_lower or t in img_lower for t in LEGIT_OVERLAY_DRIVER_TERMS):
                                     continue
                                 if any(kw in svc_lower for kw in HACK_DRIVER_KW) or any(kw in img_lower for kw in HACK_DRIVER_KW):
                                     found.append((svc_name, str(img_path)))
