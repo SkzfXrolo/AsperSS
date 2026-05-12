@@ -1,0 +1,31 @@
+rules:
+  - id: python-dangerous-eval
+    patterns:
+      - pattern: eval(...)
+    message: "Uso de eval detectado"
+    languages: [python]
+    severity: ERROR
+
+  - id: python-subprocess-shell-true
+    patterns:
+      - pattern: subprocess.$FUNC(..., shell=True, ...)
+    message: "subprocess con shell=True"
+    languages: [python]
+    severity: WARNING
+    metavariable-regex:
+      metavariable: $FUNC
+      regex: "run|Popen|call|check_output"
+
+  - id: js-innerhtml
+    patterns:
+      - pattern: $EL.innerHTML = $X
+    message: "Asignación a innerHTML; revisar sanitización"
+    languages: [javascript, typescript]
+    severity: WARNING
+
+  - id: java-hardcoded-secret
+    patterns:
+      - pattern-regex: '(?i)(api[_-]?key|secret|token)\\s*=\\s*"[^"]+"'
+    message: "Posible secreto hardcodeado en Java"
+    languages: [java]
+    severity: WARNING
