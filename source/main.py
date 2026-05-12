@@ -9502,7 +9502,10 @@ class ArgusApp:
                                 # Verificar si $R (el archivo real) sigue en la papelera
                                 r_name  = fname.replace('$I', '$R', 1)
                                 r_path  = os.path.join(sid_path, r_name)
-                                still_in_bin = os.path.exists(r_path)
+                                try:
+                                    still_in_bin = os.path.exists(r_path)
+                                except (PermissionError, OSError):
+                                    still_in_bin = False
 
                                 # Filtro #2 lite: si el binario sigue presente
                                 # y está firmado por un publisher confiable
@@ -9510,8 +9513,11 @@ class ArgusApp:
                                 # descartar la alerta. Evita FPs por nombres
                                 # desafortunados de software legítimo borrado.
                                 if still_in_bin and ext in {'.exe', '.dll', '.msi'}:
-                                    if is_trusted_publisher(r_path):
-                                        continue
+                                    try:
+                                        if is_trusted_publisher(r_path):
+                                            continue
+                                    except (PermissionError, OSError):
+                                        pass
 
                                 deleted_dt = datetime.fromtimestamp(unix_ts)
                                 now_dt     = datetime.now()
@@ -9958,7 +9964,10 @@ class ArgusApp:
                         if not orig_path:
                             continue
                         r_path = os.path.join(sid_path, fname.replace('$I', '$R', 1))
-                        still_in_bin = os.path.exists(r_path)
+                        try:
+                            still_in_bin = os.path.exists(r_path)
+                        except (PermissionError, OSError):
+                            still_in_bin = False
                         if _add('deleted', orig_path, unix_ts,
                                 source='recycle_bin', size=size_bytes,
                                 extra_data={'still_in_bin': still_in_bin, 'drive': drv}):
@@ -18227,7 +18236,13 @@ class ArgusApp:
         finally:
             try:
                 subprocess.run(['reg', 'unload', reg_key],
-                               capture_output=True, timeout=10, creationflags=0x08000000)
+                               capture_output=True, timeout=3, creationflags=0x08000000)
+            except subprocess.TimeoutExpired:
+                try:
+                    subprocess.Popen(['reg', 'unload', reg_key],
+                                     creationflags=0x08000000)
+                except Exception:
+                    pass
             except Exception:
                 pass
             try:
