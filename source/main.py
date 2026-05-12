@@ -60,12 +60,54 @@ SCANNER_VERSION = "1.6.50"
 import re as _re
 import unicodedata as _unicodedata
 import functools
+import tempfile as _tempfile
 
 def _normalize(text: str) -> str:
     """Normaliza texto a ASCII para detectar homoglyphs cirílicos/unicode.
     Ejemplo: 'vаpe' (con 'а' cirílico) → 'vape'
     """
     return _unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii').lower()
+
+
+def _atomic_write_json_locked(path: str, data, ensure_ascii: bool = False, indent: int = 2):
+    """Escribe JSON de forma atómica usando lock de archivo (evita corrupción entre instancias)."""
+    if not path:
+        return
+    import json as _json
+    lock_path = f"{path}.lock"
+    tmp_path = None
+    lock_fd = None
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
+        lock_fd = open(lock_path, "a+b")
+        try:
+            import msvcrt as _msvcrt
+            _msvcrt.locking(lock_fd.fileno(), _msvcrt.LK_LOCK, 1)
+        except Exception:
+            pass
+        with _tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8", dir=os.path.dirname(os.path.abspath(path)) or ".") as tf:
+            _json.dump(data, tf, ensure_ascii=ensure_ascii, indent=indent)
+            tf.flush()
+            os.fsync(tf.fileno())
+            tmp_path = tf.name
+        os.replace(tmp_path, path)
+    finally:
+        if lock_fd is not None:
+            try:
+                lock_fd.seek(0)
+                import msvcrt as _msvcrt
+                _msvcrt.locking(lock_fd.fileno(), _msvcrt.LK_UNLCK, 1)
+            except Exception:
+                pass
+            try:
+                lock_fd.close()
+            except Exception:
+                pass
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
 
 # Nombres exclusivos de hack clients — seguros para buscar como substring.
 # Estos nombres NUNCA aparecen en software legítimo.
@@ -21377,8 +21419,7 @@ def _run_headless(token: str, api_url: str | None, output_json: str | None):
 
     result = result_holder.get('result', {})
     if output_json:
-        with open(output_json, 'w', encoding='utf-8') as f:
-            _json.dump(result, f, ensure_ascii=False, indent=2)
+        _atomic_write_json_locked(output_json, result, ensure_ascii=False, indent=2)
         print(f"[HEADLESS] Resultado guardado en {output_json}")
     else:
         print(_json.dumps(result, ensure_ascii=False, indent=2))
