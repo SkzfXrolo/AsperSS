@@ -1,0 +1,12 @@
+PackageIdentifier: Argus.ArgusScanner
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: Argus Projects
+ShortDescription: Argus Anti-Cheat scanner
+Installers:
+  - Architecture: x64
+    InstallerType: exe
+    InstallerUrl: https://REVIEW/ArgusScanner-Setup.exe
+    InstallerSha256: TBD
+ManifestType: version
+ManifestVersion: 1.6.0

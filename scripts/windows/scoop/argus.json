@@ -1,0 +1,13 @@
+{
+  "version": "0.1.0",
+  "description": "Argus Anti-Cheat scanner",
+  "homepage": "https://REVIEW",
+  "license": "REVIEW",
+  "architecture": {
+    "64bit": {
+      "url": "https://REVIEW/ArgusScanner.exe",
+      "hash": "TBD"
+    }
+  },
+  "bin": "ArgusScanner.exe"
+}

@@ -1,0 +1,27 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/windows/**"
+      - ".github/workflows/windows-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build scanner exe
+        run: |
+          pip install pyinstaller
+          pyinstaller --clean --noconfirm --onefile ArgusScanner.spec
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: argus-windows-${{ github.sha }}
+          path: dist/*
