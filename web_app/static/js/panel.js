@@ -6319,6 +6319,16 @@ function aiChatKeyDown(e) {
     }
 }
 
+function _scrollAIChatToBottom(container) {
+    if (!container) return;
+    const last = container.lastElementChild;
+    if (last && typeof last.scrollIntoView === 'function') {
+        last.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        return;
+    }
+    container.scrollTop = container.scrollHeight;
+}
+
 async function sendAIChatMessage() {
     const inp  = document.getElementById('ai-chat-input');
     const msgs = document.getElementById('ai-chat-messages');
@@ -6366,7 +6376,7 @@ async function sendAIChatMessage() {
         _appendChatMsg(msgs, `⚠️ Error de conexión: ${e.message}`, 'bot');
     }
 
-    msgs.scrollTop = msgs.scrollHeight;
+    _scrollAIChatToBottom(msgs);
 }
 
 function _appendChatMsg(container, text, role, isTyping) {
@@ -6385,7 +6395,7 @@ function _appendChatMsg(container, text, role, isTyping) {
     ].join(';');
     el.innerHTML = isTyping ? '<span class="ai-typing-dots">● ● ●</span>' : text;
     container.appendChild(el);
-    container.scrollTop = container.scrollHeight;
+    _scrollAIChatToBottom(container);
     return el;
 }
 
