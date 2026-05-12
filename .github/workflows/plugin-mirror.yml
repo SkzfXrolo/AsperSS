@@ -1,0 +1,15 @@
+name: Plugin Mirror
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mirror release to marketplaces
+        run: |
+          set -euo pipefail
+          echo "REVIEW: integrar APIs de SpigotMC/Modrinth/Hangar con secrets."
