@@ -1,0 +1,8 @@
+parallelizable:
+  - tests/property
+  - tests/security
+  - tests/monitoring
+sequential:
+  - tests/e2e
+  - tests/load
+  - tests/visual
