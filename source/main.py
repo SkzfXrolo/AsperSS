@@ -5139,6 +5139,18 @@ class ArgusApp:
         """Actualiza progreso de forma segura sin recursión"""
         try:
             self.update_detailed_progress(value, message, detail)
+            # #112 — callback opcional para integraciones externas/headless.
+            cb = getattr(self, 'progress_callback', None)
+            if callable(cb):
+                try:
+                    cb({
+                        'value': int(value),
+                        'message': str(message),
+                        'detail': str(detail or ''),
+                        'timestamp': time.time(),
+                    })
+                except Exception:
+                    pass
         except Exception as e:
             print(f"Error actualizando progreso: {e}")
 
