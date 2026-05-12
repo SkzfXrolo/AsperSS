@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from argus_ai_oracle import evaluate, get_default_weights
+from tests._lib.factories import make_violation
 
 
 def _ev(violations=None, **kwargs):
@@ -26,7 +27,7 @@ def test_empty_evidence_returns_none():
 
 
 def test_single_low_violation_is_none_or_watch():
-    d = evaluate(_ev([{"check_name": "reach", "level": "LOW", "age_seconds": 1}]))
+    d = evaluate(_ev([make_violation(check_name="reach", level="LOW", age_seconds=1)]))
     assert d.action in {"none", "watch"}
 
 
