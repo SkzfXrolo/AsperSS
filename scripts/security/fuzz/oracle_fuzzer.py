@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Hypothesis fuzzer (stateful-like simple harness) for argus_ai_oracle.evaluate().
-Run locally: python scripts/security/fuzz/oracle_fuzzer.py
+Hypothesis harness orientado a `argus_ai_oracle.evaluate()`.
+No importa el módulo productivo para mantener scope read-only audit.
 """
 from hypothesis import given, settings, strategies as st
 
@@ -11,11 +11,16 @@ from hypothesis import given, settings, strategies as st
     score=st.floats(allow_nan=False, allow_infinity=False, min_value=-1e6, max_value=1e6),
     confidence=st.floats(allow_nan=False, allow_infinity=False, min_value=-1e6, max_value=1e6),
     player=st.text(min_size=0, max_size=200),
+    evidence=st.dictionaries(st.text(min_size=1, max_size=30), st.text(max_size=200), max_size=20),
 )
-def test_oracle_invariants(score, confidence, player):
-    # Harness defensivo: sin importar implementación final, no debería crashear
-    # y debería devolver estructura serializable.
-    payload = {"score": score, "confidence": confidence, "player_name": player}
+def test_oracle_invariants(score, confidence, player, evidence):
+    # Invariantes mínimas esperadas de entrada.
+    payload = {
+        "score": score,
+        "confidence": confidence,
+        "player_name": player,
+        "evidence": evidence,
+    }
     assert isinstance(payload, dict)
 
 

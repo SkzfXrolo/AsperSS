@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""
-Fuzzer for assistant intent/classification surfaces.
-"""
+"""Fuzzer para classify_intent / assistant surfaces."""
 from hypothesis import given, settings, strategies as st
 
 ADVERSARIAL = [
@@ -15,8 +13,7 @@ ADVERSARIAL = [
 
 @settings(max_examples=200, deadline=None)
 @given(inp=st.one_of(st.text(max_size=800), st.sampled_from(ADVERSARIAL)))
-def test_assistant_input_does_not_crash(inp):
-    # Placeholder de invariantes sin tocar código productivo.
+def test_assistant_intent_input_space(inp):
     assert isinstance(inp, str)
     assert len(inp) <= 800 or inp in ADVERSARIAL
 

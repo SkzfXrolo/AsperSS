@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""
-Fuzzer for scanner upload payload shape and sizes.
-"""
+"""Fuzzer para payloads de scan upload (JSON malformado/tamaño extremo)."""
 from hypothesis import given, settings, strategies as st
 
 
@@ -19,10 +17,10 @@ json_value = st.recursive(
 @settings(max_examples=150, deadline=None)
 @given(payload=json_value)
 def test_scanner_payload_shape(payload):
-    # Invariante base: payload serializable sin caer.
     import json
     dumped = json.dumps(payload, ensure_ascii=False)
     assert isinstance(dumped, str)
+    assert len(dumped) < 200000
 
 
 if __name__ == "__main__":
