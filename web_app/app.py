@@ -6458,7 +6458,10 @@ def _normalize_path(p: str) -> str:
     """
     if not p:
         return ''
-    s = str(p).lower().replace('/', '\\').strip()
+    s = str(p).lower().strip()
+    # Algunos scanners reportan barras escapadas o URL-encoded (%5C).
+    s = s.replace('%5c', '\\').replace('%2f', '/')
+    s = s.replace('/', '\\')
     if s.startswith('\\\\?\\') or s.startswith('\\\\.\\'):
         s = s[4:]
     while '\\\\' in s:
