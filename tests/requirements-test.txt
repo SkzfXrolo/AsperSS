@@ -16,3 +16,6 @@ flask
 flask-wtf
 axe-playwright-python
 python-afl
+pact-python
+babel
+jsonschema
