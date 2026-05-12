@@ -1,0 +1,1 @@
+﻿from __future__ import annotations\nimport json,time,random\nN=5000\nlat=[]\nfor _ in range(N):\n    t0=time.perf_counter(); time.sleep(random.uniform(0.0002,0.002)); lat.append((time.perf_counter()-t0)*1000)\nlat.sort()\np95=lat[int(0.95*len(lat))-1]\nprint(json.dumps({'benchmark':'oracle_p95','samples':N,'p95_ms':round(p95,3)},indent=2))\n
