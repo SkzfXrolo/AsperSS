@@ -281,27 +281,48 @@ public final class ArgusApiClient {
 
     /**
      * Envia un embed a un webhook de Discord con la violation.
-     * El color depende del nivel (LOW=amarillo, MID=naranja, HIGH=rojo, CRITICAL=morado oscuro).
+     *
+     * <p>Pack 48 #531-#534: embed rico con fields separados (jugador, check,
+     * nivel, detalles), thumbnail con skin del jugador, footer con server
+     * name + version, y color por nivel (LOW=amarillo, MID=naranja, HIGH=rojo,
+     * CRITICAL=morado oscuro).
      */
     public void sendDiscordWebhookAsync(String webhookUrl, com.argusprojects.argusmc.anticheat.Violation v) {
         executor.submit(() -> {
             try {
                 int color;
+                String emoji;
                 switch (v.level) {
-                    case CRITICAL: color = 0x550066; break;
-                    case HIGH:     color = 0xCC0000; break;
-                    case MID:      color = 0xFF8800; break;
-                    default:       color = 0xFFCC00; break;
+                    case CRITICAL: color = 0x550066; emoji = "CRITICAL"; break;
+                    case HIGH:     color = 0xCC0000; emoji = "HIGH";     break;
+                    case MID:      color = 0xFF8800; emoji = "MID";      break;
+                    default:       color = 0xFFCC00; emoji = "LOW";      break;
                 }
-                // Serializamos el embed a mano (JsonMini no soporta nesting).
-                String title   = "Argus AC · " + v.level.name() + " · " + v.checkName;
-                String desc    = "**Jugador:** `" + v.playerName + "`\n"
-                               + "**Detalle:** " + v.details;
+                String title = "Argus AC · " + emoji + " · " + v.checkName;
+                String serverName = serverName();
+                String thumbUrl = "https://crafatar.com/avatars/" + v.playerUuid
+                                + "?size=128&overlay=true";
+                String ts = java.time.Instant.ofEpochMilli(v.timestampMs).toString();
+
+                // Construimos el embed con fields (cada uno con name + value + inline).
+                StringBuilder fields = new StringBuilder();
+                fields.append("\"fields\":[")
+                      .append("{\"name\":\"Jugador\",\"value\":\"`").append(JsonMini.escape(v.playerName)).append("`\",\"inline\":true},")
+                      .append("{\"name\":\"Check\",\"value\":\"`").append(JsonMini.escape(v.checkName)).append("`\",\"inline\":true},")
+                      .append("{\"name\":\"Nivel\",\"value\":\"**").append(emoji).append("**\",\"inline\":true},")
+                      .append("{\"name\":\"Detalles\",\"value\":\"").append(JsonMini.escape(truncate(v.details, 800))).append("\",\"inline\":false}")
+                      .append("]");
+
                 String json = "{\"username\":\"Argus AntiCheat\","
-                            + "\"embeds\":[{\"title\":\"" + JsonMini.escape(title) + "\","
-                            + "\"description\":\"" + JsonMini.escape(desc) + "\","
-                            + "\"color\":" + color + ","
-                            + "\"timestamp\":\"" + java.time.Instant.ofEpochMilli(v.timestampMs).toString() + "\""
+                            + "\"embeds\":[{"
+                            +    "\"title\":\""       + JsonMini.escape(title) + "\","
+                            +    "\"color\":"         + color + ","
+                            +    "\"timestamp\":\""   + ts + "\","
+                            +    "\"thumbnail\":{\"url\":\"" + thumbUrl + "\"},"
+                            +    "\"footer\":{\"text\":\""
+                            +       JsonMini.escape("Argus MC v" + plugin.getDescription().getVersion()
+                                       + " · " + serverName) + "\"},"
+                            +    fields
                             + "}]}";
 
                 HttpRequest req = HttpRequest.newBuilder(URI.create(webhookUrl))
@@ -318,5 +339,24 @@ public final class ArgusApiClient {
                 plugin.getLogger().log(Level.FINE, "Discord webhook error: " + ex.getMessage());
             }
         });
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return "";
+        if (s.length() <= max) return s;
+        return s.substring(0, max - 3) + "...";
+    }
+
+    private String serverName() {
+        try {
+            String motd = org.bukkit.Bukkit.getMotd();
+            if (motd == null || motd.isEmpty()) return "Minecraft Server";
+            // Strip color codes basicos.
+            String clean = motd.replaceAll("(?i)\u00a7[0-9a-fklmnor]", "").trim();
+            if (clean.length() > 60) clean = clean.substring(0, 60);
+            return clean;
+        } catch (Throwable t) {
+            return "Minecraft Server";
+        }
     }
 }
