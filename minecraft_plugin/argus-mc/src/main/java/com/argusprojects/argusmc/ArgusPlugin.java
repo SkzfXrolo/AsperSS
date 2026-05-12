@@ -96,6 +96,25 @@ public final class ArgusPlugin extends JavaPlugin {
             getLogger().fine(() -> "[Argus/Metrics] init failed: " + t.getMessage());
         }
 
+        // Pack 48 round 2 — proxy auto-detect (informativo, no cambia logica).
+        try {
+            boolean bungee = false, velocity = false;
+            try {
+                bungee = org.bukkit.Bukkit.spigot().getConfig()
+                    .getBoolean("settings.bungeecord", false);
+            } catch (Throwable ignored) {}
+            try {
+                java.io.File pgConf = new java.io.File("config/paper-global.yml");
+                if (pgConf.exists()) {
+                    String content = java.nio.file.Files.readString(pgConf.toPath());
+                    velocity = content.contains("velocity:") && content.contains("enabled: true");
+                }
+            } catch (Throwable ignored) {}
+            getLogger().info("[Argus] Proxy detection: BungeeCord=" + bungee + " | Velocity=" + velocity);
+        } catch (Throwable t) {
+            getLogger().fine(() -> "[Argus] proxy detect failed: " + t.getMessage());
+        }
+
         if (argusConfig.isMisconfigured()) {
             getLogger().log(Level.WARNING,
                 "Argus no esta configurado todavia. Edita plugins/ArgusMC/config.yml y ejecuta /argus reload.");
