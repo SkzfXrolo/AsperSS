@@ -5,6 +5,7 @@ import sys as _sys
 _sys.stdout.reconfigure(line_buffering=True)  # forzar stdout unbuffered
 from flask import Flask, render_template, request, jsonify, session, Response, redirect, url_for, make_response, flash, send_file
 from flask_cors import CORS
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 import os
 import requests
 import json
@@ -66,6 +67,7 @@ except Exception as _ai_maint_err:
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-production')
+app.config['WTF_CSRF_CHECK_DEFAULT'] = False
 
 # Sesion persistente: 30 dias (de lo contrario las cookies expiran al cerrar el navegador
 # y el usuario se queda "deslogueado" sin previo aviso, viendo todo en 0 porque los
@@ -85,6 +87,38 @@ def _make_session_permanent():
     en lugar de morir al cerrar el navegador."""
     from flask import session as _s
     _s.permanent = True
+
+
+csrf = CSRFProtect(app)
+_CSRF_EXEMPT_PREFIXES = (
+    '/api/plugin/',
+    '/api/scans',
+    '/api/validate-token',
+    '/api/auth/login',
+    '/api/auth/register',
+    '/setup-admin-aspers2024',
+)
+
+
+def _is_csrf_exempt_path(path: str) -> bool:
+    return any(path.startswith(prefix) for prefix in _CSRF_EXEMPT_PREFIXES)
+
+
+@app.before_request
+def _csrf_protect_state_changes():
+    if request.method not in ('POST', 'PUT', 'PATCH', 'DELETE'):
+        return None
+    path = request.path or ''
+    if _is_csrf_exempt_path(path):
+        return None
+    if request.headers.get('X-Argus-Plugin-Key'):
+        return None
+    auth_header = (request.headers.get('Authorization') or '').strip()
+    if auth_header.startswith('Bearer argus_pk_'):
+        return None
+    if not (session.get('user_id') or session.get('admin_subscriptions')):
+        return None
+    return csrf.protect()
 
 
 def require_superadmin(f):
@@ -119,6 +153,7 @@ def _inject_globals():
     return {
         'discord_invite': DISCORD_INVITE_URL,
         'argus_version': _ARGUS_VERSION,
+        'csrf_token_value': generate_csrf(),
     }
 
 

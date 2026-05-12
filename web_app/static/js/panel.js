@@ -3,6 +3,20 @@
  * Sistema de gestión y aprendizaje progresivo
  */
 
+const _csrfMeta = document.querySelector('meta[name="csrf-token"]');
+const _csrfToken = _csrfMeta ? _csrfMeta.getAttribute('content') : '';
+const _origFetch = window.fetch.bind(window);
+window.fetch = (input, init = {}) => {
+    const cfg = { ...init };
+    const method = String(cfg.method || 'GET').toUpperCase();
+    if (_csrfToken && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+        const headers = new Headers(cfg.headers || {});
+        if (!headers.has('X-CSRFToken')) headers.set('X-CSRFToken', _csrfToken);
+        cfg.headers = headers;
+    }
+    return _origFetch(input, cfg);
+};
+
 // Estado global
 let currentScanId = null;
 let currentResultId = null;
