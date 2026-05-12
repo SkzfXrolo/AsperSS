@@ -7,6 +7,8 @@ Requiere pytest instalado:
 
 from pathlib import Path
 
+import pytest
+
 
 APP_PY = Path(__file__).resolve().parents[2] / "web_app" / "app.py"
 
@@ -15,6 +17,7 @@ def _src() -> str:
     return APP_PY.read_text(encoding="utf-8", errors="ignore")
 
 
+@pytest.mark.xfail(reason="Pack49: review secret cambió por hardening", strict=False)
 def test_hardcoded_review_secret_present_poc():
     src = _src()
     assert "_REVIEW_SECRET" in src
