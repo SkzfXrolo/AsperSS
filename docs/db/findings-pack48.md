@@ -252,6 +252,64 @@ como verificado.)
 
 ---
 
+## Findings adicionales (Rounds 4-6)
+
+> Los IDs F-007 a F-019 fueron levantados en Rounds 2-6 dentro de los docs correspondientes; se consolidan aquí para trazabilidad única.
+
+### F-007 · MED · Queries fantasma en `app.py` (~L810-828) — `fecha`/`scan_verdicts`/`empresas`
+
+Subagente D coordina fix. Referencia: `docs/db/query-performance.md` (Round 2).
+
+### F-008 · HIGH · Extensiones limitadas en Render (`pg_repack`, `pg_cron`, `pgaudit`, `pg_partman`)
+
+Plan B documentado: cron externo + ventana para repack/cluster + log_statement como sustituto pgaudit. Ver `docs/db/render-runbook.md`, `docs/db/extensions-evaluation.md`.
+
+### F-009 · HIGH · Backups Render dentro de Render (sin offsite)
+
+Riesgo: dependencia total al proveedor. Acción: `backup-automation.sh` + S3 cross-region GPG (`backup-strategy.md`, `backup-advanced/cross-region-backup.md`).
+
+### F-010 · MED · `idle_in_transaction_session_timeout` no configurado
+
+Riesgo de locks por bugs app. Acción: setear `5min` (`statement-timeout.md`).
+
+### F-011 · MED · Sin instrumentación regular de bloat
+
+Autovacuum comportamiento desconocido. Acción: `scripts/db/bloat-check.sql` + `scripts/db/toolkits/pg_bloat_check.sql` en cron mensual.
+
+### F-012 · MED · RLS no aplicado · aislamiento sólo por convención
+
+Acción Pack 49: `pack49-migration-plan/rls-enablement.md` + `argus-scenarios/multi-tenant-rls.md`.
+
+### F-013 · MED · Replicación lógica en Render requiere REVIEW
+
+`wal_level=logical`, slots y networking dependen de tier. Ver `logical-replication/render-limitations.md`.
+
+### F-014 · LOW · pgBackRest / Barman / `pg_basebackup` no aplican a managed Render
+
+Sólo referencia para futuro self-host. `backup-advanced/*`.
+
+### F-015 · MED · pgTAP y extensiones en CI deben validarse por tier
+
+`testing/pgtap.md` SKIP gracefully cuando extensión ausente. Plan: imagen CI con pgTAP precargada.
+
+### F-016 · MED · Falta default partition monitoring
+
+Si se adopta partitioning, alertar si `*_default` recibe filas. Ver `partitioning-deep/partition-maintenance.md`.
+
+### F-017 · MED · Stress / benchmark sin baseline persistido
+
+Resultados de `scripts/db/bench/*` no comparados temporal. Acción: guardar resultados en repo infra y dashboards. Ver `data-observability.md`.
+
+### F-018 · LOW · `polymorphic association` en `staff_audit_log` sin discriminator validado
+
+Acción Pack 50+: agregar CHECK + tabla discriminator. `data-modeling/polymorphic-association.md`.
+
+### F-019 · MED · Backfills sin tabla de tracking
+
+No hay `backfill_runs` central. Acción: crear cuando se aborde F-001. `cookbook/data-backfills.md`.
+
+---
+
 ## Anti-patterns generales identificados
 
 1. **DDL embebido en código Python** — imposible auditar sin grep masivo, no
