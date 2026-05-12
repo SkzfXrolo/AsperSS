@@ -1,0 +1,39 @@
+name: Plugin Build (Argus MC)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "minecraft_plugin/**"
+      - ".github/workflows/plugin-build.yml"
+  pull_request:
+    paths:
+      - "minecraft_plugin/**"
+      - ".github/workflows/plugin-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build-plugin-jar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Build plugin JAR
+        working-directory: minecraft_plugin/argus-mc
+        run: mvn -B -ntp clean package
+
+      - name: Upload plugin JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: argus-plugin-jar-${{ github.sha }}
+          path: minecraft_plugin/argus-mc/target/argus-mc-*.jar
+          if-no-files-found: error
