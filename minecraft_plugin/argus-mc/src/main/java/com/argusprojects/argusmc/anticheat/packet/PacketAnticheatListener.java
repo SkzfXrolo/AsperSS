@@ -12,6 +12,7 @@ import com.argusprojects.argusmc.anticheat.packet.checks.PhaseCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.PingSpoofCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.ReachPacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.TimerCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.VClipCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.VelocityCheck;
 import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import com.github.retrooper.packetevents.event.SimplePacketListenerAbstract;
@@ -54,6 +55,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final PingSpoofCheck            pingSpoofCheck;
     private final CPSPacketCheck            cpsCheck;
     private final InvMovePacketCheck        invMoveCheck;
+    private final VClipCheck                vclipCheck;
 
     public PacketAnticheatListener(ArgusPlugin plugin, PacketDataStore store) {
         super(PacketListenerPriority.NORMAL);
@@ -70,6 +72,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.pingSpoofCheck       = new PingSpoofCheck(plugin);
         this.cpsCheck             = new CPSPacketCheck(plugin);
         this.invMoveCheck         = new InvMovePacketCheck(plugin);
+        this.vclipCheck           = new VClipCheck(plugin);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -110,6 +113,8 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         phaseCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
                         // Velocity check — el cliente debe respetar la velocity asignada.
                         velocityCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
+                        // VClip — delta Y impossible en un packet (Pack 48 #482).
+                        vclipCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
 
                         s.lastX = nx;
                         s.lastY = ny;

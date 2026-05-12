@@ -209,6 +209,16 @@ anticheat:
     inv_move_packet:
       enabled: true          # ClickWindow durante movimiento legitimo.
 
+    # ── Pack 48: nuevos checks PACKET-BASED (Bloque 2 — movement/blocks) ─────
+    vclip:
+      enabled: true          # delta Y impossible en un solo packet (>0.65b sin
+                             # jump boost, >1.20b incluso con). Whitelist completa:
+                             # creative/flying, spectator, vehicle, elytra, swim,
+                             # levitation, slow falling. Compensa jump boost.
+      dy_mid: 0.65
+      dy_high: 1.20
+      dy_critical: 2.00
+
 # ── Mensajes (puedes traducir libremente) ─────────────────────
 messages:
   prefix: "&8[&6Argus&8]&r "

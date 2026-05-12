@@ -86,9 +86,10 @@ public final class PacketEventsBootstrap {
                 new PacketAnticheatBukkitBridge(plugin, dataStore, listener), plugin);
 
             initialized = true;
-            plugin.getLogger().info("[Argus/Packet] 10 checks packet-based activos: timer, phase, velocity, "
+            plugin.getLogger().info("[Argus/Packet] checks packet-based activos: timer, phase, velocity, "
                 + "invalid_rotation, reach_packet, killaura_swing_packet, aim_snap_packet, "
-                + "ping_spoof, cps_packet, inv_move_packet");
+                + "ping_spoof, cps_packet, inv_move_packet, vclip, step, speed_packet, "
+                + "fast_place, fast_break, nuker, auto_totem");
             return true;
         } catch (Throwable t) {
             plugin.getLogger().log(Level.WARNING,
