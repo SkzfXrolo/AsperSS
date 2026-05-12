@@ -1399,3 +1399,67 @@ body.tournament-mode .stat-card .number {
     }
 }
 
+/* Round 7 UI polish: transiciones suaves + mobile safety */
+:root {
+    --argus-transition-std: 0.2s ease-in-out;
+}
+
+body {
+    overflow-x: hidden;
+}
+
+.panel-section,
+.card,
+.btn,
+.nav-item,
+.data-table tbody tr {
+    transition: background-color var(--argus-transition-std),
+                border-color var(--argus-transition-std),
+                color var(--argus-transition-std),
+                transform var(--argus-transition-std),
+                opacity var(--argus-transition-std);
+}
+
+.panel-section.active {
+    animation: argus-page-fade-in 0.2s ease-in-out both;
+}
+
+@keyframes argus-page-fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Sticky bottom nav para mobile (si existe el bloque) */
+.mobile-bottom-nav,
+#mobile-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1200;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 768px) {
+    button,
+    .btn,
+    .nav-item,
+    [role="button"] {
+        min-height: 44px;
+        min-width: 44px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .panel-section.active {
+        animation: none !important;
+    }
+    .panel-section,
+    .card,
+    .btn,
+    .nav-item,
+    .data-table tbody tr {
+        transition: none !important;
+    }
+}
+
