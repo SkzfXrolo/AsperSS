@@ -4,3 +4,13 @@ pytest-mock
 freezegun
 numpy
 hypothesis
+mutmut
+syrupy
+playwright
+pytest-playwright
+schemathesis
+factory-boy
+faker
+requests
+flask
+flask-wtf
