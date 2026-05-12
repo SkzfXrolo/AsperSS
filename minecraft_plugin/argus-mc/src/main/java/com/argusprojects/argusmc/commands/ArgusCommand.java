@@ -114,6 +114,7 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
         switch (sub) {
             case "reload":           handleAdminReload(sender);          break;
             case "debug":            handleAdminDebug(sender, args);     break;
+            case "testpacket":       handleAdminTestPacket(sender, args); break;
             case "help":             sendAdminHelp(sender);              break;
             default:
                 sender.sendMessage(msg.prefix() + Messages.color("&cSub-comando admin desconocido: &f" + sub));
@@ -193,6 +194,49 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
         int vios = plugin.getViolationManager().countRecent(target.getUniqueId());
         sender.sendMessage(Messages.color("&7violations en window: &e" + vios));
         sender.sendMessage(Messages.color("&7&m─────────────────────────────────────────"));
+    }
+
+    /**
+     * #503 — /argus admin testpacket &lt;jugador&gt; [level].
+     *
+     * <p>Emite una violation sintetica (check name "admin_testpacket") al
+     * ViolationManager para verificar end-to-end: sliding window, broadcast
+     * staff, kick (si supera threshold), backend report, Discord webhook,
+     * AI Oracle. NO ejecuta accion enforced (level por defecto LOW solo
+     * dispara alerta a staff).
+     */
+    private void handleAdminTestPacket(CommandSender sender, String[] args) {
+        Messages msg = plugin.getMessages();
+        if (args.length < 3) {
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&7Uso: &f/argus admin testpacket <jugador> [level]"));
+            sender.sendMessage(Messages.color("&7Levels: LOW MID HIGH CRITICAL (default LOW)"));
+            return;
+        }
+        Player target = Bukkit.getPlayerExact(args[2]);
+        if (target == null) {
+            msg.sendPrefixed(sender, "player_not_found", Messages.ph("player", args[2]));
+            return;
+        }
+        com.argusprojects.argusmc.anticheat.ViolationLevel level =
+            com.argusprojects.argusmc.anticheat.ViolationLevel.LOW;
+        if (args.length >= 4) {
+            try {
+                level = com.argusprojects.argusmc.anticheat.ViolationLevel.valueOf(args[3].toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                sender.sendMessage(msg.prefix() + Messages.color(
+                    "&cLevel desconocido: &f" + args[3] + "&c. Usa LOW/MID/HIGH/CRITICAL."));
+                return;
+            }
+        }
+        com.argusprojects.argusmc.anticheat.Violation v =
+            new com.argusprojects.argusmc.anticheat.Violation(
+                target, "admin_testpacket", level,
+                "/argus admin testpacket invocado por " + sender.getName());
+        plugin.getViolationManager().flag(v);
+        sender.sendMessage(msg.prefix() + Messages.color(
+            "&aTest packet violation emitida &7para &e" + target.getName()
+                + " &7nivel &b" + level.name() + "&7. Mira el chat del staff y los logs."));
     }
 
     /**
