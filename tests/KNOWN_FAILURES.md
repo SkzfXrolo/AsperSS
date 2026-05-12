@@ -14,3 +14,8 @@
 - **Motivo**: `classify_intent()` no reconoce frases comunes como `que tal` (greeting) ni `porque baneaste a X` (explain_decision) por cobertura limitada de regex.
 - **Impacto**: UX del asistente pierde intents frecuentes en español coloquial.
 - **Fix en producción**: ampliar `INTENT_PATTERNS` para variantes `que tal`, `porque ...`, y verbos sin acento.
+
+## Warning observado al importar `web_app.app`
+- **Motivo**: en thread de `init_db_async`, `_notify_new_deploy` puede imprimir caracteres no soportados por `cp1252` en Windows y lanzar `UnicodeEncodeError`.
+- **Impacto**: warning de thread no manejado en tests de integración/property al importar la app.
+- **Fix en producción**: sanitizar/normalizar texto de logs antes de `print`, o usar encoding seguro.
