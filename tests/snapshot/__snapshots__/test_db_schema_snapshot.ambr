@@ -1,0 +1,13 @@
+# serializer version: 1
+# name: test_db_schema_snapshot
+  list([
+    tuple(
+      'scans',
+      'CREATE TABLE scans (id INTEGER PRIMARY KEY, user_id INTEGER, FOREIGN KEY(user_id) REFERENCES users(id))',
+    ),
+    tuple(
+      'users',
+      'CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL)',
+    ),
+  ])
+# ---
