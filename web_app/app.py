@@ -854,6 +854,7 @@ def api_public_stats():
         except Exception:
             pass
         try:
+            # H-003: schema actual usa started_at + companies; evitamos tablas legacy.
             try:
                 cur.execute("SELECT COUNT(*) FROM scans WHERE started_at > NOW() - INTERVAL '24 hours'")
             except Exception:
