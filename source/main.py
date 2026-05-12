@@ -5676,6 +5676,7 @@ class ArgusApp:
                         reg_exec.submit(_run_safe, self.scan_bam_registry),
                         reg_exec.submit(_run_safe, self.scan_srum_artifacts),
                         reg_exec.submit(_run_safe, self.scan_appcompat_shimcache),
+                        reg_exec.submit(_run_safe, self.scan_appcompatflags_store),
                         reg_exec.submit(_run_safe, self.scan_amcache),
                     ]
                     for rf in concurrent.futures.as_completed(reg_futures, timeout=30):
@@ -12085,6 +12086,38 @@ class ArgusApp:
             print(f"ShimCache no disponible: {e}")
         except Exception as e:
             print(f"Error en scan_appcompat_shimcache: {e}")
+
+    def scan_appcompatflags_store(self):
+        """#92 — Escanea Compatibility Assistant Store en AppCompatFlags."""
+        print("🔍 Escaneando AppCompatFlags Compatibility Assistant Store...")
+        key_path = r'Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store'
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as k:
+                i = 0
+                while True:
+                    try:
+                        name, data, _ = winreg.EnumValue(k, i)
+                        i += 1
+                        combined = f'{name} {data}'.lower()
+                        hit = next((h for h in _DEFINITE_HACK_NAMES if h in combined), None)
+                        if not hit:
+                            continue
+                        self.issues_found.append({
+                            'tipo': 'appcompatflags_store_suspicious',
+                            'nombre': f'AppCompat Store sospechoso: {os.path.basename(name)[:80]}',
+                            'ruta': f'HKCU\\{key_path}',
+                            'archivo': str(name)[:255],
+                            'categoria': 'FORENSE',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.74,
+                            'detected_patterns': [f'appcompat_store:{hit}'],
+                        })
+                    except OSError:
+                        break
+        except (FileNotFoundError, PermissionError):
+            pass
+        except Exception as e:
+            print(f"Error en scan_appcompatflags_store: {e}")
 
     def scan_muicache(self):
         """Lee MUICache — nombres de todos los ejecutables que corrió el usuario, incluyendo borrados."""
