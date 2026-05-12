@@ -1,15 +1,20 @@
 package com.argusprojects.argusmc.anticheat.packet;
 
 import com.argusprojects.argusmc.ArgusPlugin;
+import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.PlayerVelocityEvent;
+import org.bukkit.inventory.ItemStack;
 
 /**
  * Pack 47 — Bridge entre eventos Bukkit y el {@link PacketDataStore}.
@@ -30,7 +35,6 @@ public final class PacketAnticheatBukkitBridge implements Listener {
 
     private final ArgusPlugin plugin;
     private final PacketDataStore store;
-    @SuppressWarnings("unused") // referencia retenida para futuras integraciones
     private final PacketAnticheatListener listener;
 
     public PacketAnticheatBukkitBridge(ArgusPlugin plugin, PacketDataStore store, PacketAnticheatListener listener) {
@@ -85,5 +89,47 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         if (!(e.getPlayer() instanceof org.bukkit.entity.Player p)) return;
         PacketDataStore.State s = store.get(p.getUniqueId());
         s.inventoryOpen = false;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    //  Pack 48 #488 — AutoTotem: tracking de damage + inventory swap.
+    // ──────────────────────────────────────────────────────────────────────
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onDamage(EntityDamageEvent e) {
+        if (!(e.getEntity() instanceof org.bukkit.entity.Player p)) return;
+        if (p.hasPermission("argus.ac.bypass")) return;
+        PacketDataStore.State s = store.get(p.getUniqueId());
+        s.lastDamageTakenMs = System.currentTimeMillis();
+        // health DESPUES del damage (puede ser negativa si totem ya activo).
+        s.lastDamageHealthAfter = Math.max(0.0, p.getHealth() - e.getFinalDamage());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onSwapHands(PlayerSwapHandItemsEvent e) {
+        org.bukkit.entity.Player p = e.getPlayer();
+        if (p.hasPermission("argus.ac.bypass")) return;
+        PacketDataStore.State s = store.get(p.getUniqueId());
+        // El offhand resultante despues del swap es el item que estaba en main.
+        ItemStack offhandAfter = e.getOffHandItem();
+        Bukkit.getScheduler().runTaskLater(plugin, () ->
+            listener.getAutoTotemCheck().handleOffhandUpdate(
+                p, s, System.currentTimeMillis(), offhandAfter, listener.getSink()), 1L);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onInvClick(InventoryClickEvent e) {
+        if (!(e.getWhoClicked() instanceof org.bukkit.entity.Player p)) return;
+        if (p.hasPermission("argus.ac.bypass")) return;
+        PacketDataStore.State s = store.get(p.getUniqueId());
+        // El offhand del inventario del player es slot 40 (PlayerInventory).
+        // Verificamos en el siguiente tick (post-update) si quedo un totem ahi.
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            try {
+                ItemStack offhand = p.getInventory().getItemInOffHand();
+                listener.getAutoTotemCheck().handleOffhandUpdate(
+                    p, s, System.currentTimeMillis(), offhand, listener.getSink());
+            } catch (Throwable ignored) {}
+        }, 1L);
     }
 }

@@ -4,6 +4,7 @@ import com.argusprojects.argusmc.ArgusPlugin;
 import com.argusprojects.argusmc.anticheat.Violation;
 import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.checks.AimSnapPacketCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.AutoTotemCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.CPSPacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.FastBreakCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.FastPlaceCheck;
@@ -67,6 +68,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final FastPlaceCheck            fastPlaceCheck;
     private final FastBreakCheck            fastBreakCheck;
     private final NukerCheck                nukerCheck;
+    private final AutoTotemCheck            autoTotemCheck;
 
     public PacketAnticheatListener(ArgusPlugin plugin, PacketDataStore store) {
         super(PacketListenerPriority.NORMAL);
@@ -89,7 +91,12 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.fastPlaceCheck       = new FastPlaceCheck(plugin);
         this.fastBreakCheck       = new FastBreakCheck(plugin);
         this.nukerCheck           = new NukerCheck(plugin);
+        this.autoTotemCheck       = new AutoTotemCheck(plugin);
     }
+
+    /** Acceso al sink para checks que disparan desde el bridge Bukkit. */
+    public ViolationSink getSink() { return sink(); }
+    public AutoTotemCheck getAutoTotemCheck() { return autoTotemCheck; }
 
     // ──────────────────────────────────────────────────────────────────────
     //  Packets recibidos del CLIENTE

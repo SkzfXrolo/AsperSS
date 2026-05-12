@@ -257,6 +257,13 @@ anticheat:
       window_ms: 60
       min_breaks_mid: 3
       min_breaks_high: 5
+    auto_totem:
+      enabled: true          # Totem swap a offhand <50ms despues de un hit
+                             # casi-fatal (health post-damage <= 4). Humanos
+                             # reaccionan en 150-250ms; <100ms es bot.
+      react_ms_fast: 50      # HIGH
+      react_ms_mid: 100      # MID
+      react_ms_slow: 200     # LOW
 
 # ── Mensajes (puedes traducir libremente) ─────────────────────
 messages:
