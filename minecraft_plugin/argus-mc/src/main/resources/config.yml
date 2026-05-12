@@ -241,6 +241,15 @@ anticheat:
       max_per_sec:  9
       max_per_sec2: 14
       max_per_sec3: 22
+    fast_break:
+      enabled: true          # tiempo START_DIGGING -> FINISHED_DIGGING vs piso
+                             # plausible para la hardness del bloque. FINISH sin
+                             # START previo en bloque no instant-break tambien
+                             # se flagea (insta-break hack).
+      hardness_threshold: 1.5
+      hardness_threshold_very: 3.0
+      min_ms_hard: 80
+      min_ms_very_hard: 200
 
 # ── Mensajes (puedes traducir libremente) ─────────────────────
 messages:

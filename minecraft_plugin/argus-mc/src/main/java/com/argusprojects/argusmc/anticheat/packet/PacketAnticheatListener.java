@@ -5,6 +5,7 @@ import com.argusprojects.argusmc.anticheat.Violation;
 import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.checks.AimSnapPacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.CPSPacketCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.FastBreakCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.FastPlaceCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.InvMovePacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.InvalidRotationCheck;
@@ -23,6 +24,7 @@ import com.github.retrooper.packetevents.event.simple.PacketPlayReceiveEvent;
 import com.github.retrooper.packetevents.event.simple.PacketPlaySendEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerDigging;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerFlying;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
@@ -62,6 +64,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final StepCheck                 stepCheck;
     private final SpeedPacketCheck          speedPacketCheck;
     private final FastPlaceCheck            fastPlaceCheck;
+    private final FastBreakCheck            fastBreakCheck;
 
     public PacketAnticheatListener(ArgusPlugin plugin, PacketDataStore store) {
         super(PacketListenerPriority.NORMAL);
@@ -82,6 +85,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.stepCheck            = new StepCheck(plugin);
         this.speedPacketCheck     = new SpeedPacketCheck(plugin);
         this.fastPlaceCheck       = new FastPlaceCheck(plugin);
+        this.fastBreakCheck       = new FastBreakCheck(plugin);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -202,6 +206,21 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
             } else if (type == PacketType.Play.Client.PLAYER_BLOCK_PLACEMENT) {
                 long now = System.currentTimeMillis();
                 fastPlaceCheck.handleBlockPlacement(player, s, now, sink());
+
+            } else if (type == PacketType.Play.Client.PLAYER_DIGGING) {
+                WrapperPlayClientPlayerDigging wrap = new WrapperPlayClientPlayerDigging(event);
+                long now = System.currentTimeMillis();
+                WrapperPlayClientPlayerDigging.DiggingAction action = wrap.getAction();
+                if (action == WrapperPlayClientPlayerDigging.DiggingAction.START_DIGGING) {
+                    org.bukkit.Material mat = resolveBlock(player, wrap);
+                    fastBreakCheck.handleStartDigging(player, s, now, mat);
+                } else if (action == WrapperPlayClientPlayerDigging.DiggingAction.FINISHED_DIGGING) {
+                    org.bukkit.Material mat = resolveBlock(player, wrap);
+                    fastBreakCheck.handleFinishDigging(player, s, now, mat, sink());
+                } else if (action == WrapperPlayClientPlayerDigging.DiggingAction.CANCELLED_DIGGING) {
+                    s.currentBreakStartMs = 0L;
+                    s.currentBreakBlockMaterial = null;
+                }
             }
         } catch (Throwable t) {
             // Defensivo: jamas dejar que un packet listener tire toda la cadena
@@ -234,6 +253,18 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
             if (ent.getEntityId() == entityId) return ent;
         }
         return null;
+    }
+
+    /** Devuelve el Material del bloque target del PlayerDigging packet (best-effort). */
+    private org.bukkit.Material resolveBlock(Player player, WrapperPlayClientPlayerDigging wrap) {
+        try {
+            var pos = wrap.getBlockPosition();
+            if (pos == null) return null;
+            org.bukkit.World w = player.getWorld();
+            return w.getBlockAt(pos.getX(), pos.getY(), pos.getZ()).getType();
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     /** Sink centralizado: cualquier check llama a sink().flag(v) para reportar. */
