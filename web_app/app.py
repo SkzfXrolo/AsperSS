@@ -4101,6 +4101,83 @@ def api_ai_decisions():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/ai/decisions/<int:decision_id>/explain', methods=['GET'])
+@login_required
+def api_ai_explain_decision(decision_id: int):
+    """Explicación detallada de una decisión del Oracle para auditoría staff."""
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        roles = user.get('roles') or []
+        if isinstance(roles, str):
+            try:
+                roles = json.loads(roles)
+            except Exception:
+                roles = [roles]
+        roles_lower = {str(r).lower() for r in roles}
+        is_global_admin = bool(roles_lower & {'admin', 'owner', 'super_admin'})
+        company_id = _resolve_company_id_for_user(user)
+
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT id, company_id, player_uuid, player_name, score, confidence, "
+                f"action, reasoning, evidence_json, triggered_by, created_at "
+                f"FROM ai_decisions_log WHERE id = {_PH}",
+                (decision_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'success': False, 'error': 'Decisión no encontrada'}), 404
+            d = dict(row) if not isinstance(row, dict) else row
+            if (not is_global_admin) and int(d.get('company_id') or 0) != int(company_id or 0):
+                return jsonify({'success': False, 'error': 'No autorizado para esta decisión'}), 403
+
+        evidence = {}
+        try:
+            evidence = json.loads(d.get('evidence_json') or '{}')
+            if not isinstance(evidence, dict):
+                evidence = {}
+        except Exception:
+            evidence = {}
+
+        top_checks = []
+        by_check = evidence.get('by_check') or {}
+        if isinstance(by_check, dict):
+            for check_name, lvls in by_check.items():
+                total = int(sum(int(v or 0) for v in (lvls or {}).values())) if isinstance(lvls, dict) else 0
+                top_checks.append({'check': check_name, 'count': total})
+            top_checks.sort(key=lambda x: x['count'], reverse=True)
+
+        return jsonify({
+            'success': True,
+            'decision': {
+                'id': d.get('id'),
+                'company_id': d.get('company_id'),
+                'player_uuid': d.get('player_uuid'),
+                'player_name': d.get('player_name'),
+                'score': d.get('score'),
+                'confidence': d.get('confidence'),
+                'action': d.get('action'),
+                'reasoning': d.get('reasoning'),
+                'triggered_by': d.get('triggered_by'),
+                'created_at': str(d.get('created_at')) if d.get('created_at') else None,
+            },
+            'evidence': evidence,
+            'summary': {
+                'total_violations': int(evidence.get('total_violations') or 0),
+                'distinct_checks': int(evidence.get('distinct_checks') or 0),
+                'top_checks': top_checks[:5],
+                'ensemble_components': evidence.get('ensemble_components') or {},
+                'ensemble_weights': evidence.get('ensemble_weights') or {},
+                'ml_score': evidence.get('ml_score'),
+            },
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/ai/weights', methods=['GET'])
 @login_required
 def api_ai_weights_get():
