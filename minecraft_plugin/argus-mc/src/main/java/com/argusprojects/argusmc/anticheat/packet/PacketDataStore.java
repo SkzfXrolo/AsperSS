@@ -38,11 +38,32 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class PacketDataStore {
 
     /** Tamaños maximos de los buffers circulares por State. */
-    public static final int MOVE_BUFFER_SIZE   = 40;
-    public static final int ATTACK_BUFFER_SIZE = 20;
-    public static final int SWING_BUFFER_SIZE  = 20;
-    public static final int PLACE_BUFFER_SIZE  = 30;
-    public static final int BREAK_BUFFER_SIZE  = 30;
+    public static final int MOVE_BUFFER_SIZE     = 40;
+    public static final int ATTACK_BUFFER_SIZE   = 20;
+    public static final int SWING_BUFFER_SIZE    = 20;
+    public static final int PLACE_BUFFER_SIZE    = 30;
+    public static final int BREAK_BUFFER_SIZE    = 30;
+    public static final int ROTATION_BUFFER_SIZE = 20;
+    public static final int CHAT_BUFFER_SIZE     = 12;
+
+    /** Sample de rotacion (yaw/pitch) capturado con timestamp para checks de aim. */
+    public static final class RotationSample {
+        public final float yaw;
+        public final float pitch;
+        public final long  tsMs;
+        public RotationSample(float yaw, float pitch, long tsMs) {
+            this.yaw = yaw; this.pitch = pitch; this.tsMs = tsMs;
+        }
+    }
+
+    /** Sample de chat (texto + timestamp) para ChatMacroCheck. */
+    public static final class ChatSample {
+        public final String message;
+        public final long   tsMs;
+        public ChatSample(String message, long tsMs) {
+            this.message = message; this.tsMs = tsMs;
+        }
+    }
 
     /** Estado completo por jugador. Una sola entrada vive en este map. */
     public static final class State {
@@ -92,6 +113,45 @@ public final class PacketDataStore {
         public volatile long currentBreakStartMs;
         public volatile String currentBreakBlockMaterial;
 
+        // ===== round 2 (Pack 48-A) =====
+
+        /** Buffer de rotaciones recientes (KillauraAimCheck / BowAimCheck). */
+        public final Deque<RotationSample> recentRotations = new ArrayDeque<>();
+        /** Buffer de mensajes de chat recientes (ChatMacroCheck). */
+        public final Deque<ChatSample> recentChat = new ArrayDeque<>();
+
+        /** BoatFly state — desde cuando el boat lleva en aire sin tocar agua / suelo. */
+        public volatile long   boatAirSinceMs;
+        public volatile double boatAirStartY;
+        /** Jetpack consec counter — packets seguidos con dy positivo grande. */
+        public volatile int    jetpackConsec;
+        /** Spider consec counter — packets seguidos subiendo pegado a pared. */
+        public volatile int    spiderConsec;
+        /** Multi-velocity ignored counter — packets seguidos en los que el cliente ignoro velocity. */
+        public volatile int    velocityIgnoredConsec;
+        /** Liquid walk consec counter — packets seguidos caminando sobre liquido. */
+        public volatile int    liquidWalkConsec;
+        /** MeleeFly hover counter — attacks seguidos en aire/no fall. */
+        public volatile int    meleeFlyConsec;
+        /** Ultimo ts de bow charge start (release event clave). */
+        public volatile long   lastBowChargeStartMs;
+        /** Ultimo nombre custom de item visto en main hand (NamedItemSpamCheck). */
+        public volatile String lastMainHandItemName;
+        public volatile long   lastMainHandItemNameMs;
+        /** Trust score Argus (0-100). Se actualiza on backend response — defualt 50. */
+        public volatile double trustScore = 50.0;
+        /** Verbose watcher (UUID del admin observando) — null si nadie observa. */
+        public volatile UUID   watchedBy;
+
+        public synchronized void pushRotation(float yaw, float pitch, long now) {
+            recentRotations.addLast(new RotationSample(yaw, pitch, now));
+            while (recentRotations.size() > ROTATION_BUFFER_SIZE) recentRotations.pollFirst();
+        }
+        public synchronized void pushChat(String msg, long now) {
+            recentChat.addLast(new ChatSample(msg, now));
+            while (recentChat.size() > CHAT_BUFFER_SIZE) recentChat.pollFirst();
+        }
+
         public synchronized void pushMove(long now) {
             moveTimestamps.addLast(now);
             while (moveTimestamps.size() > MOVE_BUFFER_SIZE) moveTimestamps.pollFirst();
@@ -136,10 +196,22 @@ public final class PacketDataStore {
             swingTimestamps.clear();
             placeTimestamps.clear();
             breakTimestamps.clear();
+            recentRotations.clear();
+            recentChat.clear();
             serverVelConsumed = true;
             currentBreakStartMs = 0L;
             currentBreakBlockMaterial = null;
             speedOverflowCounter = 0;
+            boatAirSinceMs = 0L;
+            boatAirStartY  = 0.0;
+            jetpackConsec = 0;
+            spiderConsec  = 0;
+            velocityIgnoredConsec = 0;
+            liquidWalkConsec = 0;
+            meleeFlyConsec   = 0;
+            lastBowChargeStartMs = 0L;
+            lastMainHandItemName = null;
+            lastMainHandItemNameMs = 0L;
         }
     }
 

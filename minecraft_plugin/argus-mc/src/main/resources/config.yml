@@ -315,6 +315,35 @@ anticheat:
       react_ms_mid: 100      # MID
       react_ms_slow: 200     # LOW
 
+    # ── Pack 48 round 2: nuevos checks (combat/movement avanzados) ──
+    killaura_aim:
+      enabled: true          # rotacion congelada en los ultimos N packets antes
+                             # del attack (spread combinado yaw+pitch < umbral).
+                             # Humanos siempre tienen micro-jitter.
+      max_micro_jitter_deg: 0.05
+      window_ms: 250
+      min_samples: 3
+    killaura_blocking:
+      enabled: true          # attack mientras player.isBlocking() == true
+                             # (escudo activo o sword raised en pre-1.9).
+    boat_fly:
+      enabled: true          # boat fuera del agua, en aire, sin tocar suelo
+                             # ni agua durante sustained_ms y ganando altura.
+      sustained_ms: 1500
+      min_dy_total: 1.0
+    jetpack:
+      enabled: true          # dy > min_dy sostenido por N packets sin elytra,
+                             # jump boost relevante, fly, water o climbable.
+      min_dy: 0.18
+      consec_mid: 4
+      consec_high: 7
+    spider:
+      enabled: true          # subiendo (dy>0) con pared adyacente solida y
+                             # SIN climbable activo. N packets seguidos.
+      min_dy: 0.06
+      consec_mid: 5
+      consec_high: 9
+
 # ── Mensajes (puedes traducir libremente) ─────────────────────
 messages:
   prefix: "&8[&6Argus&8]&r "

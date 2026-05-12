@@ -5,17 +5,22 @@ import com.argusprojects.argusmc.anticheat.Violation;
 import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.checks.AimSnapPacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.AutoTotemCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.BoatFlyCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.CPSPacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.FastBreakCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.FastPlaceCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.InvMovePacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.InvalidRotationCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.JetpackCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.KillauraAimCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.KillauraBlockingCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.KillauraSwingPacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.NukerCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.PhaseCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.PingSpoofCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.ReachPacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.SpeedPacketCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.SpiderCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.StepCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.TimerCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.VClipCheck;
@@ -73,6 +78,11 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final FastBreakCheck            fastBreakCheck;
     private final NukerCheck                nukerCheck;
     private final AutoTotemCheck            autoTotemCheck;
+    private final KillauraAimCheck          killauraAimCheck;
+    private final KillauraBlockingCheck     killauraBlockingCheck;
+    private final BoatFlyCheck              boatFlyCheck;
+    private final JetpackCheck              jetpackCheck;
+    private final SpiderCheck               spiderCheck;
 
     /**
      * #512 — Cache entityId -> Entity para evitar el linear scan de
@@ -111,6 +121,11 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.fastBreakCheck       = new FastBreakCheck(plugin);
         this.nukerCheck           = new NukerCheck(plugin);
         this.autoTotemCheck       = new AutoTotemCheck(plugin);
+        this.killauraAimCheck     = new KillauraAimCheck(plugin);
+        this.killauraBlockingCheck= new KillauraBlockingCheck(plugin);
+        this.boatFlyCheck         = new BoatFlyCheck(plugin);
+        this.jetpackCheck         = new JetpackCheck(plugin);
+        this.spiderCheck          = new SpiderCheck(plugin);
     }
 
     /** Acceso al sink para checks que disparan desde el bridge Bukkit. */
@@ -176,6 +191,10 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         stepCheck.handlePositionPacket(player, s, nx, ny, nz, nowOnGround, sink());
                         // Speed real horizontal (Pack 48 #484).
                         speedPacketCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
+                        // Round 2: BoatFly / Jetpack / Spider.
+                        boatFlyCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
+                        jetpackCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
+                        spiderCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
 
                         s.lastDeltaY = ny - s.lastY;
                         s.lastX = nx;
@@ -190,6 +209,8 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         invalidRotationCheck.handleRotation(player, s, ny, npi, sink());
                         // Aim snap: delta yaw entre packets vs delta esperado.
                         aimSnapCheck.handleRotation(player, s, ny, npi, sink());
+                        // Round 2: buffer de rotaciones para KillauraAim / BowAim.
+                        s.pushRotation(ny, npi, now);
                         s.lastYaw   = ny;
                         s.lastPitch = npi;
                     }
@@ -213,6 +234,9 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                     if (target != null) {
                         reachCheck.handleAttack(player, target, s, sink());
                         swingCheck.handleAttack(player, target, s, now, sink());
+                        // Round 2: KillauraAim / KillauraBlocking.
+                        killauraAimCheck.handleAttack(player, target, s, now, sink());
+                        killauraBlockingCheck.handleAttack(player, target, s, now, sink());
                     }
                     // CPS verdadero a nivel packet.
                     cpsCheck.handleAttack(player, s, now, sink());
