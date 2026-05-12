@@ -86,6 +86,9 @@ INTENT_PATTERNS: list[tuple[str, str, list[str]]] = [
     ("explain_decision",
      r"(?:por\s*qu[eé]?|porqu[eé]?|why)\s+(?:kickeaste|baneaste|sancionaste|le\s+diste|hiciste\s+(?:un\s+)?ss|le\s+pusiste\s+(?:un\s+)?(?:kick|ban|ss))\s+(?:a\s+)?(?P<player>[\w_\-]{2,16})",
      ["player"]),
+    ("explain_decision",
+     r"(?:por\s*qu[eé]?|porqu[eé]?|why|explica(?:me)?|qu[eé]?\s+pas[oó]\s+con)\s+(?:el\s+)?(?:ban|kick|ss)?\s*(?:de|a)?\s*(?P<player>[\w_\-]{2,16})",
+     ["player"]),
     ("compare",
      r"(?:c[oó]mo\s+(?:compara|se\s+ve|est[aá])\s+|c[oó]mo\s+anda\s+)(?P<player>[\w_\-]+)\s+(?:vs|contra|comparado\s+con)\s+(?P<other>[\w_\-]+)",
      ["player", "other"]),
@@ -111,7 +114,7 @@ INTENT_PATTERNS: list[tuple[str, str, list[str]]] = [
      r"^(?:ayuda|help|qu[eé]?\s+puedes\s+hacer|qu[eé]?\s+sabes\s+hacer|comandos|opciones)\??$",
      []),
     ("greeting",
-     r"^(?:hola|hey|buen[oa]s|saludos|hi|qu[eé]?\s+onda|qu[eé]?\s+pasa)\b",
+     r"^(?:hola|ola|wenas|hey|buen[oa]s|saludos|hi|qu[eé]?\s+onda|qu[eé]?\s+pasa|qu[eé]?\s+tal)\b",
      []),
     ("status_short",  # solo el nombre, sin verbo
      r"^@?(?P<player>[\w_\-]{3,16})\??$",
