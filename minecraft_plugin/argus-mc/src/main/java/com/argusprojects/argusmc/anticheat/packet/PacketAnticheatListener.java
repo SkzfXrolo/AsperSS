@@ -25,6 +25,7 @@ import com.github.retrooper.packetevents.event.SimplePacketListenerAbstract;
 import com.github.retrooper.packetevents.event.simple.PacketPlayReceiveEvent;
 import com.github.retrooper.packetevents.event.simple.PacketPlaySendEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.player.DiggingAction;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientInteractEntity;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerDigging;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerFlying;
@@ -220,15 +221,15 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
             } else if (type == PacketType.Play.Client.PLAYER_DIGGING) {
                 WrapperPlayClientPlayerDigging wrap = new WrapperPlayClientPlayerDigging(event);
                 long now = System.currentTimeMillis();
-                WrapperPlayClientPlayerDigging.DiggingAction action = wrap.getAction();
-                if (action == WrapperPlayClientPlayerDigging.DiggingAction.START_DIGGING) {
+                DiggingAction action = wrap.getAction();
+                if (action == DiggingAction.START_DIGGING) {
                     org.bukkit.Material mat = resolveBlock(player, wrap);
                     fastBreakCheck.handleStartDigging(player, s, now, mat);
-                } else if (action == WrapperPlayClientPlayerDigging.DiggingAction.FINISHED_DIGGING) {
+                } else if (action == DiggingAction.FINISHED_DIGGING) {
                     org.bukkit.Material mat = resolveBlock(player, wrap);
                     fastBreakCheck.handleFinishDigging(player, s, now, mat, sink());
                     nukerCheck.handleFinishDigging(player, s, now, mat, sink());
-                } else if (action == WrapperPlayClientPlayerDigging.DiggingAction.CANCELLED_DIGGING) {
+                } else if (action == DiggingAction.CANCELLED_DIGGING) {
                     s.currentBreakStartMs = 0L;
                     s.currentBreakBlockMaterial = null;
                 }
