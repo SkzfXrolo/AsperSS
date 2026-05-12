@@ -32,6 +32,8 @@ los pesos del nuevo feature space.
 from __future__ import annotations
 
 import math
+import os
+import json
 from typing import Any
 
 
@@ -47,6 +49,28 @@ KNOWN_CHECKS: list[str] = [
 ]
 
 LEVEL_WEIGHTS = {"LOW": 1.0, "MID": 2.5, "HIGH": 5.0, "CRITICAL": 9.0}
+
+
+def _load_legit_clients() -> set[str]:
+    base = os.path.dirname(__file__)
+    path = os.path.join(base, "static", "data", "legit_clients.json")
+    defaults = {
+        "lunarclient.exe", "lunar client.exe", "lunar client",
+        "badlionclient.exe", "badlion client", "minecraftlauncher.exe",
+        "minecraft.exe", "javaw.exe", "curseforge.exe",
+    }
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        items = raw.get("process_names") if isinstance(raw, dict) else raw
+        if not isinstance(items, list):
+            return defaults
+        return {str(x).strip().lower() for x in items if str(x).strip()}
+    except Exception:
+        return defaults
+
+
+_LEGIT_CLIENTS = _load_legit_clients()
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -90,6 +114,7 @@ def _build_feature_names() -> list[str]:
         "movement_jitter",
         "session_length_hours",
         "first_seen_now",
+        "legitimate_client_detected",
     ]
     # 6) Scanner outcomes
     names += [
@@ -208,6 +233,11 @@ def extract_features(evidence: dict[str, Any]) -> list[float]:
     fv["movement_jitter"]        = float(evidence.get("movement_jitter") or 0)
     fv["session_length_hours"]   = float(evidence.get("session_length_hours") or 0)
     fv["first_seen_now"]         = 1.0 if evidence.get("first_seen_now") else 0.0
+    process_text = " ".join([
+        str(evidence.get("process_tree") or ""),
+        " ".join([str(p) for p in (evidence.get("processes") or [])]),
+    ]).lower()
+    fv["legitimate_client_detected"] = 1.0 if any(p in process_text for p in _LEGIT_CLIENTS) else 0.0
 
     # 6) Scanner outcomes
     fv["scan_detected_hacks_recent"] = 1.0 if evidence.get("scan_detected_hacks_recent") else 0.0

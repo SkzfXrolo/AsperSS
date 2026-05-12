@@ -83,6 +83,7 @@ DEFAULT_WEIGHTS: dict[str, Any] = {
         "scan_detected_hacks_recent": 1.60,  # SS reciente dio hits
         "reports_in_chat_gt_3":       1.20,  # otros lo reportaron
         "first_seen_now":             1.05,  # primera vez visto en este server
+        "legitimate_client_detected": 0.80,  # Lunar/Badlion/etc baja sospecha
     },
     # Decay del score acumulado con el tiempo (sin nuevas violations).
     "decay": {
@@ -496,6 +497,12 @@ def evaluate(evidence: dict[str, Any], weights: dict[str, Any] | None = None) ->
         final_score *= mult
         if mult != 1.0:
             multipliers_applied.append(f"primera vez visto (×{mult:.2f})")
+
+    if evidence.get("legitimate_client_detected"):
+        mult = float(multipliers_w.get("legitimate_client_detected", 0.80))
+        final_score *= mult
+        if mult != 1.0:
+            multipliers_applied.append(f"cliente legítimo detectado (×{mult:.2f})")
 
     final_score = max(0.0, min(1.0, final_score))
 
