@@ -85,6 +85,13 @@ public final class ArgusPlugin extends JavaPlugin {
         boolean lpPresent = getServer().getPluginManager().getPlugin("LuckyPerms") != null;
         getLogger().info("LuckyPerms detectado: " + (lpPresent ? "si (los permisos respetan tus grupos LP)" : "no (se usaran permisos OP por defecto)"));
 
+        // Pack 48 round 2 — bStats anonymous telemetry (opt-out).
+        try {
+            com.argusprojects.argusmc.telemetry.MetricsBootstrap.init(this);
+        } catch (Throwable t) {
+            getLogger().fine(() -> "[Argus/Metrics] init failed: " + t.getMessage());
+        }
+
         if (argusConfig.isMisconfigured()) {
             getLogger().log(Level.WARNING,
                 "Argus no esta configurado todavia. Edita plugins/ArgusMC/config.yml y ejecuta /argus reload.");

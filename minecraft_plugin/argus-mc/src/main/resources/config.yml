@@ -428,6 +428,18 @@ anticheat:
       extreme_stddev_ms: 2.0
       min_cps: 8
 
+# ── Telemetria anonima opcional (bStats-compatible) ──────────
+# Reporta cada 30min stats agregadas (no info personal):
+#   - player count bucket
+#   - plugin version + java/server version
+#   - checks enabled (map)
+#   - enforcement mode (observer/enforce)
+#
+# Cambia a false si no queres telemetria. No requiere accion del backend
+# Argus — apunta directamente a bstats.org (independiente).
+metrics:
+  enabled: true
+
 # ── Mensajes (puedes traducir libremente) ─────────────────────
 messages:
   prefix: "&8[&6Argus&8]&r "
