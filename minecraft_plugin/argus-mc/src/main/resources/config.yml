@@ -181,6 +181,34 @@ anticheat:
       enabled: true          # threshold subido a 5b/300ms (era 2b/500ms);
                              # PvP legitimo en 1.8 con fast pearl no triggers.
 
+    # ── Pack 47: checks PACKET-BASED (requieren PacketEvents instalado) ────
+    # Solo se activan si el plugin PacketEvents esta presente. Si no,
+    # ArgusMC sigue con los checks Bukkit-based de arriba.
+    timer:
+      enabled: true          # detecta TimerHack midiendo el intervalo real
+                             # entre PlayerPosition packets (50ms vanilla).
+    phase:
+      enabled: true          # NoClip por raycast entre packets de movimiento.
+                             # Whitelist conservadora de bloques solidos.
+    velocity:
+      enabled: true          # AntiKnockback: cliente debe respetar la velocity
+                             # asignada por el server (umbral 30%).
+    invalid_rotation:
+      enabled: true          # pitch fuera de [-90,+90] o yaw NaN = cliente
+                             # modificado garantizado.
+    reach_packet:
+      enabled: true          # reach con posicion EXACTA en el tick del hit.
+    killaura_swing_packet:
+      enabled: true          # attack sin Animation packet previo en 250ms.
+    aim_snap_packet:
+      enabled: true          # delta yaw >80° entre packets + attack en 200ms.
+    ping_spoof:
+      enabled: true          # RTT <3ms (imposible) o >5000ms sostenido.
+    cps_packet:
+      enabled: true          # CPS real (>22 LOW, >30 MID, >45 HIGH).
+    inv_move_packet:
+      enabled: true          # ClickWindow durante movimiento legitimo.
+
 # ── Mensajes (puedes traducir libremente) ─────────────────────
 messages:
   prefix: "&8[&6Argus&8]&r "

@@ -3,6 +3,7 @@ package com.argusprojects.argusmc;
 import com.argusprojects.argusmc.anticheat.AnticheatConfig;
 import com.argusprojects.argusmc.anticheat.AnticheatListener;
 import com.argusprojects.argusmc.anticheat.ViolationManager;
+import com.argusprojects.argusmc.anticheat.packet.PacketEventsBootstrap;
 import com.argusprojects.argusmc.api.ArgusApiClient;
 import com.argusprojects.argusmc.commands.ArgusCommand;
 import com.argusprojects.argusmc.util.Messages;
@@ -37,6 +38,7 @@ public final class ArgusPlugin extends JavaPlugin {
     private Messages         messages;
     private ViolationManager violationManager;
     private AnticheatListener anticheatListener;
+    private PacketEventsBootstrap packetEventsBootstrap;
 
     @Override
     public void onEnable() {
@@ -51,6 +53,19 @@ public final class ArgusPlugin extends JavaPlugin {
             this.anticheatListener = new AnticheatListener(this, violationManager);
             getServer().getPluginManager().registerEvents(this.anticheatListener, this);
             getLogger().info("Anti-cheat ACTIVO (enforcement=" + anticheatConfig.isEnforcement() + ")");
+
+            // Pack 47 — packet-based checks via PacketEvents (soft-dep).
+            // Si el plugin PacketEvents no esta instalado, este boot es no-op:
+            // el anti-cheat sigue funcionando con AnticheatListener Bukkit-based.
+            try {
+                this.packetEventsBootstrap = new PacketEventsBootstrap(this);
+                if (packetEventsBootstrap.detect()) {
+                    // Init en runTaskLater(1) — PacketEvents puede inicializar despues de nosotros.
+                    getServer().getScheduler().runTaskLater(this, () -> packetEventsBootstrap.init(), 20L);
+                }
+            } catch (Throwable t) {
+                getLogger().warning("PacketEventsBootstrap fallo (fallback Bukkit AC activo): " + t.getMessage());
+            }
         } else {
             getLogger().info("Anti-cheat DESACTIVADO via config (anticheat.enabled=false).");
         }
@@ -104,6 +119,9 @@ public final class ArgusPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (packetEventsBootstrap != null) {
+            try { packetEventsBootstrap.shutdown(); } catch (Throwable ignored) {}
+        }
         if (apiClient != null) {
             apiClient.shutdown();
         }

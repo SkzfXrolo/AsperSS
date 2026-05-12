@@ -41,6 +41,11 @@
             <id>sonatype</id>
             <url>https://oss.sonatype.org/content/groups/public/</url>
         </repository>
+        <!-- PacketEvents repo (Pack 47) -->
+        <repository>
+            <id>codemc-releases</id>
+            <url>https://repo.codemc.io/repository/maven-releases/</url>
+        </repository>
     </repositories>
 
     <dependencies>
@@ -64,6 +69,18 @@
             <groupId>net.luckperms</groupId>
             <artifactId>api</artifactId>
             <version>5.4</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- PacketEvents (Pack 47) — provided, soft-dep en runtime.
+             Anti-cheat packet-based de Grim/Polar/Vulcan level. Si el server tiene
+             PacketEvents instalado, los checks packet-based se activan. Si no,
+             el plugin sigue funcionando con el AnticheatListener Bukkit-based.
+             Compatible 1.8 a 1.21+. -->
+        <dependency>
+            <groupId>com.github.retrooper</groupId>
+            <artifactId>packetevents-spigot</artifactId>
+            <version>2.6.0</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>

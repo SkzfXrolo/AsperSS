@@ -8,7 +8,9 @@ website: https://argusprojects.com
 description: Argus anti-cheat — Screen Share + detector de hacks (LuckyPerms compatible)
 
 # LuckyPerms se hookea automaticamente: usamos hasPermission() de Bukkit y LP responde.
-softdepend: [LuckyPerms]
+# packetevents (Pack 47) habilita anti-cheat packet-based (Grim/Polar level).
+# Sin el plugin instalado, ArgusMC sigue funcionando con AnticheatListener Bukkit-based.
+softdepend: [LuckyPerms, packetevents]
 
 commands:
   argus:
