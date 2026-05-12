@@ -1,0 +1,11 @@
+title: Argus Suspicious Admin Activity
+id: 0f2f-argus-002
+status: experimental
+logsource:
+  product: web
+detection:
+  selection:
+    event: admin_action
+    outside_business_hours: true
+  condition: selection
+level: medium

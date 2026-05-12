@@ -1,0 +1,11 @@
+title: Argus Unauthorized API Key Use
+id: 0f2f-argus-004
+status: experimental
+logsource:
+  product: web
+detection:
+  selection:
+    event: api_key_auth
+    unexpected_ip: true
+  condition: selection
+level: high

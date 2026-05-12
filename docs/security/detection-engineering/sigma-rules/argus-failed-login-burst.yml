@@ -1,0 +1,10 @@
+title: Argus Failed Login Burst
+id: 0f2f-argus-001
+status: experimental
+logsource:
+  product: web
+detection:
+  selection:
+    event: login_failed
+  condition: selection
+level: high

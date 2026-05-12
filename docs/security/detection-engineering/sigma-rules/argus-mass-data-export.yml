@@ -1,0 +1,11 @@
+title: Argus Mass Data Export
+id: 0f2f-argus-003
+status: experimental
+logsource:
+  product: web
+detection:
+  selection:
+    event: data_export
+    rows_exported: ">10000"
+  condition: selection
+level: high

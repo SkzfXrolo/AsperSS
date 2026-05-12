@@ -1,0 +1,13 @@
+title: Argus Plugin Tampering
+id: 0f2f-argus-005
+status: experimental
+logsource:
+  product: endpoint
+detection:
+  selection:
+    event: plugin_state_change
+    action|contains:
+      - uninstall
+      - forced_restart
+  condition: selection
+level: high
