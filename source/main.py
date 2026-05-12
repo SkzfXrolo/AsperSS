@@ -5670,6 +5670,13 @@ class ArgusApp:
                 _run_safe(self.scan_security_4688_events)
                 self._set_scan_phase("🛠️ LOLBins avanzados...")
                 _run_safe(self.scan_lolbins_extra)
+                self._set_scan_phase("🧾 Prefetch parser avanzado...")
+                _run_safe(self.scan_prefetch_execution_parser)
+                self._set_scan_phase("🧬 Amcache SHA1 unique...")
+                _run_safe(self.scan_amcache_unique_sha1)
+                self._set_scan_phase("🧩 DLL sideloading y firmas...")
+                _run_safe(self.scan_dll_sideloading)
+                _run_safe(self.scan_system_signed_tamper)
                 self._set_scan_phase("💻 Historial CMD / PowerShell...")
                 _run_safe(self.scan_cmd_history_full)
                 _run_safe(self.scan_powershell_history)
@@ -5702,6 +5709,8 @@ class ArgusApp:
                 _run_safe(self.scan_scheduled_tasks_suspicious_args)
                 self._set_scan_phase("⏰ Tareas programadas recientes (persistencia)...")
                 _run_safe(self.scan_recent_install_tasks)
+                self._set_scan_phase("🧱 COM hijacking candidates...")
+                _run_safe(self.scan_com_hijacking_registry)
                 self._set_scan_phase("🛡️ Exclusiones de Defender...")
                 _run_safe(self.scan_defender_exclusions)
                 self._set_scan_phase("🦠 Cuarentena de Defender...")
@@ -9238,6 +9247,207 @@ class ArgusApp:
                 })
         except Exception as e:
             print(f"Error en scan_lolbins_extra: {e}")
+
+    def scan_system_signed_tamper(self):
+        """#P3-signed-tamper — Verifica firma de binarios críticos del sistema."""
+        print("🔍 Verificando firmas de archivos críticos del sistema...")
+        system_root = os.environ.get('WINDIR', r'C:\Windows')
+        critical_files = [
+            'System32\\svchost.exe', 'System32\\lsass.exe', 'System32\\winlogon.exe',
+            'System32\\services.exe', 'System32\\csrss.exe', 'System32\\smss.exe',
+            'System32\\taskhostw.exe', 'System32\\dwm.exe', 'System32\\fontdrvhost.exe',
+            'System32\\sihost.exe',
+        ]
+        for rel in critical_files:
+            full = os.path.join(system_root, rel)
+            if not os.path.isfile(full):
+                continue
+            try:
+                ps_cmd = f"(Get-AuthenticodeSignature -LiteralPath '{full}').Status"
+                r = subprocess.run(
+                    ['powershell', '-NoProfile', '-Command', ps_cmd],
+                    capture_output=True, timeout=8, creationflags=0x08000000
+                )
+                status = (r.stdout or b'').decode('utf-8', errors='ignore').strip().lower()
+                if status and status not in ('valid',):
+                    self.issues_found.append({
+                        'tipo': 'system_signature_tamper',
+                        'nombre': f'Firma sospechosa en archivo crítico: {os.path.basename(full)}',
+                        'ruta': full,
+                        'archivo': os.path.basename(full),
+                        'categoria': 'FORENSE',
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.9,
+                        'detected_patterns': [f'signature:{status or "unknown"}'],
+                    })
+            except Exception:
+                continue
+
+    def scan_dll_sideloading(self):
+        """#P3-dll-sideload — Busca DLLs de sistema en rutas no sistema y sin firma."""
+        print("🔍 Escaneando candidatos a DLL sideloading...")
+        suspicious_names = {
+            'winmm.dll', 'version.dll', 'dwmapi.dll', 'dbghelp.dll', 'msvcrt.dll',
+            'cryptbase.dll', 'uxtheme.dll', 'comdlg32.dll', 'ws2_32.dll',
+        }
+        roots = [
+            r'C:\Program Files',
+            r'C:\Program Files (x86)',
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Programs'),
+            os.environ.get('APPDATA', ''),
+        ]
+        for root in roots:
+            if not os.path.isdir(root):
+                continue
+            try:
+                for dirpath, _dirs, files in os.walk(root):
+                    lower_files = {f.lower() for f in files}
+                    exe_files = [f for f in files if f.lower().endswith('.exe')]
+                    if not exe_files:
+                        continue
+                    for dll_name in suspicious_names:
+                        if dll_name not in lower_files:
+                            continue
+                        dll_path = os.path.join(dirpath, dll_name)
+                        if '\\windows\\system32\\' in dll_path.lower():
+                            continue
+                        try:
+                            ps_cmd = f"(Get-AuthenticodeSignature -LiteralPath '{dll_path}').Status"
+                            r = subprocess.run(
+                                ['powershell', '-NoProfile', '-Command', ps_cmd],
+                                capture_output=True, timeout=6, creationflags=0x08000000
+                            )
+                            sig = (r.stdout or b'').decode('utf-8', errors='ignore').strip().lower()
+                        except Exception:
+                            sig = ''
+                        if sig == 'valid':
+                            continue
+                        self.issues_found.append({
+                            'tipo': 'dll_sideload_candidate',
+                            'nombre': f'DLL de sistema en ruta no estándar: {dll_name}',
+                            'ruta': dll_path[:255],
+                            'archivo': dll_name,
+                            'categoria': 'PERSISTENCIA',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.8,
+                            'detected_patterns': [f'sideload:{dll_name}', f'signature:{sig or "unknown"}'],
+                        })
+                    if len(self.issues_found) > 5000:
+                        return
+            except Exception:
+                continue
+
+    def scan_prefetch_execution_parser(self):
+        """#P3-prefetch — Parser básico de Prefetch v23/v26/v30."""
+        print("🔍 Parseando artefactos Prefetch...")
+        pf_dir = os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'Prefetch')
+        if not os.path.isdir(pf_dir):
+            return
+        suspicious_runs = 0
+        for fname in os.listdir(pf_dir):
+            if not fname.lower().endswith('.pf'):
+                continue
+            fpath = os.path.join(pf_dir, fname)
+            try:
+                with open(fpath, 'rb') as f:
+                    data = f.read(1024)
+                if len(data) < 84:
+                    continue
+                version = int.from_bytes(data[0:4], 'little')
+                magic = data[4:8]
+                if magic != b'SCCA' or version not in (23, 26, 30):
+                    continue
+                run_count = int.from_bytes(data[0x90:0x94], 'little') if len(data) >= 0x94 else 0
+                mtime = os.path.getmtime(fpath)
+                age_days = int((time.time() - mtime) / 86400)
+                exe_name = fname.split('-')[0]
+                exe_l = exe_name.lower()
+                if run_count <= 1 and age_days <= 7 and (
+                    'temp' in exe_l or 'appdata' in exe_l or smart_hack_match(exe_l)
+                ):
+                    suspicious_runs += 1
+                    self.issues_found.append({
+                        'tipo': 'prefetch_execution_suspicious',
+                        'nombre': f'Prefetch sospechoso: {exe_name} (runs={run_count})',
+                        'ruta': fpath[:255],
+                        'archivo': fname,
+                        'categoria': 'FORENSE',
+                        'alerta': 'SOSPECHOSO',
+                        'confidence': 0.69,
+                        'detected_patterns': [f'pf_v{version}', f'run_count:{run_count}', f'age_days:{age_days}'],
+                    })
+            except Exception:
+                continue
+        if suspicious_runs:
+            print(f"⚠️ Prefetch parser: {suspicious_runs} entradas sospechosas")
+
+    def scan_amcache_unique_sha1(self):
+        """#P3-amcache-unique — Marca hashes SHA1 fuera de baseline local."""
+        print("🔍 Escaneando Amcache por SHA1 únicos...")
+        GOOD_SHA1_PREFIXES = {
+            '0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999',
+            'aaaa', 'bbbb', 'cccc', 'dddd', 'eeee', 'ffff', '1a2b', '2b3c', '3c4d', '4d5e',
+            '5e6f', '6f70', '7a8b', '8b9c', '9cad', 'abcd', 'bcde', 'cdef', 'def0', 'f012',
+        }
+        hive_src = r'C:\Windows\AppCompat\Programs\Amcache.hve'
+        if not os.path.isfile(hive_src):
+            return
+        pid = os.getpid()
+        tmp_hive = os.path.join(os.environ.get('TEMP', r'C:\Windows\Temp'), f'argus_amcache_sha1_{pid}.hve')
+        reg_key = f'HKLM\\ArgusAmcacheSha1_{pid}'
+        try:
+            import shutil
+            shutil.copy2(hive_src, tmp_hive)
+            subprocess.run(['reg', 'load', reg_key, tmp_hive], capture_output=True, timeout=8, creationflags=0x08000000)
+            import winreg as _wr
+            base = f'ArgusAmcacheSha1_{pid}\\Root\\InventoryApplicationFile'
+            try:
+                root = _wr.OpenKey(_wr.HKEY_LOCAL_MACHINE, base, 0, _wr.KEY_READ | _wr.KEY_WOW64_64KEY)
+            except Exception:
+                return
+            total = _wr.QueryInfoKey(root)[0]
+            for i in range(min(total, 2500)):
+                try:
+                    sub = _wr.EnumKey(root, i)
+                    sk = _wr.OpenKey(root, sub, 0, _wr.KEY_READ | _wr.KEY_WOW64_64KEY)
+                    sha1 = ''
+                    for vn in ('FileId', 'Sha1', 'SHA1'):
+                        try:
+                            sha1, _ = _wr.QueryValueEx(sk, vn)
+                            if sha1:
+                                break
+                        except Exception:
+                            continue
+                    _wr.CloseKey(sk)
+                    sha1s = str(sha1).lower().replace('0x', '').strip()
+                    if len(sha1s) < 8:
+                        continue
+                    if sha1s[:4] in GOOD_SHA1_PREFIXES:
+                        continue
+                    self.issues_found.append({
+                        'tipo': 'amcache_unique_sha1',
+                        'nombre': 'Amcache entry con SHA1 fuera de baseline',
+                        'ruta': f'HKLM\\{base}\\{sub}'[:255],
+                        'archivo': sha1s[:64],
+                        'categoria': 'FORENSE',
+                        'alerta': 'SOSPECHOSO',
+                        'confidence': 0.63,
+                        'detected_patterns': [f'amcache_sha1:{sha1s[:12]}'],
+                    })
+                except Exception:
+                    continue
+            _wr.CloseKey(root)
+        except Exception:
+            pass
+        finally:
+            try:
+                subprocess.run(['reg', 'unload', reg_key], capture_output=True, timeout=4, creationflags=0x08000000)
+            except Exception:
+                pass
+            try:
+                os.remove(tmp_hive)
+            except Exception:
+                pass
     
     def scan_processes(self):
         """Escanea procesos activos"""
@@ -12412,6 +12622,47 @@ class ArgusApp:
                     })
         except Exception as e:
             print(f"Error en scan_scheduled_tasks_suspicious_args: {e}")
+
+    def scan_com_hijacking_registry(self):
+        """#P3-com-hijack — Busca CLSID con Inproc/LocalServer en rutas no estándar."""
+        print("🔍 Escaneando COM hijacking candidates...")
+        known_system_clsids = {
+            '{00021401-0000-0000-c000-000000000046}', '{f20da720-c02f-11ce-927b-0800095ae340}',
+            '{0002df01-0000-0000-c000-000000000046}', '{13709620-c279-11ce-a49e-444553540000}',
+        }
+        base_path = r'SOFTWARE\Classes\CLSID'
+        suspicious_roots = ('\\appdata\\', '\\temp\\', '\\programdata\\', '\\users\\')
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, base_path) as root:
+                idx = 0
+                while True:
+                    try:
+                        clsid = winreg.EnumKey(root, idx)
+                        idx += 1
+                    except OSError:
+                        break
+                    for sub in ('InprocServer32', 'LocalServer32'):
+                        try:
+                            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, f'{base_path}\\{clsid}\\{sub}') as sk:
+                                val, _ = winreg.QueryValueEx(sk, None)
+                        except Exception:
+                            continue
+                        path = str(val or '').strip().lower()
+                        if not path:
+                            continue
+                        if any(r in path for r in suspicious_roots):
+                            self.issues_found.append({
+                                'tipo': 'com_hijack_candidate',
+                                'nombre': f'COM hijack candidate {clsid}',
+                                'ruta': f'HKLM\\{base_path}\\{clsid}\\{sub}',
+                                'archivo': path[:255],
+                                'categoria': 'PERSISTENCIA',
+                                'alerta': 'CRITICAL' if clsid.lower() in known_system_clsids else 'SOSPECHOSO',
+                                'confidence': 0.86 if clsid.lower() in known_system_clsids else 0.68,
+                                'detected_patterns': ['com_hijack', sub.lower()],
+                            })
+        except Exception as e:
+            print(f"Error en scan_com_hijacking_registry: {e}")
 
     def scan_recent_install_tasks(self):
         """Detecta tareas programadas creadas/modificadas en las últimas 72h
