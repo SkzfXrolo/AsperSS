@@ -20065,17 +20065,22 @@ class ArgusApp:
                 try:
                     with open(db_path, 'rb') as f:
                         data = f.read(min(os.path.getsize(db_path), 8 * 1024 * 1024))
-                    sig_offsets = [i for i in range(0, len(data) - 4) if data[i:i+4] == b'CMMM']
-                    if not sig_offsets:
-                        continue
-                    for off in sig_offsets[:600]:
+                    scanned = 0
+                    off = 0
+                    while True:
+                        off = data.find(b'CMMM', off)
+                        if off < 0 or scanned >= 600:
+                            break
+                        scanned += 1
                         try:
                             entry_size = int.from_bytes(data[off+8:off+12], 'little') if off+12 <= len(data) else 0
                             id_size = int.from_bytes(data[off+16:off+20], 'little') if off+20 <= len(data) else 0
                             if id_size <= 0 or id_size > 1024:
+                                off += 4
                                 continue
                             id_off = off + 24
                             if id_off + id_size > len(data):
+                                off += 4
                                 continue
                             raw_id = data[id_off:id_off + id_size]
                             try:
@@ -20090,7 +20095,8 @@ class ArgusApp:
                                     hits.append((os.path.basename(db_path), ident_clean[:120], term))
                                     break
                         except Exception:
-                            continue
+                            pass
+                        off += 4
                 except (PermissionError, OSError):
                     continue
             seen = set()
