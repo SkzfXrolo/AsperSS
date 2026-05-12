@@ -115,6 +115,7 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
             case "reload":           handleAdminReload(sender);          break;
             case "debug":            handleAdminDebug(sender, args);     break;
             case "testpacket":       handleAdminTestPacket(sender, args); break;
+            case "clearviolations":  handleAdminClear(sender, args);     break;
             case "help":             sendAdminHelp(sender);              break;
             default:
                 sender.sendMessage(msg.prefix() + Messages.color("&cSub-comando admin desconocido: &f" + sub));
@@ -237,6 +238,50 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(msg.prefix() + Messages.color(
             "&aTest packet violation emitida &7para &e" + target.getName()
                 + " &7nivel &b" + level.name() + "&7. Mira el chat del staff y los logs."));
+    }
+
+    /**
+     * #506 — /argus admin clearviolations [jugador].
+     *
+     * <p>Sin argumento: limpia las violations de TODOS los jugadores online y
+     * resetea los buffers transitorios del PacketDataStore para cada uno.
+     * Con jugador: limpia solo a ese.
+     *
+     * <p>Util al ajustar thresholds en caliente o al recuperarse de un bug
+     * que dejo violations acumuladas falsas.
+     */
+    private void handleAdminClear(CommandSender sender, String[] args) {
+        Messages msg = plugin.getMessages();
+        var bootstrap = plugin.getPacketEventsBootstrap();
+
+        if (args.length >= 3) {
+            String name = args[2];
+            Player target = Bukkit.getPlayerExact(name);
+            if (target == null) {
+                msg.sendPrefixed(sender, "player_not_found", Messages.ph("player", name));
+                return;
+            }
+            plugin.getViolationManager().clearViolations(target.getUniqueId());
+            if (bootstrap != null && bootstrap.getDataStore() != null) {
+                var s = bootstrap.getDataStore().peek(target.getUniqueId());
+                if (s != null) s.clearTransient();
+            }
+            sender.sendMessage(msg.prefix() + Messages.color(
+                "&aViolations limpiadas para &e" + target.getName() + "&a."));
+            return;
+        }
+
+        int count = 0;
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            plugin.getViolationManager().clearViolations(p.getUniqueId());
+            if (bootstrap != null && bootstrap.getDataStore() != null) {
+                var s = bootstrap.getDataStore().peek(p.getUniqueId());
+                if (s != null) s.clearTransient();
+            }
+            count++;
+        }
+        sender.sendMessage(msg.prefix() + Messages.color(
+            "&aViolations limpiadas para &e" + count + " &ajugadores online."));
     }
 
     /**
