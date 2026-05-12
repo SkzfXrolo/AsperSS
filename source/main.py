@@ -15134,13 +15134,33 @@ class ArgusApp:
                         'inject', 'ghost', 'autoclicker', 'autoclick', 'xray', 'esp']
         DANGEROUS_PERMS = {'<all_urls>', 'webRequest', 'webRequestBlocking',
                            'nativeMessaging', 'debugger', 'proxy'}
+        SAFE_EXTENSION_IDS = {
+            # uBlock / privacy / password managers / devtools
+            'cjpalhdlnbpafiamejdnhcphjbkeiagm', 'ghbmnnjooekpmoecnnnilnnbdlolhkhi',
+            'nngceckbapebfimnlniiiahkandclblb', 'aeblfdkhhhdcdjpifhhbdiojplfjncoa',
+            'eimadpbcbfnmbkopoojfekhnkhdbieeh', 'fmkadmapgofadopljbjfkapdkoienihi',
+            'gighmmpiobklfepjocnamgkkbiglidom', 'aapbdbdomjkkjkaonfhkkikfgjllcleb',
+        }
 
-        # Chrome/Chromium extensions
-        chrome_ext_dirs = [
-            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Google', 'Chrome', 'User Data', 'Default', 'Extensions'),
-            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'Edge', 'User Data', 'Default', 'Extensions'),
-            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'BraveSoftware', 'Brave-Browser', 'User Data', 'Default', 'Extensions'),
+        # Chrome/Chromium extensions en todos los perfiles (Default + Profile *)
+        chrome_user_data_roots = [
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Google', 'Chrome', 'User Data'),
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'Edge', 'User Data'),
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'BraveSoftware', 'Brave-Browser', 'User Data'),
         ]
+        chrome_ext_dirs = []
+        for root in chrome_user_data_roots:
+            if not os.path.isdir(root):
+                continue
+            try:
+                for prof in os.listdir(root):
+                    prof_l = prof.lower()
+                    if prof_l == 'default' or prof_l.startswith('profile '):
+                        pext = os.path.join(root, prof, 'Extensions')
+                        if os.path.isdir(pext):
+                            chrome_ext_dirs.append(pext)
+            except OSError:
+                continue
         found = 0
         for ext_base in chrome_ext_dirs:
             if not os.path.isdir(ext_base):
@@ -15149,6 +15169,8 @@ class ArgusApp:
                 for ext_id in os.listdir(ext_base):
                     ext_path = os.path.join(ext_base, ext_id)
                     if not os.path.isdir(ext_path):
+                        continue
+                    if ext_id in SAFE_EXTENSION_IDS:
                         continue
                     # Buscar manifest.json en la versión más reciente
                     manifest_path = None
