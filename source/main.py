@@ -9175,6 +9175,7 @@ class ArgusApp:
             keywords = (' -enc ', 'frombase64string', 'mshta ', 'regsvr32 ', 'certutil ', 'powershell -w hidden')
             matched = [k.strip() for k in keywords if k in out]
             if matched:
+                event_hits = sum(out.count(m) for m in matched)
                 self.issues_found.append({
                     'tipo': 'security_4688_suspicious',
                     'nombre': 'Security 4688 con argumentos de proceso sospechosos',
@@ -9182,8 +9183,9 @@ class ArgusApp:
                     'archivo': 'EventID 4688',
                     'categoria': 'FORENSE',
                     'alerta': 'SOSPECHOSO',
-                    'confidence': 0.76,
+                    'confidence': min(0.9, 0.70 + min(event_hits, 10) * 0.02),
                     'detected_patterns': [f'4688:{m}' for m in matched[:5]],
+                    'extra': {'matched_events': int(event_hits)},
                 })
         except Exception:
             pass
