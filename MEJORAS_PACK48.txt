@@ -1,0 +1,1469 @@
+═══════════════════════════════════════════════════════════════════════════════
+                  ARGUS PROJECTS — PACK 48 (V2 BACKLOG)
+                  720 mejoras post-Pack 47 (9 sectores x 80 items)
+                  Estado: Backlog priorizable
+                  Generado: 2026-05-12 04:58 UTC-3
+                  Versión base: Pack 47 (commit 1ec248f)
+═══════════════════════════════════════════════════════════════════════════════
+
+NOTA DE LECTURA
+───────────────
+Formato por ítem:
+  [STATUS] N. (Pn, ~Tm) Título — descripción breve. DONE: criterio.
+
+Símbolos STATUS:
+  [ ]      pendiente
+  [X]      hecho
+  [-]      DEFERRED (razón técnica explícita)
+  [WIP]    en progreso
+  [REVIEW] hecho pero requiere validación del owner
+
+Prioridades:
+  P0       bug crítico / pérdida de funcionalidad / data corruption / security
+  P1       alto valor user / cierra deuda técnica / desbloquea otra feature
+  P2       mejora incremental sólida
+  P3       polish / nice-to-have / micro-optim
+
+Tiempos estimados: minutos (~Tm). >120m se considera "épica" y se subdivide
+durante la ejecución. Los items con (~Em) son "épicas" sin estimar todavía.
+
+Sectores (9 x 80 = 720):
+   1) IA / Machine Learning           80
+   2) Scanner (Windows .exe)          80
+   3) Filtro / Anti-False-Positive    80
+   4) Doble-Scanner (móvil + desktop) 80
+   5) UI / UX (panel + super-admin)   80
+   6) Argus Oracle (AI judge + asst)  80
+   7) Plugin Minecraft                80
+   8) Android (APK + PWA + mobile)    80
+   9) Linux (build + distribución)    80
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  SECTOR 1/9 — IA / MACHINE LEARNING                                    80 ítems
+═══════════════════════════════════════════════════════════════════════════════
+Foco: LogReg + KNN + Markov + Bootstrap + Labels + Heurística + Drift + XAI.
+
+[ ]   1. (P1, ~30m) Aumentar el bootstrap dataset de 1k → 5k samples con más
+        diversidad de patrones (Vape, Liquid, Salhack, Inertia, Wurst, Meteor).
+        DONE: ai_training_history muestra n_samples ≥5000 tras retrain inicial.
+[ ]   2. (P1, ~25m) Persistir vectores de features en disk (.npz) para no
+        recalcular desde DB en cada retrain. DONE: retrain con 5k <10s.
+[ ]   3. (P0, ~45m) Bug: ensemble_predict ignora KNN cuando n_profiles<10.
+        Loggear "knn_skipped reason" en evidence para auditar. DONE: log visible.
+[ ]   4. (P1, ~20m) Métrica calibration_brier_score en el panel AI Health
+        además de P/R/F1. DONE: tile nuevo "Brier" con value y color por umbral.
+[ ]   5. (P1, ~30m) Confusion matrix granular: TP/FP/FN/TN separada para cada
+        nivel (LOW/MID/HIGH/CRITICAL). DONE: matriz 4x4 en panel.
+[ ]   6. (P2, ~40m) Feature importance via permutation test (no solo coef
+        de LogReg). DONE: bar chart en panel con top 20 features.
+[ ]   7. (P2, ~25m) Whitelist de features con varianza casi-cero (auto-detect).
+        DONE: stats.csv excluye features con var<1e-6.
+[ ]   8. (P1, ~35m) Cross-validation k-fold (k=5) automático en cada retrain
+        + reportar mean/std de cada métrica. DONE: ai_training_history.cv_std.
+[ ]   9. (P2, ~30m) Stratified split por company_id (no romper isolation por
+        company en CV). DONE: cada fold contiene >=2 companies.
+[ ]  10. (P0, ~40m) Bug potential leakage: features incluyen "scan_id"
+        modulo 1k. Si es así, removerlo. DONE: feature_names.txt sin scan_id.
+
+[ ]  11. (P1, ~50m) Auto-tune learning rate (LogReg SGD) por grid simple
+        [0.001, 0.01, 0.1] al primer retrain con n_samples≥1000. DONE: log
+        con lr seleccionado.
+[ ]  12. (P1, ~30m) L2 regularization auto-tune lambda [0.001, 0.01, 0.1, 1.0]
+        por CV simple. DONE: lambda final logueado.
+[ ]  13. (P2, ~25m) Early stopping en SGD si loss no mejora en 5 epochs.
+        DONE: epoch_stop logueado.
+[ ]  14. (P2, ~30m) Mini-batch size auto (n_samples<1k → 32; <10k → 128;
+        else 512). DONE: log con batch_size.
+[ ]  15. (P1, ~40m) Class imbalance handling: SMOTE-like upsampling para clase
+        minoritaria si ratio >1:4. DONE: log con upsample_count.
+[ ]  16. (P2, ~20m) Class weights inverse-frequency como alternativa al
+        upsample. Config flag `ai.imbalance_strategy`. DONE: config respeta.
+[ ]  17. (P1, ~35m) ROC curve + AUC en panel AI Health. DONE: AUC tile +
+        gráfico SVG.
+[ ]  18. (P1, ~30m) Precision-Recall curve cuando AUC<0.85 (más informativa).
+        DONE: PR curve render solo si AUC<0.85.
+[ ]  19. (P2, ~25m) Threshold sweep: visualizar P/R/F1 vs threshold (slider).
+        DONE: slider interactivo en panel.
+[ ]  20. (P1, ~30m) Optimal threshold por Youden's J + recomendación. DONE:
+        endpoint /api/ai/suggest-threshold devuelve J-optimal.
+
+[ ]  21. (P0, ~45m) Bug: temporal Markov no resetea estado per-player al
+        cambiar de sesión (re-join). DONE: reset on PlayerJoin event.
+[ ]  22. (P2, ~30m) Markov: orden configurable (1,2,3) — default sigue siendo
+        1. DONE: config ai.markov.order respetado.
+[ ]  23. (P1, ~40m) Hidden Markov Model alternativo (estado latente) como
+        opción experimental tras Markov simple. DONE: HMM disponible si
+        `ai.use_hmm=true`.
+[ ]  24. (P2, ~25m) Markov: matriz de transición exportable a CSV para análisis.
+        DONE: /api/ai/markov/matrix devuelve CSV.
+[ ]  25. (P1, ~35m) KNN: distancia configurable (cosine/euclidean/manhattan)
+        + benchmark inline. DONE: log con metric usada.
+[ ]  26. (P1, ~40m) KNN: weighted-by-distance vs uniform. DONE: flag
+        `ai.knn.weight` respetado.
+[ ]  27. (P2, ~30m) KNN: k auto-tuned (sqrt(n) clamp [3,15]). DONE: k_used log.
+[ ]  28. (P2, ~50m) KNN: aproximate NN con LSH si n_profiles>5k.
+        DONE: LSH activado y benchmark mejora >3x.
+[ ]  29. (P1, ~25m) Embedding de features con PCA (dim=20) opcional. DONE:
+        feature_set_v2 disponible si `ai.use_pca=true`.
+[ ]  30. (P3, ~60m) UMAP embedding 2D visualizable en panel para staff.
+        DONE: scatter plot 2D con players coloreados por verdict.
+
+[ ]  31. (P1, ~30m) Heurística fallback: si todos los modelos ML devuelven
+        score<0.2 y heuristic>0.7, dejar gana heuristic (anti-underfit).
+        DONE: log "heuristic_override" cuando aplica.
+[ ]  32. (P2, ~25m) Heurística: añadir factor "time_since_last_violation"
+        decay exponencial. DONE: factor visible en evidence.
+[ ]  33. (P2, ~30m) Heurística: factor "staff_consensus" — si N staff
+        confirma hack, boost score. DONE: factor visible.
+[ ]  34. (P1, ~40m) Online learning: actualizar pesos LogReg con cada
+        verdict confirmado (SGD step) sin retrain completo. DONE:
+        weights cambian tras verdict en <1s.
+[ ]  35. (P2, ~35m) Active learning: priorizar pedir verdict a staff para
+        decisiones con confidence ∈ [0.45, 0.55] (uncertainty sampling).
+        DONE: panel destaca esos casos con badge "tu juicio cuenta".
+[ ]  36. (P2, ~30m) Concept drift detection (Page-Hinkley test) sobre la
+        precisión rolling. DONE: alert si drift detectado.
+[ ]  37. (P1, ~25m) Auto-retrain trigger: cada 200 verdicts nuevos o drift>0.3
+        o 30 días. DONE: trigger documentado y testable.
+[ ]  38. (P2, ~30m) Champion/challenger: train 2 modelos paralelos, comparar
+        métricas, promover challenger si mejora >5% en F1. DONE: state
+        en ai_model_state.champion vs challenger.
+[ ]  39. (P3, ~50m) Bandit (Thompson sampling) sobre umbrales: explora
+        umbrales con prob proporcional a su perf. DONE: experimento activo
+        tras flag `ai.bandit_thresholds=true`.
+[ ]  40. (P2, ~25m) Versionado de modelo (model_version = sha256(weights+ts))
+        + log de versión en cada decisión. DONE: decision.model_version
+        en DB.
+
+[ ]  41. (P0, ~30m) Bug: cuando staff_role='owner' confirma verdict, ai_feedback
+        no se persiste porque falta company_id en INSERT. DONE: fix + test.
+[ ]  42. (P1, ~25m) Feedback explícito staff: botones "AI acertó" / "AI falló"
+        en cada decisión del panel. DONE: feedback queda persistido.
+[ ]  43. (P2, ~30m) Feedback implícito: si staff banea/kickea, asumir AI
+        acertó (si AI dijo hack). DONE: implicit_feedback con flag.
+[ ]  44. (P2, ~35m) Comentario libre por feedback ("la AI no vio que estaba
+        usando elytra"). DONE: campo `note` opcional en /ai/feedback.
+[ ]  45. (P1, ~40m) Auto-labeling: añadir pipeline #13 — "fast verdict by
+        trusted staff (trust>80)" como label positivo de alta confianza.
+        DONE: argus_ai_labeler.label_from_fast_trusted.
+[ ]  46. (P2, ~30m) Auto-labeling pipeline #14: cross-server bans (jugador
+        baneado en >=2 servidores afiliados) → label cheater. DONE.
+[ ]  47. (P2, ~35m) Auto-labeling pipeline #15: chat-mention by other player
+        ("X está hackeando") como soft signal. DONE: weight=0.3.
+[ ]  48. (P3, ~30m) Labels: soporte para multi-label (cheater + cheat_type
+        ∈ killaura/reach/fly/etc). DONE: labels.cheat_type.
+[ ]  49. (P2, ~25m) Labels: outlier detection (IQR) en features para detectar
+        labels probablemente equivocados. DONE: anomaly_score en label.
+[ ]  50. (P1, ~30m) Label disagreement reconciliation: si 2 staffs dan
+        verdicts opuestos, marcar como "ambiguous", excluir del training.
+        DONE: ambiguous_excluded count en retrain log.
+
+[ ]  51. (P1, ~25m) Explainability: SHAP-like attribution para cada decisión
+        (cuáles features movieron el score). DONE: decision.shap_top5.
+[ ]  52. (P1, ~30m) Reasoning humanizado: incluir top-3 features en cada
+        explicación auto-generada. DONE: reasoning tiene
+        "por X (+0.4), Y (+0.3), Z (-0.1)".
+[ ]  53. (P2, ~25m) Counterfactual: "si hubiera tenido feature X<=Y, habría
+        sido clean". DONE: campo `counterfactual` en decision.
+[ ]  54. (P2, ~30m) Confidence intervals (bootstrap) sobre score. DONE:
+        decision.score_ci_low, score_ci_high.
+[ ]  55. (P2, ~25m) Modelo "honest" forest baseline (single tree depth=4)
+        para comparar contra ensemble. DONE: baseline.f1 en panel.
+[ ]  56. (P3, ~40m) Comparar contra random predictor + always-clean +
+        always-hack — sanity checks. DONE: 3 baselines en panel.
+[ ]  57. (P1, ~35m) Performance: profile de _train_models_for con 10k
+        samples — bottleneck en feature vector build. DONE: <5s.
+[ ]  58. (P1, ~30m) Inference batch: si llegan >5 ai_evaluate en 1s,
+        agrupar y procesar batch. DONE: latencia p99 <100ms.
+[ ]  59. (P2, ~40m) Cache de feature vectors per (player, hour) para
+        evitar recompute. DONE: hit ratio >70% en burst de 100 evals.
+[ ]  60. (P2, ~30m) Async I/O en _collect_training_dataset (no bloquear
+        request loop). DONE: thread pool de 4 workers.
+
+[ ]  61. (P0, ~30m) Bug: el bootstrap dataset usa np.random.seed(42) global
+        — colisiona con otros módulos. DONE: usar Generator local.
+[ ]  62. (P1, ~25m) Determinismo: seeds reproducibles per-train (logueadas).
+        DONE: ai_training_history.seed.
+[ ]  63. (P1, ~40m) Hyperparameter persistence: el modelo guarda su own
+        config (lr, lambda, k, etc) y se loadea desde ahí. DONE.
+[ ]  64. (P2, ~30m) Modelos versionados rotation (mantener últimos 5
+        modelos, rollback con un click). DONE: panel tiene dropdown
+        "rollback model".
+[ ]  65. (P1, ~35m) Shadow mode: nueva versión del modelo se evalúa en
+        paralelo pero no se aplica (compara). DONE: shadow_active flag.
+[ ]  66. (P2, ~30m) Drift gradual de feature distributions (KS-test) entre
+        train y prod cada 6h. DONE: drift_metrics en panel.
+[ ]  67. (P3, ~25m) Anomaly detection sobre vector de features (Isolation
+        Forest simple) para detectar inputs raros. DONE: outlier flag.
+[ ]  68. (P2, ~30m) Federated-like averaging: combinar modelos por company
+        si privacy lo requiere. DONE: stub + doc.
+[ ]  69. (P1, ~30m) Tracking de cuántas decisiones AI aceptó vs override
+        por staff: AI agreement rate. DONE: panel KPI "agreement %".
+[ ]  70. (P1, ~25m) Soft probabilities en plugin: en lugar de "ban", "kick"
+        binarios, mandar prob + nivel. DONE: api_response.prob.
+
+[ ]  71. (P2, ~30m) Multi-tenant: modelos por company opcionales (global
+        + per-company override). DONE: ai_models.company_id puede ser null.
+[ ]  72. (P2, ~25m) Cold-start protection: company sin data usa modelo
+        global hasta tener N>=100 verdicts. DONE: log "cold_start_global".
+[ ]  73. (P1, ~40m) Endpoint /api/ai/evaluate-batch para evaluar N players
+        en un solo request. DONE: latencia 10 players <500ms.
+[ ]  74. (P2, ~35m) Streaming verdict: WebSocket que pushea decision en
+        cuanto se evalúa. DONE: panel actualiza live.
+[ ]  75. (P3, ~50m) Backtesting: cargar dataset histórico, evaluar modelo
+        actual, mostrar accuracy histórica. DONE: endpoint
+        /api/ai/backtest.
+[ ]  76. (P2, ~30m) "Why was this missed?" — view de FPs/FNs con feature
+        delta vs train mean. DONE: panel sección "model gaps".
+[ ]  77. (P1, ~25m) Documentar el feature_set_v1 en docs/ai/features.md
+        con descripción + range + ejemplo. DONE: 55 features listed.
+[ ]  78. (P2, ~30m) Política de retención de ai_decisions (rotar después
+        de 180d). DONE: cron job + flag config.
+[ ]  79. (P2, ~25m) Backup automático del modelo (json+npz) cada 24h.
+        DONE: archivo en backups/ai/<date>.
+[ ]  80. (P0, ~45m) Test integral end-to-end: crear scan synth → evaluar →
+        AI emite decisión → feedback → retrain → re-evaluate → cambia.
+        DONE: scripts/tests/ai_e2e.py pasa.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  SECTOR 2/9 — SCANNER (Windows .exe)                                   80 ítems
+═══════════════════════════════════════════════════════════════════════════════
+Foco: precisión, performance, evasion-resistance, nuevos artefactos.
+
+[ ]  81. (P1, ~40m) Parser de SRUM (System Resource Usage Monitor) DB —
+        registra red/CPU por proceso (90 días). DONE: scan_srum_artifacts.
+[ ]  82. (P1, ~35m) WMI Repository — eventos WMI persistentes (técnica
+        Cobalt Strike pero reciclada por cheats). DONE: scan_wmi_persistence.
+[ ]  83. (P1, ~30m) AmcacheParser logic más profundo: leer InventoryDriverBinary
+        + InventoryDeviceContainer. DONE: scan_amcache_extended.
+[ ]  84. (P2, ~25m) ETW Session enumeration via wevtutil (logs no Event
+        Log). DONE: scan_etw_sessions.
+[ ]  85. (P1, ~40m) Prefetch ALL files (no solo .exe) + analizar archivos
+        referenciados (mucho hack carga DLLs sueltas). DONE: scan_prefetch_v2.
+[ ]  86. (P2, ~30m) Recent paths from Cortana SearchIndex DB. DONE:
+        scan_searchindex_recent.
+[ ]  87. (P1, ~35m) NTFS Object IDs (ObjectId tracking) — cheats borrados
+        pero hardlinks intactos. DONE: scan_ntfs_objectids.
+[ ]  88. (P0, ~25m) Bug: scan_amcache falla en Windows 11 25H2 (subkey
+        renamed). DONE: try both keys.
+[ ]  89. (P1, ~30m) Detección de XAML hijacking en .lnk recientes
+        (técnica para esconder paths). DONE: scan_lnk_xaml.
+[ ]  90. (P2, ~25m) Hash blacklist updateable desde server (fetch via
+        /api/scanner/hash-blacklist). DONE: panel admin actualiza lista.
+
+[ ]  91. (P1, ~40m) Process memory string scan (strings.exe-like) con
+        regex de hack-related (killaura/reach/aimbot/inject). DONE:
+        scan_memory_strings (solo procesos propios).
+[ ]  92. (P1, ~35m) DLL hijacking detection: enum loaded modules per
+        proceso, mismatch con expected path. DONE: scan_dll_hijack.
+[ ]  93. (P2, ~30m) Process hollowing detection: VirtualSize vs SizeOfImage
+        mismatch en módulos. DONE: scan_hollowing.
+[ ]  94. (P1, ~25m) Injected threads (CreateRemoteThread evidencia).
+        DONE: scan_remote_threads.
+[ ]  95. (P2, ~30m) Token impersonation enum (process tokens
+        difference vs user token). DONE: scan_token_impersonation.
+[ ]  96. (P1, ~35m) Network connections snapshot enumeración: conexiones
+        a IPs de servicios hack (lista mantenida). DONE: scan_net_blacklist.
+[ ]  97. (P2, ~40m) DNS cache enumeration (ipconfig /displaydns) match
+        contra TLDs sospechosos. DONE: scan_dns_cache.
+[ ]  98. (P2, ~25m) WinINET cookies — cookies de sitios hack (vape.lol,
+        liquidbounce.net, etc). DONE: scan_wininet.
+[ ]  99. (P2, ~30m) Chrome/Edge History DB: paginas visitadas con
+        hack-keywords. DONE: scan_browser_history.
+[ ]  100. (P3, ~25m) Browser extensions: extensión "X-Ray Helper" o
+        similar. DONE: scan_browser_extensions.
+
+[ ]  101. (P1, ~35m) Discord cache: imágenes/archivos compartidos
+        (.exe/.jar) en últimos 30d. DONE: scan_discord_cache.
+[ ]  102. (P2, ~30m) Telegram Desktop cache (lo mismo). DONE: scan_telegram_cache.
+[ ]  103. (P2, ~25m) WhatsApp Desktop sent files. DONE: scan_whatsapp.
+[ ]  104. (P1, ~40m) Steam VAC ban check (vía Steam community public API)
+        para tener trust signal cruzado. DONE: scan_steam_vac.
+[ ]  105. (P2, ~30m) Discord token (heurístico) — si está expuesto, alert
+        de op-sec (no es cheat pero es info). DONE: scan_discord_token.
+[ ]  106. (P1, ~35m) Minecraft Microsoft account history: cuentas usadas
+        en último mes. DONE: scan_mc_accounts.
+[ ]  107. (P2, ~25m) Java versions enumeradas: 4+ JDKs instaladas suele
+        indicar dev / hack-tester. DONE: scan_java_versions.
+[ ]  108. (P2, ~30m) Minecraft launcher_profiles.json: profiles con
+        nombres sospechosos. DONE: scan_mc_profiles.
+[ ]  109. (P1, ~35m) MultiMC / PrismLauncher instance dirs (alt launchers
+        que esconden mods custom). DONE: scan_alt_launchers.
+[ ]  110. (P2, ~25m) Lunar/Badlion mods folder (clients legítimos pero
+        con mods custom). DONE: scan_lunar_badlion.
+
+[ ]  111. (P1, ~40m) Performance: scan paralelo (ThreadPoolExecutor) sobre
+        scanners independientes. DONE: scan completo <90s.
+[ ]  112. (P1, ~35m) Cancel button funcional: el scanner respeta el cancel
+        sin dejar handles abiertos. DONE: cancel <2s.
+[ ]  113. (P2, ~30m) Progress granular: cada scanner reporta % propio.
+        DONE: progress bar avanza suavemente.
+[ ]  114. (P2, ~25m) Skip scanners según target (Steam absent → skip steam).
+        DONE: skip_logged.
+[ ]  115. (P1, ~30m) Memory footprint: actual ~250MB en picos, target <120MB.
+        DONE: psutil report.
+[ ]  116. (P2, ~25m) GC manual entre scanners pesados. DONE: gc.collect calls.
+[ ]  117. (P1, ~35m) Timeout per-scanner (max 15s) — log warn si excede.
+        DONE: timeout enforcement.
+[ ]  118. (P2, ~30m) Resume scan: si se cierra a la mitad, re-abrir desde
+        donde quedó. DONE: scan_state.json.
+[ ]  119. (P3, ~25m) Streaming results al server (no esperar al final).
+        DONE: chunks enviados cada 30s.
+[ ]  120. (P2, ~40m) Compresión del payload (zstd) antes de upload.
+        DONE: bandwidth -60%.
+
+[ ]  121. (P0, ~40m) Bug: scan_recycle_bin con archivos $R sin permisos
+        causa Exception no manejada. DONE: try/except + log warn.
+[ ]  122. (P0, ~30m) Bug: scan_vss tira UnicodeDecodeError en paths
+        con caracteres rusos. DONE: errors='replace'.
+[ ]  123. (P1, ~25m) Bug: scan_userassist no decodifica nombres con
+        emojis (Win11 los permite). DONE: utf-16 + lenient.
+[ ]  124. (P1, ~30m) Bug: scan_amcache deja `reg unload` colgado si el
+        proceso muere. DONE: signal handler.
+[ ]  125. (P1, ~25m) Bug: scan_processes ignora procesos con UAC virt
+        on. DONE: include_vrt=true.
+[ ]  126. (P0, ~35m) Race condition: 2 instances del scanner abiertos
+        simultáneamente corrompen el resultados.json. DONE: file lock.
+[ ]  127. (P1, ~30m) Detect AV interference (Defender bloqueando lecturas)
+        y log warning útil. DONE: defender_blocking warn.
+[ ]  128. (P1, ~25m) Auto-recovery: si scanner crashea, mandar mini-dump
+        + retry una vez. DONE: crash_count en logs.
+[ ]  129. (P2, ~30m) Self-update: scanner avisa si hay versión nueva
+        disponible (no auto-install). DONE: update_check.
+[ ]  130. (P2, ~35m) Telemetry opt-in: enviar perf stats anonimizadas
+        (no PII). DONE: telemetry.toml.
+
+[ ]  131. (P1, ~30m) Localización: scanner UI en EN/ES (i18n basic).
+        DONE: i18n.json con switch.
+[ ]  132. (P2, ~25m) Theme dark/light auto según Win10/11 setting.
+        DONE: scanner respeta SystemUsesLightTheme.
+[ ]  133. (P2, ~30m) "Why this was flagged?" hint per item en UI.
+        DONE: tooltip con explicación.
+[ ]  134. (P1, ~25m) Result preview antes de enviar: usuario revisa
+        qué se sube. DONE: preview window.
+[ ]  135. (P1, ~30m) Confirmar "consentimiento" expreso antes de scan
+        (texto legal corto). DONE: checkbox required.
+[ ]  136. (P2, ~25m) Botón "Exportar JSON" del resultado offline.
+        DONE: archivo .argus-scan.
+[ ]  137. (P2, ~30m) Drag-and-drop de archivos para análisis manual
+        (.jar/.exe sospechoso). DONE: file_drop area.
+[ ]  138. (P1, ~35m) Auto-detect de tampering del scanner (hash de su
+        propio .exe vs el server). DONE: self_hash_check.
+[ ]  139. (P2, ~25m) Audit log local de scans realizados (no solo server).
+        DONE: %APPDATA%/Argus/audit.log.
+[ ]  140. (P3, ~30m) Modo "stealth" para staff escaneando otro staff
+        (no notifica al target). DONE: --stealth flag.
+
+[ ]  141. (P1, ~40m) Doble-canal: subir resultados via WebSocket si HTTP
+        falla. DONE: fallback ws documented.
+[ ]  142. (P2, ~30m) Retry con backoff exponencial al subir. DONE: 3 retries
+        con backoff 1s/3s/9s.
+[ ]  143. (P1, ~35m) Encriptación E2E del payload (AES-GCM con key
+        derivada del token). DONE: payload encrypted en transit.
+[ ]  144. (P2, ~25m) Compresión + encriptación combinadas. DONE.
+[ ]  145. (P2, ~30m) Validar TLS pinning con cert de asperss.onrender.com.
+        DONE: cert_pin.json embedded.
+[ ]  146. (P1, ~30m) Timeout de upload (30s) + reanudación con upload
+        chunked. DONE: chunk_size=512KB.
+[ ]  147. (P2, ~25m) Si el server está caído, guardar payload local y
+        reenviar cuando vuelva (queue). DONE: queue/*.argus-pending.
+[ ]  148. (P1, ~35m) Si la queue >= 5, alertar al usuario (server no
+        responde por X tiempo). DONE: notification.
+[ ]  149. (P2, ~30m) Sign del payload (HMAC-SHA256) para detectar
+        tampering en tránsito. DONE: signature en headers.
+[ ]  150. (P3, ~40m) Endpoint del server para validar quote/limit del
+        scanner antes del upload (avoid wasted compute). DONE.
+
+[ ]  151. (P1, ~30m) ML-augmented scanner: features locales (proc count,
+        registry entropy) → mini-model on-device. DONE: model.pkl
+        embedded.
+[ ]  152. (P2, ~40m) On-device YARA-like signature scan (simple) sobre
+        .jar files en MultiMC/Lunar. DONE: yara_rules.json.
+[ ]  153. (P2, ~35m) Behavior baseline: comparar scan actual vs scan
+        previo del mismo PC (si existe). DONE: delta_report.
+[ ]  154. (P3, ~30m) "Twin scan" mode: 2 scans con 30s entre medio,
+        diff procesos. DONE: --twin flag.
+[ ]  155. (P2, ~25m) Hash de cada .jar mod en .minecraft/mods + envío
+        al server para cross-check. DONE: jar_hashes en payload.
+[ ]  156. (P1, ~30m) PE header analysis básico (firma digital, sections
+        sospechosas). DONE: pe_metadata en payload.
+[ ]  157. (P2, ~25m) Strings extraction de .dll sospechosas (top 500
+        ASCII strings). DONE: strings en payload.
+[ ]  158. (P2, ~30m) Yara rule: "AutoclickerLib_v3" patterns conocidos.
+        DONE: rule presente y testeable.
+[ ]  159. (P3, ~40m) Cuckoo-like sandbox mini (sin VM): ejecutar .jar
+        en JVM aislada, ver classes loaded. DONE: stub + doc.
+[ ]  160. (P2, ~25m) Compare vs OpenSource hack repos (GitHub API): si
+        un .jar matches hash conocido. DONE: github_oss_check.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  SECTOR 3/9 — FILTRO / ANTI-FALSE-POSITIVE                             80 ítems
+═══════════════════════════════════════════════════════════════════════════════
+Foco: whitelist inteligente, contexto, versioning, bayesian, staff signals.
+
+[ ]  161. (P0, ~25m) Bug: filter_legit ignora ruta con backslash escapado
+        (`\\` literal vs `\`). DONE: normalize_path.
+[ ]  162. (P1, ~30m) Whitelist por categoría: launcher / mod-loader /
+        optimization / dev-tool / streaming. DONE: categories en
+        whitelist.json.
+[ ]  163. (P1, ~35m) Whitelist version-aware: PrismLauncher 9.0 vs 8.0
+        tienen estructura distinta. DONE: lookup por (name, version).
+[ ]  164. (P1, ~30m) Whitelist con timestamp: items añadidos >180d sin
+        verificar se marcan "stale". DONE: stale flag visible.
+[ ]  165. (P1, ~25m) Whitelist por hash exacto vs nombre pattern (más
+        seguro). DONE: hash_whitelist.json.
+[ ]  166. (P2, ~30m) Auto-sugerencia de whitelist: si N>=3 staffs marcan
+        clean para el mismo path, sugerir whitelist. DONE: sugerencia
+        en panel.
+[ ]  167. (P2, ~35m) Whitelist por usuario (un servidor permite Optifine,
+        otro no). DONE: company_whitelist.
+[ ]  168. (P2, ~30m) Whitelist por rol del jugador (admin con creative
+        flying != cheater). DONE: role_aware_filter.
+[ ]  169. (P1, ~25m) Whitelist de mods OptiFine, Sodium, Iris, Lithium,
+        Phosphor, Starlight. DONE: render_mods list.
+[ ]  170. (P1, ~30m) Whitelist de mods conocidos QoL (JEI, REI, Inventory
+        Tweaks, Tweakeroo, MiniHud). DONE.
+
+[ ]  171. (P1, ~35m) Context-aware: si el scan dice "fly" pero el jugador
+        está en creative, ignorar fly hits. DONE: context_filter.
+[ ]  172. (P1, ~30m) Context: en spectator mode, no flagear ningún hack.
+        DONE: spectator_bypass.
+[ ]  173. (P1, ~30m) Context: durante /tp o /warp ignorar speed/teleport
+        2s. DONE: tp_window grace.
+[ ]  174. (P1, ~25m) Context: en vehículo (boat/minecart/horse/etc),
+        ignorar speed. DONE: vehicle_bypass.
+[ ]  175. (P1, ~35m) Context: con elytra+firework, ignorar fly+speed.
+        DONE: elytra_bypass.
+[ ]  176. (P2, ~30m) Context: levitation potion, slow falling, slow
+        fall, jump boost — todos exempt fly check. DONE: potion_filter.
+[ ]  177. (P2, ~25m) Context: ice walking (frost walker) exempt jesus.
+        DONE: frostwalker_exempt.
+[ ]  178. (P2, ~30m) Context: bubble columns, soul speed, depth strider
+        — exempt speed. DONE: env_buff_filter.
+[ ]  179. (P1, ~30m) Context: scaffold con sneak activado es ético.
+        DONE: sneak_scaffold_exempt.
+[ ]  180. (P2, ~25m) Context: sweep attack edge — multi-hit es legit por
+        sweep, no killaura. DONE: sweep_filter.
+
+[ ]  181. (P1, ~35m) Bayesian confidence: combinar evidence con prior
+        de la cuenta (historial). DONE: bayes_score visible.
+[ ]  182. (P1, ~30m) Bayesian: prior por servidor (Arefy PvP estricto vs
+        survival relajado). DONE: server_prior.
+[ ]  183. (P1, ~25m) Bayesian: actualizar prior cada vez que staff confirma.
+        DONE: prior_updates en log.
+[ ]  184. (P2, ~30m) Confidence calibration: usar isotonic regression
+        sobre prob outputs. DONE: calibration.png en panel.
+[ ]  185. (P2, ~25m) Confidence decay: violations viejas pesan menos
+        en sliding window. DONE: decay function.
+[ ]  186. (P1, ~30m) Confidence threshold dinámico: si trust del jugador
+        es alto, threshold sube; si bajo, baja. DONE: dynamic_threshold.
+[ ]  187. (P2, ~35m) Vote por staff: 3 staffs distintos confirmando
+        suben confidence. DONE: multi_staff_vote.
+[ ]  188. (P2, ~30m) Tier de staff: trust del staff afecta su voto
+        (admin > moderador > helper). DONE: tier_weight.
+[ ]  189. (P2, ~25m) "Quórum" automático: pedir 2 staffs cuando
+        confidence ∈ [0.3, 0.7]. DONE: quorum_required flag.
+[ ]  190. (P3, ~30m) Disagreement penalty: si 2 staffs dan opuesto,
+        bajar prior. DONE.
+
+[ ]  191. (P0, ~30m) Bug: filter_lunar_badlion no detecta Lunar 3.x (path
+        change). DONE: fix path.
+[ ]  192. (P1, ~25m) Bug: false positive de "killaura" cuando hay >=2
+        mobs muy juntos (sweep). DONE: sweep_check.
+[ ]  193. (P1, ~30m) Bug: false positive de "scaffold" al hacer torres
+        con sneak (legit). DONE: sneak_filter.
+[ ]  194. (P0, ~25m) Bug: false positive de "fly" durante saltos en
+        slime block. DONE: slime_block_exempt (Pack 47 lo cubre? verify).
+[ ]  195. (P0, ~30m) Bug: false positive de "nofall" cuando aterriza
+        en agua justo. DONE: water_landing_exempt.
+[ ]  196. (P1, ~25m) Bug: false positive de "reach" por hitbox
+        interpolation con ping alto. DONE: ping_compensation.
+[ ]  197. (P1, ~30m) Bug: false positive de "speed" en ice + sprint
+        (legit hasta 11 b/s). DONE: ice_sprint_exempt.
+[ ]  198. (P1, ~25m) Bug: false positive de "jesus" en lily pad densos.
+        DONE: lilypad_density_exempt.
+[ ]  199. (P1, ~30m) Bug: false positive de "fasteat" con potion de
+        regen (heal sin tick eat). DONE: regen_filter.
+[ ]  200. (P2, ~25m) Bug: false positive en /msg con caracteres especiales
+        rompiendo regex. DONE: regex_safe.
+
+[ ]  201. (P1, ~40m) Domain-aware: hack vs admin tool (cheat-engine
+        legítimo en uso por dev). DONE: dev_tool_signal.
+[ ]  202. (P2, ~30m) Domain: detect uso legítimo de macros (autoeat,
+        autoreconnect). DONE: legit_macro_filter.
+[ ]  203. (P2, ~25m) Domain: streamers usan OBS overlays con hooks
+        legit. DONE: streamer_profile.
+[ ]  204. (P1, ~35m) Domain: detectar jugadores nuevos (joined<7d) y
+        ser más lenient con falsos. DONE: newbie_grace.
+[ ]  205. (P1, ~30m) Domain: jugadores VIP/staff/donator más lenient.
+        DONE: vip_grace.
+[ ]  206. (P2, ~25m) Domain: distinción entre PvP arena vs survival
+        normal. DONE: zone_aware.
+[ ]  207. (P2, ~30m) Domain: durante eventos del servidor (PvP tournament)
+        ignorar killaura. DONE: event_mode_flag.
+[ ]  208. (P3, ~25m) Domain: stat normalization por mapa (algunos mapas
+        son más fáciles que otros). DONE: map_baseline.
+[ ]  209. (P2, ~30m) Domain: distinción entre 1v1 dueling vs survival.
+        DONE: duel_mode.
+[ ]  210. (P1, ~25m) Domain: respect /vanish, /godmode flags de admin
+        tools — no aplicar checks. DONE: god_mode_filter.
+
+[ ]  211. (P1, ~30m) Staff signal: "este jugador es mi amigo, NO es hacker"
+        flag manual no-aplicar. DONE: trust_override.
+[ ]  212. (P2, ~25m) Staff signal: notas custom por jugador ("ya verifiqué
+        que es legit"). DONE: notes field.
+[ ]  213. (P1, ~35m) Staff signal: histórico de overrides — auto-suggest
+        whitelist si N>=5 overrides del mismo path. DONE.
+[ ]  214. (P2, ~30m) Staff signal: feedback "esto fue FP, ¿por qué?"
+        dropdown con razones comunes. DONE: feedback_reason.
+[ ]  215. (P2, ~25m) Staff signal: marcar "deja en watchlist" sin banear.
+        DONE: watchlist queue.
+[ ]  216. (P3, ~30m) Crowd signal: si N>=3 servidores marcan al mismo
+        UUID como clean para el mismo path, whitelist global. DONE.
+[ ]  217. (P2, ~25m) Time-of-day signal: hits 2am suelen ser AFK farms,
+        menos relevantes. DONE: time_decay.
+[ ]  218. (P2, ~30m) Region signal: servidores con alta latencia para
+        algunos jugadores → tolerancia mayor. DONE: ping_zone.
+[ ]  219. (P3, ~25m) Hardware signal: si el client envía specs (con
+        consent), ajustar tolerancia (PCs viejos lagean). DONE.
+[ ]  220. (P2, ~30m) Replay signal: si el server tiene replay del
+        incident, link al replay desde alert. DONE: replay_link.
+
+[ ]  221. (P1, ~25m) Anti-spam de violations: dedup window 5s — la misma
+        violation no cuenta 100 veces. DONE: dedup_window.
+[ ]  222. (P1, ~30m) Severity escalator: si flagea 10 LOW seguidas,
+        promover a MID. DONE: escalator function.
+[ ]  223. (P1, ~25m) Severity decay: si pasa 10min sin violation, reset
+        contador. DONE: decay reset.
+[ ]  224. (P2, ~30m) Severity per-check budget: cada check tiene su max
+        per hour. DONE: per_check_budget.
+[ ]  225. (P2, ~25m) Anti-troll: si un user es kickeado 3 veces seguidas
+        en 1h por checks distintos, escalar a admin manual review.
+        DONE: admin_review queue.
+[ ]  226. (P3, ~30m) Habits learning: el jugador tiene su baseline (siempre
+        17 cps, su patrón). Desviación grande = sospecha. DONE.
+[ ]  227. (P2, ~25m) Persona profile: "PvP heavy", "casual builder",
+        "afk farmer". DONE: persona_tag.
+[ ]  228. (P2, ~30m) Persona-aware thresholds: PvP heavy con 22 cps es
+        normal; afk farmer con 22 cps es bot. DONE: persona_threshold.
+[ ]  229. (P3, ~25m) Friend signal: si el jugador suele jugar con X otros,
+        y X son legits, eso bouseta su trust. DONE: social_graph.
+[ ]  230. (P2, ~30m) Anti-mass-kick: si 5 jugadores en 1min son kickeados
+        por el mismo check, posible bug — pause auto-action. DONE:
+        emergency_brake.
+
+[ ]  231. (P1, ~25m) Mod fingerprinting: detect Sodium 0.6 vs 0.5
+        (estructura distinta). DONE: mod_fingerprints.json.
+[ ]  232. (P2, ~30m) Mixin-aware: si un mod-loader (Fabric/Forge) está
+        activo, ajustar checks. DONE: loader_aware.
+[ ]  233. (P2, ~25m) Optifine zoom — fast view rotation no es aimbot.
+        DONE: optifine_exempt.
+[ ]  234. (P2, ~30m) Shaders enabled — FPS drops legit, no es timer
+        manipulation. DONE: shader_aware.
+[ ]  235. (P1, ~25m) Schematica/Litematica overlay: items "no breakeables"
+        son fake, no fast-break. DONE: schematic_exempt.
+[ ]  236. (P2, ~30m) WorldEdit user — bulk actions son legitimas.
+        DONE: worldedit_aware.
+[ ]  237. (P2, ~25m) Replay mod: rebobinar y captura no es hack.
+        DONE: replay_mod_aware.
+[ ]  238. (P3, ~30m) ChatSentry / chat-tweaks plugins legit. DONE.
+[ ]  239. (P3, ~25m) Auto-totem mods públicos (legit en algunos servers).
+        DONE: autototem_flag.
+[ ]  240. (P2, ~30m) Anti-AFK mods (jiggler) — context dependent. DONE.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  SECTOR 4/9 — DOBLE-SCANNER (Móvil + Desktop combinado)                80 ítems
+═══════════════════════════════════════════════════════════════════════════════
+Foco: paridad, correlación, conflict resolution, UX, reportes cross-device.
+
+[ ]  241. (P1, ~40m) Endpoint /api/dual-scan/init que crea un dual_scan_id
+        para enlazar móvil + desktop del mismo target. DONE.
+[ ]  242. (P1, ~30m) UI: panel staff muestra "Pedí dual scan a Pepe"
+        con QR (móvil) + código (desktop). DONE.
+[ ]  243. (P1, ~35m) Móvil + desktop linked via mismo dual_scan_id en
+        payload. DONE.
+[ ]  244. (P1, ~30m) Vista combinada en panel: tabla con columnas Mobile|
+        Desktop|Combined risk. DONE.
+[ ]  245. (P1, ~25m) Combined risk score: weighted avg de los 2 (60/40
+        favoreciendo desktop). DONE.
+[ ]  246. (P2, ~30m) Si uno de los 2 falla en escanear (timeout), el
+        otro vale solo con un disclaimer. DONE.
+[ ]  247. (P2, ~25m) Si los 2 dan veredictos opuestos, badge "DISAGREE"
+        + razón. DONE.
+[ ]  248. (P2, ~30m) Reporte PDF que combina ambos resultados. DONE.
+[ ]  249. (P2, ~25m) Email automático al admin cuando dual scan completa.
+        DONE: opcional config.
+[ ]  250. (P3, ~30m) Discord webhook con cross-summary. DONE.
+
+[ ]  251. (P1, ~35m) Paridad de features: lista 20 features mobile vs
+        20 desktop, alinear. DONE: parity_matrix.md.
+[ ]  252. (P1, ~30m) Mobile: detectar root/jailbreak con SafetyNet/
+        Play Integrity. DONE: device_integrity en payload.
+[ ]  253. (P1, ~30m) Mobile: detectar emulator (BlueStacks, Genymotion).
+        DONE: emulator_flag.
+[ ]  254. (P1, ~25m) Mobile: detectar Xposed/LSPosed (cheat hooks).
+        DONE: hook_framework.
+[ ]  255. (P2, ~30m) Mobile: app signature integrity. DONE: app_signed.
+[ ]  256. (P2, ~25m) Mobile: scanner version + commit hash. DONE.
+[ ]  257. (P1, ~30m) Mobile: lectura de installed packages (con consent).
+        DONE: packages_list.
+[ ]  258. (P2, ~25m) Mobile: detectar paquetes hack conocidos
+        (KillauraMC, ToolboxForMC). DONE: hack_apps.
+[ ]  259. (P2, ~30m) Mobile: lectura de Minecraft Pocket Edition mods.
+        DONE: mcpe_mods.
+[ ]  260. (P3, ~25m) Mobile: integridad de Minecraft (firma del APK).
+        DONE: mcpe_sig_check.
+
+[ ]  261. (P1, ~35m) Mobile UI: progress nativo con animación.
+        DONE: progress_widget.
+[ ]  262. (P1, ~30m) Mobile UI: instrucciones paso a paso (claros). DONE.
+[ ]  263. (P1, ~25m) Mobile UI: result screen con risk score + razones.
+        DONE.
+[ ]  264. (P2, ~30m) Mobile UI: link "Ver más detalles" → panel web.
+        DONE.
+[ ]  265. (P2, ~25m) Mobile UI: dark mode + alto contraste. DONE.
+[ ]  266. (P2, ~30m) Mobile UI: i18n EN/ES/PT/FR mínimo. DONE.
+[ ]  267. (P1, ~25m) Mobile UI: validación del código antes de scan
+        (no perder tiempo escanenando con código viejo). DONE.
+[ ]  268. (P2, ~30m) Mobile UI: notificación push cuando scan termina.
+        DONE.
+[ ]  269. (P3, ~25m) Mobile UI: deep link desde el panel ("Abrir en
+        app móvil"). DONE.
+[ ]  270. (P2, ~30m) Mobile UI: animación success/fail (lottie). DONE.
+
+[ ]  271. (P1, ~30m) Correlation engine: si el desktop muestra Vape
+        instalado y el móvil muestra patrones similares → CRITICAL.
+        DONE: cross_evidence_boost.
+[ ]  272. (P1, ~25m) Correlation: timestamps coherentes (móvil escaneado
+        2h después del incident → menos peso). DONE: time_correlation.
+[ ]  273. (P2, ~30m) Correlation: misma IP en móvil y desktop = mismo
+        usuario; IP distinta = bandera amarilla. DONE: ip_match.
+[ ]  274. (P2, ~25m) Correlation: si móvil muestra MC PE pero el incident
+        fue en Java, prob no es el mismo dispositivo de juego. DONE.
+[ ]  275. (P2, ~30m) Correlation: hardware identifiers (Bluetooth MAC, etc
+        con consent) cross-match. DONE: device_link.
+[ ]  276. (P3, ~25m) Correlation: si el desktop muestra Discord abierto,
+        y el móvil tiene Discord — share session signal. DONE.
+[ ]  277. (P2, ~30m) Correlation: usuario en mobile = misma cuenta MC
+        (UUID). DONE: uuid_link.
+[ ]  278. (P2, ~25m) Correlation: ambos scans <5min diff → boost
+        consistency. DONE.
+[ ]  279. (P3, ~30m) Correlation: location (GPS con consent) — desktop
+        es residencial, móvil es móvil → coherente. DONE.
+[ ]  280. (P3, ~25m) Correlation: timezone match. DONE.
+
+[ ]  281. (P1, ~35m) Conflict resolution: si móvil dice "clean" y
+        desktop dice "Vape detected", desktop wins (más confiable).
+        DONE: priority_rule.
+[ ]  282. (P1, ~30m) Conflict UI: tooltip explicando quién ganó y por qué.
+        DONE.
+[ ]  283. (P2, ~25m) Manual override: staff puede forzar verdict ignorando
+        ambos. DONE: manual_override_log.
+[ ]  284. (P2, ~30m) Confidence per side: cada lado reporta su confidence
+        propio; combine usando Bayes. DONE.
+[ ]  285. (P2, ~25m) Stale data: si móvil >30min después de desktop,
+        weight reducido. DONE: stale_weight.
+[ ]  286. (P3, ~30m) Disagreement = trigger nueva rondade scan. DONE.
+[ ]  287. (P2, ~25m) Heatmap UI: visual side-by-side de hallazgos. DONE.
+[ ]  288. (P3, ~30m) AI Oracle se entera de dual scan y lo usa como
+        evidencia ponderada doble. DONE.
+[ ]  289. (P2, ~30m) "Ambos dicen lo mismo" → super-confidence boost.
+        DONE: consensus_bonus.
+[ ]  290. (P3, ~25m) "Solo uno dice algo" → score = single_side. DONE.
+
+[ ]  291. (P1, ~30m) API: GET /api/dual-scan/<id> devuelve combined view.
+        DONE.
+[ ]  292. (P1, ~25m) API: POST /api/dual-scan/<id>/verdict para cerrar
+        ambos lados de una. DONE.
+[ ]  293. (P2, ~30m) API: timeline events de cada lado por separado.
+        DONE: /events?side=mobile|desktop.
+[ ]  294. (P2, ~25m) API: cancel dual scan (cancel ambos lados). DONE.
+[ ]  295. (P2, ~30m) API: retry dual scan (re-emit code para ambos).
+        DONE.
+[ ]  296. (P3, ~25m) API: webhook al completar dual scan. DONE.
+[ ]  297. (P3, ~30m) API: stats por dual scan (cuántos completados,
+        agree %). DONE: /api/dual-scan/stats.
+[ ]  298. (P2, ~30m) API: export CSV de dual scans (compliance/audit).
+        DONE.
+[ ]  299. (P3, ~25m) API: filter dual scans por estado (pending/done/
+        timeout). DONE.
+[ ]  300. (P3, ~30m) API rate limit del dual scan endpoint. DONE.
+
+[ ]  301. (P1, ~30m) Performance: combined view query optimizada con
+        JOIN único (no N+1). DONE: explain analyze <50ms.
+[ ]  302. (P1, ~25m) Performance: cache de combined view 60s. DONE.
+[ ]  303. (P2, ~30m) Performance: lazy-load del side detail. DONE.
+[ ]  304. (P2, ~25m) Performance: paginate dual-scans en panel (50/page).
+        DONE.
+[ ]  305. (P3, ~30m) Performance: index dual_scans(target_uuid, created_at).
+        DONE.
+[ ]  306. (P3, ~25m) Performance: archive dual_scans > 1 año a tabla
+        separada. DONE.
+[ ]  307. (P2, ~30m) Storage: GZIP payloads en disk si total>1MB. DONE.
+[ ]  308. (P3, ~25m) Storage: S3 backend opcional para payloads grandes.
+        DONE: config flag.
+[ ]  309. (P2, ~30m) Storage: TTL automático para dual_scans incomplete
+        (después de 7d eliminar). DONE.
+[ ]  310. (P3, ~25m) Storage: backup automático dual_scans diario. DONE.
+
+[ ]  311. (P1, ~35m) UX: feedback "el segundo scan está pendiente". DONE.
+[ ]  312. (P1, ~30m) UX: avisar al staff cuando ambos lados completos.
+        DONE: notification.
+[ ]  313. (P2, ~25m) UX: tooltip explicando "Por qué dual scan?". DONE.
+[ ]  314. (P2, ~30m) UX: animación cuando ambos lados terminan. DONE.
+[ ]  315. (P2, ~25m) UX: badge "Dual scan completado" visible en player
+        profile. DONE.
+[ ]  316. (P3, ~30m) UX: comparar dual scans históricos del mismo
+        jugador. DONE.
+[ ]  317. (P2, ~30m) UX: filtro "solo dual scans con disagreement". DONE.
+[ ]  318. (P3, ~25m) UX: dashboard widget "dual scans esta semana". DONE.
+[ ]  319. (P3, ~30m) UX: undo verdict de dual scan (reset). DONE.
+[ ]  320. (P3, ~25m) UX: print-friendly view del combined report. DONE.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  SECTOR 5/9 — UI / UX (panel staff + super-admin + mobile)             80 ítems
+═══════════════════════════════════════════════════════════════════════════════
+Foco: pulir lo que ya hay (Pack 39 SA + Pack 46 chat), accessibility, perf.
+
+[ ]  321. (P1, ~30m) Lazy-load del panel: sólo cargar el módulo (Argus AI,
+        scans, etc) cuando se abre la tab. DONE: first-paint <1s.
+[ ]  322. (P1, ~25m) Skeleton loaders para todas las tablas (no spinner
+        en blanco). DONE.
+[ ]  323. (P1, ~35m) Virtualización de tablas con >100 filas (no render
+        todas a la vez). DONE: scan list smooth con 5000+.
+[ ]  324. (P1, ~25m) Sticky headers en tablas largas. DONE.
+[ ]  325. (P1, ~30m) Sortable columns en todas las tablas (no sólo scans).
+        DONE.
+[ ]  326. (P2, ~25m) Resizable columns. DONE.
+[ ]  327. (P2, ~30m) Column visibility toggle (mostrar/ocultar). DONE.
+[ ]  328. (P2, ~25m) Persistir column state en localStorage. DONE.
+[ ]  329. (P2, ~30m) Export CSV/JSON visible en todas las vistas. DONE.
+[ ]  330. (P3, ~25m) Export PDF con branding Argus. DONE.
+
+[ ]  331. (P0, ~25m) Bug: panel.html tiene IDs duplicados (chat-content
+        vs ai-chat-content). DONE: unique IDs.
+[ ]  332. (P0, ~30m) Bug: el chat del Oracle no scrollea al fondo al
+        recibir mensaje nuevo. DONE: scrollIntoView.
+[ ]  333. (P1, ~25m) Bug: en mobile, las cards de stats se overlapan.
+        DONE: media queries.
+[ ]  334. (P1, ~30m) Bug: el header sticky pierde transparencia al
+        scrollear y se ve raro con theme oscuro. DONE.
+[ ]  335. (P1, ~25m) Bug: dropdown del menu no cierra al click fuera.
+        DONE: outside click handler.
+[ ]  336. (P1, ~30m) Bug: notifs van en orden inverso (más nueva abajo).
+        DONE: reverse.
+[ ]  337. (P0, ~30m) Bug: logout no invalida session en server, sólo
+        client cookie. DONE: server-side invalidation.
+[ ]  338. (P1, ~25m) Bug: timezone displays como UTC en algunas vistas.
+        DONE: local TZ.
+[ ]  339. (P1, ~30m) Bug: search no respeta accents (López vs Lopez).
+        DONE: unaccent.
+[ ]  340. (P1, ~25m) Bug: keyboard shortcuts no funcionan en macOS
+        (cmd vs ctrl). DONE: cross-platform.
+
+[ ]  341. (P1, ~30m) Accessibility: alt text en todos los iconos. DONE.
+[ ]  342. (P1, ~25m) Accessibility: aria-label en botones icon-only.
+        DONE.
+[ ]  343. (P1, ~30m) Accessibility: focus visible (no outline:none).
+        DONE.
+[ ]  344. (P1, ~25m) Accessibility: contraste color WCAG AA. DONE: audit.
+[ ]  345. (P1, ~30m) Accessibility: keyboard nav completo. DONE: tab order.
+[ ]  346. (P2, ~25m) Accessibility: screen reader friendly tables. DONE.
+[ ]  347. (P2, ~30m) Accessibility: skip-to-content link. DONE.
+[ ]  348. (P2, ~25m) Accessibility: ARIA live region para notifs. DONE.
+[ ]  349. (P3, ~30m) Accessibility: high contrast mode toggle. DONE.
+[ ]  350. (P3, ~25m) Accessibility: dyslexia-friendly font option. DONE.
+
+[ ]  351. (P1, ~30m) Theme: Bronze fix definitivo — algunos sub-elements
+        siguen con tinte. DONE: full audit.
+[ ]  352. (P2, ~25m) Theme: nuevo preset "Midnight" (azul oscuro + cyan).
+        DONE.
+[ ]  353. (P2, ~30m) Theme: nuevo preset "Sakura" (rosa pastel). DONE.
+[ ]  354. (P2, ~25m) Theme: nuevo preset "Mono" (puro grayscale). DONE.
+[ ]  355. (P2, ~30m) Theme: preview del preset en miniatura antes de
+        aplicar. DONE.
+[ ]  356. (P3, ~25m) Theme: custom color picker per token. DONE.
+[ ]  357. (P3, ~30m) Theme: import/export theme JSON. DONE.
+[ ]  358. (P3, ~25m) Theme: share theme link. DONE.
+[ ]  359. (P3, ~30m) Theme: comunidad — compartir themes públicos. DONE.
+[ ]  360. (P3, ~25m) Theme: time-based auto-switch (dark night, light day).
+        DONE.
+
+[ ]  361. (P1, ~30m) Real-time: WebSocket en lugar de polling 60s para
+        scans. DONE: latencia <2s.
+[ ]  362. (P1, ~25m) Real-time: live cursor showing other staff online
+        viewing the same panel. DONE.
+[ ]  363. (P2, ~30m) Real-time: typing indicator en chat Oracle. DONE.
+[ ]  364. (P2, ~25m) Real-time: alerts pop in (slide animation). DONE.
+[ ]  365. (P2, ~30m) Real-time: sound notification opcional (toggle).
+        DONE.
+[ ]  366. (P2, ~25m) Real-time: indicador "actualizado hace 5s". DONE.
+[ ]  367. (P3, ~30m) Real-time: presence "X staff online ahora". DONE.
+[ ]  368. (P2, ~30m) Real-time: collaborative comments en cada scan.
+        DONE.
+[ ]  369. (P3, ~25m) Real-time: emoji reactions per scan. DONE.
+[ ]  370. (P3, ~30m) Real-time: stream del console del server (admin).
+        DONE.
+
+[ ]  371. (P1, ~30m) Super-admin: add "AI Oracle" tab con vista del
+        modelo activo + auto-labels + retrain history. DONE.
+[ ]  372. (P1, ~25m) Super-admin: "Maintenance dry-run" preview con
+        nivel de impacto antes de ejecutar. DONE.
+[ ]  373. (P1, ~30m) Super-admin: usuarios con problemas activos
+        (account locked, expired key, etc). DONE.
+[ ]  374. (P1, ~25m) Super-admin: graph de daily revenue (si suscripciones).
+        DONE.
+[ ]  375. (P2, ~30m) Super-admin: bulk actions (eliminar N suscripciones
+        expiradas). DONE.
+[ ]  376. (P2, ~25m) Super-admin: confirmación de acciones destructivas
+        (modal con typed-confirm). DONE.
+[ ]  377. (P2, ~30m) Super-admin: 2FA opcional. DONE.
+[ ]  378. (P3, ~25m) Super-admin: IP allowlist. DONE.
+[ ]  379. (P3, ~30m) Super-admin: audit log export. DONE.
+[ ]  380. (P3, ~25m) Super-admin: "impersonate user" para soporte. DONE.
+
+[ ]  381. (P1, ~35m) Player profile: timeline visual de eventos del
+        player (joins, scans, kicks, bans). DONE.
+[ ]  382. (P1, ~30m) Player profile: badges acumulados (e.g., "verified
+        ok 5x", "kicked twice"). DONE.
+[ ]  383. (P1, ~25m) Player profile: link a cross-server profiles si
+        existen. DONE.
+[ ]  384. (P2, ~30m) Player profile: chart de risk score 30d. DONE.
+[ ]  385. (P2, ~25m) Player profile: friends/squad relationship. DONE.
+[ ]  386. (P2, ~30m) Player profile: notes editables por staff. DONE.
+[ ]  387. (P3, ~25m) Player profile: avatar (Minecraft head texture).
+        DONE.
+[ ]  388. (P3, ~30m) Player profile: skin viewer 3D. DONE.
+[ ]  389. (P3, ~25m) Player profile: stats juego (KDR, hours played).
+        DONE.
+[ ]  390. (P3, ~30m) Player profile: share link para colleagues. DONE.
+
+[ ]  391. (P1, ~30m) Modals: re-design todos con consistent header/body/
+        footer. DONE.
+[ ]  392. (P1, ~25m) Modals: cerrar con Esc. DONE.
+[ ]  393. (P1, ~30m) Modals: focus trap. DONE.
+[ ]  394. (P2, ~25m) Modals: confirmación antes de cerrar si hay edits.
+        DONE.
+[ ]  395. (P2, ~30m) Modals: drag handle para mover. DONE.
+[ ]  396. (P3, ~25m) Modals: resize handle. DONE.
+[ ]  397. (P3, ~30m) Modals: persist position en localStorage. DONE.
+[ ]  398. (P2, ~30m) Toasts: queue + auto-dismiss + click-to-dismiss.
+        DONE.
+[ ]  399. (P3, ~25m) Toasts: persistent toast (no auto-dismiss). DONE.
+[ ]  400. (P3, ~30m) Toasts: undo action toast. DONE.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  SECTOR 6/9 — ARGUS ORACLE (AI judge + virtual assistant)              80 ítems
+═══════════════════════════════════════════════════════════════════════════════
+Foco: hardening del Pack 44-46, persona, comandos, proactive, context.
+
+[ ]  401. (P0, ~30m) Bug: Oracle no llega a evaluar packet-based violations
+        porque source mapping no incluye '_packet' suffix. DONE: source
+        infer from check_name suffix.
+[ ]  402. (P1, ~25m) Oracle: weighting de violations packet-based +20%
+        (más confiables). DONE: weight_table en argus_ai_oracle.
+[ ]  403. (P1, ~30m) Oracle: agruping de violations relacionadas (killaura
+        + reach + aim_snap = "PvP cheat"). DONE: group_evidence.
+[ ]  404. (P1, ~25m) Oracle: enumeración de "evidencia clave" en
+        reasoning humano. DONE: top_evidence printed.
+[ ]  405. (P1, ~35m) Oracle: explicación cualitativa ("este jugador
+        muestra patrón típico de killaura con scaffold combo"). DONE.
+[ ]  406. (P2, ~30m) Oracle: comparación con casos similares ("similar
+        a Player X del 5 abril que confirmaste como hack"). DONE.
+[ ]  407. (P2, ~25m) Oracle: confidence rationale ("alta confianza
+        porque 3 checks distintos + historial limpio anterior"). DONE.
+[ ]  408. (P1, ~30m) Oracle: respeta el `mute_oracle` flag por company
+        (algunos sólo quieren scoring, no acción auto). DONE.
+[ ]  409. (P2, ~25m) Oracle: dry-run mode (sugiere acciones pero no
+        las aplica). DONE: per-company config.
+[ ]  410. (P1, ~30m) Oracle: rate limit per-player (max 3 acciones/min).
+        DONE: rate_limiter.
+
+[ ]  411. (P1, ~30m) Assistant: contexto persistente por conversación
+        (los últimos 10 turns). DONE.
+[ ]  412. (P1, ~25m) Assistant: detecta seguimiento ("y a Mario?"
+        después de preguntar sobre Pedro). DONE: anaphora.
+[ ]  413. (P1, ~30m) Assistant: comprende fechas relativas ("ayer",
+        "hace 3 horas"). DONE: date_parser.
+[ ]  414. (P2, ~25m) Assistant: soporte para múltiples jugadores en
+        una pregunta ("compara a Pedro y Mario"). DONE: multi_player.
+[ ]  415. (P1, ~35m) Assistant: detecta intent "estadísticas" ("cuántos
+        kicks este mes"). DONE: stats_intent.
+[ ]  416. (P1, ~30m) Assistant: detecta intent "configuración" ("cómo
+        cambio el threshold"). DONE: config_intent.
+[ ]  417. (P2, ~25m) Assistant: detecta intent "ayuda" con sugerencias
+        contextuales. DONE.
+[ ]  418. (P2, ~30m) Assistant: detecta sentiment negativo ("no entiendo
+        nada") y ofrece tutorial. DONE.
+[ ]  419. (P2, ~25m) Assistant: pregunta de clarificación cuando
+        ambiguo. DONE: clarify_pattern.
+[ ]  420. (P3, ~30m) Assistant: chains of thought (paso a paso en
+        consultas complejas). DONE.
+
+[ ]  421. (P1, ~30m) Assistant: respuestas con formatting markdown
+        (bullets, bold). DONE.
+[ ]  422. (P1, ~25m) Assistant: links clickeables en respuestas. DONE.
+[ ]  423. (P2, ~30m) Assistant: code blocks cuando se cita config. DONE.
+[ ]  424. (P2, ~25m) Assistant: tables cuando lista players. DONE.
+[ ]  425. (P2, ~30m) Assistant: imágenes (player avatar) opcional. DONE.
+[ ]  426. (P3, ~25m) Assistant: emoji reactions a respuestas (👍/👎).
+        DONE: feedback signal.
+[ ]  427. (P2, ~30m) Assistant: histórico de conversaciones (puedo
+        retomar). DONE.
+[ ]  428. (P3, ~25m) Assistant: búsqueda en histórico de chats. DONE.
+[ ]  429. (P3, ~30m) Assistant: export conversación a markdown. DONE.
+[ ]  430. (P3, ~25m) Assistant: compartir conversación con otro staff.
+        DONE.
+
+[ ]  431. (P1, ~30m) Persona: ajustar % sarcástico via slider en config
+        (0-100%, default 25%). DONE.
+[ ]  432. (P1, ~25m) Persona: tone (formal/casual/funny) configurable
+        por company. DONE.
+[ ]  433. (P2, ~30m) Persona: nombre personalizado del assistant
+        (default "Argus", company puede cambiar a "Aegis", etc).
+        DONE.
+[ ]  434. (P2, ~25m) Persona: avatar custom del assistant. DONE.
+[ ]  435. (P2, ~30m) Persona: idioma (ES/EN/PT) auto-detectado o
+        configurable. DONE.
+[ ]  436. (P3, ~25m) Persona: catchphrase opcional (saludo de bienvenida).
+        DONE.
+[ ]  437. (P3, ~30m) Persona: "Argus está pensando..." typing animation
+        antes de respuesta. DONE.
+[ ]  438. (P3, ~25m) Persona: variedad — no repite exactamente la
+        misma frase 2 veces seguidas. DONE: anti-repeat tracker.
+[ ]  439. (P3, ~30m) Persona: ocasional "joke of the day" si tone=funny.
+        DONE.
+[ ]  440. (P3, ~25m) Persona: memoria de preferencias del staff
+        (recuerda que prefiere brevedad). DONE.
+
+[ ]  441. (P1, ~30m) Proactive: alertas push cuando un jugador alcanza
+        threshold sin requerir polling del staff. DONE: ws push.
+[ ]  442. (P1, ~25m) Proactive: digest diario por email a admins. DONE.
+[ ]  443. (P1, ~30m) Proactive: digest semanal con highlights. DONE.
+[ ]  444. (P2, ~25m) Proactive: alerta cuando un staff no responde a un
+        AI flag en >24h. DONE: staff_unresponsive.
+[ ]  445. (P2, ~30m) Proactive: sugerencia "considera revisar a X"
+        cuando hay patterns sospechosos. DONE.
+[ ]  446. (P2, ~25m) Proactive: alerta cuando un nuevo cheat aparece
+        (auto-label cluster). DONE: new_cheat_detected.
+[ ]  447. (P2, ~30m) Proactive: alerta cuando un cheater anteriormente
+        baneado vuelve. DONE: repeat_offender.
+[ ]  448. (P3, ~25m) Proactive: "tu workload esta semana"
+        (resumen del staff). DONE.
+[ ]  449. (P3, ~30m) Proactive: alerta cuando AI accuracy baja del 80%.
+        DONE: model_degradation.
+[ ]  450. (P3, ~25m) Proactive: tip del día ("¿sabías que /argus
+        timeline X muestra todo?"). DONE.
+
+[ ]  451. (P1, ~30m) Commands in-game: /argus ai <player> — full report
+        del oracle. DONE: handlePregunta extends.
+[ ]  452. (P1, ~25m) Commands: /argus ai status — modelo actual + last
+        retrain. DONE.
+[ ]  453. (P1, ~30m) Commands: /argus ai whitelist <player> — marcar
+        explícitamente como legit. DONE.
+[ ]  454. (P2, ~25m) Commands: /argus ai compare <p1> <p2>. DONE.
+[ ]  455. (P2, ~30m) Commands: /argus ai retrain (admin only). DONE.
+[ ]  456. (P2, ~25m) Commands: /argus ai mute <player> — no más
+        warnings auto. DONE.
+[ ]  457. (P2, ~30m) Commands: /argus ai stats — daily summary. DONE.
+[ ]  458. (P3, ~25m) Commands: /argus ai help. DONE.
+[ ]  459. (P3, ~30m) Commands: tab completion para player names. DONE.
+[ ]  460. (P3, ~25m) Commands: cooldown per command (anti-abuse). DONE.
+
+[ ]  461. (P1, ~30m) Context: AI Oracle conoce el contexto del server
+        (vanilla / mini-games / PvP). DONE: server_context_load.
+[ ]  462. (P1, ~25m) Context: AI ajusta tone según el momento del día
+        (3am alert es más urgente). DONE.
+[ ]  463. (P2, ~30m) Context: AI conoce eventos especiales del server
+        (PvP tournament). DONE: event_calendar.
+[ ]  464. (P2, ~25m) Context: AI sabe si un staff está atendiendo
+        otro caso (no duplica alertas). DONE.
+[ ]  465. (P2, ~30m) Context: AI recuerda historial reciente de
+        decisiones del staff. DONE.
+[ ]  466. (P3, ~25m) Context: AI lee chat reciente del server (con
+        consent) para detectar acusaciones. DONE.
+[ ]  467. (P3, ~30m) Context: AI integra con world events (lag spike,
+        TPS drop) para no flagear timer falsamente. DONE.
+[ ]  468. (P3, ~25m) Context: AI conoce el estado de la red (puede
+        tolerar ping spikes). DONE.
+[ ]  469. (P3, ~30m) Context: AI conoce el estado del staff (ausente,
+        de vacaciones). DONE.
+[ ]  470. (P3, ~25m) Context: AI sabe que día es (3am los reportes son
+        más críticos que 3pm). DONE.
+
+[ ]  471. (P1, ~30m) Voice: text-to-speech opcional para alertas críticas
+        en panel. DONE.
+[ ]  472. (P3, ~25m) Voice: voice-to-text para preguntas del staff
+        (mobile). DONE.
+[ ]  473. (P1, ~30m) Multi-modal: assistant puede recibir captura de
+        pantalla y describirla. DONE: vision_endpoint.
+[ ]  474. (P2, ~25m) Multi-modal: assistant analiza logs adjuntos. DONE.
+[ ]  475. (P2, ~30m) Multi-modal: assistant puede recibir replays mp4
+        (con consent + LLM optional). DONE.
+[ ]  476. (P3, ~25m) Multi-modal: assistant puede dictar respuestas
+        por voz. DONE.
+[ ]  477. (P1, ~30m) Privacy: opt-out del LLM polish (sólo templates).
+        DONE: per-company toggle.
+[ ]  478. (P1, ~25m) Privacy: redact PII antes de pasar al LLM. DONE.
+[ ]  479. (P2, ~30m) Privacy: retention policy del chat history (90d).
+        DONE.
+[ ]  480. (P2, ~25m) Privacy: encryption at rest de chat history. DONE.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  SECTOR 7/9 — PLUGIN MINECRAFT                                         80 ítems
+═══════════════════════════════════════════════════════════════════════════════
+Foco: pulir Pack 47 (packet-based), nuevos checks, config, distribución.
+
+[ ]  481. (P0, ~30m) Bug Pack 47: PacketDataStore.swingTimestamps growth
+        sin bounds en burst (race). DONE: synchronized + cap=20.
+[ ]  482. (P1, ~25m) Pack 47: agregar check VClipCheck (movimiento Y muy
+        grande en 1 packet). DONE.
+[ ]  483. (P1, ~30m) Pack 47: agregar check StepCheck (subir bloque sin
+        animation jump). DONE.
+[ ]  484. (P1, ~25m) Pack 47: agregar check SpeedPacketCheck (speed real
+        desde delta XZ por packet). DONE.
+[ ]  485. (P1, ~30m) Pack 47: agregar check FastPlaceCheck (BlockPlace
+        packets faster than tick rate). DONE.
+[ ]  486. (P1, ~25m) Pack 47: agregar check FastBreakCheck (mining speed
+        vs tool+enchant esperado). DONE.
+[ ]  487. (P2, ~30m) Pack 47: agregar check NukerCheck (multiple blocks
+        broken same tick). DONE.
+[ ]  488. (P2, ~25m) Pack 47: agregar check AutoTotemCheck (Totem swap
+        <50ms tras hit fatal). DONE.
+[ ]  489. (P2, ~30m) Pack 47: agregar check AntiKnockbackCheck refined
+        (Y-component también). DONE.
+[ ]  490. (P2, ~25m) Pack 47: agregar check FreeCamCheck (mirar lugares
+        no en frustum). DONE: stub + doc.
+
+[ ]  491. (P1, ~30m) Pack 47: TimerCheck — warmup 5s adjustable via
+        config. DONE.
+[ ]  492. (P1, ~25m) Pack 47: PhaseCheck — soportar más bloques
+        sólidos (mossy_cobblestone, andesite, etc). DONE.
+[ ]  493. (P1, ~30m) Pack 47: VelocityCheck — exponer threshold
+        configurable. DONE.
+[ ]  494. (P1, ~25m) Pack 47: InvalidRotationCheck — clamp pitch tolerancia
+        (90.1 vs 90.0). DONE.
+[ ]  495. (P1, ~30m) Pack 47: ReachPacketCheck — entity hitbox correcto
+        por entity type (small slime vs large slime). DONE.
+[ ]  496. (P1, ~25m) Pack 47: KillauraSwingPacketCheck — añadir métrica
+        swing_attack_delta_ms. DONE.
+[ ]  497. (P1, ~30m) Pack 47: AimSnapPacketCheck — exponer threshold
+        configurable. DONE.
+[ ]  498. (P2, ~25m) Pack 47: PingSpoofCheck — ventana de samples
+        (no decidir con 1 sample). DONE.
+[ ]  499. (P2, ~30m) Pack 47: CPSPacketCheck — burst detection (50 CPS
+        por 200ms, luego 5 cps — flag). DONE.
+[ ]  500. (P2, ~25m) Pack 47: InvMovePacketCheck — whitelist horse/
+        villager/etc inventories. DONE.
+
+[ ]  501. (P1, ~30m) /argus admin reload — reload solo config.yml sin
+        restart. DONE: incluye checks packet-based.
+[ ]  502. (P1, ~25m) /argus admin debug <player> — toggle verbose log
+        per-player. DONE.
+[ ]  503. (P1, ~30m) /argus admin testpacket <player> — simula 1
+        violation para test. DONE.
+[ ]  504. (P2, ~25m) /argus admin metrics — stats internos (packets/s,
+        flags/min, etc). DONE.
+[ ]  505. (P2, ~30m) /argus admin profile <player> — quick player
+        profile en chat. DONE.
+[ ]  506. (P2, ~25m) /argus admin clearviolations <player> — limpiar
+        contador. DONE.
+[ ]  507. (P3, ~30m) /argus admin replay <player> — last 30s replay
+        (si soportado por server). DONE: stub.
+[ ]  508. (P3, ~25m) /argus admin export — export config+violations
+        a archivo. DONE.
+[ ]  509. (P3, ~30m) /argus admin import — restore config desde archivo.
+        DONE.
+[ ]  510. (P3, ~25m) /argus admin healthcheck — test API endpoint.
+        DONE.
+
+[ ]  511. (P1, ~30m) Performance: ConcurrentHashMap warming en pre-allocate
+        para evitar resize cost. DONE.
+[ ]  512. (P1, ~25m) Performance: profile del packet listener — bottleneck
+        en resolveEntity (O(N)). DONE: cache map.
+[ ]  513. (P1, ~30m) Performance: avoid String.format en hot paths
+        (~10% improvement). DONE: StringBuilder.
+[ ]  514. (P1, ~25m) Performance: bound el size del moveTimestamps deque
+        (era unbounded antes del fix). DONE.
+[ ]  515. (P2, ~30m) Performance: lazy-init del DataStore.State (no por
+        cada player en join, solo on demand). DONE.
+[ ]  516. (P2, ~25m) Performance: schedule de cleanup async (clean stale
+        states cada 10min). DONE.
+[ ]  517. (P3, ~30m) Performance: benchmark vs Vulcan/Grim baseline con
+        bot. DONE: report.
+[ ]  518. (P2, ~30m) Compat: testear en Spigot 1.8.9 (1.8 PvP servers).
+        DONE.
+[ ]  519. (P2, ~25m) Compat: testear en Paper 1.21.4. DONE.
+[ ]  520. (P2, ~30m) Compat: ViaVersion proxy — checks no fallan con
+        clientes 1.7. DONE.
+
+[ ]  521. (P1, ~30m) Config: per-check `enforcement` flag (algunos solo
+        log, otros kick). DONE: enforcement_per_check.
+[ ]  522. (P1, ~25m) Config: per-check `level_override` (forzar LOW/MID).
+        DONE.
+[ ]  523. (P1, ~30m) Config: per-check `description` legible para staff.
+        DONE.
+[ ]  524. (P2, ~25m) Config: validar config.yml al cargar (schema). DONE.
+[ ]  525. (P2, ~30m) Config: migrar config viejo automáticamente (v1 → v2).
+        DONE: migrate_config_v1_v2.
+[ ]  526. (P2, ~25m) Config: presets de config ("permisivo", "estricto",
+        "tournament"). DONE: 3 presets en docs.
+[ ]  527. (P2, ~30m) Config: web UI para editar config sin tocar archivo
+        (panel del plugin). DONE: stub.
+[ ]  528. (P3, ~25m) Config: hot reload sin /reload (file watcher). DONE.
+[ ]  529. (P3, ~30m) Config: backup automático del config al modificar.
+        DONE.
+[ ]  530. (P3, ~25m) Config: diff entre 2 backups. DONE.
+
+[ ]  531. (P1, ~30m) Discord webhook: format con embeds (no plain text).
+        DONE.
+[ ]  532. (P1, ~25m) Discord: avatar/username configurable. DONE.
+[ ]  533. (P1, ~30m) Discord: rate limit del webhook (5 msg/min). DONE.
+[ ]  534. (P2, ~25m) Discord: mention @ a roles específicos en CRITICAL.
+        DONE.
+[ ]  535. (P2, ~30m) Discord: thread por player (no mezclar). DONE.
+[ ]  536. (P2, ~25m) Discord: buttons "Ban" / "Whitelist" desde el
+        Discord directamente. DONE: webhook interaction.
+[ ]  537. (P3, ~30m) Discord: stats embed diario automático. DONE.
+[ ]  538. (P3, ~25m) Discord: search history del player desde Discord
+        comando slash. DONE.
+[ ]  539. (P3, ~30m) Discord: multi-webhook routing (LOW va a canal X,
+        CRITICAL va a canal Y). DONE.
+[ ]  540. (P3, ~25m) Discord: webhook rotation si rate limited.
+        DONE.
+
+[ ]  541. (P1, ~35m) Distribución: GitHub Actions CI build el JAR
+        automático en cada commit. DONE.
+[ ]  542. (P1, ~30m) Distribución: GitHub Release automático on tag.
+        DONE.
+[ ]  543. (P1, ~25m) Distribución: actualizar /descargar/plugin con
+        link al GitHub release. DONE.
+[ ]  544. (P1, ~30m) Distribución: SpigotMC.org listing (manual). DONE:
+        page draft.
+[ ]  545. (P1, ~30m) Distribución: Modrinth listing. DONE: page draft.
+[ ]  546. (P2, ~25m) Distribución: BukkitDev listing. DONE.
+[ ]  547. (P2, ~30m) Distribución: video demo del plugin (2min).
+        DONE: youtube link.
+[ ]  548. (P2, ~25m) Distribución: README con badges (stars, downloads).
+        DONE.
+[ ]  549. (P3, ~30m) Distribución: cargo de PacketEvents version
+        compatibility matrix. DONE: tabla en README.
+[ ]  550. (P3, ~25m) Distribución: changelog auto-gen desde commits.
+        DONE.
+
+[ ]  551. (P1, ~30m) Tests: unit test ViolationManager (mocks Bukkit).
+        DONE.
+[ ]  552. (P1, ~25m) Tests: unit test cada packet check con events
+        sintéticos. DONE.
+[ ]  553. (P1, ~30m) Tests: integración con TestServer (Paper test mode).
+        DONE: stub.
+[ ]  554. (P2, ~25m) Tests: regression suite para los false-positives
+        documentados. DONE.
+[ ]  555. (P2, ~30m) Tests: bench micro (10k packets/s sin OOM). DONE.
+[ ]  556. (P3, ~25m) Tests: chaos test (drop packets, lag, disconnect).
+        DONE.
+[ ]  557. (P3, ~30m) Tests: cross-version test (1.8/1.16/1.20/1.21).
+        DONE.
+[ ]  558. (P2, ~30m) Logs: structured logging (JSON) opcional.
+        DONE: log4j layout.
+[ ]  559. (P3, ~25m) Logs: rotation policy (max 50MB). DONE.
+[ ]  560. (P3, ~30m) Logs: filter por nivel (silenciar INFO). DONE.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  SECTOR 8/9 — ANDROID (APK + PWA + mobile experience)                  80 ítems
+═══════════════════════════════════════════════════════════════════════════════
+Foco: PWA, APK polish, permisos, UX mobile, push, offline, security.
+
+[ ]  561. (P0, ~30m) Bug: PWA en Android dimensions rotas en algunas vistas
+        (descargas, panel staff). DONE: viewport meta + media queries.
+[ ]  562. (P0, ~25m) Bug: APK "paquete no es válido" en algunos devices —
+        verificar manifest minSdk/targetSdk. DONE.
+[ ]  563. (P1, ~30m) APK: actualizar a targetSdk 34 (Android 14). DONE.
+[ ]  564. (P1, ~25m) APK: agregar adaptive icon (round + foreground+
+        background). DONE.
+[ ]  565. (P1, ~30m) APK: signing v3 (release+debug separados).
+        DONE.
+[ ]  566. (P1, ~25m) APK: ProGuard rules para reducir tamaño. DONE.
+[ ]  567. (P1, ~30m) APK: bundle .aab para Play Store opcional. DONE.
+[ ]  568. (P2, ~25m) APK: splash screen branded. DONE.
+[ ]  569. (P2, ~30m) APK: app shortcuts (Android 7+). DONE.
+[ ]  570. (P2, ~25m) APK: deep links de asperss.onrender.com/m/<id>.
+        DONE.
+
+[ ]  571. (P1, ~30m) PWA: manifest.json con icons + theme_color. DONE.
+[ ]  572. (P1, ~25m) PWA: service worker con cache strategy adecuada.
+        DONE.
+[ ]  573. (P1, ~30m) PWA: offline fallback page. DONE.
+[ ]  574. (P1, ~25m) PWA: install prompt (después de 2da visita). DONE.
+[ ]  575. (P2, ~30m) PWA: notificaciones push (con consent). DONE.
+[ ]  576. (P2, ~25m) PWA: background sync (envía pendientes al volver
+        online). DONE.
+[ ]  577. (P2, ~30m) PWA: share target (compartir scan desde otra app).
+        DONE.
+[ ]  578. (P2, ~25m) PWA: lighthouse score >= 90 en todas las pages. DONE.
+[ ]  579. (P3, ~30m) PWA: app-like animation (slide between routes).
+        DONE.
+[ ]  580. (P3, ~25m) PWA: pull-to-refresh en feed. DONE.
+
+[ ]  581. (P1, ~30m) Permisos: READ_EXTERNAL_STORAGE solicitud explicativa.
+        DONE.
+[ ]  582. (P1, ~25m) Permisos: lista clara de qué se accede + por qué.
+        DONE: privacy_screen.
+[ ]  583. (P1, ~30m) Permisos: minimal — solo lo necesario para el scan.
+        DONE.
+[ ]  584. (P2, ~25m) Permisos: opt-in para envío telemetría. DONE.
+[ ]  585. (P2, ~30m) Permisos: opt-in para crash reporting. DONE.
+[ ]  586. (P2, ~25m) Permisos: storage Scoped (Android 11+). DONE.
+[ ]  587. (P2, ~30m) Permisos: revoke screen — botón para revocar todo.
+        DONE.
+[ ]  588. (P3, ~25m) Permisos: re-request al usuario tras N días si
+        denegó. DONE.
+[ ]  589. (P3, ~30m) Permisos: graceful degradation si denegó (qué se
+        puede hacer y qué no). DONE.
+[ ]  590. (P3, ~25m) Permisos: log de permisos otorgados (audit).
+        DONE.
+
+[ ]  591. (P1, ~30m) Mobile UI: bottom nav (5 items max). DONE.
+[ ]  592. (P1, ~25m) Mobile UI: swipe gestures (atrás, dismissals). DONE.
+[ ]  593. (P1, ~30m) Mobile UI: tap targets >=48dp. DONE.
+[ ]  594. (P1, ~25m) Mobile UI: keyboard avoidance (input no se tapa).
+        DONE.
+[ ]  595. (P1, ~30m) Mobile UI: dark mode automático según device. DONE.
+[ ]  596. (P2, ~25m) Mobile UI: pull-to-refresh en todas las listas.
+        DONE.
+[ ]  597. (P2, ~30m) Mobile UI: bottom sheets para modals. DONE.
+[ ]  598. (P2, ~25m) Mobile UI: floating action button (donde aplique).
+        DONE.
+[ ]  599. (P2, ~30m) Mobile UI: haptic feedback en confirmaciones.
+        DONE.
+[ ]  600. (P3, ~25m) Mobile UI: shake-to-feedback. DONE.
+
+[ ]  601. (P1, ~30m) Offline: cache last 50 scans local. DONE: indexedDB.
+[ ]  602. (P1, ~25m) Offline: detect offline state + banner. DONE.
+[ ]  603. (P1, ~30m) Offline: queue actions cuando offline, sync al
+        volver. DONE.
+[ ]  604. (P2, ~25m) Offline: conflict resolution (server-side wins
+        + log al user). DONE.
+[ ]  605. (P2, ~30m) Offline: progress UI cuando sync. DONE.
+[ ]  606. (P2, ~25m) Offline: dataset crítico precargado (whitelist).
+        DONE.
+[ ]  607. (P3, ~30m) Offline: estimación de "data usage". DONE.
+[ ]  608. (P3, ~25m) Offline: lower-data mode toggle. DONE.
+[ ]  609. (P3, ~30m) Offline: scheduled sync (cron 4h). DONE.
+[ ]  610. (P3, ~25m) Offline: storage usage screen. DONE.
+
+[ ]  611. (P1, ~30m) Notificaciones: alerta para staff cuando AI dispara
+        kick/ban. DONE.
+[ ]  612. (P1, ~25m) Notificaciones: alerta cuando scan termina.
+        DONE.
+[ ]  613. (P1, ~30m) Notificaciones: categories (alerts, completions,
+        promos). DONE.
+[ ]  614. (P2, ~25m) Notificaciones: quiet hours por usuario. DONE.
+[ ]  615. (P2, ~30m) Notificaciones: action buttons (Ver / Dismiss).
+        DONE.
+[ ]  616. (P2, ~25m) Notificaciones: badge count en el icon. DONE.
+[ ]  617. (P3, ~30m) Notificaciones: sound custom por nivel. DONE.
+[ ]  618. (P3, ~25m) Notificaciones: vibration pattern custom.
+        DONE.
+[ ]  619. (P3, ~30m) Notificaciones: silent push para sync invisible.
+        DONE.
+[ ]  620. (P3, ~25m) Notificaciones: opt-out granular por canal. DONE.
+
+[ ]  621. (P1, ~30m) Upload: compresión before send (gzip). DONE.
+[ ]  622. (P1, ~25m) Upload: resume si fail (offset). DONE.
+[ ]  623. (P1, ~30m) Upload: progress por chunk. DONE.
+[ ]  624. (P1, ~25m) Upload: cancelable. DONE.
+[ ]  625. (P2, ~30m) Upload: WiFi-only opción. DONE.
+[ ]  626. (P2, ~25m) Upload: throttle si battery bajo. DONE.
+[ ]  627. (P2, ~30m) Upload: notification persistente durante upload
+        grande. DONE.
+[ ]  628. (P3, ~25m) Upload: stats de uploads históricos. DONE.
+[ ]  629. (P3, ~30m) Upload: retry policy configurable. DONE.
+[ ]  630. (P3, ~25m) Upload: prefiero cellular si battery >50%. DONE.
+
+[ ]  631. (P1, ~30m) Security: SSL pinning (certificate). DONE.
+[ ]  632. (P1, ~25m) Security: root/jailbreak detection block. DONE.
+[ ]  633. (P1, ~30m) Security: debugger detection. DONE.
+[ ]  634. (P1, ~25m) Security: emulator detection. DONE.
+[ ]  635. (P2, ~30m) Security: tamper detection (signature check). DONE.
+[ ]  636. (P2, ~25m) Security: secure storage (Keystore). DONE.
+[ ]  637. (P2, ~30m) Security: screenshot block en pantallas sensibles.
+        DONE.
+[ ]  638. (P3, ~25m) Security: app-level passcode opcional. DONE.
+[ ]  639. (P3, ~30m) Security: biometric unlock. DONE.
+[ ]  640. (P3, ~25m) Security: auto-logout tras 15min inactividad.
+        DONE.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  SECTOR 9/9 — LINUX (build + distribución + UX)                        80 ítems
+═══════════════════════════════════════════════════════════════════════════════
+Foco: build cross-distro, packaging, perf, parity con Windows.
+
+[ ]  641. (P1, ~40m) Build: pyinstaller --onefile target Linux con CI.
+        DONE: linux_build.yml GitHub Action.
+[ ]  642. (P1, ~30m) Build: AppImage como formato preferido. DONE.
+[ ]  643. (P1, ~25m) Build: .deb package para Debian/Ubuntu. DONE.
+[ ]  644. (P1, ~30m) Build: .rpm package para Fedora/RHEL. DONE.
+[ ]  645. (P2, ~25m) Build: Flatpak. DONE.
+[ ]  646. (P2, ~30m) Build: Snap. DONE.
+[ ]  647. (P1, ~30m) Build: ensure GLIBC >=2.31 compatibility (Ubuntu 20.04+).
+        DONE.
+[ ]  648. (P2, ~25m) Build: detect Wayland vs X11. DONE.
+[ ]  649. (P2, ~30m) Build: portable tarball como fallback. DONE.
+[ ]  650. (P3, ~25m) Build: signed binaries (gpg). DONE.
+
+[ ]  651. (P1, ~30m) Portability: paths con XDG_CONFIG_HOME/XDG_CACHE_HOME.
+        DONE.
+[ ]  652. (P1, ~25m) Portability: detect distro (Ubuntu/Fedora/Arch).
+        DONE: /etc/os-release.
+[ ]  653. (P1, ~30m) Portability: el scanner funciona sin .NET / Windows
+        APIs (puro Python). DONE.
+[ ]  654. (P1, ~25m) Portability: detect Wayland → adjust UI. DONE.
+[ ]  655. (P1, ~30m) Portability: theme se adapta a Gtk/Qt system theme.
+        DONE.
+[ ]  656. (P2, ~25m) Portability: locale auto-detect (LANG env). DONE.
+[ ]  657. (P2, ~30m) Portability: fonts del sistema usadas (no Windows-
+        only). DONE.
+[ ]  658. (P3, ~25m) Portability: ARM64 builds para Raspberry Pi /
+        Steam Deck. DONE.
+[ ]  659. (P3, ~30m) Portability: emulación de scan Windows artefactos
+        cuando se ejecuta en Linux (dual-boot). DONE: mount Windows
+        partition opcional.
+[ ]  660. (P3, ~25m) Portability: Wine artifacts si Minecraft via Wine.
+        DONE.
+
+[ ]  661. (P1, ~30m) Scanner Linux: /var/log/syslog/journalctl scan
+        para hack-related strings. DONE.
+[ ]  662. (P1, ~25m) Scanner Linux: .bash_history scan. DONE.
+[ ]  663. (P1, ~30m) Scanner Linux: ~/.minecraft scan (paths Linux). DONE.
+[ ]  664. (P2, ~25m) Scanner Linux: ~/.cache/PrismLauncher / MultiMC.
+        DONE.
+[ ]  665. (P2, ~30m) Scanner Linux: Flatpak Minecraft instances. DONE.
+[ ]  666. (P2, ~25m) Scanner Linux: Snap Minecraft instances. DONE.
+[ ]  667. (P1, ~30m) Scanner Linux: systemd services con nombres
+        sospechosos. DONE.
+[ ]  668. (P2, ~25m) Scanner Linux: cron jobs sospechosos. DONE.
+[ ]  669. (P2, ~30m) Scanner Linux: GTK Recent Files (.local/share/
+        recently-used.xbel). DONE.
+[ ]  670. (P3, ~25m) Scanner Linux: KDE Plasma activities. DONE.
+
+[ ]  671. (P1, ~30m) Test Linux: Ubuntu 22.04 (most common). DONE.
+[ ]  672. (P1, ~30m) Test Linux: Fedora 40. DONE.
+[ ]  673. (P1, ~30m) Test Linux: Arch (rolling). DONE.
+[ ]  674. (P2, ~30m) Test Linux: Mint 21. DONE.
+[ ]  675. (P2, ~30m) Test Linux: Pop!_OS. DONE.
+[ ]  676. (P2, ~30m) Test Linux: openSUSE Tumbleweed. DONE.
+[ ]  677. (P3, ~30m) Test Linux: Debian 12 (legacy). DONE.
+[ ]  678. (P3, ~30m) Test Linux: Manjaro. DONE.
+[ ]  679. (P3, ~30m) Test Linux: NixOS (challenging). DONE.
+[ ]  680. (P3, ~30m) Test Linux: Steam Deck (gaming). DONE.
+
+[ ]  681. (P1, ~30m) Permisos: detectar acceso sudo y avisar (no
+        requerido pero útil para algunos scans). DONE.
+[ ]  682. (P1, ~25m) Permisos: /proc access OK para enumeration. DONE.
+[ ]  683. (P1, ~30m) Permisos: /sys/class scan (USB devices). DONE.
+[ ]  684. (P2, ~25m) Permisos: SELinux awareness (Fedora). DONE.
+[ ]  685. (P2, ~30m) Permisos: AppArmor awareness (Ubuntu). DONE.
+[ ]  686. (P2, ~25m) Permisos: capability check (no sudo needed). DONE.
+[ ]  687. (P3, ~30m) Permisos: Polkit integration opcional. DONE.
+[ ]  688. (P3, ~25m) Permisos: rootless con setuid binary opcional.
+        DONE.
+[ ]  689. (P3, ~30m) Permisos: detección de sandbox (flatpak/snap)
+        y mensaje claro. DONE.
+[ ]  690. (P3, ~25m) Permisos: user namespaces awareness. DONE.
+
+[ ]  691. (P1, ~30m) UI Linux: aplicar tema del sistema. DONE.
+[ ]  692. (P1, ~25m) UI Linux: tray icon (systemtray). DONE.
+[ ]  693. (P1, ~30m) UI Linux: notifications via libnotify. DONE.
+[ ]  694. (P2, ~25m) UI Linux: minimal toolkit dependency (tkinter
+        always disponible). DONE.
+[ ]  695. (P2, ~30m) UI Linux: HiDPI support. DONE.
+[ ]  696. (P2, ~25m) UI Linux: keyboard shortcuts (Ctrl+S, Ctrl+Q).
+        DONE.
+[ ]  697. (P3, ~30m) UI Linux: copy to clipboard funcional. DONE.
+[ ]  698. (P3, ~25m) UI Linux: drag-and-drop archivos. DONE.
+[ ]  699. (P3, ~30m) UI Linux: Wayland clipboard fix (xclip → wl-copy).
+        DONE.
+[ ]  700. (P3, ~25m) UI Linux: window decorations consistentes. DONE.
+
+[ ]  701. (P1, ~30m) Updates: auto-update via checksum comparison. DONE.
+[ ]  702. (P1, ~25m) Updates: in-app updater (download + verify + apply).
+        DONE.
+[ ]  703. (P2, ~30m) Updates: rollback al previous version. DONE.
+[ ]  704. (P2, ~25m) Updates: delta updates (no descargar todo cada vez).
+        DONE.
+[ ]  705. (P3, ~30m) Updates: changelog inline. DONE.
+[ ]  706. (P3, ~25m) Updates: schedule update fuera de uso (de noche).
+        DONE.
+[ ]  707. (P2, ~30m) Updates: notification antes de update mandatorio.
+        DONE.
+[ ]  708. (P3, ~25m) Updates: opt-out de auto-update (config). DONE.
+[ ]  709. (P3, ~30m) Updates: signed updates (verify sig). DONE.
+[ ]  710. (P3, ~25m) Updates: torrent fallback para CDN failure. DONE.
+
+[ ]  711. (P1, ~30m) Security Linux: clear-text creds nunca en disk.
+        DONE: keyring lib.
+[ ]  712. (P1, ~25m) Security Linux: gnome-keyring / kwallet integration.
+        DONE.
+[ ]  713. (P1, ~30m) Security Linux: log file permissions 600. DONE.
+[ ]  714. (P2, ~25m) Security Linux: secure delete tmpfile. DONE.
+[ ]  715. (P2, ~30m) Security Linux: drop privileges si sudo-elevated.
+        DONE.
+[ ]  716. (P2, ~25m) Security Linux: PAM integration opcional. DONE.
+[ ]  717. (P3, ~30m) Security Linux: audit logs go to journald. DONE.
+[ ]  718. (P3, ~25m) Security Linux: namespace isolation para scanner.
+        DONE.
+[ ]  719. (P3, ~30m) Security Linux: signed binary verification. DONE.
+[ ]  720. (P3, ~25m) Security Linux: secure tempdir (mode 700). DONE.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PRIORIZACIÓN DEL SPRINT 8H
+═══════════════════════════════════════════════════════════════════════════════
+Foco para los próximos 8h:
+  1. Cerrar P0 bugs primero (data integrity / crash / FP-critical).
+  2. P1s rápidos (≤30m) en bloques temáticos.
+  3. Mantener cada commit auto-contenido + nota explicando decisión.
+  4. Al chocar con bloqueo, best-guess + tag REVIEW: en el commit.
+
+Itinerario tentativo (ajustable durante ejecución):
+
+  H0 - H1: P0 bugs cross-sector  (items 3, 10, 21, 41, 61, 88, 121, 122,
+                                  126, 161, 191, 194, 195, 331, 332,
+                                  337, 401, 481, 561, 562)
+  H1 - H2: AI ML quick wins      (4, 5, 19, 42, 51, 52, 69, 73, 77)
+  H2 - H3: Plugin Pack 47 polish (482, 483, 484, 491-494, 496, 497,
+                                  500, 502, 503, 506, 511-514, 521-523)
+  H3 - H4: Anti-FP filtro        (162-170, 171-180, 192, 196-200)
+  H4 - H5: Oracle hardening      (402-410, 411-415, 421-425, 431-435)
+  H5 - H6: UI/UX panel polish    (321-325, 333-339, 341-345, 391-395)
+  H6 - H7: Doble-scanner setup   (241-245, 281, 282, 291, 292)
+  H7 - H8: Wrap-up + docs        (resumen, MEJORAS_PACK48.txt update,
+                                  build local, git log limpio)
+
+Notas finales:
+- Si algo requiere recompilar el plugin: hago el bloque cohesivo (todos
+  los Pack 47 polish en serie) → 1 sola recompilación al final.
+- Si algo requiere migración de DB: lo dejo SKIP + REVIEW para que vos
+  apruebes.
+- Si algo requiere credentials externos (OpenAI key, hash blacklist
+  endpoint, etc): SKIP + REVIEW.
+- Push final lo decidís vos al despertar.
+
+═══════════════════════════════════════════════════════════════════════════════
+  CHANGELOG DE EJECUCIÓN (se actualiza durante el sprint)
+═══════════════════════════════════════════════════════════════════════════════
+
+[se irá llenando con items completados, formato:
+  H1:32  #482 [X] Pack 47: VClipCheck — agrego check + config + recompile.
+                  commit 1a2b3c4 - movimiento Y>+0.6/-0.78 en 1 packet
+                  sin slime/honey/water. NoOp si velocity Y server-set.]
