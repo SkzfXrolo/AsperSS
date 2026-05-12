@@ -184,30 +184,62 @@ anticheat:
     # ── Pack 47: checks PACKET-BASED (requieren PacketEvents instalado) ────
     # Solo se activan si el plugin PacketEvents esta presente. Si no,
     # ArgusMC sigue con los checks Bukkit-based de arriba.
+    # Pack 48 #491-#500: todos los thresholds expuestos a config.
     timer:
       enabled: true          # detecta TimerHack midiendo el intervalo real
                              # entre PlayerPosition packets (50ms vanilla).
+      window_ms: 1500
+      ideal_interval_ms: 50
+      tolerance_ms: 150      # subido de 100 a 150 (Pack 48 #491) — menos FP
+      high_balance_ms: 300   # balance < -300ms = HIGH (era hardcoded)
+      min_packets: 10
+      warmup_ms: 2000
     phase:
       enabled: true          # NoClip por raycast entre packets de movimiento.
                              # Whitelist conservadora de bloques solidos.
+      min_blocked_samples: 2
+      samples_per_block: 2
     velocity:
       enabled: true          # AntiKnockback: cliente debe respetar la velocity
                              # asignada por el server (umbral 30%).
+      window_ms: 250
+      fraction_mid_threshold: 0.30
+      fraction_high_threshold: 0.10
+      min_significant_velocity: 0.10
     invalid_rotation:
       enabled: true          # pitch fuera de [-90,+90] o yaw NaN = cliente
                              # modificado garantizado.
+      max_abs_pitch: 90.1
+      extreme_abs_yaw: 100000.0
     reach_packet:
       enabled: true          # reach con posicion EXACTA en el tick del hit.
+      dist_mid: 3.3
+      dist_high: 3.6
+      dist_critical: 4.5
     killaura_swing_packet:
       enabled: true          # attack sin Animation packet previo en 250ms.
+      swing_window_ms: 250
+      max_fov_deg: 90.0
     aim_snap_packet:
-      enabled: true          # delta yaw >80° entre packets + attack en 200ms.
+      enabled: true          # delta yaw >80 grados entre packets + attack <200ms.
+      snap_delta_deg: 80.0
+      extreme_delta_deg: 130.0
+      snap_to_attack_ms: 200
     ping_spoof:
       enabled: true          # RTT <3ms (imposible) o >5000ms sostenido.
+      warmup_ms: 5000
+      min_rtt_ms: 3
+      extreme_rtt_ms: 5000
     cps_packet:
       enabled: true          # CPS real (>22 LOW, >30 MID, >45 HIGH).
+      window_ms: 1000
+      cps_low: 22
+      cps_mid: 30
+      cps_high: 45
     inv_move_packet:
       enabled: true          # ClickWindow durante movimiento legitimo.
+      grace_ms: 300
+      stale_move_ms: 1000
 
     # ── Pack 48: nuevos checks PACKET-BASED (Bloque 2 — movement/blocks) ─────
     vclip:

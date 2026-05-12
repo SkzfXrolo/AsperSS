@@ -5,6 +5,7 @@ import com.argusprojects.argusmc.anticheat.Violation;
 import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.PacketAnticheatListener.ViolationSink;
 import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
 /**
@@ -35,19 +36,26 @@ public final class CPSPacketCheck {
 
     public void handleAttack(Player player, PacketDataStore.State s, long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("cps_packet")) return;
-        int cps = s.recentAttacksWithin(1_000L, now);
-        if (cps >= 45) {
+
+        ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("cps_packet");
+        int lowCps  = sec != null ? sec.getInt("cps_low",  22) : 22;
+        int midCps  = sec != null ? sec.getInt("cps_mid",  30) : 30;
+        int highCps = sec != null ? sec.getInt("cps_high", 45) : 45;
+        long windowMs = sec != null ? sec.getLong("window_ms", 1_000L) : 1_000L;
+
+        int cps = s.recentAttacksWithin(windowMs, now);
+        if (cps >= highCps) {
             sink.flag(new Violation(player, "cps_packet",
                 ViolationLevel.HIGH,
-                String.format("cps=%d (>45)", cps)));
-        } else if (cps >= 30) {
+                String.format("cps=%d (>=%d)", cps, highCps)));
+        } else if (cps >= midCps) {
             sink.flag(new Violation(player, "cps_packet",
                 ViolationLevel.MID,
-                String.format("cps=%d (>30)", cps)));
-        } else if (cps >= 22) {
+                String.format("cps=%d (>=%d)", cps, midCps)));
+        } else if (cps >= lowCps) {
             sink.flag(new Violation(player, "cps_packet",
                 ViolationLevel.LOW,
-                String.format("cps=%d (>22)", cps)));
+                String.format("cps=%d (>=%d)", cps, lowCps)));
         }
     }
 }

@@ -5,6 +5,7 @@ import com.argusprojects.argusmc.anticheat.Violation;
 import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.PacketAnticheatListener.ViolationSink;
 import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
 /**
@@ -38,14 +39,20 @@ public final class VelocityCheck {
                                      double nx, double ny, double nz,
                                      ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("velocity")) return;
+
+        ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("velocity");
+        long windowMs    = sec != null ? sec.getLong("window_ms",            VELOCITY_WINDOW_MS)         : VELOCITY_WINDOW_MS;
+        double midFrac   = sec != null ? sec.getDouble("fraction_mid_threshold",  EXPECTED_FRACTION_THRESHOLD) : EXPECTED_FRACTION_THRESHOLD;
+        double highFrac  = sec != null ? sec.getDouble("fraction_high_threshold", 0.10)                  : 0.10;
+        double minVelH   = sec != null ? sec.getDouble("min_significant_velocity", 0.10)                 : 0.10;
+
         long now = System.currentTimeMillis();
         if (s.serverVelConsumed) return;
         long age = now - s.serverVelAssignedAtMs;
-        if (age <= 0 || age > VELOCITY_WINDOW_MS) return;
+        if (age <= 0 || age > windowMs) return;
 
         double expectedH = Math.sqrt(s.serverVelX * s.serverVelX + s.serverVelZ * s.serverVelZ);
-        if (expectedH < 0.10) {
-            // velocity insignificante (no hay knockback notable) — marcar consumida
+        if (expectedH < minVelH) {
             s.serverVelConsumed = true;
             return;
         }
@@ -55,10 +62,10 @@ public final class VelocityCheck {
         double actualH = Math.sqrt(dx * dx + dz * dz);
 
         double fraction = actualH / expectedH;
-        s.serverVelConsumed = true; // un solo packet decide la check
+        s.serverVelConsumed = true;
 
-        if (fraction < EXPECTED_FRACTION_THRESHOLD) {
-            ViolationLevel lvl = (fraction < 0.10) ? ViolationLevel.HIGH : ViolationLevel.MID;
+        if (fraction < midFrac) {
+            ViolationLevel lvl = (fraction < highFrac) ? ViolationLevel.HIGH : ViolationLevel.MID;
             sink.flag(new Violation(player, "velocity_packet",
                 lvl,
                 String.format("expected=%.3f actual=%.3f fraction=%.0f%%", expectedH, actualH, fraction * 100)));

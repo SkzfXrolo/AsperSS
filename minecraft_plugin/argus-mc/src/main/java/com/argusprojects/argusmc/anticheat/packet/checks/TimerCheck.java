@@ -5,6 +5,7 @@ import com.argusprojects.argusmc.anticheat.Violation;
 import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.PacketAnticheatListener.ViolationSink;
 import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
 /**
@@ -26,9 +27,11 @@ import org.bukkit.entity.Player;
  */
 public final class TimerCheck {
 
-    private static final long WINDOW_MS = 1_500L;
-    private static final long IDEAL_INTERVAL_MS = 50L;
-    private static final long TOLERANCE_MS = 100L;
+    private static final long DEFAULT_WINDOW_MS = 1_500L;
+    private static final long DEFAULT_IDEAL_INTERVAL_MS = 50L;
+    private static final long DEFAULT_TOLERANCE_MS = 150L;
+    private static final long DEFAULT_HIGH_THRESHOLD_MS = 300L;
+    private static final int  DEFAULT_MIN_PACKETS = 10;
 
     private final ArgusPlugin plugin;
 
@@ -39,9 +42,15 @@ public final class TimerCheck {
     public void handlePositionPacket(Player player, PacketDataStore.State s, long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("timer")) return;
 
-        // Warmup: ignorar 2s tras el join (lag de spawn + carga de chunks)
-        if (now - s.joinMs < 2_000L) return;
-        // Teleport: ignorar la ventana de gracia
+        ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("timer");
+        long windowMs       = sec != null ? sec.getLong("window_ms",        DEFAULT_WINDOW_MS)        : DEFAULT_WINDOW_MS;
+        long idealMs        = sec != null ? sec.getLong("ideal_interval_ms", DEFAULT_IDEAL_INTERVAL_MS) : DEFAULT_IDEAL_INTERVAL_MS;
+        long toleranceMs    = sec != null ? sec.getLong("tolerance_ms",      DEFAULT_TOLERANCE_MS)    : DEFAULT_TOLERANCE_MS;
+        long highBalanceMs  = sec != null ? sec.getLong("high_balance_ms",  DEFAULT_HIGH_THRESHOLD_MS): DEFAULT_HIGH_THRESHOLD_MS;
+        int  minPackets     = sec != null ? sec.getInt("min_packets",       DEFAULT_MIN_PACKETS)      : DEFAULT_MIN_PACKETS;
+        long warmupMs       = sec != null ? sec.getLong("warmup_ms",        2_000L)                   : 2_000L;
+
+        if (now - s.joinMs < warmupMs) return;
         if (s.teleporting && now < s.teleportUntilMs) return;
         if (s.teleporting && now >= s.teleportUntilMs) {
             s.teleporting = false;
@@ -51,7 +60,7 @@ public final class TimerCheck {
         int count;
         long oldest;
         synchronized (s) {
-            cutoff = now - WINDOW_MS;
+            cutoff = now - windowMs;
             count = 0;
             oldest = now;
             for (Long t : s.moveTimestamps) {
@@ -61,15 +70,15 @@ public final class TimerCheck {
                 }
             }
         }
-        if (count < 10) return; // datos insuficientes (lag spike, AFK)
+        if (count < minPackets) return;
 
-        long expectedMs = count * IDEAL_INTERVAL_MS;
+        long expectedMs = count * idealMs;
         long actualMs   = now - oldest;
         long balance    = actualMs - expectedMs; // negativo = cliente envio MAS rapido
 
-        if (balance < -(TOLERANCE_MS + 50L)) {
+        if (balance < -toleranceMs) {
             double ratio = expectedMs > 0 ? (double) expectedMs / actualMs : 1.0;
-            ViolationLevel lvl = (balance < -300L) ? ViolationLevel.HIGH : ViolationLevel.MID;
+            ViolationLevel lvl = (balance < -highBalanceMs) ? ViolationLevel.HIGH : ViolationLevel.MID;
             sink.flag(new Violation(player, "timer_packet",
                 lvl,
                 String.format("packets=%d balance=%dms ratio=%.2fx", count, balance, ratio)));

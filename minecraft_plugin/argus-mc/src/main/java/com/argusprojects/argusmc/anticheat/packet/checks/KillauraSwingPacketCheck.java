@@ -5,6 +5,7 @@ import com.argusprojects.argusmc.anticheat.Violation;
 import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.PacketAnticheatListener.ViolationSink;
 import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
@@ -27,7 +28,8 @@ import org.bukkit.entity.Player;
  */
 public final class KillauraSwingPacketCheck {
 
-    private static final long SWING_WINDOW_MS = 250L;
+    private static final long DEFAULT_SWING_WINDOW_MS = 250L;
+    private static final double DEFAULT_FOV_DEG = 90.0;
 
     private final ArgusPlugin plugin;
 
@@ -36,8 +38,6 @@ public final class KillauraSwingPacketCheck {
     }
 
     public void handleSwing(Player player, PacketDataStore.State s, long now, ViolationSink sink) {
-        // Sin logica per-swing por ahora — la decision se toma al recibir el attack.
-        // Pero registramos el tiempo para que handleAttack lo vea.
         s.lastSwingMs = now;
     }
 
@@ -45,28 +45,31 @@ public final class KillauraSwingPacketCheck {
         if (!plugin.getAnticheatConfig().isCheckEnabled("killaura_swing_packet")) return;
         if (target == null) return;
 
+        ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("killaura_swing_packet");
+        long swingWindowMs = sec != null ? sec.getLong("swing_window_ms", DEFAULT_SWING_WINDOW_MS) : DEFAULT_SWING_WINDOW_MS;
+        double fovThr      = sec != null ? sec.getDouble("max_fov_deg",   DEFAULT_FOV_DEG)         : DEFAULT_FOV_DEG;
+
         long sinceSwing = now - s.lastSwingMs;
 
-        if (s.lastSwingMs == 0 || sinceSwing > SWING_WINDOW_MS) {
+        if (s.lastSwingMs == 0 || sinceSwing > swingWindowMs) {
             sink.flag(new Violation(player, "killaura_no_swing_packet",
                 ViolationLevel.HIGH,
-                String.format("sinceSwing=%dms (>250ms or never)", sinceSwing)));
+                String.format("sinceSwing=%dms (>%dms or never)", sinceSwing, swingWindowMs)));
             return;
         }
 
-        // Yaw del atacante apuntando al target (chequeo de FOV).
         org.bukkit.Location tloc = target.getLocation();
         double dx = tloc.getX() - s.lastX;
         double dz = tloc.getZ() - s.lastZ;
-        if (dx == 0 && dz == 0) return; // mismo bloque
+        if (dx == 0 && dz == 0) return;
 
         double yawToTarget = Math.toDegrees(Math.atan2(-dx, dz));
         double diff = Math.abs(normalizeYaw(s.lastYaw - (float) yawToTarget));
 
-        if (diff > 90.0) {
+        if (diff > fovThr) {
             sink.flag(new Violation(player, "killaura_fov_packet",
                 ViolationLevel.HIGH,
-                String.format("yawDiff=%.1f° (target out of FOV)", diff)));
+                String.format("yawDiff=%.1f° (target out of FOV >%.1f°)", diff, fovThr)));
         }
     }
 

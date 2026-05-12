@@ -6,6 +6,7 @@ import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.PacketAnticheatListener.ViolationSink;
 import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.GameMode;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
@@ -62,15 +63,20 @@ public final class ReachPacketCheck {
 
         double dist = eye.distance(tHead);
 
-        if (dist > 4.5) {
+        ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("reach_packet");
+        double midThr      = sec != null ? sec.getDouble("dist_mid",      3.3) : 3.3;
+        double highThr     = sec != null ? sec.getDouble("dist_high",     3.6) : 3.6;
+        double criticalThr = sec != null ? sec.getDouble("dist_critical", 4.5) : 4.5;
+
+        if (dist > criticalThr) {
             sink.flag(new Violation(player, "reach_packet",
                 ViolationLevel.CRITICAL,
                 String.format("dist=%.2f target=%s", dist, target.getType().name().toLowerCase())));
-        } else if (dist > 3.6) {
+        } else if (dist > highThr) {
             sink.flag(new Violation(player, "reach_packet",
                 ViolationLevel.HIGH,
                 String.format("dist=%.2f target=%s", dist, target.getType().name().toLowerCase())));
-        } else if (dist > 3.3) {
+        } else if (dist > midThr) {
             sink.flag(new Violation(player, "reach_packet",
                 ViolationLevel.MID,
                 String.format("dist=%.2f target=%s", dist, target.getType().name().toLowerCase())));

@@ -5,6 +5,7 @@ import com.argusprojects.argusmc.anticheat.Violation;
 import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.PacketAnticheatListener.ViolationSink;
 import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
 /**
@@ -33,11 +34,15 @@ public final class InvMovePacketCheck {
     public void handleClickWindow(Player player, PacketDataStore.State s, long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("inv_move_packet")) return;
         if (!s.inventoryOpen) return;
-        if (now - s.inventoryOpenSinceMs < 300L) return; // recien abierto, ignorar
 
-        // Si ha habido movimiento despues de abrir el inventario, es invmove.
-        if (s.lastMoveMs > s.inventoryOpenSinceMs + 300L
-            && now - s.lastMoveMs < 1_000L) {
+        ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("inv_move_packet");
+        long graceMs       = sec != null ? sec.getLong("grace_ms",         300L) : 300L;
+        long staleMoveMs   = sec != null ? sec.getLong("stale_move_ms",  1_000L) : 1_000L;
+
+        if (now - s.inventoryOpenSinceMs < graceMs) return;
+
+        if (s.lastMoveMs > s.inventoryOpenSinceMs + graceMs
+            && now - s.lastMoveMs < staleMoveMs) {
             sink.flag(new Violation(player, "inv_move_packet",
                 ViolationLevel.MID,
                 String.format("clickWindow during movement (lastMove %dms ago, invOpen %dms)",

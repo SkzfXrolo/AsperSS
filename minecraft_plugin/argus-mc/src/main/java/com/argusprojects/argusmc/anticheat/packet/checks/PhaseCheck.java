@@ -6,6 +6,7 @@ import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.PacketAnticheatListener.ViolationSink;
 import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.Material;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
 /**
@@ -49,8 +50,12 @@ public final class PhaseCheck {
         // > 12 bloques en un packet ya lo detecta otra check (speed/teleport).
         if (dist2 > 144.0) return;
 
+        ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("phase");
+        int minBlockedSamples = sec != null ? sec.getInt("min_blocked_samples", 2) : 2;
+        int samplesPerBlock   = sec != null ? sec.getInt("samples_per_block",   2) : 2;
+
         // Sampleamos puntos intermedios entre last y new (raycast simple).
-        int steps = Math.max(2, (int) Math.ceil(Math.sqrt(dist2) * 2));
+        int steps = Math.max(2, (int) Math.ceil(Math.sqrt(dist2) * samplesPerBlock));
         org.bukkit.World w = player.getWorld();
         int blockedSteps = 0;
         for (int i = 1; i < steps; i++) {
@@ -62,8 +67,7 @@ public final class PhaseCheck {
             if (isHardSolid(m)) blockedSteps++;
         }
 
-        // Si >= 2 muestras intermedias chocaron contra solidos hard, es phase claro.
-        if (blockedSteps >= 2) {
+        if (blockedSteps >= minBlockedSamples) {
             sink.flag(new Violation(player, "phase_packet",
                 ViolationLevel.HIGH,
                 String.format("dx=%.2f dy=%.2f dz=%.2f blockedSamples=%d/%d", dx, dy, dz, blockedSteps, steps - 1)));

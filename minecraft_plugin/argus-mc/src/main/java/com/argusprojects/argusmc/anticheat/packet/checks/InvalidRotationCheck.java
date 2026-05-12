@@ -5,6 +5,7 @@ import com.argusprojects.argusmc.anticheat.Violation;
 import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.PacketAnticheatListener.ViolationSink;
 import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
 /**
@@ -30,22 +31,25 @@ public final class InvalidRotationCheck {
                                float yaw, float pitch, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("invalid_rotation")) return;
 
+        ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("invalid_rotation");
+        double maxPitch       = sec != null ? sec.getDouble("max_abs_pitch",       90.1)      : 90.1;
+        double extremeYawAbs  = sec != null ? sec.getDouble("extreme_abs_yaw",     100_000.0) : 100_000.0;
+
         if (!Float.isFinite(yaw) || !Float.isFinite(pitch)) {
             sink.flag(new Violation(player, "invalid_rotation_packet",
                 ViolationLevel.CRITICAL,
                 "non-finite yaw=" + yaw + " pitch=" + pitch));
             return;
         }
-        if (Math.abs(pitch) > 90.0f + 0.1f) {
+        if (Math.abs(pitch) > maxPitch) {
             sink.flag(new Violation(player, "invalid_rotation_packet",
                 ViolationLevel.HIGH,
-                String.format("pitch=%.2f out of [-90, +90]", pitch)));
+                String.format("pitch=%.2f out of [-%.1f, +%.1f]", pitch, maxPitch, maxPitch)));
         }
-        // Sanity de yaw — un valor enorme sostenido suele venir de bots.
-        if (Math.abs(yaw) > 100_000.0f) {
+        if (Math.abs(yaw) > extremeYawAbs) {
             sink.flag(new Violation(player, "invalid_rotation_packet",
                 ViolationLevel.MID,
-                String.format("yaw=%.2f extreme", yaw)));
+                String.format("yaw=%.2f extreme (>%.0f)", yaw, extremeYawAbs)));
         }
     }
 }

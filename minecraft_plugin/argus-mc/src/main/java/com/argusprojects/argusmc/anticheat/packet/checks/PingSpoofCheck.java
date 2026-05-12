@@ -5,6 +5,7 @@ import com.argusprojects.argusmc.anticheat.Violation;
 import com.argusprojects.argusmc.anticheat.ViolationLevel;
 import com.argusprojects.argusmc.anticheat.packet.PacketAnticheatListener.ViolationSink;
 import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
 /**
@@ -33,14 +34,19 @@ public final class PingSpoofCheck {
 
     public void handleKeepAliveResponse(Player player, PacketDataStore.State s, long rttMs, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("ping_spoof")) return;
-        // Warmup 5s tras join (las primeras keep-alives suelen tener rtt raros)
-        if (System.currentTimeMillis() - s.joinMs < 5_000L) return;
 
-        if (rttMs >= 0 && rttMs < 3L) {
+        ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("ping_spoof");
+        long warmupMs      = sec != null ? sec.getLong("warmup_ms",       5_000L) : 5_000L;
+        long minRttMs      = sec != null ? sec.getLong("min_rtt_ms",      3L)     : 3L;
+        long extremeRttMs  = sec != null ? sec.getLong("extreme_rtt_ms", 5_000L)  : 5_000L;
+
+        if (System.currentTimeMillis() - s.joinMs < warmupMs) return;
+
+        if (rttMs >= 0 && rttMs < minRttMs) {
             sink.flag(new Violation(player, "ping_spoof_packet",
                 ViolationLevel.MID,
-                String.format("rtt=%dms (impossible)", rttMs)));
-        } else if (rttMs > 5_000L) {
+                String.format("rtt=%dms (impossible <%dms)", rttMs, minRttMs)));
+        } else if (rttMs > extremeRttMs) {
             sink.flag(new Violation(player, "ping_spoof_packet",
                 ViolationLevel.LOW,
                 String.format("rtt=%dms (extreme lag or spoof)", rttMs)));
