@@ -4488,6 +4488,69 @@ def api_ai_agreement_rate():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/ai/confidence-histogram', methods=['GET'])
+@login_required
+def api_ai_confidence_histogram():
+    """Histograma de confianza de decisiones IA para panel de salud."""
+    _plugin_schema_guard()
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        if not user:
+            return jsonify({'success': False, 'error': 'No autenticado'}), 401
+        company_id = 0 if user.get('is_super_admin') else int(user.get('company_id') or 0)
+        days = max(1, min(180, int(request.args.get('days', 30))))
+        bins = [0] * 10  # 0-9 => [0.0-0.1), ..., [0.9-1.0]
+
+        with get_api_db_cursor() as cursor:
+            try:
+                if company_id > 0:
+                    cursor.execute(
+                        f"SELECT confidence FROM ai_decisions_log "
+                        f"WHERE company_id = {_PH} "
+                        f"  AND created_at >= CURRENT_TIMESTAMP - INTERVAL '{days} days'",
+                        (company_id,)
+                    )
+                else:
+                    cursor.execute(
+                        f"SELECT confidence FROM ai_decisions_log "
+                        f"WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '{days} days'"
+                    )
+            except Exception:
+                if company_id > 0:
+                    cursor.execute(
+                        f"SELECT confidence FROM ai_decisions_log "
+                        f"WHERE company_id = {_PH} "
+                        f"  AND created_at >= datetime('now', '-{days} days')",
+                        (company_id,)
+                    )
+                else:
+                    cursor.execute(
+                        f"SELECT confidence FROM ai_decisions_log "
+                        f"WHERE created_at >= datetime('now', '-{days} days')"
+                    )
+            rows = cursor.fetchall() or []
+
+        total = 0
+        for r in rows:
+            c = float(_row_get(r, 0, 'confidence') or 0.0)
+            c = max(0.0, min(1.0, c))
+            idx = min(9, int(c * 10))
+            bins[idx] += 1
+            total += 1
+
+        labels = [f"{i/10:.1f}-{(i+1)/10:.1f}" for i in range(10)]
+        return jsonify({
+            'success': True,
+            'company_id': company_id,
+            'days': days,
+            'labels': labels,
+            'bins': bins,
+            'total': total,
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/ai/retrain', methods=['POST'])
 @admin_required
 def api_ai_retrain():
