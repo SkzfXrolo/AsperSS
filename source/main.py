@@ -5627,6 +5627,8 @@ class ArgusApp:
                 _run_safe(self.scan_muicache)
                 self._set_scan_phase("📎 Archivos recientes (LNK)...")
                 _run_safe(self.scan_recent_lnk)
+                self._set_scan_phase("🧭 Jump Lists (historial de accesos)...")
+                _run_safe(self.scan_jump_lists)
                 self._set_scan_phase("📅 Tareas programadas...")
                 _run_safe(self.scan_scheduled_tasks)
                 self._set_scan_phase("⏰ Tareas programadas recientes (persistencia)...")
@@ -11822,6 +11824,55 @@ class ArgusApp:
                 print(f"✅ LNK recientes: {len(lnk_files)} archivos encontrados")
         except Exception as e:
             print(f"Error en scan_recent_lnk: {e}")
+
+    def scan_jump_lists(self):
+        """Escanea Jump Lists (AutomaticDestinations/CustomDestinations) por referencias sospechosas."""
+        print("🔍 Escaneando Jump Lists...")
+        hack_terms = list(_DEFINITE_HACK_NAMES)
+        interesting_exts = ('.exe', '.jar', '.dll', '.bat', '.ps1', '.vbs', '.msi')
+        base_recent = os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Windows', 'Recent')
+        jump_dirs = [
+            os.path.join(base_recent, 'AutomaticDestinations'),
+            os.path.join(base_recent, 'CustomDestinations'),
+        ]
+        found = 0
+        for jdir in jump_dirs:
+            if not os.path.isdir(jdir):
+                continue
+            try:
+                for fname in os.listdir(jdir):
+                    if not (fname.lower().endswith('.automaticdestinations-ms')
+                            or fname.lower().endswith('.customdestinations-ms')):
+                        continue
+                    fpath = os.path.join(jdir, fname)
+                    try:
+                        with open(fpath, 'rb') as f:
+                            blob = f.read(2 * 1024 * 1024)
+                    except (PermissionError, OSError):
+                        continue
+                    text = blob.decode('utf-16-le', errors='ignore').lower()
+                    if len(text) < 10:
+                        text = blob.decode('latin-1', errors='ignore').lower()
+                    ext_hit = any(ext in text for ext in interesting_exts)
+                    term_hit = next((t for t in hack_terms if t in text), None)
+                    if term_hit and ext_hit:
+                        self.issues_found.append({
+                            'tipo': 'jump_list_suspicious',
+                            'nombre': f'Jump List sospechosa: {fname[:80]}',
+                            'ruta': fpath[:255],
+                            'archivo': fname[:255],
+                            'categoria': 'EXECUTED_FILES',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.68,
+                            'detected_patterns': [f'jump_list:{term_hit}'],
+                            'extra': {'source': 'jump_lists'},
+                        })
+                        found += 1
+                        print(f"⚠️ JUMP LIST SOSPECHOSA: {fname} [{term_hit}]")
+            except (PermissionError, OSError):
+                continue
+        if found == 0:
+            print("✅ Jump Lists sin referencias sospechosas")
 
     def scan_appcompat_shimcache(self):
         """Lee AppCompatCache (ShimCache) del registro — ejecuciones históricas de aplicaciones."""
