@@ -16013,6 +16013,10 @@ class ArgusApp:
         print("🔍 Escaneando JARs cargados en memoria de Minecraft...")
         import re as _re
         import zipfile as _zf
+        MEM_HACK_RE = _re.compile(
+            r'(killaura|aimbot|triggerbot|autoclick|cheatengine|dllinject|xenos|processhollow|manualmap)',
+            _re.IGNORECASE
+        )
 
         # Strings de módulos de hack (>= 8 chars, específicos)
         HACK_SIGNATURES = [
@@ -16049,13 +16053,30 @@ class ArgusApp:
                     if 'javaw' not in name and 'java' not in name:
                         continue
                     loaded_jars = set()
+                    suspicious_maps = set()
                     try:
                         for mmap in proc.memory_maps():
                             path = mmap.path or ''
                             if path.lower().endswith('.jar') and os.path.isfile(path):
                                 loaded_jars.add(path)
+                            elif path and MEM_HACK_RE.search(path):
+                                suspicious_maps.add(path)
                     except (psutil.AccessDenied, psutil.NoSuchProcess):
                         pass
+
+                    if suspicious_maps:
+                        sample = sorted(suspicious_maps)[:3]
+                        self.issues_found.append({
+                            'nombre': f'Patrones de hack en memoria mapeada: {os.path.basename(name)}',
+                            'ruta': sample[0][:255],
+                            'archivo': '; '.join(s[:80] for s in sample),
+                            'tipo': 'process_memory_keyword',
+                            'categoria': 'JAVA_INJECTION',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.66,
+                            'detected_patterns': ['memory_map_keyword'],
+                            'explicacion': 'Se detectaron rutas mapeadas en memoria con keywords típicas de inyección/hack.',
+                        })
 
                     for jar_path in loaded_jars:
                         jar_l = jar_path.lower()
