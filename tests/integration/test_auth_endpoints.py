@@ -20,8 +20,8 @@ def test_api_logout_invalidates_session_and_sets_cache_headers(login_session):
     assert r.status_code in {200, 400}
     if r.status_code == 200:
         assert "no-store" in (r.headers.get("Cache-Control") or "")
-    with login_session.session_transaction() as sess:
-        assert "user_id" not in sess
+        with login_session.session_transaction() as sess:
+            assert "user_id" not in sess
 
 
 def test_api_register_success(client, monkeypatch):
