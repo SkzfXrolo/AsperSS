@@ -13,6 +13,26 @@ import datetime
 import secrets
 import traceback
 from functools import wraps
+from cache import cache as _app_cache
+from cache import cached as _cached
+try:
+    from utils.request_id import bind_request_id as _bind_request_id
+except Exception:
+    _bind_request_id = None
+try:
+    from utils.structured_logging import JSONFormatter as _JSONFormatter
+except Exception:
+    _JSONFormatter = None
+try:
+    from utils.pagination import Paginator as _Paginator
+except Exception:
+    _Paginator = None
+try:
+    from flask_socketio import SocketIO, emit, join_room
+except Exception:
+    SocketIO = None
+    emit = None
+    join_room = None
 
 # Importar sistema de autenticaciÃ³n
 from auth import (
@@ -68,6 +88,13 @@ except Exception as _ai_maint_err:
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-production')
 app.config['WTF_CSRF_CHECK_DEFAULT'] = False
+_SOCKETIO_CORS = os.environ.get('SOCKETIO_CORS_ALLOWED_ORIGINS', '*')
+socketio = SocketIO(app, async_mode='threading', cors_allowed_origins=_SOCKETIO_CORS) if SocketIO else None
+try:
+    from api_v2 import api_v2 as _api_v2_bp
+    app.register_blueprint(_api_v2_bp)
+except Exception as _e_v2:
+    print(f"[api_v2] no disponible: {_e_v2}")
 
 # Sesion persistente: 30 dias (de lo contrario las cookies expiran al cerrar el navegador
 # y el usuario se queda "deslogueado" sin previo aviso, viendo todo en 0 porque los
@@ -80,6 +107,13 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 if os.environ.get('RENDER') or os.environ.get('FLASK_ENV') == 'production':
     app.config['SESSION_COOKIE_SECURE'] = True
 
+if os.environ.get('LOG_FORMAT', '').strip().lower() == 'json' and _JSONFormatter is not None:
+    import logging as _logging
+    _h = _logging.StreamHandler()
+    _h.setFormatter(_JSONFormatter())
+    app.logger.handlers = [_h]
+    app.logger.setLevel(_logging.INFO)
+
 
 @app.before_request
 def _make_session_permanent():
@@ -87,6 +121,11 @@ def _make_session_permanent():
     en lugar de morir al cerrar el navegador."""
     from flask import session as _s
     _s.permanent = True
+    if _bind_request_id is not None:
+        try:
+            _bind_request_id()
+        except Exception:
+            pass
 
 
 csrf = CSRFProtect(app)
@@ -130,6 +169,53 @@ def _csrf_protect_state_changes():
     return csrf.protect()
 
 
+@app.after_request
+def _propagate_request_id(resp):
+    try:
+        from flask import g
+        rid = getattr(g, 'request_id', '')
+        if rid:
+            resp.headers['X-Request-ID'] = rid
+    except Exception:
+        pass
+    return resp
+
+
+if socketio is not None:
+    @socketio.on('connect')
+    def _ws_connect():
+        uid = int(session.get('user_id') or 0)
+        if uid <= 0:
+            return False
+        if join_room is not None:
+            join_room(f"user:{uid}")
+        if emit is not None:
+            emit('notification', {'kind': 'socket', 'message': 'Conectado a tiempo real'})
+
+    @socketio.on('disconnect')
+    def _ws_disconnect():
+        return None
+
+    @socketio.on('oracle_message')
+    def _ws_oracle_message(data):
+        uid = int(session.get('user_id') or 0)
+        if uid <= 0:
+            return
+        msg = str((data or {}).get('message') or '').strip()
+        if not msg:
+            if emit is not None:
+                emit('oracle_response', {'error': 'Mensaje vacío'})
+            return
+        try:
+            import argus_ai_assistant as A
+            out = A.generate_response(msg, None, None, None)
+            ans = (out or {}).get('answer') or 'Sin respuesta.'
+        except Exception as e:
+            ans = f"Error Oracle WS: {e}"
+        if emit is not None:
+            emit('oracle_response', {'reply': ans, 'via': 'ws'})
+
+
 def require_superadmin(f):
     """Restringe endpoint a usuarios superadmin autenticados."""
     @wraps(f)
@@ -140,6 +226,34 @@ def require_superadmin(f):
             return jsonify({'error': 'Acceso restringido a superadmin'}), 403
         return f(*args, **kwargs)
     return _wrapped
+
+
+def _write_audit(action: str, resource_type: str = '', resource_id: str = '', details: dict | None = None):
+    try:
+        uid = int(session.get('user_id') or 0) or None
+        sid = request.cookies.get('session') if request else None
+        ip = request.remote_addr if request else None
+        ua = request.headers.get('User-Agent') if request else None
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"INSERT INTO audit_log_v2 (user_id, session_id, action, resource_type, resource_id, details, ip_address, user_agent) "
+                f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})",
+                (uid, sid, action, resource_type, str(resource_id or ''), json.dumps(details or {}), ip, ua)
+            )
+    except Exception as e:
+        print(f"[audit_v2] write error: {e}")
+
+
+def audit_action(action_name: str, resource_type: str = ''):
+    def _decorator(fn):
+        @wraps(fn)
+        def _wrapped(*args, **kwargs):
+            resp = fn(*args, **kwargs)
+            rid = kwargs.get('scan_id') or kwargs.get('company_id') or kwargs.get('id') or ''
+            _write_audit(action_name, resource_type, str(rid), {'method': request.method, 'path': request.path})
+            return resp
+        return _wrapped
+    return _decorator
 
 
 CORS(app)
@@ -576,6 +690,10 @@ try:
                        id='daily_summary', replace_existing=True)
     _scheduler.add_job(lambda: globals().get('_send_daily_digest_emails', lambda: None)(), 'cron', hour=8, minute=0,
                        id='daily_digest_email', replace_existing=True)
+    _scheduler.add_job(lambda: globals().get('aggregate_fp_feedback', lambda: None)(), 'cron', hour=7, minute=30,
+                       id='aggregate_fp_feedback', replace_existing=True)
+    _scheduler.add_job(lambda: globals().get('audit_retention_cleanup', lambda: None)(), 'cron', hour=4, minute=15,
+                       id='audit_retention_cleanup', replace_existing=True)
     _scheduler.add_job(lambda: globals().get('scan_scheduler_tick', lambda: None)(), 'interval', minutes=5,
                        id='scan_scheduler_tick', replace_existing=True)
     _scheduler.add_job(_try_send_deploy_webhook, 'interval', minutes=10,
@@ -2685,6 +2803,121 @@ def _ensure_plugin_keys_schema():
                     pass
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_pref_user ON user_preferences(user_id)")
 
+                # Game profiles por compañía + reglas context-aware (#173-176)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS game_profiles (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(80) NOT NULL,
+                        slug VARCHAR(60) NOT NULL,
+                        filter_rules TEXT NOT NULL,
+                        default_for_company INTEGER,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                try:
+                    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_game_profiles_slug ON game_profiles(slug)")
+                except Exception:
+                    pass
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS company_game_profile (
+                        company_id INTEGER PRIMARY KEY,
+                        game_profile_id INTEGER NOT NULL,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+
+                # Agregaciones de feedback FP (#178)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_feedback_aggregations (
+                        id SERIAL PRIMARY KEY,
+                        agg_date DATE NOT NULL,
+                        feature_name VARCHAR(80) NOT NULL,
+                        false_positive_count INTEGER DEFAULT 0,
+                        true_positive_count INTEGER DEFAULT 0,
+                        weight_adjustment REAL DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                try:
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_afa_date ON ai_feedback_aggregations(agg_date DESC)")
+                except Exception:
+                    pass
+
+                # Marketplace de reglas compartidas (#181)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS shared_filter_rules (
+                        id SERIAL PRIMARY KEY,
+                        source_company_id INTEGER NOT NULL,
+                        name VARCHAR(120) NOT NULL,
+                        description TEXT,
+                        rules_json TEXT NOT NULL,
+                        public BOOLEAN DEFAULT TRUE,
+                        downloads_count INTEGER DEFAULT 0,
+                        rating_avg REAL DEFAULT 0,
+                        rating_count INTEGER DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                try:
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sfr_public ON shared_filter_rules(public)")
+                except Exception:
+                    pass
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS company_shared_rules (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER NOT NULL,
+                        shared_rule_id INTEGER NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                try:
+                    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_company_shared_rules ON company_shared_rules(company_id, shared_rule_id)")
+                except Exception:
+                    pass
+
+                # Seed profiles default
+                _seed_profiles = [
+                    ('Minecraft', 'minecraft', json.dumps({'whitelist_checks': ['inventory_move'], 'allow_legit_clients': True})),
+                    ('Fortnite', 'fortnite', json.dumps({'whitelist_checks': [], 'allow_legit_clients': False})),
+                    ('CS2', 'cs2', json.dumps({'whitelist_checks': [], 'allow_legit_clients': False})),
+                    ('Valorant', 'valorant', json.dumps({'whitelist_checks': [], 'allow_legit_clients': False})),
+                    ('GTA RP', 'gta_rp', json.dumps({'whitelist_checks': [], 'allow_legit_clients': False})),
+                    ('Roblox', 'roblox', json.dumps({'whitelist_checks': [], 'allow_legit_clients': False})),
+                ]
+                for _name, _slug, _rules in _seed_profiles:
+                    try:
+                        cursor.execute(f"SELECT id FROM game_profiles WHERE slug = {_PH} LIMIT 1", (_slug,))
+                        if not cursor.fetchone():
+                            cursor.execute(
+                                f"INSERT INTO game_profiles (name, slug, filter_rules) VALUES ({_PH},{_PH},{_PH})",
+                                (_name, _slug, _rules)
+                            )
+                    except Exception:
+                        pass
+
+                # Audit log centralizado v2
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS audit_log_v2 (
+                        id BIGSERIAL PRIMARY KEY,
+                        timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        user_id INTEGER,
+                        session_id TEXT,
+                        action TEXT NOT NULL,
+                        resource_type TEXT,
+                        resource_id TEXT,
+                        details TEXT,
+                        ip_address TEXT,
+                        user_agent TEXT
+                    )
+                """)
+                try:
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_v2_ts ON audit_log_v2(timestamp DESC)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_v2_action ON audit_log_v2(action)")
+                except Exception:
+                    pass
+
                 # Columnas adicionales en scan_tokens â€” solo ALTER si no existen
                 _migrations = [
                     ('plugin_key_id', "ALTER TABLE scan_tokens ADD COLUMN plugin_key_id INTEGER"),
@@ -3403,13 +3636,11 @@ def _get_ai_weights(company_id: int) -> dict:
 
     Si la empresa no tiene pesos custom, usa los globales (company_id=0).
     Si tampoco hay globales en BD, usa los hardcoded de argus_ai_oracle."""
-    import time as _t
     import argus_ai_oracle as _oracle
-    cache_key = company_id or 0
-    now = _t.time()
-    cached = _AI_WEIGHTS_CACHE.get(cache_key)
-    if cached and (now - cached['ts']) < _AI_WEIGHTS_TTL_S:
-        return cached['weights']
+    cache_key = f"ai_weights:{int(company_id or 0)}"
+    cached = _app_cache.get(cache_key)
+    if cached:
+        return cached
     try:
         with get_api_db_cursor() as cursor:
             cursor.execute(
@@ -3431,8 +3662,62 @@ def _get_ai_weights(company_id: int) -> dict:
     except Exception as e:
         print(f"[ai_weights] fallback a defaults: {e}")
         weights = _oracle.get_default_weights()
-    _AI_WEIGHTS_CACHE[cache_key] = {'weights': weights, 'ts': now}
+    # Ajustes agregados de feedback FP recientes (#178)
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT feature_name, weight_adjustment FROM ai_feedback_aggregations "
+                f"WHERE agg_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY agg_date DESC LIMIT 200"
+            )
+            rows = cursor.fetchall() or []
+        mult = ((weights.get('multipliers') or {}).copy())
+        for r in rows:
+            d = dict(r) if not isinstance(r, dict) else r
+            fn = str(d.get('feature_name') or '')
+            adj = float(d.get('weight_adjustment') or 0.0)
+            if not fn:
+                continue
+            current = float(mult.get(fn, 1.0))
+            mult[fn] = max(0.35, min(1.35, current + adj))
+        weights = dict(weights)
+        weights['multipliers'] = mult
+    except Exception:
+        pass
+    _app_cache.set(cache_key, weights, ttl=300)
     return weights
+
+
+def _get_company_game_profile_rules(company_id: int) -> dict:
+    cache_key = f"company_game_profile_rules:{int(company_id or 0)}"
+    c = _app_cache.get(cache_key)
+    if c:
+        return c
+    default_rules = {'whitelist_checks': [], 'allow_legit_clients': True}
+    if int(company_id or 0) <= 0:
+        return default_rules
+    try:
+        with get_api_db_cursor() as cursor:
+            cursor.execute(
+                f"SELECT gp.filter_rules FROM company_game_profile cgp "
+                f"JOIN game_profiles gp ON gp.id = cgp.game_profile_id "
+                f"WHERE cgp.company_id = {_PH} LIMIT 1",
+                (int(company_id),)
+            )
+            row = cursor.fetchone()
+            if row:
+                d = dict(row) if not isinstance(row, dict) else row
+                rules = json.loads(d.get('filter_rules') or '{}')
+                if isinstance(rules, dict):
+                    out = {
+                        'whitelist_checks': list(rules.get('whitelist_checks') or []),
+                        'allow_legit_clients': bool(rules.get('allow_legit_clients', True)),
+                    }
+                    _app_cache.set(cache_key, out, ttl=60)
+                    return out
+    except Exception:
+        pass
+    _app_cache.set(cache_key, default_rules, ttl=60)
+    return default_rules
 
 
 def _build_ai_evidence(cursor, company_id: int, player_uuid: str, player_name: str,
@@ -3445,6 +3730,7 @@ def _build_ai_evidence(cursor, company_id: int, player_uuid: str, player_name: s
       - SS pasados via scan_tokens.minecraft_target (cuantos limpios, ultimo resultado)
       - reports recientes (no implementado aun, defaults a 0)
     """
+    profile_rules = _get_company_game_profile_rules(company_id)
     evidence: dict = {
         'violations': [],
         'current_score': 0.0,
@@ -3455,6 +3741,7 @@ def _build_ai_evidence(cursor, company_id: int, player_uuid: str, player_name: s
         'prior_clean_scans': 0,
         'scan_detected_hacks_recent': False,
         'reports_in_chat': 0,
+        'game_profile_rules': profile_rules,
     }
     # Estado previo
     try:
@@ -3495,10 +3782,14 @@ def _build_ai_evidence(cursor, company_id: int, player_uuid: str, player_name: s
             f"ORDER BY created_at DESC LIMIT 50",
             (company_id, player_uuid)
         )
+        whitelist_checks = {str(x).strip().lower() for x in (profile_rules.get('whitelist_checks') or [])}
         for r in cursor.fetchall():
             d = dict(r) if not isinstance(r, dict) else r
+            ckn = str(d.get('check_name') or '')
+            if ckn.split(':', 1)[0].strip().lower() in whitelist_checks:
+                continue
             evidence['violations'].append({
-                'check_name': d.get('check_name'),
+                'check_name': ckn,
                 'level': d.get('level'),
                 'age_seconds': d.get('age_s') or 0,
             })
@@ -3864,6 +4155,7 @@ def _can_manage_company_notifications(user: dict | None, requested_company_id: i
 
 @app.route('/api/companies/<int:company_id>/notifications', methods=['GET', 'PUT'])
 @login_required
+@audit_action('company.notifications.update', 'company')
 def api_company_notifications(company_id: int):
     _plugin_schema_guard()
     user = get_user_by_id(session.get('user_id'))
@@ -3936,6 +4228,431 @@ def api_admin_digest_preview():
     return jsonify({'success': True, 'digest': digest, 'text_preview': text, 'html_preview': html}), 200
 
 
+@app.route('/api/game-profiles', methods=['GET', 'POST', 'PUT', 'DELETE'])
+@login_required
+def api_game_profiles():
+    _plugin_schema_guard()
+    user = get_user_by_id(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'No autenticado'}), 401
+    roles = user.get('roles') or []
+    if isinstance(roles, str):
+        try:
+            roles = json.loads(roles)
+        except Exception:
+            roles = [roles]
+    roles = {str(r).lower() for r in roles}
+    is_admin = bool(roles & {'admin', 'owner', 'super_admin'})
+    if request.method == 'GET':
+        with get_api_db_cursor() as cur:
+            cur.execute("SELECT id, name, slug, filter_rules, default_for_company FROM game_profiles ORDER BY name ASC")
+            items = []
+            for r in (cur.fetchall() or []):
+                d = dict(r) if not isinstance(r, dict) else r
+                items.append({
+                    'id': d.get('id'),
+                    'name': d.get('name'),
+                    'slug': d.get('slug'),
+                    'filter_rules': json.loads(d.get('filter_rules') or '{}'),
+                    'default_for_company': d.get('default_for_company'),
+                })
+        return jsonify({'success': True, 'items': items}), 200
+    if not is_admin:
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    data = request.json or {}
+    try:
+        with get_api_db_cursor() as cur:
+            if request.method == 'POST':
+                name = str(data.get('name') or '').strip()[:80]
+                slug = str(data.get('slug') or '').strip().lower()[:60]
+                rules = data.get('filter_rules') or {}
+                if not name or not slug:
+                    return jsonify({'success': False, 'error': 'name/slug requeridos'}), 400
+                sid = _insert_id(cur, f"INSERT INTO game_profiles (name, slug, filter_rules) VALUES ({_PH},{_PH},{_PH})",
+                                 (name, slug, json.dumps(rules)))
+                return jsonify({'success': True, 'id': sid}), 200
+            if request.method == 'PUT':
+                pid = int(data.get('id') or 0)
+                if pid <= 0:
+                    return jsonify({'success': False, 'error': 'id requerido'}), 400
+                cur.execute(
+                    f"UPDATE game_profiles SET name = {_PH}, slug = {_PH}, filter_rules = {_PH}, updated_at = CURRENT_TIMESTAMP "
+                    f"WHERE id = {_PH}",
+                    (str(data.get('name') or '')[:80], str(data.get('slug') or '').lower()[:60],
+                     json.dumps(data.get('filter_rules') or {}), pid)
+                )
+                return jsonify({'success': True}), 200
+            pid = int(data.get('id') or request.args.get('id') or 0)
+            if pid <= 0:
+                return jsonify({'success': False, 'error': 'id requerido'}), 400
+            cur.execute(f"DELETE FROM game_profiles WHERE id = {_PH}", (pid,))
+            return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/companies/<int:company_id>/game-profile', methods=['GET', 'PUT'])
+@login_required
+def api_company_game_profile(company_id: int):
+    _plugin_schema_guard()
+    user = get_user_by_id(session.get('user_id'))
+    if not _can_manage_company_notifications(user, company_id):
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    if request.method == 'GET':
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT cgp.game_profile_id, gp.slug, gp.name, gp.filter_rules "
+                f"FROM company_game_profile cgp JOIN game_profiles gp ON gp.id = cgp.game_profile_id "
+                f"WHERE cgp.company_id = {_PH} LIMIT 1",
+                (company_id,)
+            )
+            row = cur.fetchone()
+        if not row:
+            return jsonify({'success': True, 'profile': None}), 200
+        d = dict(row) if not isinstance(row, dict) else row
+        return jsonify({'success': True, 'profile': {
+            'game_profile_id': d.get('game_profile_id'),
+            'slug': d.get('slug'),
+            'name': d.get('name'),
+            'filter_rules': json.loads(d.get('filter_rules') or '{}'),
+        }}), 200
+    data = request.json or {}
+    pid = int(data.get('game_profile_id') or 0)
+    if pid <= 0:
+        return jsonify({'success': False, 'error': 'game_profile_id requerido'}), 400
+    with get_api_db_cursor() as cur:
+        cur.execute(f"SELECT company_id FROM company_game_profile WHERE company_id = {_PH}", (company_id,))
+        if cur.fetchone():
+            cur.execute(
+                f"UPDATE company_game_profile SET game_profile_id = {_PH}, updated_at = CURRENT_TIMESTAMP "
+                f"WHERE company_id = {_PH}",
+                (pid, company_id)
+            )
+        else:
+            cur.execute(
+                f"INSERT INTO company_game_profile (company_id, game_profile_id, updated_at) VALUES ({_PH},{_PH},CURRENT_TIMESTAMP)",
+                (company_id, pid)
+            )
+    _app_cache.delete(f"company_game_profile_rules:{company_id}")
+    return jsonify({'success': True}), 200
+
+
+@app.route('/api/shared-rules', methods=['GET', 'POST'])
+@login_required
+def api_shared_rules():
+    _plugin_schema_guard()
+    user = get_user_by_id(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'No autenticado'}), 401
+    company_id = int(_resolve_company_id_for_user(user) or 0)
+    if request.method == 'GET':
+        page = max(1, int(request.args.get('page', 1) or 1))
+        per_page = max(1, min(50, int(request.args.get('per_page', 20) or 20)))
+        off = (page - 1) * per_page
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT id, source_company_id, name, description, rules_json, downloads_count, rating_avg "
+                f"FROM shared_filter_rules WHERE public = TRUE ORDER BY rating_avg DESC, downloads_count DESC LIMIT {_PH} OFFSET {_PH}",
+                (per_page, off)
+            )
+            rows = cur.fetchall() or []
+        items = []
+        for r in rows:
+            d = dict(r) if not isinstance(r, dict) else r
+            items.append({
+                'id': d.get('id'),
+                'source_company_id': d.get('source_company_id'),
+                'name': d.get('name'),
+                'description': d.get('description'),
+                'rules': json.loads(d.get('rules_json') or '{}'),
+                'downloads_count': int(d.get('downloads_count') or 0),
+                'rating_avg': float(d.get('rating_avg') or 0.0),
+            })
+        return jsonify({'success': True, 'items': items, 'page': page, 'per_page': per_page}), 200
+    data = request.json or {}
+    if company_id <= 0:
+        return jsonify({'success': False, 'error': 'Usuario sin company'}), 400
+    with get_api_db_cursor() as cur:
+        rid = _insert_id(
+            cur,
+            f"INSERT INTO shared_filter_rules (source_company_id, name, description, rules_json, public, updated_at) "
+            f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},CURRENT_TIMESTAMP)",
+            (
+                company_id,
+                str(data.get('name') or 'Rule set')[:120],
+                str(data.get('description') or '')[:500],
+                json.dumps(data.get('rules') or {}),
+                bool(data.get('public', True)),
+            )
+        )
+    return jsonify({'success': True, 'id': rid}), 200
+
+
+@app.route('/api/shared-rules/<int:rule_id>/use', methods=['POST'])
+@login_required
+def api_shared_rules_use(rule_id: int):
+    user = get_user_by_id(session.get('user_id'))
+    company_id = int(_resolve_company_id_for_user(user) or 0) if user else 0
+    if company_id <= 0:
+        return jsonify({'success': False, 'error': 'Usuario sin company'}), 400
+    with get_api_db_cursor() as cur:
+        cur.execute(
+            f"INSERT INTO company_shared_rules (company_id, shared_rule_id) VALUES ({_PH},{_PH})",
+            (company_id, rule_id)
+        )
+        cur.execute(
+            f"UPDATE shared_filter_rules SET downloads_count = COALESCE(downloads_count,0)+1, updated_at = CURRENT_TIMESTAMP "
+            f"WHERE id = {_PH}",
+            (rule_id,)
+        )
+    return jsonify({'success': True}), 200
+
+
+@app.route('/api/shared-rules/<int:rule_id>/rate', methods=['POST'])
+@login_required
+def api_shared_rules_rate(rule_id: int):
+    data = request.json or {}
+    rating = max(1, min(5, int(data.get('rating') or 0)))
+    with get_api_db_cursor() as cur:
+        cur.execute(
+            f"SELECT rating_avg, rating_count FROM shared_filter_rules WHERE id = {_PH}",
+            (rule_id,)
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify({'success': False, 'error': 'Regla no encontrada'}), 404
+        d = dict(row) if not isinstance(row, dict) else row
+        cur_avg = float(d.get('rating_avg') or 0.0)
+        cur_n = int(d.get('rating_count') or 0)
+        new_n = cur_n + 1
+        new_avg = ((cur_avg * cur_n) + rating) / new_n
+        cur.execute(
+            f"UPDATE shared_filter_rules SET rating_avg = {_PH}, rating_count = {_PH}, updated_at = CURRENT_TIMESTAMP "
+            f"WHERE id = {_PH}",
+            (new_avg, new_n, rule_id)
+        )
+    return jsonify({'success': True, 'rating_avg': round(new_avg, 3), 'rating_count': new_n}), 200
+
+
+@app.route('/api/filters/export', methods=['GET'])
+@login_required
+def api_filters_export():
+    user = get_user_by_id(session.get('user_id'))
+    req_company = int(request.args.get('company_id') or 0)
+    company_id = req_company if req_company > 0 else int(_resolve_company_id_for_user(user) or 0)
+    if company_id <= 0:
+        return jsonify({'success': False, 'error': 'company_id inválido'}), 400
+    if not _can_manage_company_notifications(user, company_id):
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    with get_api_db_cursor() as cur:
+        cur.execute(
+            f"SELECT gp.id, gp.name, gp.slug, gp.filter_rules "
+            f"FROM company_game_profile cgp JOIN game_profiles gp ON gp.id = cgp.game_profile_id "
+            f"WHERE cgp.company_id = {_PH} LIMIT 1",
+            (company_id,)
+        )
+        gp = cur.fetchone()
+        cur.execute(
+            f"SELECT feature_name, false_positive_count, true_positive_count, weight_adjustment, agg_date "
+            f"FROM ai_feedback_aggregations WHERE agg_date >= CURRENT_DATE - INTERVAL '30 days'",
+        )
+        aggs = cur.fetchall() or []
+        cur.execute(
+            f"SELECT shared_rule_id FROM company_shared_rules WHERE company_id = {_PH}",
+            (company_id,)
+        )
+        shared = [int(_row_get(r, 0, 'shared_rule_id') or 0) for r in (cur.fetchall() or [])]
+    out = {
+        'company_id': company_id,
+        'exported_at': datetime.datetime.utcnow().isoformat() + 'Z',
+        'game_profile': None,
+        'fp_feedback_aggregations': [dict(r) if not isinstance(r, dict) else r for r in aggs],
+        'shared_rule_ids': shared,
+    }
+    if gp:
+        d = dict(gp) if not isinstance(gp, dict) else gp
+        out['game_profile'] = {
+            'id': d.get('id'),
+            'name': d.get('name'),
+            'slug': d.get('slug'),
+            'filter_rules': json.loads(d.get('filter_rules') or '{}'),
+        }
+    return jsonify({'success': True, 'data': out}), 200
+
+
+@app.route('/api/filters/import', methods=['POST'])
+@login_required
+def api_filters_import():
+    user = get_user_by_id(session.get('user_id'))
+    data = request.json or {}
+    company_id = int(data.get('company_id') or _resolve_company_id_for_user(user) or 0)
+    if company_id <= 0:
+        return jsonify({'success': False, 'error': 'company_id inválido'}), 400
+    if not _can_manage_company_notifications(user, company_id):
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    payload = data.get('data') or {}
+    gp = payload.get('game_profile') or {}
+    aggs = payload.get('fp_feedback_aggregations') or []
+    shared_ids = payload.get('shared_rule_ids') or []
+    try:
+        with get_api_db_cursor() as cur:
+            if gp and gp.get('slug'):
+                cur.execute(f"SELECT id FROM game_profiles WHERE slug = {_PH} LIMIT 1", (str(gp.get('slug')),))
+                row = cur.fetchone()
+                gid = int(_row_get(row, 0, 'id') or 0) if row else 0
+                if gid <= 0:
+                    gid = _insert_id(
+                        cur,
+                        f"INSERT INTO game_profiles (name, slug, filter_rules) VALUES ({_PH},{_PH},{_PH})",
+                        (str(gp.get('name') or gp.get('slug')), str(gp.get('slug')), json.dumps(gp.get('filter_rules') or {}))
+                    ) or 0
+                cur.execute(f"DELETE FROM company_game_profile WHERE company_id = {_PH}", (company_id,))
+                cur.execute(f"INSERT INTO company_game_profile (company_id, game_profile_id, updated_at) VALUES ({_PH},{_PH},CURRENT_TIMESTAMP)",
+                            (company_id, gid))
+            for a in aggs[:200]:
+                cur.execute(
+                    f"INSERT INTO ai_feedback_aggregations (agg_date, feature_name, false_positive_count, true_positive_count, weight_adjustment) "
+                    f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH})",
+                    (
+                        str((a or {}).get('agg_date') or datetime.date.today().isoformat()),
+                        str((a or {}).get('feature_name') or '')[:80],
+                        int((a or {}).get('false_positive_count') or 0),
+                        int((a or {}).get('true_positive_count') or 0),
+                        float((a or {}).get('weight_adjustment') or 0.0),
+                    )
+                )
+            for rid in shared_ids[:200]:
+                try:
+                    cur.execute(f"INSERT INTO company_shared_rules (company_id, shared_rule_id) VALUES ({_PH},{_PH})",
+                                (company_id, int(rid)))
+                except Exception:
+                    pass
+        _app_cache.delete(f"company_game_profile_rules:{company_id}")
+        _app_cache.delete(f"ai_weights:{company_id}")
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/audit/search', methods=['GET'])
+@login_required
+@require_superadmin
+def api_audit_search():
+    limit = max(1, min(200, int(request.args.get('limit', 50) or 50)))
+    cursor_id = int(request.args.get('cursor_id', 0) or 0)
+    cursor_token = str(request.args.get('cursor') or '').strip()
+    if cursor_id <= 0 and cursor_token and _Paginator is not None:
+        payload = _Paginator.decode_cursor(cursor_token)
+        cursor_id = int(payload.get('last_id') or 0)
+    user_id = int(request.args.get('user_id', 0) or 0)
+    action = str(request.args.get('action') or '').strip()
+    resource_type = str(request.args.get('resource_type') or '').strip()
+    where = ["1=1"]
+    params: list = []
+    if cursor_id > 0:
+        where.append(f"id < {_PH}")
+        params.append(cursor_id)
+    if user_id > 0:
+        where.append(f"user_id = {_PH}")
+        params.append(user_id)
+    if action:
+        where.append(f"action = {_PH}")
+        params.append(action)
+    if resource_type:
+        where.append(f"resource_type = {_PH}")
+        params.append(resource_type)
+    where_sql = " AND ".join(where)
+    with get_api_db_cursor() as cur:
+        cur.execute(
+            f"SELECT id, timestamp, user_id, action, resource_type, resource_id, details, ip_address, user_agent "
+            f"FROM audit_log_v2 WHERE {where_sql} ORDER BY id DESC LIMIT {_PH}",
+            tuple(params + [limit])
+        )
+        rows = cur.fetchall() or []
+    items = []
+    for r in rows:
+        d = dict(r) if not isinstance(r, dict) else r
+        details_raw = d.get('details')
+        try:
+            details = json.loads(details_raw) if isinstance(details_raw, str) else details_raw
+        except Exception:
+            details = {'raw': str(details_raw)}
+        items.append({
+            'id': d.get('id'),
+            'timestamp': str(d.get('timestamp') or ''),
+            'user_id': d.get('user_id'),
+            'action': d.get('action'),
+            'resource_type': d.get('resource_type'),
+            'resource_id': d.get('resource_id'),
+            'details': details,
+            'ip_address': d.get('ip_address'),
+            'user_agent': d.get('user_agent'),
+        })
+    next_cursor_id = items[-1]['id'] if items else None
+    next_cursor = _Paginator.encode_cursor({'last_id': next_cursor_id}) if (next_cursor_id and _Paginator is not None) else None
+    return jsonify({'success': True, 'items': items, 'next_cursor_id': next_cursor_id, 'next_cursor': next_cursor}), 200
+
+
+@app.route('/api/openapi.json', methods=['GET'])
+def api_openapi_json():
+    try:
+        with open(os.path.join(os.path.dirname(__file__), 'static', 'openapi.json'), 'r', encoding='utf-8') as f:
+            spec = json.load(f)
+        return jsonify(spec), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/docs', methods=['GET'])
+def api_docs():
+    html = """
+    <!doctype html><html><head><meta charset="utf-8"><title>Argus API Docs</title></head>
+    <body style="margin:0"><div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script>window.ui = SwaggerUIBundle({url:'/api/openapi.json',dom_id:'#swagger-ui'});</script>
+    </body></html>
+    """
+    return Response(html, mimetype='text/html')
+
+
+def aggregate_fp_feedback():
+    """Agrega feedback del último mes y guarda ajustes de multiplicadores."""
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT COALESCE(reasoning,''), COUNT(*) AS c "
+                f"FROM ai_feedback WHERE created_at >= CURRENT_DATE - INTERVAL '30 days' "
+                f"GROUP BY COALESCE(reasoning,'')"
+            )
+            rows = cur.fetchall() or []
+            for r in rows:
+                d = dict(r) if not isinstance(r, dict) else r
+                reason = str(d.get('coalesce') or d.get('reasoning') or '').lower()
+                cnt = int(d.get('c') or 0)
+                feature_name = ''
+                if 'legit' in reason or 'false positive' in reason or 'fp' in reason:
+                    feature_name = 'legitimate_client_detected'
+                if not feature_name:
+                    continue
+                adj = -min(0.25, 0.02 * cnt)
+                cur.execute(
+                    f"INSERT INTO ai_feedback_aggregations (agg_date, feature_name, false_positive_count, true_positive_count, weight_adjustment) "
+                    f"VALUES (CURRENT_DATE, {_PH}, {_PH}, 0, {_PH})",
+                    (feature_name, cnt, adj)
+                )
+        _app_cache.delete("ai_weights:0")
+    except Exception as e:
+        print(f"[fp_aggregation] error: {e}")
+
+
+def audit_retention_cleanup():
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute("DELETE FROM audit_log_v2 WHERE timestamp < CURRENT_TIMESTAMP - INTERVAL '365 days'")
+    except Exception as e:
+        print(f"[audit_v2] cleanup error: {e}")
+
+
 @app.route('/api/me/preferences', methods=['GET', 'PUT'])
 @login_required
 def api_me_preferences():
@@ -3944,6 +4661,10 @@ def api_me_preferences():
     if uid <= 0:
         return jsonify({'success': False, 'error': 'No autenticado'}), 401
     if request.method == 'GET':
+        cache_key = f"user_prefs:{uid}"
+        hit = _app_cache.get(cache_key)
+        if isinstance(hit, dict):
+            return jsonify({'success': True, 'preferences': hit}), 200
         with get_api_db_cursor() as cur:
             cur.execute(
                 f"SELECT pref_key, pref_value FROM user_preferences WHERE user_id = {_PH}",
@@ -3953,6 +4674,7 @@ def api_me_preferences():
             for r in (cur.fetchall() or []):
                 d = dict(r) if not isinstance(r, dict) else r
                 prefs[str(d.get('pref_key') or '')] = d.get('pref_value')
+        _app_cache.set(cache_key, prefs, ttl=300)
         return jsonify({'success': True, 'preferences': prefs}), 200
     data = request.json or {}
     prefs = data.get('preferences') or {}
@@ -3982,6 +4704,7 @@ def api_me_preferences():
                         f"VALUES ({_PH},{_PH},{_PH},CURRENT_TIMESTAMP)",
                         (uid, key, val)
                     )
+        _app_cache.delete(f"user_prefs:{uid}")
         return jsonify({'success': True}), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -12461,6 +13184,7 @@ def compare_scans_query():
 
 @app.route('/api/scans/<int:scan_id>/set-baseline', methods=['POST'])
 @login_required
+@audit_action('scan.set_baseline', 'scan')
 def set_scan_baseline(scan_id: int):
     _ensure_dual_scanner_schema()
     try:
@@ -12538,6 +13262,7 @@ def scans_timeline():
 
 @app.route('/api/schedules', methods=['GET', 'POST', 'PUT', 'DELETE'])
 @login_required
+@audit_action('schedules.mutate', 'scan_schedule')
 def api_schedules():
     _ensure_dual_scanner_schema()
     uid = int(session.get('user_id') or 0)
@@ -17676,5 +18401,8 @@ if __name__ == '__main__':
     print(f"ðŸ”‘ API Key configurada: {'SÃ­' if API_KEY != 'change-this-in-production' else 'No (usar valor por defecto)'}")
     print("âš ï¸  NOTA: AsegÃºrate de que la API estÃ© corriendo en http://localhost:5000")
     print("âš ï¸  NOTA: La API Key debe coincidir con la configurada en api_server.py")
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    if socketio is not None:
+        socketio.run(app, host='0.0.0.0', port=8080, debug=True)
+    else:
+        app.run(host='0.0.0.0', port=8080, debug=True)
 

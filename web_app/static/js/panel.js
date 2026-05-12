@@ -27,6 +27,31 @@ let _issuesFilter = 'all'; // filtro de categoría activo
 let _issuesSearchText = '';  // buscador in-scan
 let _issuesSeverity = '';    // filtro severidad in-scan
 let _currentScanData = null;
+let _argusSocket = null;
+let _argusSocketConnected = false;
+let _argusSocketPendingResolve = null;
+
+function initArgusSocket() {
+    if (typeof io !== 'function') return;
+    if (_argusSocket) return;
+    _argusSocket = io({ transports: ['websocket', 'polling'] });
+    _argusSocket.on('connect', () => { _argusSocketConnected = true; });
+    _argusSocket.on('disconnect', () => { _argusSocketConnected = false; });
+    _argusSocket.on('oracle_response', (payload) => {
+        if (typeof _argusSocketPendingResolve === 'function') {
+            _argusSocketPendingResolve(payload || {});
+            _argusSocketPendingResolve = null;
+        }
+    });
+    _argusSocket.on('notification', (payload) => {
+        const txt = payload && payload.message ? payload.message : 'Nueva notificación en tiempo real';
+        if (typeof showToast === 'function') showToast(txt, 'info');
+    });
+}
+
+setTimeout(() => {
+    try { initArgusSocket(); } catch (_) {}
+}, 120);
 
 // ── Paleta de colores ──────────────────────────────────────────────────────
 const ARGUS_PALETTES = {
@@ -1483,6 +1508,7 @@ function showSection(sectionName) {
         loadUsers();
         loadCompanyUsersForAdmin();
         loadCompanyNotifications();
+        loadCompanyGameProfiles();
     } else if (sectionName === 'mi-empresa') {
         loadCompanyInfo();
         loadCompanyTokens();
@@ -1589,6 +1615,105 @@ async function previewCompanyDigest() {
     }
 }
 window.previewCompanyDigest = previewCompanyDigest;
+
+async function loadCompanyGameProfiles() {
+    const companyId = Number(window.CURRENT_COMPANY_ID || 0);
+    const sel = document.getElementById('company-game-profile-select');
+    if (!sel || !companyId) return;
+    try {
+        const [rp, rc] = await Promise.all([
+            fetch('/api/game-profiles'),
+            fetch(`/api/companies/${companyId}/game-profile`)
+        ]);
+        const pd = await rp.json();
+        const cd = await rc.json();
+        const items = (pd && pd.success && Array.isArray(pd.items)) ? pd.items : [];
+        sel.innerHTML = items.map(x => `<option value="${x.id}">${escapeHtml(x.name)} (${escapeHtml(x.slug)})</option>`).join('');
+        const activeId = cd && cd.success && cd.profile ? Number(cd.profile.game_profile_id || 0) : 0;
+        if (activeId) sel.value = String(activeId);
+    } catch (e) {
+        if (typeof showToast === 'function') showToast(`Error profiles: ${e.message}`, 'error');
+    }
+}
+window.loadCompanyGameProfiles = loadCompanyGameProfiles;
+
+async function saveCompanyGameProfile() {
+    const companyId = Number(window.CURRENT_COMPANY_ID || 0);
+    const sel = document.getElementById('company-game-profile-select');
+    if (!companyId || !sel) return;
+    try {
+        const game_profile_id = Number(sel.value || 0);
+        const r = await fetch(`/api/companies/${companyId}/game-profile`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ game_profile_id })
+        });
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'No se pudo guardar');
+        showToast('Game profile guardado', 'success');
+    } catch (e) {
+        showToast(`Error guardando profile: ${e.message}`, 'error');
+    }
+}
+window.saveCompanyGameProfile = saveCompanyGameProfile;
+
+async function browseSharedRules() {
+    const box = document.getElementById('shared-rules-preview');
+    if (box) box.textContent = 'Cargando marketplace...';
+    try {
+        const r = await fetch('/api/shared-rules?page=1&per_page=10');
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'No disponible');
+        const items = d.items || [];
+        if (!items.length) { if (box) box.textContent = 'No hay reglas públicas.'; return; }
+        if (box) {
+            box.textContent = items.map(x => `#${x.id} ${x.name} · ⭐ ${Number(x.rating_avg || 0).toFixed(2)} · ⬇ ${x.downloads_count}`).join('\n');
+        }
+    } catch (e) {
+        if (box) box.textContent = `Error marketplace: ${e.message}`;
+    }
+}
+window.browseSharedRules = browseSharedRules;
+
+async function exportFiltersConfig() {
+    const companyId = Number(window.CURRENT_COMPANY_ID || 0);
+    if (!companyId) return;
+    try {
+        const r = await fetch(`/api/filters/export?company_id=${encodeURIComponent(companyId)}`);
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'Export falló');
+        const txt = JSON.stringify(d.data || {}, null, 2);
+        await navigator.clipboard.writeText(txt);
+        const box = document.getElementById('shared-rules-preview');
+        if (box) box.textContent = 'Export copiado al portapapeles.';
+        showToast('Export copiado', 'success');
+    } catch (e) {
+        showToast(`Error export: ${e.message}`, 'error');
+    }
+}
+window.exportFiltersConfig = exportFiltersConfig;
+
+async function importFiltersConfig() {
+    const companyId = Number(window.CURRENT_COMPANY_ID || 0);
+    if (!companyId) return;
+    const raw = prompt('Pegá JSON de import de filtros');
+    if (!raw) return;
+    try {
+        const data = JSON.parse(raw);
+        const r = await fetch('/api/filters/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ company_id: companyId, data })
+        });
+        const d = await r.json();
+        if (!r.ok || !d.success) throw new Error(d.error || 'Import falló');
+        showToast('Import aplicado', 'success');
+        loadCompanyGameProfiles();
+    } catch (e) {
+        showToast(`Error import: ${e.message}`, 'error');
+    }
+}
+window.importFiltersConfig = importFiltersConfig;
 
 async function loadSchedules() {
     const box = document.getElementById('schedules-list');
@@ -6562,13 +6687,28 @@ async function sendAIChatMessage() {
     try {
         const body = { message: msg };
         if (currentScanId) body.scan_id = currentScanId;
-
-        const res  = await fetch('/api/staff/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        const data = await res.json();
+        let data = null;
+        initArgusSocket();
+        if (_argusSocket && _argusSocketConnected) {
+            data = await new Promise((resolve) => {
+                _argusSocketPendingResolve = resolve;
+                _argusSocket.emit('oracle_message', body);
+                setTimeout(() => {
+                    if (_argusSocketPendingResolve === resolve) {
+                        _argusSocketPendingResolve = null;
+                        resolve({ error: 'WS timeout, usando fallback HTTP' });
+                    }
+                }, 4500);
+            });
+        }
+        if (!data || data.error === 'WS timeout, usando fallback HTTP') {
+            const res  = await fetch('/api/staff/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            data = await res.json();
+        }
 
         typing.remove();
 

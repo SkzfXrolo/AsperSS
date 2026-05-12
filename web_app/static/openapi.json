@@ -1,0 +1,29 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Argus Web API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/openapi.json": {
+      "get": {
+        "summary": "OpenAPI spec",
+        "responses": {
+          "200": {
+            "description": "Spec JSON"
+          }
+        }
+      }
+    },
+    "/api/v2/health": {
+      "get": {
+        "summary": "V2 health",
+        "responses": {
+          "200": {
+            "description": "ok"
+          }
+        }
+      }
+    }
+  }
+}

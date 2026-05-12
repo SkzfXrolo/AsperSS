@@ -2853,6 +2853,20 @@
                     </div>
                     <pre id="notif-preview" style="margin-top:10px;white-space:pre-wrap;font-size:12px;color:var(--text-m);"></pre>
                 </div>
+                <div class="card" style="margin-bottom:16px;">
+                    <h3 class="card-title">🎮 Game Profile & Shared Rules</h3>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+                        <select id="company-game-profile-select" style="max-width:260px;"></select>
+                        <button class="btn btn-primary" type="button" onclick="saveCompanyGameProfile()">Guardar profile</button>
+                        <button class="btn btn-secondary" type="button" onclick="loadCompanyGameProfiles()">Recargar profiles</button>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+                        <button class="btn btn-secondary" type="button" onclick="browseSharedRules()">Marketplace reglas</button>
+                        <button class="btn btn-secondary" type="button" onclick="exportFiltersConfig()">Export filtros</button>
+                        <button class="btn btn-secondary" type="button" onclick="importFiltersConfig()">Import filtros</button>
+                    </div>
+                    <pre id="shared-rules-preview" style="white-space:pre-wrap;font-size:12px;color:var(--text-m);">Sin datos.</pre>
+                </div>
 
                 {% if user and 'admin' in user.roles %}
                 <!-- Contenido para Super Admin -->
@@ -3442,6 +3456,7 @@
     </script>
     <script src="{{ url_for('static', filename='js/safe.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=17"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" integrity="sha384-MjKb3XbAcsL1U0q7Q2E31E4n4t4DccnE9vrFica8FWHQrQQizxgxYkWwaP42QikI" crossorigin="anonymous"></script>
     <script src="{{ url_for('static', filename='js/panel.js') }}?v=75"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
