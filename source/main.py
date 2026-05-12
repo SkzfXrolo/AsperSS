@@ -16106,12 +16106,18 @@ class ArgusApp:
                             continue
                         try:
                             with _zf.ZipFile(jar_path, 'r') as zf:
-                                class_names = [n for n in zf.namelist() if n.endswith('.class')]
                                 matched_sig = None
                                 matched_pkg = None
                                 # P3 #7 — NLP accumulator for hack-like class names
                                 nlp_hits = []
-                                for class_name in class_names[:8000]:
+                                scanned_classes = 0
+                                for zinfo in zf.infolist():
+                                    class_name = zinfo.filename
+                                    if not class_name.endswith('.class'):
+                                        continue
+                                    scanned_classes += 1
+                                    if scanned_classes > 8000:
+                                        break
                                     cn = class_name.encode('utf-8', errors='ignore')
                                     # #12 — Skip strings de Java legítimo
                                     if cn.startswith(JAVA_LEGIT_PREFIXES):
