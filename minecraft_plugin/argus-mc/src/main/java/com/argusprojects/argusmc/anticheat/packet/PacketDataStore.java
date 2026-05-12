@@ -145,6 +145,38 @@ public final class PacketDataStore {
         /** Verbose watcher (UUID del admin observando) — null si nadie observa. */
         public volatile UUID   watchedBy;
 
+        // ===== round 3 (Pack 48-A) =====
+
+        /** Cuando empezo el use-item action (eat/bow/shield) — 0 si nada. */
+        public volatile long   useItemStartMs;
+        /** Material del item en uso (formato Material.name()). */
+        public volatile String useItemMaterial;
+        /** Cuando termino el ultimo eat completo. */
+        public volatile long   lastEatFinishMs;
+        /** Charge time del ultimo bow shot completado. */
+        public volatile long   lastBowChargeMs;
+        /** Velocidad horizontal mientras "sneaking" — para NoSlowSneak. */
+        public volatile boolean sneakActive;
+        public volatile long    sneakStartMs;
+        /** Ultima vez que cambio armor el jugador (in-combat o no). */
+        public volatile long    lastArmorChangeMs;
+        /** Health en el ultimo HealthChangeEvent observado — para Regen. */
+        public volatile double  lastHealth = 20.0;
+        public volatile long    lastHealthChangeMs;
+        /** Counter de regen events anomalos dentro de la ventana. */
+        public volatile int     regenAnomaliesInWindow;
+        /** Brand del cliente (Lunar/Vanilla/Forge/Optifine) — LegitClientWhitelist. */
+        public volatile String  clientBrand;
+        /** Contador de FPs detectados/canceled (FalsePositiveLogger). */
+        public volatile int     cancelledViolations;
+        /** Cuando recibio el ultimo daño con KB esperado del server (AntiKnockback). */
+        public volatile long    lastKnockbackExpectedMs;
+        /** Magnitud del KB esperado (sqrt(vx²+vz²)) que el cliente debería absorber. */
+        public volatile double  lastKnockbackExpectedMag;
+        /** Hit-pattern reciente: secuencia de attacks alternados con eat (AutoEat). */
+        public volatile int     autoEatPatternHits;
+        public volatile long    autoEatLastEventMs;
+
         public synchronized void pushRotation(float yaw, float pitch, long now) {
             recentRotations.addLast(new RotationSample(yaw, pitch, now));
             while (recentRotations.size() > ROTATION_BUFFER_SIZE) recentRotations.pollFirst();
@@ -215,6 +247,18 @@ public final class PacketDataStore {
             lastMainHandItemName = null;
             lastMainHandItemNameMs = 0L;
             namedChangesInWindow = 0;
+            useItemStartMs = 0L;
+            useItemMaterial = null;
+            lastEatFinishMs = 0L;
+            lastBowChargeMs = 0L;
+            sneakActive = false;
+            sneakStartMs = 0L;
+            lastArmorChangeMs = 0L;
+            regenAnomaliesInWindow = 0;
+            lastKnockbackExpectedMs = 0L;
+            lastKnockbackExpectedMag = 0.0;
+            autoEatPatternHits = 0;
+            autoEatLastEventMs = 0L;
         }
     }
 
