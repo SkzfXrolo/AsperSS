@@ -1,0 +1,25 @@
+name: Load tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: "Target host URL"
+        required: true
+        default: "https://staging.example.com"
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install load deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements-load.txt
+      - name: Dry-run locust
+        run: |
+          locust -f tests/load/locustfile.py --host "${{ github.event.inputs.host }}" --headless -u 5 -r 1 -t 30s
