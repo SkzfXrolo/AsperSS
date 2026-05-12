@@ -6383,7 +6383,10 @@ async function sendAIChatMessage() {
                 meta.push('🤖 ' + data.providers_used.map(p => ({claude:'Claude',groq:'Groq',gemini:'Gemini'}[p]||p)).join(' + '));
             if (data.search_done) meta.push('🔍 búsqueda web');
             if (meta.length) reply += `\n\n<span style="font-size:11px;opacity:.55">${meta.join(' · ')}</span>`;
-            _appendChatMsg(msgs, _formatAIReply(reply), 'bot');
+            const botBubble = _appendChatMsg(msgs, _formatAIReply(reply), 'bot');
+            if (data.conversation_id) {
+                _appendOracleFeedbackButtons(msgs, data.conversation_id, botBubble);
+            }
         }
     } catch (e) {
         typing.remove();
@@ -6411,6 +6414,41 @@ function _appendChatMsg(container, text, role, isTyping) {
     container.appendChild(el);
     _scrollAIChatToBottom(container);
     return el;
+}
+
+function _appendOracleFeedbackButtons(container, conversationId, anchorEl) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;gap:8px;align-self:flex-start;margin-top:4px;opacity:.85';
+    const up = document.createElement('button');
+    const down = document.createElement('button');
+    up.type = 'button';
+    down.type = 'button';
+    up.textContent = '👍 útil';
+    down.textContent = '👎 no útil';
+    [up, down].forEach((b) => {
+        b.style.cssText = 'background:rgba(148,163,184,.12);border:1px solid rgba(148,163,184,.25);color:#cbd5e1;border-radius:8px;padding:3px 7px;font-size:11px;cursor:pointer';
+    });
+    const sendFeedback = async (thumb) => {
+        try {
+            await fetch('/api/oracle/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversation_id: conversationId, thumb })
+            });
+            wrap.innerHTML = '<span style="font-size:11px;color:#94a3b8">Gracias por el feedback.</span>';
+        } catch (_) {
+            wrap.innerHTML = '<span style="font-size:11px;color:#ef4444">No se pudo guardar feedback.</span>';
+        }
+    };
+    up.addEventListener('click', () => sendFeedback('up'));
+    down.addEventListener('click', () => sendFeedback('down'));
+    wrap.appendChild(up);
+    wrap.appendChild(down);
+    if (anchorEl && anchorEl.nextSibling) {
+        container.insertBefore(wrap, anchorEl.nextSibling);
+    } else {
+        container.appendChild(wrap);
+    }
 }
 
 function _formatAIReply(text) {

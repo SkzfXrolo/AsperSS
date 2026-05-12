@@ -12698,6 +12698,74 @@ def api_oracle_history():
     return jsonify({'success': True, 'history': rows}), 200
 
 
+@app.route('/api/oracle/feedback', methods=['POST'])
+@login_required
+def api_oracle_feedback():
+    """Feedback de conversación Oracle (thumb up/down)."""
+    _ensure_oracle_conversations_schema()
+    uid = int(session.get('user_id') or 0)
+    data = request.json or {}
+    conv_id = int(data.get('conversation_id') or 0)
+    thumb = str(data.get('thumb') or '').strip().lower()
+    note = str(data.get('note') or '').strip()[:500]
+    if not conv_id or thumb not in ('up', 'down'):
+        return jsonify({'success': False, 'error': 'Parámetros inválidos'}), 400
+    fb = 1 if thumb == 'up' else -1
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"UPDATE oracle_conversations SET feedback = {_PH}, feedback_note = {_PH} "
+                f"WHERE id = {_PH} AND user_id = {_PH}",
+                (fb, note or None, conv_id, uid)
+            )
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/oracle/conversations/<int:conversation_id>/export', methods=['GET'])
+@login_required
+def api_oracle_conversation_export(conversation_id: int):
+    """Exporta una conversación en markdown o texto plano para PDF."""
+    _ensure_oracle_conversations_schema()
+    uid = int(session.get('user_id') or 0)
+    fmt = (request.args.get('format') or 'md').strip().lower()
+    if fmt not in ('md', 'pdf'):
+        return jsonify({'success': False, 'error': 'Formato no soportado (md|pdf)'}), 400
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT id, message, response, created_at, scan_id "
+                f"FROM oracle_conversations WHERE id = {_PH} AND user_id = {_PH} LIMIT 1",
+                (conversation_id, uid)
+            )
+            row = cur.fetchone()
+        if not row:
+            return jsonify({'success': False, 'error': 'Conversación no encontrada'}), 404
+        row = dict(row) if not isinstance(row, dict) else row
+        md = (
+            f"# Oracle Conversation #{row.get('id')}\n\n"
+            f"- Fecha: {row.get('created_at')}\n"
+            f"- Scan ID: {row.get('scan_id')}\n\n"
+            f"## Staff\n\n{row.get('message') or ''}\n\n"
+            f"## Oracle\n\n{row.get('response') or ''}\n"
+        )
+        if fmt == 'md':
+            return Response(
+                md,
+                mimetype='text/markdown; charset=utf-8',
+                headers={'Content-Disposition': f'attachment; filename=oracle-conversation-{conversation_id}.md'}
+            )
+        # Fallback ligero: export "pdf" como texto si no hay librería PDF instalada.
+        return Response(
+            md,
+            mimetype='text/plain; charset=utf-8',
+            headers={'Content-Disposition': f'attachment; filename=oracle-conversation-{conversation_id}.pdf.txt'}
+        )
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/staff/ai/suggest-verdict/<int:scan_id>', methods=['GET'])
 @login_required
 def ai_suggest_verdict(scan_id):
