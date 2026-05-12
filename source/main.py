@@ -5852,6 +5852,8 @@ class ArgusApp:
                 _run_safe(self.scan_nbt_exploits_saves)
                 self._set_scan_phase("🔧 Drivers kernel sospechosos (KMDF/minifilter)...")
                 _run_safe(self.scan_suspicious_kernel_drivers)
+                self._set_scan_phase("🧬 Firmware/UEFI hardening...")
+                _run_safe(self.scan_firmware_uefi_indicators)
                 # ── Pack 41 — scanners nuevos ─────────────────────
                 self._set_scan_phase("🖼️ Thumbcache — referencias a archivos borrados...")
                 _run_safe(self.scan_thumbcache_artifacts)
@@ -15202,6 +15204,52 @@ class ArgusApp:
 
         if not found:
             print("✅ No se encontraron drivers de kernel sospechosos")
+
+    def scan_firmware_uefi_indicators(self):
+        """Detecta señales forenses de firmware/UEFI inseguro o alterado."""
+        print("🔍 Escaneando indicadores de firmware/UEFI...")
+        try:
+            fw_path = r'SYSTEM\CurrentControlSet\Control'
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, fw_path) as key:
+                try:
+                    pe_type, _ = winreg.QueryValueEx(key, 'PEFirmwareType')
+                    if int(pe_type) == 1:
+                        self.issues_found.append({
+                            'tipo': 'firmware_mode_legacy',
+                            'nombre': 'Firmware en modo Legacy BIOS (sin UEFI)',
+                            'ruta': f'HKLM\\{fw_path}',
+                            'archivo': 'PEFirmwareType=1',
+                            'categoria': 'FORENSE',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.55,
+                            'detected_patterns': ['legacy_bios'],
+                        })
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        try:
+            sb = subprocess.run(
+                ['powershell', '-NoProfile', '-Command', 'Confirm-SecureBootUEFI'],
+                capture_output=True, timeout=8, creationflags=0x08000000
+            )
+            out = ((sb.stdout or b'') + b' ' + (sb.stderr or b'')).decode('utf-8', errors='ignore').lower()
+            if 'false' in out:
+                self.issues_found.append({
+                    'tipo': 'secure_boot_disabled',
+                    'nombre': 'Secure Boot deshabilitado',
+                    'ruta': 'Confirm-SecureBootUEFI',
+                    'archivo': 'secure_boot:false',
+                    'categoria': 'FORENSE',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.60,
+                    'detected_patterns': ['secure_boot_off'],
+                    'explicacion': 'Secure Boot apagado facilita bootkits y drivers no confiables en arranque.',
+                })
+                print("⚠️ Secure Boot deshabilitado")
+        except Exception:
+            pass
 
     def scan_browser_extensions_suspicious(self):
         """P5 #3 — Detecta extensiones de Chrome/Firefox con permisos all_urls o nombres sospechosos."""
