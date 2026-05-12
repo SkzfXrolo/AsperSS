@@ -5621,6 +5621,8 @@ class ArgusApp:
                 _run_safe(self.scan_executed_userassist)
                 self._set_scan_phase("⏱️ BAM registry (ejecuciones con timestamp)...")
                 _run_safe(self.scan_bam_registry)
+                self._set_scan_phase("📈 SRUM (actividad histórica)...")
+                _run_safe(self.scan_srum_artifacts)
                 self._set_scan_phase("🔗 ShimCache / AppCompatCache...")
                 _run_safe(self.scan_appcompat_shimcache)
                 self._set_scan_phase("🎨 MUICache...")
@@ -11774,6 +11776,42 @@ class ArgusApp:
             print(f"Error en scan_bam_registry: {e}")
         if not scanned_any:
             print("BAM/DAM no disponible o sin entradas legibles")
+
+    def scan_srum_artifacts(self):
+        """Escaneo liviano de SRUM (SRUDB.dat) para actividad reciente de procesos sospechosos."""
+        print("🔍 Escaneando SRUM (SRUDB.dat)...")
+        srum_db = r'C:\Windows\System32\sru\SRUDB.dat'
+        if not os.path.isfile(srum_db):
+            print("SRUM no disponible en este host")
+            return
+        try:
+            mtime = os.path.getmtime(srum_db)
+            age_days = int((time.time() - mtime) / 86400)
+            with open(srum_db, 'rb') as f:
+                blob = f.read(4 * 1024 * 1024)
+            text = blob.decode('utf-16-le', errors='ignore').lower()
+            if len(text) < 20:
+                text = blob.decode('latin-1', errors='ignore').lower()
+            term = next((t for t in _DEFINITE_HACK_NAMES if t in text), None)
+            if term:
+                self.issues_found.append({
+                    'tipo': 'srum_suspicious_activity',
+                    'nombre': f'SRUM: actividad histórica sospechosa ({term})',
+                    'ruta': srum_db,
+                    'archivo': 'SRUDB.dat',
+                    'categoria': 'FORENSE',
+                    'alerta': 'SOSPECHOSO',
+                    'confidence': 0.58,
+                    'detected_patterns': [f'srum:{term}', f'age_days:{age_days}'],
+                    'extra': {'db_age_days': age_days},
+                })
+                print(f"⚠️ SRUM sospechoso: término '{term}'")
+            else:
+                print(f"✅ SRUM revisado (edad: {age_days}d), sin patrones explícitos")
+        except (PermissionError, OSError) as e:
+            print(f"SRUM sin acceso: {e}")
+        except Exception as e:
+            print(f"Error en scan_srum_artifacts: {e}")
 
     def scan_recent_lnk(self):
         """Escanea archivos .lnk recientes en %APPDATA%\\Microsoft\\Windows\\Recent."""
