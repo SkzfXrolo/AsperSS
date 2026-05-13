@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Términos y Condiciones — Argus Projects</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/logo.png') }}" type="image/png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:      #09091C;
+            --bg-2:    #0E0E28;
+            --bg-card: rgba(12,12,38,0.95);
+            --border:  rgba(139,92,246,0.15);
+            --accent:  #8B5CF6;
+            --accent2: #10B981;
+            --text:    #E2E8F7;
+            --text-m:  #7C7FA6;
+            --text-d:  #3D3F6E;
+        }
+
+        html, body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            -webkit-font-smoothing: antialiased;
+            line-height: 1.7;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(139,92,246,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(139,92,246,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── Topbar ── */
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(9,9,28,0.92);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            padding: 0 40px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .topbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            font-size: 15px;
+            color: var(--text);
+            text-decoration: none;
+        }
+        .topbar-brand img { width: 28px; height: 28px; border-radius: 6px; }
+        .topbar-badge {
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(139,92,246,0.15);
+            color: var(--accent);
+            border: 1px solid rgba(139,92,246,0.3);
+            border-radius: 4px;
+            padding: 2px 7px;
+        }
+        .topbar-links { display: flex; gap: 20px; }
+        .topbar-links a {
+            font-size: 13px;
+            color: var(--text-m);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .topbar-links a:hover { color: var(--text); }
+
+        /* ── Layout ── */
+        .page {
+            position: relative;
+            z-index: 1;
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 56px 24px 80px;
+        }
+
+        /* ── Hero ── */
+        .hero {
+            text-align: center;
+            margin-bottom: 56px;
+        }
+        .hero-tag {
+            display: inline-block;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--accent);
+            background: rgba(139,92,246,0.1);
+            border: 1px solid rgba(139,92,246,0.25);
+            border-radius: 4px;
+            padding: 4px 12px;
+            margin-bottom: 20px;
+        }
+        .hero h1 {
+            font-size: clamp(28px, 5vw, 42px);
+            font-weight: 700;
+            margin-bottom: 14px;
+            background: linear-gradient(135deg, var(--text) 40%, var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero-meta {
+            font-size: 13px;
+            color: var(--text-m);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ── TOC ── */
+        .toc {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px 28px;
+            margin-bottom: 48px;
+        }
+        .toc-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-m);
+            margin-bottom: 14px;
+        }
+        .toc ol { padding-left: 18px; }
+        .toc li { margin-bottom: 6px; }
+        .toc a {
+            font-size: 14px;
+            color: var(--text-m);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .toc a:hover { color: var(--accent); }
+
+        /* ── Sections ── */
+        .section {
+            margin-bottom: 44px;
+            scroll-margin-top: 72px;
+        }
+        .section-num {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--accent);
+            margin-bottom: 6px;
+        }
+        .section h2 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+        .section p { color: var(--text-m); font-size: 14.5px; margin-bottom: 12px; }
+        .section ul, .section ol {
+            color: var(--text-m);
+            font-size: 14.5px;
+            padding-left: 20px;
+            margin-bottom: 12px;
+        }
+        .section li { margin-bottom: 6px; }
+        .section strong { color: var(--text); font-weight: 600; }
+
+        /* ── Alert box ── */
+        .alert-box {
+            background: rgba(244,63,94,0.08);
+            border: 1px solid rgba(244,63,94,0.25);
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin: 16px 0;
+            font-size: 14px;
+            color: #FDA4AF;
+        }
+        .info-box {
+            background: rgba(139,92,246,0.08);
+            border: 1px solid rgba(139,92,246,0.25);
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin: 16px 0;
+            font-size: 14px;
+            color: #C4B5FD;
+        }
+
+        /* ── Cookie section ── */
+        .cookie-types { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+        .cookie-row {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 14px;
+        }
+        .cookie-badge {
+            flex-shrink: 0;
+            font-size: 11px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+        .badge-req  { background: rgba(16,185,129,0.15); color: #34D399; border: 1px solid rgba(16,185,129,0.3); }
+        .badge-func { background: rgba(139,92,246,0.15); color: #A78BFA; border: 1px solid rgba(139,92,246,0.3); }
+        .badge-none { background: rgba(71,85,105,0.3);   color: #94A3B8; border: 1px solid rgba(71,85,105,0.4); }
+        .cookie-desc { color: var(--text-m); }
+        .cookie-desc strong { color: var(--text); }
+
+        /* ── Footer ── */
+        .doc-footer {
+            margin-top: 64px;
+            padding-top: 28px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .doc-footer-links { display: flex; gap: 20px; flex-wrap: wrap; }
+        .doc-footer-links a {
+            font-size: 13px;
+            color: var(--text-m);
+            text-decoration: none;
+        }
+        .doc-footer-links a:hover { color: var(--accent); }
+        .doc-footer-copy { font-size: 12px; color: var(--text-d); font-family: 'JetBrains Mono', monospace; }
+
+        @media (max-width: 600px) {
+            .topbar { padding: 0 16px; }
+            .page { padding: 36px 16px 60px; }
+        }
+    </style>
+</head>
+<body>
+
+<nav class="topbar">
+    <a href="/" class="topbar-brand">
+        <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Argus">
+        Argus Projects
+        <span class="topbar-badge">LEGAL</span>
+    </a>
+    <div class="topbar-links">
+        <a href="/login">Iniciar sesión</a>
+        <a href="{{ discord_invite }}" target="_blank" rel="noopener">Discord</a>
+    </div>
+</nav>
+
+<main class="page">
+
+    <div class="hero">
+        <div class="hero-tag">Documento Legal</div>
+        <h1>Términos y Condiciones</h1>
+        <p class="hero-meta">Última actualización: 12 de mayo de 2026 · Versión 1.0</p>
+    </div>
+
+    <div class="toc">
+        <div class="toc-title">Índice</div>
+        <ol>
+            <li><a href="#aceptacion">Aceptación de los términos</a></li>
+            <li><a href="#servicio">Descripción del servicio</a></li>
+            <li><a href="#uso-permitido">Uso permitido</a></li>
+            <li><a href="#uso-prohibido">Uso prohibido</a></li>
+            <li><a href="#cuentas">Cuentas y acceso</a></li>
+            <li><a href="#datos">Tratamiento de datos</a></li>
+            <li><a href="#cookies">Política de cookies</a></li>
+            <li><a href="#responsabilidad">Limitación de responsabilidad</a></li>
+            <li><a href="#propiedad">Propiedad intelectual</a></li>
+            <li><a href="#modificaciones">Modificaciones</a></li>
+            <li><a href="#contacto">Contacto</a></li>
+        </ol>
+    </div>
+
+    <div class="info-box">
+        Al acceder o utilizar Argus Projects aceptás estos Términos y Condiciones en su totalidad. Si no estás de acuerdo con algún punto, no debés usar el servicio.
+    </div>
+
+    <!-- 1 -->
+    <section class="section" id="aceptacion">
+        <div class="section-num">01</div>
+        <h2>Aceptación de los términos</h2>
+        <p>Estos Términos y Condiciones ("Términos") regulan el acceso y uso de <strong>Argus Projects</strong> ("el Servicio"), incluyendo el panel web, el escáner ArgusScanner y el plugin para servidores Minecraft.</p>
+        <p>Al crear una cuenta, descargar el software o utilizar cualquier parte del Servicio, confirmás que leíste, entendiste y aceptás estos Términos. Si actuás en nombre de una organización (empresa, servidor, comunidad), aceptás estos Términos también en nombre de dicha organización.</p>
+    </section>
+
+    <!-- 2 -->
+    <section class="section" id="servicio">
+        <div class="section-num">02</div>
+        <h2>Descripción del servicio</h2>
+        <p>Argus Projects es una plataforma de anti-trampa para servidores de Minecraft que provee:</p>
+        <ul>
+            <li><strong>ArgusScanner</strong> — software ejecutable para Windows que analiza el sistema del jugador durante una revisión de screenshare, detectando indicadores de trampas (hacks, modificaciones no autorizadas, clientes modificados).</li>
+            <li><strong>Panel web</strong> — interfaz para que el staff del servidor gestione escaneos, veredictos, tokens de acceso, e historial de jugadores.</li>
+            <li><strong>Plugin para Minecraft</strong> — integración con servidores Bukkit/Spigot/Paper que conecta el plugin directamente con el panel web.</li>
+            <li><strong>Argus Oracle (IA)</strong> — sistema de asistencia basado en inteligencia artificial que ayuda al staff a interpretar resultados de escaneo.</li>
+        </ul>
+        <p>El Servicio se provee "tal como está" y puede ser actualizado, modificado o discontinuado en cualquier momento.</p>
+    </section>
+
+    <!-- 3 -->
+    <section class="section" id="uso-permitido">
+        <div class="section-num">03</div>
+        <h2>Uso permitido</h2>
+        <p>Podés usar el Servicio únicamente para:</p>
+        <ul>
+            <li>Ejecutar revisiones de screenshare a jugadores de tu servidor que <strong>otorgaron su consentimiento</strong> explícito para ser analizados.</li>
+            <li>Gestionar el historial anti-trampa de tu comunidad de Minecraft.</li>
+            <li>Integrar el plugin en servidores que operes legalmente.</li>
+            <li>Revisar los resultados de escaneo como parte del proceso disciplinario de tu servidor.</li>
+        </ul>
+        <div class="info-box">
+            <strong>Importante:</strong> el jugador analizado debe ser informado y dar su consentimiento antes de ejecutar ArgusScanner en su equipo. No usar el Servicio sin consentimiento explícito del jugador.
+        </div>
+    </section>
+
+    <!-- 4 -->
+    <section class="section" id="uso-prohibido">
+        <div class="section-num">04</div>
+        <h2>Uso prohibido</h2>
+        <p>Está estrictamente prohibido:</p>
+        <ul>
+            <li>Ejecutar ArgusScanner en equipos de personas sin su consentimiento previo e informado.</li>
+            <li>Usar el Servicio para fines ilegales, incluyendo vigilancia no autorizada, extorsión o acoso.</li>
+            <li>Intentar evadir, descompilar o modificar el software para ocultar o fabricar resultados.</li>
+            <li>Compartir credenciales de acceso al panel con personas no autorizadas.</li>
+            <li>Automatizar el uso del Servicio mediante bots o scripts no autorizados.</li>
+            <li>Intentar acceder a datos de otras organizaciones o usuarios.</li>
+            <li>Usar el Servicio para tomar decisiones discriminatorias basadas en datos personales más allá del contexto de juego.</li>
+        </ul>
+        <div class="alert-box">
+            El incumplimiento de estas restricciones puede resultar en la suspensión inmediata de la cuenta y, cuando corresponda, en la notificación a las autoridades competentes.
+        </div>
+    </section>
+
+    <!-- 5 -->
+    <section class="section" id="cuentas">
+        <div class="section-num">05</div>
+        <h2>Cuentas y acceso</h2>
+        <p>Para usar el panel web necesitás una cuenta creada mediante token de invitación emitido por un administrador autorizado. Sos responsable de:</p>
+        <ul>
+            <li>Mantener la confidencialidad de tu contraseña.</li>
+            <li>Toda la actividad que ocurra bajo tu cuenta.</li>
+            <li>Notificarnos inmediatamente si sospechás de acceso no autorizado.</li>
+        </ul>
+        <p>Nos reservamos el derecho de suspender o eliminar cuentas que violen estos Términos, que estén inactivas por períodos prolongados, o por decisión de la organización administradora.</p>
+    </section>
+
+    <!-- 6 -->
+    <section class="section" id="datos">
+        <div class="section-num">06</div>
+        <h2>Tratamiento de datos</h2>
+        <p>En el contexto del Servicio se recopilan y procesan los siguientes tipos de datos:</p>
+        <ul>
+            <li><strong>Datos de cuenta:</strong> nombre de usuario, contraseña (hasheada), correo electrónico opcional, empresa/organización asociada.</li>
+            <li><strong>Datos de escaneo:</strong> resultados del análisis del sistema del jugador, incluyendo procesos activos, archivos recientes, configuraciones de juego y metadatos técnicos. Estos datos se almacenan asociados al nombre de usuario de Minecraft del jugador analizado.</li>
+            <li><strong>Datos de uso:</strong> logs de acceso al panel, acciones del staff (veredictos emitidos, tokens creados), y estadísticas agregadas.</li>
+        </ul>
+        <p>Los datos de escaneo se almacenan únicamente en la base de datos asociada a tu organización y no se comparten con terceros sin tu consentimiento, salvo obligación legal.</p>
+        <p>Podés solicitar la exportación o eliminación de tus datos de cuenta desde el panel de usuario, o contactándonos directamente.</p>
+    </section>
+
+    <!-- 7 -->
+    <section class="section" id="cookies">
+        <div class="section-num">07</div>
+        <h2>Política de cookies</h2>
+        <p>El panel web de Argus Projects utiliza cookies y almacenamiento local con los siguientes fines:</p>
+
+        <div class="cookie-types">
+            <div class="cookie-row">
+                <span class="cookie-badge badge-req">Necesaria</span>
+                <div class="cookie-desc">
+                    <strong>Sesión de usuario</strong> — cookie <code>session</code> que mantiene tu sesión iniciada. Sin ella no podés acceder al panel. Duración: 30 días o hasta cerrar sesión.
+                </div>
+            </div>
+            <div class="cookie-row">
+                <span class="cookie-badge badge-func">Funcional</span>
+                <div class="cookie-desc">
+                    <strong>Preferencias de tema</strong> — almacenamiento local que guarda tu preferencia de tema claro/oscuro y configuraciones de visualización del panel.
+                </div>
+            </div>
+            <div class="cookie-row">
+                <span class="cookie-badge badge-func">Funcional</span>
+                <div class="cookie-desc">
+                    <strong>Token CSRF</strong> — token de seguridad incluido en cada formulario para prevenir ataques de falsificación de solicitudes. Se regenera en cada sesión.
+                </div>
+            </div>
+            <div class="cookie-row">
+                <span class="cookie-badge badge-none">No usamos</span>
+                <div class="cookie-desc">
+                    <strong>Cookies de rastreo o publicidad</strong> — Argus Projects <strong>no utiliza</strong> cookies de analytics de terceros, publicidad, ni rastreo entre sitios.
+                </div>
+            </div>
+        </div>
+
+        <p>Al usar el panel web aceptás el uso de las cookies necesarias y funcionales descritas. No podemos ofrecerte el Servicio sin las cookies de sesión.</p>
+    </section>
+
+    <!-- 8 -->
+    <section class="section" id="responsabilidad">
+        <div class="section-num">08</div>
+        <h2>Limitación de responsabilidad</h2>
+        <p>Argus Projects se provee sin garantías de ningún tipo, expresas o implícitas. En particular:</p>
+        <ul>
+            <li>No garantizamos que el Servicio detecte el 100% de las trampas existentes ni que esté libre de falsos positivos.</li>
+            <li>Las decisiones disciplinarias (bans, kicks, advertencias) son responsabilidad exclusiva de los administradores del servidor. Argus Projects es una herramienta de asistencia, no un juicio definitivo.</li>
+            <li>No somos responsables por decisiones tomadas a partir de los resultados del escaneo.</li>
+            <li>No garantizamos disponibilidad ininterrumpida del Servicio.</li>
+        </ul>
+        <p>En ningún caso nuestra responsabilidad total excederá el importe pagado por el Servicio en los últimos tres meses.</p>
+    </section>
+
+    <!-- 9 -->
+    <section class="section" id="propiedad">
+        <div class="section-num">09</div>
+        <h2>Propiedad intelectual</h2>
+        <p>Todo el código, diseño, logotipos, textos y funcionalidades de Argus Projects son propiedad de sus creadores y están protegidos por las leyes de propiedad intelectual aplicables.</p>
+        <p>Se te otorga una licencia limitada, no exclusiva, no transferible y revocable para usar el Servicio de acuerdo con estos Términos. No podés:</p>
+        <ul>
+            <li>Copiar, distribuir o vender el software o partes del mismo.</li>
+            <li>Usar el nombre "Argus Projects" o sus logotipos sin autorización escrita.</li>
+            <li>Descompilar o hacer ingeniería inversa del software más allá de lo permitido por ley.</li>
+        </ul>
+    </section>
+
+    <!-- 10 -->
+    <section class="section" id="modificaciones">
+        <div class="section-num">10</div>
+        <h2>Modificaciones</h2>
+        <p>Nos reservamos el derecho de modificar estos Términos en cualquier momento. Cuando lo hagamos, actualizaremos la fecha de "Última actualización" al inicio de este documento.</p>
+        <p>Si los cambios son significativos, te notificaremos a través del panel o por correo electrónico (si lo tenemos registrado) con al menos 7 días de anticipación. El uso continuado del Servicio después de la fecha de vigencia de los nuevos términos implica tu aceptación.</p>
+    </section>
+
+    <!-- 11 -->
+    <section class="section" id="contacto">
+        <div class="section-num">11</div>
+        <h2>Contacto</h2>
+        <p>Para cualquier consulta sobre estos Términos, solicitudes de datos o reportes de uso indebido, podés contactarnos a través de:</p>
+        <ul>
+            <li><strong>Discord:</strong> <a href="{{ discord_invite }}" target="_blank" rel="noopener" style="color:var(--accent);">Servidor oficial de Argus Projects</a></li>
+            <li><strong>GitHub:</strong> <a href="https://github.com/SkzfXrolo/AsperSS/issues" target="_blank" rel="noopener" style="color:var(--accent);">github.com/SkzfXrolo/AsperSS</a></li>
+        </ul>
+    </section>
+
+    <div class="doc-footer">
+        <div class="doc-footer-links">
+            <a href="/">Inicio</a>
+            <a href="/login">Iniciar sesión</a>
+            <a href="{{ discord_invite }}" target="_blank" rel="noopener">Discord</a>
+        </div>
+        <span class="doc-footer-copy">© 2026 Argus Projects // v1.0</span>
+    </div>
+
+</main>
+</body>
+</html>

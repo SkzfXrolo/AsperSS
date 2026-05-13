@@ -911,6 +911,11 @@ def index():
     response.headers['Cache-Control'] = 'public, max-age=300'  # 5 minutos
     return response
 
+
+@app.route('/terminos')
+def terminos():
+    return render_template('terminos.html')
+
 @app.route('/discord/interactions', methods=['POST'])
 def discord_interactions():
     """Endpoint para Discord HTTP Interactions (slash commands sin gateway)."""
