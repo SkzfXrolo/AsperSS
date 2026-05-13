@@ -335,7 +335,7 @@ def _emit_realtime_notification(user_id: int | None = None, company_id: int | No
             try:
                 with get_api_db_cursor() as cur:
                     cur.execute(
-                        f"SELECT id FROM users WHERE company_id = {_PH} AND (deleted_at IS NULL OR deleted_at IS NULL)",
+                        f"SELECT id FROM users WHERE company_id = {_PH} AND deleted_at IS NULL",
                         (int(company_id),)
                     )
                     targets = [int(_row_get(r, 0, 'id') or 0) for r in (cur.fetchall() or [])]
@@ -14710,6 +14710,12 @@ def _ensure_oracle_conversations_schema():
                     """
                 )
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_oracle_conv_user ON oracle_conversations(user_id, created_at DESC)")
+                # Migración no destructiva: agregar columnas si tabla ya existe sin ellas
+                for _col, _def in [('feedback', 'SMALLINT'), ('feedback_note', 'TEXT'), ('company_id', 'INTEGER'), ('scan_id', 'INTEGER')]:
+                    try:
+                        cur.execute(f"ALTER TABLE oracle_conversations ADD COLUMN IF NOT EXISTS {_col} {_def}")
+                    except Exception:
+                        pass
             except Exception:
                 cur.execute(
                     """
