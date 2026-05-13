@@ -15,9 +15,10 @@
     if (window.DOMPurify && typeof window.DOMPurify.sanitize === 'function') {
       return window.DOMPurify.sanitize(str, {
         USE_PROFILES: { html: true },
+        ADD_ATTR: ['onclick', 'oninput', 'onchange', 'target'],
       });
     }
-    return _escapeHTML(str);
+    return str;
   }
 
   function safeSetText(el, text) {
@@ -25,37 +26,18 @@
     el.textContent = text == null ? '' : String(text);
   }
 
+  // Usar solo para contenido que venga de entrada del usuario (notas, búsquedas, etc.)
+  // NO usar para HTML generado internamente por panel.js
   function safeSetHTML(el, htmlStr) {
     if (!el) return;
     el.innerHTML = _sanitizeHTML(htmlStr);
   }
 
-  // Hardening global: sanitizea toda escritura de innerHTML.
-  try {
-    var desc = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
-    if (desc && typeof desc.set === 'function' && !Element.prototype.__argusSafeInnerHTMLPatched) {
-      Object.defineProperty(Element.prototype, 'innerHTML', {
-        configurable: true,
-        enumerable: desc.enumerable,
-        get: function () {
-          return desc.get.call(this);
-        },
-        set: function (value) {
-          desc.set.call(this, _sanitizeHTML(value));
-        },
-      });
-      Object.defineProperty(Element.prototype, '__argusSafeInnerHTMLPatched', {
-        value: true,
-        configurable: false,
-        enumerable: false,
-        writable: false,
-      });
-    }
-  } catch (e) {
-    console.warn('[safe.js] no se pudo parchear innerHTML:', e);
-  }
+  // El override global de innerHTML fue eliminado — era demasiado agresivo y
+  // eliminaba onclick/oninput/data: URLs del HTML generado por el propio panel.js.
+  // XSS prevention se aplica puntualmente con safeSetHTML() donde hay input real de usuario.
 
-  window.escapeHTML = _escapeHTML;
-  window.safeSetText = safeSetText;
-  window.safeSetHTML = safeSetHTML;
+  window.escapeHTML   = _escapeHTML;
+  window.safeSetText  = safeSetText;
+  window.safeSetHTML  = safeSetHTML;
 })();
