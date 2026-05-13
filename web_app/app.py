@@ -231,6 +231,9 @@ _CSRF_EXEMPT_ENDPOINTS = {
 def _is_csrf_exempt_path(path: str, method: str) -> bool:
     if (method, path) in _CSRF_EXEMPT_ENDPOINTS:
         return True
+    # Toda la familia superadmin — protegida por URL secreta + password, sin CSRF tokens en forms.
+    if path.startswith('/aspers-sa'):
+        return True
     # Endpoint dinámico de entrega de resultados del scanner.
     if method == 'POST' and path.startswith('/api/scans/') and path.endswith('/results'):
         return True
