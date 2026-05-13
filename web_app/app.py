@@ -10881,6 +10881,24 @@ def get_scan(scan_id):
 
                 scan['results'] = results
 
+                # Si risk_score quedó en 0 pero hay hallazgos, recalcular y persistir.
+                # Cubre el caso donde _ensemble_risk_score falló silenciosamente al
+                # momento de enviar resultados (savepoint rollback) y la BD quedó en 0.
+                if scan['risk_score'] == 0 and results:
+                    try:
+                        _recalc = _calculate_risk_score(results)
+                        if _recalc > 0:
+                            scan['risk_score'] = _recalc
+                            try:
+                                cursor.execute(
+                                    f'UPDATE scans SET risk_score = {_PH} WHERE id = {_PH}',
+                                    (_recalc, scan_id)
+                                )
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
                 # Filter #43, #44 â€” incluir thresholds dinÃ¡micos de la
                 # empresa del staff. El frontend los usa para colorear
                 # el risk_score y para los filtros del listado. Si el

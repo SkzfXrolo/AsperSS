@@ -444,28 +444,55 @@ function clearNewScansBadge() {
 }
 
 let _toastContainer = null;
-function showToast(message, type = 'info', scanId = null) {
+const _TOAST_MAX = 4;
+
+function _dismissToast(toast) {
+    if (toast._dismissed) return;
+    toast._dismissed = true;
+    toast.style.transition = 'opacity .3s, transform .3s';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(20px)';
+    setTimeout(() => { try { toast.remove(); } catch(_) {} }, 320);
+}
+
+// showToast(message, type, scanIdOrOpts)
+// scanIdOrOpts: number → click opens that scan; object → {duration, scanId, onClick}
+function showToast(message, type = 'info', scanIdOrOpts = null) {
     if (!_toastContainer) {
         _toastContainer = document.createElement('div');
-        _toastContainer.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+        _toastContainer.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none;max-height:calc(100vh - 80px);overflow:hidden;';
         document.body.appendChild(_toastContainer);
     }
+
+    // Evict oldest if queue at max
+    const existing = _toastContainer.querySelectorAll('.argus-toast');
+    if (existing.length >= _TOAST_MAX) _dismissToast(existing[0]);
+
+    const opts   = (scanIdOrOpts && typeof scanIdOrOpts === 'object') ? scanIdOrOpts : {};
+    const scanId = (typeof scanIdOrOpts === 'number') ? scanIdOrOpts : (opts.scanId || null);
+    const duration = opts.duration || 5000;
+    const onClick  = opts.onClick || null;
+
     const cfg = {
         info:    { color: '#B87333', bg: 'rgba(184,115,51,0.12)', icon: '◆' },
         success: { color: '#10b981', bg: 'rgba(16,185,129,0.12)',  icon: '✓' },
         error:   { color: '#ef4444', bg: 'rgba(239,68,68,0.12)',   icon: '✗' },
+        warning: { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)',  icon: '⚠' },
     };
     const c = cfg[type] || cfg.info;
     const toast = document.createElement('div');
+    toast.className = 'argus-toast';
+    toast._dismissed = false;
+    const clickable = !!(scanId || onClick);
     toast.style.cssText = `
         background:var(--bg-card,#1e1e2e);
         border:1px solid ${c.color}55;
         border-left:3px solid ${c.color};
-        border-radius:10px;padding:11px 15px;
+        border-radius:10px;padding:11px 15px 11px 12px;
         font-size:13px;color:var(--text,#e2e8f0);
-        box-shadow:0 8px 32px rgba(0,0,0,0.35),0 0 0 0 ${c.color};
-        pointer-events:all;cursor:${scanId?'pointer':'default'};
-        max-width:290px;min-width:220px;
+        box-shadow:0 8px 32px rgba(0,0,0,0.35);
+        pointer-events:all;cursor:${clickable?'pointer':'default'};
+        max-width:310px;min-width:220px;
         animation:slideInRight .22s cubic-bezier(0.4,0,0.2,1);
         display:flex;gap:10px;align-items:flex-start;
         position:relative;overflow:hidden;`;
@@ -475,10 +502,21 @@ function showToast(message, type = 'info', scanId = null) {
             <div style="font-weight:600;margin-bottom:2px;font-size:12px;color:${c.color};">Argus Projects</div>
             <div style="color:var(--text-m,#94a3b8);font-size:12.5px;line-height:1.4;">${message}</div>
         </div>
-        <div style="position:absolute;bottom:0;left:0;height:2px;background:${c.color};opacity:0.5;animation:toast-drain 5s linear forwards;width:100%;transform-origin:left;"></div>`;
-    if (scanId) toast.onclick = () => { viewScanDetails(scanId); toast.remove(); };
+        <button onclick="event.stopPropagation()" style="background:none;border:none;color:var(--text-d,#666);cursor:pointer;font-size:16px;line-height:1;padding:0 0 0 4px;flex-shrink:0;opacity:0.7;" title="Cerrar">×</button>
+        <div style="position:absolute;bottom:0;left:0;height:2px;background:${c.color};opacity:0.5;width:100%;transform-origin:left;animation:toast-drain ${duration}ms linear forwards;"></div>`;
+
+    const closeBtn = toast.querySelector('button');
+    closeBtn.addEventListener('click', () => _dismissToast(toast));
+
+    toast.addEventListener('click', () => {
+        if (scanId && typeof viewScanDetails === 'function') viewScanDetails(scanId);
+        else if (onClick) onClick();
+        _dismissToast(toast);
+    });
+
     _toastContainer.appendChild(toast);
-    setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity .35s'; setTimeout(() => toast.remove(), 350); }, 5000);
+    const tid = setTimeout(() => _dismissToast(toast), duration);
+    toast._tid = tid;
 }
 
 let _soundEnabled = localStorage.getItem('notif-sound') !== 'false';
@@ -1825,7 +1863,7 @@ async function loadSchedules() {
             const host = escapeHtml(s.host || '');
             const freq = Number(s.frequency_hours || 24);
             const enabled = !!s.enabled;
-            const next = s.next_run ? new Date(s.next_run).toLocaleString() : '-';
+            const next = s.next_run ? formatDate(s.next_run) : '-';
             return `<div style="padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;display:flex;gap:10px;align-items:center;justify-content:space-between;">
                 <div><strong>${host}</strong> · cada ${freq}h · next: ${next} · ${enabled ? 'activo' : 'pausado'}</div>
                 <button class="btn btn-secondary" type="button" onclick="deleteSchedule(${id})">Eliminar</button>
@@ -3286,7 +3324,7 @@ function renderScreenshot(data) {
         container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-d);font-size:13px;">Sin captura de pantalla — el scanner tomará una automáticamente a partir de la próxima versión.</div>';
         return;
     }
-    const ts = data.started_at ? new Date(data.started_at).toLocaleString() : '';
+    const ts = data.started_at ? formatDate(data.started_at) : '';
     const dataUrl = `data:image/jpeg;base64,${b64}`;
     container.innerHTML = `
         <div style="font-size:12px;color:var(--text-d);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
@@ -3462,7 +3500,7 @@ function _getCategoryLabel(cat) {
 // ── Buscador in-scan ────────────────────────────────────────────────────────
 
 function _onIssuesSearch(scanId) {
-    const q   = (document.getElementById('issues-search-input')?.value || '').toLowerCase().trim();
+    const q   = _normalize(document.getElementById('issues-search-input')?.value || '').trim();
     const sev = (document.getElementById('issues-severity-select')?.value || '').trim();
     _issuesSearchText = q;
     _issuesSeverity   = sev;
@@ -3540,8 +3578,8 @@ function renderIssuePage(container, scanId) {
     if (_issuesSearchText) {
         const q = _issuesSearchText;
         filtered = filtered.filter(r =>
-            (r.issue_name  || '').toLowerCase().includes(q) ||
-            (r.issue_path  || '').toLowerCase().includes(q)
+            _normalize(r.issue_name).includes(q) ||
+            _normalize(r.issue_path).includes(q)
         );
     }
 
@@ -4882,15 +4920,15 @@ function _drawFileActivityTable(items) {
 
 function filterExploreTable() {
     const inputEl = document.getElementById('explore-search');
-    const q = (inputEl && inputEl.value || '').toLowerCase();
+    const q = _normalize(inputEl && inputEl.value || '');
     let pool = _fileActivityAll;
     if (_exploreActionFilter && _exploreActionFilter !== 'all') {
         pool = pool.filter(r => _resolveActivityAction(r) === _exploreActionFilter);
     }
     const filtered = q ? pool.filter(r =>
-        (r.issue_path || '').toLowerCase().includes(q) ||
-        (r.issue_name || '').toLowerCase().includes(q) ||
-        _resolveActivityAction(r).toLowerCase().includes(q)
+        _normalize(r.issue_path).includes(q) ||
+        _normalize(r.issue_name).includes(q) ||
+        _normalize(_resolveActivityAction(r)).includes(q)
     ) : pool;
     _drawFileActivityTable(filtered);
 }
@@ -5772,10 +5810,22 @@ function exportScanPDF() {
     window.open(`/api/scans/${currentScanId}/export/pdf`, '_blank');
 }
 
+function _parseUTC(s) {
+    if (!s) return null;
+    s = String(s).trim();
+    if (/Z$|[+-]\d{2}:\d{2}$/.test(s)) return new Date(s);
+    return new Date(s.replace(' ', 'T') + 'Z');
+}
+
 function formatDate(dateString) {
     if (!dateString) return 'N/A';
-    const date = new Date(dateString);
+    const date = _parseUTC(dateString);
+    if (!date || isNaN(date.getTime())) return String(dateString);
     return date.toLocaleString('es-ES');
+}
+
+function _normalize(s) {
+    return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
 function formatDuration(seconds) {
@@ -6115,14 +6165,14 @@ async function loadRegistrationTokens() {
         const tbody = document.getElementById('registration-tokens-table-body');
         if (data.success && data.tokens && data.tokens.length > 0) {
             tbody.innerHTML = data.tokens.map(token => {
-                const expiresAt = token.expires_at ? new Date(token.expires_at).toLocaleString('es-ES') : 'Sin expiración';
-                const isExpired = token.expires_at ? new Date(token.expires_at) < new Date() : false;
-                
+                const expiresAt = token.expires_at ? (_parseUTC(token.expires_at) || new Date(0)).toLocaleString('es-ES') : 'Sin expiración';
+                const isExpired = token.expires_at ? (_parseUTC(token.expires_at) || new Date(0)) < new Date() : false;
+
                 return `
                 <tr>
                     <td><code style="font-size: 11px;">${token.token.substring(0, 20)}...</code></td>
                     <td>${token.created_by || 'N/A'}</td>
-                    <td>${new Date(token.created_at).toLocaleString('es-ES')}</td>
+                    <td>${(_parseUTC(token.created_at) || new Date()).toLocaleString('es-ES')}</td>
                     <td>${expiresAt}</td>
                     <td>
                         <span class="badge badge-${token.is_used ? 'danger' : (isExpired ? 'warning' : 'success')}">
@@ -6167,8 +6217,8 @@ async function loadDownloadLinks() {
                         </thead>
                         <tbody>
                             ${data.links.map(link => {
-                                const expiresAt = link.expires_at ? new Date(link.expires_at).toLocaleString('es-ES') : 'Sin expiración';
-                                const isExpired = link.expires_at ? new Date(link.expires_at) < new Date() : false;
+                                const expiresAt = link.expires_at ? (_parseUTC(link.expires_at) || new Date(0)).toLocaleString('es-ES') : 'Sin expiración';
+                                const isExpired = link.expires_at ? (_parseUTC(link.expires_at) || new Date(0)) < new Date() : false;
                                 const isLimitReached = link.download_count >= link.max_downloads;
                                 const status = !link.is_active ? 'Desactivado' : (isExpired ? 'Expirado' : (isLimitReached ? 'Límite alcanzado' : 'Activo'));
                                 const statusBadge = !link.is_active ? 'danger' : (isExpired ? 'warning' : (isLimitReached ? 'warning' : 'success'));
@@ -6262,7 +6312,7 @@ async function loadUsers() {
         const tbody = document.getElementById('users-table-body');
         if (data.success && data.users && data.users.length > 0) {
             tbody.innerHTML = data.users.map(user => {
-                const lastLogin = user.last_login ? new Date(user.last_login).toLocaleString('es-ES') : 'Nunca';
+                const lastLogin = user.last_login ? (_parseUTC(user.last_login) || new Date()).toLocaleString('es-ES') : 'Nunca';
                 
                 return `
                 <tr>
@@ -6304,7 +6354,7 @@ async function loadCompanyUsersForAdmin() {
         
         if (data.success && data.users && data.users.length > 0) {
             tbody.innerHTML = data.users.map(user => {
-                const lastLogin = user.last_login ? new Date(user.last_login).toLocaleString('es-ES') : 'Nunca';
+                const lastLogin = user.last_login ? (_parseUTC(user.last_login) || new Date()).toLocaleString('es-ES') : 'Nunca';
                 const roles = Array.isArray(user.roles) ? user.roles.join(', ') : (user.role || 'Usuario');
                 const isAdmin = Array.isArray(user.roles) && user.roles.includes('administrador');
                 const currentUserId = parseInt(document.body.getAttribute('data-user-id') || '0');
@@ -6721,7 +6771,7 @@ function toggleAIChat() {
         : '0 4px 20px rgba(160,90,44,.45)';
     if (_aiChatOpen) {
         _updateAIChatScanBadge();
-        document.getElementById('ai-chat-input').focus();
+        document.getElementById('ai-floating-chat-input').focus();
     }
 }
 
@@ -6737,7 +6787,7 @@ function _updateAIChatScanBadge() {
 }
 
 function aiQuick(msg) {
-    const inp = document.getElementById('ai-chat-input');
+    const inp = document.getElementById('ai-floating-chat-input');
     if (inp) { inp.value = msg; inp.style.height = 'auto'; }
     sendAIChatMessage();
 }
@@ -6760,7 +6810,7 @@ function _scrollAIChatToBottom(container) {
 }
 
 async function sendAIChatMessage() {
-    const inp  = document.getElementById('ai-chat-input');
+    const inp  = document.getElementById('ai-floating-chat-input');
     const msgs = document.getElementById('ai-chat-messages');
     if (!inp || !msgs) return;
 
@@ -7860,7 +7910,7 @@ window._setBreadcrumb = _setBreadcrumb;
 // 🖼 BACKGROUND CUSTOMIZER
 // ============================================================
 
-const BG_PRESETS = ['default','aurora','nebula','cyber','ocean','lava','forest','classic'];
+const BG_PRESETS = ['default','aurora','nebula','cyber','ocean','lava','forest','classic','midnight'];
 const CURSOR_MODES = ['argus','system'];
 
 function openBgCustomizer() {
@@ -8054,6 +8104,58 @@ document.addEventListener('DOMContentLoaded', () => {
 // Also close on Esc
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeBgCustomizer();
+});
+
+// ── Feature 360: Auto-switch día/noche ────────────────────────────────────
+// Day (06:00-19:59): ocean (azul claro). Night (20:00-05:59): midnight (azul oscuro).
+let _autoThemeTimer = null;
+
+function _autoThemePreset() {
+    const h = new Date().getHours();
+    return (h >= 6 && h < 20) ? 'ocean' : 'midnight';
+}
+
+function _applyAutoTheme() {
+    if (localStorage.getItem('argus_auto_theme') !== '1') return;
+    setBgPreset(_autoThemePreset());
+}
+
+function _syncAutoThemeUI() {
+    const on = localStorage.getItem('argus_auto_theme') === '1';
+    const dot   = document.getElementById('auto-theme-dot');
+    const label = document.getElementById('auto-theme-label');
+    if (dot) {
+        dot.style.background = on ? 'var(--accent, #06b6d4)' : '#333';
+        const thumb = dot.querySelector('span');
+        if (thumb) thumb.style.left = on ? '16px' : '2px';
+    }
+    if (label) {
+        const h = new Date().getHours();
+        const next = on ? (_autoThemePreset() === 'ocean' ? 'Día → Ocean. Noche → Midnight' : 'Noche → Midnight. Día → Ocean') : 'Desactivado';
+        label.textContent = next;
+    }
+}
+
+function toggleAutoTheme() {
+    const on = localStorage.getItem('argus_auto_theme') === '1';
+    localStorage.setItem('argus_auto_theme', on ? '0' : '1');
+    _syncAutoThemeUI();
+    if (!on) {
+        _applyAutoTheme();
+        if (_autoThemeTimer) clearInterval(_autoThemeTimer);
+        _autoThemeTimer = setInterval(_applyAutoTheme, 60000);
+    } else {
+        if (_autoThemeTimer) { clearInterval(_autoThemeTimer); _autoThemeTimer = null; }
+    }
+}
+window.toggleAutoTheme = toggleAutoTheme;
+
+document.addEventListener('DOMContentLoaded', () => {
+    _syncAutoThemeUI();
+    if (localStorage.getItem('argus_auto_theme') === '1') {
+        _applyAutoTheme();
+        _autoThemeTimer = setInterval(_applyAutoTheme, 60000);
+    }
 });
 
 // ============================================================
@@ -8419,7 +8521,12 @@ async function openPlayerTimelineModal(username, opts) {
         });
     }
     root.dataset.username = username;
-    root.querySelector('#argus-timeline-title').textContent = `Timeline · ${username}`;
+    const titleEl = root.querySelector('#argus-timeline-title');
+    const esc = (typeof _qsEscapeSafe === 'function') ? _qsEscapeSafe : (s) => String(s);
+    titleEl.innerHTML = `<img src="https://mc-heads.net/avatar/${encodeURIComponent(username)}/32"
+        alt="${esc(username)}" width="32" height="32"
+        style="border-radius:4px;image-rendering:pixelated;vertical-align:middle;margin-right:6px;"
+        onerror="this.style.display='none'">Timeline · ${esc(username)}`;
     root.querySelector('#argus-timeline-range').value = String(sinceDays);
     root.classList.add('show');
 
@@ -8534,7 +8641,7 @@ function _renderTimelineRiskProfile(container, prof) {
 }
 
 function _renderTimelineEvent(ev) {
-    const ts = ev.ts ? new Date(ev.ts) : null;
+    const ts = ev.ts ? _parseUTC(ev.ts) : null;
     const tsStr = ts && !isNaN(ts.getTime())
         ? ts.toLocaleString('es-AR', {
             year:'numeric', month:'short', day:'numeric',
