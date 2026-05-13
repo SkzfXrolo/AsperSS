@@ -3079,6 +3079,55 @@ async function loadScans() {
     }
 }
 
+// ── Feature 323: Virtual list para contenedores con >100 ítems ────────────
+// Renderiza solo los ítems visibles + buffer de 5 arriba/abajo.
+// Uso: _VirtualList(container, items, renderFn, { rowHeight })
+function _VirtualList(container, items, renderFn, opts) {
+    opts = opts || {};
+    const ROW_H  = opts.rowHeight || 68;
+    const BUFFER = 5;
+    container.style.cssText += 'overflow-y:auto;position:relative;';
+    const inner = document.createElement('div');
+    inner.style.position = 'relative';
+    inner.style.height   = (items.length * ROW_H) + 'px';
+    container.innerHTML  = '';
+    container.appendChild(inner);
+
+    let _rendered = { start: -1, end: -1 };
+
+    function _render() {
+        const scrollTop = container.scrollTop;
+        const viewH     = container.clientHeight || 400;
+        const start = Math.max(0, Math.floor(scrollTop / ROW_H) - BUFFER);
+        const end   = Math.min(items.length, Math.ceil((scrollTop + viewH) / ROW_H) + BUFFER);
+        if (start === _rendered.start && end === _rendered.end) return;
+        _rendered = { start, end };
+
+        const frag = document.createDocumentFragment();
+        const pad  = document.createElement('div');
+        pad.style.height = (start * ROW_H) + 'px';
+        frag.appendChild(pad);
+
+        for (let i = start; i < end; i++) {
+            const el = document.createElement('div');
+            el.style.height = ROW_H + 'px';
+            el.innerHTML    = renderFn(items[i], i);
+            frag.appendChild(el);
+        }
+
+        const padBot = document.createElement('div');
+        padBot.style.height = ((items.length - end) * ROW_H) + 'px';
+        frag.appendChild(padBot);
+
+        inner.innerHTML = '';
+        inner.appendChild(frag);
+    }
+
+    container.addEventListener('scroll', _render, { passive: true });
+    _render();
+    return { refresh: _render };
+}
+
 // V20: time-ago helper
 function _timeAgo(dateStr) {
     if (!dateStr) return '—';
@@ -4154,7 +4203,17 @@ async function viewScanDetails(scanId) {
                 size: 'lg',
             });
         } else {
-            issuesContainerReset.innerHTML = '<div class="loading-cell">Cargando...</div>';
+            issuesContainerReset.innerHTML = `<div class="skel-issues">${
+                Array(5).fill(0).map(() => `
+                <div class="skel-row">
+                    <div class="skel skel-avatar"></div>
+                    <div class="skel-text">
+                        <div class="skel skel-line w-80"></div>
+                        <div class="skel skel-line w-40"></div>
+                    </div>
+                    <div class="skel skel-badge-sm"></div>
+                </div>`).join('')
+            }</div>`;
         }
     }
 
@@ -5148,10 +5207,22 @@ async function viewPlayerProfile(machineName) {
 
 async function loadPreviousScans(machineName) {
     try {
-        const response = await fetch(`/api/scans?machine_name=${encodeURIComponent(machineName)}&limit=20`);
+        const container = document.getElementById('previous-scans-list');
+        if (container) {
+            container.innerHTML = `<div class="skel-issues">${
+                Array(4).fill(0).map(() => `
+                <div class="skel-row" style="border-bottom:1px solid var(--border);padding:12px 0;">
+                    <div class="skel-text">
+                        <div class="skel skel-line w-60"></div>
+                        <div class="skel skel-line w-40"></div>
+                    </div>
+                    <div class="skel skel-badge-sm" style="width:72px;height:22px;"></div>
+                </div>`).join('')
+            }</div>`;
+        }
+        const response = await fetch(`/api/scans?machine_name=${encodeURIComponent(machineName)}&limit=200`);
         const data = await response.json();
 
-        const container = document.getElementById('previous-scans-list');
         if (!container) return;
 
         const allScans  = data.scans || [];
@@ -5221,17 +5292,24 @@ async function loadPreviousScans(machineName) {
                     </div>
                 </div>`;
 
-            container.innerHTML = statsHtml + prevScans.map((scan, i) => {
-                const prev      = prevScans[i + 1];
+            // Render stats header then scans (virtual scroll when >50)
+            container.innerHTML = statsHtml;
+            const listEl = document.createElement('div');
+            if (prevScans.length > 50) {
+                listEl.style.maxHeight = '420px';
+            }
+            container.appendChild(listEl);
+
+            const _renderScanItem = (scan, i) => {
+                const prev       = prevScans[i + 1];
                 const issuesDiff = prev != null ? (scan.issues_found || 0) - (prev.issues_found || 0) : null;
-                const diffBadge = issuesDiff === null ? '' :
+                const diffBadge  = issuesDiff === null ? '' :
                     issuesDiff > 0 ? `<span style="color:#ef4444;font-size:11px;">▲ ${issuesDiff}</span>` :
                     issuesDiff < 0 ? `<span style="color:#10b981;font-size:11px;">▼ ${Math.abs(issuesDiff)}</span>` :
-                                    `<span style="color:var(--text-d);font-size:11px;">= igual</span>`;
+                                     `<span style="color:var(--text-d);font-size:11px;">= igual</span>`;
                 const verdictBadge = scan.verdict === 'hack'  ? '<span style="font-size:10px;font-weight:700;color:#ef4444;background:rgba(220,38,38,0.12);padding:1px 6px;border-radius:6px;">HACKS</span>' :
                                      scan.verdict === 'clean' ? '<span style="font-size:10px;font-weight:700;color:#10b981;background:rgba(16,185,129,0.12);padding:1px 6px;border-radius:6px;">LIMPIO</span>' : '';
-                return `
-                    <div class="previous-scan-item" onclick="viewScanDetails(${scan.id})" style="cursor:pointer;">
+                return `<div class="previous-scan-item" onclick="viewScanDetails(${scan.id})" style="cursor:pointer;">
                         <div class="previous-scan-header">
                             <span class="previous-scan-id">Escaneo #${scan.id} ${verdictBadge}</span>
                             <span class="previous-scan-date">${formatDate(scan.started_at)}</span>
@@ -5241,23 +5319,19 @@ async function loadPreviousScans(machineName) {
                             <span class="previous-scan-stat"><strong>${scan.total_files_scanned || 0}</strong> archivos</span>
                             ${scan.risk_score != null ? `<span class="previous-scan-stat" style="color:${scan.risk_score>=70?'#ef4444':scan.risk_score>=30?'#f59e0b':'#10b981'};font-weight:700;">Risk ${scan.risk_score}</span>` : ''}
                             <button onclick="event.stopPropagation();compareScanWith(${scan.id})"
-                                style="margin-left:auto;font-size:10px;padding:2px 8px;background:rgba(184,115,51,0.15);
-                                       border:1px solid rgba(184,115,51,0.4);color:var(--accent);border-radius:6px;cursor:pointer;">
-                                Comparar
-                            </button>
+                                style="margin-left:auto;font-size:10px;padding:2px 8px;background:rgba(184,115,51,0.15);border:1px solid rgba(184,115,51,0.4);color:var(--accent);border-radius:6px;cursor:pointer;">Comparar</button>
                             <button onclick="event.stopPropagation();markScanAsBaseline(${scan.id})"
-                                style="font-size:10px;padding:2px 8px;background:rgba(16,185,129,0.12);
-                                       border:1px solid rgba(16,185,129,0.35);color:#10b981;border-radius:6px;cursor:pointer;">
-                                Baseline
-                            </button>
+                                style="font-size:10px;padding:2px 8px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.35);color:#10b981;border-radius:6px;cursor:pointer;">Baseline</button>
                             <button onclick="event.stopPropagation();openScanTrend(${scan.id})"
-                                style="font-size:10px;padding:2px 8px;background:rgba(59,130,246,0.12);
-                                       border:1px solid rgba(59,130,246,0.35);color:#60a5fa;border-radius:6px;cursor:pointer;">
-                                Trend
-                            </button>
-                        </div>
-                    </div>`;
-            }).join('');
+                                style="font-size:10px;padding:2px 8px;background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.35);color:#60a5fa;border-radius:6px;cursor:pointer;">Trend</button>
+                        </div></div>`;
+            };
+
+            if (prevScans.length > 50) {
+                _VirtualList(listEl, prevScans, _renderScanItem, { rowHeight: 70 });
+            } else {
+                listEl.innerHTML = prevScans.map(_renderScanItem).join('');
+            }
         } else {
             container.innerHTML = `
                 <div class="argus-empty argus-empty--v2">
@@ -8075,6 +8149,28 @@ function _applyBg(cfg) {
     _applyCursor(cfg);
 }
 
+// ── Feature 355: Hover preview para preset cards ─────────────────────────
+function _initPresetPreviews() {
+    document.querySelectorAll('.bg-preset-card').forEach(card => {
+        if (card.querySelector('.bg-preset-preview')) return;
+        const label = card.querySelector('span')?.textContent || '';
+        const bg    = card.style.background || card.style.backgroundImage || '';
+        const inner = card.querySelector('div');
+        const innerStyle = inner ? inner.style.cssText : '';
+
+        const preview = document.createElement('div');
+        preview.className = 'bg-preset-preview';
+        preview.style.cssText = `background:${bg};`;
+        preview.innerHTML = `
+            <div style="position:absolute;inset:0;${innerStyle}pointer-events:none;"></div>
+            <div style="position:absolute;top:8px;left:8px;right:8px;height:8px;background:rgba(255,255,255,0.08);border-radius:3px;"></div>
+            <div style="position:absolute;top:22px;left:8px;width:40%;height:6px;background:rgba(255,255,255,0.05);border-radius:3px;"></div>
+            <div style="position:absolute;top:34px;left:8px;right:8px;bottom:20px;background:rgba(0,0,0,0.2);border-radius:4px;"></div>
+            <div class="bg-preset-preview-label">${label}</div>`;
+        card.appendChild(preview);
+    });
+}
+
 // Init on load
 document.addEventListener('DOMContentLoaded', () => {
     const cfg = _loadBgCfg();
@@ -8083,6 +8179,9 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         _applyCursor({});
     }
+
+    // Feature 355: inject hover previews after customizer opens
+    document.getElementById('bg-customizer')?.addEventListener('transitionend', _initPresetPreviews, { once: true });
 
     // Drag & drop on the upload area
     const uploadLabel = document.getElementById('bg-upload-label');
@@ -8463,7 +8562,39 @@ if (_origViewScan) {
 
 
 /* ════════════════════════════════════════════════════════════════════════
- * Pack 33 — V#47 Timeline visual del jugador
+// Feature 382: badges acumulados del jugador basados en historial de scans
+function _computePlayerBadges(data) {
+    const total   = data.scans_total || 0;
+    const hacks   = data.hacks   || 0;
+    const cleans  = data.cleans  || 0;
+    const avgRisk = data.avg_risk || 0;
+
+    const BADGE_DEFS = [
+        { id: 'veteran',   icon: '🏅', label: 'Veterano',        color: '#f59e0b', cond: total >= 10,        tip: `${total} scans en total`       },
+        { id: 'clean5',    icon: '✅', label: 'Limpio ×5',       color: '#22c55e', cond: cleans >= 5,        tip: `${cleans} scans limpios`        },
+        { id: 'clean10',   icon: '🌟', label: 'Limpio ×10',      color: '#10b981', cond: cleans >= 10,       tip: `${cleans} scans limpios`        },
+        { id: 'hacked',    icon: '🔴', label: 'Hack detectado',  color: '#ef4444', cond: hacks >= 1,         tip: `${hacks} veredicto(s) hack`     },
+        { id: 'recidivo',  icon: '⚑',  label: 'Reincidente',     color: '#f97316', cond: hacks >= 2,         tip: `${hacks} hacks detectados`      },
+        { id: 'highrisk',  icon: '⚠️', label: 'Alto riesgo',     color: '#fbbf24', cond: avgRisk >= 50,      tip: `Risk promedio: ${avgRisk}`      },
+        { id: 'lowrisk',   icon: '🛡️', label: 'Bajo riesgo',     color: '#3b82f6', cond: avgRisk < 20 && total >= 3, tip: `Risk promedio: ${avgRisk}` },
+        { id: 'prolific',  icon: '📊', label: 'Frecuente',       color: '#8b5cf6', cond: total >= 25,        tip: `${total} scans registrados`     },
+    ];
+
+    const earned = BADGE_DEFS.filter(b => b.cond);
+    if (!earned.length) return '';
+
+    return `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+        ${earned.map(b => `
+            <span title="${b.tip}" style="
+                display:inline-flex;align-items:center;gap:4px;
+                padding:3px 9px;border-radius:12px;font-size:11.5px;font-weight:700;
+                background:${b.color}18;border:1px solid ${b.color}44;color:${b.color};">
+                ${b.icon} ${b.label}
+            </span>`).join('')}
+    </div>`;
+}
+
+ /* Pack 33 — V#47 Timeline visual del jugador
  * Muestra todos los eventos del jugador (scans, verdict changes, notas)
  * ordenados cronológicamente. Modal full-height con timeline vertical.
  * ════════════════════════════════════════════════════════════════════════ */
@@ -8564,6 +8695,9 @@ async function openPlayerTimelineModal(username, opts) {
         return;
     }
 
+    // Feature 382: calcular badges del jugador a partir del timeline
+    const badgesHtml = _computePlayerBadges(data);
+
     // Stats header
     const statsRow = `
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; padding:10px 12px;
@@ -8576,6 +8710,7 @@ async function openPlayerTimelineModal(username, opts) {
             ${data.avg_risk !== null && data.avg_risk !== undefined
                 ? `<div>risk avg: <b>${data.avg_risk}</b></div>` : ''}
         </div>
+        ${badgesHtml}
         <div id="argus-timeline-risk-profile" style="margin-bottom:12px;"></div>`;
 
     // Timeline items

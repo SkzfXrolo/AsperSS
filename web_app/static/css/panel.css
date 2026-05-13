@@ -4692,3 +4692,101 @@ button {
     .issue-row-stagger { break-inside: avoid; box-shadow: none; }
 }
 
+/* ── Skeleton loaders extra (Feature 322) ───────────────────────────────── */
+/* .skel ya existe en línea 3182; solo añadimos variantes de uso */
+.skel-avatar { width: 32px; height: 32px; border-radius: 6px; flex-shrink: 0; }
+.skel-text   { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.skel-line   { height: 10px; border-radius: 4px; }
+.skel-line.w-40 { width: 40%; }
+.skel-line.w-60 { width: 60%; }
+.skel-line.w-80 { width: 80%; }
+.skel-badge-sm { width: 56px; height: 20px; border-radius: 10px; flex-shrink: 0; }
+.skel-card  { border-radius: 10px; height: 72px; margin-bottom: 8px; }
+
+/* Issues skeleton */
+.skel-issues { padding: 6px 0; }
+.skel-issues .skel-row { border-radius: 8px; margin-bottom: 4px; border-bottom: none; background: rgba(255,255,255,0.015); }
+
+/* ── Modal base consistente (Feature 391) ──────────────────────────────── */
+.argus-modal-overlay {
+    position: fixed; inset: 0; z-index: 10000;
+    background: rgba(0,0,0,0.65);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s;
+}
+.argus-modal-overlay.open {
+    opacity: 1; pointer-events: all;
+}
+.argus-modal {
+    background: var(--bg-2, #0E0C08);
+    border: 1px solid var(--border-m, rgba(184,115,51,0.28));
+    border-radius: 14px;
+    width: min(96vw, 680px);
+    max-height: 88vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04);
+    transform: translateY(12px) scale(0.98);
+    transition: transform .2s, opacity .2s;
+}
+.argus-modal-overlay.open .argus-modal {
+    transform: translateY(0) scale(1);
+}
+.argus-modal-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border, rgba(184,115,51,0.12));
+    flex-shrink: 0;
+}
+.argus-modal-header h3 {
+    margin: 0; font-size: 16px; font-weight: 700;
+    color: var(--text-h, #f0e6d8); flex: 1;
+}
+.argus-modal-close {
+    background: none; border: none;
+    color: var(--text-d, #6b7280);
+    font-size: 20px; line-height: 1;
+    cursor: pointer; padding: 0 4px;
+    transition: color .15s;
+}
+.argus-modal-close:hover { color: var(--text, #e2e8f0); }
+.argus-modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+.argus-modal-footer {
+    padding: 14px 20px;
+    border-top: 1px solid var(--border, rgba(184,115,51,0.12));
+    display: flex; gap: 8px; justify-content: flex-end;
+    flex-shrink: 0;
+}
+
+/* ── Theme preset hover preview (Feature 355) ──────────────────────────── */
+.bg-preset-card { position: relative; }
+.bg-preset-preview {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%; transform: translateX(-50%);
+    width: 160px; height: 90px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.18);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    z-index: 100;
+    pointer-events: none;
+}
+.bg-preset-card:hover .bg-preset-preview { display: block; }
+.bg-preset-preview::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.5) 100%);
+}
+.bg-preset-preview-label {
+    position: absolute; bottom: 6px; left: 0; right: 0;
+    text-align: center; font-size: 11px; font-weight: 700;
+    color: #fff; z-index: 1; text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+}
+

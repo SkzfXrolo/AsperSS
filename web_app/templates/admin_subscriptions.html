@@ -522,6 +522,7 @@
             <a class="sb-link" data-tab="cooldowns"><span class="ico">❄</span> Cooldowns <span class="pill" id="pill-cooldowns">—</span></a>
             <a class="sb-link" data-tab="offenders"><span class="ico">⚑</span> Reincidentes</a>
             <a class="sb-link" data-tab="learnfp"><span class="ico">≈</span> Sugerencias FP</a>
+            <a class="sb-link" data-tab="oracle"><span class="ico">◎</span> AI Oracle <span class="pill purple" id="pill-oracle">—</span></a>
         </div>
 
         <div class="sb-section">
@@ -553,6 +554,9 @@
                 </div>
             </div>
         </div>
+
+        <!-- embedded companies data for revenue chart -->
+        <script>window._SA_COMPANIES = {{ companies|tojson }};</script>
 
         <!-- ── DASHBOARD ── -->
         <section class="section active" id="sec-dashboard">
@@ -604,6 +608,17 @@
                             <tbody id="tbl-top-companies"><tr><td colspan="4" class="empty">Cargando…</td></tr></tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+
+            <!-- 374: Revenue by company bar chart -->
+            <div class="card">
+                <div class="card-head">
+                    <span class="card-title">Ingresos recurrentes por empresa</span>
+                    <span class="card-sub" id="revenue-chart-total">USD —/mes</span>
+                </div>
+                <div class="card-body" id="revenue-chart-body" style="padding-top:16px;padding-bottom:16px">
+                    <div style="color:var(--text-d);font-size:12px;text-align:center;padding:12px">Cargando…</div>
                 </div>
             </div>
 
@@ -1002,6 +1017,42 @@
                     }
                 })();
             </script>
+
+            <!-- 373: Cuentas con problemas -->
+            {% set all_users = individual_users + company_users %}
+            {% set problem_count = namespace(n=0) %}
+            {% for u in all_users %}{% if not u.is_active %}{% set problem_count.n = problem_count.n + 1 %}{% endif %}{% endfor %}
+            <div class="card" style="margin-top:18px;border-color:rgba(248,113,113,0.25)">
+                <div class="card-head">
+                    <span class="card-title" style="color:#F87171">Cuentas con problemas
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(248,113,113,0.15);color:#F87171;border:1px solid rgba(248,113,113,0.3);border-radius:100px;padding:2px 8px;margin-left:6px">{{ problem_count.n }}</span>
+                    </span>
+                    <span class="card-sub">Cuentas inactivas que requieren atención</span>
+                </div>
+                {% if problem_count.n == 0 %}
+                <div class="card-body" style="text-align:center;color:var(--text-d);font-size:13px;padding:24px">
+                    <span style="font-size:22px">✓</span><br>Todas las cuentas están activas.
+                </div>
+                {% else %}
+                <div class="tbl-wrap">
+                    <table>
+                        <thead><tr><th>Usuario</th><th>Email</th><th>Empresa</th><th>Roles</th><th>Estado</th><th>Creado</th></tr></thead>
+                        <tbody>
+                        {% for u in all_users %}{% if not u.is_active %}
+                            <tr style="background:rgba(248,113,113,0.04)">
+                                <td><strong>{{ u.username }}</strong></td>
+                                <td class="mono" style="font-size:11px">{{ u.email or '—' }}</td>
+                                <td>{% if u.company_id %}{% for c in companies if c.id == u.company_id %}{{ c.name }}{% endfor %}{% else %}<span style="color:var(--text-d)">Individual</span>{% endif %}</td>
+                                <td>{% for r in u.roles %}<span class="badge badge-role" style="margin-right:2px">{{ r }}</span>{% endfor %}</td>
+                                <td><span class="badge badge-expired">Inactiva</span></td>
+                                <td class="mono" style="font-size:11px">{{ u.created_at or '—' }}</td>
+                            </tr>
+                        {% endif %}{% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
         </section>
 
         <!-- ── NUEVA EMPRESA ── -->
@@ -1263,6 +1314,55 @@
             </div>
         </section>
 
+        <!-- ── AI ORACLE ── -->
+        <section class="section" id="sec-oracle">
+            <div class="page-head">
+                <div>
+                    <span class="page-eyebrow">// INTELIGENCIA</span>
+                    <h1 class="page-title">AI <span>Oracle</span></h1>
+                </div>
+                <div class="page-actions">
+                    <button class="btn btn-outline btn-sm" onclick="loadOracle()">↻ Refrescar</button>
+                </div>
+            </div>
+
+            <!-- Oracle KPI grid -->
+            <div class="kpi-grid" id="oracle-kpi-grid">
+                <div class="kpi"><div class="kpi-label">Decisiones 24h</div><div class="kpi-val blue" id="oracle-d24h">—</div><div class="kpi-sub" id="oracle-d24h-sub">acciones automáticas</div></div>
+                <div class="kpi"><div class="kpi-label">Decisiones 7d</div><div class="kpi-val purple" id="oracle-d7d">—</div><div class="kpi-sub">últimos 7 días</div></div>
+                <div class="kpi"><div class="kpi-label">Decisiones 30d</div><div class="kpi-val gold" id="oracle-d30d">—</div><div class="kpi-sub">últimos 30 días</div></div>
+                <div class="kpi"><div class="kpi-label">Auto-labels</div><div class="kpi-val green" id="oracle-autolabels">—</div><div class="kpi-sub">total acumulado</div></div>
+            </div>
+
+            <div class="row-2">
+                <div class="card">
+                    <div class="card-head"><span class="card-title">Acciones 30d por tipo</span></div>
+                    <div class="card-body" id="oracle-actions-body">
+                        <div style="color:var(--text-d);font-size:12px;text-align:center;padding:16px">Cargando…</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-head"><span class="card-title">Estado del módulo</span></div>
+                    <div class="card-body" id="oracle-status-body">
+                        <div style="color:var(--text-d);font-size:12px;text-align:center;padding:16px">Cargando…</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-head">
+                    <span class="card-title">Decisiones recientes</span>
+                    <span class="card-sub" id="oracle-recent-summary">últimas 20</span>
+                </div>
+                <div class="tbl-wrap">
+                    <table>
+                        <thead><tr><th>Jugador</th><th>Score</th><th>Confianza</th><th>Acción</th><th>Hace</th></tr></thead>
+                        <tbody id="tbl-oracle-recent"><tr><td colspan="5" class="empty">Cargando…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
         <!-- ── MAINTENANCE ── -->
         <section class="section" id="sec-maintenance">
             <div class="page-head">
@@ -1279,12 +1379,15 @@
             <div class="card">
                 <div class="card-head"><span class="card-title">Resultado</span><span class="card-sub" id="maint-mode">— sin ejecutar —</span></div>
                 <div class="card-body">
-                    <pre id="maint-out" style="background:rgba(0,0,0,0.35);padding:18px;border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text-m);overflow-x:auto;white-space:pre-wrap;line-height:1.6;border:1px solid var(--border)">Aún no ejecutado.
-
-Acciones:
-  • Dry run     — preview de qué se haría sin tocar BD
-  • Ejecutar    — corre decay + cleanup + recompute
-  • Ejecutar + Discord — además manda embed al webhook DISCORD_AI_HEALTH_WEBHOOK</pre>
+                    <div id="maint-initial" style="text-align:center;padding:24px 16px;color:var(--text-d)">
+                        <div style="font-size:32px;margin-bottom:12px">⚒</div>
+                        <div style="font-size:13px;line-height:1.7">
+                            <strong style="color:var(--text-m)">Dry run</strong> — previsualiza impacto sin modificar nada<br>
+                            <strong style="color:var(--text-m)">Ejecutar</strong> — aplica decay + cleanup + recompute<br>
+                            <strong style="color:var(--text-m)">Ejecutar + Discord</strong> — además notifica al webhook
+                        </div>
+                    </div>
+                    <div id="maint-tiles" style="display:none;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px"></div>
                 </div>
             </div>
             <div class="card">
@@ -1496,6 +1599,7 @@ function loadTabIfNeeded(name) {
     if (name === 'cooldowns')   { loadCooldowns();  _loaded_tabs.add(name); return; }
     if (name === 'offenders')   { loadOffenders();  _loaded_tabs.add(name); return; }
     if (name === 'learnfp')     { loadLearnFP();    _loaded_tabs.add(name); return; }
+    if (name === 'oracle')      { loadOracle();     _loaded_tabs.add(name); return; }
     if (name === 'audit')       { loadAudit();      _loaded_tabs.add(name); return; }
     if (name === 'system')      { loadSystem();     _loaded_tabs.add(name); return; }
 }
@@ -1955,31 +2059,51 @@ async function runMaintenance(notify_discord=false) {
 
 function renderMaintReport(report, dry) {
     if (!report) return;
-    $('#maint-mode').textContent = (dry ? '🧪 dry-run · ' : '✅ aplicado · ') + new Date().toLocaleString('es-AR');
+    const modeEl = $('#maint-mode');
+    if (modeEl) modeEl.textContent = (dry ? '🧪 dry-run · ' : '✅ aplicado · ') + new Date().toLocaleString('es-AR');
+    const initEl = $('#maint-initial');
+    if (initEl) initEl.style.display = 'none';
+    const tiles = $('#maint-tiles');
+    if (!tiles) return;
+    tiles.style.display = 'grid';
+
     const dh = report.decay_hack || {};
     const ld = report.legit_decay || {};
     const tr = report.trust_recompute || {};
     const cc = report.cooldown_cleanup || {};
-    const out = [];
-    out.push('▸ Decay learned_hack_patterns:');
-    out.push(`    decayed (>30d):  ${dh.decayed_30d || 0}`);
-    out.push(`    decayed (>90d):  ${dh.decayed_90d || 0}`);
-    out.push(`    deactivated:     ${dh.deactivated || 0}`);
-    out.push('');
-    out.push('▸ Decay legit patterns:');
-    out.push(`    deactivated:     ${ld.deactivated || 0} (>120d, count<=2)`);
-    out.push('');
-    out.push('▸ Recompute trust scores:');
-    out.push(`    rows updated:    ${tr.updated || 0}`);
-    out.push('');
-    out.push('▸ Cooldown cleanup:');
-    out.push(`    reset:           ${cc.reset || 0} empresas (>24h sin event)`);
-    $('#maint-out').textContent = out.join('\n');
 
-    // Index suggestions table
+    const mkTile = (icon, title, rows, accent) => `
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 18px">
+            <div style="font-size:20px;margin-bottom:8px">${icon}</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-d);margin-bottom:10px">${title}</div>
+            ${rows.map(([lbl, val]) => `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">
+                    <span style="font-size:11.5px;color:var(--text-m)">${lbl}</span>
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:${accent};font-weight:600">${val}</span>
+                </div>`).join('')}
+        </div>`;
+
+    tiles.innerHTML = [
+        mkTile('🗑', 'Decay hack patterns', [
+            ['decayed 30d', dh.decayed_30d || 0],
+            ['decayed 90d', dh.decayed_90d || 0],
+            ['desactivados', dh.deactivated || 0],
+        ], '#F87171'),
+        mkTile('🌿', 'Decay legit patterns', [
+            ['desactivados (>120d)', ld.deactivated || 0],
+        ], '#34D399'),
+        mkTile('⚖', 'Recompute trust', [
+            ['filas actualizadas', tr.updated || 0],
+        ], '#A78BFA'),
+        mkTile('❄', 'Cooldown cleanup', [
+            ['empresas reseteadas', cc.reset || 0],
+        ], '#60A5FA'),
+    ].join('');
+
     const idx = report.index_suggestions || [];
-    if (idx.length) {
-        $('#tbl-indexes').innerHTML = idx.map(s => `
+    const tblIdx = $('#tbl-indexes');
+    if (tblIdx && idx.length) {
+        tblIdx.innerHTML = idx.map(s => `
             <tr>
                 <td class="mono">${escHTML(s.table)}</td>
                 <td class="mono">${escHTML(s.columns)}</td>
@@ -1990,19 +2114,124 @@ function renderMaintReport(report, dry) {
 }
 
 function renderMaintMetrics(m) {
+    const tiles = $('#maint-tiles');
+    if (!tiles || !m) return;
     const mm = m.metrics || {};
-    const extra = [
-        '',
-        '▸ Métricas de calidad (90d):',
-        `    P=${(mm.precision*100||0).toFixed(1)}%  R=${(mm.recall*100||0).toFixed(1)}%  F1=${(mm.f1*100||0).toFixed(1)}%  drift=${(mm.drift_score*100||0).toFixed(1)}%`,
-        `    n=${mm.total_evaluated || 0} verdicts`,
-    ];
-    if (m.retrain && m.retrain.should_retrain) {
-        extra.push('');
-        extra.push('▸ ⚠ Retrain RF recomendado (' + (m.retrain.urgency || 'low') + '):');
-        (m.retrain.reasons || []).forEach(r => extra.push('    • ' + r));
+    const div = document.createElement('div');
+    div.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 18px;grid-column:1/-1';
+    div.innerHTML = `
+        <div style="font-size:20px;margin-bottom:8px">📊</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-d);margin-bottom:12px">Métricas de calidad post-mantenimiento (90d)</div>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12.5px;color:var(--text-m)">
+            <span>Precision <strong style="color:var(--text)">${(mm.precision*100||0).toFixed(1)}%</strong></span>
+            <span>Recall <strong style="color:var(--text)">${(mm.recall*100||0).toFixed(1)}%</strong></span>
+            <span>F1 <strong style="color:var(--text)">${(mm.f1*100||0).toFixed(1)}%</strong></span>
+            <span>Drift <strong style="color:var(--text)">${(mm.drift_score*100||0).toFixed(1)}%</strong></span>
+            <span>n=<strong style="color:var(--text)">${fmtNum(mm.total_evaluated)}</strong></span>
+        </div>
+        ${m.retrain && m.retrain.should_retrain ? `
+        <div style="margin-top:12px;padding:10px 14px;background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.25);border-radius:8px;font-size:12px;color:#FBBF24">
+            ⚠ Retrain RF recomendado (${escHTML(m.retrain.urgency || 'low')}): ${escHTML((m.retrain.reasons||[]).join('; '))}
+        </div>` : ''}`;
+    tiles.appendChild(div);
+}
+
+/* ── ORACLE ── */
+async function loadOracle() {
+    try {
+        const d = await api('/oracle-stats');
+        const setEl = (id, v) => { const e = $(id); if(e) e.textContent = v; };
+        setEl('#oracle-d24h', fmtNum(d.decisions_24h));
+        setEl('#oracle-d7d',  fmtNum(d.decisions_7d));
+        setEl('#oracle-d30d', fmtNum(d.decisions_30d));
+        setEl('#oracle-autolabels', fmtNum(d.auto_labels_total));
+        $('#pill-oracle').textContent = fmtNum(d.decisions_30d);
+
+        // Action breakdown
+        const actBody = $('#oracle-actions-body');
+        const actions = d.action_counts || {};
+        const total30 = Object.values(actions).reduce((a,b)=>a+b,0) || 1;
+        const actionColors = { ban:'#F87171', kick:'#FBBF24', flag:'#60A5FA', allow:'#34D399', warn:'#A78BFA' };
+        if (!Object.keys(actions).length) {
+            actBody.innerHTML = '<div style="color:var(--text-d);font-size:12px;text-align:center;padding:16px">Sin decisiones en 30d</div>';
+        } else {
+            actBody.innerHTML = Object.entries(actions).map(([action, count]) => {
+                const pct = (count / total30 * 100).toFixed(1);
+                const color = actionColors[action] || '#8B949E';
+                return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+                    <div style="width:70px;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:11px;color:${color};text-transform:uppercase">${escHTML(action)}</div>
+                    <div style="flex:1;height:16px;background:rgba(255,255,255,0.04);border-radius:3px;overflow:hidden;position:relative">
+                        <div style="position:absolute;left:0;top:0;bottom:0;width:${pct}%;background:${color};border-radius:3px;opacity:0.75"></div>
+                    </div>
+                    <div style="width:50px;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-m);text-align:right">${fmtNum(count)}</div>
+                </div>`;
+            }).join('');
+        }
+
+        // Module status
+        const statusBody = $('#oracle-status-body');
+        const avail = d.oracle_available !== false;
+        statusBody.innerHTML = `
+            <table style="width:100%;font-size:13px">
+                <tr><td style="color:var(--text-m);width:160px">Módulo Oracle</td>
+                    <td>${avail ? '<span class="badge badge-active">cargado</span>' : '<span class="badge badge-expired">no disponible</span>'}</td></tr>
+                <tr><td style="color:var(--text-m)">Decisiones hoy</td>
+                    <td class="mono">${fmtNum(d.decisions_24h)}</td></tr>
+                <tr><td style="color:var(--text-m)">Auto-labels totales</td>
+                    <td class="mono">${fmtNum(d.auto_labels_total)}</td></tr>
+                ${d.error ? `<tr><td style="color:var(--text-m)">Error</td><td style="color:#F87171;font-size:11px">${escHTML(d.error)}</td></tr>` : ''}
+            </table>`;
+
+        // Recent decisions
+        const tb = $('#tbl-oracle-recent');
+        const rows = d.recent || [];
+        if (!rows.length) {
+            tb.innerHTML = '<tr><td colspan="5" class="empty">Sin decisiones recientes</td></tr>';
+        } else {
+            const actionBadge = a => {
+                const cls = a==='ban'?'badge-hack':a==='kick'?'badge-hack':a==='flag'?'badge-info':'badge-clean';
+                return `<span class="badge ${cls}">${escHTML(a.toUpperCase())}</span>`;
+            };
+            tb.innerHTML = rows.map(r => `
+                <tr>
+                    <td><strong>${escHTML(r.player || '—')}</strong></td>
+                    <td class="num">${(r.score*100||0).toFixed(0)}</td>
+                    <td class="num">${(r.confidence*100||0).toFixed(0)}%</td>
+                    <td>${actionBadge(r.action || 'unknown')}</td>
+                    <td class="mono" style="font-size:11px">${fmtAgo(r.created_at)}</td>
+                </tr>`).join('');
+        }
+        $('#oracle-recent-summary').textContent = `${rows.length} recientes`;
+    } catch(e) { console.error(e); }
+}
+
+/* ── REVENUE CHART ── */
+function renderRevenueChart() {
+    const companies = window._SA_COMPANIES || [];
+    const paying = companies
+        .filter(c => c.subscription_status === 'active' && c.subscription_price > 0)
+        .sort((a, b) => (b.subscription_price||0) - (a.subscription_price||0));
+    const body = $('#revenue-chart-body');
+    if (!body) return;
+    const total = paying.reduce((s, c) => s + (c.subscription_price||0), 0);
+    const totalEl = $('#revenue-chart-total');
+    if (totalEl) totalEl.textContent = `USD ${total.toFixed(0)}/mes · ${paying.length} empresas`;
+    if (!paying.length) {
+        body.innerHTML = '<div style="color:var(--text-d);font-size:12px;text-align:center;padding:20px">Sin empresas de pago activas</div>';
+        return;
     }
-    $('#maint-out').textContent += '\n' + extra.join('\n');
+    const max = Math.max(...paying.map(c => c.subscription_price||0), 1);
+    body.innerHTML = paying.map(c => {
+        const pct = ((c.subscription_price||0) / max * 100).toFixed(1);
+        const color = (c.subscription_price||0) >= 30 ? '#D4A017' : (c.subscription_price||0) >= 15 ? '#3B82F6' : '#10B981';
+        return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+            <div style="width:160px;flex-shrink:0;font-size:12px;color:var(--text);text-overflow:ellipsis;overflow:hidden;white-space:nowrap;text-align:right" title="${escHTML(c.name||'')}">${escHTML(c.name||'')}</div>
+            <div style="flex:1;height:18px;background:rgba(255,255,255,0.04);border-radius:3px;overflow:hidden;position:relative">
+                <div style="position:absolute;left:0;top:0;bottom:0;width:${pct}%;background:${color};border-radius:3px;opacity:0.85;transition:width 0.6s ease"></div>
+            </div>
+            <div style="width:62px;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#D4A017;text-align:left">$${(c.subscription_price||0).toFixed(2)}</div>
+        </div>`;
+    }).join('');
 }
 
 /* ── AUDIT ── */
@@ -2211,6 +2440,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Cargar overview SIEMPRE para llenar pills del sidebar
     if (!_loaded_tabs.has('dashboard')) loadOverview();
+
+    // Revenue chart usa datos embebidos — render inmediato
+    renderRevenueChart();
 
     startLive();
 });

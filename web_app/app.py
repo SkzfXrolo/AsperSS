@@ -18648,6 +18648,81 @@ def sa_api_scans_timeseries():
 #   * /aspers-sa/api/export/<kind>.csv     (export CSV de las tablas)
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
+
+@app.route('/aspers-sa/api/oracle-stats', methods=['GET'])
+@_sa_required
+def sa_api_oracle_stats():
+    """Oracle AI: decision counts by period, action breakdown, auto-labels, recent decisions."""
+    oracle_available = True
+    try:
+        import argus_ai_oracle as _ao  # noqa: F401
+    except ImportError:
+        oracle_available = False
+
+    out = {
+        'oracle_available': oracle_available,
+        'decisions_24h': 0, 'decisions_7d': 0, 'decisions_30d': 0,
+        'auto_labels_total': 0,
+        'action_counts': {},
+        'recent': [],
+    }
+    try:
+        with get_api_db_cursor() as cur:
+            for key, days in [('decisions_24h', 1), ('decisions_7d', 7), ('decisions_30d', 30)]:
+                out[key] = _sa_dual_count(
+                    cur,
+                    f"SELECT COUNT(*) FROM ai_decisions_log WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '{int(days)} days'",
+                    f"SELECT COUNT(*) FROM ai_decisions_log WHERE created_at >= datetime('now', '-{int(days)} days')"
+                )
+
+            try:
+                cur.execute(
+                    "SELECT action, COUNT(*) AS cnt FROM ai_decisions_log "
+                    "WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '30 days' "
+                    "GROUP BY action ORDER BY cnt DESC"
+                )
+            except Exception:
+                try:
+                    cur.execute(
+                        "SELECT action, COUNT(*) AS cnt FROM ai_decisions_log "
+                        "WHERE created_at >= datetime('now', '-30 days') "
+                        "GROUP BY action ORDER BY cnt DESC"
+                    )
+                except Exception:
+                    pass
+            rows = cur.fetchall() or []
+            for r in rows:
+                action = str(_row_get(r, 0, 'action') or '')
+                cnt_val = _row_get(r, 1, 'cnt')
+                out['action_counts'][action] = int(cnt_val or 0)
+
+            out['auto_labels_total'] = _sa_dual_count(
+                cur,
+                "SELECT COUNT(*) FROM ai_auto_labels",
+                "SELECT COUNT(*) FROM ai_auto_labels"
+            )
+
+            try:
+                cur.execute(
+                    "SELECT player_name, score, confidence, action, created_at "
+                    "FROM ai_decisions_log ORDER BY created_at DESC LIMIT 20"
+                )
+                rows = cur.fetchall() or []
+                out['recent'] = [{
+                    'player':     str(_row_get(r, 0, 'player_name') or ''),
+                    'score':      float(_row_get(r, 1, 'score') or 0),
+                    'confidence': float(_row_get(r, 2, 'confidence') or 0),
+                    'action':     str(_row_get(r, 3, 'action') or ''),
+                    'created_at': str(_row_get(r, 4, 'created_at') or ''),
+                } for r in rows]
+            except Exception:
+                pass
+    except Exception as e:
+        out['error'] = str(e)
+
+    return jsonify(out), 200
+
+
 @app.route('/aspers-sa/api/companies/<int:cid>/health', methods=['GET'])
 @_sa_required
 def sa_api_company_health(cid):
