@@ -75,12 +75,12 @@ class DatabaseIntegration:
                     _scn_ver = getattr(self.app, 'scanner_version', '') or ''
                 if not _scn_ver:
                     try:
-                        from main import SCANNER_VERSION as _SV  # type: ignore
+                        from config.version import SCANNER_VERSION as _SV
                         _scn_ver = _SV
                     except Exception:
                         try:
-                            import main as _m  # type: ignore
-                            _scn_ver = getattr(_m, 'SCANNER_VERSION', '') or ''
+                            from main import SCANNER_VERSION as _SV  # type: ignore
+                            _scn_ver = _SV
                         except Exception:
                             pass
             except Exception:

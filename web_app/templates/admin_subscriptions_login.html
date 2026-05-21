@@ -3,118 +3,142 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Suscripciones - Argus Projects</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Control Imperial — Acceso</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sa-imperial-enhance.css') }}">
     <style>
-        .admin-login-container {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
-            padding: 20px;
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            font-family: 'Inter', sans-serif;
+            background: #060306;
+            color: #F0E4E8;
+            overflow: hidden;
         }
-        .admin-login-card {
-            background: #1e2329;
-            border-radius: 16px;
-            padding: 40px;
-            width: 100%;
-            max-width: 420px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-            border: 1px solid #30363d;
+        body::before {
+            content: ''; position: fixed; inset: 0;
+            background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(196,30,58,0.18), transparent 70%);
+            pointer-events: none;
         }
-        .admin-login-header {
+        .shield-wrap {
+            position: fixed; top: 50%; left: 50%;
+            width: 420px; height: 420px; margin: -210px 0 0 -210px;
+            opacity: 0.06; pointer-events: none;
+            animation: shield-pulse 4s ease-in-out infinite;
+        }
+        @keyframes shield-pulse {
+            0%, 100% { transform: scale(1); opacity: 0.06; }
+            50% { transform: scale(1.05); opacity: 0.1; }
+        }
+        .shield-wrap svg { width: 100%; height: 100%; fill: #C41E3A; }
+        .login-card {
+            position: relative; z-index: 1;
+            width: 100%; max-width: 400px;
+            padding: 2.5rem 2rem;
+            background: rgba(20, 10, 16, 0.95);
+            border: 1px solid rgba(196, 30, 58, 0.35);
+            border-radius: 14px;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+        }
+        .login-card h1 {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.35rem;
             text-align: center;
-            margin-bottom: 32px;
+            margin-bottom: 0.35rem;
         }
-        .admin-login-header h1 {
-            color: #f0f6fc;
-            font-size: 28px;
-            font-weight: 700;
-            margin-bottom: 8px;
+        .login-card .sub {
+            text-align: center; font-size: 0.8rem;
+            color: #9A8490; margin-bottom: 1.75rem;
         }
-        .admin-login-header p {
-            color: #8b949e;
-            font-size: 14px;
+        .field { margin-bottom: 1.1rem; position: relative; }
+        .field label {
+            display: block; font-size: 0.8rem; font-weight: 500;
+            margin-bottom: 0.4rem; color: #9A8490;
         }
-        .form-group {
-            margin-bottom: 20px;
+        .field-icon {
+            position: absolute; left: 12px; bottom: 11px;
+            font-size: 0.9rem; opacity: 0.5;
         }
-        .form-group label {
-            display: block;
-            color: #f0f6fc;
-            font-size: 14px;
-            font-weight: 500;
-            margin-bottom: 8px;
-        }
-        .form-group input {
-            width: 100%;
-            padding: 12px 16px;
-            background: #0d1117;
-            border: 1px solid #30363d;
+        .field input {
+            width: 100%; padding: 0.65rem 2.5rem 0.65rem 2.25rem;
+            background: #110A0F;
+            border: 1px solid rgba(196, 30, 58, 0.25);
             border-radius: 8px;
-            color: #f0f6fc;
-            font-size: 14px;
-            transition: border-color 0.3s;
+            color: #F0E4E8;
+            font-size: 0.9rem;
         }
-        .form-group input:focus {
+        .field input:focus {
             outline: none;
-            border-color: #238636;
+            border-color: #C41E3A;
+            box-shadow: 0 0 0 2px rgba(196, 30, 58, 0.2);
         }
-        .error-message {
-            background: #f85149;
-            color: white;
-            padding: 12px;
+        .toggle-pw {
+            position: absolute; right: 10px; bottom: 10px;
+            background: none; border: none; color: #9A8490;
+            cursor: pointer; font-size: 0.85rem;
+        }
+        .error-message, .sa-login-error {
+            background: rgba(196, 30, 58, 0.2);
+            border: 1px solid #C41E3A;
+            color: #FCA5A5;
+            padding: 0.75rem;
             border-radius: 8px;
-            margin-bottom: 20px;
-            font-size: 14px;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+            text-align: center;
         }
         .btn-submit {
-            width: 100%;
-            padding: 12px;
-            background: #238636;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 16px;
+            width: 100%; padding: 0.75rem;
+            background: linear-gradient(135deg, #C41E3A, #7B1225);
+            color: #fff; border: none; border-radius: 8px;
+            font-weight: 600; font-size: 0.95rem;
             cursor: pointer;
-            transition: background 0.3s;
+            transition: opacity 0.2s, transform 0.15s;
         }
-        .btn-submit:hover {
-            background: #2ea043;
-        }
+        .btn-submit:hover { opacity: 0.92; transform: translateY(-1px); }
+        .btn-submit.argus-btn-loading::before { border-top-color: #fff; }
     </style>
 </head>
 <body>
-    <div class="admin-login-container">
-        <div class="admin-login-card">
-            <div class="admin-login-header">
-                <h1>🔐 Admin Suscripciones</h1>
-                <p>Acceso exclusivo para gestión de suscripciones</p>
-            </div>
-            
-            {% if error %}
-            <div class="error-message">{{ error }}</div>
-            {% endif %}
-            
-            <form method="POST">
-                <div class="form-group">
-                    <label>Usuario</label>
-                    <input type="text" name="username" required autofocus>
-                </div>
-                <div class="form-group">
-                    <label>Contraseña</label>
-                    <input type="password" name="password" required>
-                </div>
-                <button type="submit" class="btn-submit">Iniciar Sesión</button>
-            </form>
-        </div>
+    <div class="shield-wrap" aria-hidden="true">
+        <svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg">
+            <path d="M50 4 L8 22 L8 58 Q8 92 50 116 Q92 92 92 58 L92 22 Z"/>
+        </svg>
     </div>
+    <div class="login-card">
+        <h1>Control Imperial</h1>
+        <p class="sub">Acceso exclusivo SuperAdmin</p>
+        {% if error %}
+        <div class="error-message sa-login-error">{{ error }}</div>
+        {% endif %}
+        <form method="POST" id="sa-login-form">
+            <div class="field">
+                <label for="username">Usuario</label>
+                <span class="field-icon">👤</span>
+                <input type="text" id="username" name="username" required autofocus autocomplete="username">
+            </div>
+            <div class="field">
+                <label for="password">Contraseña</label>
+                <span class="field-icon">🔒</span>
+                <input type="password" id="password" name="password" required autocomplete="current-password">
+                <button type="button" class="toggle-pw" id="toggle-pw" aria-label="Mostrar contraseña">👁</button>
+            </div>
+            <button type="submit" class="btn-submit">Entrar al imperio</button>
+        </form>
+    </div>
+    <script src="{{ url_for('static', filename='js/sa-imperial-enhance.js') }}"></script>
+    <script>
+        document.getElementById('toggle-pw')?.addEventListener('click', function () {
+            var inp = document.getElementById('password');
+            if (!inp) return;
+            inp.type = inp.type === 'password' ? 'text' : 'password';
+        });
+        document.getElementById('sa-login-form')?.addEventListener('submit', function () {
+            var btn = this.querySelector('.btn-submit');
+            if (btn) btn.classList.add('argus-btn-loading');
+        });
+    </script>
 </body>
 </html>
-
-

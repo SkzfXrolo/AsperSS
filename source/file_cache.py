@@ -74,13 +74,40 @@ class FileCache:
             file_info = self.get_file_info(file_path)
             if not file_info:
                 return None
-            
-            file_hash = self.calculate_file_hash(file_path)
-            if not file_hash:
-                return None
-            
+
             conn = sqlite3.connect(self.database_path)
             cursor = conn.cursor()
+
+            # Lookup rápido por ruta + tamaño + mtime (sin hashear el disco)
+            cursor.execute('''
+                SELECT scan_result, is_suspicious, confidence, detected_patterns,
+                       file_hash, file_size, file_modified, last_scanned
+                FROM file_cache
+                WHERE file_path = ? AND file_size = ? AND file_modified = ?
+                ORDER BY last_scanned DESC
+                LIMIT 1
+            ''', (file_path, file_info['size'], file_info['modified']))
+            quick = cursor.fetchone()
+            if quick:
+                cached_hash = quick[4]
+                file_hash = self.calculate_file_hash(file_path)
+                if file_hash and cached_hash == file_hash:
+                    conn.close()
+                    return {
+                        'cached': True,
+                        'scan_result': quick[0],
+                        'is_suspicious': bool(quick[1]),
+                        'confidence': quick[2],
+                        'detected_patterns': quick[3],
+                        'last_scanned': quick[7],
+                    }
+                conn.close()
+                return {'cached': False}
+
+            file_hash = self.calculate_file_hash(file_path)
+            if not file_hash:
+                conn.close()
+                return None
             
             cursor.execute('''
                 SELECT scan_result, is_suspicious, confidence, detected_patterns,

@@ -377,8 +377,9 @@
             .discord-fab span { display: none; }
         }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-public.css') }}">
 </head>
-<body>
+<body class="argus-login-split">
     <div class="page">
         <div class="card">
 
@@ -498,5 +499,6 @@
             form.querySelector('input[type="text"], input[type="password"]').focus();
         }
     </script>
+    <script src="{{ url_for('static', filename='js/argus-public.js') }}" defer></script>
 </body>
 </html>

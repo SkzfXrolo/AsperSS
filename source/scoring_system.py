@@ -67,12 +67,14 @@ class ScoringSystem:
         combined = f"{name} {file_path}"
         
         # Patrones de alta confianza (hacks conocidos específicos)
+        # Solo stems exclusivos (sin 'impact'/'flux'/'rise' sueltos — FP en mods legítimos)
         high_confidence_patterns = [
             'vape', 'vapelite', 'vapev2', 'vapev4', 'entropy', 'entropyclient',
-            'killaura', 'aimbot', 'triggerbot', 'reach', 'velocity', 'antiknockback',
-            'autoclicker', 'xray', 'scaffold', 'fly', 'nofall', 'speedhack',
-            'whiteout', 'liquidbounce', 'wurst', 'impact', 'sigma', 'flux', 'future',
-            'astolfo', 'exhibition', 'novoline', 'rise', 'moon', 'drip'
+            'killaura', 'aimbot', 'triggerbot', 'antiknockback',
+            'autoclicker', 'xraymod', 'scaffoldhack', 'nofall', 'speedhack',
+            'whiteout', 'liquidbounce', 'wurstclient', 'impactclient',
+            'sigmaclient', 'fluxclient', 'futureclient',
+            'astolfo', 'exhibition', 'novoline', 'riseclient', 'dripclient',
         ]
         
         # Patrones de media confianza (más genéricos)
@@ -99,10 +101,10 @@ class ScoringSystem:
             if pattern in combined:
                 return -15  # Penalización fuerte para archivos legítimos conocidos
         
-        # Verificar patrones de alta confianza
+        # Verificar patrones de alta confianza (como segmento, no substring suelto)
+        import re
         for pattern in high_confidence_patterns:
-            if pattern in combined:
-                # Verificar que no sea parte de un nombre legítimo más largo
+            if re.search(rf'(?<![a-z0-9]){re.escape(pattern)}(?![a-z0-9])', combined):
                 if not any(legit in combined for legit in legitimate_patterns):
                     return self.factors['name_match']  # 30 puntos
         

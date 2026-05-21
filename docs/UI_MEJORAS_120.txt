@@ -1,0 +1,188 @@
+================================================================================
+  ARGUS PROJECTS — 120 MEJORAS DE UI (PROPUESTA)
+  Generado: 2026-05-20
+  Ámbitos: EXE (scanner) · Web pública · SuperAdmin (/aspers-sa)
+================================================================================
+
+
+################################################################################
+  A) EXE — ARGUS SCANNER (40 mejoras visuales)
+  Archivos: source/ui_style.py, source/main.py, assets/
+  Ventana actual: ~705×279, tema Bronze Premium
+################################################################################
+
+  1.  Modo compacto / expandido: toggle para ventana 705×279 vs 880×420 con más detalle.
+  2.  Barra de título custom con logo mini + “Argus Scanner” centrado.
+  3.  Botones minimizar y cerrar con estados hover/active y tooltip.
+  4.  Arrastrar ventana desde cualquier zona del header (no solo inner).
+  5.  Fade-in + fade-out suave al abrir/cerrar (alpha 0→1).
+  6.  Splash screen 1.5s con logo y versión antes del scan automático.
+  7.  Badge de versión clickeable → abre changelog en navegador.
+  8.  Indicador “Conectado / Sin red” junto al badge de estado.
+  9.  Anillo de progreso con gradiente dinámico (cobre → ámbar → verde → rojo si CRIT).
+ 10.  Texto central del anillo: SCAN → % → ✓ con transición tween.
+ 11.  Barra inferior con glow y punta luminosa más visible en 4px height.
+ 12.  10–12 dots de fase que se iluminan según subfases del escaneo.
+ 13.  Lista scrollable de últimas 5 fases en tooltip o panel lateral expandible.
+ 14.  Chips CRIT / SOSP / BAJO / OK con borde, icono y animación al incrementar.
+ 15.  Barra “Riesgo X/100” con colores semáforo y etiqueta numérica grande.
+ 16.  Mini-gráfico sparkline del riesgo durante el scan (canvas 80×24).
+ 17.  Barras CPU y RAM con porcentaje numérico encima.
+ 18.  Timer con dígitos tabulares (JetBrains Mono) y separador que parpadea.
+ 19.  Contador de archivos escaneados en vivo (“12.450 archivos”).
+ 20.  Botón cancelar con confirmación visual (rojo + “¿Seguro?” 2s).
+ 21.  Panel de completado a pantalla completa con check animado + confetti cobre.
+ 22.  Resumen post-scan: CRIT · SOSP · Total · tiempo · archivos.
+ 23.  Línea “Hallazgo principal” con nombre del CRITICAL top.
+ 24.  Botón “Copiar resumen” al portapapeles desde panel completado.
+ 25.  Estado de envío al panel: spinner → ✓ Enviado / ⚠ Error con retry.
+ 26.  Modo “scan silencioso”: sin animaciones pesadas (bajo consumo GPU).
+ 27.  Tema alto contraste (blanco/negro) accesible desde config.json.
+ 28.  Vignette + grid de fondo sutil coherente con la web.
+ 29.  Logo con drop-shadow cobre al hover en header.
+ 30.  Badge estado con iconos ● ◉ ✓ ✕ según LISTO / ESCANEANDO / ERROR.
+ 31.  Pulso del badge sincronizado con latido del anillo al escanear.
+ 32.  Detalle de fase con fade crossfade al cambiar texto (no salto seco).
+ 33.  Sonido opcional al completar (beep suave) + toggle en config.
+ 34.  Flash verde/rojo breve en borde DWM al terminar limpio / con CRIT.
+ 35.  Tooltip en chips explicando CRIT vs SOSP vs BAJO.
+ 36.  Indicador de token válido / inválido antes de iniciar (icono llave).
+ 37.  Barra de “última actualización del .exe” si hay update en /api/version.
+ 38.  Watermark “Argus Projects” + link discreto a asperss.onrender.com.
+ 39.  Tray icon (bandeja del sistema) con menú: Abrir / Cancelar scan / Salir.
+ 40.  Pantalla de error dedicada si falla auth (no solo messagebox genérico).
+
+
+################################################################################
+  B) PÁGINA WEB PÚBLICA (40 mejoras visuales)
+  Páginas: index.html, descargar.html, login.html, register.html, terminos.html
+  CSS: argus-ui.css, style.css, argus-mobile-fix.css
+################################################################################
+
+  1.  Design system único documentado (tokens cobre/crema en :root) compartido entre todas las landings.
+  2.  Navbar sticky con blur glass al scroll + sombra cobre.
+  3.  Hero de index con video loop o animación CSS del scanner en acción.
+  4.  CTA principal con micro-interacción (shine sweep cada 3s).
+  5.  Sección “Cómo funciona” con timeline horizontal animada al entrar en viewport.
+  6.  Cards de features con hover lift + borde glow cobre.
+  7.  Comparativa Argus vs otros AC en tabla responsive con badges.
+  8.  Testimonios / logos de servidores (carrusel infinito suave).
+  9.  FAQ acordeón con icono +/- animado y máxima legibilidad móvil.
+ 10.  Footer unificado: Discord, Términos, Descargar, Panel, idioma ES/EN.
+ 11.  Página /descargar: card central con versión en vivo desde API (no estática).
+ 12.  Botón descarga con estado: Listo / Descargando / Hash SHA256 visible.
+ 13.  Checklist pre-descarga (Windows 10+, .NET, permisos admin) con iconos.
+ 14.  QR code para abrir descarga desde el móvil.
+ 15.  Sección “Qué incluye esta versión” (changelog resumido por release).
+ 16.  Login: split layout (brand izquierda, form derecha) en desktop.
+ 17.  Login: indicador de fuerza de sesión + “Recordarme” estilizado.
+ 18.  Register: pasos wizard (cuenta → empresa → confirmación).
+ 19.  Errores de formulario inline con shake suave y color ámbar/rojo.
+ 20.  Estados de carga en botones (spinner + texto “Entrando…”).
+ 21.  Modo oscuro forzado coherente (sin flash blanco al cargar).
+ 22.  Skeleton loaders en bloques que esperan API.
+ 23.  Animaciones scroll-reveal (Intersection Observer) en index.
+ 24.  Ilustraciones SVG custom (no solo emojis) para cada feature.
+ 25.  Página 404/500 on-brand con botón volver al inicio.
+ 26.  Open Graph images dinámicas por página (preview Discord/Twitter).
+ 27.  PWA: install prompt banner “Instalar Argus Web” en móvil.
+ 28.  Breadcrumbs en páginas secundarias (Inicio > Descargar).
+ 29.  Botón flotante Discord con pulse en esquina inferior derecha.
+ 30.  Tipografía: Syne títulos + Inter cuerpo + JetBrains Mono para hashes/versiones.
+ 31.  Contraste WCAG AA en textos secundarios (--text-m más claro donde haga falta).
+ 32.  Focus visible accesible en todos los links/botones (outline cobre).
+ 33.  Reducción de motion: respeta prefers-reduced-motion.
+ 34.  Imágenes WebP/AVIF con fallback PNG para logo y screenshots.
+ 35.  Sección precios/planes (si aplica) con cards y toggle mensual/anual.
+ 36.  Mapa o contador “X scans realizados” animado (social proof).
+ 37.  Enlace directo “Soy staff → Panel” visible pero secundario al CTA descarga.
+ 38.  Banner superior dismissible para avisos (mantenimiento, nueva versión).
+ 39.  Cookie/consent bar minimalista alineado al tema cobre.
+ 40.  Lighthouse ≥90 en Performance/Accessibility en index y descargar.
+
+
+################################################################################
+  C) SUPERADMIN — CONTROL IMPERIAL /aspers-sa (40 mejoras visuales)
+  Páginas: admin_subscriptions.html, admin_subscriptions_login.html
+  Tema actual: rojo imperial + sidebar 248px
+################################################################################
+
+  1.  Login SuperAdmin: pantalla full con escudo imperial animado + sin distracciones.
+  2.  Login: campo usuario/contraseña con iconos y toggle mostrar contraseña.
+  3.  Login: rate-limit visual (“Demasiados intentos — espera Xs”).
+  4.  Dashboard home al entrar: KPI cards (empresas, usuarios, scans 24h, CRIT 24h).
+  5.  KPI cards con sparkline mini y delta % vs ayer.
+  6.  Sidebar colapsable a iconos (64px) para más espacio en tablas.
+  7.  Sidebar: secciones agrupadas con badges de conteo (orphans, offenders).
+  8.  Header superior sticky con breadcrumb + reloj UTC + usuario SA.
+  9.  Búsqueda global (Cmd+K) que salta a empresa/usuario/scan por ID.
+ 10.  Tabla de empresas: columnas ordenables, filtros, paginación y densidad compacta/comfortable.
+ 11.  Tabla empresas: fila con estado activo/inactivo como pill verde/gris.
+ 12.  Drawer lateral al clic en empresa (detalle sin salir de la lista).
+ 13.  Editor de empresa en modal con tabs: General / Plan / Staff / Tokens.
+ 14.  Vista usuarios con avatar placeholder, rol badge y último login relativo.
+ 15.  Acción bulk: seleccionar varios usuarios → asignar empresa / desactivar.
+ 16.  Panel “Staff huérfano” con UI tipo inbox (lista + panel de asignación).
+ 17.  Drag-and-drop visual para asignar huérfano a empresa (opcional).
+ 18.  Sección scans recientes: tabla con severidad por color de fila (CRIT fondo rojo suave).
+ 19.  Scan detail modal: JSON formateado + hallazgos + enlace abrir en panel staff.
+ 20.  Gráfico Chart.js: scans por día (30 días) en dashboard.
+ 21.  Gráfico: distribución de alertas (CRIT/SOSP/BAJO) donut chart.
+ 22.  Trust patterns: tabla con preview del patrón + botón aprobar/rechazar.
+ 23.  Cooldowns / offenders: timeline visual de eventos por usuario.
+ 24.  Audit log: tabla filtrable con icono de acción (create/update/delete).
+ 25.  Export CSV: botones con feedback “Generando…” → descarga automática.
+ 26.  Toast notifications unificadas (éxito verde imperial, error rojo).
+ 27.  Confirmación modal para acciones destructivas (toggle empresa, ban).
+ 28.  Empty states ilustrados (“No hay empresas aún”) con CTA crear.
+ 29.  Loading overlays semitransparentes en secciones que llaman API.
+ 30.  Versión del scanner en sidebar footer sincronizada con API /api/version.
+ 31.  Panel “Deploy / health”: estado Render, DB, último ping (semáforo).
+ 32.  Editor de changelog / release notes para publicar en descargar.
+ 33.  Gestión de versiones .exe: subir binario, hash, forzar mínima compatible.
+ 34.  Dark theme consistency: unificar rojos (#C41E3A) y evitar grises fuera de paleta.
+ 35.  Responsive tablet: sidebar off-canvas hamburger en <1024px.
+ 36.  Atajos de teclado documentados (? → overlay ayuda).
+ 37.  Indicador de sesión SA expira en X min (barra fina en header).
+ 38.  Multi-select filtros chips (activas, trial, expiradas) en lista empresas.
+ 39.  Comparar dos empresas lado a lado (métricas scans, staff, tokens).
+ 40.  Logout + “Cerrar todas las sesiones SA” con confirmación doble.
+
+
+================================================================================
+  NOTAS DE IMPLEMENTACIÓN
+================================================================================
+
+  EXE:
+    - Muchas mejoras ya iniciadas en ui_style.py v3 (ver docs/VISUAL_IMPROVEMENTS_40.md).
+    - Recompilar .exe solo cuando se implementen cambios en source/main.py o ui_style.py.
+    - Sincronizar versión en config/version.py + web_app al rebuild.
+
+  WEB PÚBLICA:
+    - Priorizar index + descargar (conversión) antes que terminos/register.
+    - Extraer CSS inline de descargar.html a argus-landing.css reutilizable.
+
+  SUPERADMIN:
+    - admin_subscriptions.html es monolítico (~2400 líneas); conviene extraer
+      sa-dashboard.css + sa-dashboard.js en fases.
+    - Mantener URL secreta /aspers-sa sin links públicos en index.
+
+================================================================================
+  ESTADO DE IMPLEMENTACIÓN (2026-05-20)
+================================================================================
+
+  EXE (A): ui_style.py + ui_enhancements.py + hooks en main.py
+    - Modo compacto/expandido, splash, fade, sparkline riesgo, copiar resumen,
+      upload status, cancel confirm, tray (si pystray), tooltips chips, etc.
+
+  WEB (B): web_app/static/css/argus-public.css + js/argus-public.js
+    - Enlazado en index, descargar, login. APIs: /api/public/banner, /api/public/stats
+    - 404/500 on-brand. Item 40 (Lighthouse) = meta de despliegue.
+
+  SUPERADMIN (C): sa-imperial-enhance.css/js + login imperial
+    - Cmd+K, toasts, sidebar collapse, UTC, filtros, tablas severidad, etc.
+    - Dashboard monolítico: mejoras vía overlay JS (fases futuras para drawers/charts).
+
+================================================================================
+  FIN DEL DOCUMENTO
+================================================================================

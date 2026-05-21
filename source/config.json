@@ -4,5 +4,11 @@
     "scan_timeout": 300,
     "scan_token": "",
     "api_url": "https://asperss.onrender.com",
-    "web_url": "https://asperss.onrender.com"
+    "web_url": "https://asperss.onrender.com",
+    "ui": {
+        "compact": false,
+        "high_contrast": false,
+        "reduced_motion": false,
+        "sound_on_complete": false
+    }
 }

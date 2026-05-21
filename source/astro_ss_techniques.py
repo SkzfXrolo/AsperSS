@@ -436,10 +436,16 @@ class AstroSSTechniques:
 
             # Solo reportar si el nombre coincide con un hack conocido
             # (cualquier EXE borrado genera demasiado ruido — instaladores, updaters, etc.)
-            from main import _DEFINITE_HACK_NAMES
+            try:
+                from config.hack_signatures import filename_is_definite_hack
+            except ImportError:
+                from main import _DEFINITE_HACK_NAMES  # type: ignore
+                def filename_is_definite_hack(name):  # type: ignore
+                    n = name.lower().replace('.exe', '')
+                    return any(h in n for h in _DEFINITE_HACK_NAMES)
             for path, info in deleted.items():
-                fname_lower = info['filename'].lower().replace('.exe', '')
-                if not any(hack in fname_lower for hack in _DEFINITE_HACK_NAMES):
+                fname_lower = info['filename'].lower()
+                if not filename_is_definite_hack(fname_lower):
                     continue
                 issues.append({
                     'tipo': 'executed_deleted_file',

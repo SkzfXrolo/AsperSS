@@ -130,6 +130,16 @@ limiter = Limiter(
 ) if Limiter is not None else None
 
 
+@app.errorhandler(404)
+def _handle_not_found(e):
+    return render_template('errors/404.html'), 404
+
+
+@app.errorhandler(500)
+def _handle_server_error(e):
+    return render_template('errors/500.html'), 500
+
+
 @app.errorhandler(429)
 def _handle_rate_limit(e):
     retry_after = 60
@@ -393,7 +403,7 @@ def audit_action(action_name: str, resource_type: str = ''):
 CORS(app)
 
 # Inicializar base de datos de autenticaciÃ³n al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.50'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
+_ARGUS_VERSION = '1.6.51'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
 # URL de invitacion permanente al Discord oficial. Se inyecta en todos los
 # templates como `discord_invite` via @app.context_processor (ver mas abajo).
@@ -1071,9 +1081,24 @@ def api_version():
     except Exception as _e:
         db_ok = False
         db_error = str(_e)[:200]
+    changelog = ''
+    file_hash = ''
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                'SELECT version, changelog, file_hash FROM app_versions ORDER BY id DESC LIMIT 1'
+            )
+            row = cur.fetchone()
+            if row:
+                changelog = _row_get(row, 1, 'changelog') or ''
+                file_hash = _row_get(row, 2, 'file_hash') or ''
+    except Exception:
+        pass
     return jsonify({
         'version':         _ARGUS_VERSION,
         'scanner_version': CURRENT_SCANNER_VERSION,
+        'changelog':       changelog,
+        'file_hash':       file_hash,
         'uptime_seconds':  uptime_seconds,
         'uptime_human':    uptime_human,
         'db_ok':           db_ok,
@@ -1081,6 +1106,74 @@ def api_version():
         'db_error':        db_error,
         'started_at':      int(_APP_START_TIME),
     })
+
+
+@app.route('/api/public/banner', methods=['GET'])
+def api_public_banner():
+    """Banner superior dismissible (mantenimiento / nueva versión)."""
+    msg = os.environ.get('ARGUS_PUBLIC_BANNER', '').strip()
+    if not msg:
+        try:
+            with get_api_db_cursor() as cur:
+                cur.execute(
+                    "SELECT value FROM app_settings WHERE key = 'public_banner' LIMIT 1"
+                )
+                row = cur.fetchone()
+                if row:
+                    msg = _row_get(row, 0, 'value') or ''
+        except Exception:
+            pass
+    if not msg:
+        return jsonify({'message': None})
+    return jsonify({'id': 'default', 'message': msg})
+
+
+@app.route('/api/public/stats', methods=['GET'])
+def api_public_stats():
+    """Contador social proof para la landing."""
+    total = 12840
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute('SELECT COUNT(*) FROM scans')
+            row = cur.fetchone()
+            if row:
+                n = _row_get(row, 0, 0) or 0
+                if int(n) > 0:
+                    total = int(n)
+    except Exception:
+        pass
+    return jsonify({'scans_total': total, 'total_scans': total})
+
+
+@app.route('/api/sa/search', methods=['GET'])
+def api_sa_search():
+    """Búsqueda global SuperAdmin (Cmd+K)."""
+    if not session.get('admin_subscriptions'):
+        return jsonify({'results': []}), 403
+    q = (request.args.get('q') or '').strip()
+    if not q or len(q) < 2:
+        return jsonify({'results': []})
+    results = []
+    like = f'%{q}%'
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute('SELECT id, name FROM companies WHERE name LIKE ? LIMIT 8', (like,))
+            for row in cur.fetchall():
+                results.append({
+                    'label': _row_get(row, 1, 'name'),
+                    'type': 'empresa',
+                    'section': 'companies',
+                })
+            cur.execute('SELECT id, username FROM users WHERE username LIKE ? LIMIT 8', (like,))
+            for row in cur.fetchall():
+                results.append({
+                    'label': _row_get(row, 1, 'username'),
+                    'type': 'usuario',
+                    'section': 'users',
+                })
+    except Exception:
+        pass
+    return jsonify({'results': results[:12]})
 
 @app.route('/api/public_stats', methods=['GET'])
 def api_public_stats():
@@ -7982,7 +8075,7 @@ def debug_last_scan():
 
 
 # Current released scanner version â€” update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.6.50"
+CURRENT_SCANNER_VERSION = "1.6.51"
 
 @app.route('/sw.js')
 def service_worker():

@@ -9,9 +9,77 @@ import hashlib
 from typing import Dict, List, Set, Tuple
 from pathlib import Path
 
+try:
+    from config.hack_signatures import filename_is_definite_hack
+except ImportError:
+    from hack_signatures import filename_is_definite_hack  # type: ignore
+
 class LegitimatePatterns:
     """Sistema que aprende patrones de archivos legítimos para reducir falsos positivos"""
-    
+
+    # #169-170: whitelist estático de mods/loaders Minecraft conocidos (prefijos lowercase)
+    _KNOWN_MC_MOD_PREFIXES: Set[str] = {
+        'optifine', 'optifine_', 'optifabric',
+        'sodium', 'lithium', 'phosphor', 'iris', 'indium', 'starlight',
+        'fabricloader', 'fabric-loader', 'fabric-api', 'fabric_loader',
+        'forge', 'neoforge', 'quiltloader', 'quilt-loader',
+        'create', 'create-', 'createfabric',
+        'jei-', 'jei_', 'justenoughitems',
+        'roughlyenoughitems', 'rei-', 'emi-',
+        'journeymap', 'xaerominimap', 'xaeros_minimap', 'voxelmap',
+        'inventorytweaks', 'inventoryhud', 'appleskin',
+        'hwyla', 'jade-', 'jade_', 'wthit',
+        'betterf3', 'replaymod', 'nofog', 'fpscap',
+        'modmenu', 'mod-menu', 'cloth-config', 'clothconfig',
+        'mixin', 'mixins',
+        'distanthorizons', 'distant-horizons',
+        'complementary', 'bsl-shaders', 'seus',
+        'sodium-extra', 'reeses-sodium',
+        'lazydfu', 'ferritecore', 'entityculling', 'c2me',
+        'krypton', 'smoothboot', 'dashloader',
+        'architectury', 'geckolib',
+        'patchouli', 'mantle', 'tconstruct', 'tinkers',
+        'twilightforest', 'biomesoplenty', 'byg-',
+        'waystones', 'ftb-chunks', 'ftbquests',
+        'ranks', 'luckperms', 'essentialsx',
+        'voicechat', 'simple-voice-chat',
+        'prism', 'multimc',
+        # Performance / rendering (Sodium ecosystem)
+        'rubidium', 'oculus', 'embeddium', 'reeses', 'notenoughanimations',
+        'immediatelyfast', 'modernfix', 'fastload', 'chunky', 'dynamicfps',
+        'fullscreened', 'entitytexturefeatures', 'continuity',
+        'sodiumdynamiclights', 'sodiumoptionsapi', 'sodiumextras',
+        # Launchers / clients legítimos (archivos internos)
+        'feather', 'lunar', 'badlion',
+        # Utilidades comunes
+        'spark', 'fzzyconfig', 'yacl', 'yetanotherconfiglib',
+        'placeholderapi', 'packetfixer', 'servercore',
+        'supplementaries', 'amendments', 'moonlight', 'ok_zoomer',
+        'shulkerboxtooltip', 'trinkets', 'cardinal-components',
+        'geckolib', 'citresewn', 'fabric-api', 'forge',
+    }
+
+    # #162: categorías de confianza para patrones de ruta conocidos
+    _TRUSTED_PATH_FRAGMENTS: Set[str] = {
+        'appdata\\roaming\\.minecraft\\mods',
+        'appdata\\roaming\\.minecraft\\resourcepacks',
+        'appdata\\roaming\\.minecraft\\shaderpacks',
+        'appdata\\roaming\\.minecraft\\config',
+        'appdata\\roaming\\prism launcher',
+        'appdata\\roaming\\multimc',
+        'program files\\java',
+        'program files (x86)\\java',
+        'windows\\system32',
+        'windows\\syswow64',
+        'appdata\\roaming\\feather',
+        'appdata\\roaming\\.feather',
+        'appdata\\roaming\\gdlauncher',
+        'appdata\\roaming\\lunarclient',
+        'curseforge\\minecraft',
+        'overwolf\\curseforge',
+        'ftblauncher',
+    }
+
     def __init__(self, database_path='scanner_db.sqlite'):
         self.database_path = database_path
         self.legitimate_patterns = {
@@ -111,6 +179,10 @@ class LegitimatePatterns:
         
         file_path_lower = file_path.lower()
         file_name_lower = (file_name or os.path.basename(file_path)).lower()
+
+        # Nunca marcar legítimo un JAR con nombre de hack conocido (aunque esté en /mods/)
+        if file_name_lower.endswith('.jar') and filename_is_definite_hack(file_name_lower):
+            return False, 0.0
         
         confidence = 0.0
         matches = []
@@ -118,14 +190,37 @@ class LegitimatePatterns:
         # 1. Verificar hash conocido como legítimo (máxima confianza)
         if file_hash and file_hash in self.legitimate_patterns['file_hashes']:
             return True, 1.0
-        
+
+        # 1b. #169-170: whitelist estático de mods MC conocidos (alta confianza)
+        if file_name_lower.endswith('.jar'):
+            stem = file_name_lower[:-4]
+            for prefix in self._KNOWN_MC_MOD_PREFIXES:
+                if stem.startswith(prefix) or stem == prefix.rstrip('-_'):
+                    confidence += 0.6
+                    matches.append(f'known_mc_mod: {prefix}')
+                    break
+
+        # 1c. #162: ruta de confianza conocida
+        path_normalized_full = file_path_lower.replace('\\\\', '\\').replace('/', '\\')
+        _path_boost = {
+            # Solo refuerzo moderado: la ruta sola no debe whitelistear hacks disfrazados
+            'appdata\\roaming\\.minecraft\\mods': 0.45,
+            'appdata\\roaming\\.minecraft\\resourcepacks': 0.5,
+            'appdata\\roaming\\.minecraft\\shaderpacks': 0.5,
+        }
+        for frag in self._TRUSTED_PATH_FRAGMENTS:
+            if frag in path_normalized_full:
+                confidence += _path_boost.get(frag, 0.4)
+                matches.append(f'trusted_path: {frag}')
+                break
+
         # 2. Verificar nombre de archivo conocido
         if file_name_lower in self.legitimate_patterns['file_names']:
             confidence += 0.4
             matches.append('nombre_conocido')
         
-        # 3. Verificar patrones de carpeta
-        path_parts = file_path_lower.split(os.sep)
+        # 3. Verificar patrones de carpeta (#161: normalizar separadores antes de split)
+        path_parts = path_normalized_full.split('\\')
         for part in path_parts:
             if part in self.legitimate_patterns['folder_names']:
                 confidence += 0.2
@@ -164,7 +259,7 @@ class LegitimatePatterns:
             'steam', 'epic games', 'origin', 'uplay'
         ]
         
-        file_path = context.get('file_path', '').lower()
+        file_path = context.get('file_path', '').lower().replace('/', '\\').replace('\\\\', '\\')
         for location in legitimate_locations:
             if location in file_path:
                 context_score += 0.3
@@ -199,8 +294,9 @@ class LegitimatePatterns:
                 if file_name_lower:
                     self.legitimate_patterns['file_names'].add(file_name_lower)
                 
-                # Extraer partes de la ruta
-                path_parts = file_path_lower.split(os.sep)
+                # Extraer partes de la ruta (#161: normalizar separadores)
+                path_normalized = file_path_lower.replace('\\\\', '\\').replace('/', '\\')
+                path_parts = path_normalized.split('\\')
                 for part in path_parts:
                     if len(part) > 3:
                         self.legitimate_patterns['folder_names'].add(part)

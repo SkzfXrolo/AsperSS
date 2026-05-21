@@ -4,17 +4,18 @@ import threading
 import os
 import sys
 
-# ── Log a archivo para debugging (AppData/Roaming/ASPERSProjectsSS/scanner.log) ──
-try:
-    _log_dir = os.path.join(os.environ.get('APPDATA', ''), 'ASPERSProjectsSS')
-    os.makedirs(_log_dir, exist_ok=True)
-    _log_path = os.path.join(_log_dir, 'scanner.log')
-    _log_file = open(_log_path, 'w', encoding='utf-8', buffering=1)
-    sys.stdout = _log_file
-    sys.stderr = _log_file
-    print(f"[INICIO] ArgusScanner iniciado - log en {_log_path}")
-except Exception:
-    pass
+# ── Log a archivo (solo .exe empaquetado o ARGUS_FILE_LOG=1) ──
+if getattr(sys, 'frozen', False) or os.environ.get('ARGUS_FILE_LOG', '').strip() in ('1', 'true', 'yes'):
+    try:
+        _log_dir = os.path.join(os.environ.get('APPDATA', ''), 'ASPERSProjectsSS')
+        os.makedirs(_log_dir, exist_ok=True)
+        _log_path = os.path.join(_log_dir, 'scanner.log')
+        _log_file = open(_log_path, 'w', encoding='utf-8', buffering=1)
+        sys.stdout = _log_file
+        sys.stderr = _log_file
+        print(f"[INICIO] ArgusScanner iniciado - log en {_log_path}")
+    except Exception:
+        pass
 import psutil
 import winreg
 import json
@@ -59,7 +60,10 @@ except ImportError:
     UI_STYLE_AVAILABLE = False
     ModernUI = None
 
-SCANNER_VERSION = "1.6.50"
+try:
+    from config.version import SCANNER_VERSION
+except ImportError:
+    SCANNER_VERSION = "1.6.51"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -1655,8 +1659,27 @@ class ArgusApp:
         # Crear interfaz mejorada con estilo moderno
         self.create_ui()
 
+        if UI_STYLE_AVAILABLE and ModernUI:
+            try:
+                ModernUI.set_token_status(bool(self.config.get('scan_token')))
+                _api = self.config.get('api_url', 'https://asperss.onrender.com')
+                ModernUI.check_update_async(_api, SCANNER_VERSION)
+                ModernUI.setup_tray(self.root, on_quit=lambda: self.root.destroy())
+            except Exception:
+                pass
+
         self._click_test_result = None
-        self.root.after(800, self.full_scan_with_discord)
+
+        def _start_scan_after_splash():
+            self.root.after(400, self.full_scan_with_discord)
+
+        if UI_STYLE_AVAILABLE and ModernUI:
+            try:
+                ModernUI.show_splash(self.root, SCANNER_VERSION, on_done=_start_scan_after_splash)
+            except Exception:
+                self.root.after(800, self.full_scan_with_discord)
+        else:
+            self.root.after(800, self.full_scan_with_discord)
 
         # Inicializar variables de cronómetro
         self.scan_start_time = None
@@ -3500,6 +3523,19 @@ class ArgusApp:
         return out
 
     @staticmethod
+    def _cached_sha256(self, file_path, max_bytes=None):
+        """SHA256 con caché en memoria (VT, F23, patrones legítimos)."""
+        try:
+            from utils.file_hash_cache import FileHashCache
+            return FileHashCache.sha256(str(file_path), max_bytes=max_bytes)
+        except ImportError:
+            try:
+                from utils.hash_utils import sha256_file
+            except ImportError:
+                return None
+            return sha256_file(str(file_path), max_bytes=max_bytes)
+
+    @staticmethod
     def _is_legitimate_mod_jar(jar_path: str) -> bool:
         """Devuelve True si el JAR tiene indicadores de ser un mod legítimo de Minecraft.
         Revisa META-INF/MANIFEST.MF, fabric.mod.json y mods.toml.
@@ -3812,6 +3848,7 @@ class ArgusApp:
         _debug_filter = os.environ.get('ARGUS_DEBUG_FILTER') == '1'
         _discarded_items = [] if _debug_filter else None  # F35: collect if debug mode
         _legit_mod_count = 0  # F25: cuenta mods legítimos verificados
+        _legit_pattern_count = 0  # whitelist estática + patrones aprendidos
         def _discard(reason_key, item_nombre, item_ruta=''):
             _filter_stats[reason_key] = _filter_stats.get(reason_key, 0) + 1
             if _debug_filter:
@@ -3909,6 +3946,32 @@ class ArgusApp:
                         print(f"✅ [CurseForge] Mod legítimo verificado: {os.path.basename(str(_jar_path))}")
                         _legit_mod_count += 1
                         continue
+                    # Fast-path: patrones legítimos (mods MC / rutas conocidas) antes de VT
+                    if self.legitimate_patterns:
+                        try:
+                            _jar_name_lp = os.path.basename(str(_jar_path)).lower()
+                            try:
+                                from config.hack_signatures import filename_is_definite_hack as _is_hack_jar
+                            except ImportError:
+                                def _is_hack_jar(_n):  # type: ignore
+                                    return False
+                            if not _is_hack_jar(_jar_name_lp):
+                                _lp_ok, _lp_conf = self.legitimate_patterns.is_legitimate(
+                                    file_path=str(_jar_path),
+                                    file_name=_jar_name_lp,
+                                    file_hash=item.get('file_hash'),
+                                    context={'file_path': str(_jar_path)},
+                                )
+                                if _lp_ok and _lp_conf >= 0.5:
+                                    print(
+                                        f"✅ [LegitPattern] Mod/ruta legítima: "
+                                        f"{os.path.basename(str(_jar_path))} (conf={_lp_conf:.2f})"
+                                    )
+                                    _legit_mod_count += 1
+                                    _legit_pattern_count += 1
+                                    continue
+                        except Exception:
+                            pass
 
             # P2 #1+8 — VirusTotal + MalwareBazaar para .exe/.jar sospechosos
             _vt_path = item.get('archivo') or item.get('ruta') or ''
@@ -3917,8 +3980,9 @@ class ArgusApp:
                     os.path.isfile(str(_vt_path)) and
                     any(str(_vt_path).lower().endswith(e) for e in ('.exe', '.jar', '.dll'))):
                 try:
-                    import hashlib as _hl_vt
-                    _sha256_vt = _hl_vt.sha256(open(str(_vt_path), 'rb').read()).hexdigest()
+                    _sha256_vt = self._cached_sha256(str(_vt_path))
+                    if not _sha256_vt:
+                        continue
                     # MalwareBazaar (gratis, sin API key)
                     if _sha256_vt not in ArgusApp._mbaz_cache:
                         ArgusApp._mbaz_cache[_sha256_vt] = self._mbaz_check_hash(_sha256_vt)
@@ -3950,8 +4014,9 @@ class ArgusApp:
             try:
                 _f23_path = item.get('archivo') or item.get('ruta') or ''
                 if _f23_path and os.path.isfile(str(_f23_path)):
-                    import hashlib as _hl_f23
-                    _sha256_f23 = _hl_f23.sha256(open(str(_f23_path), 'rb').read(8 * 1024 * 1024)).hexdigest()
+                    _sha256_f23 = self._cached_sha256(str(_f23_path), max_bytes=8 * 1024 * 1024)
+                    if not _sha256_f23:
+                        raise OSError('hash failed')
                     _freq = self._cloud_hash_frequency.get(_sha256_f23.lower(), 0)
                     if _freq >= 3:
                         _boost = min(0.30, _freq * 0.05)
@@ -3984,6 +4049,7 @@ class ArgusApp:
                     
                     if is_legitimate and legit_confidence >= 0.5:
                         is_false_positive = True
+                        _legit_pattern_count += 1
                         print(f"✅ Filtrado como legítimo aprendido: {archivo or nombre} (confianza: {legit_confidence:.2f})")
                 except Exception as e:
                     pass
@@ -4199,6 +4265,10 @@ class ArgusApp:
         print(f"🟢 NORMALES: {len(hacks_normal)}")
         print(f"📋 TOTAL FILTRADO: {len(filtered)}")
         print(f"🗑️ ELEMENTOS DESCARTADOS: {len(issues) - len(filtered)}")
+        if _legit_mod_count:
+            print(f"✅ MODS/RUTAS LEGÍTIMAS (manifest/modrinth/patrones): {_legit_mod_count}")
+        if _legit_pattern_count:
+            print(f"✅ FILTRADOS POR LegitPattern: {_legit_pattern_count}")
         if _filter_stats:
             print(f"📂 MOTIVOS DE DESCARTE:")
             for reason, count in sorted(_filter_stats.items(), key=lambda x: -x[1]):
@@ -4265,6 +4335,13 @@ class ArgusApp:
 
         # P2 #23 — Agregar explicaciones en español a todos los hallazgos
         filtered = self._apply_human_explanations(filtered)
+
+        # Dedupe exacto (mismo tipo + ruta + nombre)
+        try:
+            from scanner_dedupe import dedupe_issues
+            filtered = dedupe_issues(filtered)
+        except ImportError:
+            pass
 
         # P2 #24 — Agrupar resultados repetidos del mismo tipo
         filtered = self._group_related_results(filtered)
@@ -4807,9 +4884,11 @@ class ArgusApp:
 
             # Header
             ModernUI.create_header(main_panel)
+            ModernUI.set_app_version(SCANNER_VERSION)
 
             # Progress section
             progress_widgets = ModernUI.create_progress_section(main_panel)
+            self._progress_widgets = progress_widgets
             self.progress_frame = progress_widgets['container']
             self.progress_label = progress_widgets['status']
             self.progress_bar = progress_widgets['progress']
@@ -4839,7 +4918,10 @@ class ArgusApp:
                         "⛔ Cancelando escaneo...",
                         "Esperando que finalicen los módulos actuales"
                     )
-                self._cancel_btn_widget.config(command=_on_cancel_scan)
+                try:
+                    ModernUI.wire_cancel_confirm(self._cancel_btn_widget, _on_cancel_scan)
+                except Exception:
+                    self._cancel_btn_widget.config(command=_on_cancel_scan)
 
             # Scan button (hidden — escaneo arranca automáticamente)
             btn_container = tk.Frame(main_panel, bg=ModernUI.COLORS['bg_primary'], height=0)
@@ -4860,8 +4942,9 @@ class ArgusApp:
                     break
             self.details_button = None
 
-            # Completion panel (visible to user instead of raw results)
+            # Completion panel (se muestra al terminar el escaneo)
             self._completion_widgets = ModernUI.create_completion_panel(main_panel)
+            ModernUI.set_scan_ui_mode(self._progress_widgets, self._completion_widgets, scanning=True)
 
             # Hidden results section (staff data written here but never shown)
             results_widgets = ModernUI.create_results_section(main_panel)
@@ -5206,6 +5289,10 @@ class ArgusApp:
 
     def _apply_phase_update(self, text, pct):
         try:
+            if UI_STYLE_AVAILABLE and ModernUI:
+                text = ModernUI.format_phase_label(text)
+                ModernUI.update_status_fade(detail_text=text)
+                ModernUI.update_phase_dots(pct)
             if hasattr(self, 'progress_detail_label') and self.progress_detail_label:
                 self.progress_detail_label.config(text=text)
             cur = getattr(self, 'progress_target_value', 0)
@@ -5269,10 +5356,22 @@ class ArgusApp:
         """Actualiza la visualización del timer y recursos de forma segura"""
         try:
             if self.timer_label:
-                self.timer_label.config(text=time_str)
+                self.timer_label.config(text=time_str.replace('⏱️ ', 'Tiempo '))
             if self.resources_label and resources_str:
                 self.resources_label.config(text=resources_str)
-        except:
+            if UI_STYLE_AVAILABLE and ModernUI and resources_str:
+                try:
+                    import re as _re_ui
+                    cpu_m = _re_ui.search(r'CPU:\s*([\d.]+)%', resources_str)
+                    ram_m = _re_ui.search(r'RAM:\s*([\d.]+)%', resources_str)
+                    if cpu_m or ram_m:
+                        ModernUI.update_resource_meters(
+                            float(cpu_m.group(1)) if cpu_m else None,
+                            float(ram_m.group(1)) if ram_m else None,
+                        )
+                except Exception:
+                    pass
+        except Exception:
             pass
     
     def full_scan_with_discord(self):
@@ -5364,6 +5463,11 @@ class ArgusApp:
                     if self.db_integration.scan_token:
                         try:
                             self._update_progress_safe(99, "📤 Enviando resultados...", "Subiendo a servidor...")
+                            if UI_STYLE_AVAILABLE and ModernUI:
+                                try:
+                                    ModernUI.set_upload_status('pending')
+                                except Exception:
+                                    pass
                             success = self.db_integration.submit_results(
                                 self.issues_found,
                                 self.total_files_scanned,
@@ -5377,9 +5481,19 @@ class ArgusApp:
                                     for i in self.issues_found
                                 )))
                                 self._update_progress_safe(100, "✅ Escaneo completado", f"{len(self.issues_found)} hallazgos · Risk Score: {_rs}/100")
+                                if UI_STYLE_AVAILABLE and ModernUI:
+                                    try:
+                                        ModernUI.set_upload_status('ok')
+                                    except Exception:
+                                        pass
                                 print("✅ Resultados enviados a Web/BD")
                             else:
                                 self._update_progress_safe(100, "⚠️ Error al enviar", "Revisa conexión y token")
+                                if UI_STYLE_AVAILABLE and ModernUI:
+                                    try:
+                                        ModernUI.set_upload_status('error', 'Revisa conexión')
+                                    except Exception:
+                                        pass
                                 print("⚠️ Error al enviar resultados a Web/BD")
                         except Exception as e:
                             print(f"⚠️ Error al enviar a Web/BD: {e}")
@@ -5483,6 +5597,20 @@ class ArgusApp:
         
         self.scanning = True
         self.issues_found = []
+        try:
+            from utils.file_hash_cache import FileHashCache
+            FileHashCache.clear()
+        except ImportError:
+            pass
+        if UI_STYLE_AVAILABLE and hasattr(self, '_progress_widgets'):
+            try:
+                ModernUI.set_scan_ui_mode(
+                    self._progress_widgets, self._completion_widgets, scanning=True
+                )
+                ModernUI.set_scanning_active(True)
+                ModernUI.set_status_badge("ESCANEANDO", ModernUI.COLORS['amber'])
+            except Exception:
+                pass
         self.mouse_findings = []
         self.forensic_findings = []
         self.total_files_scanned = 0
@@ -5634,9 +5762,9 @@ class ArgusApp:
 
             # Grupo B — Archivos y fechas (I/O medio)
             def _group_files():
-                self._set_scan_phase("📄 Ejecutables (.exe)...")
+                self._set_scan_phase("📄 Ejecutables y JAR (mods + hacks)...")
+                _run_safe(self.scan_minecraft_mods_blacklist)
                 _run_safe(self.scan_exe_files)
-                self._set_scan_phase("☕ Archivos JAR...")
                 _run_safe(self.scan_jar_files)
                 self._set_scan_phase("📅 Archivos por fecha...")
                 _run_safe(self.scan_files_by_date)
@@ -5707,6 +5835,8 @@ class ArgusApp:
                 _run_safe(self.scan_scheduled_tasks)
                 self._set_scan_phase("🧾 Args sospechosos en tareas...")
                 _run_safe(self.scan_scheduled_tasks_suspicious_args)
+                self._set_scan_phase("🔬 Scanners modulares (WMI/DNS/registro)...")
+                _run_safe(self.scan_modular_scanners)
                 self._set_scan_phase("⏰ Tareas programadas recientes (persistencia)...")
                 _run_safe(self.scan_recent_install_tasks)
                 self._set_scan_phase("🧱 COM hijacking candidates...")
@@ -6137,8 +6267,33 @@ class ArgusApp:
                         counts['low'] += 1
                     else:
                         counts['clean'] += 1
+                counts['total'] = len(self.issues_found)
+                self._last_scan_counts = counts
                 for k, v in counts.items():
-                    ModernUI.update_counter(k, v)
+                    if k != 'total':
+                        ModernUI.update_counter(k, v)
+                _risk_w = {'CRITICAL': 25, 'SOSPECHOSO': 12, 'POCO_SOSPECHOSO': 4, 'NORMAL': 1}
+                _rs = min(100, int(sum(
+                    _risk_w.get(i.get('alerta', 'NORMAL'), 1) * min(
+                        float(i.get('confidence') or 0) * (1 if float(i.get('confidence') or 0) > 1 else 100) / 100,
+                        1,
+                    )
+                    for i in self.issues_found
+                )))
+                ModernUI.update_risk_meter(_rs, counts.get('critical', 0))
+                try:
+                    ModernUI.set_files_scanned(getattr(self, 'total_files_scanned', 0))
+                except Exception:
+                    pass
+                _top_crit = next(
+                    (i.get('nombre', '') for i in self.issues_found if i.get('alerta') == 'CRITICAL'),
+                    '',
+                )
+                if _top_crit and hasattr(self, '_completion_widgets'):
+                    ModernUI.set_top_finding(
+                        self._completion_widgets,
+                        f"Principal: {_top_crit}",
+                    )
 
             # Finalizar (95% — el 100% lo pone el hilo principal tras enviar resultados)
             self._update_progress_safe(95, "Preparando resultados", f"Encontrados {len(self.issues_found)} elementos")
@@ -6197,14 +6352,25 @@ class ArgusApp:
             self.scanning = False
             self._restore_window_title()
             if UI_STYLE_AVAILABLE:
+                ModernUI.set_scanning_active(False)
                 ModernUI.set_status_badge("LISTO", ModernUI.COLORS['green'])
+                try:
+                    ModernUI.set_scan_ui_mode(
+                        getattr(self, '_progress_widgets', None),
+                        getattr(self, '_completion_widgets', None),
+                        scanning=False,
+                    )
+                except Exception:
+                    pass
                 if hasattr(self, '_completion_widgets'):
                     try:
-                        self.root.after(0, lambda: ModernUI.set_completion_state(
+                        _counts = getattr(self, '_last_scan_counts', None)
+                        self.root.after(0, lambda c=_counts: ModernUI.set_completion_state(
                             self._completion_widgets,
                             success=True,
                             message="Escaneo completado",
-                            sub="Los resultados han sido enviados al staff"
+                            sub="Enviado al staff",
+                            counts=c,
                         ))
                     except Exception:
                         pass
@@ -6267,17 +6433,24 @@ class ArgusApp:
             # Solo rutas relevantes para Minecraft hacks — no System32 ni Program Files completos
             user_home = os.path.expanduser("~")
             critical_paths = [
-                # Minecraft y clientes
+                # Minecraft y clientes (sin AppData\\Roaming completo — demasiado I/O)
                 os.path.join(user_home, "AppData", "Roaming", ".minecraft"),
+                os.path.join(user_home, "AppData", "Roaming", "lunarclient"),
                 os.path.join(user_home, "AppData", "Roaming", "lunar-launcher"),
                 os.path.join(user_home, "AppData", "Roaming", "feather"),
+                os.path.join(user_home, "AppData", "Roaming", ".feather"),
+                os.path.join(user_home, "AppData", "Roaming", "PrismLauncher"),
+                os.path.join(user_home, "AppData", "Roaming", "gdlauncher"),
+                os.path.join(user_home, "AppData", "Roaming", "MultiMC"),
+                os.path.join(user_home, "AppData", "Roaming", "ATLauncher"),
                 os.path.join(user_home, "AppData", "Roaming", "cosmic"),
+                os.path.join(user_home, "AppData", "Roaming", "Badlion Client"),
+                os.path.join(user_home, "AppData", "Local", "Overwolf"),
                 os.path.join(user_home, "AppData", "Local", "Programs"),
                 # Carpetas de usuario
                 os.path.join(user_home, "Downloads"),
                 os.path.join(user_home, "Desktop"),
                 os.path.join(user_home, "Documents"),
-                os.path.join(user_home, "AppData", "Roaming"),
                 os.path.join(user_home, "AppData", "Local", "Temp"),
                 # Temp del sistema (pequeño)
                 os.path.join(drive, "Windows", "Temp"),
@@ -6294,7 +6467,11 @@ class ArgusApp:
                             mc_path = os.path.join(user_path, "AppData", "Roaming", ".minecraft")
                             if mc_path not in critical_paths:
                                 critical_paths.append(mc_path)
-                            for client in ("lunar-launcher", "feather", "cosmic"):
+                            for client in (
+                                "lunar-launcher", "lunarclient", "feather", ".feather",
+                                "cosmic", "PrismLauncher", "gdlauncher", "MultiMC",
+                                "Badlion Client",
+                            ):
                                 cp = os.path.join(user_path, "AppData", "Roaming", client)
                                 if cp not in critical_paths:
                                     critical_paths.append(cp)
@@ -6948,11 +7125,7 @@ class ArgusApp:
                 try:
                     file_hash = None
                     if os.path.exists(file_path):
-                        try:
-                            with open(file_path, 'rb') as f:
-                                file_hash = hashlib.sha256(f.read()).hexdigest()
-                        except:
-                            pass
+                        file_hash = self._cached_sha256(file_path)
                     
                     is_legitimate, legit_confidence = self.legitimate_patterns.is_legitimate(
                         file_path=file_path,
@@ -8783,6 +8956,20 @@ class ArgusApp:
     def scan_jar_files(self):
         """Cubierto por _scan_for_specific_hacks y scan_jar_files en el scanner principal."""
         pass
+
+    def scan_modular_scanners(self):
+        """Ejecuta scanners/ (WMI, DNS, registro, tareas) y convierte a issues_found."""
+        try:
+            from scanner_integrations import run_modular_scanners, results_to_issues
+            raw = run_modular_scanners(timeout=18)
+            issues = results_to_issues(raw)
+            if issues:
+                self.issues_found.extend(issues)
+            print(f"✅ Scanners modulares: {len(issues)} hallazgo(s)")
+        except ImportError as ex:
+            print(f"⚠️ Scanners modulares no disponibles: {ex}")
+        except Exception as ex:
+            print(f"⚠️ Scanners modulares: {ex}")
     
     def scan_files_by_date(self):
         """Deshabilitado — FORFILES con patrones genéricos genera demasiados FPs."""
@@ -14704,14 +14891,15 @@ class ArgusApp:
         cloud_blacklist = self._get_cloud_hack_blacklist()
         # P2 #2 — Whitelist por servidor (mods permitidos explícitamente en este token)
         server_allowed  = set(str(m).lower() for m in self.config.get('server_allowed_mods', []))
-        BLACKLISTED = [
-            'baritone', 'horion', 'impact', 'wurst', 'aristois', 'meteor',
-            'sigma', 'ares', 'salhack', 'entropy', 'remix', 'inertia',
-            'liquidbounce', 'flux', 'vape', 'riseclient', 'future', 'astolfo',
-            'novoline', 'rusherhack', 'dripclient', 'vertex', 'azura', 'jello',
-            'datura', 'mathias', 'weave', 'xray', 'killaura', 'aimbot',
-            'scaffold', 'autoclick', 'clickgui', 'hacked', 'cheat', 'inject',
-        ]
+        try:
+            from config.hack_signatures import mod_blacklist_match
+        except ImportError:
+            def mod_blacklist_match(fname_lower):  # type: ignore
+                _legacy = (
+                    'baritone', 'horion', 'impactclient', 'wurst', 'vape', 'meteorclient',
+                    'liquidbounce', 'fluxclient', 'killaura', 'aimbot',
+                )
+                return next((b for b in _legacy if b in fname_lower), None)
         # F13 — Modpacks populares: sus mods son legítimos aunque tengan nombres genéricos
         MODPACK_WHITELIST_DIRS = {
             'all the mods', 'atm', 'allthemods', 'rlcraft', 'sky factory',
@@ -14738,183 +14926,175 @@ class ArgusApp:
         }
         try:
             for mods_dir in mods_dirs_to_scan:
-             for fname in os.listdir(mods_dir):
-                if not fname.lower().endswith('.jar'):
-                    continue
-                # F21 already handled in filter, but also skip here at source
-                if fname.lower().endswith(('.disabled', '.bak', '.off', '.old')):
-                    continue
-                fpath = os.path.join(mods_dir, fname)
-                fname_lower = fname.lower()
-                # P2 #2 — Verificar contra whitelist por servidor (nombre)
-                if server_allowed and fname_lower in server_allowed:
-                    continue
-                # Calcular hash SHA256 una sola vez (usado por whitelist + blacklist)
-                _sha256 = None
-                try:
-                    h = hashlib.sha256()
-                    with open(fpath, 'rb') as f:
-                        for chunk in iter(lambda: f.read(65536), b''):
-                            h.update(chunk)
-                    _sha256 = h.hexdigest().lower()
-                except Exception:
-                    pass
-                # P2 #1 — Verificar contra whitelist dinámica de mods legítimos (hash)
-                if cloud_whitelist and _sha256 and _sha256 in cloud_whitelist:
-                    continue  # mod legítimo confirmado
-                # Pack 14 — metadata estructurada del JAR (1 sola lectura
-                # del zip, reutilizada por todos los appends posteriores).
-                _jar_meta = self._collect_mod_jar_metadata(fpath)
-                # P3 #17 — Verificar contra blacklist dinámica de hacks confirmados
-                if cloud_blacklist and _sha256 and _sha256 in cloud_blacklist:
-                    print(f"🚨 HASH EN BLACKLIST DINÁMICA: {fname} ({_sha256[:12]}...)")
-                    self.issues_found.append({
-                        'nombre': f'Hash confirmado como hack en blacklist dinámica: {fname}',
-                        'ruta': fpath,
-                        'archivo': fname,
-                        'tipo': 'cloud_hash_match',
-                        'categoria': 'GHOST_CLIENT',
-                        'alerta': 'CRITICAL',
-                        'confidence': 0.98,
-                        'detected_patterns': [f'cloud_blacklist:{_sha256[:16]}'],
-                        'file_hash': _sha256,
-                        'explicacion': (
-                            f'El hash SHA256 de "{fname}" está en la blacklist dinámica — '
-                            'confirmado como hack en 3 o más scans previos. '
-                            'Detección 100% confiable por hash.'
-                        ),
-                        'extra': {'jar_metadata': _jar_meta},
-                    })
-                    continue
-                # F13 — Si el mod está en la carpeta de un modpack popular, skip
-                fpath_lower = fpath.lower()
-                if any(mp in fpath_lower for mp in MODPACK_WHITELIST_DIRS):
-                    continue
-                # F15 — Whitelist de nombres de mods legítimos que colisionan con hack patterns
-                if any(lm in fname_lower for lm in LEGIT_MOD_NAME_FRAGMENTS):
-                    continue
-                # Filtro #58 — Java agents legítimos (yourkit/datadog/newrelic/aspectj/etc.)
-                if is_legit_java_agent(fname_lower):
-                    continue
-
-                matched_bl = next((bl for bl in BLACKLISTED if bl in fname_lower), None)
-                if matched_bl:
-                    # Pack 14 — anti-FP por metadata: si el JAR es claramente
-                    # un mod legítimo (loader oficial + firma CDN, SIN hits
-                    # de bytecode), bajamos a SOSPECHOSO. Esto evita banear
-                    # a alguien por tener "baritone-1.10.2.jar" oficial.
-                    _meta_verdict = (_jar_meta.get('verdict') or 'unknown')
-                    _bc_hits      = _jar_meta.get('bytecode_hits') or []
-                    if _meta_verdict == 'legit_mod' and not _bc_hits:
-                        _alerta = 'SOSPECHOSO'
-                        _conf   = 0.55
-                        _patterns = [f'blacklisted_mod:{matched_bl}', 'metadata_legit_mod']
-                        _expl = (f'El archivo "{fname}" matchea por nombre con un hack ({matched_bl}), '
-                                 f'pero su metadata indica que es un mod legítimo '
-                                 f'(loader: {_jar_meta.get("mod_loader")}, vendor: {_jar_meta.get("manifest_vendor") or "—"}). '
-                                 f'Revisión humana recomendada.')
-                    else:
-                        _alerta = 'CRITICAL'
-                        _conf   = 0.97 if _bc_hits else 0.95
-                        # Filtro #27 — Bayesian-lite: tokens loader/injector/etc.
-                        # suben la confianza, tokens setup/installer la bajan.
-                        try:
-                            _bayes = bayesian_filename_delta(fname_lower, mc_context=True)
-                            if _bayes:
-                                _conf = max(0.50, min(0.99, _conf + _bayes))
-                        except Exception:
-                            _bayes = 0.0
-                        _patterns = [f'blacklisted_mod:{matched_bl}']
-                        if _bc_hits:
-                            _patterns.extend([f'bc:{h}' for h in _bc_hits[:4]])
-                        if _bayes:
-                            _patterns.append(f'bayes:{_bayes:+.2f}')
-                        _expl = (f'El archivo "{fname}" en la carpeta de mods contiene el nombre de un hack client '
-                                 f'conocido ({matched_bl}). Está directamente instalado como mod en Minecraft.')
-                    print(f"🚨 MOD PROHIBIDO: {fname} (alerta={_alerta} meta={_meta_verdict})")
-                    self.issues_found.append({
-                        'nombre': f'Mod prohibido detectado en .minecraft/mods/: {fname}',
-                        'ruta': fpath,
-                        'archivo': fname,
-                        'tipo': 'blacklisted_mod',
-                        'categoria': 'GHOST_CLIENT',
-                        'alerta': _alerta,
-                        'confidence': _conf,
-                        'detected_patterns': _patterns,
-                        'explicacion': _expl,
-                        'extra': {'jar_metadata': _jar_meta},
-                    })
-                else:
-                    # Analizar nombres de clases internas del JAR — detecta mods renombrados
-                    class_hit = None
-                    try:
-                        import zipfile as _zf
-                        HACK_PKG_PREFIXES = [
-                            'com/vape/', 'net/sigma/', 'com/entropy/', 'net/liquidbounce/',
-                            'com/wurst/', 'com/future/', 'com/flux/', 'com/meteor/',
-                            'com/astolfo/', 'net/rise/', 'com/novoline/', 'me/kami/',
-                            'net/rusherhack/', 'com/aristois/', 'com/tenacity/',
-                            'com/vertex/', 'com/inertia/', 'com/salhack/', 'com/jello/',
-                            'me/baritone/', 'com/phobos/', 'com/pandora/', 'com/azura/',
-                            'com/konas/', 'com/remix/', 'me/weave/', 'net/weaveloader/',
-                            'meteordevelopment/', 'me/drip/',
-                        ]
-                        with _zf.ZipFile(fpath, 'r') as zf:
-                            for entry in zf.namelist():
-                                entry_lower = entry.lower()
-                                if entry_lower.endswith('.class'):
-                                    for pkg in HACK_PKG_PREFIXES:
-                                        if entry_lower.startswith(pkg):
-                                            class_hit = pkg.rstrip('/').replace('/', '.')
-                                            break
-                                if class_hit:
-                                    break
-                    except Exception:
-                        pass
-
-                    if class_hit:
-                        print(f"🚨 CLASE DE HACK EN JAR RENOMBRADO: {fname} → paquete {class_hit}")
+                for fname in os.listdir(mods_dir):
+                    if not fname.lower().endswith('.jar'):
+                        continue
+                    # F21 already handled in filter, but also skip here at source
+                    if fname.lower().endswith(('.disabled', '.bak', '.off', '.old')):
+                        continue
+                    fpath = os.path.join(mods_dir, fname)
+                    fname_lower = fname.lower()
+                    # P2 #2 — Verificar contra whitelist por servidor (nombre)
+                    if server_allowed and fname_lower in server_allowed:
+                        continue
+                    # Calcular hash SHA256 una sola vez (caché compartida con filtros/VT)
+                    _sha256 = (self._cached_sha256(fpath) or "").lower() or None
+                    # P2 #1 — Verificar contra whitelist dinámica de mods legítimos (hash)
+                    if cloud_whitelist and _sha256 and _sha256 in cloud_whitelist:
+                        continue  # mod legítimo confirmado
+                    # Pack 14 — metadata estructurada del JAR (1 sola lectura
+                    # del zip, reutilizada por todos los appends posteriores).
+                    _jar_meta = self._collect_mod_jar_metadata(fpath)
+                    # P3 #17 — Verificar contra blacklist dinámica de hacks confirmados
+                    if cloud_blacklist and _sha256 and _sha256 in cloud_blacklist:
+                        print(f"🚨 HASH EN BLACKLIST DINÁMICA: {fname} ({_sha256[:12]}...)")
                         self.issues_found.append({
-                            'nombre': f'JAR renombrado con clases de hack: {fname}',
+                            'nombre': f'Hash confirmado como hack en blacklist dinámica: {fname}',
+                            'ruta': fpath,
+                            'archivo': fname,
+                            'tipo': 'cloud_hash_match',
+                            'categoria': 'GHOST_CLIENT',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.98,
+                            'detected_patterns': [f'cloud_blacklist:{_sha256[:16]}'],
+                            'file_hash': _sha256,
+                            'explicacion': (
+                                f'El hash SHA256 de "{fname}" está en la blacklist dinámica — '
+                                'confirmado como hack en 3 o más scans previos. '
+                                'Detección 100% confiable por hash.'
+                            ),
+                            'extra': {'jar_metadata': _jar_meta},
+                        })
+                        continue
+                    # F13 — Si el mod está en la carpeta de un modpack popular, skip
+                    fpath_lower = fpath.lower()
+                    if any(mp in fpath_lower for mp in MODPACK_WHITELIST_DIRS):
+                        continue
+                    # F15 — Whitelist de nombres de mods legítimos que colisionan con hack patterns
+                    if any(lm in fname_lower for lm in LEGIT_MOD_NAME_FRAGMENTS):
+                        continue
+                    # Filtro #58 — Java agents legítimos (yourkit/datadog/newrelic/aspectj/etc.)
+                    if is_legit_java_agent(fname_lower):
+                        continue
+
+                    matched_bl = mod_blacklist_match(fname_lower) if mod_blacklist_match else None
+                    if matched_bl:
+                        # Pack 14 — anti-FP por metadata: si el JAR es claramente
+                        # un mod legítimo (loader oficial + firma CDN, SIN hits
+                        # de bytecode), bajamos a SOSPECHOSO. Esto evita banear
+                        # a alguien por tener "baritone-1.10.2.jar" oficial.
+                        _meta_verdict = (_jar_meta.get('verdict') or 'unknown')
+                        _bc_hits      = _jar_meta.get('bytecode_hits') or []
+                        if _meta_verdict == 'legit_mod' and not _bc_hits:
+                            _alerta = 'SOSPECHOSO'
+                            _conf   = 0.55
+                            _patterns = [f'blacklisted_mod:{matched_bl}', 'metadata_legit_mod']
+                            _expl = (f'El archivo "{fname}" matchea por nombre con un hack ({matched_bl}), '
+                                     f'pero su metadata indica que es un mod legítimo '
+                                     f'(loader: {_jar_meta.get("mod_loader")}, vendor: {_jar_meta.get("manifest_vendor") or "—"}). '
+                                     f'Revisión humana recomendada.')
+                        else:
+                            _alerta = 'CRITICAL'
+                            _conf   = 0.97 if _bc_hits else 0.95
+                            # Filtro #27 — Bayesian-lite: tokens loader/injector/etc.
+                            # suben la confianza, tokens setup/installer la bajan.
+                            try:
+                                _bayes = bayesian_filename_delta(fname_lower, mc_context=True)
+                                if _bayes:
+                                    _conf = max(0.50, min(0.99, _conf + _bayes))
+                            except Exception:
+                                _bayes = 0.0
+                            _patterns = [f'blacklisted_mod:{matched_bl}']
+                            if _bc_hits:
+                                _patterns.extend([f'bc:{h}' for h in _bc_hits[:4]])
+                            if _bayes:
+                                _patterns.append(f'bayes:{_bayes:+.2f}')
+                            _expl = (f'El archivo "{fname}" en la carpeta de mods contiene el nombre de un hack client '
+                                     f'conocido ({matched_bl}). Está directamente instalado como mod en Minecraft.')
+                        print(f"🚨 MOD PROHIBIDO: {fname} (alerta={_alerta} meta={_meta_verdict})")
+                        self.issues_found.append({
+                            'nombre': f'Mod prohibido detectado en .minecraft/mods/: {fname}',
                             'ruta': fpath,
                             'archivo': fname,
                             'tipo': 'blacklisted_mod',
                             'categoria': 'GHOST_CLIENT',
-                            'alerta': 'CRITICAL',
-                            'confidence': 0.93,
-                            'detected_patterns': [f'jar_class_pkg:{class_hit}'],
-                            'explicacion': (
-                                f'El archivo "{fname}" tiene un nombre inocente, pero sus clases internas '
-                                f'pertenecen al paquete "{class_hit}" — un hack client conocido. '
-                                f'El jugador renombró el JAR para evadir la detección por nombre.'
-                            ),
+                            'alerta': _alerta,
+                            'confidence': _conf,
+                            'detected_patterns': _patterns,
+                            'explicacion': _expl,
                             'extra': {'jar_metadata': _jar_meta},
                         })
                     else:
-                        # P3 #10 — character n-gram similarity for renamed/obfuscated hack mods
-                        sim, matched_hack = self._score_path_hack_similarity(fname)
-                        if sim >= 0.40:
-                            # Pack 14 — si la metadata dice claramente que es
-                            # mod legítimo, descartar el match por similitud
-                            # (el n-gram tiene FPs frecuentes con mods de mismo
-                            # autor, ej. "wurst-keyboard" vs "wurst-client").
-                            if (_jar_meta.get('verdict') == 'legit_mod'
-                                    and not (_jar_meta.get('bytecode_hits') or [])):
-                                continue
-                            print(f"⚠️ MOD SIMILAR A HACK (N-GRAM): {fname} ~ {matched_hack} ({sim:.2f})")
+                        # Analizar nombres de clases internas del JAR — detecta mods renombrados
+                        class_hit = None
+                        try:
+                            import zipfile as _zf
+                            HACK_PKG_PREFIXES = [
+                                'com/vape/', 'net/sigma/', 'com/entropy/', 'net/liquidbounce/',
+                                'com/wurst/', 'com/future/', 'com/flux/', 'com/meteor/',
+                                'com/astolfo/', 'net/rise/', 'com/novoline/', 'me/kami/',
+                                'net/rusherhack/', 'com/aristois/', 'com/tenacity/',
+                                'com/vertex/', 'com/inertia/', 'com/salhack/', 'com/jello/',
+                                'me/baritone/', 'com/phobos/', 'com/pandora/', 'com/azura/',
+                                'com/konas/', 'com/remix/', 'me/weave/', 'net/weaveloader/',
+                                'meteordevelopment/', 'me/drip/',
+                            ]
+                            with _zf.ZipFile(fpath, 'r') as zf:
+                                for entry in zf.namelist():
+                                    entry_lower = entry.lower()
+                                    if entry_lower.endswith('.class'):
+                                        for pkg in HACK_PKG_PREFIXES:
+                                            if entry_lower.startswith(pkg):
+                                                class_hit = pkg.rstrip('/').replace('/', '.')
+                                                break
+                                    if class_hit:
+                                        break
+                        except Exception:
+                            pass
+
+                        if class_hit:
+                            print(f"🚨 CLASE DE HACK EN JAR RENOMBRADO: {fname} → paquete {class_hit}")
                             self.issues_found.append({
-                                'nombre': f'Mod con nombre similar a hack conocido: {fname} ≈ {matched_hack}',
+                                'nombre': f'JAR renombrado con clases de hack: {fname}',
                                 'ruta': fpath,
                                 'archivo': fname,
                                 'tipo': 'blacklisted_mod',
                                 'categoria': 'GHOST_CLIENT',
-                                'alerta': 'SOSPECHOSO',
-                                'confidence': round(min(0.85, 0.50 + sim * 0.7), 2),
-                                'detected_patterns': [f'name_similar_to:{matched_hack}({sim:.2f})'],
-                                'explicacion': f'El mod "{fname}" tiene alta similitud de caracteres (n-gram Jaccard={sim:.2f}) '
-                                               f'con el cliente de hack conocido "{matched_hack}". Puede estar renombrado para evadir detección.',
+                                'alerta': 'CRITICAL',
+                                'confidence': 0.93,
+                                'detected_patterns': [f'jar_class_pkg:{class_hit}'],
+                                'explicacion': (
+                                    f'El archivo "{fname}" tiene un nombre inocente, pero sus clases internas '
+                                    f'pertenecen al paquete "{class_hit}" — un hack client conocido. '
+                                    f'El jugador renombró el JAR para evadir la detección por nombre.'
+                                ),
                                 'extra': {'jar_metadata': _jar_meta},
                             })
+                        else:
+                            # P3 #10 — character n-gram similarity for renamed/obfuscated hack mods
+                            sim, matched_hack = self._score_path_hack_similarity(fname)
+                            if sim >= 0.40:
+                                # Pack 14 — si la metadata dice claramente que es
+                                # mod legítimo, descartar el match por similitud
+                                # (el n-gram tiene FPs frecuentes con mods de mismo
+                                # autor, ej. "wurst-keyboard" vs "wurst-client").
+                                if (_jar_meta.get('verdict') == 'legit_mod'
+                                        and not (_jar_meta.get('bytecode_hits') or [])):
+                                    continue
+                                print(f"⚠️ MOD SIMILAR A HACK (N-GRAM): {fname} ~ {matched_hack} ({sim:.2f})")
+                                self.issues_found.append({
+                                    'nombre': f'Mod con nombre similar a hack conocido: {fname} ≈ {matched_hack}',
+                                    'ruta': fpath,
+                                    'archivo': fname,
+                                    'tipo': 'blacklisted_mod',
+                                    'categoria': 'GHOST_CLIENT',
+                                    'alerta': 'SOSPECHOSO',
+                                    'confidence': round(min(0.85, 0.50 + sim * 0.7), 2),
+                                    'detected_patterns': [f'name_similar_to:{matched_hack}({sim:.2f})'],
+                                    'explicacion': f'El mod "{fname}" tiene alta similitud de caracteres (n-gram Jaccard={sim:.2f}) '
+                                                   f'con el cliente de hack conocido "{matched_hack}". Puede estar renombrado para evadir detección.',
+                                    'extra': {'jar_metadata': _jar_meta},
+                                })
         except Exception as e:
             print(f"Error en scan_minecraft_mods_blacklist: {e}")
 
@@ -19104,6 +19284,8 @@ class ArgusApp:
             candidate_bases = [
                 f'ArgusAmcache_{pid}\\Root\\InventoryApplicationFile',
                 f'ArgusAmcache_{pid}\\Root\\InventoryApplication',
+                f'ArgusAmcache_{pid}\\Root\\InventoryApplicationShortcut',  # Win11 25H2
+                f'ArgusAmcache_{pid}\\Root\\File',                           # formato legado
             ]
             for base in candidate_bases:
                 try:
@@ -19766,6 +19948,8 @@ class ArgusApp:
         GROUPABLE_TYPES = {
             'ghost_client_config', 'blacklisted_mod', 'temp_jar_recent',
             'prefetch_hack', 'usn_deleted_hack', 'jitter_script',
+            'registry_anomaly_modular', 'hosts_minecraft_redirect',
+            'wmi_persistence_modular', 'scheduled_task_suspicious_modular',
         }
 
         for issue in issues:

@@ -1,5 +1,5 @@
 """
-Argus Scanner — UI Style v2 (Bronze Premium)
+Argus Scanner — UI Style v3 (Bronze Premium)
 ============================================
 Re-skin completo hacia la paleta cobre/bronce del proyecto, con
 microinteracciones y movilidad mejoradas SIN agrandar la ventana
@@ -96,6 +96,27 @@ class ModernUI:
     _shimmer_canvas = None
     _shimmer_after_id = None
     _shimmer_offset = 0
+    _app_version = ''
+    _root_ref = None
+    _phase_dots_canvas = None
+    _risk_canvas = None
+    _risk_label = None
+    _cpu_bar_canvas = None
+    _ram_bar_canvas = None
+    _detail_label_ref = None
+    _status_label_ref = None
+    _detail_fade_gen = 0
+    _scanning_active = False
+    _top_finding_label = None
+    _counter_prev = {}
+
+    @classmethod
+    def set_app_version(cls, version: str):
+        cls._app_version = version or ''
+
+    @classmethod
+    def set_scanning_active(cls, active: bool):
+        cls._scanning_active = bool(active)
 
     @classmethod
     def _apply_ttk_style(cls):
@@ -123,13 +144,40 @@ class ModernUI:
     @staticmethod
     def apply_window_style(root):
         root.title("Argus Scanner")
-        w, h = 705, 279
+        try:
+            from ui_enhancements import load_ui_prefs, patch_modern_ui
+            if not getattr(ModernUI, '_ui_enh_patch', False):
+                patch_modern_ui(ModernUI)
+                ModernUI._ui_enh_patch = True
+            _prefs = load_ui_prefs()
+            ModernUI.apply_ui_prefs(root)
+            if _prefs.get('ui_compact'):
+                w, h = 705, 279
+            else:
+                w, h = 880, 420
+        except Exception:
+            w, h = 705, 279
         x = (root.winfo_screenwidth()  - w) // 2
         y = (root.winfo_screenheight() - h) // 2
         root.geometry(f"{w}x{h}+{x}+{y}")
         root.resizable(False, False)
         root.overrideredirect(True)
         root.configure(bg=ModernUI.COLORS['bg_primary'])
+        cls._root_ref = root
+        # Fade-in al abrir (#4)
+        try:
+            root.attributes('-alpha', 0.0)
+            def _fade(step=0):
+                a = min(1.0, step / 12.0)
+                try:
+                    root.attributes('-alpha', a)
+                except Exception:
+                    return
+                if a < 1.0:
+                    root.after(25, lambda: _fade(step + 1))
+            root.after(50, _fade)
+        except Exception:
+            pass
         base = ModernUI._base_path()
 
         # Icono
@@ -272,6 +320,25 @@ class ModernUI:
         inner = tk.Frame(hdr, bg=C['bg_primary'])
         inner.pack(fill=tk.X, padx=24, pady=(12, 10))
 
+        # Arrastrar ventana (#1)
+        def _start_drag(ev):
+            cls._drag_x = ev.x
+            cls._drag_y = ev.y
+
+        def _on_drag(ev):
+            r = cls._root_ref
+            if r is None:
+                return
+            try:
+                x = r.winfo_x() + ev.x - cls._drag_x
+                y = r.winfo_y() + ev.y - cls._drag_y
+                r.geometry(f"+{x}+{y}")
+            except Exception:
+                pass
+
+        inner.bind('<Button-1>', _start_drag)
+        inner.bind('<B1-Motion>', _on_drag)
+
         # ── Left: logo + brand ──────────────────────────────────────────────
         left = tk.Frame(inner, bg=C['bg_primary'])
         left.pack(side=tk.LEFT, fill=tk.Y)
@@ -286,6 +353,18 @@ class ModernUI:
                                     bg=C['bg_primary'], bd=0)
                 logo_lbl.image = _photo
                 logo_lbl.pack(side=tk.LEFT, padx=(0, 10))
+                def _logo_in(_e=None):
+                    try:
+                        logo_lbl.config(bg=C['bg_hover'])
+                    except Exception:
+                        pass
+                def _logo_out(_e=None):
+                    try:
+                        logo_lbl.config(bg=C['bg_primary'])
+                    except Exception:
+                        pass
+                logo_lbl.bind('<Enter>', _logo_in)
+                logo_lbl.bind('<Leave>', _logo_out)
                 _logo_shown = True
         except Exception:
             pass
@@ -314,9 +393,39 @@ class ModernUI:
                  bg=C['bg_primary'], fg=C['text_muted'],
                  anchor='w').pack(anchor='w')
 
-        # ── Right: status badge con halo animado ────────────────────────────
+        # ── Right: chrome + versión + badge ─────────────────────────────────
         right = tk.Frame(inner, bg=C['bg_primary'])
         right.pack(side=tk.RIGHT, fill=tk.Y)
+
+        if cls._app_version:
+            ver = tk.Label(
+                right, text=f"v{cls._app_version}",
+                font=('Consolas', 7),
+                bg=C['bg_card'], fg=C['text_muted'],
+                padx=6, pady=2,
+            )
+            ver.pack(side=tk.RIGHT, padx=(0, 8))
+
+        chrome = tk.Frame(right, bg=C['bg_primary'])
+        chrome.pack(side=tk.RIGHT, padx=(0, 6))
+
+        def _chrome_btn(text, cmd, hover_fg=None):
+            b = tk.Label(
+                chrome, text=text, font=('Segoe UI', 9),
+                bg=C['bg_card'], fg=C['text_muted'],
+                padx=8, pady=2, cursor='hand2',
+            )
+            b.pack(side=tk.LEFT, padx=1)
+            b.bind('<Button-1>', lambda _e: cmd())
+            hf = hover_fg or C['accent_light']
+            b.bind('<Enter>', lambda _e: b.config(fg=hf, bg=C['bg_hover']))
+            b.bind('<Leave>', lambda _e: b.config(fg=C['text_muted'], bg=C['bg_card']))
+            return b
+
+        r = cls._root_ref
+        if r is not None:
+            _chrome_btn('—', lambda: r.iconify())
+            _chrome_btn('✕', lambda: r.destroy(), hover_fg=C['red'])
 
         # Canvas que envuelve al badge — para dibujar halo pulsante alrededor
         badge_canvas = tk.Canvas(right, width=92, height=22,
@@ -401,6 +510,15 @@ class ModernUI:
                 pass
         sep_canvas.after(120, _draw_shimmer)
 
+        try:
+            if not getattr(cls, '_ui_enh_patch', False):
+                from ui_enhancements import patch_modern_ui
+                patch_modern_ui(cls)
+                cls._ui_enh_patch = True
+            cls.enhance_header(hdr, inner, right)
+        except Exception:
+            pass
+
         return hdr
 
     # ══════════════════════════════════════════════════════════════════════
@@ -414,17 +532,36 @@ class ModernUI:
         outer = tk.Frame(parent, bg=C['bg_primary'])
         outer.pack(fill=tk.BOTH, expand=True, padx=24, pady=(14, 6))
 
+        # Vignette sutil (#5)
+        vignette = tk.Canvas(outer, height=6, bg=C['bg_primary'],
+                             highlightthickness=0, bd=0)
+        vignette.pack(fill=tk.X)
+        def _draw_vignette(_e=None):
+            vignette.delete('v')
+            w = vignette.winfo_width()
+            if w < 4:
+                return
+            vignette.create_rectangle(0, 0, w, 6, fill=C['accent_deep'], outline='', tags='v')
+            vignette.create_rectangle(w * 0.2, 0, w * 0.8, 2,
+                                      fill=C['accent'], outline='', stipple='gray50', tags='v')
+        vignette.bind('<Configure>', _draw_vignette)
+
+        card = tk.Frame(outer, bg=C['bg_card'],
+                        highlightbackground=C['border_bright'],
+                        highlightthickness=1)
+        card.pack(fill=tk.BOTH, expand=True, padx=0, pady=(4, 0))
+
         # ── Top row: ring + info ────────────────────────────────────────────
-        top = tk.Frame(outer, bg=C['bg_primary'])
-        top.pack(fill=tk.X)
+        top = tk.Frame(card, bg=C['bg_card'])
+        top.pack(fill=tk.X, padx=12, pady=(10, 0))
 
         # Ring
-        ring_wrap = tk.Frame(top, bg=C['bg_primary'])
+        ring_wrap = tk.Frame(top, bg=C['bg_card'])
         ring_wrap.pack(side=tk.LEFT)
 
         ring_size = 110
         ring_c = tk.Canvas(ring_wrap, width=ring_size, height=ring_size,
-                           bg=C['bg_primary'], highlightthickness=0)
+                           bg=C['bg_card'], highlightthickness=0)
         ring_c.pack()
         cls._ring_canvas = ring_c
         cls._ring_pct    = 0.0
@@ -472,9 +609,13 @@ class ModernUI:
                               outline=C['bg_secondary'],
                               width=1)
 
-            # ── Progress arc cobre con gradiente suave ──
+            # ── Progress arc: color por % (#7) ──
             if pct > 0:
-                if pct < 50:
+                if pct >= 95:
+                    arc_color = _interp_color(C['green'], C['green_glow'], 0.5)
+                elif pct >= 60:
+                    arc_color = _interp_color(C['accent'], C['amber'], (pct - 60) / 35)
+                elif pct < 50:
                     arc_color = _interp_color(C['accent_deep'], C['accent'], pct / 50)
                 else:
                     arc_color = _interp_color(C['accent'], C['accent_glow'], (pct - 50) / 50)
@@ -537,13 +678,14 @@ class ModernUI:
             # ── Texto del porcentaje (con tween) ──
             cx, cy = ring_size // 2, ring_size // 2
             display_pct = cls._ring_pct  # ya tweened
+            inner_txt = "SCAN" if display_pct < 3 and cls._scanning_active else f"{int(display_pct)}%"
             ring_c.create_text(cx + 1, cy + 1,
-                               text=f"{int(display_pct)}%",
-                               font=('Segoe UI', 18, 'bold'),
-                               fill=C['bg_primary'])
+                               text=inner_txt,
+                               font=('Segoe UI', 16, 'bold'),
+                               fill=C['bg_card'])
             ring_c.create_text(cx, cy,
-                               text=f"{int(display_pct)}%",
-                               font=('Segoe UI', 18, 'bold'),
+                               text=inner_txt,
+                               font=('Segoe UI', 16, 'bold'),
                                fill=C['text_primary'])
 
         ring_c._draw = _draw_ring
@@ -553,29 +695,51 @@ class ModernUI:
         cls._start_ambient_motion(ring_c, _draw_ring)
 
         # ── Right: info block ───────────────────────────────────────────────
-        info = tk.Frame(top, bg=C['bg_primary'])
+        info = tk.Frame(top, bg=C['bg_card'])
         info.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(20, 0))
 
         tk.Label(info, text="ANALISIS EN CURSO",
                  font=('Segoe UI', 7, 'bold'),
-                 bg=C['bg_primary'], fg=C['accent_light'],
+                 bg=C['bg_card'], fg=C['accent_light'],
                  anchor='w').pack(anchor='w')
 
         status = tk.Label(info, text="Iniciando...",
                           font=('Segoe UI', 11, 'bold'),
-                          bg=C['bg_primary'], fg=C['text_primary'],
+                          bg=C['bg_card'], fg=C['text_primary'],
                           anchor='w', wraplength=350, justify='left')
-        status.pack(anchor='w', pady=(4, 6))
+        status.pack(anchor='w', pady=(4, 2))
+        cls._status_label_ref = status
 
         detail = tk.Label(info, text="",
                           font=('Consolas', 8),
-                          bg=C['bg_primary'], fg=C['text_secondary'],
+                          bg=C['bg_card'], fg=C['text_secondary'],
                           anchor='w', wraplength=350, justify='left')
         detail.pack(anchor='w')
+        cls._detail_label_ref = detail
+
+        # Dots de fase (#11)
+        dots_row = tk.Frame(info, bg=C['bg_card'])
+        dots_row.pack(anchor='w', pady=(6, 0))
+        dots_c = tk.Canvas(dots_row, width=120, height=10,
+                           bg=C['bg_card'], highlightthickness=0, bd=0)
+        dots_c.pack(anchor='w')
+        cls._phase_dots_canvas = dots_c
+
+        def _draw_dots(pct_val=0):
+            dots_c.delete('all')
+            n = 10
+            filled = int((pct_val / 100.0) * n)
+            for i in range(n):
+                x0, y0 = i * 12 + 2, 3
+                col = C['accent_light'] if i < filled else C['border_bright']
+                dots_c.create_oval(x0, y0, x0 + 6, y0 + 6, fill=col, outline='')
+
+        dots_c._draw_dots = _draw_dots
+        _draw_dots(0)
 
         # ── Progress bar con shimmer ────────────────────────────────────────
-        bar_wrap = tk.Frame(outer, bg=C['border'], height=4)
-        bar_wrap.pack(fill=tk.X, pady=(18, 0))
+        bar_wrap = tk.Frame(card, bg=C['border'], height=4)
+        bar_wrap.pack(fill=tk.X, padx=12, pady=(14, 0))
         bar_wrap.pack_propagate(False)
         bar_c = tk.Canvas(bar_wrap, height=4,
                           bg=C['bg_secondary'], highlightthickness=0, bd=0)
@@ -644,27 +808,117 @@ class ModernUI:
         bar_c.after(150, _shimmer_tick)
 
         # ── Bottom row: timer + resources ───────────────────────────────────
-        bot = tk.Frame(outer, bg=C['bg_primary'])
-        bot.pack(fill=tk.X, pady=(10, 0))
+        bot = tk.Frame(card, bg=C['bg_card'])
+        bot.pack(fill=tk.X, padx=12, pady=(10, 0))
 
-        timer = tk.Label(bot, text="Tiempo: 00:00:00",
+        timer = tk.Label(bot, text="Tiempo 00:00:00",
                          font=('Consolas', 9),
-                         bg=C['bg_primary'], fg=C['text_secondary'])
+                         bg=C['bg_card'], fg=C['text_secondary'])
         timer.pack(side=tk.LEFT)
 
-        resources = tk.Label(bot, text="",
-                             font=('Segoe UI', 8),
-                             bg=C['bg_primary'], fg=C['text_secondary'])
-        resources.pack(side=tk.RIGHT)
+        res_wrap = tk.Frame(bot, bg=C['bg_card'])
+        res_wrap.pack(side=tk.RIGHT)
+        resources = tk.Label(res_wrap, text="",
+                             font=('Segoe UI', 7),
+                             bg=C['bg_card'], fg=C['text_secondary'])
+        resources.pack(anchor='e')
+        meters = tk.Frame(res_wrap, bg=C['bg_card'])
+        meters.pack(anchor='e', pady=(2, 0))
+        cls._cpu_bar_canvas = tk.Canvas(meters, width=70, height=4,
+                                        bg=C['bg_secondary'], highlightthickness=0, bd=0)
+        cls._cpu_bar_canvas.pack(anchor='e')
+        cls._ram_bar_canvas = tk.Canvas(meters, width=70, height=4,
+                                        bg=C['bg_secondary'], highlightthickness=0, bd=0)
+        cls._ram_bar_canvas.pack(anchor='e', pady=(2, 0))
+
+        # Contadores en vivo (#13)
+        counts_row = tk.Frame(card, bg=C['bg_card'])
+        counts_row.pack(fill=tk.X, padx=12, pady=(8, 0))
+        cls._counter_labels = {}
+        _chip_specs = (
+            ('critical', 'CRIT', C['red']),
+            ('suspicious', 'SOSP', C['amber']),
+            ('low', 'BAJO', C['blue']),
+            ('clean', 'OK', C['green']),
+        )
+        for key, short, color in _chip_specs:
+            chip_fr = tk.Frame(counts_row, bg=C['border_bright'], padx=1, pady=1)
+            chip_fr.pack(side=tk.LEFT, padx=(0, 6))
+            chip = tk.Label(
+                chip_fr,
+                text=f"{short}: 0",
+                font=('Segoe UI', 7, 'bold'),
+                bg=C['bg_secondary'],
+                fg=color,
+                padx=8,
+                pady=2,
+            )
+            chip.pack()
+            cls._counter_labels[key] = chip
+
+        # Risk meter (#15 #32 #33)
+        risk_row = tk.Frame(card, bg=C['bg_card'])
+        risk_row.pack(fill=tk.X, padx=12, pady=(6, 4))
+        cls._risk_label = tk.Label(
+            risk_row, text="Riesgo —",
+            font=('Segoe UI', 7),
+            bg=C['bg_card'], fg=C['text_muted'],
+        )
+        cls._risk_label.pack(side=tk.LEFT)
+        cls._risk_canvas = tk.Canvas(risk_row, height=6, bg=C['bg_secondary'],
+                                     highlightthickness=0, bd=0)
+        cls._risk_canvas.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
+        try:
+            if not getattr(cls, '_ui_enh_patch', False):
+                from ui_enhancements import patch_modern_ui
+                patch_modern_ui(cls)
+                cls._ui_enh_patch = True
+            sp = cls.create_sparkline(risk_row)
+            sp.pack(side=tk.RIGHT, padx=(8, 0))
+            cls.attach_files_counter(card)
+            cls.create_phase_sidebar(parent)
+            cls.add_chip_tooltips(getattr(cls, '_counter_labels', {}))
+        except Exception:
+            pass
+
+        tk.Label(
+            card, text="Argus Projects",
+            font=('Segoe UI', 6),
+            bg=C['bg_card'], fg=C['border_bright'],
+        ).pack(anchor='e', padx=12, pady=(0, 6))
 
         # compat: hidden ttk bar y pct label
-        pb = ttk.Progressbar(outer, mode='determinate', maximum=100,
+        pb = ttk.Progressbar(card, mode='determinate', maximum=100,
                              style='Argus.Horizontal.TProgressbar')
-        pct_lbl = tk.Label(outer, text="0%", font=cls.FONTS['big_pct'],
-                           bg=C['bg_primary'], fg=C['bg_primary'])
+        pct_lbl = tk.Label(card, text="0%", font=cls.FONTS['big_pct'],
+                           bg=C['bg_card'], fg=C['bg_card'])
+
+        cancel_row = tk.Frame(card, bg=C['bg_card'])
+        cancel_row.pack(fill=tk.X, pady=(6, 0))
+        cancel_btn = tk.Button(
+            cancel_row,
+            text="✕  Cancelar escaneo",
+            font=('Segoe UI', 8),
+            bg=C['bg_card'],
+            fg=C['text_muted'],
+            activebackground=C['bg_hover'],
+            activeforeground=C['red'],
+            relief=tk.FLAT,
+            bd=0,
+            cursor='hand2',
+            padx=10,
+            pady=4,
+            highlightthickness=1,
+            highlightbackground=C['border'],
+            highlightcolor=C['accent'],
+        )
+        cancel_btn.pack(anchor='e', padx=12, pady=(0, 8))
+        cancel_btn.bind('<Enter>', lambda _e: cancel_btn.config(highlightbackground=C['accent']))
+        cancel_btn.bind('<Leave>', lambda _e: cancel_btn.config(highlightbackground=C['border']))
 
         return {
             'container':  outer,
+            'card':       card,
             'status':     status,
             'progress':   pb,
             'detail':     detail,
@@ -673,6 +927,8 @@ class ModernUI:
             'percent':    pct_lbl,
             '_canvas':    bar_c,
             '_ring':      ring_c,
+            'cancel_row': cancel_row,
+            'cancel_btn': cancel_btn,
         }
 
     # ══════════════════════════════════════════════════════════════════════
@@ -713,13 +969,60 @@ class ModernUI:
                            bg=C['bg_card'], fg=C['text_muted'])
         sub_lbl.pack(pady=(4, 0))
 
-        return {
+        top_find = tk.Label(center, text="",
+                            font=('Consolas', 7),
+                            bg=C['bg_card'], fg=C['accent_light'],
+                            wraplength=320, justify='center')
+        top_find.pack(pady=(6, 0))
+        cls._top_finding_label = top_find
+
+        outer.pack_forget()
+
+        widgets = {
             'outer':       outer,
             'card':        card,
             'icon_canvas': icon_c,
             'main_label':  main_lbl,
             'sub_label':   sub_lbl,
+            'top_finding': top_find,
         }
+        try:
+            if not getattr(cls, '_ui_enh_patch', False):
+                from ui_enhancements import patch_modern_ui
+                patch_modern_ui(cls)
+                cls._ui_enh_patch = True
+            cls.enhance_completion_panel(widgets)
+        except Exception:
+            pass
+        return widgets
+
+    @classmethod
+    def show_completion_panel(cls, completion_widgets, visible: bool = True):
+        outer = (completion_widgets or {}).get('outer')
+        if outer is None:
+            return
+        try:
+            if visible:
+                outer.pack(fill=tk.BOTH, expand=True, padx=24, pady=(4, 10))
+            else:
+                outer.pack_forget()
+        except Exception:
+            pass
+
+    @classmethod
+    def set_scan_ui_mode(cls, progress_widgets=None, completion_widgets=None, scanning: bool = True):
+        """Durante el scan: barra visible; al terminar: panel de completado."""
+        if progress_widgets:
+            cont = progress_widgets.get('container')
+            if cont is not None:
+                try:
+                    if scanning:
+                        cont.pack(fill=tk.BOTH, expand=True, padx=24, pady=(14, 6))
+                    else:
+                        cont.pack_forget()
+                except Exception:
+                    pass
+        cls.show_completion_panel(completion_widgets, visible=not scanning)
 
     # ══════════════════════════════════════════════════════════════════════
     #  BUTTON con shimmer al hover
@@ -799,12 +1102,31 @@ class ModernUI:
     #  PUBLIC HELPERS
     # ══════════════════════════════════════════════════════════════════════
     @classmethod
+    def format_phase_label(cls, text: str, max_len: int = 52) -> str:
+        """Recorta fases largas para que no rompan el layout de la ventana."""
+        if not text:
+            return ""
+        one_line = " ".join(str(text).split())
+        if len(one_line) <= max_len:
+            return one_line
+        return one_line[: max_len - 1] + "\u2026"
+
+    @classmethod
     def set_status_badge(cls, text, color=None):
         if cls._status_badge is None:
             return
         col = color or cls.COLORS['accent']
         try:
-            cls._status_badge.config(text=f"●  {text}", fg=col)
+            up = (text or '').upper()
+            if 'LISTO' in up or 'OK' in up:
+                icon = '✓'
+            elif 'ESCANE' in up:
+                icon = '◉'
+            elif 'ERROR' in up or 'CANCEL' in up:
+                icon = '✕'
+            else:
+                icon = '●'
+            cls._status_badge.config(text=f"{icon}  {text}", fg=col)
             if text and 'ESCANE' in text.upper():
                 cls._start_badge_pulse(col)
             else:
@@ -863,15 +1185,171 @@ class ModernUI:
             pass
         cls._badge_pulse_after = None
 
+    _counter_short = {'critical': 'CRIT', 'suspicious': 'SOSP', 'low': 'BAJO', 'clean': 'OK'}
+
     @classmethod
     def update_counter(cls, key, value):
-        pass
+        lbl = getattr(cls, '_counter_labels', {}).get(key)
+        if lbl is None:
+            return
+        short = cls._counter_short.get(key, key.upper()[:4])
+        try:
+            v = int(value)
+            prev = cls._counter_prev.get(key, 0)
+            lbl.config(text=f"{short}: {v}")
+            if v > prev:
+                try:
+                    lbl.config(bg=cls.COLORS['bg_hover'])
+                    lbl.after(120, lambda: lbl.config(bg=cls.COLORS['bg_secondary']))
+                except Exception:
+                    pass
+            cls._counter_prev[key] = v
+        except Exception:
+            pass
+
+    @classmethod
+    def update_phase_dots(cls, pct: float):
+        if cls._phase_dots_canvas and hasattr(cls._phase_dots_canvas, '_draw_dots'):
+            try:
+                cls._phase_dots_canvas._draw_dots(float(pct))
+            except Exception:
+                pass
+
+    @classmethod
+    def update_status_fade(cls, status_text=None, detail_text=None):
+        """Fade suave al cambiar mensajes (#12)."""
+        cls._detail_fade_gen += 1
+        gen = cls._detail_fade_gen
+        C = cls.COLORS
+
+        def _step(alpha, st=None, dt=None):
+            if gen != cls._detail_fade_gen:
+                return
+            try:
+                if st is not None and cls._status_label_ref:
+                    fg = C['text_primary'] if alpha > 0.5 else C['text_muted']
+                    cls._status_label_ref.config(text=st, fg=fg)
+                if dt is not None and cls._detail_label_ref:
+                    cls._detail_label_ref.config(
+                        text=dt,
+                        fg=C['text_secondary'] if alpha > 0.5 else C['text_muted'],
+                    )
+            except Exception:
+                pass
+            if alpha < 1.0 and cls._root_ref:
+                cls._root_ref.after(30, lambda: _step(min(1.0, alpha + 0.25), st, dt))
+
+        if status_text is not None or detail_text is not None:
+            _step(0.0, status_text, detail_text)
+        if detail_text:
+            try:
+                cls.append_phase_history(detail_text)
+            except Exception:
+                pass
+
+    @classmethod
+    def update_risk_meter(cls, score: int, crit_count: int = 0):
+        """Barra de riesgo 0-100 (#15)."""
+        if cls._risk_canvas is None:
+            return
+        C = cls.COLORS
+        score = max(0, min(100, int(score)))
+        try:
+            if cls._risk_label:
+                cls._risk_label.config(text=f"Riesgo {score}/100", font=('Segoe UI', 9, 'bold'))
+            try:
+                cls.push_risk_sample(score)
+            except Exception:
+                pass
+            cls._risk_canvas.delete('all')
+            w = cls._risk_canvas.winfo_width()
+            if w < 8:
+                w = 200
+            fw = int(w * score / 100)
+            fill = C['green'] if score < 35 else (C['amber'] if score < 65 else C['red'])
+            if crit_count > 0:
+                fill = C['red_deep']
+            cls._risk_canvas.create_rectangle(0, 0, w, 6, fill=C['bg_secondary'], outline='')
+            if fw > 0:
+                cls._risk_canvas.create_rectangle(0, 0, fw, 6, fill=fill, outline='')
+        except Exception:
+            pass
+
+    @classmethod
+    def update_resource_meters(cls, cpu_pct=None, ram_pct=None):
+        """Mini barras CPU/RAM (#16)."""
+        C = cls.COLORS
+
+        def _draw(canvas, pct, label):
+            if canvas is None or pct is None:
+                return
+            try:
+                canvas.delete('all')
+                w = 70
+                fw = int(w * max(0, min(100, float(pct))) / 100)
+                canvas.create_rectangle(0, 0, w, 4, fill=C['bg_secondary'], outline='')
+                if fw > 0:
+                    canvas.create_rectangle(0, 0, fw, 4, fill=C['accent'], outline='')
+            except Exception:
+                pass
+
+        _draw(cls._cpu_bar_canvas, cpu_pct, 'CPU')
+        _draw(cls._ram_bar_canvas, ram_pct, 'RAM')
+
+    @classmethod
+    def set_top_finding(cls, completion_widgets, text: str):
+        lbl = (completion_widgets or {}).get('top_finding') or cls._top_finding_label
+        if lbl is None:
+            return
+        try:
+            lbl.config(text=text[:120] if text else '')
+        except Exception:
+            pass
+
+    @classmethod
+    def _trigger_confetti(cls, canvas):
+        """Partículas cobre al completar (#20)."""
+        if canvas is None:
+            return
+        C = cls.COLORS
+        particles = []
+        for _ in range(18):
+            particles.append({
+                'x': random.randint(8, 48),
+                'y': random.randint(8, 48),
+                'vy': random.uniform(-2.5, -0.5),
+                'vx': random.uniform(-1.2, 1.2),
+                'life': random.randint(8, 20),
+            })
+
+        def _tick():
+            try:
+                canvas.delete('conf')
+                alive = False
+                for p in particles:
+                    if p['life'] <= 0:
+                        continue
+                    alive = True
+                    p['life'] -= 1
+                    p['x'] += p['vx']
+                    p['y'] += p['vy']
+                    p['vy'] += 0.15
+                    canvas.create_oval(
+                        p['x'], p['y'], p['x'] + 3, p['y'] + 3,
+                        fill=C['accent_light'], outline='', tags='conf',
+                    )
+                if alive:
+                    canvas.after(40, _tick)
+            except Exception:
+                pass
+        _tick()
 
     @classmethod
     def update_canvas_bar(cls, canvas, pct_val):
         """Actualiza barra y ring. Aplica tween numerico para que el numero
         del ring no salte en seco entre valores."""
         try:
+            cls.update_phase_dots(float(pct_val))
             cls._ring_target_pct = float(pct_val)
             # Si la diferencia es grande (>2%), tweenamos suavemente
             if cls._ring_canvas and abs(cls._ring_target_pct - cls._ring_pct) > 0.5:
@@ -908,7 +1386,7 @@ class ModernUI:
             cls._pct_tween_after = None
 
     @classmethod
-    def set_completion_state(cls, completion_widgets, success=True, message=None, sub=None):
+    def set_completion_state(cls, completion_widgets, success=True, message=None, sub=None, counts=None):
         C = cls.COLORS
         icon_c   = completion_widgets.get('icon_canvas')
         main_lbl = completion_widgets.get('main_label')
@@ -949,4 +1427,28 @@ class ModernUI:
             main_lbl.config(text=txt, fg=C['green_glow'] if success else C['red_deep'])
 
         if sub_lbl:
-            sub_lbl.config(text=sub or "", fg=C['text_secondary'])
+            if counts:
+                crit = int(counts.get('critical', 0))
+                susp = int(counts.get('suspicious', 0))
+                low = int(counts.get('low', 0))
+                total = int(counts.get('total', crit + susp + low + int(counts.get('clean', 0))))
+                parts = [f"CRIT {crit}", f"SOSP {susp}"]
+                if low:
+                    parts.append(f"BAJO {low}")
+                parts.append(f"Total {total}")
+                line = " · ".join(parts)
+                if sub:
+                    line = f"{line} — {sub}"
+                sub_lbl.config(text=line, fg=C['text_secondary'])
+            else:
+                sub_lbl.config(text=sub or "", fg=C['text_secondary'])
+
+        if success and icon_c:
+            cls._trigger_confetti(icon_c)
+        try:
+            crit_n = int((counts or {}).get('critical', 0))
+            cls.flash_dwm_border(success and crit_n == 0)
+            if success:
+                cls.play_complete_sound()
+        except Exception:
+            pass

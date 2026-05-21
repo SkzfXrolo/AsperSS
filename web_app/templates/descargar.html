@@ -688,6 +688,8 @@
             border: 2px solid var(--bg0);
         }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-public.css') }}">
+    <script>window.ARGUS_API_BASE = '';</script>
 </head>
 <body>
     <div class="wrap">
@@ -1199,5 +1201,6 @@
             }, 2400);
         });
     </script>
+    <script src="{{ url_for('static', filename='js/argus-public.js') }}" defer></script>
 </body>
 </html>

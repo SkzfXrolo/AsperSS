@@ -1511,6 +1511,8 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-public.css') }}">
+    <script>window.ARGUS_API_BASE = '';</script>
 </head>
 <body>
 
@@ -2129,5 +2131,6 @@
         }, { threshold: 0.4 });
         document.querySelectorAll('.stat-value').forEach(el => _statObserver.observe(el));
     </script>
+    <script src="{{ url_for('static', filename='js/argus-public.js') }}" defer></script>
 </body>
 </html>
