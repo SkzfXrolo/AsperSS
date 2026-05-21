@@ -403,7 +403,7 @@ def audit_action(action_name: str, resource_type: str = ''):
 CORS(app)
 
 # Inicializar base de datos de autenticaciÃ³n al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.52'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
+_ARGUS_VERSION = '1.6.53'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
 # URL de invitacion permanente al Discord oficial. Se inyecta en todos los
 # templates como `discord_invite` via @app.context_processor (ver mas abajo).
@@ -8059,7 +8059,7 @@ def debug_last_scan():
 
 
 # Current released scanner version â€” update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.6.52"
+CURRENT_SCANNER_VERSION = "1.6.53"
 
 @app.route('/sw.js')
 def service_worker():
@@ -9043,6 +9043,15 @@ def _is_server_false_positive(result: dict) -> bool:
 
     # Tipos que son FP estructural independientemente de la ruta
     tipo = (result.get('tipo') or result.get('issue_type') or '').lower().replace(' ', '_')
+    _NEVER_SCRUB_TYPES = {
+        'blacklisted_mod', 'dll_injection_java', 'injected_dll', 'javaagent_injection',
+        'injector_process', 'ghost_client_config', 'ghost_client_registry',
+        'browser_visited_hack', 'browser_download_hack', 'modified_minecraft_jar',
+        'hack_string_in_loaded_jar', 'weave_loader', 'prefetch_hack', 'kill_chain',
+        'registry_run_hack', 'registry_userassist_hack', 'cloud_hash_match',
+    }
+    if tipo in _NEVER_SCRUB_TYPES:
+        return False
     if tipo in _ZERO_RISK_ISSUE_TYPES:
         return True
 

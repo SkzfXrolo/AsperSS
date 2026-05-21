@@ -1,6 +1,7 @@
 """Firmas de hacks compartidas — evita imports circulares desde main.py."""
 from __future__ import annotations
 
+import os
 import re
 from typing import Iterable, Optional
 
@@ -17,11 +18,18 @@ NEVER_LEGITIMATE_STEMS: frozenset[str] = frozenset({
 })
 
 # Blacklist de mods por nombre de archivo (stems específicos, sin substrings genéricos)
+# Stems de inyección Vape / loaders (boundary — no matchea "injection" genérico)
+VAPE_INJECT_STEMS: tuple[str, ...] = (
+    'vapeinject', 'vape-inject', 'vape_inject', 'vapeinjector',
+    'vape-loader', 'vape_loader', 'vapeloader',
+)
+
 BLACKLISTED_MOD_STEMS: tuple[str, ...] = (
     'baritone', 'horion', 'impactclient', 'wurst', 'wurstclient', 'aristois',
     'meteorclient', 'meteor-client', 'sigmaclient', 'sigma5', 'sigma6',
     'ares', 'salhack', 'entropy', 'entropyclient', 'remix', 'inertia',
     'liquidbounce', 'fluxclient', 'vape', 'vapelite', 'riseclient',
+    *VAPE_INJECT_STEMS,
     'futureclient', 'astolfo', 'novoline', 'rusherhack',
     'dripclient', 'vertex', 'azura', 'jello', 'datura', 'mathias', 'weave',
     'weaveloader', 'xraymod', 'killaura', 'aimbot', 'scaffoldhack',
@@ -65,3 +73,26 @@ def mod_blacklist_match(filename_lower: str) -> Optional[str]:
         if stem_in_filename(stem, filename_lower):
             return stem
     return None
+
+
+def combined_path_indicates_hack(
+    nombre: str = '',
+    ruta: str = '',
+    archivo: str = '',
+) -> bool:
+    """True si nombre+ruta+archivo indican hack definitivo (p. ej. inject de Vape)."""
+    combined = f"{nombre}|{ruta}|{archivo}".lower()
+    if not combined.strip('|'):
+        return False
+    if filename_is_definite_hack(archivo or nombre):
+        return True
+    if 'vape' in combined and any(
+        tok in combined for tok in ('inject', 'loader', 'dllinject', 'javaagent')
+    ):
+        return True
+    for stem in VAPE_INJECT_STEMS:
+        if stem in combined.replace('-', '').replace('_', ''):
+            return True
+        if stem_in_filename(stem, os.path.basename(archivo or nombre or ruta)):
+            return True
+    return False

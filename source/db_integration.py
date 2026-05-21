@@ -270,6 +270,19 @@ class DatabaseIntegration:
                 while '\\\\' in _ruta_n:
                     _ruta_n = _ruta_n.replace('\\\\', '\\')
                 _combined = _ruta_n + '|' + str(_nombre).lower()
+                # No descartar hacks definitivos aunque estén bajo AppData/Temp
+                try:
+                    from config.hack_signatures import combined_path_indicates_hack
+                    if combined_path_indicates_hack(str(_nombre), _ruta_n, _ruta_n):
+                        return False
+                except ImportError:
+                    pass
+                if _tipo in (
+                    'blacklisted_mod', 'dll_injection_java', 'injected_dll',
+                    'javaagent_injection', 'injector_process', 'ghost_client_config',
+                    'browser_visited_hack', 'browser_download_hack',
+                ):
+                    return False
                 if any(f in _combined for f in _PRE_SAFE_FRAGS):
                     return True
                 return False
@@ -297,7 +310,7 @@ class DatabaseIntegration:
                 sorted_issues = sorted_issues[:MAX_RESULTS]
 
             # Cap separado para historial de archivos: hasta 5000 (preservando los más recientes)
-            MAX_FILE_HISTORY = 5000
+            MAX_FILE_HISTORY = 1200
             if len(_file_history) > MAX_FILE_HISTORY:
                 _file_history.sort(key=lambda r: (r.get('extra') or {}).get('ts', 0), reverse=True)
                 print(f"⚠️ Truncando historial de archivos: {len(_file_history)} → {MAX_FILE_HISTORY}")

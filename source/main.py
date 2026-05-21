@@ -63,7 +63,7 @@ except ImportError:
 try:
     from config.version import SCANNER_VERSION
 except ImportError:
-    SCANNER_VERSION = "1.6.52"
+    SCANNER_VERSION = "1.6.53"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -197,6 +197,28 @@ _DEFINITE_HACK_NAMES = {
 # 'crack'/'cracked' eliminados — son demasiado genéricos y flagean software pirata
 # no relacionado con Minecraft. Las variantes MC-específicas están en _DEFINITE_HACK_NAMES.
 _WORD_BOUNDARY_HACK_WORDS = ['hack', 'cheat', 'bypass']
+
+# Tipos que nunca deben descartarse por LOW_SCORE / secondary_filter / AI decay
+_NEVER_FILTER_TYPES = frozenset({
+    'ghost_client_config', 'ghost_client_registry', 'jdwp_debug_port',
+    'vpn_active', 'hosts_minecraft_redirect', 'hosts_file_custom',
+    'blacklisted_mod', 'dll_injection_java', 'injected_dll', 'ahk_autoclick',
+    'bloody_a4tech', 'peripheral_macro', 'arduino_hid_device',
+    'injector_process', 'temp_jar_recent', 'baritone_prohibited',
+    'baritone_installed', 'litematica_printer', 'schematica_printer',
+    'optifine_zoom_combat', 'modified_minecraft_jar', 'hack_string_in_loaded_jar',
+    'javaagent_injection', 'bootclasspath_modification',
+    'weave_loader', 'prefetch_hack', 'usn_deleted_hack',
+    'jitter_script', 'java_suspicious_parent', 'java_unusual_parent',
+    'evasion_indicators', 'kill_chain', 'minecraft_safe_mode',
+    'suspicious_process_location', 'short_lived_process', 'cloud_hash_match',
+    'prescan_cleanup', 'suspicious_process_tree', 'unknown_parent_process',
+    'baseline_anomaly', 'config_tfidf_match', 'suspicious_network_connection',
+    'discord_webhook_config', 'registry_run_hack', 'registry_userassist_hack',
+    'registry_appcompat_hack', 'browser_visited_hack', 'browser_download_hack',
+    'ddos_application', 'f3t_resourcepack_exploit', 'defender_exclusion_hack',
+    'amcache_hack_execution',
+})
 
 # ── Whitelist de Mods/Launchers Legítimos de Minecraft (Filtro #4) ──────────
 #
@@ -3652,6 +3674,9 @@ class ArgusApp:
             'wtap', 'speedhack',
             # Injectors con nombre específico
             'dllinjector', 'extremeinjector',
+            # Vape inject / loaders (scan #106 — no filtrar por nombre genérico)
+            'vapeinject', 'vape-inject', 'vape_inject', 'vapeinjector',
+            'vape-loader', 'vape_loader', 'vapeloader',
             # Weave
             'weaveloader', 'weave-loader',
         ]
@@ -3736,35 +3761,7 @@ class ArgusApp:
         # ============================================================
         
         # Tipos generados por scanners especializados — siempre pasan el filtro
-        TRUSTED_TYPES = {
-            'ghost_client_config', 'ghost_client_registry', 'jdwp_debug_port',
-            'vpn_active', 'hosts_minecraft_redirect', 'hosts_file_custom',
-            'blacklisted_mod', 'dll_injection_java', 'ahk_autoclick',
-            'bloody_a4tech', 'peripheral_macro', 'arduino_hid_device',
-            'injector_process', 'temp_jar_recent', 'baritone_prohibited',
-            'baritone_installed', 'litematica_printer', 'schematica_printer',
-            'optifine_zoom_combat', 'modified_minecraft_jar', 'hack_string_in_loaded_jar',
-            'javaagent_injection', 'bootclasspath_modification',
-            # Nuevas detecciones P1 y P3
-            'weave_loader', 'prefetch_hack', 'usn_deleted_hack',
-            'jitter_script', 'java_suspicious_parent', 'java_unusual_parent',
-            'evasion_indicators', 'kill_chain', 'minecraft_safe_mode',
-            'suspicious_process_location', 'short_lived_process', 'cloud_hash_match',
-            'prescan_cleanup', 'suspicious_process_tree', 'unknown_parent_process',
-            'baseline_anomaly', 'config_tfidf_match',
-            'suspicious_network_connection',
-            # v1.5.0 — nuevos detectores especializados
-            'ghost_client_config',       # ya estaba pero incluir explícitamente
-            'discord_webhook_config',    # Discord C2 en configs de hacks
-            'registry_run_hack',         # Run/RunOnce con nombre de hack
-            'registry_userassist_hack',  # UserAssist: hack ejecutado
-            'registry_appcompat_hack',   # AppCompat: loader ejecutado
-            'ahk_autoclick',             # Script/exe AHK con autoclick
-            'f3t_resourcepack_exploit',  # Bug F3+T en logs — ruta contiene launcher, no filtrar
-            # v1.6.0 — clipboard: pasa por filtro AI, no como trusted
-            # browser_download_hack y clipboard_hack_evidence NO están en TRUSTED_TYPES
-            # porque pueden generar falsos positivos — pasan por el scoring engine
-        }
+        TRUSTED_TYPES = set(_NEVER_FILTER_TYPES)
 
         # ── Rutas que NUNCA son hacks — se aplican ANTES del bypass de TRUSTED_TYPES ──
         # Razón: tipos como usn_deleted_hack, prefetch_hack saltaban el exclude_patterns
@@ -4133,12 +4130,19 @@ class ArgusApp:
                 except:
                     pass
             
-            # 3. ACEPTAR SI CONTIENE PATRONES DE HACKS
+            # 3. ACEPTAR SI CONTIENE PATRONES DE HACKS (nombre, archivo o ruta completa)
             is_potential_hack = False
+            _hack_path_combo = f"{nombre}|{ruta}|{archivo}"
             for pattern in real_hack_patterns:
-                if pattern in archivo or pattern in nombre:
+                if pattern in archivo or pattern in nombre or pattern in _hack_path_combo:
                     is_potential_hack = True
                     break
+            if not is_potential_hack:
+                try:
+                    from config.hack_signatures import combined_path_indicates_hack
+                    is_potential_hack = combined_path_indicates_hack(nombre, ruta, archivo)
+                except ImportError:
+                    pass
             
             # 4. TAMBIÉN ACEPTAR SI ESTÁ EN CARPETAS ESPECÍFICAMENTE SOSPECHOSAS
             # Regla: el path debe ser un segmento de directorio completo, no substring.
@@ -6150,6 +6154,12 @@ class ArgusApp:
 
             # Fase 9: Filtrado y clasificación (100%)
             self._update_progress_safe(100, "🔍 Filtrando resultados", "Aplicando filtros ultra estrictos...")
+            # Hallazgos forenses (SS checklist) deben entrar al mismo pipeline que el panel/API
+            if getattr(self, 'forensic_findings', None):
+                _ff = self.forensic_findings
+                if _ff:
+                    self.issues_found.extend(_ff)
+                    print(f"[FILTRO] Fusionados {len(_ff)} hallazgos forenses en issues_found")
             print(f"[FILTRO] Issues antes de filtrar: {len(self.issues_found)} | Archivos escaneados: {self.total_files_scanned} | Dirs: {self.total_dirs_scanned}")
 
             # Aplicar filtro ultra inteligente
@@ -6447,11 +6457,13 @@ class ArgusApp:
                 os.path.join(user_home, "AppData", "Roaming", "Badlion Client"),
                 os.path.join(user_home, "AppData", "Local", "Overwolf"),
                 os.path.join(user_home, "AppData", "Local", "Programs"),
+                os.path.join(user_home, "AppData", "Roaming", ".vape"),
                 # Carpetas de usuario
                 os.path.join(user_home, "Downloads"),
                 os.path.join(user_home, "Desktop"),
                 os.path.join(user_home, "Documents"),
                 os.path.join(user_home, "AppData", "Local", "Temp"),
+                # Sin AppData\Local completo (millones de archivos de browsers)
                 # Temp del sistema (pequeño)
                 os.path.join(drive, "Windows", "Temp"),
                 os.path.join(drive, "Windows", "Prefetch"),
@@ -6518,10 +6530,10 @@ class ArgusApp:
                             '.zip', '.rar', '.7z', '.tar', '.gz', '.msi', '.msm', '.msp'
                         )
                         relevant_files = [f for f in files if f.lower().endswith(relevant_extensions)]
-                        # Contar TODOS los archivos vistos (antes de filtrar por extensión)
-                        self.total_files_scanned += len(files)
-                        scanned_files += len(files)
-                        folder_scanned += len(files)
+                        # Contar solo archivos relevantes (evita inflar "15973 archivos")
+                        self.total_files_scanned += len(relevant_files)
+                        scanned_files += len(relevant_files)
+                        folder_scanned += len(relevant_files)
 
                         # Verificar carpetas sospechosas
                         _root_lower = root.lower()
@@ -7774,6 +7786,11 @@ class ArgusApp:
                 ruta = issue.get('ruta', '').lower()
                 archivo = issue.get('archivo', '').lower()
                 tipo = issue.get('tipo', '')
+
+                # Tipos de alta confianza — nunca eliminar en el segundo filtro
+                if tipo in _NEVER_FILTER_TYPES:
+                    filtered_issues.append(issue)
+                    continue
                 
                 # Verificar si es un hack real
                 is_real_hack = False
@@ -7800,12 +7817,14 @@ class ArgusApp:
                     is_real_hack = True
                 
                 # 4. Verificar palabras clave específicas de hacks (NO usar 'mod'/'client' - demasiado genéricas)
-                hack_keywords = ['hack', 'cheat', 'cracked', 'killaura', 'aimbot', 'wallhack', 'triggerbot']
+                hack_keywords = ['hack', 'cheat', 'cracked', 'killaura', 'aimbot', 'wallhack', 'triggerbot', 'inject']
                 if not is_real_hack:
                     for keyword in hack_keywords:
                         if keyword in nombre or keyword in archivo:
                             is_real_hack = True
                             break
+                if not is_real_hack and 'vape' in (ruta + archivo) and 'inject' in (nombre + archivo + ruta):
+                    is_real_hack = True
 
                 if is_real_hack:
                     # Archivos fuera de instancia (Downloads/Desktop/Documents sin .minecraft)
@@ -7986,14 +8005,30 @@ class ArgusApp:
                                 dlls = proc.memory_maps()
                                 for dll in dlls:
                                     dll_path = dll.path.lower()
-                                    if any(hack in dll_path for hack in ['flux', 'vape', 'entropy', 'wurst', 'impact', 'inject']):
+                                    _dll_l = dll_path.lower()
+                                    _dll_base = os.path.basename(_dll_l)
+                                    _dll_hit = next(
+                                        (h for h in ('flux', 'vape', 'entropy', 'wurst', 'impact')
+                                         if h in _dll_l or h in _dll_base),
+                                        None,
+                                    )
+                                    if not _dll_hit and 'vape' in _dll_l and (
+                                        'inject' in _dll_l or 'loader' in _dll_l
+                                    ):
+                                        _dll_hit = 'vape_inject'
+                                    if not _dll_hit and _dll_base.startswith('inject'):
+                                        if any(h in _dll_l for h in ('vape', 'entropy', 'ghost', 'hack')):
+                                            _dll_hit = 'inject_dll'
+                                    if _dll_hit:
                                         self.issues_found.append({
-                                            'nombre': os.path.basename(dll.path),
-                                            'ruta': os.path.dirname(dll.path),
+                                            'nombre': f'DLL inyectada en JVM: {os.path.basename(dll.path)}',
+                                            'ruta': dll.path,
                                             'archivo': dll.path,
-                                            'tipo': 'injected_dll',
-                                            'categoria': 'HACKS',
-                                            'alerta': 'CRITICAL'
+                                            'tipo': 'dll_injection_java',
+                                            'categoria': 'JAVA_INJECTION',
+                                            'alerta': 'CRITICAL',
+                                            'confidence': 0.92,
+                                            'detected_patterns': [f'dll_legacy:{_dll_hit}'],
                                         })
                                         print(f"🚨 DLL INYECTADA DETECTADA: {dll.path}")
                         except:
@@ -10449,7 +10484,7 @@ class ArgusApp:
             has_admin = False
 
         # Cap de entradas para no saturar UI/DB. Mantenemos las MÁS RECIENTES.
-        MAX_ENTRIES = 5000
+        MAX_ENTRIES = 1200
         seen_keys = set()                # (action, path_lower)
         activity_entries = []            # acumulador local
 
@@ -10884,7 +10919,6 @@ class ArgusApp:
             os.path.join(user_home, 'Desktop'),
             os.path.join(user_home, 'Downloads'),
             os.path.join(user_home, 'Documents'),
-            os.path.join(user_home, 'OneDrive'),
             os.path.join(user_home, 'Videos'),
             os.path.join(user_home, 'Pictures'),
             os.path.join(user_home, 'Music'),
@@ -10893,11 +10927,10 @@ class ArgusApp:
             os.path.join(user_home, 'AppData', 'Local'),       # más pesado: cache de browsers
             'C:\\Users\\Public',
         ]
-        # Cap de archivos a inspeccionar para evitar bloquear varios minutos.
-        # 500k cubre escenarios típicos (~75-90s). Si se excede, paramos en seco.
-        MAX_FILES_INSPECTED = 500000
+        # Cap de archivos a inspeccionar — evita scans de 15k+ archivos contados
+        MAX_FILES_INSPECTED = 120000
         # Hard time cap (segundos) para no bloquear el scan completo
-        TIME_CAP = 90.0
+        TIME_CAP = 45.0
         deadline = time.time() + TIME_CAP
 
         inspected = 0
@@ -11154,6 +11187,7 @@ class ArgusApp:
             ('Kami Local',         os.path.join(localapp, '.kamiblue')),
             # Archivos de configuración específicos en home
             ('Inertia (home)',     os.path.join(home,     '.inertia')),
+            ('Vape Client',        os.path.join(appdata,  '.vape')),
             ('Vape (encrypted)',   os.path.join(appdata,  'vape.encrypted')),
             ('Vape (json)',        os.path.join(appdata,  'vape.json')),
             ('Vape (settings)',    os.path.join(appdata,  'vapesettings.json')),
@@ -14983,9 +15017,23 @@ class ArgusApp:
                         # un mod legítimo (loader oficial + firma CDN, SIN hits
                         # de bytecode), bajamos a SOSPECHOSO. Esto evita banear
                         # a alguien por tener "baritone-1.10.2.jar" oficial.
+                        # Nunca degradar hacks definitivos (vape, entropy, inject…).
+                        try:
+                            from config.hack_signatures import NEVER_LEGITIMATE_STEMS
+                            _force_critical_bl = matched_bl in NEVER_LEGITIMATE_STEMS
+                        except ImportError:
+                            _force_critical_bl = matched_bl in ('vape', 'vapelite', 'entropy', 'inject')
                         _meta_verdict = (_jar_meta.get('verdict') or 'unknown')
                         _bc_hits      = _jar_meta.get('bytecode_hits') or []
-                        if _meta_verdict == 'legit_mod' and not _bc_hits:
+                        if _force_critical_bl:
+                            _alerta = 'CRITICAL'
+                            _conf   = 0.97 if _bc_hits else 0.95
+                            _patterns = [f'blacklisted_mod:{matched_bl}']
+                            if _bc_hits:
+                                _patterns.extend([f'bc:{h}' for h in _bc_hits[:4]])
+                            _expl = (f'El archivo "{fname}" en mods matchea hack client conocido ({matched_bl}). '
+                                     f'No se degrada por metadata legítima.')
+                        elif _meta_verdict == 'legit_mod' and not _bc_hits:
                             _alerta = 'SOSPECHOSO'
                             _conf   = 0.55
                             _patterns = [f'blacklisted_mod:{matched_bl}', 'metadata_legit_mod']
@@ -15105,6 +15153,7 @@ class ArgusApp:
         SUSPICIOUS_DLL_KW = list(_DEFINITE_HACK_NAMES) + [
             'injector', 'xinput_hook', 'payload', 'loader_dll',
             'aimhook', 'killaura_dll', 'bypass_dll',
+            'vapeinject', 'vape-inject', 'vape_inject', 'vapeloader',
         ]
         # DLLs del sistema y JRE que NUNCA son hacks
         SAFE_PREFIXES = [
@@ -15157,9 +15206,14 @@ class ArgusApp:
                             dll_norm = _normalize(dll_name)
                             hit = next(
                                 (kw for kw in SUSPICIOUS_DLL_KW
-                                 if kw in dll_name or kw in dll_norm),
+                                 if kw in dll_name or kw in dll_norm or kw in path),
                                 None
                             )
+                            if not hit and 'vape' in path and (
+                                'inject' in dll_name or 'inject' in path
+                                or 'loader' in dll_name
+                            ):
+                                hit = 'vape_inject_path'
                             if hit:
                                 print(f"🚨 DLL HACK en javaw.exe (PID {proc.pid}): {path}")
                                 self.issues_found.append({
@@ -20107,18 +20161,7 @@ class ArgusApp:
         """P2 #4 — Un solo indicador aislado no debería ser CRITICAL.
         Si un tipo de evidencia aparece solo UNA VEZ y no hay ningún otro CRITICAL,
         lo baja a SOSPECHOSO (excepto tipos de altísima confianza)."""
-        ALWAYS_CRITICAL_TYPES = {
-            'ghost_client_config', 'ghost_client_registry', 'jdwp_debug_port',
-            'dll_injection_java', 'javaagent_injection', 'bootclasspath_modification',
-            'modified_minecraft_jar', 'hack_string_in_loaded_jar',
-            'cloud_hash_match', 'kill_chain', 'weave_loader',
-            'suspicious_process_tree',
-            # v1.5.0 — nuevos tipos de alta confianza
-            'discord_webhook_config',   # C2 en config de hack = siempre crítico
-            'registry_run_hack',        # Persistencia en Run/RunOnce
-            'registry_userassist_hack', # Ejecución confirmada por forense
-            'prefetch_hack',            # Prefetch de hack = ejecución confirmada
-        }
+        ALWAYS_CRITICAL_TYPES = set(_NEVER_FILTER_TYPES)
         critical_items = [i for i in issues if i.get('alerta') == 'CRITICAL']
         if len(critical_items) <= 1:
             for i in issues:
@@ -20295,12 +20338,7 @@ class ArgusApp:
                 if i.get('alerta') == 'CRITICAL':
                     tipo = i.get('tipo', '')
                     # Tipos que son siempre CRITICAL aunque estén solos
-                    if tipo not in {
-                        'ghost_client_config', 'modified_minecraft_jar',
-                        'jdwp_debug_port', 'javaagent_injection',
-                        'dll_injection_java', 'weave_loader',
-                        'discord_webhook_config', 'registry_run_hack',
-                    }:
+                    if tipo not in _NEVER_FILTER_TYPES:
                         i['alerta'] = 'SOSPECHOSO'
                         i['ai_decayed'] = 'single_critical_no_forense'
             print("🧠 [AI] Decay: único CRITICAL sin forense → SOSPECHOSO")
