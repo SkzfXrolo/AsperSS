@@ -63,7 +63,7 @@ except ImportError:
 try:
     from config.version import SCANNER_VERSION
 except ImportError:
-    SCANNER_VERSION = "1.6.54"
+    SCANNER_VERSION = "1.6.55"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -5500,8 +5500,11 @@ class ArgusApp:
                                     except Exception:
                                         pass
                                 print("✅ Resultados enviados a Web/BD")
+                                # Cerrar solo DESPUÉS de subir — si se cierra antes, el POST se corta
+                                # y el panel queda en "running" con 0 archivos (scan #107–109).
+                                self.root.after(0, lambda: self._schedule_close_after_upload(6))
                             else:
-                                self._update_progress_safe(100, "⚠️ Error al enviar", "Revisa conexión y token")
+                                self._update_progress_safe(100, "⚠️ Error al enviar", "No cierres el scanner — reintenta o avisa al staff")
                                 if UI_STYLE_AVAILABLE and ModernUI:
                                     try:
                                         ModernUI.set_upload_status('error', 'Revisa conexión')
@@ -5518,9 +5521,6 @@ class ArgusApp:
                 
                 # Desactivar modo silencioso
                 self.scanning_mode = False
-
-                # Cerrar automáticamente tras 4 segundos (resultados ya enviados al panel)
-                self.root.after(4000, self.root.destroy)
                 
             except Exception as e:
                 self.scanning_mode = False
@@ -5557,7 +5557,20 @@ class ArgusApp:
                     print(f"⚠️ No se pudo cerrar scan abortado en API: {_fe}")
         
         # Ejecutar todo en un hilo separado
-        threading.Thread(target=scan_and_report, daemon=True).start()
+        # daemon=False: el proceso no debe matar el hilo de upload al cerrar la ventana
+        threading.Thread(target=scan_and_report, daemon=False, name='ArgusScanUpload').start()
+
+    def _schedule_close_after_upload(self, delay_sec: int = 6):
+        """Cierra la app solo cuando el upload ya terminó (evita scans colgados en el panel)."""
+        try:
+            if UI_STYLE_AVAILABLE and ModernUI:
+                ModernUI.set_status_badge("SUBIDO", ModernUI.COLORS.get('green', '#22c55e'))
+        except Exception:
+            pass
+        try:
+            self.root.after(max(2000, int(delay_sec * 1000)), self.root.destroy)
+        except Exception:
+            pass
     
     def _run_pre_scan_predict(self):
         """P3 #35 — Llama a /api/predict con señales rápidas antes de escanear.
@@ -22574,13 +22587,18 @@ def _run_headless(token: str, api_url: str | None, output_json: str | None):
     app._headless_callback = _on_complete
     app._headless_mode = True
 
-    scan_thread = threading.Thread(target=app.run_scan, daemon=True)
-    scan_thread.start()
-    # Poll Tk event loop until scan is done (up to 10 minutes)
-    for _ in range(600):
+    app.full_scan_with_discord()
+    # full_scan_with_discord arranca scan_and_report en un hilo; esperar scan + upload
+    for _ in range(720):
         root.update()
-        if done_event.wait(timeout=1):
+        if not getattr(app, 'scanning', False):
+            for _u in range(120):
+                if getattr(app, '_scan_results_submitted', False):
+                    break
+                root.update()
+                time.sleep(1)
             break
+        time.sleep(0.5)
 
     try:
         app.cleanup_argus_temp_artifacts()

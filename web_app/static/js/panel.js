@@ -4514,7 +4514,7 @@ async function viewScanDetails(scanId) {
                 <div style="text-align:center;padding:60px 20px;color:var(--text-m)">
                     <div style="font-size:36px;margin-bottom:14px">⏳</div>
                     <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">Scan en progreso...</div>
-                    <div style="font-size:13px">El jugador debe dejar el scanner abierto hasta que termine y suba los resultados.</div>
+                    <div style="font-size:13px">El jugador debe dejar el scanner abierto hasta ver <strong>«Subido al panel»</strong> (unos segundos después del 100%). Si cerró antes, el scan local terminó pero el servidor no recibió datos.</div>
                     <div style="font-size:12px;color:var(--text-d);margin-top:10px">Archivos hasta ahora: <strong>${(data.total_files_scanned || 0).toLocaleString()}</strong></div>
                     <button class="btn btn-sm" style="margin-top:18px" onclick="viewScanDetails(${scanId})">Actualizar</button>
                 </div>`;

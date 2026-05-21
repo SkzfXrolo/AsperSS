@@ -6,6 +6,7 @@ import sqlite3
 import requests
 import json
 import os
+import time
 from datetime import datetime
 
 try:
@@ -401,37 +402,37 @@ class DatabaseIntegration:
             print(f"📤 Enviando POST a: {url}")
             print(f"📤 Payload: {len(results)} resultados, {total_files_scanned} archivos")
 
-            response = requests.post(
-                url,
-                json=payload,
-                timeout=60
-            )
-            
-            print(f"📤 Respuesta recibida:")
-            print(f"   - Status Code: {response.status_code}")
-            print(f"   - Response: {response.text[:200]}")
-            
-            if response.status_code == 200:
-                print(f"✅ Resultados enviados exitosamente a API - {len(issues_found)} issues")
-                print(f"{'='*60}\n")
-                return True
-            else:
-                print(f"❌ Error al enviar resultados:")
-                print(f"   - Status: {response.status_code}")
-                print(f"   - Response: {response.text}")
-                print(f"{'='*60}\n")
-                return False
-        except requests.exceptions.Timeout:
-            print(f"❌ ERROR: Timeout al conectar con la API (60s)")
-            print(f"   - URL: {self.api_url}")
-            print(f"   - Esto puede indicar que la API está lenta o no responde")
-            print(f"{'='*60}\n")
-            return False
-        except requests.exceptions.ConnectionError as e:
-            print(f"❌ ERROR: No se pudo conectar con la API")
-            print(f"   - URL: {self.api_url}")
-            print(f"   - Error: {str(e)}")
-            print(f"   - Verifica que la API esté corriendo y accesible")
+            _timeout = min(300, max(90, 45 + len(results) // 40))
+            _last_err = None
+            for _attempt in range(1, 4):
+                try:
+                    if _attempt > 1:
+                        print(f"📤 Reintento upload {_attempt}/3 (timeout {_timeout}s)...")
+                        time.sleep(2 * _attempt)
+                    response = requests.post(
+                        url,
+                        json=payload,
+                        timeout=_timeout,
+                    )
+                    print(f"📤 Respuesta recibida:")
+                    print(f"   - Status Code: {response.status_code}")
+                    print(f"   - Response: {response.text[:200]}")
+                    if response.status_code == 200:
+                        print(f"✅ Resultados enviados exitosamente a API - {len(issues_found)} issues")
+                        print(f"{'='*60}\n")
+                        return True
+                    _last_err = f"HTTP {response.status_code}: {response.text[:300]}"
+                    print(f"❌ Error al enviar resultados: {_last_err}")
+                except requests.exceptions.Timeout as e:
+                    _last_err = str(e)
+                    print(f"❌ Timeout upload ({_timeout}s) intento {_attempt}/3")
+                except requests.exceptions.ConnectionError as e:
+                    _last_err = str(e)
+                    print(f"❌ Conexión fallida intento {_attempt}/3: {e}")
+                except Exception as e:
+                    _last_err = str(e)
+                    print(f"❌ Error upload intento {_attempt}/3: {e}")
+            print(f"❌ Upload falló tras 3 intentos: {_last_err}")
             print(f"{'='*60}\n")
             return False
         except Exception as e:
