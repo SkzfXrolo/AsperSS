@@ -189,11 +189,15 @@ def _get_postgresql_connection():
     return _local.connection
 
 def _fix_postgresql_url(url):
-    """Normaliza el prefijo de la URL — psycopg2 requiere postgresql://, Render da postgres://"""
+    """Normaliza prefijo y SSL — conexiones externas a Render requieren sslmode=require."""
     if not url:
         return url
-    # Solo normalizar el prefijo, nunca modificar el hostname (rompe hostnames internos de Render)
-    return url.replace('postgres://', 'postgresql://', 1)
+    fixed = url.replace('postgres://', 'postgresql://', 1)
+    low = fixed.lower()
+    if 'render.com' in low and 'sslmode=' not in low:
+        sep = '&' if '?' in fixed else '?'
+        fixed = f'{fixed}{sep}sslmode=require'
+    return fixed
 
 def _get_mysql_connection():
     """Obtiene conexión MySQL"""

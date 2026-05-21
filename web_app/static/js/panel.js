@@ -1503,7 +1503,11 @@ async function copyScanLink(scanId) {
 
 function showSection(sectionName) {
     console.log('Cambiando a sección:', sectionName);
-    
+
+    if ((sectionName === 'administracion' || sectionName === 'super-admin') && !window.IS_PANEL_OWNER) {
+        sectionName = 'dashboard';
+    }
+
     // Actualizar navegación activa
     document.querySelectorAll('.nav-item').forEach(item => {
         item.classList.remove('active');
@@ -3610,10 +3614,18 @@ function _renderWebHistory(items, scanId) {
 }
 window._renderWebHistory = _renderWebHistory;
 
+function _sdSeverityClass(level) {
+    if (level === 'CRITICAL') return 'sd-sev-crit';
+    if (level === 'MUY_SOSPECHOSO' || level === 'SOSPECHOSO') return 'sd-sev-high';
+    if (level === 'PAGINA_SOSPECHOSA') return 'sd-sev-web';
+    if (level === 'POCO_SOSPECHOSO') return 'sd-sev-mid';
+    return 'sd-sev-low';
+}
+
 function renderIssuePage(container, scanId) {
     const all = currentIssuesList;
     if (!all || all.length === 0) {
-        container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-d);font-size:13px;">Sin hallazgos críticos o sospechosos en este escaneo.</div>';
+        container.innerHTML = '<div class="scan-issues-empty">Sin hallazgos críticos o sospechosos en este escaneo.</div>';
         return;
     }
 
@@ -3666,21 +3678,12 @@ function renderIssuePage(container, scanId) {
     const chips = cats.map(c => {
         const count = c === 'all' ? all.length : all.filter(r => (r.issue_category || 'Otro') === c).length;
         const active = _issuesFilter === c;
-        const accent = _catColors[c] || '#B87333';
-        return `<button class="argus-chip-tab" role="tab" aria-selected="${active}" tabindex="${active ? '0' : '-1'}" onclick="_setIssueFilter('${c}',${scanId})" style="
-            font-size:11px;padding:4px 10px;border-radius:20px;cursor:pointer;font-weight:600;
-            border:1px solid ${active ? accent : 'var(--border-m)'};
-            background:${active ? accent + '22' : 'var(--bg-t)'};
-            color:${active ? accent : 'var(--text-m)'};white-space:nowrap;">
-            ${c === 'all' ? '🔍 Todos' : _getCategoryLabel(c)} <span style="opacity:.7">${count}</span>
+        return `<button type="button" class="sd-chip argus-chip-tab${active ? ' is-active' : ''}" role="tab" aria-selected="${active}" tabindex="${active ? '0' : '-1'}" onclick="_setIssueFilter('${c}',${scanId})">
+            ${c === 'all' ? '🔍 Todos' : _getCategoryLabel(c)}<span class="sd-chip-count">${count}</span>
         </button>`;
-    }).join('') + `<button onclick="_toggleOnlyInstance(${scanId})" style="
-        font-size:11px;padding:4px 10px;border-radius:20px;cursor:pointer;font-weight:600;
-        border:1px solid ${onlyInst ? '#10b981' : 'var(--border-m)'};
-        background:${onlyInst ? 'rgba(16,185,129,0.15)' : 'var(--bg-t)'};
-        color:${onlyInst ? '#10b981' : 'var(--text-m)'};white-space:nowrap;"
+    }).join('') + `<button type="button" class="sd-chip sd-chip--inst${onlyInst ? ' is-active' : ''}" onclick="_toggleOnlyInstance(${scanId})"
         title="Mostrar solo archivos cargados en una instancia activa de Minecraft">
-        En instancia <span style="opacity:.7">${instCount}</span>
+        En instancia<span class="sd-chip-count">${instCount}</span>
     </button>`;
 
     const rows = slice.map((result, rowIdx) => {
@@ -3693,35 +3696,23 @@ function renderIssuePage(container, scanId) {
         const isCrit  = result.alert_level === 'CRITICAL';
         const isMid   = result.alert_level === 'SOSPECHOSO' || result.alert_level === 'MUY_SOSPECHOSO';
         const isWeb   = result.alert_level === 'PAGINA_SOSPECHOSA';
-        const accent  = isCrit ? '#ef4444' : isMid ? '#f59e0b' : isWeb ? '#818cf8' : '#6b7280';
-        const bg      = isCrit ? 'rgba(239,68,68,0.05)' : isMid ? 'rgba(245,158,11,0.04)' : isWeb ? 'rgba(129,140,248,0.04)' : 'rgba(107,114,128,0.03)';
-        const dot     = isCrit ? '🔴' : isMid ? '🟠' : isWeb ? '🌐' : '🔵';
+        const sevCls  = _sdSeverityClass(result.alert_level);
         const cat     = result.issue_category || '';
         const name    = (result.issue_name || 'Hallazgo').slice(0, 100);
         const path    = result.issue_path || '';
         const truncPath = path.length > 90 ? '…' + path.slice(-87) : path;
         const inInst  = _isInMinecraftInstance(path);
-        // PAGINA_SOSPECHOSA es una visita web — no tiene sentido el badge de instancia
         const instBadge = isWeb ? '' : (inInst
-            ? `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);flex-shrink:0;white-space:nowrap;">En instancia</span>`
-            : `<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);flex-shrink:0;white-space:nowrap;">Fuera de instancia</span>`);
-        const variantBadge = _grp ? `<button onclick="event.stopPropagation();var el=document.getElementById('vg_${_gKey}');el.style.display=el.style.display==='flex'?'none':'flex';" style="font-size:10px;padding:1px 7px;border-radius:4px;background:rgba(129,140,248,0.15);color:#818cf8;border:1px solid rgba(129,140,248,0.3);cursor:pointer;flex-shrink:0;">${_grp.length} variantes ▾</button>` : '';
+            ? '<span class="sd-badge sd-badge--inst">En instancia</span>'
+            : '<span class="sd-badge sd-badge--out">Fuera de instancia</span>');
+        const variantBadge = _grp ? `<button type="button" class="sd-btn-variants" onclick="event.stopPropagation();var el=document.getElementById('vg_${_gKey}');el.style.display=el.style.display==='flex'?'none':'flex';">${_grp.length} variantes ▾</button>` : '';
         const metaChip = _metadataVerdictChip(result);
-        // Filter #42 — Badge "primera vez visto" / "visto Nx".
-        // Decorado por el backend con first_seen + seen_count en /api/scans/<id>.
-        // Solo mostramos en CRITICAL/SOSPECHOSO (en informativos solo añade ruido).
         let seenBadge = '';
         if (isCrit || isMid) {
             if (result.first_seen === true) {
-                seenBadge = `<span title="Esta evidencia es la primera vez que la vemos en cualquier scan de Argus. Sugerimos revisión humana antes de banear."
-                    style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;
-                    background:rgba(245,158,11,0.18);color:#f59e0b;border:1px solid rgba(245,158,11,0.45);
-                    flex-shrink:0;white-space:nowrap;">🆕 Nueva</span>`;
+                seenBadge = '<span class="sd-badge sd-badge--new" title="Primera vez vista en Argus">🆕 Nueva</span>';
             } else if (typeof result.seen_count === 'number' && result.seen_count >= 5) {
-                seenBadge = `<span title="Esta evidencia ya ha aparecido ${result.seen_count} veces en otros scans. Más confianza en el verdict."
-                    style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;
-                    background:rgba(99,102,241,0.14);color:#818cf8;border:1px solid rgba(99,102,241,0.32);
-                    flex-shrink:0;white-space:nowrap;">👁 Visto ${result.seen_count}×</span>`;
+                seenBadge = `<span class="sd-badge sd-badge--seen" title="Vista ${result.seen_count} veces">👁 ${result.seen_count}×</span>`;
             }
         }
 
@@ -3730,73 +3721,61 @@ function renderIssuePage(container, scanId) {
         const catIcon = _catIcon(cat);
         const flames = _flameIndicator(result.alert_level, result.confidence);
         const glowCls = isCrit ? 'issue-critical-glow' : '';
-        const staggerStyle = `animation-delay:${rowIdx * 40}ms;`;
         const conf = result.confidence;
         const confBar = (conf !== undefined && conf !== null) ? `
-            <div style="margin-top:5px;display:flex;align-items:center;gap:6px;">
-                <div style="flex:1;height:3px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;">
-                    <div style="height:100%;width:${Math.min(conf,100)}%;background:${accent};border-radius:2px;transition:width 0.8s ease;"></div>
-                </div>
-                <span style="font-size:10px;color:var(--text-d);flex-shrink:0;">${conf}%</span>
+            <div class="sd-conf">
+                <div class="sd-conf-track"><div class="sd-conf-fill" style="width:${Math.min(conf, 100)}%"></div></div>
+                <span class="sd-conf-pct">${conf}%</span>
             </div>` : '';
         const fmtPath = _formatPath(path);
         const hashMatch = path.match(/\b([a-f0-9]{64})\b/i);
-        const copyBtn = hashMatch ? `<button onclick="event.stopPropagation();_copyWithFeedback('${hashMatch[1]}',this)" title="Copiar hash" style="font-size:11px;padding:1px 5px;border-radius:4px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;flex-shrink:0;margin-left:4px;">📋</button>` : '';
+        const copyBtn = hashMatch ? `<button type="button" class="sd-btn-copy" onclick="event.stopPropagation();_copyWithFeedback('${hashMatch[1]}',this)" title="Copiar hash">📋</button>` : '';
+        const escPath = path.replace(/"/g, '&quot;');
 
-        const mainRow = `<div data-result-id="${result.id}" class="issue-row-stagger ${glowCls}" style="${staggerStyle}
-            background:${bg};border:1px solid ${accent}33;border-left:3px solid ${accent};
-            border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:10px;
-            overflow:hidden;max-width:100%;min-width:0;cursor:pointer;transition:outline 0.15s,background 0.15s;"
-            onclick="_selectIssue(this)">
-            <span style="font-size:18px;flex-shrink:0;margin-top:0;">${catIcon}</span>
-            <div style="flex:1;min-width:0;overflow:hidden;">
-                <div style="font-size:12px;font-weight:600;color:var(--text-h);display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;overflow:hidden;">
-                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;word-break:break-all;min-width:0;flex:1;">${name}</span>
-                    <span style="font-size:12px;flex-shrink:0;" title="Nivel de peligro">${flames}</span>
+        const mainRow = `<article data-result-id="${result.id}" class="sd-finding issue-row-stagger ${sevCls} ${glowCls}" style="animation-delay:${rowIdx * 40}ms" onclick="_selectIssue(this)" role="button" tabindex="0">
+            <span class="sd-finding-icon" aria-hidden="true">${catIcon}</span>
+            <div class="sd-finding-body">
+                <div class="sd-finding-title-row">
+                    <span class="sd-finding-name">${name}</span>
+                    <span title="Nivel de peligro">${flames}</span>
                     ${variantBadge}
                     ${metaChip}
                     ${seenBadge}
                     ${instBadge}
-                    ${cat ? `<span style="font-size:10px;font-weight:500;color:var(--text-d);background:var(--bg-t);border:1px solid var(--border-m);padding:1px 6px;border-radius:4px;flex-shrink:0;white-space:nowrap;">${_getCategoryLabel(cat)}</span>` : ''}
-                    <button onclick="event.stopPropagation();aiExplainFinding('${safeName}','${safeLevel}',this)" title="Explicar con IA"
-                            style="font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid rgba(160,90,44,.35);
-                                   background:rgba(160,90,44,.1);color:#D4915A;cursor:pointer;flex-shrink:0;">🤖</button>
+                    ${cat ? `<span class="sd-badge sd-badge--cat">${_getCategoryLabel(cat)}</span>` : ''}
+                    <button type="button" class="sd-btn-ai" onclick="event.stopPropagation();aiExplainFinding('${safeName}','${safeLevel}',this)" title="Explicar con IA">🤖 IA</button>
                 </div>
-                ${truncPath ? `<div style="font-size:11px;color:var(--text-d);margin-top:3px;overflow:hidden;text-overflow:ellipsis;max-width:100%;" title="${path}">${fmtPath}${copyBtn}</div>` : ''}
+                ${truncPath ? `<div class="sd-finding-path" title="${escPath}">${fmtPath}${copyBtn}</div>` : ''}
                 ${confBar}
             </div>
-        </div>`;
+        </article>`;
 
         if (!_grp) return mainRow;
 
         const varHtml = _grp.slice(1).map(v => {
             const vn = (v.issue_name||'').slice(0, 100);
             const vp = v.issue_path || '';
-            return `<div style="padding:7px 10px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);font-size:11px;">
-                <div style="color:var(--text-h);font-weight:500;">${vn}</div>
-                ${vp ? `<div style="color:var(--text-d);margin-top:2px;font-size:10px;">${vp.length>80?'…'+vp.slice(-78):vp}</div>` : ''}
+            return `<div class="sd-variant-item">
+                <div style="color:var(--text-h);font-weight:600;">${vn}</div>
+                ${vp ? `<div class="sd-finding-path" style="margin-top:4px">${vp.length>80?'…'+vp.slice(-78):vp}</div>` : ''}
             </div>`;
         }).join('');
-        return `<div style="display:flex;flex-direction:column;gap:4px;">
+        return `<div class="sd-finding-group">
             ${mainRow}
-            <div id="vg_${_gKey}" style="display:none;flex-direction:column;gap:3px;margin-left:28px;padding-left:10px;border-left:2px solid rgba(129,140,248,0.25);">
-                ${varHtml}
-            </div>
+            <div id="vg_${_gKey}" class="sd-variants">${varHtml}</div>
         </div>`;
     }).join('');
 
     const loadMoreBtn = hasMore ? `
-        <div style="text-align:center;padding:10px 0 4px;">
-            <button onclick="_loadMoreIssues(${scanId})" style="
-                font-size:12px;padding:6px 20px;border-radius:6px;border:1px solid var(--border-m);
-                background:var(--bg-t);color:var(--text-m);cursor:pointer;">
+        <div class="sd-load-more-wrap">
+            <button type="button" class="sd-btn-load-more" onclick="_loadMoreIssues(${scanId})">
                 Cargar más (${filtered.length - showCount} restantes)
             </button>
-        </div>` : filtered.length > 0 ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--text-d);">— ${filtered.length} hallazgo(s) total —</div>` : '';
+        </div>` : filtered.length > 0 ? `<div class="sd-load-more-wrap" style="font-size:12px;color:var(--text-d)">— ${filtered.length} hallazgo(s) —</div>` : '';
 
     container.innerHTML = `
-        <div class="argus-chip-tabs" role="tablist" aria-label="Filtrar hallazgos por categoría" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border);">${chips}</div>
-        <div class="issues-stagger-host" style="display:flex;flex-direction:column;gap:6px;">${rows || '<div style="padding:20px;text-align:center;color:var(--text-d);font-size:12px;">Sin hallazgos en esta categoría.</div>'}</div>
+        <div class="sd-chips argus-chip-tabs" role="tablist" aria-label="Filtrar hallazgos por categoría">${chips}</div>
+        <div class="sd-findings issues-stagger-host">${rows || '<div class="scan-issues-empty">Sin hallazgos en esta categoría.</div>'}</div>
         ${loadMoreBtn}`;
     // Visual #4 — staggered fade-in en results recién renderizados.
     // Solo se aplica a la primera página; al "Cargar más" la página suma
@@ -4177,6 +4156,9 @@ async function confirmHackSelection() {
 
 async function viewScanDetails(scanId) {
     currentScanId = scanId;
+    if (typeof window._argusCoreOnScanOpen === 'function') {
+        window._argusCoreOnScanOpen(scanId);
+    }
 
     // Ocultar todas las secciones y mostrar solo el detalle
     document.querySelectorAll('.panel-section').forEach(s => {
@@ -6926,28 +6908,13 @@ async function sendAIChatMessage() {
     try {
         const body = { message: msg };
         if (currentScanId) body.scan_id = currentScanId;
-        let data = null;
-        initArgusSocket();
-        if (_argusSocket && _argusSocketConnected) {
-            data = await new Promise((resolve) => {
-                _argusSocketPendingResolve = resolve;
-                _argusSocket.emit('oracle_message', body);
-                setTimeout(() => {
-                    if (_argusSocketPendingResolve === resolve) {
-                        _argusSocketPendingResolve = null;
-                        resolve({ error: 'WS timeout, usando fallback HTTP' });
-                    }
-                }, 4500);
-            });
-        }
-        if (!data || data.error === 'WS timeout, usando fallback HTTP') {
-            const res  = await fetch('/api/staff/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            data = await res.json();
-        }
+        // Argus Core + Gemini: siempre HTTP (contexto de scan + memoria por scan_id)
+        const res  = await fetch('/api/staff/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
 
         typing.remove();
 
@@ -6957,7 +6924,9 @@ async function sendAIChatMessage() {
             let reply = data.reply || '';
             // Badge de proveedores + búsqueda web usada
             const meta = [];
-            if (data.providers_used && data.providers_used.length)
+            if (data.model && (data.provider_mode === 'gemini' || (data.providers_used || []).includes('gemini')))
+                meta.push('✦ Gemini · ' + data.model);
+            else if (data.providers_used && data.providers_used.length)
                 meta.push('🤖 ' + data.providers_used.map(p => ({claude:'Claude',groq:'Groq',gemini:'Gemini'}[p]||p)).join(' + '));
             if (data.search_done) meta.push('🔍 búsqueda web');
             if (meta.length) reply += `\n\n<span style="font-size:11px;opacity:.55">${meta.join(' · ')}</span>`;
@@ -7041,12 +7010,18 @@ function _formatAIReply(text) {
 async function clearAIChat() {
     const msgs = document.getElementById('ai-chat-messages');
     if (!msgs) return;
-    // Limpiar en servidor
-    await fetch('/api/staff/chat/clear', { method: 'POST' }).catch(() => {});
-    // Limpiar UI — dejar solo el mensaje de bienvenida
-    msgs.innerHTML = `<div style="background:rgba(160,90,44,.15);border-radius:12px 12px 12px 4px;
-        padding:10px 13px;font-size:13px;color:#e2e8f0;max-width:90%">
-        Conversación borrada. ¿En qué te ayudo?</div>`;
+    const body = currentScanId ? { scan_id: currentScanId } : {};
+    await fetch('/api/staff/chat/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    }).catch(() => {});
+    delete msgs.dataset.coreGreeted;
+    if (typeof window._argusCoreResetChat === 'function') {
+        window._argusCoreResetChat(msgs);
+    } else {
+        msgs.innerHTML = '';
+    }
 }
 
 // Actualizar badge cuando cambia el scan activo

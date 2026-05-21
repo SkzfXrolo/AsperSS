@@ -3390,7 +3390,10 @@ body.light-theme .skel {
    V39 Scroll-to-top button
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 #scroll-to-top {
-    position: fixed; bottom: 84px; right: 88px;
+    position: fixed;
+    right: 32px;
+    bottom: 96px;
+    left: auto;
     width: 38px; height: 38px; border-radius: 50%;
     background: var(--bg-card); border: 1px solid var(--border-m);
     color: var(--text-m); cursor: pointer; font-size: 15px;
@@ -3401,6 +3404,51 @@ body.light-theme .skel {
 }
 #scroll-to-top.visible { opacity: 1; pointer-events: all; }
 #scroll-to-top:hover { background: var(--accent-bg); color: var(--accent); transform: translateY(-2px); }
+
+/* Argus IA — FAB esquina inferior derecha (no flota sobre la lista) */
+#ai-chat-btn.ai-chat-fab {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    left: auto;
+    z-index: 9998;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(160, 90, 44, 0.45);
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+#ai-chat-panel.ai-chat-panel {
+    position: fixed;
+    right: 24px;
+    bottom: 86px;
+    left: auto;
+    z-index: 9999;
+    width: min(380px, calc(100vw - 280px));
+    max-height: min(560px, calc(100vh - 120px));
+    border-radius: 16px;
+    background: #1a1a2e;
+    border: 1px solid rgba(160, 90, 44, 0.4);
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+    flex-direction: column;
+    overflow: hidden;
+}
+@media (max-width: 540px) {
+    #ai-chat-btn.ai-chat-fab { right: 16px; bottom: 16px; }
+    #ai-chat-panel.ai-chat-panel {
+        right: 16px;
+        bottom: 78px;
+        width: min(380px, calc(100vw - 32px));
+    }
+    #scroll-to-top { right: 22px; bottom: 82px; }
+}
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    V68 Critical alert top banner
@@ -3611,10 +3659,100 @@ body.matrix-theme .brand-text { color: #00ff41 !important; -webkit-text-fill-col
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    V1  Gauge SVG arc in scan detail
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
-.risk-gauge-wrap { display: flex; flex-direction: column; align-items: center; }
+/* Vista general del scan: columnas fijas + risk gauge centrado */
+.scan-overview-grid {
+    display: grid;
+    grid-template-columns: 280px 220px minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+.scan-summary-left,
+.scan-summary-chart {
+    background: var(--bg-s);
+    border: 1px solid var(--border-m);
+    border-radius: 10px;
+    align-self: start;
+    position: sticky;
+    top: 76px;
+    z-index: 2;
+}
+.scan-summary-left {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: calc(100vh - 92px);
+    overflow-y: auto;
+}
+.scan-summary-chart {
+    border-radius: 14px;
+    padding: 22px 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+.scan-risk-score-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 14px 8px 10px;
+    margin-top: 4px;
+    border-top: 1px solid var(--border-m);
+    flex-shrink: 0;
+    text-align: center;
+}
+#risk-gauge-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    margin: 0 auto;
+}
+.scan-risk-score-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    width: 100%;
+    margin-top: 6px;
+    gap: 8px;
+}
+.scan-risk-score-card .risk-score-bar-wrap {
+    width: 100%;
+    margin-top: 6px;
+}
+.risk-gauge-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+}
 .risk-gauge-arc { transition: stroke-dashoffset 1s cubic-bezier(0.4,0,0.2,1); }
 .risk-gauge-val { font-size: 22px; font-weight: 800; line-height: 1; }
 .risk-gauge-lbl { font-size: 10px; color: var(--text-d); letter-spacing: 1px; text-transform: uppercase; }
+
+@media (max-width: 1100px) {
+    .scan-overview-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .scan-summary-chart {
+        grid-column: 1 / -1;
+    }
+}
+@media (max-width: 700px) {
+    .scan-overview-grid {
+        grid-template-columns: 1fr;
+    }
+    .scan-summary-left,
+    .scan-summary-chart {
+        position: static;
+        max-height: none;
+    }
+}
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    â‘  GLASSMORPHISM REAL â€” todas las cards

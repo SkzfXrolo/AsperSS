@@ -29,6 +29,8 @@ source/dist/*
 
 # Archivos sensibles
 .env
+.env.local
+web_app/.env.local
 tokens.json
 
 # config.json raíz (credenciales locales)
@@ -63,6 +65,8 @@ logo/
 # Artefactos de build PyInstaller en raíz (ya cubrimos source/build y source/dist arriba)
 /build/
 /dist/
+argus-admin/build/
+argus-admin/dist/
 
 # Mensaje temporal de commit (workaround para PowerShell que no soporta heredoc)
 .commit_msg.txt

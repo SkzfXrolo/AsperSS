@@ -191,7 +191,7 @@
 
   function initBreadcrumbs() {
     var path = window.location.pathname.replace(/\/$/, '') || '/';
-    if (path === '/' || path === '/index') return;
+    if (path === '/' || path === '/index' || path === '/login') return;
     var labels = { '/descargar': 'Descargar', '/login': 'Login', '/register': 'Registro', '/terminos': 'Términos' };
     var label = labels[path];
     if (!label) return;

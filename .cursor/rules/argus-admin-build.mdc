@@ -1,0 +1,16 @@
+---
+description: Tras compilar ArgusAdmin, copiar al escritorio y borrar versión anterior
+globs: argus-admin/**/*
+alwaysApply: false
+---
+
+# ArgusAdmin — build en escritorio
+
+Cada vez que recompilés **ArgusAdmin.exe**:
+
+1. `cd argus-admin` → `python -m PyInstaller ArgusAdmin.spec --noconfirm`
+2. Ejecutar `scripts\copiar_a_escritorio.bat` (o hacerlo manualmente):
+   - **Borrar** todos `ArgusAdmin*.exe` en `%USERPROFILE%\OneDrive\Desktop` (o Escritorio/Desktop)
+   - **Copiar** `dist\ArgusAdmin.exe` → `ArgusAdmin-v{ADMIN_VERSION}.exe` en el escritorio
+
+No dejar solo el binario en `dist/` sin actualizar el escritorio del usuario.

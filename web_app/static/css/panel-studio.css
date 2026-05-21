@@ -1,0 +1,596 @@
+/**
+ * Argus Panel Studio — rediseño global del panel staff
+ * body.panel-studio (no afecta login ni scan-studio interno)
+ */
+
+body.panel-studio {
+  --ps-bg: #06050c;
+  --ps-surface: rgba(16, 14, 28, 0.92);
+  --ps-surface-2: rgba(22, 20, 38, 0.96);
+  --ps-border: rgba(255, 255, 255, 0.08);
+  --ps-copper: #c9894e;
+  --ps-violet: #8b5cf6;
+  --ps-radius: 18px;
+  --ps-radius-sm: 12px;
+  --ps-font-display: 'Syne', 'Inter', system-ui, sans-serif;
+  --ps-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+body.panel-studio {
+  background: var(--ps-bg) !important;
+}
+
+/* Fondo más sutil detrás del contenido */
+body.panel-studio #argus-bg-overlay {
+  background: linear-gradient(
+    160deg,
+    rgba(139, 92, 246, 0.06) 0%,
+    transparent 35%,
+    rgba(201, 137, 78, 0.05) 100%
+  ) !important;
+}
+
+body.panel-studio #particles-canvas {
+  opacity: 0.35;
+}
+
+/* ── Sidebar ── */
+body.panel-studio .sidebar {
+  width: 252px;
+  background: rgba(10, 9, 18, 0.88) !important;
+  border-right: 1px solid var(--ps-border) !important;
+  backdrop-filter: blur(28px) saturate(1.2);
+  box-shadow: 8px 0 40px rgba(0, 0, 0, 0.35);
+}
+
+body.panel-studio .sidebar::before {
+  background: linear-gradient(180deg, rgba(201, 137, 78, 0.06), transparent 40%) !important;
+}
+
+body.panel-studio .sidebar-header {
+  padding: 22px 18px 18px;
+  border-bottom: 1px solid var(--ps-border);
+}
+
+body.panel-studio .brand-text {
+  background: linear-gradient(135deg, #fff, var(--ps-copper));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+body.panel-studio .nav-group-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--ps-copper);
+  opacity: 0.85;
+  padding: 14px 14px 6px;
+}
+
+body.panel-studio .nav-item {
+  margin: 2px 10px;
+  padding: 11px 14px;
+  border-radius: var(--ps-radius-sm);
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s, color 0.2s;
+}
+
+body.panel-studio .nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-h);
+  transform: translateX(3px);
+}
+
+body.panel-studio .nav-item.active {
+  background: linear-gradient(135deg, rgba(201, 137, 78, 0.22), rgba(139, 92, 246, 0.12));
+  border-color: rgba(201, 137, 78, 0.4);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(201, 137, 78, 0.2);
+}
+
+body.panel-studio .nav-item.active svg {
+  color: var(--ps-copper);
+}
+
+body.panel-studio .sidebar-footer {
+  border-top: 1px solid var(--ps-border);
+  padding: 14px 10px 16px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+body.panel-studio .sidebar-user-avatar {
+  padding: 10px 12px;
+  border-radius: var(--ps-radius-sm);
+  margin-bottom: 8px;
+  transition: background 0.2s;
+}
+
+body.panel-studio .sidebar-user-avatar:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+body.panel-studio .avatar-circle {
+  box-shadow: 0 0 0 3px rgba(201, 137, 78, 0.25);
+}
+
+body.panel-studio .nav-item-logout:hover {
+  background: rgba(244, 63, 94, 0.12);
+  border-color: rgba(244, 63, 94, 0.3);
+  color: #fca5a5;
+}
+
+body.panel-studio .sidebar-toggle-btn {
+  border-radius: 10px;
+  border: 1px solid var(--ps-border);
+  background: var(--ps-surface-2);
+}
+
+/* ── Main layout ── */
+body.panel-studio .main-content {
+  margin-left: 252px;
+  background: transparent;
+}
+
+body.panel-studio .panel-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  margin: 0 0 8px;
+  padding: 16px 28px;
+  background: rgba(10, 9, 18, 0.75) !important;
+  border-bottom: 1px solid var(--ps-border) !important;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+body.panel-studio .panel-title {
+  font-family: var(--ps-font-display);
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--text-h), var(--ps-copper));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+body.panel-studio .header-actions button,
+body.panel-studio .header-actions a[title] {
+  border-radius: 12px !important;
+  border: 1px solid var(--ps-border) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s !important;
+}
+
+body.panel-studio .header-actions button:hover,
+body.panel-studio .header-actions a[title]:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  background: rgba(201, 137, 78, 0.12) !important;
+}
+
+body.panel-studio .argus-quicksearch-trigger {
+  border-radius: 999px !important;
+  padding: 8px 16px !important;
+  min-width: 200px;
+  background: rgba(0, 0, 0, 0.35) !important;
+  border: 1px solid var(--ps-border) !important;
+}
+
+body.panel-studio .argus-quicksearch-trigger kbd {
+  border-radius: 6px;
+  background: rgba(201, 137, 78, 0.15);
+  border: 1px solid rgba(201, 137, 78, 0.3);
+  color: var(--ps-copper);
+}
+
+body.panel-studio .user-info .user-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* ── Secciones ── */
+body.panel-studio .panel-section {
+  padding: 8px 28px 40px;
+  animation: ps-section-in 0.4s ease both;
+}
+
+@keyframes ps-section-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Scan detail mantiene su propio padding */
+body.panel-studio #issues-detail-section.scan-studio {
+  padding: 8px 20px 80px;
+}
+
+/* ── Dashboard hero ── */
+body.panel-studio .greeting-banner {
+  border-radius: var(--ps-radius);
+  padding: 32px 36px;
+  margin-bottom: 24px;
+  background: var(--ps-surface);
+  border: 1px solid var(--ps-border);
+  box-shadow: var(--ps-shadow);
+  overflow: hidden;
+}
+
+body.panel-studio .greeting-banner::before {
+  background: linear-gradient(125deg, rgba(139, 92, 246, 0.15), transparent 50%, rgba(201, 137, 78, 0.12)) !important;
+}
+
+body.panel-studio .greeting-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: var(--ps-copper);
+}
+
+body.panel-studio .greeting-title {
+  font-family: var(--ps-font-display);
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-top: 6px;
+}
+
+body.panel-studio .greeting-sub {
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+/* ── Stat cards ── */
+body.panel-studio .stats-grid {
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+body.panel-studio .stat-card {
+  border-radius: var(--ps-radius);
+  padding: 20px 22px;
+  background: var(--ps-surface);
+  border: 1px solid var(--ps-border);
+  box-shadow: var(--ps-shadow);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+
+body.panel-studio .stat-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(201, 137, 78, 0.35);
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.5), 0 0 40px rgba(201, 137, 78, 0.08);
+}
+
+body.panel-studio .stat-value {
+  font-family: var(--ps-font-display);
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+body.panel-studio .stat-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(201, 137, 78, 0.12);
+  border: 1px solid rgba(201, 137, 78, 0.25);
+}
+
+/* ── Dashboard cards ── */
+body.panel-studio .dashboard-card,
+body.panel-studio .panel-card {
+  border-radius: var(--ps-radius);
+  background: var(--ps-surface);
+  border: 1px solid var(--ps-border);
+  box-shadow: var(--ps-shadow);
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+body.panel-studio .dashboard-card:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+body.panel-studio .dashboard-card-header {
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--ps-border);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+body.panel-studio .dashboard-card-title {
+  font-family: var(--ps-font-display);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+body.panel-studio .dashboard-card-sub {
+  font-size: 12px;
+  color: var(--text-m);
+  margin-top: 2px;
+}
+
+body.panel-studio .dashboard-bottom-grid {
+  gap: 18px;
+}
+
+body.panel-studio .echo-scan-row {
+  padding: 14px 18px;
+  border-radius: var(--ps-radius-sm);
+  margin: 4px 8px;
+  border-bottom: none;
+  transition: background 0.15s, transform 0.15s;
+}
+
+body.panel-studio .echo-scan-row:hover {
+  background: rgba(201, 137, 78, 0.08);
+  transform: translateX(4px);
+}
+
+/* ── Escaneos (resultados) ── */
+body.panel-studio #resultados-section .section-subtitle,
+body.panel-studio .section-subtitle {
+  font-family: var(--ps-font-display);
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+body.panel-studio .section-header-actions {
+  margin-bottom: 16px;
+  padding: 14px 18px;
+  border-radius: var(--ps-radius-sm);
+  background: var(--ps-surface);
+  border: 1px solid var(--ps-border);
+}
+
+body.panel-studio .quick-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 4px 0;
+}
+
+body.panel-studio .quick-chip {
+  padding: 9px 16px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--ps-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-m);
+  cursor: pointer;
+  transition: transform 0.12s, background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+body.panel-studio .quick-chip:hover {
+  transform: translateY(-1px);
+  color: var(--text-h);
+  border-color: rgba(201, 137, 78, 0.4);
+  background: rgba(201, 137, 78, 0.1);
+}
+
+body.panel-studio .quick-chip.active,
+body.panel-studio .quick-chip.chip-active {
+  background: linear-gradient(135deg, rgba(201, 137, 78, 0.35), rgba(139, 92, 246, 0.2));
+  border-color: rgba(201, 137, 78, 0.5);
+  color: #fff;
+}
+
+body.panel-studio .scans-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  border-radius: var(--ps-radius);
+  background: var(--ps-surface);
+  border: 1px solid var(--ps-border);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+body.panel-studio .filter-input,
+body.panel-studio .filter-select {
+  padding: 11px 14px !important;
+  border-radius: var(--ps-radius-sm) !important;
+  border: 1px solid var(--ps-border) !important;
+  background: rgba(0, 0, 0, 0.25) !important;
+  color: var(--text-h) !important;
+  font-size: 13px !important;
+  min-height: 42px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+body.panel-studio .filter-input:focus,
+body.panel-studio .filter-select:focus {
+  outline: none;
+  border-color: var(--ps-copper) !important;
+  box-shadow: 0 0 0 3px rgba(201, 137, 78, 0.18);
+}
+
+body.panel-studio .btn-primary {
+  border-radius: var(--ps-radius-sm) !important;
+  background: linear-gradient(135deg, #9a5f2e, var(--ps-copper)) !important;
+  border: none !important;
+  font-weight: 700 !important;
+  box-shadow: 0 6px 24px rgba(201, 137, 78, 0.35);
+}
+
+body.panel-studio .btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 32px rgba(201, 137, 78, 0.45);
+}
+
+body.panel-studio .btn-ghost {
+  border-radius: var(--ps-radius-sm) !important;
+  border: 1px solid var(--ps-border) !important;
+}
+
+body.panel-studio #scans-view-toggle [role="group"] {
+  border-radius: var(--ps-radius-sm) !important;
+  border: 1px solid var(--ps-border) !important;
+  background: rgba(0, 0, 0, 0.3) !important;
+  overflow: hidden;
+}
+
+body.panel-studio .scans-view-btn[aria-pressed="true"] {
+  background: linear-gradient(135deg, rgba(201, 137, 78, 0.3), rgba(139, 92, 246, 0.15)) !important;
+  color: #fff !important;
+}
+
+/* ── Tabla de escaneos ── */
+body.panel-studio .results-table-container {
+  border-radius: var(--ps-radius);
+  background: var(--ps-surface);
+  border: 1px solid var(--ps-border);
+  box-shadow: var(--ps-shadow);
+  overflow: hidden;
+}
+
+body.panel-studio .data-table,
+body.panel-studio .echo-results-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+body.panel-studio .data-table thead {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+body.panel-studio .data-table thead th {
+  padding: 14px 18px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ps-copper);
+  border-bottom: 1px solid var(--ps-border);
+}
+
+body.panel-studio .data-table tbody tr {
+  transition: background 0.15s;
+}
+
+body.panel-studio .data-table tbody tr:hover {
+  background: rgba(201, 137, 78, 0.06);
+}
+
+body.panel-studio .data-table tbody td {
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  vertical-align: middle;
+}
+
+body.panel-studio .data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+body.panel-studio .loading-cell {
+  padding: 48px !important;
+  text-align: center;
+  color: var(--text-m);
+  font-size: 14px;
+}
+
+/* ── Botones y inputs globales en secciones ── */
+body.panel-studio .panel-section input[type="text"],
+body.panel-studio .panel-section input[type="date"],
+body.panel-studio .panel-section input[type="email"],
+body.panel-studio .panel-section input[type="password"],
+body.panel-studio .panel-section select,
+body.panel-studio .panel-section textarea {
+  border-radius: var(--ps-radius-sm);
+  border: 1px solid var(--ps-border);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+body.panel-studio .panel-section input:focus,
+body.panel-studio .panel-section select:focus,
+body.panel-studio .panel-section textarea:focus {
+  outline: none;
+  border-color: var(--ps-copper);
+  box-shadow: 0 0 0 3px rgba(201, 137, 78, 0.15);
+}
+
+/* ── Modales ── */
+body.panel-studio .modal-content {
+  border-radius: var(--ps-radius) !important;
+  background: var(--ps-surface-2) !important;
+  border: 1px solid var(--ps-border) !important;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6) !important;
+}
+
+body.panel-studio .modal-header {
+  border-bottom: 1px solid var(--ps-border);
+  padding: 20px 24px;
+}
+
+/* ── Critical banner ── */
+body.panel-studio #critical-alert-banner {
+  border-radius: 0 0 var(--ps-radius-sm) var(--ps-radius-sm);
+  backdrop-filter: blur(12px);
+}
+
+/* ── Collapsed sidebar ── */
+body.panel-studio .sidebar.collapsed + .sidebar-overlay + .main-content,
+body.panel-studio .sidebar.collapsed ~ .main-content {
+  margin-left: 60px !important;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  body.panel-studio .main-content {
+    margin-left: 0;
+  }
+  body.panel-studio .panel-section {
+    padding: 8px 14px 32px;
+  }
+  body.panel-studio .panel-header {
+    padding: 12px 16px;
+  }
+}
+
+/* ── Otras secciones (tokens, generar app, admin) ── */
+body.panel-studio .ga2-hero,
+body.panel-studio .token-card,
+body.panel-studio .ac-card {
+  border-radius: var(--ps-radius);
+  border: 1px solid var(--ps-border);
+  box-shadow: var(--ps-shadow);
+}
+
+body.panel-studio .ga2-hero {
+  background: var(--ps-surface);
+  overflow: hidden;
+}
+
+body.panel-studio .tab-bar,
+body.panel-studio .ac-tabs {
+  gap: 6px;
+  padding: 6px;
+  border-radius: var(--ps-radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--ps-border);
+}
+
+body.panel-studio .tab-btn.active,
+body.panel-studio .ac-tab.active {
+  background: linear-gradient(135deg, rgba(201, 137, 78, 0.3), rgba(139, 92, 246, 0.15));
+  border-radius: 10px;
+  color: #fff;
+}
+
+/* Light theme */
+body.panel-studio.light-theme .sidebar {
+  background: rgba(255, 255, 255, 0.92) !important;
+}
+body.panel-studio.light-theme .stat-card,
+body.panel-studio.light-theme .dashboard-card,
+body.panel-studio.light-theme .results-table-container,
+body.panel-studio.light-theme .scans-filter-bar {
+  background: rgba(255, 255, 255, 0.95);
+}

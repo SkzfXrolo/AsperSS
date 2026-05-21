@@ -275,16 +275,20 @@ body.argus-public-enhanced input:focus-visible {
   background: #fff; border-radius: 8px; margin: 1rem 0;
 }
 
-/* Login split */
-@media (min-width: 900px) {
-  .argus-login-split {
-    display: grid; grid-template-columns: 1fr 1fr; min-height: 100vh;
-  }
-  .argus-login-brand {
-    display: flex; flex-direction: column; justify-content: center;
-    padding: 3rem; background: linear-gradient(135deg, #110B07, #1A130C);
-    border-right: 1px solid rgba(184, 115, 51, 0.2);
-  }
+/* Login — card centrada (sin grid split vacío) */
+body.argus-login-page .argus-breadcrumbs {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  text-align: center;
+  background: rgba(9, 9, 28, 0.72);
+  backdrop-filter: blur(8px);
+}
+body.argus-login-page .page {
+  width: 100%;
+  justify-content: center;
 }
 
 /* PWA install banner */

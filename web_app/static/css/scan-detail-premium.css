@@ -1,0 +1,612 @@
+/**
+ * Argus — Scan Detail Premium UI (100+ mejoras visuales)
+ * Scope: #issues-detail-section
+ */
+
+/* ── 01–10: Contenedor y atmósfera ── */
+#issues-detail-section {
+  --sd-radius: 16px;
+  --sd-radius-sm: 10px;
+  --sd-glass: rgba(14, 12, 28, 0.72);
+  --sd-glow-copper: rgba(184, 115, 51, 0.35);
+  --sd-glow-red: rgba(244, 63, 94, 0.4);
+  --sd-glow-green: rgba(16, 185, 129, 0.35);
+  position: relative;
+  padding-bottom: 48px;
+}
+#issues-detail-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(900px, 80%);
+  height: 280px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(184, 115, 51, 0.08), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+#issues-detail-section > * { position: relative; z-index: 1; }
+
+/* ── 11–20: Header del scan ── */
+#issues-detail-section .scan-page-header {
+  padding: 18px 22px;
+  margin-bottom: 18px;
+  border-radius: var(--sd-radius);
+  background: var(--sd-glass);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+#issues-detail-section .scan-page-title {
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--text-h) 0%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+#issues-detail-section .scan-page-subtitle {
+  font-size: 0.82rem;
+  color: var(--text-m);
+}
+#issues-detail-section .scan-back-btn {
+  border-radius: 999px;
+  padding: 8px 14px;
+}
+#issues-detail-section .scan-back-btn:hover {
+  transform: translateX(-2px);
+  box-shadow: var(--glow);
+}
+#issues-detail-section .scan-page-header-right .btn-secondary {
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+}
+#issues-detail-section .scan-page-header-right .btn-secondary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+#issues-detail-section .scan-player-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  font-size: 1.1rem;
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.2), 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* ── 21–30: Banner detección ── */
+#issues-detail-section .echo-detection-banner {
+  border-radius: var(--sd-radius);
+  padding: 18px 24px;
+  background: linear-gradient(105deg, rgba(244, 63, 94, 0.14), rgba(244, 63, 94, 0.04));
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  box-shadow: 0 0 40px rgba(244, 63, 94, 0.12);
+  animation: sd-banner-in 0.45s ease both;
+}
+@keyframes sd-banner-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+#issues-detail-section .echo-detection-icon {
+  box-shadow: 0 0 24px var(--sd-glow-red);
+  animation: sd-pulse-icon 2.5s ease-in-out infinite;
+}
+@keyframes sd-pulse-icon {
+  0%, 100% { box-shadow: 0 0 16px rgba(244, 63, 94, 0.5); }
+  50% { box-shadow: 0 0 28px rgba(244, 63, 94, 0.85); }
+}
+#issues-detail-section.risk-clean .echo-detection-banner {
+  background: linear-gradient(105deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.03));
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+/* ── 31–42: Subnav tabs ── */
+#issues-detail-section .scan-subnav {
+  margin-bottom: 20px;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+#issues-detail-section .subnav-row {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--accent-rgb), 0.4) transparent;
+  padding-bottom: 2px;
+}
+#issues-detail-section .subnav-row::-webkit-scrollbar { height: 5px; }
+#issues-detail-section .subnav-row::-webkit-scrollbar-thumb {
+  background: rgba(var(--accent-rgb), 0.45);
+  border-radius: 99px;
+}
+#issues-detail-section .subnav-item {
+  flex-shrink: 0;
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+#issues-detail-section .subnav-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-h);
+}
+#issues-detail-section .subnav-item.active {
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.22), rgba(var(--accent-rgb), 0.08));
+  border-color: rgba(var(--accent-rgb), 0.45);
+  color: var(--text-h);
+  box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.2);
+}
+
+/* ── 43–55: Grid vista general ── */
+#issues-detail-section .scan-overview-grid {
+  grid-template-columns: minmax(268px, 300px) minmax(210px, 240px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+#issues-detail-section .scan-summary-left,
+#issues-detail-section .scan-summary-chart {
+  border-radius: var(--sd-radius);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--sd-glass);
+  backdrop-filter: blur(22px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+#issues-detail-section .scan-summary-left {
+  padding: 18px 16px;
+}
+#issues-detail-section .scan-summary-chart {
+  padding: 20px 18px;
+}
+
+/* ── 56–68: Info metadata ── */
+#issues-detail-section .echo-info-item {
+  padding: 10px 4px;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+#issues-detail-section .echo-info-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+#issues-detail-section .echo-info-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+#issues-detail-section .echo-info-value {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* ── 69–78: Risk gauge card ── */
+#issues-detail-section .scan-risk-score-card {
+  margin-top: 8px;
+  padding: 18px 12px 14px;
+  border-radius: var(--sd-radius-sm);
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+#issues-detail-section #risk-gauge-container svg {
+  filter: drop-shadow(0 0 12px rgba(var(--accent-rgb), 0.35));
+}
+#issues-detail-section .risk-score-bar-wrap {
+  height: 6px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+#issues-detail-section .risk-score-bar {
+  border-radius: 99px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── 79–88: Donut chart ── */
+#issues-detail-section #ring-chart-svg {
+  filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.25));
+}
+#issues-detail-section .scan-summary-chart [id^="ring-num-"] {
+  font-variant-numeric: tabular-nums;
+}
+#issues-detail-section .scan-summary-chart > div:last-child {
+  width: 100%;
+  padding: 4px 0;
+}
+
+/* ── 89–100: Columna hallazgos + severity cards ── */
+#issues-detail-section .scan-findings-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+#issues-detail-section .scan-severity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+#issues-detail-section .scan-stat-card {
+  position: relative;
+  text-align: center;
+  padding: 14px 10px 12px;
+  border-radius: var(--sd-radius-sm);
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+#issues-detail-section .scan-stat-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  pointer-events: none;
+}
+#issues-detail-section .scan-stat-card:hover {
+  transform: translateY(-2px);
+}
+#issues-detail-section .scan-stat-card--clean {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+#issues-detail-section .scan-stat-card--clean:hover { box-shadow: 0 8px 28px var(--sd-glow-green); }
+#issues-detail-section .scan-stat-card--alert {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}
+#issues-detail-section .scan-stat-card--alert:hover { box-shadow: 0 8px 28px rgba(245, 158, 11, 0.2); }
+#issues-detail-section .scan-stat-card--severe {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+#issues-detail-section .scan-stat-card--severe:hover { box-shadow: 0 8px 28px var(--sd-glow-red); }
+#issues-detail-section .scan-stat-label {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+#issues-detail-section .scan-stat-value {
+  font-size: 1.65rem;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 101–110: IA card + veredicto ── */
+#issues-detail-section #ai-verdict-card {
+  border-radius: var(--sd-radius-sm) !important;
+  background: linear-gradient(135deg, rgba(160, 90, 44, 0.1), rgba(99, 102, 241, 0.06)) !important;
+  border: 1px solid rgba(160, 90, 44, 0.35) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+#issues-detail-section .scan-verdict-block {
+  padding: 16px 18px;
+  border-radius: var(--sd-radius-sm);
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+#issues-detail-section .scan-verdict-block .btn-verdict-clean {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  padding: 10px 20px !important;
+  border-radius: 10px !important;
+  border: none !important;
+  background: linear-gradient(135deg, #059669, #10b981) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+#issues-detail-section .scan-verdict-block .btn-verdict-clean:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.45);
+}
+#issues-detail-section .scan-verdict-block .btn-verdict-hack {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  padding: 10px 20px !important;
+  border-radius: 10px !important;
+  border: none !important;
+  background: linear-gradient(135deg, #dc2626, #ef4444) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+#issues-detail-section .scan-verdict-block .btn-verdict-hack:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px var(--sd-glow-red);
+}
+#issues-detail-section .scan-verdict-block .btn-verdict-muted {
+  font-size: 12px !important;
+  padding: 10px 16px !important;
+  border-radius: 10px !important;
+  border: 1px solid var(--border-m) !important;
+  background: transparent !important;
+  color: var(--text-m) !important;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+#issues-detail-section .scan-verdict-block .btn-verdict-muted:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: var(--text-h) !important;
+}
+
+/* ── 111–125: Buscador y filtros ── */
+#issues-detail-section .issues-search-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: var(--sd-radius-sm);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+#issues-detail-section .issues-search-bar input,
+#issues-detail-section .issues-search-bar select {
+  border-radius: 10px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: var(--text-h) !important;
+  font-size: 13px !important;
+  padding: 10px 14px !important;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+#issues-detail-section .issues-search-bar input:focus,
+#issues-detail-section .issues-search-bar select:focus {
+  border-color: rgba(var(--accent-rgb), 0.55) !important;
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
+}
+#issues-detail-section #issues-count-label {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent);
+}
+
+/* ── 126–135: Panel lista hallazgos ── */
+#issues-detail-section .scan-findings-panel {
+  border-radius: var(--sd-radius);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--sd-glass);
+  backdrop-filter: blur(18px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 360px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+}
+#issues-detail-section .issues-list-scroll {
+  flex: 1;
+  min-height: 280px;
+  max-height: min(68vh, 680px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 14px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--accent-rgb), 0.45) transparent;
+}
+#issues-detail-section .issues-list-scroll::-webkit-scrollbar { width: 8px; }
+#issues-detail-section .issues-list-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.5), rgba(var(--accent-rgb), 0.25));
+  border-radius: 99px;
+}
+
+/* ── 136–150: Chips categoría ── */
+#issues-detail-section .argus-chip-tabs {
+  padding: 10px 12px 8px !important;
+  margin-bottom: 0 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: rgba(0, 0, 0, 0.15);
+  gap: 8px !important;
+}
+#issues-detail-section .argus-chip-tabs button {
+  border-radius: 999px !important;
+  font-weight: 600 !important;
+  transition: transform 0.12s, box-shadow 0.12s !important;
+}
+#issues-detail-section .argus-chip-tabs button:hover {
+  transform: translateY(-1px);
+}
+#issues-detail-section .argus-chip-tabs button[aria-selected="true"] {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+/* ── 151–175: Filas de hallazgos (override inline) ── */
+#issues-detail-section .issues-stagger-host {
+  gap: 8px !important;
+}
+#issues-detail-section [data-result-id] {
+  border-radius: 12px !important;
+  padding: 12px 14px !important;
+  border-width: 1px !important;
+  border-left-width: 4px !important;
+  transition: transform 0.18s, box-shadow 0.18s, background 0.18s, border-color 0.18s !important;
+}
+#issues-detail-section [data-result-id]:hover {
+  transform: translateX(4px) !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35) !important;
+}
+#issues-detail-section [data-result-id].issue-selected {
+  outline: 2px solid rgba(var(--accent-rgb), 0.65) !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.15) !important;
+}
+#issues-detail-section .issue-row-stagger {
+  animation: sd-row-in 0.35s ease both;
+}
+@keyframes sd-row-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+#issues-detail-section .issue-critical-glow {
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.15) !important;
+}
+
+/* ── 176–85: Bulk bar, web history, load more ── */
+#issues-detail-section #bulk-actions-bar {
+  border-radius: var(--sd-radius-sm);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.1), transparent);
+}
+#issues-detail-section #web-history-container > div {
+  border-radius: var(--sd-radius-sm) !important;
+}
+#issues-detail-section .issues-list-scroll button {
+  border-radius: 999px !important;
+  font-weight: 600 !important;
+  transition: background 0.15s, transform 0.15s !important;
+}
+#issues-detail-section .issues-list-scroll button:hover {
+  transform: translateY(-1px);
+  background: rgba(var(--accent-rgb), 0.12) !important;
+}
+
+/* ── 86–95: Responsive ── */
+@media (max-width: 1280px) {
+  #issues-detail-section .scan-overview-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  #issues-detail-section .scan-findings-column {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 768px) {
+  #issues-detail-section .scan-overview-grid {
+    grid-template-columns: 1fr;
+  }
+  #issues-detail-section .scan-summary-left,
+  #issues-detail-section .scan-summary-chart {
+    position: static;
+    max-height: none;
+  }
+  #issues-detail-section .issues-list-scroll {
+    max-height: 55vh;
+  }
+}
+
+/* ── 96–100: Light theme + empty states ── */
+body.light-theme #issues-detail-section .scan-summary-left,
+body.light-theme #issues-detail-section .scan-summary-chart,
+body.light-theme #issues-detail-section .scan-findings-panel {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(160, 90, 44, 0.15);
+}
+#issues-detail-section .issues-list-scroll > div[style*="padding:40px"],
+#issues-detail-section .scan-issues-empty {
+  padding: 48px 24px !important;
+  font-size: 14px !important;
+  color: var(--text-m) !important;
+  text-align: center;
+}
+#issues-detail-section .scan-issues-empty::before {
+  content: '⏳';
+  display: block;
+  font-size: 2rem;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+/* ── Ring chart + leyenda ── */
+#issues-detail-section .scan-summary-chart > div:first-child {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--text-d);
+}
+#issues-detail-section .scan-ring-wrap {
+  position: relative;
+  width: 148px;
+  height: 148px;
+  flex-shrink: 0;
+}
+#issues-detail-section .scan-ring-center-num {
+  font-size: 1.75rem !important;
+  font-weight: 900 !important;
+  font-variant-numeric: tabular-nums;
+}
+#issues-detail-section .scan-ring-legend-row {
+  padding: 6px 8px;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+#issues-detail-section .scan-ring-legend-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ── Toolbar IA ── */
+#issues-detail-section #ai-verdict-card > div:last-of-type:not([id]) button,
+#issues-detail-section #ai-verdict-card > div[style*="flex-wrap"] button {
+  font-size: 11px !important;
+  padding: 6px 12px !important;
+  border-radius: 999px !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s, filter 0.12s !important;
+}
+#issues-detail-section #ai-verdict-card button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+/* ── Banner veredicto actual ── */
+#issues-detail-section #current-verdict-banner {
+  border-radius: var(--sd-radius-sm) !important;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Títulos sección info ── */
+#issues-detail-section .scan-summary-left > div:first-child {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+/* ── Issue card por severidad (data-level vía clases JS) ── */
+#issues-detail-section .sp-issue-card[data-level="CRITICAL"],
+#issues-detail-section .sp-issue-card.issue-critical-glow {
+  border-left-color: #ef4444 !important;
+}
+#issues-detail-section .sp-issue-card .sp-issue-path {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  opacity: 0.9;
+}
+
+/* ── Subpáginas scan ── */
+#issues-detail-section .subpage-content {
+  animation: sd-subpage-in 0.35s ease both;
+}
+@keyframes sd-subpage-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── FAB IA (fijo esquina inferior derecha) ── */
+#ai-chat-btn.ai-chat-fab {
+  background: linear-gradient(145deg, #B87333, #7c3aed) !important;
+  box-shadow: 0 8px 32px rgba(184, 115, 51, 0.5), 0 0 0 4px rgba(184, 115, 51, 0.1) !important;
+}
+#ai-chat-btn.ai-chat-fab:hover {
+  transform: scale(1.06);
+  box-shadow: 0 12px 40px rgba(184, 115, 51, 0.6) !important;
+}
+
+/* ── Web history block ── */
+#issues-detail-section #web-history-container {
+  padding: 0 14px 8px;
+}

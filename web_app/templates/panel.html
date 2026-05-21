@@ -16,6 +16,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel.css') }}?v=27">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/panel-bronze-premium.css') }}?v=4">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-ui.css') }}?v=17">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/scan-studio.css') }}?v=4">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel-studio.css') }}?v=3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/panel-sections.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-core.css') }}?v=2">
     <!-- Mobile responsive overrides (Pack 27) — DEBE cargarse último para sobrescribir paddings/footer/dropdowns -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-mobile-fix.css') }}?v=1">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -27,7 +31,7 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css">
 </head>
-<body data-user-id="{{ user.id if user else 0 }}">
+<body class="panel-studio" data-user-id="{{ user.id if user else 0 }}">
     <!-- Background layers -->
     <div id="argus-bg"></div>
     <div id="argus-bg-overlay"></div>
@@ -115,7 +119,7 @@
             </a>
             {% endif %}
 
-            {% if user and ('admin' in user.roles or 'administrador' in user.roles) %}
+            {% if is_panel_owner %}
             <div class="nav-group-label">ADMIN</div>
             <a href="/panel" class="nav-item" data-section="administracion">
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -124,8 +128,6 @@
                 </svg>
                 <span>Administración</span>
             </a>
-            {% endif %}
-            {% if user and 'admin' in user.roles %}
             <a href="/panel" class="nav-item" data-section="super-admin">
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                     <path d="M9 1.5L10.8 6.5H16L11.6 9.6L13.4 14.5L9 11.4L4.6 14.5L6.4 9.6L2 6.5H7.2L9 1.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
@@ -292,10 +294,10 @@
         </header>
 
         <!-- Dashboard Section -->
-        <section class="panel-section active" id="dashboard-section">
+        <section class="panel-section ps-page ps-page--dashboard active" id="dashboard-section">
 
             <!-- Greeting banner -->
-            <div class="greeting-banner">
+            <div class="greeting-banner ps-hero ps-hero--dashboard">
                 <div class="greeting-content">
                     <p class="greeting-label">ARGUS PROJECTS</p>
                     <h2 class="greeting-title" id="greeting-text">Bienvenido, {{ user.username if user else 'Staff' }}!</h2>
@@ -482,7 +484,7 @@
         </section>
 
         <!-- Generar App Section -->
-        <section class="panel-section" id="generar-app-section">
+        <section class="panel-section ps-page ps-page--app" id="generar-app-section">
 
 
             <!-- ══════════════════════════════════════════════
@@ -641,9 +643,17 @@
         </section>
 
         <!-- Tokens Section -->
-        <section class="panel-section" id="tokens-section">
-            <div class="section-header-actions">
-                <h2 class="section-subtitle">Gestión de Tokens</h2>
+        <section class="panel-section ps-page ps-page--tokens" id="tokens-section">
+            <header class="ps-hero ps-hero--tokens">
+                <div class="ps-hero-mesh" aria-hidden="true"></div>
+                <div class="ps-hero-inner">
+                    <span class="ps-hero-kicker">Herramientas</span>
+                    <h2 class="ps-hero-title">Tokens de escaneo</h2>
+                    <p class="ps-hero-desc">Generá y administrá tokens para Screen Share y acceso al scanner.</p>
+                </div>
+            </header>
+            <div class="section-header-actions ps-toolbar">
+                <h2 class="section-subtitle ps-hide">Gestión de Tokens</h2>
                 <button class="btn btn-primary" id="create-token-btn" style="display:inline-flex!important">
                     <span>Crear Nuevo Token</span>
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -652,7 +662,7 @@
                 </button>
             </div>
 
-            <div class="tokens-table-container">
+            <div class="tokens-table-container ps-table-shell">
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -674,9 +684,17 @@
         </section>
 
         <!-- Equipo Section (Staff + Empresa unificados) -->
-        <section class="panel-section" id="equipo-section">
+        <section class="panel-section ps-page ps-page--equipo" id="equipo-section">
+            <header class="ps-hero ps-hero--equipo">
+                <div class="ps-hero-mesh" aria-hidden="true"></div>
+                <div class="ps-hero-inner">
+                    <span class="ps-hero-kicker">Organización</span>
+                    <h2 class="ps-hero-title">Equipo</h2>
+                    <p class="ps-hero-desc">Miembros del staff, roles y configuración de tu empresa.</p>
+                </div>
+            </header>
             <!-- Tabs de navegación · V#34 keyboard nav (argus-chip-tabs) -->
-            <div class="equipo-tabs argus-chip-tabs" id="equipo-tabs" role="tablist" aria-label="Secciones de equipo">
+            <div class="equipo-tabs argus-chip-tabs ps-tabs" id="equipo-tabs" role="tablist" aria-label="Secciones de equipo">
                 {% if staff_role in ('admin','owner') %}
                 <button class="equipo-tab active" data-equipo-tab="miembros" onclick="showEquipoTab('miembros')">
                     <svg width="15" height="15" viewBox="0 0 18 18" fill="none">
@@ -788,9 +806,17 @@
         </section>
 
         <!-- Resultados Section -->
-        <section class="panel-section" id="resultados-section">
-            <div class="section-header-actions" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-                <h2 class="section-subtitle">Resultados de Escaneos - Argus Projects</h2>
+        <section class="panel-section ps-page ps-page--scans" id="resultados-section">
+            <header class="ps-hero ps-hero--scans">
+                <div class="ps-hero-mesh" aria-hidden="true"></div>
+                <div class="ps-hero-inner">
+                    <span class="ps-hero-kicker">Forense</span>
+                    <h2 class="ps-hero-title">Escaneos</h2>
+                    <p class="ps-hero-desc">Historial completo, filtros avanzados y acceso al análisis detallado.</p>
+                </div>
+            </header>
+            <div class="section-header-actions ps-toolbar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+                <h2 class="section-subtitle ps-hide">Resultados de Escaneos - Argus Projects</h2>
                 <!-- Visual #33: Densidad global ajustable (cómoda / normal / compacta) -->
                 <div id="argus-density-switch" style="display:flex;align-items:center;gap:4px;"
                      data-argus-tip="Ajustá la densidad de toda la interfaz: cómoda (más aire), normal o compacta (más rows visibles).">
@@ -965,7 +991,7 @@
                 </div>
             </div>
 
-            <div class="results-table-container scans-view-host">
+            <div class="results-table-container scans-view-host ps-table-shell">
                 <table class="data-table echo-results-table results-table">
                     <thead>
                         <tr>
@@ -986,35 +1012,32 @@
         </section>
 
         <!-- Vista Detallada de Issues -->
-        <section class="panel-section" id="issues-detail-section" style="display: none;">
+        <section class="panel-section scan-studio" id="issues-detail-section" style="display: none;">
 
-            <!-- Scan page header (Echo style) -->
-            <div class="scan-page-header">
-                <div class="scan-page-header-left">
-                    <button class="btn btn-ghost scan-back-btn" id="back-to-scans-btn">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <path d="M10 3L5 8L10 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        Volver
-                    </button>
-                    <div>
-                        <h2 class="scan-page-title">Resultados del escaneo</h2>
-                        <p class="scan-page-subtitle" id="scan-page-player-label">Minecraft</p>
+            <header class="sd-hero scan-page-header">
+                <div class="sd-hero-mesh" aria-hidden="true"></div>
+                <div class="sd-hero-inner">
+                    <div class="sd-hero-left scan-page-header-left">
+                        <button type="button" class="sd-back scan-back-btn btn btn-ghost" id="back-to-scans-btn">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                                <path d="M10 3L5 8L10 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            Volver
+                        </button>
+                        <div class="sd-hero-text">
+                            <span class="sd-hero-kicker">Argus Forensics</span>
+                            <h2 class="sd-hero-title scan-page-title">Resultados del escaneo</h2>
+                            <p class="sd-hero-player scan-page-subtitle" id="scan-page-player-label">Minecraft</p>
+                        </div>
+                    </div>
+                    <div class="sd-hero-actions scan-page-header-right">
+                        <button type="button" class="sd-btn-tool btn btn-secondary" id="download-report-btn">📥 Reporte</button>
+                        <button type="button" class="sd-btn-tool btn btn-secondary" id="export-csv-btn" onclick="exportScanCSV()">📊 CSV</button>
+                        <button type="button" class="sd-btn-tool btn btn-secondary" id="export-pdf-btn" onclick="exportScanPDF()">📄 PDF</button>
+                        <div class="sd-hero-avatar scan-player-avatar" id="scan-header-avatar" title="">?</div>
                     </div>
                 </div>
-                <div class="scan-page-header-right" style="display:flex;gap:8px;align-items:center;">
-                    <button class="btn btn-secondary" id="download-report-btn" style="font-size:12px;padding:7px 14px;">
-                        📥 Reporte
-                    </button>
-                    <button class="btn btn-secondary" id="export-csv-btn" onclick="exportScanCSV()" style="font-size:12px;padding:7px 14px;">
-                        📊 CSV
-                    </button>
-                    <button class="btn btn-secondary" id="export-pdf-btn" onclick="exportScanPDF()" style="font-size:12px;padding:7px 14px;">
-                        📄 PDF
-                    </button>
-                    <div class="scan-player-avatar" id="scan-header-avatar" title="">?</div>
-                </div>
-            </div>
+            </header>
 
             <!-- Banner de Detección (Echo style) -->
             <div class="detection-banner echo-detection-banner" id="detection-banner" style="display: none;">
@@ -1179,10 +1202,10 @@
                     <span id="sum-clean" style="display:none;">0</span>
 
                     <!-- MAIN THREE-COLUMN -->
-                    <div style="display:grid;grid-template-columns:280px 220px 1fr;gap:16px;align-items:start;">
+                    <div class="scan-overview-grid">
 
-                        <!-- LEFT: Scan info -->
-                        <div style="background:var(--bg-s);border:1px solid var(--border-m);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+                        <!-- LEFT: Scan info + risk (sticky; gauge siempre centrado) -->
+                        <div class="scan-summary-left">
                             <div style="font-size:11px;font-weight:700;color:var(--text-d);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">Info del Scan</div>
                             <div class="echo-info-list" id="scan-info-block">
                                 <div class="echo-info-item">
@@ -1291,24 +1314,20 @@
                                     <span class="echo-info-label">Papelera</span>
                                     <span class="echo-info-value" id="detail-recycle-date" style="color:#f59e0b;">—</span>
                                 </div>
-                                <div style="height:1px;background:var(--border-m);margin:2px 0;"></div>
-                                <div style="display:flex;flex-direction:column;gap:5px;align-items:center;">
-                                    <!-- V1: Animated SVG gauge -->
-                                    <div id="risk-gauge-container" style="margin:4px 0;"></div>
-                                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;width:100%;">
-                                        <span class="argus-tip-trigger" style="color:var(--text-d);"
-                                              data-argus-tip="<b>Risk Score</b><br>Puntuación 0–100 calculada por Argus combinando:<br>• Severidad de cada hallazgo<br>• Patrones de evasión (cleaners, anti-forensics)<br>• Coincidencias en Prefetch / USN / Papelera<br><br>Bandas:<br>• <b>0–29</b> CLEAN — sin riesgo<br>• <b>30–59</b> WATCH — sospechoso<br>• <b>60–79</b> SUSPECT — alto riesgo<br>• <b>80–100</b> CHEAT — banear">Risk Score</span>
-                                        <span id="detail-risk-score-badge" class="risk-score-badge risk-clean argus-tip-trigger" style="font-size:11px;padding:3px 10px;border-bottom:none;"
-                                              data-argus-tip="Score numérico 0–100 derivado de los hallazgos del scan. Cuanto más alto, mayor probabilidad de cheat.">—</span>
-                                    </div>
-                                    <div class="risk-score-bar-wrap" style="width:100%;">
-                                        <div id="detail-risk-score-bar" class="risk-score-bar risk-clean" style="width:0%"></div>
-                                    </div>
+                            </div>
+                            <div class="scan-risk-score-card">
+                                <div id="risk-gauge-container"></div>
+                                <div class="scan-risk-score-meta">
+                                    <span class="argus-tip-trigger" style="color:var(--text-d);"
+                                          data-argus-tip="<b>Risk Score</b><br>Puntuación 0–100 calculada por Argus combinando:<br>• Severidad de cada hallazgo<br>• Patrones de evasión (cleaners, anti-forensics)<br>• Coincidencias en Prefetch / USN / Papelera<br><br>Bandas:<br>• <b>0–29</b> CLEAN — sin riesgo<br>• <b>30–59</b> WATCH — sospechoso<br>• <b>60–79</b> SUSPECT — alto riesgo<br>• <b>80–100</b> CHEAT — banear">Risk Score</span>
+                                    <span id="detail-risk-score-badge" class="risk-score-badge risk-clean argus-tip-trigger" style="font-size:11px;padding:3px 10px;border-bottom:none;"
+                                          data-argus-tip="Score numérico 0–100 derivado de los hallazgos del scan. Cuanto más alto, mayor probabilidad de cheat.">—</span>
                                 </div>
-                                <!-- Ensemble verdict -->
-                                <div id="ensemble-verdict-container" style="display:none;width:100%;margin-top:4px;"></div>
-                                <!-- P3 #13 — Active learning marker -->
-                                <div id="active-learning-badge" style="display:none;align-items:center;gap:6px;margin-top:8px;padding:6px 10px;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:8px;font-size:11px;color:#a855f7;">
+                                <div class="risk-score-bar-wrap">
+                                    <div id="detail-risk-score-bar" class="risk-score-bar risk-clean" style="width:0%"></div>
+                                </div>
+                                <div id="ensemble-verdict-container" style="display:none;width:100%;"></div>
+                                <div id="active-learning-badge" style="display:none;align-items:center;gap:6px;margin-top:4px;padding:6px 10px;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:8px;font-size:11px;color:#a855f7;width:100%;">
                                     <span>🎯</span>
                                     <span><strong>Caso incierto</strong> — Tu revisión aquí mejora el modelo más que en casos obvios</span>
                                 </div>
@@ -1320,7 +1339,7 @@
                         </div>
 
                         <!-- CENTER: Donut ring chart -->
-                        <div style="background:var(--bg-s);border:1px solid var(--border-m);border-radius:14px;padding:22px 18px;display:flex;flex-direction:column;align-items:center;gap:14px;">
+                        <div class="scan-summary-chart">
                             <div style="font-size:10px;font-weight:700;color:var(--text-d);text-transform:uppercase;letter-spacing:.8px;align-self:flex-start;">Gráfico de indicaciones</div>
                             <!-- SVG Ring -->
                             <div style="position:relative;width:140px;height:140px;flex-shrink:0;">
@@ -1357,34 +1376,25 @@
                                     <span id="ring-num-clean"    style="font-size:14px;font-weight:800;color:#10b981;">0</span>
                                 </div>
                             </div>
-                        </div>
-
-                        <!-- RIGHT: Log de indicaciones -->
-                        <div style="display:flex;flex-direction:column;gap:10px;">
-                            <!-- Severity summary bar -->
-                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
-                                <div style="background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.20);border-radius:12px;padding:12px 8px;text-align:center;position:relative;overflow:hidden;">
-                                    <div style="font-size:9px;font-weight:700;color:#10b981;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">Limpio</div>
-                                    <div id="log-clean" style="font-size:26px;font-weight:900;color:#10b981;line-height:1;">0</div>
-                                    <div style="position:absolute;bottom:6px;right:8px;opacity:.18;">
-                                        <svg width="16" height="16" viewBox="0 0 20 20" fill="#10b981"><path d="M7 10L9.5 12.5L13.5 7.5" stroke="#10b981" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="10" cy="10" r="8" stroke="#10b981" stroke-width="1.5" fill="none"/></svg>
-                                    </div>
+                            <!-- Resumen Limpio / Alerta / Severo (debajo del gráfico) -->
+                            <div class="scan-severity-grid scan-chart-stats">
+                                <div class="scan-stat-card scan-stat-card--clean">
+                                    <div class="scan-stat-label">Limpio</div>
+                                    <div id="log-clean" class="scan-stat-value">0</div>
                                 </div>
-                                <div style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.20);border-radius:12px;padding:12px 8px;text-align:center;position:relative;overflow:hidden;">
-                                    <div style="font-size:9px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">Alerta</div>
-                                    <div id="log-alert" style="font-size:26px;font-weight:900;color:#f59e0b;line-height:1;">0</div>
-                                    <div style="position:absolute;bottom:6px;right:8px;opacity:.18;">
-                                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 3L17 16H3L10 3Z" stroke="#f59e0b" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 9V12M10 14.5V15" stroke="#f59e0b" stroke-width="1.8" stroke-linecap="round"/></svg>
-                                    </div>
+                                <div class="scan-stat-card scan-stat-card--alert">
+                                    <div class="scan-stat-label">Alerta</div>
+                                    <div id="log-alert" class="scan-stat-value">0</div>
                                 </div>
-                                <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.20);border-radius:12px;padding:12px 8px;text-align:center;position:relative;overflow:hidden;">
-                                    <div style="font-size:9px;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;">Severo</div>
-                                    <div id="log-severe" style="font-size:26px;font-weight:900;color:#ef4444;line-height:1;">0</div>
-                                    <div style="position:absolute;bottom:6px;right:8px;opacity:.18;">
-                                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 4V10M10 14V14.01" stroke="#ef4444" stroke-width="2.2" stroke-linecap="round"/><circle cx="10" cy="10" r="8" stroke="#ef4444" stroke-width="1.5"/></svg>
-                                    </div>
+                                <div class="scan-stat-card scan-stat-card--severe">
+                                    <div class="scan-stat-label">Severo</div>
+                                    <div id="log-severe" class="scan-stat-value">0</div>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- RIGHT: Hallazgos + veredicto -->
+                        <div class="scan-findings-column">
                             <!-- Veredicto actual -->
                             <div id="current-verdict-banner" style="display:none;border-radius:10px;padding:12px 16px;margin-bottom:4px;font-size:13px;"></div>
 
@@ -1435,18 +1445,19 @@
                                 <div id="ai-followup-container" style="display:none;margin-top:8px;font-size:11px;color:#34d399;padding:6px 10px;background:rgba(16,185,129,.06);border-radius:6px;border-left:2px solid #10b981;"></div>
                             </div>
 
-                            <div id="bulk-actions-bar" style="display:none;background:var(--bg-s);border:1px solid var(--border-m);border-radius:10px;padding:14px 16px;flex-direction:column;gap:10px;">
+                            <div id="bulk-actions-bar" class="scan-verdict-block" style="display:none;flex-direction:column;gap:10px;">
                                 <div style="font-size:13px;font-weight:600;color:var(--text-h);display:flex;align-items:center;gap:6px;">
                                     <span class="argus-tip-trigger" data-argus-tip="<b>Veredicto humano</b><br>Tu decisión final como staff sobre el caso. Argus aprende de cada veredicto: las heurísticas y la IA se calibran con tus aciertos para reducir falsos positivos en futuros scans.<br><br>El veredicto queda registrado en el historial del jugador y de la empresa.">Veredicto del escaneo</span>
                                 </div>
-                                <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                                    <button onclick="openVerdictModal('clean')" data-argus-tip="Marcar como limpio. Argus penalizará patrones que llevaron a este falso positivo." style="font-size:12px;font-weight:700;padding:8px 18px;border-radius:7px;border:none;background:#059669;color:white;cursor:pointer;">Usuario Limpio</button>
-                                    <button onclick="openVerdictModal('hack')" data-argus-tip="Marcar como cheater. Argus reforzará los patrones que detectó este caso." style="font-size:12px;font-weight:700;padding:8px 18px;border-radius:7px;border:none;background:#dc2626;color:white;cursor:pointer;">Usuario Con Hacks</button>
-                                    <button onclick="skipVerdict()" data-argus-tip="Omitir si no estás seguro. No afecta al aprendizaje." style="font-size:12px;padding:8px 16px;border-radius:7px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">Omitir</button>
-                                    <button onclick="loadVerdictHistory()" data-argus-tip="Ver veredictos previos del staff sobre este jugador." style="font-size:12px;padding:8px 16px;border-radius:7px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;">Historial</button>
+                                <div class="scan-verdict-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
+                                    <button class="btn-verdict-clean" onclick="openVerdictModal('clean')" data-argus-tip="Marcar como limpio. Argus penalizará patrones que llevaron a este falso positivo.">Usuario Limpio</button>
+                                    <button class="btn-verdict-hack" onclick="openVerdictModal('hack')" data-argus-tip="Marcar como cheater. Argus reforzará los patrones que detectó este caso.">Usuario Con Hacks</button>
+                                    <button class="btn-verdict-muted" onclick="skipVerdict()" data-argus-tip="Omitir si no estás seguro. No afecta al aprendizaje.">Omitir</button>
+                                    <button class="btn-verdict-muted" onclick="loadVerdictHistory()" data-argus-tip="Ver veredictos previos del staff sobre este jugador.">Historial</button>
                                 </div>
                                 <div id="verdict-history-panel" style="display:none;margin-top:6px;font-size:12px;color:var(--text-s);"></div>
                             </div>
+                            <div class="scan-findings-panel">
                             <!-- Buscador dentro del scan -->
                             <div class="issues-search-bar">
                                 <input type="text" id="issues-search-input"
@@ -1461,13 +1472,14 @@
                                     <option value="POCO_SOSPECHOSO">🔵 Poco Sosp.</option>
                                     <option value="NORMAL">⚪ Normal</option>
                                 </select>
-                                <span id="issues-count-label" style="font-size:11px;color:var(--text-d);white-space:nowrap;flex-shrink:0;"></span>
+                                <span id="issues-count-label"></span>
                             </div>
                             <!-- Historial web sospechoso (PAGINA_SOSPECHOSA) — separado de hallazgos -->
                             <div id="web-history-container" style="display:none;"></div>
                             <!-- Issues list (scrollable) -->
                             <div id="issues-list-container" class="issues-list-scroll">
-                                <div style="padding:40px;text-align:center;color:var(--text-d);font-size:13px;">Cargando...</div>
+                                <div class="scan-issues-empty">Cargando hallazgos…</div>
+                            </div>
                             </div>
                         </div>
                     </div>
@@ -1833,31 +1845,33 @@
 
         <!-- Anti-Cheat Section (Pack 43) — feed live de violations del plugin Minecraft -->
         {% if staff_role or (user and 'admin' in user.roles) %}
-        <section class="panel-section" id="anticheat-section">
+        <section class="panel-section ps-page ps-page--ac" id="anticheat-section">
             <div class="section-content">
-                <h2 class="section-title">Anti-Cheat <span style="opacity:.6;font-size:14px;font-weight:500;">· Argus MC plugin</span></h2>
-                <p class="section-description">
-                    Detecciones en tiempo real del plugin instalado en tus servers Minecraft. Filtros, severidad y enlace
-                    automatico con tokens de Screen Share del mismo jugador.
-                </p>
+                <header class="ps-hero ps-hero--ac">
+                    <div class="ps-hero-mesh" aria-hidden="true"></div>
+                    <div class="ps-hero-inner">
+                        <span class="ps-hero-kicker">Minecraft en vivo</span>
+                        <h2 class="ps-hero-title">Anti-Cheat</h2>
+                        <p class="ps-hero-desc">Detecciones del plugin Argus MC en tiempo real, con enlace a Screen Share.</p>
+                    </div>
+                </header>
 
-                <!-- Stats cards -->
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px;">
-                    <div class="card" style="padding:14px;">
-                        <div style="font-size:11px;letter-spacing:1.4px;color:var(--text-m);text-transform:uppercase;">LOW</div>
-                        <div id="ac-stat-low" style="font-size:26px;font-weight:700;color:#facc15;margin-top:4px;">—</div>
+                <div class="ps-stat-grid ps-stat-grid--4">
+                    <div class="ps-stat ps-stat--low">
+                        <div class="ps-stat-label">LOW</div>
+                        <div id="ac-stat-low" class="ps-stat-value">—</div>
                     </div>
-                    <div class="card" style="padding:14px;">
-                        <div style="font-size:11px;letter-spacing:1.4px;color:var(--text-m);text-transform:uppercase;">MID · kick</div>
-                        <div id="ac-stat-mid" style="font-size:26px;font-weight:700;color:#fb923c;margin-top:4px;">—</div>
+                    <div class="ps-stat ps-stat--mid">
+                        <div class="ps-stat-label">MID · kick</div>
+                        <div id="ac-stat-mid" class="ps-stat-value">—</div>
                     </div>
-                    <div class="card" style="padding:14px;">
-                        <div style="font-size:11px;letter-spacing:1.4px;color:var(--text-m);text-transform:uppercase;">HIGH · auto-SS</div>
-                        <div id="ac-stat-high" style="font-size:26px;font-weight:700;color:#ef4444;margin-top:4px;">—</div>
+                    <div class="ps-stat ps-stat--high">
+                        <div class="ps-stat-label">HIGH · auto-SS</div>
+                        <div id="ac-stat-high" class="ps-stat-value">—</div>
                     </div>
-                    <div class="card" style="padding:14px;">
-                        <div style="font-size:11px;letter-spacing:1.4px;color:var(--text-m);text-transform:uppercase;">CRITICAL · ban</div>
-                        <div id="ac-stat-critical" style="font-size:26px;font-weight:700;color:#a855f7;margin-top:4px;">—</div>
+                    <div class="ps-stat ps-stat--crit">
+                        <div class="ps-stat-label">CRITICAL · ban</div>
+                        <div id="ac-stat-critical" class="ps-stat-value">—</div>
                     </div>
                 </div>
 
@@ -2120,16 +2134,16 @@
 
         <!-- ─── Pack 44: Argus AI Oracle Section ──────────────────────── -->
         {% if staff_role or (user and 'admin' in user.roles) %}
-        <section class="panel-section" id="argusai-section">
+        <section class="panel-section ps-page ps-page--ai" id="argusai-section">
             <div class="section-content">
-                <h2 class="section-title">
-                    <span style="background:linear-gradient(135deg,#06b6d4,#3b82f6,#8b5cf6);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:800;">Argus AI Oracle</span>
-                </h2>
-                <p class="section-description">
-                    El staff IA senior. Evalúa cada violation contra el contexto completo del jugador
-                    (historial, scans previos, antigüedad de cuenta) y decide acciones autónomas.
-                    Habla en humano.
-                </p>
+                <header class="ps-hero ps-hero--ai">
+                    <div class="ps-hero-mesh" aria-hidden="true"></div>
+                    <div class="ps-hero-inner">
+                        <span class="ps-hero-kicker">Inteligencia</span>
+                        <h2 class="ps-hero-title ps-hero-title--gradient">Argus AI Oracle</h2>
+                        <p class="ps-hero-desc">Staff IA senior: contexto del jugador, decisiones autónomas y lenguaje humano.</p>
+                    </div>
+                </header>
 
                 <!-- Top sospechosos actuales -->
                 <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px;">
@@ -2813,9 +2827,9 @@
         {% endif %}
 
 
-        <!-- Administración Section (Solo para admins y administradores de empresa) -->
-        {% if user and ('admin' in user.roles or 'administrador' in user.roles) %}
-        <section class="panel-section" id="administracion-section">
+        <!-- Administración — solo owner del panel (arefy_admin) -->
+        {% if is_panel_owner %}
+        <section class="panel-section ps-page ps-page--admin" id="administracion-section">
             <div class="section-content">
                 <h2 class="section-title">Administración - Argus Projects</h2>
                 <p class="section-description">Gestiona usuarios y tokens de registro</p>
@@ -3042,9 +3056,9 @@
         </section>
         {% endif %}
 
-        <!-- SUPER ADMIN — Redirección al panel interno -->
-        {% if user and 'admin' in user.roles %}
-        <section class="panel-section" id="super-admin-section">
+        <!-- SUPER ADMIN — solo owner del panel -->
+        {% if is_panel_owner %}
+        <section class="panel-section ps-page ps-page--super" id="super-admin-section">
             <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:24px;text-align:center;">
                 <div style="font-size:56px;line-height:1;">🔐</div>
                 <div>
@@ -3464,6 +3478,7 @@
     <script>
     // Permisos de staff inyectados desde Flask
     window.STAFF_ROLE     = "{{ staff_role }}";
+    window.IS_PANEL_OWNER = {{ 'true' if is_panel_owner else 'false' }};
     window.CAN_VERDICT    = {{ 'true' if staff_role in ('moderador','admin','owner') else 'false' }};
     window.CAN_TOKENS     = true;
     window.CAN_MANAGE_STAFF = {{ 'true' if staff_role in ('admin','owner') else 'false' }};
@@ -3472,7 +3487,9 @@
     <script src="{{ url_for('static', filename='js/safe.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='js/argus-ui.js') }}?v=17"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" integrity="sha384-MjKb3XbAcsL1U0q7Q2E31E4n4t4DccnE9vrFica8FWHQrQQizxgxYkWwaP42QikI" crossorigin="anonymous"></script>
-    <script src="{{ url_for('static', filename='js/panel.js') }}?v=75"></script>
+    <script src="{{ url_for('static', filename='js/panel.js') }}?v=78"></script>
+    <script src="{{ url_for('static', filename='js/argus-core.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='js/argus-core-voice.js') }}?v=1"></script>
     <script src="{{ url_for('static', filename='js/empresas.js') }}?v=8"></script>
     <script>
     // ── Cerrar modal comparar al click fuera ──────────────────
@@ -3517,77 +3534,58 @@
     // (Cursor picker legacy eliminado — ahora se gestiona desde el modal "Personalizar Fondo" (setCursorMode))
     </script>
     <!-- ═══════════════════════════════════════════════════════════════════
-         ARGUS AI CHAT — botón flotante + panel de chat para el staff
+         ARGUS CORE — copiloto forense (Ctrl+J)
          ═══════════════════════════════════════════════════════════════════ -->
-    <button id="ai-chat-btn" onclick="toggleAIChat()" title="Argus IA — Asistente de seguridad"
-            style="position:fixed;bottom:24px;right:24px;z-index:9998;
-                   width:52px;height:52px;border-radius:50%;
-                   background:linear-gradient(135deg,#7c3aed,#4f46e5);
-                   border:2px solid rgba(255,255,255,.15);cursor:pointer;
-                   box-shadow:0 4px 20px rgba(160,90,44,.45);
-                   font-size:22px;display:flex;align-items:center;justify-content:center;
-                   transition:transform .2s,box-shadow .2s">🤖</button>
+    <button type="button" id="ai-chat-btn" class="ai-chat-fab argus-core-fab" onclick="toggleAIChat()" title="Argus Core — Copiloto forense (Ctrl+J)" aria-label="Abrir Argus Core">
+        <span class="argus-core-orb" aria-hidden="true">
+            <span class="argus-core-ring"></span>
+            <span class="argus-core-ring argus-core-ring-2"></span>
+            <span class="argus-core-orb-core">AC</span>
+        </span>
+    </button>
 
-    <div id="ai-chat-panel"
-         style="display:none;position:fixed;bottom:86px;right:24px;z-index:9999;
-                width:380px;max-height:560px;border-radius:16px;
-                background:#1a1a2e;border:1px solid rgba(160,90,44,.4);
-                box-shadow:0 8px 40px rgba(0,0,0,.6);
-                display:none;flex-direction:column;overflow:hidden">
+    <div id="ai-chat-panel" class="ai-chat-panel argus-core-panel" style="display:none" role="dialog" aria-label="Argus Core">
 
-        <!-- Header -->
-        <div style="padding:14px 16px;background:linear-gradient(135deg,#7c3aed22,#4f46e522);
-                    border-bottom:1px solid rgba(160,90,44,.3);
-                    display:flex;align-items:center;justify-content:space-between">
-            <div style="display:flex;align-items:center;gap:10px">
-                <span style="font-size:20px">🤖</span>
+        <header class="argus-core-header">
+            <div class="argus-core-brand">
+                <div class="argus-core-mini-orb" aria-hidden="true">AC</div>
                 <div>
-                    <div style="font-weight:600;font-size:14px;color:#e2e8f0">Argus IA</div>
-                    <div id="ai-chat-scan-badge" style="font-size:11px;color:#D4915A;display:none"></div>
+                    <div class="argus-core-title">Argus Core</div>
+                    <div id="argus-core-status" class="argus-core-sub is-live">Iniciando sistemas…</div>
+                    <div id="ai-chat-scan-badge" style="display:none"></div>
                 </div>
             </div>
-            <div style="display:flex;gap:8px">
-                <button onclick="clearAIChat()" title="Borrar conversación"
-                        style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:15px;padding:4px">🗑️</button>
-                <button onclick="toggleAIChat()" title="Cerrar"
-                        style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:18px;padding:4px">✕</button>
+            <div class="argus-core-header-actions">
+                <button type="button" id="argus-core-voice-toggle" class="argus-core-icon-btn argus-core-voice-btn" title="Respuestas con voz" aria-pressed="false">🔊</button>
+                <button type="button" id="argus-core-convo-toggle" class="argus-core-icon-btn argus-core-voice-btn" title="Modo conversación: después de responder, vuelve a escuchar">💬</button>
+                <button type="button" class="argus-core-icon-btn" onclick="clearAIChat()" title="Reiniciar memoria">↺</button>
+                <button type="button" class="argus-core-icon-btn" onclick="toggleAIChat()" title="Cerrar">✕</button>
+            </div>
+        </header>
+
+        <div id="ai-chat-messages" class="argus-core-messages">
+            <div class="argus-core-msg argus-core-msg--bot argus-core-msg--system argus-core-welcome">
+                <div class="argus-core-msg-label">Argus Core</div>
+                Copiloto forense activo. Abrí un escaneo o preguntame lo que necesites.
             </div>
         </div>
 
-        <!-- Mensajes -->
-        <div id="ai-chat-messages"
-             style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;min-height:200px;max-height:360px">
-            <div class="ai-msg-bot" style="background:rgba(160,90,44,.15);border-radius:12px 12px 12px 4px;
-                         padding:10px 13px;font-size:13px;color:#e2e8f0;max-width:90%">
-                Hola, soy Argus IA 👋 Puedo ayudarte a analizar hallazgos, identificar falsos positivos y responder preguntas sobre hacks de Minecraft. ¿En qué te ayudo?
-            </div>
+        <div id="ai-quick-btns" class="argus-core-cmds">
+            <button type="button" class="argus-core-cmd" onclick="aiQuick('¿Este hallazgo es falso positivo? Explica por qué.')">¿FP o real?</button>
+            <button type="button" class="argus-core-cmd" onclick="aiQuick('Resumí los 5 hallazgos más graves de este scan y qué harías vos.')">Resumen crítico</button>
+            <button type="button" class="argus-core-cmd argus-core-cmd--accent" onclick="aiQuick('Dame un veredicto sugerido con confianza y riesgos de banear mal.')">Veredicto</button>
+            <button type="button" class="argus-core-cmd" onclick="aiQuick('/help')">Comandos</button>
+            <button type="button" class="argus-core-cmd" onclick="aiQuick('Busca en internet el cliente o hack más grave que ves en el contexto.')">🔍 Web</button>
         </div>
 
-        <!-- Accesos rápidos -->
-        <div id="ai-quick-btns" style="padding:6px 14px;display:flex;gap:6px;flex-wrap:wrap">
-            <button onclick="aiQuick('¿Es este hallazgo un falso positivo?')"
-                    style="font-size:11px;padding:4px 9px;border-radius:20px;border:1px solid rgba(160,90,44,.4);
-                           background:rgba(160,90,44,.1);color:#D4915A;cursor:pointer">FP o TP?</button>
-            <button onclick="aiQuick('Resume los hallazgos más importantes de este scan')"
-                    style="font-size:11px;padding:4px 9px;border-radius:20px;border:1px solid rgba(160,90,44,.4);
-                           background:rgba(160,90,44,.1);color:#D4915A;cursor:pointer">Resumir scan</button>
-            <button onclick="aiQuick('Busca en internet información sobre el hack más grave detectado')"
-                    style="font-size:11px;padding:4px 9px;border-radius:20px;border:1px solid rgba(160,90,44,.4);
-                           background:rgba(160,90,44,.1);color:#D4915A;cursor:pointer">🔍 Buscar en web</button>
-        </div>
-
-        <!-- Input -->
-        <div style="padding:10px 14px 14px;display:flex;gap:8px;border-top:1px solid rgba(255,255,255,.07)">
-            <textarea id="ai-floating-chat-input" rows="1" placeholder="Pregunta algo sobre este scan..."
+        <div class="argus-core-input-row">
+            <button type="button" id="argus-core-mic-btn" class="argus-core-mic" title="Hablar (micrófono)">🎤</button>
+            <textarea id="ai-floating-chat-input" rows="1" placeholder="Escribí o usá el micrófono…"
                       onkeydown="aiChatKeyDown(event)"
-                      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px'"
-                      style="flex:1;background:rgba(255,255,255,.06);border:1px solid rgba(160,90,44,.3);
-                             border-radius:10px;padding:8px 12px;color:#e2e8f0;font-size:13px;
-                             resize:none;outline:none;font-family:inherit;line-height:1.4"></textarea>
-            <button onclick="sendAIChatMessage()"
-                    style="background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;
-                           border-radius:10px;padding:0 14px;cursor:pointer;color:#fff;font-size:16px">➤</button>
+                      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px'"></textarea>
+            <button type="button" class="argus-core-send" onclick="sendAIChatMessage()" title="Enviar">➤</button>
         </div>
+        <div class="argus-core-hint">🎤 Mic · 🔊 Voz · 💬 Conversación · Chrome/Edge · Ctrl+J</div>
     </div>
 
     <script>

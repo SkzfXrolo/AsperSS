@@ -2,11 +2,17 @@
 AplicaciÃ³n Web Flask para Panel del Staff de ASPERS Projects
 """
 import sys as _sys
-_sys.stdout.reconfigure(line_buffering=True)  # forzar stdout unbuffered
+try:
+    _sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
+    _sys.stderr.reconfigure(encoding='utf-8')
+except Exception:
+    pass
 from flask import Flask, render_template, request, jsonify, session, Response, redirect, url_for, make_response, flash, send_file
 from flask_cors import CORS
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 import os
+from bootstrap_env import bootstrap_local_env, is_local_dev as _is_local_dev
+bootstrap_local_env()
 import requests
 import json
 import datetime
@@ -175,6 +181,32 @@ if os.environ.get('LOG_FORMAT', '').strip().lower() == 'json' and _JSONFormatter
     _h.setFormatter(_JSONFormatter())
     app.logger.handlers = [_h]
     app.logger.setLevel(_logging.INFO)
+
+
+@app.before_request
+def _local_dev_access_guard():
+    """Solo localhost (+ secreto opcional) cuando ARGUS_LOCAL_DEV=1."""
+    if not _is_local_dev() or IS_RENDER:
+        return None
+    remote = (request.remote_addr or '').strip()
+    if remote not in ('127.0.0.1', '::1'):
+        return jsonify({
+            'success': False,
+            'error': 'Panel local: acceso solo desde esta máquina (127.0.0.1).',
+        }), 403
+    _secret = (os.environ.get('LOCAL_DEV_SECRET') or '').strip()
+    if _secret:
+        _got = (
+            (request.headers.get('X-Local-Dev-Secret') or '').strip()
+            or (request.args.get('_local_dev') or '').strip()
+            or (request.cookies.get('argus_local_dev') or '').strip()
+        )
+        if _got != _secret:
+            return jsonify({
+                'success': False,
+                'error': 'Falta LOCAL_DEV_SECRET (header X-Local-Dev-Secret o cookie argus_local_dev).',
+            }), 403
+    return None
 
 
 @app.before_request
@@ -873,8 +905,13 @@ if IS_RENDER:
     else:
         API_BASE_URL = RENDER_EXTERNAL_URL.rstrip('/')
         print(f"âœ… API_URL apunta a esta misma app: {API_BASE_URL}")
+elif _is_local_dev():
+    # Réplica local de asperss.onrender.com: misma app monolítica en un solo puerto
+    _local_port = int(os.environ.get('PORT', '8080'))
+    API_BASE_URL = (os.environ.get('API_URL') or f'http://127.0.0.1:{_local_port}').rstrip('/')
+    print(f"[local-dev] API_URL → {API_BASE_URL} (modo Render local)")
 else:
-    # En desarrollo local, usar localhost:5000
+    # Legacy: API separada en :5000
     API_BASE_URL = os.environ.get('API_URL', 'http://localhost:5000')
 
 # IMPORTANTE: La API Key debe coincidir con la que genera api_server.py
@@ -1330,8 +1367,8 @@ def login():
         if result['success']:
             user = result['user']
             
-            # ValidaciÃ³n de tipo de login
-            if login_type == 'empresa':
+            # ValidaciÃ³n de tipo de login (omitida en dev local: misma cuenta en ambas pestañas)
+            if not (_is_local_dev() and not IS_RENDER) and login_type == 'empresa':
                 # Si es login empresarial, verificar que el usuario tenga empresa
                 if not user.get('company_id'):
                     error_msg = 'Este usuario no pertenece a ninguna empresa. Use el login individual.'
@@ -1349,7 +1386,7 @@ def login():
                             return jsonify({'success': False, 'error': error_msg}), 403
                         return render_template('login.html', error=error_msg)
             
-            elif login_type == 'individual':
+            elif not (_is_local_dev() and not IS_RENDER) and login_type == 'individual':
                 # Si es login individual, verificar que NO tenga empresa
                 if user.get('company_id'):
                     error_msg = 'Este usuario pertenece a una empresa. Use el login empresarial.'
@@ -1463,6 +1500,16 @@ def _build_logout_response(resp):
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     return resp
 
+def _is_panel_owner(user):
+    """Owner del panel: única cuenta que ve ADMIN en el sidebar (configurable por env)."""
+    if not user:
+        return False
+    uname = (user.get('username') or '').strip().lower()
+    raw = (os.environ.get('ARGUS_PANEL_OWNER_USERNAMES') or 'arefy_admin,arefy').strip().lower()
+    allowed = {p.strip() for p in raw.split(',') if p.strip()}
+    return uname in allowed
+
+
 @app.route('/panel')
 @login_required
 def panel():
@@ -1476,7 +1523,14 @@ def panel():
         except:
             user['roles'] = [user.get('roles', 'user')]
     staff_role = get_staff_role(user) if user else 'helper'
-    return render_template('panel.html', user=user, staff_role=staff_role, scanner_version=_ARGUS_VERSION)
+    is_panel_owner = _is_panel_owner(user)
+    return render_template(
+        'panel.html',
+        user=user,
+        staff_role=staff_role,
+        scanner_version=_ARGUS_VERSION,
+        is_panel_owner=is_panel_owner,
+    )
 
 @app.route('/aspers-sa', methods=['GET', 'POST'])
 def admin_subscriptions():
@@ -8457,6 +8511,10 @@ _SERVER_FP_FRAGMENTS = [
     'nvidia corporation', 'amd\\radeon', 'intel corporation',
     'discord\\app-', 'teamspeak 3 client',
     'logitech\\logi options', 'razer\\synapse',
+    'wallpaperservice32',              # servicio Windows de fondos (FP: matcheaba ce32)
+    'appdata\\local\\crashdumps\\',    # dumps de apps legítimas (ASUS, Steam, etc.)
+    '\\temp\\lwjgl',                   # natives LWJGL extraídos por Minecraft
+    'feather\\sidebar.json', '.minecraft\\feather\\',
     'corsair\\icue', 'steelseries\\engine',
     # LabyMod â€” cliente legÃ­timo de Minecraft
     'labymod', 'labymodlauncher', 'labymod-neo',
@@ -9191,6 +9249,45 @@ def _is_server_false_positive(result: dict) -> bool:
         # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         if is_known_legit_installer(name_lower, combined):
             return True
+
+        # PACK 55 — ruido típico en PCs de staff/dev (audit scan #110)
+        _pat_raw = result.get('detected_patterns') or []
+        if isinstance(_pat_raw, str):
+            try:
+                _pat_raw = json.loads(_pat_raw)
+            except Exception:
+                _pat_raw = [_pat_raw]
+        _pat_s = ' '.join(str(p).lower() for p in (_pat_raw if isinstance(_pat_raw, list) else []))
+
+        if tipo == 'crash_dump' or '\\crashdumps\\' in combined:
+            return True
+        if tipo == 'defender_health_event' or 'defender_health' in _pat_s:
+            return True
+        if tipo == 'razer_installed' or 'razer_macros' in _pat_s or 'razer_installed' in _pat_s:
+            return True
+        if 'wallpaperservice32' in combined:
+            return True
+        if name_lower == 'sidebar.json' and (
+            'feather' in combined or 'feathermc' in combined or '\\.minecraft\\feather' in combined
+        ):
+            return True
+        if '\\temp\\lwjgl' in combined or (
+            'lwjgl' in combined and '\\appdata\\local\\temp\\' in combined
+        ):
+            return True
+        if tipo == 'ghost_client_config' and (
+            'versiones de minecraft' in desc or 'no-vanilla' in desc
+            or ('sin metadata' in desc and 'companyname' in desc)
+        ):
+            return True
+        if tipo == 'ghost_client_config' and 'config_tfidf' in _pat_s and (
+            'feather' in combined or 'sidebar.json' in name_lower
+        ):
+            return True
+        if tipo == 'javaagent_injection' and 'rwx_large_regions' in _pat_s:
+            return True
+        if 'multiple_javaw' in _pat_s or tipo == 'multiple_javaw':
+            return True
     except Exception:
         pass
 
@@ -9605,8 +9702,13 @@ def _calculate_risk_score(results, return_breakdown=False):
     ZERO_RISK_TYPES = {
         'texture_pack', 'texture_pack_xray', 'texture_pack_analysis',
         'resource_pack', 'resource_pack_xray',
+        'file_created', 'file_modified',
+        'crash_dump', 'defender_health_event', 'razer_installed',
+        'multiple_javaw',
     }
-    ZERO_RISK_CATS = {'texture_packs', 'resource_packs'}
+    ZERO_RISK_CATS = {'texture_packs', 'resource_packs', 'file_activity'}
+
+    _alert_counted = set()
 
     for r in results:
         tipo   = (r.get('tipo') or r.get('issue_type') or '').lower().replace(' ', '_')
@@ -9629,9 +9731,11 @@ def _calculate_risk_score(results, return_breakdown=False):
                     breakdown.append({'source': nombre, 'points': pts, 'reason': f'Tipo detectado: {key}'})
                 break
 
-        # Puntos adicionales por nivel de alerta
+        # Puntos por alerta: una vez por (tipo, nivel), no por cada fila duplicada
         alert_pts = ALERT_SCORES.get(alerta, 0)
-        if alert_pts > 0:
+        alert_key = (tipo or cat or 'unknown', alerta)
+        if alert_pts > 0 and alert_key not in _alert_counted:
+            _alert_counted.add(alert_key)
             score += alert_pts
             breakdown.append({'source': nombre, 'points': alert_pts, 'reason': f'Nivel de alerta: {alerta}'})
 
@@ -10986,14 +11090,14 @@ def get_scan(scan_id):
 
                 scan['results'] = results
 
-                # Si risk_score quedó en 0 pero hay hallazgos, recalcular y persistir.
-                # Cubre el caso donde _ensemble_risk_score falló silenciosamente al
-                # momento de enviar resultados (savepoint rollback) y la BD quedó en 0.
-                if scan['risk_score'] == 0 and results:
+                # Risk visible = heurística sobre hallazgos ya saneados (FP filter).
+                # Corrige scans con risk inflado (p. ej. miles de FILE_ACTIVITY).
+                if results:
                     try:
+                        _stored_before = int(scan.get('risk_score') or 0)
                         _recalc = _calculate_risk_score(results)
-                        if _recalc > 0:
-                            scan['risk_score'] = _recalc
+                        scan['risk_score'] = _recalc
+                        if _recalc != _stored_before:
                             try:
                                 cursor.execute(
                                     f'UPDATE scans SET risk_score = {_PH} WHERE id = {_PH}',
@@ -14718,11 +14822,13 @@ def update_user_avatar(user_id):
 
 # â”€â”€ Staff AI Chat â€” ensemble: Claude + Groq + Gemini + DuckDuckGo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-_CHAT_SYSTEM = (
-    'Eres Argus AI, asistente experto en seguridad de Minecraft para el staff de ASPERS Projects. '
-    'Ayudas a entender hallazgos del scanner Argus, identificar falsos positivos y responder sobre '
-    'hacks y cheats de Minecraft. Responde en espaÃ±ol, directo y tÃ©cnico. Bullet points si aplica.'
-)
+try:
+    from argus_core_prompt import ARGUS_CORE_SYSTEM as _CHAT_SYSTEM
+except ImportError:
+    _CHAT_SYSTEM = (
+        'Eres Argus Core, copiloto forense de ASPERS Projects. '
+        'Respondes en español, directo y técnico.'
+    )
 
 
 def _ai_web_search(query, n=4):
@@ -14776,31 +14882,139 @@ def _ai_call_groq(key, system, messages):
         return None
 
 
-def _ai_call_gemini(key, system, history, user_msg):
+_GEMINI_MODEL = os.environ.get('ARGUS_GEMINI_MODEL', 'gemini-2.0-flash')
+_GEMINI_MODEL_ACTIVE = _GEMINI_MODEL
+
+
+def _gemini_models_to_try():
+    primary = (_GEMINI_MODEL or 'gemini-2.0-flash').strip()
+    fallbacks = ('gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-flash-8b')
+    out = [primary]
+    for m in fallbacks:
+        if m and m not in out:
+            out.append(m)
+    return out
+
+
+def _argus_core_provider():
+    """gemini = solo Gemini (Argus Core). ensemble = Claude+Groq+Gemini."""
+    p = (os.environ.get('ARGUS_CORE_PROVIDER') or 'gemini').strip().lower()
+    return p if p in ('gemini', 'ensemble') else 'gemini'
+
+
+def _chat_history_session_key(scan_id):
+    return f'chat_history_scan_{int(scan_id)}' if scan_id else 'chat_history'
+
+
+def _build_argus_core_scan_context(scan_id):
+    """Contexto forense completo para conversar scan a scan con Gemini."""
+    if not scan_id:
+        return ''
     try:
-        contents = []
-        for m in history[:-1]:  # historial previo (sin el Ãºltimo user_msg)
-            role = 'user' if m['role'] == 'user' else 'model'
-            contents.append({'role': role, 'parts': [{'text': m['content']}]})
-        # Primer turno incluye el system prompt
-        first_text = f'{system}\n\n{history[-1]["content"]}' if contents else f'{system}\n\n{user_msg}'
-        if not contents:
-            contents.append({'role': 'user', 'parts': [{'text': first_text}]})
-        else:
-            contents.append({'role': 'user', 'parts': [{'text': user_msg}]})
-        r = requests.post(
-            f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}',
-            json={
-                'contents': contents,
-                'generationConfig': {'maxOutputTokens': 700, 'temperature': 0.6},
-            },
-            timeout=25,
-        )
-        r.raise_for_status()
-        return r.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+        sid = int(scan_id)
+    except (TypeError, ValueError):
+        return ''
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f'SELECT machine_name, minecraft_username, verdict, issues_found, risk_score, '
+                f'started_at, scanner_version FROM scans WHERE id = {_PH}',
+                (sid,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return ''
+            machine = _row_get(row, 0, 'machine_name') or '?'
+            mc_user = _row_get(row, 1, 'minecraft_username') or '?'
+            verdict = _row_get(row, 2, 'verdict') or 'pendiente'
+            n_issues = int(_row_get(row, 3, 'issues_found') or 0)
+            risk = int(_row_get(row, 4, 'risk_score') or 0)
+            started = str(_row_get(row, 5, 'started_at') or '')[:19]
+            scanner_ver = _row_get(row, 6, 'scanner_version') or ''
+
+            lines = [
+                f'\n\n[CASO ACTIVO — SCAN #{sid}]',
+                f'Jugador: {mc_user} | Máquina: {machine}',
+                f'Risk: {risk}/100 | Veredicto: {verdict} | Hallazgos: {n_issues}',
+                f'Fecha: {started}' + (f' | Scanner: {scanner_ver}' if scanner_ver else ''),
+                'Listado de hallazgos (ordenados por confianza):',
+            ]
+            cur.execute(
+                f'SELECT issue_name, issue_category, alert_level, confidence, issue_type '
+                f'FROM scan_results WHERE scan_id = {_PH} '
+                f'ORDER BY CASE alert_level WHEN \'CRITICAL\' THEN 0 WHEN \'SEVERE\' THEN 1 '
+                f'WHEN \'ALERT\' THEN 2 ELSE 3 END, confidence DESC LIMIT 45',
+                (sid,),
+            )
+            for r in (cur.fetchall() or []):
+                name = _row_get(r, 0, 'issue_name') or ''
+                cat = _row_get(r, 1, 'issue_category') or ''
+                lvl = _row_get(r, 2, 'alert_level') or ''
+                tipo = _row_get(r, 4, 'issue_type') or ''
+                try:
+                    conf_s = f'{float(_row_get(r, 3, "confidence") or 0):.0%}'
+                except Exception:
+                    conf_s = ''
+                lines.append(f'  [{lvl}] {name} ({cat}/{tipo}) conf={conf_s}')
+            lines.append(
+                'Instrucción: analizá SOLO este scan. Si el staff pregunta por otro, pedí que abra ese scan en el panel.'
+            )
+            return '\n'.join(lines) + '\n'
     except Exception as e:
-        print(f'[gemini] {e}')
-        return None
+        print(f'[argus_core] scan ctx error: {e}')
+        return ''
+
+
+def _ai_call_gemini(key, system, history, user_msg=None):
+    """Gemini multi-turn con systemInstruction (Argus Core). Prueba modelos alternativos si hay 429."""
+    global _GEMINI_MODEL_ACTIVE
+    contents = []
+    for m in history:
+        role = m.get('role')
+        text = (m.get('content') or '').strip()
+        if not text:
+            continue
+        if role == 'user':
+            contents.append({'role': 'user', 'parts': [{'text': text}]})
+        elif role in ('assistant', 'model'):
+            contents.append({'role': 'model', 'parts': [{'text': text}]})
+    if not contents:
+        contents.append({'role': 'user', 'parts': [{'text': user_msg or 'Hola'}]})
+    payload = {
+        'systemInstruction': {'parts': [{'text': system}]},
+        'contents': contents,
+        'generationConfig': {'maxOutputTokens': 1024, 'temperature': 0.45},
+    }
+    last_err = None
+    for model in _gemini_models_to_try():
+        try:
+            url = (
+                f'https://generativelanguage.googleapis.com/v1beta/models/'
+                f'{model}:generateContent?key={key}'
+            )
+            r = requests.post(url, json=payload, timeout=45)
+            if r.status_code in (429, 503, 404):
+                print(f'[gemini] {model} HTTP {r.status_code}')
+                last_err = r.text[:200]
+                continue
+            r.raise_for_status()
+            data = r.json()
+            cands = data.get('candidates') or []
+            if not cands:
+                continue
+            parts = (cands[0].get('content') or {}).get('parts') or []
+            if not parts:
+                continue
+            text = (parts[0].get('text') or '').strip()
+            if text:
+                _GEMINI_MODEL_ACTIVE = model
+                return text
+        except Exception as e:
+            print(f'[gemini] {model} {e}')
+            last_err = str(e)
+    if last_err:
+        print(f'[gemini] todos los modelos fallaron: {last_err}')
+    return None
 
 
 def _ai_synthesize(responses, question, synth_fn):
@@ -14865,16 +15079,24 @@ def _ensure_oracle_conversations_schema():
         print(f"[oracle_conversations] schema error: {e}")
 
 
-def _load_oracle_history(user_id: int, limit: int = 10) -> list[dict]:
+def _load_oracle_history(user_id: int, limit: int = 10, scan_id=None) -> list[dict]:
     out: list[dict] = []
     try:
         with get_api_db_cursor() as cur:
-            cur.execute(
-                f"SELECT id, message, response, created_at, scan_id, feedback, feedback_note "
-                f"FROM oracle_conversations WHERE user_id = {_PH} "
-                f"ORDER BY created_at DESC LIMIT {_PH}",
-                (int(user_id), int(limit))
-            )
+            if scan_id is not None:
+                cur.execute(
+                    f"SELECT id, message, response, created_at, scan_id, feedback, feedback_note "
+                    f"FROM oracle_conversations WHERE user_id = {_PH} AND scan_id = {_PH} "
+                    f"ORDER BY created_at DESC LIMIT {_PH}",
+                    (int(user_id), int(scan_id), int(limit)),
+                )
+            else:
+                cur.execute(
+                    f"SELECT id, message, response, created_at, scan_id, feedback, feedback_note "
+                    f"FROM oracle_conversations WHERE user_id = {_PH} AND scan_id IS NULL "
+                    f"ORDER BY created_at DESC LIMIT {_PH}",
+                    (int(user_id), int(limit)),
+                )
             for r in (cur.fetchall() or []):
                 d = dict(r) if not isinstance(r, dict) else r
                 out.append({
@@ -14889,6 +15111,119 @@ def _load_oracle_history(user_id: int, limit: int = 10) -> list[dict]:
     except Exception as e:
         print(f"[oracle_conversations] load history error: {e}")
     return out
+
+
+@app.route('/api/argus-core/brief', methods=['GET'])
+@login_required
+def argus_core_brief():
+    """Saludo proactivo + estado del panel para Argus Core (copiloto)."""
+    import datetime as _dt
+    try:
+        from argus_core_prompt import ARGUS_CORE_GREETINGS
+    except ImportError:
+        ARGUS_CORE_GREETINGS = {'morning': 'Argus Core en línea.'}
+
+    try:
+        user = get_user_by_id(session.get('user_id'))
+        uname = (user.get('username') if user else session.get('username')) or 'Staff'
+        hour = _dt.datetime.now().hour
+        if hour < 12:
+            slot = 'morning'
+        elif hour < 18:
+            slot = 'afternoon'
+        elif hour < 22:
+            slot = 'evening'
+        else:
+            slot = 'night'
+        base = ARGUS_CORE_GREETINGS.get(slot, 'Argus Core en línea.')
+
+        pending = today_total = high_risk = 0
+        try:
+            with get_api_db_cursor() as cur:
+                cur.execute(
+                    "SELECT COUNT(*) FROM scans WHERE verdict IS NULL OR verdict = 'pending'"
+                )
+                row = cur.fetchone()
+                pending = int(_row_get(row, 0, list(row.keys())[0] if row else 0) or 0)
+
+                today = _dt.datetime.utcnow().strftime('%Y-%m-%d')
+                if _USE_PG:
+                    cur.execute(
+                        f"SELECT COUNT(*) FROM scans WHERE DATE(started_at) = {_PH}",
+                        (today,),
+                    )
+                else:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM scans WHERE DATE(started_at) = ?",
+                        (today,),
+                    )
+                row2 = cur.fetchone()
+                today_total = int(_row_get(row2, 0, list(row2.keys())[0] if row2 else 0) or 0)
+
+                cur.execute(
+                    "SELECT COUNT(*) FROM scans WHERE risk_score >= 70 "
+                    "AND (verdict IS NULL OR verdict = 'pending')"
+                )
+                row3 = cur.fetchone()
+                high_risk = int(_row_get(row3, 0, list(row3.keys())[0] if row3 else 0) or 0)
+        except Exception as e:
+            print(f'[argus-core/brief] {e}')
+
+        hints = []
+        if pending:
+            hints.append(f'{pending} escaneo(s) sin veredicto')
+        if high_risk:
+            hints.append(f'{high_risk} con risk alto (70+)')
+        if today_total:
+            hints.append(f'{today_total} hoy')
+
+        greeting = f'{base} Hola, {uname}.'
+        greeting += (' ' + ' · '.join(hints) + '.') if hints else ' Panel al día.'
+
+        return jsonify({
+            'greeting': greeting,
+            'status': 'online',
+            'pending_scans': pending,
+            'high_risk_pending': high_risk,
+            'scans_today': today_total,
+            'staff': uname,
+        }), 200
+    except Exception as e:
+        return jsonify({'greeting': 'Argus Core en línea.', 'status': 'degraded', 'error': str(e)}), 200
+
+
+@app.route('/api/argus-core/status', methods=['GET'])
+@login_required
+def argus_core_status():
+    """Estado del motor IA (Gemini) para Argus Core."""
+    k_gemini = os.environ.get('GEMINI_API_KEY')
+    provider = _argus_core_provider()
+    ready = bool(k_gemini) if provider == 'gemini' else bool(
+        k_gemini or os.environ.get('GROQ_API_KEY') or os.environ.get('ANTHROPIC_API_KEY')
+    )
+    return jsonify({
+        'provider': provider,
+        'model': _GEMINI_MODEL_ACTIVE if provider == 'gemini' else 'ensemble',
+        'gemini_configured': bool(k_gemini),
+        'ready': ready,
+        'hint': None if ready else 'Configurá GEMINI_API_KEY en .env.local (ver .env.local.example).',
+    })
+
+
+@app.route('/api/argus-core/history', methods=['GET'])
+@login_required
+def argus_core_history():
+    """Historial de chat Argus Core para un scan (o global sin scan_id)."""
+    user_id = int(session.get('user_id') or 0)
+    scan_raw = request.args.get('scan_id')
+    scan_id = int(scan_raw) if scan_raw and str(scan_raw).isdigit() else None
+    turns = []
+    for h in reversed(_load_oracle_history(user_id, limit=12, scan_id=scan_id)):
+        if h.get('message'):
+            turns.append({'role': 'user', 'text': h['message']})
+        if h.get('response'):
+            turns.append({'role': 'bot', 'text': h['response']})
+    return jsonify({'scan_id': scan_id, 'turns': turns})
 
 
 @app.route('/api/staff/chat', methods=['POST'])
@@ -14971,112 +15306,90 @@ def staff_chat():
                 'scan_id': scan_id
             }), 200
 
-    # Detectar quÃ© providers estÃ¡n configurados
     k_claude = os.environ.get('ANTHROPIC_API_KEY')
     k_groq   = os.environ.get('GROQ_API_KEY')
     k_gemini = os.environ.get('GEMINI_API_KEY')
-    if not any([k_claude, k_groq, k_gemini]):
-        return jsonify({'error': 'No hay API keys de IA configuradas (ANTHROPIC_API_KEY / GROQ_API_KEY / GEMINI_API_KEY).'}), 503
+    provider_mode = _argus_core_provider()
 
-    # Contexto del scan
-    scan_context = ''
-    if scan_id:
-        try:
-            with get_api_db_cursor() as cur:
-                cur.execute(
-                    f'SELECT machine_name, minecraft_username, verdict, issues_found FROM scans WHERE id = {_PH}',
-                    (scan_id,)
-                )
-                row = cur.fetchone()
-                if row:
-                    machine  = _row_get(row, 0, 'machine_name') or '?'
-                    mc_user  = _row_get(row, 1, 'minecraft_username') or '?'
-                    verdict  = _row_get(row, 2, 'verdict') or 'pendiente'
-                    n_issues = _row_get(row, 3, 'issues_found') or 0
-                    scan_context = (
-                        f'\n\n[SCAN #{scan_id}] Jugador: {mc_user} | MÃ¡quina: {machine} | '
-                        f'Veredicto: {verdict} | Hallazgos: {n_issues}\n'
-                    )
-                    cur.execute(
-                        f'SELECT issue_name, issue_category, alert_level, confidence '
-                        f'FROM scan_results WHERE scan_id = {_PH} ORDER BY confidence DESC LIMIT 20',
-                        (scan_id,)
-                    )
-                    for r in (cur.fetchall() or []):
-                        lvl  = _row_get(r, 2, 'alert_level') or ''
-                        name = _row_get(r, 0, 'issue_name') or ''
-                        cat  = _row_get(r, 1, 'issue_category') or ''
-                        try:
-                            conf_s = f"{float(_row_get(r, 3, 'confidence') or 0):.0%}"
-                        except Exception:
-                            conf_s = ''
-                        scan_context += f'  [{lvl}] {name} ({cat}) {conf_s}\n'
-        except Exception as e:
-            print(f'[staff_chat] scan ctx error: {e}')
+    if provider_mode == 'gemini':
+        if not k_gemini:
+            return jsonify({
+                'error': 'Argus Core usa Gemini. Configurá GEMINI_API_KEY en web_app/.env.local y reiniciá el panel.',
+            }), 503
+    elif not any([k_claude, k_groq, k_gemini]):
+        return jsonify({'error': 'No hay API keys de IA (GEMINI_API_KEY / GROQ_API_KEY / ANTHROPIC_API_KEY).'}), 503
+
+    scan_context = _build_argus_core_scan_context(scan_id)
+    hist_key = _chat_history_session_key(scan_id)
 
     history = []
-    for h in reversed(_load_oracle_history(user_id, limit=10)):
+    for h in reversed(_load_oracle_history(user_id, limit=12, scan_id=int(scan_id) if scan_id else None)):
         if h.get('message'):
             history.append({'role': 'user', 'content': h['message']})
         if h.get('response'):
             history.append({'role': 'assistant', 'content': h['response']})
-    history.extend(list(session.get('chat_history', [])))
+    history.extend(list(session.get(hist_key, [])))
     history.append({'role': 'user', 'content': user_msg})
 
-    # BÃºsqueda web compartida (en paralelo con las llamadas a IA)
     search_text = ''
     search_query = user_msg[:120]
-
     system_full = _CHAT_SYSTEM + scan_context
 
-    # Lanzar bÃºsqueda web + llamadas a IA TODO en paralelo
-    futures = {}
-    with _cf.ThreadPoolExecutor(max_workers=4) as pool:
-        futures['search'] = pool.submit(_ai_web_search, search_query)
-        if k_claude:
-            futures['claude'] = pool.submit(_ai_call_claude, k_claude, system_full, list(history))
-        if k_groq:
-            futures['groq']   = pool.submit(_ai_call_groq,   k_groq,   system_full, list(history))
-        if k_gemini:
-            futures['gemini'] = pool.submit(_ai_call_gemini, k_gemini, system_full, list(history), user_msg)
-
-        results = {name: f.result() for name, f in futures.items()}
-
-    search_text = results.pop('search', '') or ''
     providers_used = []
-    ai_responses   = []
-
-    for name in ('claude', 'groq', 'gemini'):
-        if name in results and results[name]:
-            providers_used.append(name)
-            ai_responses.append(results[name])
-
-    if not ai_responses:
-        return jsonify({'error': 'Todos los modelos fallaron. Verifica las API keys.'}), 503
-
-    # Si hay resultados web, aÃ±adirlos a un segundo round si se necesita
-    # (ya incluidos en el contexto de las IAs vÃ­a system prompt + search_text)
-    # Para la sÃ­ntesis, incluir el contexto de bÃºsqueda en el system
-    if search_text:
-        system_full += f'\n\n[BÃšSQUEDA WEB]\n{search_text[:1200]}'
-
-    # SÃ­ntesis: si hay 2+ respuestas, fusionar con el modelo mÃ¡s rÃ¡pido disponible
     final_reply = ''
-    if len(ai_responses) == 1:
-        final_reply = ai_responses[0]
-    else:
-        # Elegir sintetizador: Groq (gratis+rÃ¡pido) > Gemini > Claude
-        if k_groq:
-            synth_fn = lambda msgs: _ai_call_groq(k_groq, system_full, msgs)
-        elif k_gemini:
-            synth_fn = lambda msgs: _ai_call_gemini(k_gemini, system_full, [], msgs[0]['content'])
-        else:
-            synth_fn = lambda msgs: _ai_call_claude(k_claude, system_full, msgs)
 
-        final_reply = _ai_synthesize(ai_responses, user_msg, synth_fn) or ai_responses[0]
+    if provider_mode == 'gemini':
+        want_search = any(w in user_msg.lower() for w in ('busca', 'buscar', 'web', 'internet', 'google'))
+        if want_search:
+            search_text = _ai_web_search(search_query) or ''
+            if search_text:
+                system_full += f'\n\n[BÚSQUEDA WEB]\n{search_text[:1200]}'
+        final_reply = _ai_call_gemini(k_gemini, system_full, list(history))
+        if final_reply:
+            providers_used = ['gemini']
+        else:
+            return jsonify({
+                'error': f'Gemini no respondió ({_GEMINI_MODEL}). Revisá GEMINI_API_KEY o probá ARGUS_GEMINI_MODEL=gemini-1.5-flash.',
+            }), 503
+    else:
+        futures = {}
+        with _cf.ThreadPoolExecutor(max_workers=4) as pool:
+            futures['search'] = pool.submit(_ai_web_search, search_query)
+            if k_claude:
+                futures['claude'] = pool.submit(_ai_call_claude, k_claude, system_full, list(history))
+            if k_groq:
+                futures['groq'] = pool.submit(_ai_call_groq, k_groq, system_full, list(history))
+            if k_gemini:
+                futures['gemini'] = pool.submit(_ai_call_gemini, k_gemini, system_full, list(history))
+
+            results = {name: f.result() for name, f in futures.items()}
+
+        search_text = results.pop('search', '') or ''
+        ai_responses = []
+        for name in ('claude', 'groq', 'gemini'):
+            if name in results and results[name]:
+                providers_used.append(name)
+                ai_responses.append(results[name])
+
+        if not ai_responses:
+            return jsonify({'error': 'Todos los modelos fallaron. Verifica las API keys.'}), 503
+
+        if search_text:
+            system_full += f'\n\n[BÚSQUEDA WEB]\n{search_text[:1200]}'
+
+        if len(ai_responses) == 1:
+            final_reply = ai_responses[0]
+        else:
+            if k_groq:
+                synth_fn = lambda msgs: _ai_call_groq(k_groq, system_full, msgs)
+            elif k_gemini:
+                synth_fn = lambda msgs: _ai_call_gemini(k_gemini, system_full, msgs)
+            else:
+                synth_fn = lambda msgs: _ai_call_claude(k_claude, system_full, msgs)
+            final_reply = _ai_synthesize(ai_responses, user_msg, synth_fn) or ai_responses[0]
 
     history.append({'role': 'assistant', 'content': final_reply})
-    session['chat_history'] = history[-20:]
+    session[hist_key] = history[-20:]
     conv_id = None
     try:
         user = get_user_by_id(user_id)
@@ -15094,6 +15407,8 @@ def staff_chat():
     return jsonify({
         'reply':          final_reply,
         'providers_used': providers_used,
+        'provider_mode':  provider_mode,
+        'model':          _GEMINI_MODEL if provider_mode == 'gemini' else 'ensemble',
         'search_done':    bool(search_text),
         'scan_id':        scan_id,
         'conversation_id': conv_id,
@@ -15103,10 +15418,17 @@ def staff_chat():
 @app.route('/api/staff/chat/clear', methods=['POST'])
 @login_required
 def staff_chat_clear():
-    """Borra el historial del chat de IA para la sesiÃ³n actual."""
-    session.pop('chat_history', None)
-    session.pop('chat_rate_log', None)
-    return jsonify({'success': True})
+    """Borra historial de sesión (por scan si se envía scan_id)."""
+    data = request.json or {}
+    scan_id = data.get('scan_id')
+    if scan_id:
+        session.pop(_chat_history_session_key(scan_id), None)
+    else:
+        session.pop('chat_history', None)
+        for key in list(session.keys()):
+            if isinstance(key, str) and key.startswith('chat_history_scan_'):
+                session.pop(key, None)
+    return jsonify({'success': True, 'scan_id': scan_id})
 
 
 @app.route('/api/oracle/history', methods=['GET'])
@@ -19442,16 +19764,37 @@ def _daily_brief_loop():
 
 threading.Thread(target=_daily_brief_loop, daemon=True).start()
 
+try:
+    from argus_admin_api import register_argus_admin_routes as _register_argus_admin
+    _register_argus_admin(
+        app,
+        get_api_db_cursor=get_api_db_cursor,
+        row_get=_row_get,
+        use_pg=_USE_PG,
+        is_panel_owner_fn=_is_panel_owner,
+    )
+    print('[boot] ArgusAdmin API registrada (/api/argus-admin/v1/*)')
+except Exception as _argus_admin_boot_err:
+    print(f'[boot] argus_admin_api no disponible: {_argus_admin_boot_err}')
+
 
 if __name__ == '__main__':
-    print("ðŸŒ Iniciando aplicaciÃ³n web de ASPERS Projects...")
-    api_url_display = os.environ.get('API_URL') or (API_BASE_URL if IS_RENDER else API_BASE_URL)
-    print(f"ðŸ“¡ Conectado a API: {api_url_display}")
-    print(f"ðŸ”‘ API Key configurada: {'SÃ­' if API_KEY != 'change-this-in-production' else 'No (usar valor por defecto)'}")
-    print("âš ï¸  NOTA: AsegÃºrate de que la API estÃ© corriendo en http://localhost:5000")
-    print("âš ï¸  NOTA: La API Key debe coincidir con la configurada en api_server.py")
+    _port = int(os.environ.get('PORT', '8080'))
+    _host = '127.0.0.1' if _is_local_dev() and not IS_RENDER else '0.0.0.0'
+    _debug = os.environ.get('FLASK_DEBUG', '1').strip().lower() in ('1', 'true', 'yes')
+    _reload = _debug and not (_is_local_dev() and not IS_RENDER)
+    print("Iniciando aplicacion web ASPERS Projects...")
+    print(f"API: {API_BASE_URL}")
+    print(f"BD:  {'PostgreSQL (DATABASE_URL)' if os.environ.get('DATABASE_URL') else 'SQLite local'}")
+    if _is_local_dev() and not IS_RENDER:
+        print(f"Modo local privado → http://127.0.0.1:{_port}/panel")
+        print("Login: pestaña Individual o Empresa (misma cuenta en local).")
+        print("Los cambios de codigo NO suben solos a Render: git push → deploy.")
+    elif not IS_RENDER:
+        print("Tip: copia web_app/.env.local.example → .env.local y usa BAT/INICIAR_PANEL_LOCAL.bat")
+        print("Legacy API separada: http://localhost:5000 (INICIAR_SISTEMA_COMPLETO.bat)")
     if socketio is not None:
-        socketio.run(app, host='0.0.0.0', port=8080, debug=True)
+        socketio.run(app, host=_host, port=_port, debug=_debug, use_reloader=_reload)
     else:
-        app.run(host='0.0.0.0', port=8080, debug=True)
+        app.run(host=_host, port=_port, debug=_debug, use_reloader=_reload)
 
