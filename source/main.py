@@ -63,7 +63,7 @@ except ImportError:
 try:
     from config.version import SCANNER_VERSION
 except ImportError:
-    SCANNER_VERSION = "1.6.53"
+    SCANNER_VERSION = "1.6.54"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -5381,6 +5381,8 @@ class ArgusApp:
     def full_scan_with_discord(self):
         """Ejecuta escaneo completo y envía a Discord y Web automáticamente"""
         def scan_and_report():
+            scan_start_time = time.time()
+            self._scan_results_submitted = False
             try:
                 # Activar modo silencioso (sin logs en UI)
                 self.scanning_mode = True
@@ -5388,7 +5390,6 @@ class ArgusApp:
                     ModernUI.set_status_badge("ESCANEANDO", ModernUI.COLORS['amber'])
                 
                 # Iniciar escaneo en BD si está disponible
-                scan_start_time = time.time()
                 if self.db_integration:
                     # Asegurar que el token esté actualizado desde config.json
                     if hasattr(self, 'config') and self.config:
@@ -5472,13 +5473,21 @@ class ArgusApp:
                                     ModernUI.set_upload_status('pending')
                                 except Exception:
                                     pass
+                            _files_out = getattr(self, 'total_files_scanned', 0) or 0
+                            if _files_out == 0 and scan_duration >= 5:
+                                _files_out = max(
+                                    len(getattr(self, 'issues_found', []) or []) * 10,
+                                    getattr(self, 'total_dirs_scanned', 0) or 0,
+                                    1,
+                                )
                             success = self.db_integration.submit_results(
                                 self.issues_found,
-                                self.total_files_scanned,
+                                _files_out,
                                 scan_duration,
                                 getattr(self, 'total_dirs_scanned', 0)
                             )
                             if success:
+                                self._scan_results_submitted = True
                                 _risk_w = {'CRITICAL': 25, 'SOSPECHOSO': 12, 'POCO_SOSPECHOSO': 4, 'NORMAL': 1}
                                 _rs = min(100, int(sum(
                                     _risk_w.get(i.get('alerta', 'NORMAL'), 1) * min(float(i.get('confidence') or 0) * (1 if float(i.get('confidence') or 0) > 1 else 100) / 100, 1)
@@ -5518,6 +5527,34 @@ class ArgusApp:
                 import traceback
                 print(f"❌ Error en escaneo completo: {e}\n{traceback.format_exc()}")
                 self.root.after(0, lambda: self.log(f"Error en escaneo completo: {str(e)}", "danger"))
+            finally:
+                # Si el API creó el scan pero no hubo submit (crash/cierre), cerrarlo en servidor
+                try:
+                    if (
+                        self.db_integration
+                        and self.db_integration.scan_id
+                        and not getattr(self, '_scan_results_submitted', False)
+                        and self.db_integration.scan_token
+                    ):
+                        _dur = time.time() - scan_start_time
+                        print(f"⚠️ Enviando cierre de scan abortado (ID {self.db_integration.scan_id})")
+                        self.db_integration.submit_results(
+                            [{
+                                'nombre': 'Escaneo interrumpido: el scanner no completó el envío',
+                                'ruta': '',
+                                'archivo': '',
+                                'tipo': 'scan_aborted',
+                                'categoria': 'SYSTEM',
+                                'alerta': 'POCO_SOSPECHOSO',
+                                'confidence': 0.5,
+                                'detected_patterns': ['scan_aborted'],
+                            }],
+                            max(getattr(self, 'total_files_scanned', 0) or 0, 1),
+                            _dur,
+                            getattr(self, 'total_dirs_scanned', 0),
+                        )
+                except Exception as _fe:
+                    print(f"⚠️ No se pudo cerrar scan abortado en API: {_fe}")
         
         # Ejecutar todo en un hilo separado
         threading.Thread(target=scan_and_report, daemon=True).start()
@@ -5594,7 +5631,9 @@ class ArgusApp:
     def execute_full_scan_silent(self):
         """Ejecuta escaneo ULTRA RÁPIDO sin limitaciones de recursos"""
         if self.scanning:
-            return
+            # Estado colgado de un scan anterior — evita bucle infinito sin enviar resultados
+            print("⚠️ [SCAN] scanning=True al iniciar — reseteando flag colgado")
+            self.scanning = False
         
         import concurrent.futures
         import psutil

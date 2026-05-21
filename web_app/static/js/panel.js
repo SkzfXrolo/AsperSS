@@ -4514,10 +4514,33 @@ async function viewScanDetails(scanId) {
                 <div style="text-align:center;padding:60px 20px;color:var(--text-m)">
                     <div style="font-size:36px;margin-bottom:14px">⏳</div>
                     <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">Scan en progreso...</div>
-                    <div style="font-size:13px">Los resultados aparecerán cuando el scanner termine.</div>
+                    <div style="font-size:13px">El jugador debe dejar el scanner abierto hasta que termine y suba los resultados.</div>
+                    <div style="font-size:12px;color:var(--text-d);margin-top:10px">Archivos hasta ahora: <strong>${(data.total_files_scanned || 0).toLocaleString()}</strong></div>
                     <button class="btn btn-sm" style="margin-top:18px" onclick="viewScanDetails(${scanId})">Actualizar</button>
                 </div>`;
             document.getElementById('bulk-actions-bar').style.display = 'none';
+            // Auto-refresh cada 8s mientras siga en running (evita pantalla "limpia" con 0 hallazgos)
+            if (window._scanPollTimer) clearInterval(window._scanPollTimer);
+            window._scanPollTimer = setInterval(() => {
+                if (currentScanId === scanId) viewScanDetails(scanId);
+            }, 8000);
+            return;
+        }
+        if (window._scanPollTimer) {
+            clearInterval(window._scanPollTimer);
+            window._scanPollTimer = null;
+        }
+        if (data.status === 'abandoned' || data.status === 'failed') {
+            const issuesContainer = document.getElementById('issues-list-container');
+            if (issuesContainer) issuesContainer.innerHTML = `
+                <div style="text-align:center;padding:60px 20px;color:var(--text-m)">
+                    <div style="font-size:36px;margin-bottom:14px">⚠️</div>
+                    <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">Scan incompleto</div>
+                    <div style="font-size:13px">El scanner no envió resultados (cerrado, crash o timeout). Pedí al jugador que vuelva a ejecutar el SS.</div>
+                    <button class="btn btn-sm" style="margin-top:18px" onclick="viewScanDetails(${scanId})">Reintentar</button>
+                </div>`;
+            document.getElementById('bulk-actions-bar').style.display = 'none';
+            return;
         } else if (data.verdict === 'hack') {
             if (detectionBanner) detectionBanner.style.display = 'flex';
         } else if (data.verdict === 'clean' || data.verdict === 'limpio') {

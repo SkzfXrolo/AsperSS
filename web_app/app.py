@@ -403,7 +403,7 @@ def audit_action(action_name: str, resource_type: str = ''):
 CORS(app)
 
 # Inicializar base de datos de autenticaciÃ³n al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.53'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
+_ARGUS_VERSION = '1.6.54'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
 # URL de invitacion permanente al Discord oficial. Se inyecta en todos los
 # templates como `discord_invite` via @app.context_processor (ver mas abajo).
@@ -10768,13 +10768,32 @@ def get_scan(scan_id):
                 if not row:
                     return jsonify({'error': 'Escaneo no encontrado'}), 404
 
+                _started_raw = _row_get(row, 3, 'started_at')
+                _status_raw = _row_get(row, 5, 'status')
+                # Scans colgados en running (>10 min sin submit) — el panel los trata como abandonados
+                if _status_raw == 'running' and _started_raw:
+                    try:
+                        from datetime import datetime, timezone
+                        if hasattr(_started_raw, 'isoformat'):
+                            _started_dt = _started_raw
+                            if getattr(_started_dt, 'tzinfo', None) is None:
+                                _started_dt = _started_dt.replace(tzinfo=timezone.utc)
+                        else:
+                            _s = str(_started_raw).replace('Z', '+00:00')
+                            _started_dt = datetime.fromisoformat(_s)
+                        _age_s = (datetime.now(timezone.utc) - _started_dt.astimezone(timezone.utc)).total_seconds()
+                        if _age_s > 600:
+                            _status_raw = 'abandoned'
+                    except Exception:
+                        pass
+
                 scan = {
                     'id': _row_get(row, 0, 'id'),
                     'token_id': _row_get(row, 1, 'token_id'),
                     'scan_token': _row_get(row, 2, 'scan_token'),
-                    'started_at': str(_row_get(row, 3, 'started_at') or ''),
+                    'started_at': str(_started_raw or ''),
                     'completed_at': str(_row_get(row, 4, 'completed_at') or ''),
-                    'status': _row_get(row, 5, 'status'),
+                    'status': _status_raw,
                     'total_files_scanned': _row_get(row, 6, 'total_files_scanned') or 0,
                     'total_dirs_scanned': 0,
                     'issues_found': _row_get(row, 7, 'issues_found') or 0,
