@@ -428,16 +428,17 @@ def patch_modern_ui(cls):
             'low': 'BAJO: señal débil o contextual',
             'clean': 'OK: sin alertas en esta categoría',
         }
+        C = cls.COLORS
         for key, w in (chip_widgets or {}).items():
             tip = tips.get(key)
             if not tip or w is None:
                 continue
-            def _enter(e, t=tip, widget=w):
+            def _enter(e, t=tip, widget=w, _C=C):
                 tw = tk.Toplevel(widget)
                 tw.wm_overrideredirect(True)
-                tw.configure(bg=cls.COLORS['bg_card'])
+                tw.configure(bg=_C['bg_card'])
                 lbl = tk.Label(tw, text=t, font=('Segoe UI', 7),
-                               bg=cls.COLORS['bg_card'], fg=cls.COLORS['text_secondary'],
+                               bg=_C['bg_card'], fg=_C['text_secondary'],
                                padx=6, pady=3)
                 lbl.pack()
                 x = widget.winfo_rootx()
@@ -491,3 +492,14 @@ def patch_modern_ui(cls):
 
         threading.Thread(target=_run, daemon=True).start()
         return icon
+
+    _method_names = (
+        'apply_ui_prefs', 'toggle_expanded_mode', 'show_splash', 'fade_out_and_quit',
+        'enhance_header', 'set_network_status', 'set_token_status', 'append_phase_history',
+        'create_phase_sidebar', 'create_sparkline', 'push_risk_sample', 'set_files_scanned',
+        'attach_files_counter', 'enhance_completion_panel', 'set_upload_status',
+        'wire_cancel_confirm', 'flash_dwm_border', 'play_complete_sound', 'check_update_async',
+        'show_auth_error_screen', 'add_chip_tooltips', 'setup_tray',
+    )
+    for _name in _method_names:
+        setattr(cls, _name, locals()[_name])

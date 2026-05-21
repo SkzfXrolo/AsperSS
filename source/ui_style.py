@@ -163,7 +163,7 @@ class ModernUI:
         root.resizable(False, False)
         root.overrideredirect(True)
         root.configure(bg=ModernUI.COLORS['bg_primary'])
-        cls._root_ref = root
+        ModernUI._root_ref = root
         # Fade-in al abrir (#4)
         try:
             root.attributes('-alpha', 0.0)
