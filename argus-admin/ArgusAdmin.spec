@@ -1,29 +1,43 @@
 # -*- mode: python ; coding: utf-8 -*-
 # ArgusAdmin — Control Imperial (.exe)
-# python -m PyInstaller ArgusAdmin.spec
+# python -m PyInstaller ArgusAdmin.spec --noconfirm
 
-import sys
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_all
 
 _icon = Path('assets/argus_admin.ico')
 _datas = []
 if _icon.is_file():
     _datas.append((str(_icon), 'assets'))
 
+_binaries = []
+_hidden = [
+    'argus_admin', 'argus_admin.gui', 'argus_admin.voice_lock',
+    'argus_admin.api_client', 'argus_admin.config_local', 'argus_admin.main',
+    'numpy', 'requests', 'sounddevice', '_sounddevice_data', 'wave',
+]
+for pkg in ('sounddevice',):
+    try:
+        d, b, h = collect_all(pkg)
+        _datas += d
+        _binaries += b
+        _hidden += h
+    except Exception:
+        pass
+
 a = Analysis(
     ['run_argus_admin.py'],
     pathex=['.'],
-    binaries=[],
+    binaries=_binaries,
     datas=_datas,
-    hiddenimports=[
-        'argus_admin', 'argus_admin.gui', 'argus_admin.voice_lock',
-        'argus_admin.api_client', 'argus_admin.config_local',
-        'numpy', 'requests',
-    ],
+    hiddenimports=_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        'speech_recognition', 'google', 'grpc', 'tensorflow', 'torch',
+        'matplotlib', 'pandas', 'PIL', 'pygments', 'rich', 'anyio',
+    ],
     noarchive=False,
 )
 pyz = PYZ(a.pure)
@@ -33,7 +47,7 @@ _kw = dict(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,

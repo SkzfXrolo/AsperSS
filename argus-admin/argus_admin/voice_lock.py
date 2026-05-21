@@ -55,7 +55,7 @@ def fingerprint_from_wav(path: str | Path) -> np.ndarray:
     if data.size < 800:
         raise ValueError('Audio demasiado corto — hablá más fuerte y más cerca del mic.')
     rms = float(np.sqrt(np.mean(data ** 2)))
-    if rms < 80:
+    if rms < 40:
         raise ValueError(
             'Casi no se escuchó tu voz. Subí el volumen del micrófono o acercate al mic.'
         )
@@ -129,49 +129,47 @@ def _similarity(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(_unit(a), _unit(b)))
 
 
+def _write_wav(path: Path, pcm: np.ndarray, rate: int) -> None:
+    import wave
+    pcm = np.asarray(pcm, dtype=np.int16).reshape(-1)
+    with wave.open(str(path), 'wb') as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(pcm.tobytes())
+
+
 def record_wav(seconds: float = 4.5, rate: int = 16000) -> Path:
+    import wave  # noqa: F401 — asegura módulo stdlib en .exe
     _SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
     path = _SAMPLES_DIR / f'sample_{int(time.time() * 1000)}.wav'
+    last_err: Exception | None = None
     try:
         import sounddevice as sd
-        audio = sd.rec(int(seconds * rate), samplerate=rate, channels=1, dtype='int16')
+        frames = int(seconds * rate)
+        audio = sd.rec(frames, samplerate=rate, channels=1, dtype='int16')
         sd.wait()
-        with __import__('wave').open(str(path), 'wb') as w:
-            w.setnchannels(1)
-            w.setsampwidth(2)
-            w.setframerate(rate)
-            w.writeframes(audio.tobytes())
+        _write_wav(path, audio, rate)
         fingerprint_from_wav(path)
         return path
-    except ImportError:
-        pass
+    except ImportError as e:
+        last_err = e
     except ValueError:
         raise
     except Exception as e:
+        last_err = e
         err = str(e).lower()
         if 'device' in err or 'portaudio' in err:
             raise RuntimeError(
                 'Micrófono no disponible. Conectá el headset y probá de nuevo.'
             ) from e
-        raise
-    try:
-        import speech_recognition as sr
-        r = sr.Recognizer()
-        r.dynamic_energy_threshold = True
-        with sr.Microphone() as src:
-            r.adjust_for_ambient_noise(src, duration=0.4)
-            audio = r.listen(src, timeout=seconds + 6, phrase_time_limit=seconds + 2)
-        with open(path, 'wb') as f:
-            f.write(audio.get_wav_data(convert_rate=rate))
-        fingerprint_from_wav(path)
-        return path
-    except ImportError:
-        raise ImportError(
-            'Instalá micrófono: pip install sounddevice numpy\n'
-            'O alternativa: pip install SpeechRecognition pyaudio'
-        ) from None
-    except sr.WaitTimeoutError:
-        raise RuntimeError('No escuché nada. Hablá cuando aparezca el cuadro de grabación.') from None
+    if last_err and not isinstance(last_err, ImportError):
+        raise RuntimeError(f'Error al grabar: {last_err}') from last_err
+    raise RuntimeError(
+        'No se pudo usar el micrófono en este .exe.\n'
+        'Reinstalá ArgusAdmin o ejecutá: pip install sounddevice\n'
+        f'Detalle: {last_err}'
+    )
 
 
 def reset_profile() -> None:

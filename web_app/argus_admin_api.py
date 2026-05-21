@@ -92,7 +92,7 @@ def register_argus_admin_routes(app, *, get_api_db_cursor, row_get, use_pg=False
                             id SERIAL PRIMARY KEY,
                             user_id INTEGER NOT NULL,
                             device_id VARCHAR(128) NOT NULL,
-                            voice_fp_hash VARCHAR(128),
+                            voice_fp_hash TEXT,
                             assistant_settings TEXT,
                             phrase_label VARCHAR(64) DEFAULT 'desbloqueo argus',
                             enrolled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -114,8 +114,21 @@ def register_argus_admin_routes(app, *, get_api_db_cursor, row_get, use_pg=False
                             UNIQUE(user_id, device_id)
                         )
                     """)
+                if _USE_PG:
+                    cur.execute(
+                        'ALTER TABLE argus_admin_devices '
+                        'ALTER COLUMN voice_fp_hash TYPE TEXT'
+                    )
         except Exception as e:
             app.logger.warning('[argus-admin] schema: %s', e)
+
+    def _auth_user(username: str, password: str):
+        """authenticate_user devuelve dict, no tupla."""
+        from auth import authenticate_user
+        result = authenticate_user(username, password)
+        if not result or not result.get('success'):
+            return None, (result or {}).get('error') or 'Credenciales inválidas'
+        return result.get('user'), None
 
     def _device_header() -> str:
         return (request.headers.get('X-Argus-Admin-Device') or '').strip()[:128]
@@ -155,10 +168,9 @@ def register_argus_admin_routes(app, *, get_api_db_cursor, row_get, use_pg=False
         device_id = (data.get('device_id') or '').strip()[:128]
         if not username or not password or not device_id:
             return jsonify({'error': 'username, password y device_id requeridos'}), 400
-        from auth import authenticate_user
-        user, err = authenticate_user(username, password)
+        user, err = _auth_user(username, password)
         if err or not user:
-            return jsonify({'error': err or 'Credenciales inválidas'}), 401
+            return jsonify({'error': err}), 401
         if not owner_check(user):
             return jsonify({'error': 'Solo el owner del panel puede usar ArgusAdmin'}), 403
         _ensure_schema()
@@ -221,10 +233,9 @@ def register_argus_admin_routes(app, *, get_api_db_cursor, row_get, use_pg=False
         fp_hash = (data.get('fingerprint_hash') or '').strip()
         if not all([username, password, device_id, fp_hash]):
             return jsonify({'error': 'Datos incompletos'}), 400
-        from auth import authenticate_user
-        user, err = authenticate_user(username, password)
+        user, err = _auth_user(username, password)
         if err or not user or not owner_check(user):
-            return jsonify({'error': 'Acceso denegado'}), 401
+            return jsonify({'error': err or 'Acceso denegado'}), 401
         _ensure_schema()
         try:
             with get_api_db_cursor() as cur:

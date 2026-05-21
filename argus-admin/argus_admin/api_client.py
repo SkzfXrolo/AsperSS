@@ -83,11 +83,17 @@ class ArgusAdminApi:
             h['X-Argus-Admin-Token'] = self.token
         return h
 
-    def check_api_available(self) -> tuple[bool, str]:
+    def check_api_available(self, *, fast: bool = False) -> tuple[bool, str]:
         """Comprueba que Render (o local) expone ArgusAdmin API."""
         url = f'{self.base}/api/argus-admin/v1/status'
         try:
-            r = _request('GET', url, 'API ArgusAdmin', retry_cold_start=True)
+            r = _request(
+                'GET',
+                url,
+                'API ArgusAdmin',
+                retry_cold_start=not fast,
+                timeout=12 if fast else 60,
+            )
         except RuntimeError as e:
             return False, str(e)
         if r.status_code == 404:
@@ -118,7 +124,8 @@ class ArgusAdminApi:
         )
         data = _parse_json_response(r, 'Login')
         if not r.ok:
-            raise RuntimeError(data.get('error') or f'Login falló ({r.status_code})')
+            err = data.get('error') if isinstance(data, dict) else None
+            raise RuntimeError(err or f'Login falló ({r.status_code})')
         self.token = data.get('token')
         if not self.token:
             raise RuntimeError('Login OK pero el servidor no devolvió token.')
@@ -137,7 +144,8 @@ class ArgusAdminApi:
         )
         data = _parse_json_response(r, 'Registro de voz')
         if not r.ok:
-            raise RuntimeError(data.get('error') or f'Enroll falló ({r.status_code})')
+            err = data.get('error') if isinstance(data, dict) else None
+            raise RuntimeError(err or f'Enroll falló ({r.status_code})')
         return data
 
     def unlock_voice(self, username: str, password: str, fp_hash: str) -> dict:

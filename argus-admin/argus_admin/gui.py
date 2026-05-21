@@ -3,6 +3,7 @@ ArgusAdmin — ventana: enroll voz → desbloqueo → panel imperial.
 """
 from __future__ import annotations
 
+import threading
 import tkinter as tk
 import webbrowser
 from tkinter import messagebox, scrolledtext, simpledialog
@@ -68,13 +69,12 @@ class ArgusAdminApp:
                 f, text=self._api_init_error, fg='#f88', bg=self.BG, wraplength=420,
             ).pack(pady=8)
         elif self.api:
-            ok_api, api_msg = self.api.check_api_available()
-            if not ok_api:
-                tk.Label(
-                    f, text=api_msg, fg='#f88', bg=self.BG, wraplength=440, justify='left',
-                ).pack(pady=8)
-            else:
-                tk.Label(f, text=api_msg, fg='#5a8', bg=self.BG, font=('Segoe UI', 9)).pack()
+            self._api_status_lbl = tk.Label(
+                f, text='Comprobando API…', fg='#888', bg=self.BG,
+                wraplength=440, justify='left', font=('Segoe UI', 9),
+            )
+            self._api_status_lbl.pack(pady=8)
+            self.root.after(200, self._check_api_background)
 
         if profile_needs_reenroll():
             tk.Label(
@@ -125,6 +125,28 @@ class ArgusAdminApp:
             fg='#666', bg=self.BG, font=('Segoe UI', 9),
         ).pack(pady=12)
 
+    def _check_api_background(self) -> None:
+        if not self.api:
+            return
+        api = self.api
+
+        def work() -> None:
+            ok, msg = api.check_api_available(fast=True)
+            def ui() -> None:
+                if not getattr(self, '_api_status_lbl', None):
+                    return
+                try:
+                    if self._api_status_lbl.winfo_exists():
+                        self._api_status_lbl.config(
+                            text=msg[:500],
+                            fg='#5a8' if ok else '#f88',
+                        )
+                except tk.TclError:
+                    pass
+            self.root.after(0, ui)
+
+        threading.Thread(target=work, daemon=True).start()
+
     def _setup_account(self) -> None:
         url = simpledialog.askstring('API', 'URL Render:', initialvalue=self.cfg.get('api_url', ''))
         user = simpledialog.askstring(
@@ -144,6 +166,16 @@ class ArgusAdminApp:
         messagebox.showinfo('ArgusAdmin', 'Guardado en %APPDATA%\\ArgusAdmin\\config.json')
 
     def _enroll_voice(self) -> None:
+        try:
+            self._enroll_voice_impl()
+        except Exception as e:
+            messagebox.showerror(
+                'Error',
+                f'{e}\n\nSi el programa se cerró solo, mirá %APPDATA%\\ArgusAdmin\\crash.log',
+            )
+            self._show_gate()
+
+    def _enroll_voice_impl(self) -> None:
         if not self.cfg.get('username'):
             self._setup_account()
             self.cfg = load()
@@ -153,24 +185,35 @@ class ArgusAdminApp:
         pwd = simpledialog.askstring('Contraseña', 'Contraseña del panel owner:', show='*')
         if not pwd:
             return
-        ok_api, api_msg = self.api.check_api_available()
+        self.root.config(cursor='watch')
+        self.root.update()
+        try:
+            ok_api, api_msg = self.api.check_api_available(fast=True)
+        finally:
+            self.root.config(cursor='')
         if not ok_api:
             messagebox.showerror('API no disponible', api_msg)
             return
         reset_profile()
         phrase = self.cfg.get('phrase') or 'desbloqueo argus'
         for i in range(3):
-            messagebox.showinfo(
+            if not messagebox.askokcancel(
                 'Grabación',
-                f'Muestra {i + 1}/3\nDecí en voz alta (mismo tono cada vez):\n«{phrase}»',
-            )
+                f'Muestra {i + 1}/3\nDecí en voz alta (mismo tono):\n«{phrase}»\n\n'
+                'Aceptar = empiezo a grabar 4 s.',
+            ):
+                return
             try:
                 wav = record_wav(4.5)
                 enroll_sample(wav)
             except Exception as e:
                 messagebox.showerror('Error de grabación', str(e))
                 return
-        fp = finalize_profile()
+        try:
+            fp = finalize_profile()
+        except VoiceProfileOutdated as e:
+            messagebox.showerror('Perfil', str(e))
+            return
         if not fp:
             messagebox.showerror('Error', 'No se pudo crear el perfil de voz (faltan muestras).')
             return
