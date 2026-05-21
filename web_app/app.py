@@ -1128,23 +1128,6 @@ def api_public_banner():
     return jsonify({'id': 'default', 'message': msg})
 
 
-@app.route('/api/public/stats', methods=['GET'])
-def api_public_stats():
-    """Contador social proof para la landing."""
-    total = 12840
-    try:
-        with get_api_db_cursor() as cur:
-            cur.execute('SELECT COUNT(*) FROM scans')
-            row = cur.fetchone()
-            if row:
-                n = _row_get(row, 0, 0) or 0
-                if int(n) > 0:
-                    total = int(n)
-    except Exception:
-        pass
-    return jsonify({'scans_total': total, 'total_scans': total})
-
-
 @app.route('/api/sa/search', methods=['GET'])
 def api_sa_search():
     """Búsqueda global SuperAdmin (Cmd+K)."""
@@ -1175,6 +1158,7 @@ def api_sa_search():
         pass
     return jsonify({'results': results[:12]})
 
+@app.route('/api/public/stats', methods=['GET'])
 @app.route('/api/public_stats', methods=['GET'])
 def api_public_stats():
     """Stats pÃºblicas agregadas para el live counter del index. NUNCA devuelve

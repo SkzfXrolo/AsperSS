@@ -273,7 +273,7 @@
   }
 
   function initSocialProof() {
-    fetch((API_BASE || '') + '/api/public/stats')
+    fetch((API_BASE || '') + '/api/public_stats')
       .then(function (r) { return r.json(); })
       .then(function (d) {
         var n = d.scans_total || d.total_scans || 12840;
