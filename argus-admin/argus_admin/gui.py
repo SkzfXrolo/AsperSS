@@ -150,7 +150,9 @@ class ArgusAdminApp:
     def _setup_account(self) -> None:
         url = simpledialog.askstring('API', 'URL Render:', initialvalue=self.cfg.get('api_url', ''))
         user = simpledialog.askstring(
-            'Cuenta', 'Usuario owner (ej. arefy_admin):', initialvalue=self.cfg.get('username', ''),
+            'Cuenta',
+            'Usuario (mismo que /aspers-sa SUPER_ADMIN_USER o panel owner, ej. Rodrigo):',
+            initialvalue=self.cfg.get('username', ''),
         )
         if url:
             update(api_url=url.rstrip('/'))

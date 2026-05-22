@@ -39,8 +39,14 @@ Variables en Render:
 
 ```env
 ARGUS_ADMIN_JWT_SECRET=<secreto-largo>
-ARGUS_PANEL_OWNER_USERNAMES=arefy_admin
+ARGUS_PANEL_OWNER_USERNAMES=Rodrigo
+SUPER_ADMIN_USER=Rodrigo
+SUPER_ADMIN_PASS=<tu-clave-super-admin>
+# Si Rodrigo solo existe como SUPER_ADMIN (no en tabla users):
+ARGUS_ADMIN_LINK_USER_ID=1
 ```
+
+`/aspers-sa` usa `SUPER_ADMIN_USER` / `SUPER_ADMIN_PASS`. ArgusAdmin acepta esas mismas credenciales y guarda la voz vinculada al `user_id` de `ARGUS_ADMIN_LINK_USER_ID` (o al primer owner que exista en la BD).
 
 ## Checklist al probar
 

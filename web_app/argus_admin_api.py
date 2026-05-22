@@ -42,7 +42,11 @@ def _panel_owner_usernames() -> set[str]:
 def _is_panel_owner_user(user) -> bool:
     if not user:
         return False
-    return (user.get('username') or '').strip().lower() in _panel_owner_usernames()
+    uname = (user.get('username') or '').strip().lower()
+    if uname in _panel_owner_usernames():
+        return True
+    sa = (os.environ.get('SUPER_ADMIN_USER') or '').strip().lower()
+    return bool(sa) and uname == sa
 
 
 def _token_issue(user_id: int, device_id: str, *, voice_ok: bool, hours: int = 8) -> str:
@@ -122,13 +126,54 @@ def register_argus_admin_routes(app, *, get_api_db_cursor, row_get, use_pg=False
         except Exception as e:
             app.logger.warning('[argus-admin] schema: %s', e)
 
+    def _resolve_owner_user_id(username_hint: str) -> int | None:
+        linked = (os.environ.get('ARGUS_ADMIN_LINK_USER_ID') or '').strip()
+        if linked.isdigit():
+            return int(linked)
+        names: list[str] = []
+        h = (username_hint or '').strip().lower()
+        if h:
+            names.append(h)
+        for n in _panel_owner_usernames():
+            if n not in names:
+                names.append(n)
+        try:
+            with get_api_db_cursor() as cur:
+                for name in names:
+                    cur.execute(
+                        f'SELECT id FROM users WHERE LOWER(username) = LOWER({_PH}) LIMIT 1',
+                        (name,),
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        rid = row_get(row, 0, 'id') if hasattr(row, 'keys') else row[0]
+                        return int(rid)
+        except Exception:
+            pass
+        return None
+
     def _auth_user(username: str, password: str):
-        """authenticate_user devuelve dict, no tupla."""
+        """Panel (tabla users) o Super Admin (/aspers-sa SUPER_ADMIN_* en Render)."""
         from auth import authenticate_user
-        result = authenticate_user(username, password)
-        if not result or not result.get('success'):
-            return None, (result or {}).get('error') or 'Credenciales inválidas'
-        return result.get('user'), None
+        uname = (username or '').strip()
+        pwd = password or ''
+        result = authenticate_user(uname, pwd)
+        if result and result.get('success'):
+            return result.get('user'), None
+        sa_user = (os.environ.get('SUPER_ADMIN_USER') or '').strip()
+        sa_pass = (os.environ.get('SUPER_ADMIN_PASS') or '').strip()
+        if sa_user and sa_pass and uname == sa_user and pwd == sa_pass:
+            uid = _resolve_owner_user_id(sa_user)
+            if uid:
+                return {'id': uid, 'username': sa_user, 'roles': ['super_admin', 'admin']}, None
+            return None, (
+                'Login Super Admin OK pero falta usuario en la BD. '
+                'En Render: ARGUS_ADMIN_LINK_USER_ID=id de users.'
+            )
+        err = (result or {}).get('error') or 'Credenciales inválidas'
+        if sa_user and 'no encontrado' in err.lower():
+            err += f' Con /aspers-sa usá usuario {sa_user} y la misma clave.'
+        return None, err
 
     def _device_header() -> str:
         return (request.headers.get('X-Argus-Admin-Device') or '').strip()[:128]

@@ -1507,7 +1507,10 @@ def _is_panel_owner(user):
     uname = (user.get('username') or '').strip().lower()
     raw = (os.environ.get('ARGUS_PANEL_OWNER_USERNAMES') or 'arefy_admin,arefy').strip().lower()
     allowed = {p.strip() for p in raw.split(',') if p.strip()}
-    return uname in allowed
+    if uname in allowed:
+        return True
+    sa = (os.environ.get('SUPER_ADMIN_USER') or '').strip().lower()
+    return bool(sa) and uname == sa
 
 
 @app.route('/panel')
