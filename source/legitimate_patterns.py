@@ -78,7 +78,16 @@ class LegitimatePatterns:
         'curseforge\\minecraft',
         'overwolf\\curseforge',
         'ftblauncher',
+        'wallpaperengine',
+        'steam\\steamapps\\common\\wallpaper_engine',
     }
+
+    # Procesos Windows legítimos (inyector FP)
+    _TRUSTED_PROCESS_NAMES: frozenset[str] = frozenset({
+        'wallpaperservice32.exe',
+        'desktopwallpaperengine.exe',
+        'lively.exe',
+    })
 
     def __init__(self, database_path='scanner_db.sqlite'):
         self.database_path = database_path
@@ -237,6 +246,9 @@ class LegitimatePatterns:
         
         # 5. Verificar contexto (si se proporciona)
         if context:
+            for proc in context.get('related_processes') or []:
+                if (proc or '').lower() in self._TRUSTED_PROCESS_NAMES:
+                    return True, 0.92
             context_confidence = self._check_context(context)
             confidence += context_confidence * 0.2
         
@@ -269,6 +281,9 @@ class LegitimatePatterns:
         related_processes = context.get('related_processes', [])
         for proc in related_processes:
             proc_lower = proc.lower()
+            if proc_lower in self._TRUSTED_PROCESS_NAMES:
+                context_score += 0.5
+                break
             if any(legit in proc_lower for legit in ['minecraft', 'java', 'steam', 'epic']):
                 context_score += 0.2
                 break

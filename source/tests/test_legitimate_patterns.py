@@ -55,6 +55,17 @@ def test_hack_jar_not_whitelisted_by_name_alone():
     assert conf < 0.5
 
 
+def test_trusted_wallpaper_process_in_context():
+    lp = LegitimatePatterns(database_path=os.devnull)
+    ok, conf = lp.is_legitimate(
+        r"C:\Windows\System32\WallpaperService32.exe",
+        file_name="WallpaperService32.exe",
+        context={'related_processes': ['WallpaperService32.exe']},
+    )
+    assert ok is True
+    assert conf >= 0.5
+
+
 def test_rubidium_mod_prefix():
     lp = LegitimatePatterns(database_path=os.devnull)
     ok, conf = lp.is_legitimate(

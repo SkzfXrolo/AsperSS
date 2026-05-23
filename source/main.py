@@ -16625,31 +16625,28 @@ class ArgusApp:
     def scan_active_injectors(self):
         """Detecta procesos inyectores corriendo durante el scan."""
         print("🔍 Buscando procesos inyectores activos...")
-        INJECTOR_SIGS = [
-            'extremeinjector', 'xenos', 'dllinjector', 'dll_injector',
-            'processhacker', 'cheatengine', 'cheat_engine', 'ce32', 'ce64',
-            'scylla', 'scyllahide', 'titan', 'injex', 'remoteinjector',
-            'manualmap', 'threadhijack',
-        ]
+        try:
+            from utils.injector_process import match_injector_process
+        except ImportError:
+            from injector_process import match_injector_process  # type: ignore
         try:
             for proc in psutil.process_iter(['pid', 'name', 'exe']):
                 try:
-                    pname = (proc.info.get('name') or '').lower().replace(' ', '').replace('-', '').replace('_', '')
-                    pexe  = (proc.info.get('exe') or '').lower().replace(' ', '').replace('-', '')
-                    for sig in INJECTOR_SIGS:
-                        if sig in pname or sig in pexe:
-                            print(f"🚨 INYECTOR ACTIVO: {proc.info.get('name')}")
-                            self.issues_found.append({
-                                'nombre': f'Proceso inyector activo: {proc.info.get("name", sig)}',
-                                'ruta': proc.info.get('exe') or 'N/A',
-                                'archivo': proc.info.get('name', sig),
-                                'tipo': 'injector_process',
-                                'categoria': 'JAVA_INJECTION',
-                                'alerta': 'CRITICAL',
-                                'confidence': 0.93,
-                                'detected_patterns': ['active_injector'],
-                            })
-                            break
+                    raw_name = proc.info.get('name') or ''
+                    exe_path = proc.info.get('exe') or ''
+                    sig = match_injector_process(raw_name, exe_path)
+                    if sig:
+                        print(f"🚨 INYECTOR ACTIVO: {raw_name}")
+                        self.issues_found.append({
+                            'nombre': f'Proceso inyector activo: {raw_name or sig}',
+                            'ruta': exe_path or 'N/A',
+                            'archivo': raw_name or sig,
+                            'tipo': 'injector_process',
+                            'categoria': 'JAVA_INJECTION',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.93,
+                            'detected_patterns': ['active_injector', sig],
+                        })
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
         except Exception as e:
