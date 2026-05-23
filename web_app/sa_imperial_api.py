@@ -10,6 +10,111 @@ from datetime import datetime, timedelta, timezone
 
 from flask import jsonify, request
 
+_imperial_cache: dict = {}
+_imperial_cache_ts: dict = {}
+
+
+def _cache_get(key: str, ttl: int = 60):
+    import time
+    if key in _imperial_cache and (time.time() - _imperial_cache_ts.get(key, 0)) < ttl:
+        return _imperial_cache[key]
+    return None
+
+
+def _cache_set(key: str, val):
+    import time
+    _imperial_cache[key] = val
+    _imperial_cache_ts[key] = time.time()
+
+
+def _cache_bust(*keys):
+    if not keys:
+        _imperial_cache.clear()
+        _imperial_cache_ts.clear()
+        return
+    for k in keys:
+        _imperial_cache.pop(k, None)
+        _imperial_cache_ts.pop(k, None)
+
+
+def _scalar(cur, sql, params=(), row_get=None):
+    cur.execute(sql, params)
+    row = cur.fetchone()
+    if not row:
+        return 0
+    if row_get:
+        return row_get(row, 0, 0) or 0
+    return row[0] if not hasattr(row, 'keys') else list(row.values())[0]
+
+
+def imperial_dashboard_stats(get_api_db_cursor, row_get) -> dict:
+    cached = _cache_get('dashboard')
+    if cached is not None:
+        return cached
+    stats = {
+        'companies': 0, 'users': 0, 'individuals': 0,
+        'misassigned': 0, 'revenue_mrr': 0.0, 'tokens_individual_open': 0,
+    }
+    try:
+        with get_api_db_cursor() as cur:
+            stats['companies'] = int(_scalar(cur, 'SELECT COUNT(*) FROM companies', row_get=row_get))
+            stats['users'] = int(_scalar(cur, 'SELECT COUNT(*) FROM users', row_get=row_get))
+            stats['individuals'] = int(_scalar(
+                cur, 'SELECT COUNT(*) FROM users WHERE company_id IS NULL', row_get=row_get,
+            ))
+            stats['revenue_mrr'] = float(_scalar(
+                cur,
+                "SELECT COALESCE(SUM(subscription_price), 0) FROM companies "
+                "WHERE LOWER(COALESCE(subscription_status, '')) = 'active'",
+                row_get=row_get,
+            ))
+            stats['misassigned'] = int(_scalar(
+                cur,
+                """
+                SELECT COUNT(*) FROM users u
+                WHERE (
+                    u.company_id IS NOT NULL
+                    AND NOT EXISTS (SELECT 1 FROM companies c WHERE c.id = u.company_id)
+                ) OR (
+                    u.company_id IS NULL AND (
+                        COALESCE(u.roles, '') LIKE '%empresa%'
+                        OR COALESCE(u.roles, '') LIKE '%staff%'
+                        OR COALESCE(u.roles, '') LIKE '%administrador%'
+                        OR COALESCE(u.roles, '') LIKE '%helper%'
+                        OR COALESCE(u.roles, '') LIKE '%moderador%'
+                    )
+                )
+                """,
+                row_get=row_get,
+            ))
+            try:
+                stats['tokens_individual_open'] = int(_scalar(
+                    cur,
+                    'SELECT COUNT(*) FROM registration_tokens '
+                    'WHERE is_used = FALSE AND (company_id IS NULL OR company_id = 0)',
+                    row_get=row_get,
+                ))
+            except Exception:
+                pass
+    except Exception:
+        pass
+    stats['revenue_mrr'] = round(float(stats['revenue_mrr']), 2)
+    _cache_set('dashboard', stats)
+    return stats
+
+
+def _parse_roles(raw):
+    if not raw:
+        return ['user']
+    if isinstance(raw, list):
+        return raw
+    try:
+        r = json.loads(raw)
+        return r if isinstance(r, list) else [str(r)]
+    except Exception:
+        return [str(raw)]
+
+
 DEFAULT_PLANS = [
     {
         'id': 'ind_basic', 'name': 'Individual Básico', 'type': 'individual',
@@ -215,25 +320,7 @@ def register_sa_imperial_routes(app, *, get_api_db_cursor, row_get, sa_required_
     @app.route('/aspers-sa/api/v2/dashboard', methods=['GET'])
     @sa_required_fn
     def sa_v2_dashboard():
-        from auth import list_companies, list_users
-        companies = list_companies() or []
-        users = list_users() or []
-        mis = find_misassigned_users(users, companies)
-        rev = sum(float(c.get('subscription_price') or 0) for c in companies if (c.get('subscription_status') or '').lower() == 'active')
-        tokens_unused = 0
-        try:
-            from auth import list_registration_tokens
-            tokens_unused = len([t for t in list_registration_tokens(include_used=False) if not t.get('company_id')])
-        except Exception:
-            pass
-        return jsonify({
-            'companies': len(companies),
-            'users': len(users),
-            'individuals': len([u for u in users if not u.get('company_id')]),
-            'misassigned': len(mis),
-            'revenue_mrr': round(rev, 2),
-            'tokens_individual_open': tokens_unused,
-        }), 200
+        return jsonify(imperial_dashboard_stats(get_api_db_cursor, row_get)), 200
 
     @app.route('/aspers-sa/api/v2/plans', methods=['GET', 'POST'])
     @sa_required_fn
@@ -406,12 +493,86 @@ def register_sa_imperial_routes(app, *, get_api_db_cursor, row_get, sa_required_
     @app.route('/aspers-sa/api/v2/users/misassigned', methods=['GET'])
     @sa_required_fn
     def sa_v2_misassigned():
-        from auth import list_companies, list_users
-        users = list_users() or []
-        companies = list_companies() or []
+        from auth import list_companies
+        mis_rows = []
+        valid_ids = set()
+        try:
+            with get_api_db_cursor() as cur:
+                cur.execute('SELECT id FROM companies')
+                for r in cur.fetchall() or []:
+                    valid_ids.add(row_get(r, 0, 'id'))
+                cur.execute(
+                    """
+                    SELECT u.id, u.username, u.email, u.roles, u.is_active,
+                           u.created_at, u.last_login, u.company_id
+                    FROM users u
+                    WHERE (
+                        u.company_id IS NOT NULL
+                        AND NOT EXISTS (SELECT 1 FROM companies c WHERE c.id = u.company_id)
+                    ) OR (
+                        u.company_id IS NULL AND (
+                            COALESCE(u.roles, '') LIKE '%empresa%'
+                            OR COALESCE(u.roles, '') LIKE '%staff%'
+                            OR COALESCE(u.roles, '') LIKE '%administrador%'
+                            OR COALESCE(u.roles, '') LIKE '%helper%'
+                            OR COALESCE(u.roles, '') LIKE '%moderador%'
+                        )
+                    )
+                    ORDER BY u.created_at DESC
+                    LIMIT 300
+                    """
+                )
+                for row in cur.fetchall() or []:
+                    if hasattr(row, 'keys'):
+                        u = {
+                            'id': row['id'], 'username': row['username'], 'email': row['email'],
+                            'roles': _parse_roles(row['roles']),
+                            'is_active': bool(row['is_active']),
+                            'created_at': str(row['created_at']),
+                            'last_login': str(row['last_login']) if row.get('last_login') else None,
+                            'company_id': row['company_id'],
+                        }
+                    else:
+                        u = {
+                            'id': row[0], 'username': row[1], 'email': row[2],
+                            'roles': _parse_roles(row[3]),
+                            'is_active': bool(row[4]),
+                            'created_at': str(row[5]),
+                            'last_login': str(row[6]) if row[6] else None,
+                            'company_id': row[7],
+                        }
+                    mis_rows.append(u)
+        except Exception:
+            from auth import list_users
+            companies = list_companies() or []
+            mis_rows = find_misassigned_users(list_users() or [], companies)
+            return jsonify({
+                'users': mis_rows,
+                'count': len(mis_rows),
+                'companies': [{'id': c['id'], 'name': c.get('name')} for c in companies],
+            }), 200
+
+        for u in mis_rows:
+            roles = u.get('roles') or []
+            cid = u.get('company_id')
+            reasons = []
+            if cid and cid not in valid_ids:
+                reasons.append('company_id inválido')
+            if any(r in roles for r in ('empresa', 'staff', 'administrador', 'helper', 'moderador')) and not cid:
+                reasons.append('rol staff/empresa sin company_id')
+            if 'empresa' in roles and not cid:
+                reasons.append('rol empresa sin empresa')
+            u['misassign_reasons'] = reasons or ['revisar asignación']
+
+        cached_cos = _cache_get('companies_light')
+        if cached_cos is not None:
+            companies = cached_cos
+        else:
+            companies = list_companies() or []
+            _cache_set('companies_light', companies)
         return jsonify({
-            'users': find_misassigned_users(users, companies),
-            'count': len(find_misassigned_users(users, companies)),
+            'users': mis_rows,
+            'count': len(mis_rows),
             'companies': [{'id': c['id'], 'name': c.get('name')} for c in companies],
         }), 200
 
@@ -427,6 +588,7 @@ def register_sa_imperial_routes(app, *, get_api_db_cursor, row_get, sa_required_
             with get_api_db_cursor() as cur:
                 r = attach_user_to_company(cur, uid, int(cid), force=force)
                 _log(cur, 'user.attach_company', target_type='user', target_id=uid, detail=str(cid), ip=request.remote_addr)
+            _cache_bust('dashboard', 'companies_light')
             return jsonify(r), 200
         except ValueError as e:
             return jsonify({'error': str(e)}), 400
@@ -451,6 +613,7 @@ def register_sa_imperial_routes(app, *, get_api_db_cursor, row_get, sa_required_
                 except Exception as ex:
                     err.append({'user_id': uid, 'error': str(ex)})
             _log(cur, 'user.bulk_attach', detail=f'company={cid} ok={len(ok)}', ip=request.remote_addr)
+        _cache_bust('dashboard', 'companies_light')
         return jsonify({'ok': True, 'attached': ok, 'errors': err}), 200
 
     @app.route('/aspers-sa/api/v2/users/<int:uid>/detach', methods=['POST'])
@@ -648,38 +811,89 @@ def register_sa_imperial_routes(app, *, get_api_db_cursor, row_get, sa_required_
     @app.route('/aspers-sa/api/v2/users/directory', methods=['GET'])
     @sa_required_fn
     def sa_v2_users_directory():
-        """Listado global: individuales (sin empresa) y usuarios de empresa."""
-        from auth import list_users, list_companies
+        """Listado global con filtros en SQL (sin cargar todos los usuarios)."""
+        from auth import _ph
         q = (request.args.get('q') or '').strip().lower()
         tipo = (request.args.get('type') or 'all').strip().lower()
-        companies = list_companies() or []
-        cmap = {c.get('id'): c for c in companies}
+        ph = _ph()
         rows = []
-        for u in list_users() or []:
-            cid = u.get('company_id')
-            is_individual = not cid
-            if tipo == 'individual' and not is_individual:
-                continue
-            if tipo == 'empresa' and is_individual:
-                continue
-            un = (u.get('username') or '').lower()
-            em = (u.get('email') or '').lower()
-            if q and q not in un and q not in em and q != str(u.get('id', '')):
-                co = cmap.get(cid) or {}
-                if q not in (co.get('name') or '').lower():
+        try:
+            with get_api_db_cursor() as cur:
+                sql = (
+                    f'SELECT u.id, u.username, u.email, u.roles, u.is_active, u.company_id, '
+                    f'u.created_at, c.name AS company_name FROM users u '
+                    f'LEFT JOIN companies c ON c.id = u.company_id WHERE 1=1'
+                )
+                params = []
+                if tipo == 'individual':
+                    sql += ' AND u.company_id IS NULL'
+                elif tipo == 'empresa':
+                    sql += ' AND u.company_id IS NOT NULL'
+                if q:
+                    like = f'%{q}%'
+                    sql += (
+                        f' AND (LOWER(u.username) LIKE LOWER({ph})'
+                        f' OR LOWER(COALESCE(u.email, \'\')) LIKE LOWER({ph})'
+                        f' OR CAST(u.id AS TEXT) = {ph}'
+                        f' OR LOWER(COALESCE(c.name, \'\')) LIKE LOWER({ph}))'
+                    )
+                    params.extend([like, like, q, like])
+                sql += ' ORDER BY u.created_at DESC LIMIT 400'
+                cur.execute(sql, tuple(params))
+                for row in cur.fetchall() or []:
+                    if hasattr(row, 'keys'):
+                        cid = row['company_id']
+                        rows.append({
+                            'id': row['id'],
+                            'username': row['username'],
+                            'email': row['email'],
+                            'roles': _parse_roles(row['roles']),
+                            'is_active': bool(row['is_active']),
+                            'company_id': cid,
+                            'company_name': row.get('company_name'),
+                            'segment': 'individual' if not cid else 'empresa',
+                            'created_at': str(row['created_at'] or '')[:10],
+                        })
+                    else:
+                        cid = row[5]
+                        rows.append({
+                            'id': row[0], 'username': row[1], 'email': row[2],
+                            'roles': _parse_roles(row[3]),
+                            'is_active': bool(row[4]),
+                            'company_id': cid,
+                            'company_name': row[7],
+                            'segment': 'individual' if not cid else 'empresa',
+                            'created_at': str(row[6] or '')[:10],
+                        })
+        except Exception:
+            from auth import list_users, list_companies
+            companies = list_companies() or []
+            cmap = {c.get('id'): c for c in companies}
+            for u in list_users() or []:
+                cid = u.get('company_id')
+                is_individual = not cid
+                if tipo == 'individual' and not is_individual:
                     continue
-            co = cmap.get(cid) if cid else None
-            rows.append({
-                'id': u.get('id'),
-                'username': u.get('username'),
-                'email': u.get('email'),
-                'roles': u.get('roles') or [],
-                'is_active': u.get('is_active', True),
-                'company_id': cid,
-                'company_name': co.get('name') if co else None,
-                'segment': 'individual' if is_individual else 'empresa',
-                'created_at': str(u.get('created_at') or '')[:10],
-            })
+                if tipo == 'empresa' and is_individual:
+                    continue
+                un = (u.get('username') or '').lower()
+                em = (u.get('email') or '').lower()
+                if q and q not in un and q not in em and q != str(u.get('id', '')):
+                    co = cmap.get(cid) or {}
+                    if q not in (co.get('name') or '').lower():
+                        continue
+                co = cmap.get(cid) if cid else None
+                rows.append({
+                    'id': u.get('id'),
+                    'username': u.get('username'),
+                    'email': u.get('email'),
+                    'roles': u.get('roles') or [],
+                    'is_active': u.get('is_active', True),
+                    'company_id': cid,
+                    'company_name': co.get('name') if co else None,
+                    'segment': 'individual' if is_individual else 'empresa',
+                    'created_at': str(u.get('created_at') or '')[:10],
+                })
         ind = sum(1 for r in rows if r['segment'] == 'individual')
         emp = sum(1 for r in rows if r['segment'] == 'empresa')
         return jsonify({
@@ -692,9 +906,11 @@ def register_sa_imperial_routes(app, *, get_api_db_cursor, row_get, sa_required_
     @app.route('/aspers-sa/api/v2/revenue/detailed', methods=['GET'])
     @sa_required_fn
     def sa_v2_revenue_detailed():
-        from auth import list_companies, list_users
-        companies = list_companies() or []
-        users = list_users() or []
+        from auth import list_companies
+        companies = _cache_get('companies_light')
+        if companies is None:
+            companies = list_companies() or []
+            _cache_set('companies_light', companies)
         paying = []
         free_co = []
         for c in companies:
@@ -714,8 +930,20 @@ def register_sa_imperial_routes(app, *, get_api_db_cursor, row_get, sa_required_
             elif st == 'active':
                 free_co.append(entry)
         mrr = sum(p['price'] for p in paying)
-        individuals = [u for u in users if not u.get('company_id')]
-        ind_active = [u for u in individuals if u.get('is_active', True)]
+        individuals_total = 0
+        individuals_active = 0
+        try:
+            with get_api_db_cursor() as cur:
+                individuals_total = int(_scalar(
+                    cur, 'SELECT COUNT(*) FROM users WHERE company_id IS NULL', row_get=row_get,
+                ))
+                individuals_active = int(_scalar(
+                    cur,
+                    'SELECT COUNT(*) FROM users WHERE company_id IS NULL AND is_active = TRUE',
+                    row_get=row_get,
+                ))
+        except Exception:
+            pass
         by_price = {}
         for p in paying:
             by_price[p['price']] = by_price.get(p['price'], 0) + 1
@@ -723,8 +951,8 @@ def register_sa_imperial_routes(app, *, get_api_db_cursor, row_get, sa_required_
             'mrr': round(mrr, 2),
             'paying': len(paying),
             'free_active': len(free_co),
-            'individuals_total': len(individuals),
-            'individuals_active': len(ind_active),
+            'individuals_total': individuals_total,
+            'individuals_active': individuals_active,
             'by_price': [{'price': k, 'count': v} for k, v in sorted(by_price.items(), reverse=True)],
             'companies_paying': sorted(paying, key=lambda x: -x['price']),
             'companies_free': free_co[:20],
@@ -734,7 +962,10 @@ def register_sa_imperial_routes(app, *, get_api_db_cursor, row_get, sa_required_
     @sa_required_fn
     def sa_v2_companies():
         from auth import list_companies
-        companies = list_companies() or []
+        companies = _cache_get('companies_light')
+        if companies is None:
+            companies = list_companies() or []
+            _cache_set('companies_light', companies)
         for c in companies:
             if c.get('subscription_price') is not None:
                 try:
@@ -746,23 +977,55 @@ def register_sa_imperial_routes(app, *, get_api_db_cursor, row_get, sa_required_
     @app.route('/aspers-sa/api/v2/quick-search', methods=['GET'])
     @sa_required_fn
     def sa_v2_search():
+        from auth import _ph
         q = (request.args.get('q') or '').strip().lower()
         if len(q) < 2:
             return jsonify({'results': []}), 200
-        from auth import list_users, list_companies
+        ph = _ph()
+        like = f'%{q}%'
         results = []
-        for c in list_companies() or []:
-            if q in (c.get('name') or '').lower():
-                results.append({'type': 'company', 'id': c['id'], 'label': c.get('name'), 'view': 'cartera'})
-        for u in list_users() or []:
-            un = (u.get('username') or '').lower()
-            em = (u.get('email') or '').lower()
-            if q in un or q in em or q == str(u.get('id', '')):
-                results.append({
-                    'type': 'user',
-                    'id': u['id'],
-                    'label': u.get('username'),
-                    'sub': u.get('email') or ('empresa #' + str(u.get('company_id')) if u.get('company_id') else 'individual'),
-                    'view': 'migraciones' if not u.get('company_id') else 'cartera',
-                })
+        try:
+            with get_api_db_cursor() as cur:
+                cur.execute(
+                    f'SELECT id, name FROM companies WHERE LOWER(name) LIKE LOWER({ph}) ORDER BY name LIMIT 8',
+                    (like,),
+                )
+                for row in cur.fetchall() or []:
+                    cid = row_get(row, 0, 'id')
+                    name = row_get(row, 1, 'name')
+                    results.append({'type': 'company', 'id': cid, 'label': name, 'view': 'cartera'})
+                cur.execute(
+                    f'SELECT id, username, email, company_id FROM users WHERE '
+                    f'LOWER(username) LIKE LOWER({ph}) OR LOWER(COALESCE(email, \'\')) LIKE LOWER({ph}) '
+                    f'OR CAST(id AS TEXT) = {ph} ORDER BY username LIMIT 12',
+                    (like, like, q),
+                )
+                for row in cur.fetchall() or []:
+                    uid = row_get(row, 0, 'id')
+                    uname = row_get(row, 1, 'username')
+                    email = row_get(row, 2, 'email')
+                    coid = row_get(row, 3, 'company_id')
+                    results.append({
+                        'type': 'user',
+                        'id': uid,
+                        'label': uname,
+                        'sub': email or ('empresa #' + str(coid) if coid else 'individual'),
+                        'view': 'migraciones' if not coid else 'cartera',
+                    })
+        except Exception:
+            from auth import list_users, list_companies
+            for c in list_companies() or []:
+                if q in (c.get('name') or '').lower():
+                    results.append({'type': 'company', 'id': c['id'], 'label': c.get('name'), 'view': 'cartera'})
+            for u in list_users() or []:
+                un = (u.get('username') or '').lower()
+                em = (u.get('email') or '').lower()
+                if q in un or q in em or q == str(u.get('id', '')):
+                    results.append({
+                        'type': 'user',
+                        'id': u['id'],
+                        'label': u.get('username'),
+                        'sub': u.get('email') or ('empresa #' + str(u.get('company_id')) if u.get('company_id') else 'individual'),
+                        'view': 'migraciones' if not u.get('company_id') else 'cartera',
+                    })
         return jsonify({'results': results[:25]}), 200

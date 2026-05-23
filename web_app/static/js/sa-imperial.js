@@ -639,19 +639,8 @@
 
   function renderUsuarios() {
     var tb = $('usuarios-tbody');
-    var q = ($('usr-search') && $('usr-search').value || '').trim().toLowerCase();
     var tipo = $('usr-type-filter') && $('usr-type-filter').value || 'all';
-    var rows = _usrCache.filter(function (u) {
-      if (tipo !== 'all' && u.segment !== tipo) return false;
-      if (!q) return true;
-      return (u.username || '').toLowerCase().indexOf(q) >= 0 ||
-        (u.email || '').toLowerCase().indexOf(q) >= 0 ||
-        String(u.id) === q ||
-        (u.company_name || '').toLowerCase().indexOf(q) >= 0;
-    });
-    $('usr-total').textContent = rows.length;
-    $('usr-ind').textContent = rows.filter(function (u) { return u.segment === 'individual'; }).length;
-    $('usr-emp').textContent = rows.filter(function (u) { return u.segment === 'empresa'; }).length;
+    var rows = _usrCache;
     var desc = $('usr-filter-desc');
     if (desc) {
       desc.textContent = tipo === 'individual' ? 'Plan individual (sin empresa)' :
@@ -676,17 +665,32 @@
     }).join('');
   }
 
+  var _usrFetchTimer = null;
+
   function loadUsuarios() {
     var tb = $('usuarios-tbody');
-    setLoading(tb.closest('.imp-card'), true);
-    api('/users/directory').then(function (d) {
+    var card = tb && tb.closest('.imp-card');
+    setLoading(card, true);
+    var q = ($('usr-search') && $('usr-search').value || '').trim();
+    var tipo = $('usr-type-filter') && $('usr-type-filter').value || 'all';
+    var qs = '?type=' + encodeURIComponent(tipo);
+    if (q) qs += '&q=' + encodeURIComponent(q);
+    api('/users/directory' + qs).then(function (d) {
       _usrCache = d.users || [];
+      $('usr-total').textContent = d.count != null ? d.count : _usrCache.length;
+      $('usr-ind').textContent = d.individuals != null ? d.individuals : '—';
+      $('usr-emp').textContent = d.enterprise_users != null ? d.enterprise_users : '—';
       renderUsuarios();
-      setLoading(tb.closest('.imp-card'), false);
+      setLoading(card, false);
     }).catch(function (e) {
-      setLoading(tb.closest('.imp-card'), false);
+      setLoading(card, false);
       toast(e.message, 'err');
     });
+  }
+
+  function scheduleUsuariosReload() {
+    if (_usrFetchTimer) clearTimeout(_usrFetchTimer);
+    _usrFetchTimer = setTimeout(loadUsuarios, 320);
   }
 
   function openUserAdmin(uid) {
@@ -701,16 +705,23 @@
   function loadInteligencia() {
     var body = $('intel-body');
     setLoading(body, true);
-    Promise.all([
-      api('/overview', {}, API_V1),
-      api('/ai-health?since_days=30', {}, API_V1).catch(function () { return { available: false }; }),
-      api('/orphan-staff', {}, API_V1).catch(function () { return { orphans: [] }; }),
-      api('/cooldowns', {}, API_V1).catch(function () { return { rows: [] }; }),
-      api('/learned-patterns', {}, API_V1).catch(function () { return { patterns: [] }; }),
-      api('/oracle-stats', {}, API_V1).catch(function () { return {}; }),
-      api('/system-info', {}, API_V1).catch(function () { return {}; }),
-      api('/staff-trust', {}, API_V1).catch(function () { return { rows: [] }; }),
-    ]).then(function (arr) {
+    api('/overview', {}, API_V1).then(function (ov) {
+      body.innerHTML =
+        '<p class="imp-cell-muted" style="padding:12px 0">Cargando métricas IA y ops…</p>' +
+        '<div class="imp-intel-stat"><span>Scans 24h / 7d / 30d</span><span>' +
+        (ov.scans_24h || 0) + ' / ' + (ov.scans_7d || 0) + ' / ' + (ov.scans_30d || 0) + '</span></div>';
+      return Promise.all([
+        Promise.resolve(ov),
+        api('/ai-health?since_days=30', {}, API_V1).catch(function () { return { available: false }; }),
+        api('/orphan-staff', {}, API_V1).catch(function () { return { orphans: [] }; }),
+        api('/cooldowns', {}, API_V1).catch(function () { return { rows: [] }; }),
+        api('/learned-patterns', {}, API_V1).catch(function () { return { patterns: [] }; }),
+        api('/oracle-stats', {}, API_V1).catch(function () { return {}; }),
+        api('/system-info', {}, API_V1).catch(function () { return {}; }),
+        api('/staff-trust', {}, API_V1).catch(function () { return { rows: [] }; }),
+      ]);
+    }).then(function (arr) {
+      if (!arr) return;
       var ov = arr[0];
       var ai = arr[1];
       var orphan = arr[2];
@@ -973,8 +984,8 @@
   function initUsuariosFilter() {
     var inp = $('usr-search');
     var sel = $('usr-type-filter');
-    if (inp) inp.addEventListener('input', renderUsuarios);
-    if (sel) sel.addEventListener('change', renderUsuarios);
+    if (inp) inp.addEventListener('input', scheduleUsuariosReload);
+    if (sel) sel.addEventListener('change', loadUsuarios);
   }
 
   window.Imp = {

@@ -1581,19 +1581,11 @@ def admin_subscriptions():
         return render_template('admin_subscriptions_login.html')
 
     try:
-        from auth import list_companies, list_users
-        companies = list_companies() or []
-        users = list_users() or []
-        individual_users = [u for u in users if not u.get('company_id')]
-        company_users = [u for u in users if u.get('company_id')]
-        # Convertir Decimal a float para que Jinja2 lo maneje sin problemas
-        for c in companies:
-            if c.get('subscription_price') is not None:
-                c['subscription_price'] = float(c['subscription_price'])
+        # SPA Imperial carga empresas/usuarios vía API — evitar listar toda la BD en el HTML inicial.
         return render_template('admin_subscriptions.html',
-                               companies=companies,
-                               individual_users=individual_users,
-                               company_users=company_users)
+                               companies=[],
+                               individual_users=[],
+                               company_users=[])
     except Exception as _e:
         import traceback as _tb
         _err = _tb.format_exc()

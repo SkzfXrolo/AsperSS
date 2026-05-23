@@ -1199,60 +1199,91 @@ def get_company_by_id(company_id):
         return None
 
 
-def list_companies():
-    """Lista todas las empresas — usa PostgreSQL o SQLite según configuración."""
-    try:
-        ph = _ph()
-        with _auth_cursor() as cursor:
-            cursor.execute(
-                'SELECT id, name, contact_email, subscription_type, subscription_status,'
-                ' subscription_start_date, subscription_end_date, subscription_price,'
-                ' max_users, max_admins, created_at, is_active'
-                ' FROM companies ORDER BY created_at DESC'
-            )
-            rows = cursor.fetchall()
+def _row_company_with_counts(row, current_users, current_admins):
+    if isinstance(row, dict):
+        return {
+            'id': row['id'], 'name': row['name'],
+            'contact_email': row['contact_email'],
+            'subscription_type': row['subscription_type'] or 'enterprise',
+            'subscription_status': row['subscription_status'],
+            'subscription_start_date': row['subscription_start_date'],
+            'subscription_end_date': row['subscription_end_date'],
+            'subscription_price': row['subscription_price'] or 13.0,
+            'max_users': row['max_users'], 'max_admins': row['max_admins'],
+            'created_at': str(row['created_at']), 'is_active': bool(row['is_active']),
+            'current_users': int(current_users or 0),
+            'current_admins': int(current_admins or 0),
+        }
+    return {
+        'id': row[0], 'name': row[1], 'contact_email': row[2],
+        'subscription_type': row[3] or 'enterprise', 'subscription_status': row[4],
+        'subscription_start_date': row[5], 'subscription_end_date': row[6],
+        'subscription_price': row[7] or 13.0,
+        'max_users': row[8], 'max_admins': row[9],
+        'created_at': row[10], 'is_active': bool(row[11]),
+        'current_users': int(current_users or 0),
+        'current_admins': int(current_admins or 0),
+    }
 
+
+def list_companies():
+    """Lista todas las empresas con conteos de staff (una sola consulta agregada)."""
+    try:
+        with _auth_cursor() as cursor:
+            if USE_POSTGRESQL:
+                cursor.execute('''
+                    SELECT c.id, c.name, c.contact_email, c.subscription_type, c.subscription_status,
+                           c.subscription_start_date, c.subscription_end_date, c.subscription_price,
+                           c.max_users, c.max_admins, c.created_at, c.is_active,
+                           COUNT(u.id) FILTER (WHERE u.is_active = TRUE) AS current_users,
+                           COUNT(u.id) FILTER (
+                               WHERE u.is_active = TRUE AND u.roles LIKE '%%administrador%%'
+                           ) AS current_admins
+                    FROM companies c
+                    LEFT JOIN users u ON u.company_id = c.id
+                    GROUP BY c.id, c.name, c.contact_email, c.subscription_type, c.subscription_status,
+                             c.subscription_start_date, c.subscription_end_date, c.subscription_price,
+                             c.max_users, c.max_admins, c.created_at, c.is_active
+                    ORDER BY c.created_at DESC
+                ''')
+            elif USE_MYSQL:
+                cursor.execute('''
+                    SELECT c.id, c.name, c.contact_email, c.subscription_type, c.subscription_status,
+                           c.subscription_start_date, c.subscription_end_date, c.subscription_price,
+                           c.max_users, c.max_admins, c.created_at, c.is_active,
+                           SUM(CASE WHEN u.is_active = TRUE THEN 1 ELSE 0 END) AS current_users,
+                           SUM(CASE WHEN u.is_active = TRUE AND u.roles LIKE '%%administrador%%'
+                               THEN 1 ELSE 0 END) AS current_admins
+                    FROM companies c
+                    LEFT JOIN users u ON u.company_id = c.id
+                    GROUP BY c.id, c.name, c.contact_email, c.subscription_type, c.subscription_status,
+                             c.subscription_start_date, c.subscription_end_date, c.subscription_price,
+                             c.max_users, c.max_admins, c.created_at, c.is_active
+                    ORDER BY c.created_at DESC
+                ''')
+            else:
+                cursor.execute('''
+                    SELECT c.id, c.name, c.contact_email, c.subscription_type, c.subscription_status,
+                           c.subscription_start_date, c.subscription_end_date, c.subscription_price,
+                           c.max_users, c.max_admins, c.created_at, c.is_active,
+                           SUM(CASE WHEN u.is_active = 1 THEN 1 ELSE 0 END) AS current_users,
+                           SUM(CASE WHEN u.is_active = 1 AND u.roles LIKE '%%administrador%%'
+                               THEN 1 ELSE 0 END) AS current_admins
+                    FROM companies c
+                    LEFT JOIN users u ON u.company_id = c.id
+                    GROUP BY c.id
+                    ORDER BY c.created_at DESC
+                ''')
+            rows = cursor.fetchall()
             companies = []
             for row in rows:
                 if isinstance(row, dict):
-                    cid = row['id']
+                    cu = row.get('current_users', 0)
+                    ca = row.get('current_admins', 0)
                 else:
-                    cid = row[0]
-
-                cursor.execute(f'SELECT COUNT(*) as c FROM users WHERE company_id = {ph} AND is_active = TRUE', (cid,))
-                cu = cursor.fetchone()
-                current_users = (cu['c'] if isinstance(cu, dict) else cu[0]) if cu else 0
-
-                cursor.execute(
-                    f'SELECT COUNT(*) as c FROM users WHERE company_id = {ph} AND is_active = TRUE AND roles LIKE {ph}',
-                    (cid, '%administrador%')
-                )
-                ca = cursor.fetchone()
-                current_admins = (ca['c'] if isinstance(ca, dict) else ca[0]) if ca else 0
-
-                if isinstance(row, dict):
-                    companies.append({
-                        'id': row['id'], 'name': row['name'],
-                        'contact_email': row['contact_email'],
-                        'subscription_type': row['subscription_type'] or 'enterprise',
-                        'subscription_status': row['subscription_status'],
-                        'subscription_start_date': row['subscription_start_date'],
-                        'subscription_end_date': row['subscription_end_date'],
-                        'subscription_price': row['subscription_price'] or 13.0,
-                        'max_users': row['max_users'], 'max_admins': row['max_admins'],
-                        'created_at': str(row['created_at']), 'is_active': bool(row['is_active']),
-                        'current_users': current_users, 'current_admins': current_admins,
-                    })
-                else:
-                    companies.append({
-                        'id': row[0], 'name': row[1], 'contact_email': row[2],
-                        'subscription_type': row[3] or 'enterprise', 'subscription_status': row[4],
-                        'subscription_start_date': row[5], 'subscription_end_date': row[6],
-                        'subscription_price': row[7] or 13.0,
-                        'max_users': row[8], 'max_admins': row[9],
-                        'created_at': row[10], 'is_active': bool(row[11]),
-                        'current_users': current_users, 'current_admins': current_admins,
-                    })
+                    cu = row[12] if len(row) > 12 else 0
+                    ca = row[13] if len(row) > 13 else 0
+                companies.append(_row_company_with_counts(row, cu, ca))
         return companies
     except Exception as e:
         print(f"⚠️ list_companies error: {e}")
