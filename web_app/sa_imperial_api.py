@@ -645,6 +645,91 @@ def register_sa_imperial_routes(app, *, get_api_db_cursor, row_get, sa_required_
         _log(cur, 'plan.duplicate', detail=f'{plan_id}->{new_id}', ip=request.remote_addr)
         return jsonify({'ok': True, 'plan': plan}), 201
 
+    @app.route('/aspers-sa/api/v2/users/directory', methods=['GET'])
+    @sa_required_fn
+    def sa_v2_users_directory():
+        """Listado global: individuales (sin empresa) y usuarios de empresa."""
+        from auth import list_users, list_companies
+        q = (request.args.get('q') or '').strip().lower()
+        tipo = (request.args.get('type') or 'all').strip().lower()
+        companies = list_companies() or []
+        cmap = {c.get('id'): c for c in companies}
+        rows = []
+        for u in list_users() or []:
+            cid = u.get('company_id')
+            is_individual = not cid
+            if tipo == 'individual' and not is_individual:
+                continue
+            if tipo == 'empresa' and is_individual:
+                continue
+            un = (u.get('username') or '').lower()
+            em = (u.get('email') or '').lower()
+            if q and q not in un and q not in em and q != str(u.get('id', '')):
+                co = cmap.get(cid) or {}
+                if q not in (co.get('name') or '').lower():
+                    continue
+            co = cmap.get(cid) if cid else None
+            rows.append({
+                'id': u.get('id'),
+                'username': u.get('username'),
+                'email': u.get('email'),
+                'roles': u.get('roles') or [],
+                'is_active': u.get('is_active', True),
+                'company_id': cid,
+                'company_name': co.get('name') if co else None,
+                'segment': 'individual' if is_individual else 'empresa',
+                'created_at': str(u.get('created_at') or '')[:10],
+            })
+        ind = sum(1 for r in rows if r['segment'] == 'individual')
+        emp = sum(1 for r in rows if r['segment'] == 'empresa')
+        return jsonify({
+            'users': rows,
+            'count': len(rows),
+            'individuals': ind,
+            'enterprise_users': emp,
+        }), 200
+
+    @app.route('/aspers-sa/api/v2/revenue/detailed', methods=['GET'])
+    @sa_required_fn
+    def sa_v2_revenue_detailed():
+        from auth import list_companies, list_users
+        companies = list_companies() or []
+        users = list_users() or []
+        paying = []
+        free_co = []
+        for c in companies:
+            price = float(c.get('subscription_price') or 0)
+            st = (c.get('subscription_status') or '').lower()
+            entry = {
+                'id': c.get('id'),
+                'name': c.get('name'),
+                'price': price,
+                'status': st,
+                'users': c.get('current_users') or 0,
+                'max_users': c.get('max_users') or 8,
+                'end_date': str(c.get('subscription_end_date') or '')[:10],
+            }
+            if st == 'active' and price > 0:
+                paying.append(entry)
+            elif st == 'active':
+                free_co.append(entry)
+        mrr = sum(p['price'] for p in paying)
+        individuals = [u for u in users if not u.get('company_id')]
+        ind_active = [u for u in individuals if u.get('is_active', True)]
+        by_price = {}
+        for p in paying:
+            by_price[p['price']] = by_price.get(p['price'], 0) + 1
+        return jsonify({
+            'mrr': round(mrr, 2),
+            'paying': len(paying),
+            'free_active': len(free_co),
+            'individuals_total': len(individuals),
+            'individuals_active': len(ind_active),
+            'by_price': [{'price': k, 'count': v} for k, v in sorted(by_price.items(), reverse=True)],
+            'companies_paying': sorted(paying, key=lambda x: -x['price']),
+            'companies_free': free_co[:20],
+        }), 200
+
     @app.route('/aspers-sa/api/v2/companies', methods=['GET'])
     @sa_required_fn
     def sa_v2_companies():

@@ -30,7 +30,8 @@ def bootstrap_local_env() -> None:
         for name in ('.env.local', '.env'):
             p = _WEB_APP_DIR / name
             if p.is_file():
-                load_dotenv(p, override=False)
+                # .env.local gana sobre variables vacías del sistema en dev
+                load_dotenv(p, override=(name == '.env.local'))
     except ImportError:
         for name in ('.env.local', '.env'):
             _load_env_file(_WEB_APP_DIR / name)

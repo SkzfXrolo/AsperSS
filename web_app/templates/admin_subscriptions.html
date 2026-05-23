@@ -39,6 +39,7 @@
                 <button type="button" class="imp-nav-item" data-view="regalos"><span class="ico">🎁</span> Regalos</button>
                 <button type="button" class="imp-nav-item" data-view="sorteos"><span class="ico">🎟</span> Tokens sorteo</button>
                 <div class="imp-nav-label">Usuarios</div>
+                <button type="button" class="imp-nav-item" data-view="usuarios"><span class="ico">👥</span> Todos los usuarios</button>
                 <button type="button" class="imp-nav-item" data-view="migraciones">
                     <span class="ico">⇄</span> Migraciones
                     <span class="imp-nav-badge" id="nav-badge-mis" style="display:none">0</span>
@@ -215,6 +216,37 @@
                     </div>
                 </section>
 
+                <section class="imp-view" id="view-usuarios">
+                    <p class="imp-section-intro">Directorio completo: cuentas <strong>individuales</strong> (plan individual, sin empresa) y usuarios dentro de empresas.</p>
+                    <div class="imp-kpi-row" style="margin-bottom:16px">
+                        <div class="imp-kpi"><div class="imp-kpi-label">Total</div><div class="imp-kpi-val" id="usr-total">—</div></div>
+                        <div class="imp-kpi"><div class="imp-kpi-label">Individuales</div><div class="imp-kpi-val gold" id="usr-ind">—</div></div>
+                        <div class="imp-kpi"><div class="imp-kpi-label">En empresas</div><div class="imp-kpi-val" id="usr-emp">—</div></div>
+                    </div>
+                    <div class="imp-card">
+                        <div class="imp-card-head">
+                            <div>
+                                <span class="imp-card-title">Directorio</span>
+                                <div class="imp-card-desc" id="usr-filter-desc">Todos los usuarios</div>
+                            </div>
+                            <div class="imp-toolbar">
+                                <select id="usr-type-filter" class="imp-select" style="max-width:160px">
+                                    <option value="all">Todos</option>
+                                    <option value="individual">Solo individuales</option>
+                                    <option value="empresa">Solo en empresas</option>
+                                </select>
+                                <input type="search" id="usr-search" class="imp-input" placeholder="Buscar usuario o empresa…">
+                            </div>
+                        </div>
+                        <div class="imp-table-wrap">
+                            <table class="imp-table imp-table-compact">
+                                <thead><tr><th>Usuario</th><th>Tipo</th><th>Empresa</th><th>Roles</th><th>Estado</th><th class="imp-col-actions">Acción</th></tr></thead>
+                                <tbody id="usuarios-tbody"><tr><td colspan="6" class="imp-empty">Cargando…</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
                 <section class="imp-view" id="view-migraciones">
                     <p class="imp-section-intro">Usuarios con rol de staff/empresa pero sin empresa asignada. Al moverlos se ignora el cupo máximo.</p>
                     <div class="imp-detail-panel" id="mig-summary">Cargando resumen…</div>
@@ -254,7 +286,13 @@
                         <button type="button" class="imp-btn imp-btn-rose imp-btn-sm" onclick="saSaveGodMode()">⚡ God Mode</button>
                     </div>
                     <div class="imp-card">
-                        <div class="imp-card-head"><span class="imp-card-title">God Mode</span></div>
+                        <div class="imp-card-head">
+                            <div>
+                                <span class="imp-card-title">God Mode</span>
+                                <div class="imp-card-desc">Activá cada interruptor y pulsá <strong>Guardar</strong> — efecto inmediato en toda la plataforma</div>
+                            </div>
+                            <button type="button" class="imp-btn imp-btn-rose imp-btn-sm" onclick="saSaveGodMode()">Guardar God Mode</button>
+                        </div>
                         <div class="imp-card-body"><div class="sa-god-grid" id="sa-god-grid"></div></div>
                     </div>
                     <div class="imp-card">
@@ -277,24 +315,36 @@
                 </section>
 
                 <section class="imp-view" id="view-ingresos">
-                    <p class="imp-section-intro">Ingresos recurrentes estimados según precio de suscripción activo.</p>
+                    <p class="imp-section-intro">Ingresos recurrentes (MRR) de empresas de pago. Los usuarios individuales no suman al MRR salvo que tengan empresa.</p>
                     <div class="imp-kpi-row">
-                        <div class="imp-kpi"><div class="imp-kpi-label">MRR</div><div class="imp-kpi-val gold" id="ing-mrr">—</div><div class="imp-kpi-sub">mensual</div></div>
-                        <div class="imp-kpi"><div class="imp-kpi-label">De pago</div><div class="imp-kpi-val" id="ing-paying">—</div><div class="imp-kpi-sub">empresas</div></div>
-                        <div class="imp-kpi"><div class="imp-kpi-label">Gratis / trial</div><div class="imp-kpi-val" id="ing-free">—</div><div class="imp-kpi-sub">resto activas</div></div>
+                        <div class="imp-kpi"><div class="imp-kpi-label">MRR</div><div class="imp-kpi-val gold" id="ing-mrr">—</div><div class="imp-kpi-sub">empresas de pago</div></div>
+                        <div class="imp-kpi"><div class="imp-kpi-label">Empresas de pago</div><div class="imp-kpi-val" id="ing-paying">—</div><div class="imp-kpi-sub" id="ing-paying-sub">—</div></div>
+                        <div class="imp-kpi"><div class="imp-kpi-label">Individuales</div><div class="imp-kpi-val" id="ing-individuals">—</div><div class="imp-kpi-sub" id="ing-ind-sub">cuentas sin empresa</div></div>
+                        <div class="imp-kpi"><div class="imp-kpi-label">Gratis / trial</div><div class="imp-kpi-val" id="ing-free">—</div><div class="imp-kpi-sub">empresas activas $0</div></div>
                     </div>
                     <div class="imp-card">
+                        <div class="imp-card-head"><span class="imp-card-title">Desglose por precio</span></div>
                         <div class="imp-table-wrap">
-                            <table class="imp-table">
-                                <thead><tr><th>Precio</th><th>Empresas</th><th>Subtotal</th><th>% MRR</th></tr></thead>
+                            <table class="imp-table imp-table-compact">
+                                <thead><tr><th>Precio/mes</th><th>Empresas</th><th>Subtotal MRR</th><th>% del total</th></tr></thead>
                                 <tbody id="ing-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="imp-card">
+                        <div class="imp-card-head"><span class="imp-card-title">Empresas que pagan</span></div>
+                        <div class="imp-table-wrap">
+                            <table class="imp-table imp-table-compact">
+                                <thead><tr><th>Empresa</th><th>Precio</th><th>Staff</th><th>Vence</th></tr></thead>
+                                <tbody id="ing-companies-tbody"></tbody>
                             </table>
                         </div>
                     </div>
                 </section>
 
                 <section class="imp-view" id="view-inteligencia">
-                    <div class="imp-card"><div class="imp-card-body" id="intel-body">Cargando…</div></div>
+                    <p class="imp-section-intro">Salud del motor IA, confianza del staff, Oracle y mantenimiento del sistema.</p>
+                    <div id="intel-body">Cargando…</div>
                 </section>
             </div>
         </div>

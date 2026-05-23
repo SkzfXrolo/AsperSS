@@ -123,6 +123,7 @@
     planes: ['Planes', 'Catálogo y alta rápida'],
     regalos: ['Regalos', 'Usuarios individuales de regalo'],
     sorteos: ['Tokens sorteo', 'Links de registro para individuales'],
+    usuarios: ['Usuarios', 'Directorio global — individuales y empresas'],
     migraciones: ['Migraciones', 'Usuarios mal asignados → empresa'],
     poder: ['Poder Imperial', 'Permisos, God Mode, impersonación'],
     ingresos: ['Ingresos', 'MRR y desglose'],
@@ -162,6 +163,7 @@
       planes: loadPlanes,
       regalos: loadRegalos,
       sorteos: loadSorteos,
+      usuarios: loadUsuarios,
       migraciones: loadMigraciones,
       poder: loadPoderView,
       ingresos: loadIngresos,
@@ -602,20 +604,98 @@
   }
 
   function loadIngresos() {
-    api('/revenue/summary').then(function (d) {
+    api('/revenue/detailed').then(function (d) {
       $('ing-mrr').textContent = '$' + (d.mrr || 0);
       $('ing-paying').textContent = d.paying || 0;
+      var psub = $('ing-paying-sub');
+      if (psub) psub.textContent = 'generan el MRR';
       $('ing-free').textContent = d.free_active || 0;
-      var tb = $('ing-tbody');
-      var rows = d.by_price || [];
+      $('ing-individuals').textContent = d.individuals_active != null ? d.individuals_active : '—';
+      var isub = $('ing-ind-sub');
+      if (isub) isub.textContent = (d.individuals_total || 0) + ' registrados (sin empresa)';
       var total = d.mrr || 0;
-      tb.innerHTML = rows.map(function (r) {
+      var tb = $('ing-tbody');
+      tb.innerHTML = (d.by_price || []).map(function (r) {
         var sub = r.price * r.count;
         var pct = total ? Math.round(sub / total * 100) : 0;
-        return '<tr><td class="mono">$' + r.price + '</td><td>' + r.count + ' empresas</td>' +
-          '<td class="mono">$' + sub.toFixed(0) + '/mes</td><td><div class="imp-bar"><span style="width:' + pct + '%"></span></div></td></tr>';
-      }).join('') || '<tr><td colspan="4" class="imp-empty">Sin datos</td></tr>';
+        return '<tr><td class="mono">$' + r.price + '</td><td>' + r.count + '</td>' +
+          '<td class="mono">$' + sub.toFixed(0) + '</td>' +
+          '<td><div class="imp-bar"><span style="width:' + pct + '%"></span></div> ' + pct + '%</td></tr>';
+      }).join('') || '<tr><td colspan="4" class="imp-empty">Sin empresas de pago</td></tr>';
+      var ctb = $('ing-companies-tbody');
+      if (ctb) {
+        var paying = d.companies_paying || [];
+        ctb.innerHTML = paying.length ? paying.map(function (c) {
+          return '<tr><td><strong>' + esc(c.name) + '</strong><div class="imp-row-sub mono">#' + c.id + '</div></td>' +
+            '<td class="mono">$' + c.price + '</td>' +
+            '<td class="mono">' + c.users + '/' + c.max_users + '</td>' +
+            '<td class="imp-cell-muted">' + esc(c.end_date || '—') + '</td></tr>';
+        }).join('') : '<tr><td colspan="4" class="imp-empty">Ninguna empresa de pago activa</td></tr>';
+      }
     }).catch(function (e) { toast(e.message, 'err'); });
+  }
+
+  var _usrCache = [];
+
+  function renderUsuarios() {
+    var tb = $('usuarios-tbody');
+    var q = ($('usr-search') && $('usr-search').value || '').trim().toLowerCase();
+    var tipo = $('usr-type-filter') && $('usr-type-filter').value || 'all';
+    var rows = _usrCache.filter(function (u) {
+      if (tipo !== 'all' && u.segment !== tipo) return false;
+      if (!q) return true;
+      return (u.username || '').toLowerCase().indexOf(q) >= 0 ||
+        (u.email || '').toLowerCase().indexOf(q) >= 0 ||
+        String(u.id) === q ||
+        (u.company_name || '').toLowerCase().indexOf(q) >= 0;
+    });
+    $('usr-total').textContent = rows.length;
+    $('usr-ind').textContent = rows.filter(function (u) { return u.segment === 'individual'; }).length;
+    $('usr-emp').textContent = rows.filter(function (u) { return u.segment === 'empresa'; }).length;
+    var desc = $('usr-filter-desc');
+    if (desc) {
+      desc.textContent = tipo === 'individual' ? 'Plan individual (sin empresa)' :
+        tipo === 'empresa' ? 'Usuarios dentro de empresas' : 'Todos los usuarios';
+    }
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="6" class="imp-empty">Sin resultados</td></tr>';
+      return;
+    }
+    tb.innerHTML = rows.map(function (u) {
+      var segBadge = u.segment === 'individual' ? 'imp-badge-warn' : 'imp-badge-ok';
+      var segLabel = u.segment === 'individual' ? 'Individual' : 'Empresa';
+      return '<tr><td><div class="imp-cell-stack"><strong>' + esc(u.username) + '</strong>' +
+        '<div class="imp-row-sub mono">#' + u.id + (u.email ? ' · ' + esc(u.email) : '') + '</div></div></td>' +
+        '<td><span class="imp-badge ' + segBadge + '">' + segLabel + '</span></td>' +
+        '<td>' + (u.company_name ? esc(u.company_name) : '<span class="imp-cell-muted">—</span>') + '</td>' +
+        '<td>' + (u.roles || []).slice(0, 3).map(function (r) {
+          return '<span class="imp-badge imp-badge-muted">' + esc(r) + '</span>';
+        }).join(' ') + '</td>' +
+        '<td>' + (u.is_active ? '<span class="imp-badge imp-badge-ok">Activo</span>' : '<span class="imp-badge imp-badge-err">Inactivo</span>') + '</td>' +
+        '<td class="imp-col-actions"><button type="button" class="imp-btn imp-btn-ghost imp-btn-sm" onclick="Imp.openUserAdmin(' + u.id + ')">Gestionar</button></td></tr>';
+    }).join('');
+  }
+
+  function loadUsuarios() {
+    var tb = $('usuarios-tbody');
+    setLoading(tb.closest('.imp-card'), true);
+    api('/users/directory').then(function (d) {
+      _usrCache = d.users || [];
+      renderUsuarios();
+      setLoading(tb.closest('.imp-card'), false);
+    }).catch(function (e) {
+      setLoading(tb.closest('.imp-card'), false);
+      toast(e.message, 'err');
+    });
+  }
+
+  function openUserAdmin(uid) {
+    if (typeof saOpenUserEditor === 'function') {
+      navigate('poder');
+      setTimeout(function () { saOpenUserEditor(uid); }, 300);
+    } else {
+      toast('Abrí la pestaña Poder Imperial', 'err');
+    }
   }
 
   function loadInteligencia() {
@@ -623,39 +703,95 @@
     setLoading(body, true);
     Promise.all([
       api('/overview', {}, API_V1),
-      api('/ai-health', {}, API_V1).catch(function () { return {}; }),
+      api('/ai-health?since_days=30', {}, API_V1).catch(function () { return { available: false }; }),
       api('/orphan-staff', {}, API_V1).catch(function () { return { orphans: [] }; }),
+      api('/cooldowns', {}, API_V1).catch(function () { return { rows: [] }; }),
+      api('/learned-patterns', {}, API_V1).catch(function () { return { patterns: [] }; }),
+      api('/oracle-stats', {}, API_V1).catch(function () { return {}; }),
+      api('/system-info', {}, API_V1).catch(function () { return {}; }),
+      api('/staff-trust', {}, API_V1).catch(function () { return { rows: [] }; }),
     ]).then(function (arr) {
       var ov = arr[0];
       var ai = arr[1];
       var orphan = arr[2];
-      var orphans = orphan.orphans || orphan.users || [];
-      var aiOk = ai && ai.status === 'ok';
+      var cooldowns = arr[3];
+      var patterns = arr[4];
+      var oracle = arr[5];
+      var sys = arr[6];
+      var trust = arr[7];
+      var orphans = orphan.orphans || [];
+      var metrics = (ai && ai.metrics) || {};
+      var m = metrics.metrics || metrics;
+      var prec = m.precision != null ? (m.precision * 100).toFixed(1) + '%' : '—';
+      var rec = m.recall != null ? (m.recall * 100).toFixed(1) + '%' : '—';
+      var f1 = m.f1 != null ? (m.f1 * 100).toFixed(1) + '%' : '—';
+      var drift = m.drift_score != null ? m.drift_score.toFixed(3) : '—';
+      var topTrust = (trust.rows || []).slice(0, 5);
+      var patCount = (patterns.rows || patterns.patterns || []).length;
+      var cdCount = (cooldowns.rows || []).length;
       body.innerHTML =
         '<div class="imp-intel-grid">' +
-        '<div class="imp-card"><div class="imp-card-head"><span class="imp-card-title">Motor IA</span></div><div class="imp-card-body">' +
-        '<div class="imp-intel-stat"><span>Patrones autolearn activos</span><span>' + (ov.autolearn_active || 0) + '</span></div>' +
-        '<div class="imp-intel-stat"><span>Cooldowns activos</span><span>' + (ov.cooldowns_active || 0) + '</span></div>' +
-        '<div class="imp-intel-stat"><span>Staff con trust score</span><span>' + (ov.staff_with_trust || 0) + '</span></div>' +
-        '<div class="imp-intel-stat"><span>Estado IA</span><span>' + (aiOk ? 'OK' : (ai.status || '—')) + '</span></div>' +
+        '<div class="imp-card"><div class="imp-card-head"><span class="imp-card-title">Calidad IA (30d)</span>' +
+        '<span class="imp-badge ' + (ai.available !== false ? 'imp-badge-ok' : 'imp-badge-muted') + '">' +
+        (ai.available !== false ? 'Activo' : 'N/D') + '</span></div><div class="imp-card-body">' +
+        '<div class="imp-intel-stat"><span>Precisión</span><span>' + prec + '</span></div>' +
+        '<div class="imp-intel-stat"><span>Recall</span><span>' + rec + '</span></div>' +
+        '<div class="imp-intel-stat"><span>F1</span><span>' + f1 + '</span></div>' +
+        '<div class="imp-intel-stat"><span>Drift score</span><span>' + drift + '</span></div>' +
+        (ai.suggestion ? '<p class="imp-hint" style="margin-top:10px">' + esc(ai.suggestion) + '</p>' : '') +
+        (ai.retrain && ai.retrain.should_retrain ? '<p class="imp-hint" style="color:var(--imp-gold)">⚠ Retrain recomendado</p>' : '') +
+        '</div></div>' +
+        '<div class="imp-card"><div class="imp-card-head"><span class="imp-card-title">Plataforma</span></div><div class="imp-card-body">' +
+        '<div class="imp-intel-stat"><span>Scans 24h / 7d / 30d</span><span>' + (ov.scans_24h || 0) + ' / ' + (ov.scans_7d || 0) + ' / ' + (ov.scans_30d || 0) + '</span></div>' +
+        '<div class="imp-intel-stat"><span>Pendientes / Hacks 30d</span><span><span class="rose">' + (ov.pending_total || 0) +
+        '</span> / ' + (ov.hacks_30d || 0) + '</span></div>' +
+        '<div class="imp-intel-stat"><span>Patrones aprendidos</span><span>' + patCount + '</span></div>' +
+        '<div class="imp-intel-stat"><span>Cooldowns FP</span><span>' + cdCount + '</span></div>' +
+        '<div class="imp-intel-stat"><span>Argus</span><span class="mono">' + esc(sys.argus_version || '—') + '</span></div>' +
+        '</div></div>' +
+        '<div class="imp-card"><div class="imp-card-head"><span class="imp-card-title">Oracle</span>' +
+        '<span class="imp-badge ' + (oracle.oracle_available ? 'imp-badge-ok' : 'imp-badge-muted') + '">' +
+        (oracle.oracle_available ? 'ON' : 'OFF') + '</span></div><div class="imp-card-body">' +
+        '<div class="imp-intel-stat"><span>Decisiones 24h</span><span>' + (oracle.decisions_24h || 0) + '</span></div>' +
+        '<div class="imp-intel-stat"><span>Decisiones 7d / 30d</span><span>' + (oracle.decisions_7d || 0) + ' / ' + (oracle.decisions_30d || 0) + '</span></div>' +
+        '<div class="imp-intel-stat"><span>Auto-labels</span><span>' + (oracle.auto_labels_total || 0) + '</span></div>' +
+        '</div></div>' +
+        '<div class="imp-card"><div class="imp-card-head"><span class="imp-card-title">Staff trust (top)</span></div><div class="imp-card-body">' +
+        (topTrust.length ? topTrust.map(function (t) {
+          return '<div class="imp-list-item"><strong>' + esc(t.username) + '</strong> <span class="mono">' +
+            (t.trust_score != null ? t.trust_score.toFixed(0) : '—') + '</span> · ' + (t.verdicts_total || 0) + ' veredictos</div>';
+        }).join('') : '<p class="imp-cell-muted">Sin datos de trust</p>') +
         '</div></div>' +
         '<div class="imp-card"><div class="imp-card-head"><span class="imp-card-title">Staff sin empresa</span>' +
         '<span class="imp-badge ' + (orphans.length ? 'imp-badge-warn' : 'imp-badge-ok') + '">' + orphans.length + '</span></div>' +
         '<div class="imp-card-body">' +
-        (orphans.length ? orphans.slice(0, 6).map(function (o) {
-          return '<div class="imp-list-item"><strong>' + esc(o.username) + '</strong> <span class="mono">#' + o.id + '</span> · ' + esc((o.roles || []).join(', ')) + '</div>';
+        (orphans.length ? orphans.slice(0, 8).map(function (o) {
+          return '<div class="imp-list-item"><strong>' + esc(o.username) + '</strong> · ' + esc((o.roles || []).join(', ')) + '</div>';
         }).join('') : '<p class="imp-cell-muted">Nadie pendiente</p>') +
-        (orphans.length ? '<button type="button" class="imp-btn imp-btn-gold imp-btn-sm" style="margin-top:14px" onclick="Imp.navigate(\'migraciones\')">Corregir en migraciones</button>' : '') +
+        (orphans.length ? '<button type="button" class="imp-btn imp-btn-gold imp-btn-sm" style="margin-top:12px" onclick="Imp.navigate(\'migraciones\')">Ir a migraciones</button>' : '') +
         '</div></div>' +
         '<div class="imp-card"><div class="imp-card-head"><span class="imp-card-title">Mantenimiento</span></div><div class="imp-card-body">' +
-        '<p class="imp-cell-muted" style="margin-bottom:12px">Simula limpieza de datos sin aplicar cambios.</p>' +
-        '<button type="button" class="imp-btn imp-btn-ghost imp-btn-sm" onclick="Imp.runMaintenanceDry()">Ejecutar dry-run</button></div></div>' +
+        '<p class="imp-cell-muted" style="margin-bottom:10px">Limpieza de datos (simulación).</p>' +
+        '<div class="imp-form-actions">' +
+        '<button type="button" class="imp-btn imp-btn-ghost imp-btn-sm" onclick="Imp.runMaintenanceDry()">Dry-run</button>' +
+        '<button type="button" class="imp-btn imp-btn-rose imp-btn-sm" onclick="Imp.runMaintenanceReal()">Ejecutar real</button>' +
+        '</div></div></div>' +
         '</div>';
       setLoading(body, false);
     }).catch(function (e) {
       setLoading(body, false);
       toast(e.message, 'err');
     });
+  }
+
+  function runMaintenanceReal() {
+    if (!confirm('¿Ejecutar mantenimiento REAL? Puede borrar datos antiguos.')) return;
+    api('/maintenance/run', { method: 'POST', body: JSON.stringify({ notify_discord: false }) }, API_V1)
+      .then(function (d) {
+        openModal('Mantenimiento ejecutado', '<pre class="imp-pre">' + esc(JSON.stringify(d.report || d, null, 2).slice(0, 3000)) + '</pre>',
+          '<button type="button" class="imp-btn imp-btn-ghost" data-close="1">Cerrar</button>');
+        toast('Mantenimiento completado', 'ok');
+      }).catch(function (e) { toast(e.message, 'err'); });
   }
 
   function runMaintenanceDry() {
@@ -834,6 +970,13 @@
     });
   }
 
+  function initUsuariosFilter() {
+    var inp = $('usr-search');
+    var sel = $('usr-type-filter');
+    if (inp) inp.addEventListener('input', renderUsuarios);
+    if (sel) sel.addEventListener('change', renderUsuarios);
+  }
+
   window.Imp = {
     navigate: navigate,
     toast: toast,
@@ -859,6 +1002,8 @@
     resetPw: resetPw,
     promoteUser: promoteUser,
     runMaintenanceDry: runMaintenanceDry,
+    runMaintenanceReal: runMaintenanceReal,
+    openUserAdmin: openUserAdmin,
     refreshAll: function () {
       refreshCompanies().then(function () {
         loadView(state.view);
@@ -877,6 +1022,7 @@
     initSearch();
     initMobile();
     initCarteraFilter();
+    initUsuariosFilter();
     var hash = (location.hash || '').replace('#', '');
     navigate(hash && VIEW_TITLES[hash] ? hash : 'inicio');
   });

@@ -36,9 +36,33 @@
   }
 
   function toast(msg, type) {
-    if (typeof showToast === 'function') showToast(msg, type || 'ok');
-    else if (window.saToast) window.saToast(msg, type === 'err' ? 'err' : 'ok');
+    if (window.Imp && window.Imp.toast) window.Imp.toast(msg, type === 'err' ? 'err' : 'ok');
+    else if (typeof showToast === 'function') showToast(msg, type || 'ok');
     else alert(msg);
+  }
+
+  function bindGodModeEvents() {
+    var grid = document.getElementById('sa-god-grid');
+    if (!grid) return;
+    grid.querySelectorAll('.sa-god-toggle').forEach(function (row) {
+      var cb = row.querySelector('input[type="checkbox"]');
+      if (!cb) return;
+      cb.addEventListener('change', function () {
+        row.classList.toggle('is-on', cb.checked);
+      });
+      row.addEventListener('click', function (e) {
+        if (e.target.tagName === 'INPUT' || e.target.closest('.sa-switch')) return;
+        cb.checked = !cb.checked;
+        row.classList.toggle('is-on', cb.checked);
+        cb.dispatchEvent(new Event('change'));
+      });
+    });
+    grid.querySelectorAll('.sa-god-text-input').forEach(function (inp) {
+      inp.addEventListener('input', function () {
+        var wrap = inp.closest('.sa-god-toggle');
+        if (wrap) wrap.classList.toggle('is-on', !!(inp.value || '').trim());
+      });
+    });
   }
 
   function roleClass(r) {
@@ -142,6 +166,7 @@
         '</div>',
       ].join('');
     }).join('');
+    bindGodModeEvents();
   };
 
   window.saSaveGodMode = async function saSaveGodMode() {

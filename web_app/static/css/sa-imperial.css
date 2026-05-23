@@ -562,6 +562,63 @@ body.imp-body {
   color: var(--imp-champagne);
 }
 
+/* Poder Imperial — variables para sa-imperial-powers.css */
+#view-poder {
+  --bg2: var(--imp-bg3);
+  --bg3: var(--imp-bg2);
+  --bg4: #1a1024;
+  --card: var(--imp-surface);
+  --border: var(--imp-border);
+  --border-h: var(--imp-border-h);
+  --border-m: rgba(232, 197, 71, 0.2);
+  --text: var(--imp-text);
+  --text-m: var(--imp-muted);
+  --text-d: var(--imp-dim);
+  --text-dd: #4a4058;
+  --gold-l: var(--imp-gold);
+  --red: var(--imp-rose);
+  --red-b: #e85a6f;
+  --red-soft: var(--imp-rose-soft);
+  --r: 10px;
+  --r-l: var(--imp-r);
+  --trans: 0.18s ease;
+  --shadow-l: var(--imp-shadow);
+}
+#view-poder .sa-god-toggle {
+  background: rgba(0, 0, 0, 0.35);
+  border-color: var(--imp-border);
+  cursor: pointer;
+}
+#view-poder .sa-god-toggle:hover { border-color: var(--imp-border-h); }
+#view-poder .sa-god-label { color: var(--imp-champagne); }
+#view-poder .sa-god-desc { color: var(--imp-muted); }
+#view-poder .sa-switch-slider {
+  background: #2a1f35;
+  border-color: var(--imp-border-h);
+}
+#view-poder .sa-switch input:checked + .sa-switch-slider {
+  background: rgba(196, 30, 58, 0.5);
+  border-color: var(--imp-rose);
+}
+#view-poder .sa-switch input:checked + .sa-switch-slider::before {
+  background: #fff;
+}
+#view-poder .sa-god-text-input {
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--imp-border-h);
+  color: var(--imp-text);
+  border-radius: 10px;
+}
+#view-poder .sa-power-card {
+  background: var(--imp-surface);
+  border-color: var(--imp-border);
+}
+#view-poder .sa-matrix th:first-child,
+#view-poder .sa-matrix td:first-child {
+  background: var(--imp-bg3);
+}
+#view-poder .empty { color: var(--imp-dim); padding: 24px; text-align: center; }
+
 /* Poder tab inherits */
 #view-poder .sa-poder-hero { margin-top: 0; }
 
