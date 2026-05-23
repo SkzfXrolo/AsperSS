@@ -6,6 +6,7 @@ Solo consumido desde /aspers-sa (sesión admin_subscriptions).
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import time
 from datetime import datetime, timezone
@@ -143,8 +144,22 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def ensure_sa_permission_tables(cursor, *, use_pg=False):
+def _is_server_db() -> bool:
+    """True en PostgreSQL/MySQL (Render); False en SQLite local."""
+    try:
+        from auth import USE_POSTGRESQL, USE_MYSQL
+        if USE_POSTGRESQL or USE_MYSQL:
+            return True
+    except Exception:
+        pass
+    url = (os.environ.get('DATABASE_URL') or '').lower()
+    return url.startswith('postgres') or 'mysql' in url
+
+
+def ensure_sa_permission_tables(cursor, *, use_pg=None):
     """Crea tablas de flags y overrides si no existen."""
+    if use_pg is None:
+        use_pg = _is_server_db()
     if use_pg:
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS sa_platform_flags (
