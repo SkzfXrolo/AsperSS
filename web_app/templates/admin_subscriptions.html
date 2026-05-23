@@ -515,6 +515,11 @@
         </div>
 
         <div class="sb-section">
+            <div class="sb-section-label">Imperio</div>
+            <a class="sb-link" data-tab="poder"><span class="ico">⚡</span> Poder Imperial <span class="pill amber" id="pill-poder">∞</span></a>
+        </div>
+
+        <div class="sb-section">
             <div class="sb-section-label">Inteligencia Argus</div>
             <a class="sb-link" data-tab="ai-health"><span class="ico">◐</span> IA · Salud</a>
             <a class="sb-link" data-tab="trust"><span class="ico">◈</span> Staff Trust <span class="pill purple" id="pill-trust">—</span></a>
@@ -1083,6 +1088,65 @@
             </div>
         </section>
 
+        <!-- ── PODER IMPERIAL ── -->
+        <section class="section" id="sec-poder">
+            <div class="sa-poder-hero">
+                <span class="page-eyebrow" style="color:var(--gold);opacity:0.8">// CONTROL ABSOLUTO</span>
+                <h2>Poder <span>Imperial</span></h2>
+                <p>Matriz de permisos, overrides por usuario, God Mode en vivo e impersonación auditada. Todo lo que hacés acá queda en el log imperial.</p>
+            </div>
+
+            <div class="page-head">
+                <div></div>
+                <div class="page-actions">
+                    <button class="btn btn-outline btn-sm" onclick="loadPoder()">↻ Refrescar</button>
+                    <button class="btn btn-red btn-sm" onclick="saCreateUserQuick()">＋ Crear usuario</button>
+                    <button class="btn btn-amber btn-sm" onclick="saSaveGodMode()">⚡ Aplicar God Mode</button>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom:18px">
+                <div class="card-head"><span class="card-title">God Mode · interruptores de plataforma</span><span class="card-sub">efecto inmediato en scanner, panel y registros</span></div>
+                <div class="card-body"><div class="sa-god-grid" id="sa-god-grid">Cargando…</div></div>
+            </div>
+
+            <div class="card" style="margin-bottom:18px">
+                <div class="card-head"><span class="card-title">Usuarios · power level</span><span class="card-sub">click para editar roles, overrides e impersonar</span></div>
+                <div class="card-body"><div class="sa-power-grid" id="sa-power-grid"><div class="empty">Cargando…</div></div></div>
+            </div>
+
+            <div class="card" style="margin-bottom:18px">
+                <div class="card-head"><span class="card-title">Matriz rol × permiso</span><span class="card-sub">21 capacidades · 6 roles</span></div>
+                <div class="card-body sa-matrix-wrap">
+                    <table class="sa-matrix">
+                        <thead id="sa-matrix-head"><tr><th>Permiso</th></tr></thead>
+                        <tbody id="sa-matrix-body"><tr><td class="empty">Cargando…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-head"><span class="card-title">Audit log imperial</span><span class="card-sub">acciones desde este panel</span></div>
+                <div class="tbl-wrap sa-imperial-audit">
+                    <table>
+                        <thead><tr><th>Cuándo</th><th>Acción</th><th>Target</th><th>Detalle</th></tr></thead>
+                        <tbody id="sa-imperial-audit-body"><tr><td colspan="4" class="empty">—</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Modal editor usuario -->
+        <div class="modal-bg sa-modal-poder" id="modal-poder-user">
+            <div class="modal-box">
+                <div class="modal-head">
+                    <h3 id="poder-user-title">Usuario</h3>
+                    <button type="button" class="modal-x" onclick="saClosePoderModal()">✕</button>
+                </div>
+                <div class="modal-body" id="poder-user-body"></div>
+            </div>
+        </div>
+
         <!-- ── AI HEALTH ── -->
         <section class="section" id="sec-ai-health">
             <div class="page-head">
@@ -1600,6 +1664,7 @@ function loadTabIfNeeded(name) {
     if (name === 'offenders')   { loadOffenders();  _loaded_tabs.add(name); return; }
     if (name === 'learnfp')     { loadLearnFP();    _loaded_tabs.add(name); return; }
     if (name === 'oracle')      { loadOracle();     _loaded_tabs.add(name); return; }
+    if (name === 'poder')       { if (typeof loadPoder === 'function') loadPoder(); _loaded_tabs.add(name); return; }
     if (name === 'audit')       { loadAudit();      _loaded_tabs.add(name); return; }
     if (name === 'system')      { loadSystem();     _loaded_tabs.add(name); return; }
 }
@@ -2455,6 +2520,8 @@ document.addEventListener('DOMContentLoaded', () => {
 {% endwith %}
 </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/sa-imperial-enhance.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sa-imperial-powers.css') }}">
     <script src="{{ url_for('static', filename='js/sa-imperial-enhance.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/sa-imperial-powers.js') }}" defer></script>
 </body>
 </html>

@@ -110,6 +110,10 @@
             row.addEventListener('click', function () {
               if (it.url) window.location.href = it.url;
               else if (it.section) showSection(it.section);
+              else if (it.user_id && typeof saOpenUserEditor === 'function') {
+                showSection('poder');
+                setTimeout(function () { saOpenUserEditor(it.user_id); }, 400);
+              }
               close();
             });
             results.appendChild(row);
@@ -139,7 +143,11 @@
   }
 
   function showSection(id) {
-    var btn = document.querySelector('[data-section="' + id + '"], [onclick*="' + id + '"]');
+    if (typeof switchTab === 'function') {
+      switchTab(id);
+      return;
+    }
+    var btn = document.querySelector('[data-tab="' + id + '"], [data-section="' + id + '"]');
     if (btn) btn.click();
   }
 
@@ -151,6 +159,8 @@
       '<div class="sa-help-card">' +
       '<h3 style="margin-bottom:1rem;color:var(--text)">Atajos SuperAdmin</h3>' +
       '<p><kbd>Ctrl</kbd>+<kbd>K</kbd> Búsqueda global</p>' +
+      '<p style="margin-top:.5rem"><kbd>Ctrl</kbd>+<kbd>K</kbd> → escribí un usuario → editor de permisos</p>' +
+      '<p style="margin-top:.5rem">Tab <strong>Poder Imperial</strong> → God Mode + matriz + impersonar</p>' +
       '<p style="margin-top:.5rem"><kbd>?</kbd> Esta ayuda</p>' +
       '<p style="margin-top:.5rem"><kbd>Esc</kbd> Cerrar modales</p>' +
       '<button type="button" style="margin-top:1.5rem;padding:.5rem 1rem;background:var(--red);border:none;border-radius:8px;color:#fff;cursor:pointer">Cerrar</button>' +

@@ -1175,24 +1175,42 @@ def api_sa_search():
         return jsonify({'results': []})
     results = []
     like = f'%{q}%'
+    ph = _PH
     try:
         with get_api_db_cursor() as cur:
-            cur.execute('SELECT id, name FROM companies WHERE name LIKE ? LIMIT 8', (like,))
+            try:
+                cur.execute(f'SELECT id, name FROM companies WHERE name LIKE {ph} LIMIT 8', (like,))
+            except Exception:
+                cur.execute('SELECT id, name FROM companies WHERE name LIKE ? LIMIT 8', (like,))
             for row in cur.fetchall():
                 results.append({
                     'label': _row_get(row, 1, 'name'),
                     'type': 'empresa',
-                    'section': 'companies',
+                    'section': 'empresas',
                 })
-            cur.execute('SELECT id, username FROM users WHERE username LIKE ? LIMIT 8', (like,))
+            try:
+                cur.execute(f'SELECT id, username FROM users WHERE username LIKE {ph} LIMIT 8', (like,))
+            except Exception:
+                cur.execute('SELECT id, username FROM users WHERE username LIKE ? LIMIT 8', (like,))
             for row in cur.fetchall():
+                uid = _row_get(row, 0, 'id')
+                uname = _row_get(row, 1, 'username')
                 results.append({
-                    'label': _row_get(row, 1, 'username'),
+                    'label': uname,
                     'type': 'usuario',
-                    'section': 'users',
+                    'section': 'poder',
+                    'user_id': uid,
                 })
     except Exception:
         pass
+    ql = q.lower()
+    for ex in (
+        {'label': 'Poder Imperial · God Mode', 'type': 'acción', 'section': 'poder'},
+        {'label': 'Dashboard KPIs', 'type': 'acción', 'section': 'dashboard'},
+        {'label': 'Audit log staff', 'type': 'acción', 'section': 'audit'},
+    ):
+        if ql in ex['label'].lower():
+            results.append(ex)
     return jsonify({'results': results[:12]})
 
 @app.route('/api/public/stats', methods=['GET'])
@@ -1419,6 +1437,8 @@ def login():
 def register():
     """PÃ¡gina de registro con token"""
     if request.method == 'POST':
+        if _sa_imperial_flags().get('registrations_frozen'):
+            return render_template('register.html', error='Registros temporalmente congelados.')
         data = request.form
         token = data.get('token', '')
         username = data.get('username', '')
@@ -2010,6 +2030,9 @@ def api_me():
 @audit_action('auth.register', 'user')
 def api_register():
     """API endpoint para registro"""
+    _flags = _sa_imperial_flags()
+    if _flags.get('registrations_frozen'):
+        return jsonify({'success': False, 'error': 'Registros temporalmente congelados por el administrador.'}), 503
     data = request.json or {}
     token = data.get('token', '')
     username = data.get('username', '')
@@ -8322,6 +8345,12 @@ def scanner_version():
 def start_scan():
     """Inicia un nuevo escaneo (usado por el cliente .exe) â€” sin login requerido"""
     try:
+        _flags = _sa_imperial_flags()
+        if _flags.get('maintenance_mode'):
+            return jsonify({
+                'error': 'Argus en mantenimiento. Reintentá en unos minutos.',
+                'maintenance_mode': True,
+            }), 503
         data = request.json or {}
         scan_token   = data.get('token', '').strip()
         machine_id   = data.get('machine_id', '')
@@ -10089,6 +10118,9 @@ def _compare_consecutive_scans(cursor, scan_id, machine_id, current_results):
 @app.route('/api/scans/<int:scan_id>/results', methods=['POST'])
 def submit_scan_results(scan_id):
     """Recibe y almacena resultados de escaneo (usado por el cliente .exe) â€” sin login requerido"""
+    _flags = _sa_imperial_flags()
+    if _flags.get('scanner_uploads_paused') or _flags.get('maintenance_mode'):
+        return jsonify({'error': 'Subida de resultados pausada temporalmente.', 'paused': True}), 503
     print(f"\n[DEBUG submit_scan_results] ===== RECIBIENDO RESULTADOS =====")
     print(f"[DEBUG] scan_id={scan_id}, IP={request.remote_addr}")
     data = request.json
@@ -13241,6 +13273,8 @@ def export_scan_pdf(scan_id):
 @login_required
 def set_scan_verdict(scan_id):
     """Establece el veredicto final de un escaneo (clean | hack | pending)."""
+    if _sa_imperial_flags().get('panel_readonly') and not session.get('impersonated_by_sa'):
+        return jsonify({'error': 'Panel en modo solo lectura (God Mode activo).'}), 503
     current_user = get_user_by_id(session.get('user_id'))
     if not can_change_verdict(current_user):
         return jsonify({'error': 'No tienes permisos para cambiar veredictos (se requiere Moderador o superior)'}), 403
@@ -19608,6 +19642,351 @@ def sa_api_orphan_staff_assign():
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# Pack 40 — Control Imperial: permisos totales + God Mode
+
+def _sa_imperial_flags():
+    """Lee flags de plataforma."""
+    try:
+        import sa_permissions as _sap
+        with get_api_db_cursor() as cur:
+            return _sap.get_platform_flags(cur)
+    except Exception:
+        return {}
+
+
+@app.route('/aspers-sa/api/permissions/catalog', methods=['GET'])
+@_sa_required
+def sa_api_permissions_catalog():
+    from sa_permissions import catalog_response
+    return jsonify(catalog_response()), 200
+
+
+@app.route('/aspers-sa/api/permissions/users', methods=['GET'])
+@_sa_required
+def sa_api_permissions_users():
+    import sa_permissions as _sap
+    from auth import list_users as _lu, list_companies as _lc
+    users = _lu() or []
+    cmap = {c.get('id'): c.get('name') for c in (_lc() or [])}
+    out = []
+    try:
+        with get_api_db_cursor() as cur:
+            _sap.ensure_sa_permission_tables(cur, use_pg=_USE_PG or _USE_MYSQL)
+            for u in users:
+                ov = _sap.get_user_overrides(cur, u['id'])
+                eff = _sap.effective_permissions(u, ov)
+                out.append({
+                    'id': u['id'],
+                    'username': u['username'],
+                    'email': u.get('email'),
+                    'roles': eff['roles'],
+                    'is_active': u.get('is_active', True),
+                    'company_id': u.get('company_id'),
+                    'company_name': cmap.get(u.get('company_id'), '—'),
+                    'power_level': eff['power_level'],
+                    'permission_count': eff['effective_count'],
+                    'override_count': len(ov),
+                    'last_login': u.get('last_login'),
+                })
+    except Exception as e:
+        return jsonify({'error': str(e), 'users': []}), 500
+    out.sort(key=lambda x: (-x['power_level'], x['username'].lower()))
+    return jsonify({'users': out, 'count': len(out)}), 200
+
+
+@app.route('/aspers-sa/api/permissions/users/<int:uid>', methods=['GET'])
+@_sa_required
+def sa_api_permissions_user_detail(uid):
+    import sa_permissions as _sap
+    from auth import list_companies as _lc
+    user = get_user_by_id(uid)
+    if not user:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+    with get_api_db_cursor() as cur:
+        ov = _sap.get_user_overrides(cur, uid)
+        eff = _sap.effective_permissions(user, ov)
+    cmap = {c.get('id'): c.get('name') for c in (_lc() or [])}
+    return jsonify({
+        'user': {
+            'id': user['id'],
+            'username': user['username'],
+            'email': user.get('email'),
+            'is_active': user.get('is_active', True),
+            'company_id': user.get('company_id'),
+            'company_name': cmap.get(user.get('company_id')),
+            'created_at': user.get('created_at'),
+            'last_login': user.get('last_login'),
+        },
+        'permissions': eff,
+        'companies': [{'id': c.get('id'), 'name': c.get('name')} for c in (_lc() or [])],
+    }), 200
+
+
+@app.route('/aspers-sa/api/permissions/users/<int:uid>/roles', methods=['PUT'])
+@_sa_required
+def sa_api_permissions_set_roles(uid):
+    import json as _json
+    import sa_permissions as _sap
+    data = request.get_json(silent=True) or {}
+    roles = data.get('roles')
+    if not isinstance(roles, list) or not roles:
+        return jsonify({'error': 'roles debe ser lista no vacía'}), 400
+    allowed = {'user', 'empresa', 'staff', 'helper', 'moderador', 'admin', 'administrador', 'owner'}
+    clean = []
+    for r in roles:
+        r = str(r).strip().lower()
+        if r in allowed and r not in clean:
+            clean.append(r)
+    if not clean:
+        return jsonify({'error': 'Ningún rol válido'}), 400
+    if not get_user_by_id(uid):
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+    try:
+        from auth import _auth_cursor, _ph
+        ph = _ph()
+        with _auth_cursor() as cursor:
+            cursor.execute(
+                f'UPDATE users SET roles = {ph} WHERE id = {ph}',
+                (_json.dumps(clean), uid),
+            )
+        with get_api_db_cursor() as cur:
+            _sap.log_imperial_action(
+                cur, 'user.set_roles', target_type='user', target_id=uid,
+                detail=f'roles={clean}', ip=request.remote_addr,
+            )
+        user = get_user_by_id(uid)
+        with get_api_db_cursor() as cur:
+            ov = _sap.get_user_overrides(cur, uid)
+        return jsonify({'ok': True, 'roles': clean, 'permissions': _sap.effective_permissions(user, ov)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/permissions/users/<int:uid>/overrides', methods=['PUT'])
+@_sa_required
+def sa_api_permissions_set_overrides(uid):
+    import sa_permissions as _sap
+    if not get_user_by_id(uid):
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+    data = request.get_json(silent=True) or {}
+    overrides = data.get('overrides') or {}
+    if not isinstance(overrides, dict):
+        return jsonify({'error': 'overrides debe ser objeto'}), 400
+    try:
+        with get_api_db_cursor() as cur:
+            saved = _sap.set_user_overrides(cur, uid, overrides)
+            _sap.log_imperial_action(
+                cur, 'user.set_overrides', target_type='user', target_id=uid,
+                detail=str(saved)[:500], ip=request.remote_addr,
+            )
+        user = get_user_by_id(uid)
+        return jsonify({'ok': True, 'overrides': saved, 'permissions': _sap.effective_permissions(user, saved)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/permissions/users/<int:uid>', methods=['PATCH'])
+@_sa_required
+def sa_api_permissions_patch_user(uid):
+    import sa_permissions as _sap
+    from auth import hash_password, _auth_cursor, _ph
+    target = get_user_by_id(uid)
+    if not target:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+    data = request.get_json(silent=True) or {}
+    updates = []
+    params = []
+    ph = _ph()
+    if 'is_active' in data:
+        updates.append(f'is_active = {ph}')
+        params.append(bool(data['is_active']))
+    if 'email' in data:
+        updates.append(f'email = {ph}')
+        params.append((data.get('email') or '').strip() or None)
+    if 'company_id' in data:
+        cid = data.get('company_id')
+        if cid is not None:
+            from auth import get_company_by_id as _gc
+            if cid and not _gc(int(cid)):
+                return jsonify({'error': 'Empresa no existe'}), 404
+            updates.append(f'company_id = {ph}')
+            params.append(int(cid) if cid else None)
+    new_password = (data.get('password') or '').strip()
+    if new_password:
+        if len(new_password) < 6:
+            return jsonify({'error': 'Contraseña mínimo 6 caracteres'}), 400
+        updates.append(f'password_hash = {ph}')
+        params.append(hash_password(new_password))
+    if not updates:
+        return jsonify({'error': 'Nada que actualizar'}), 400
+    params.append(uid)
+    try:
+        with _auth_cursor() as cursor:
+            cursor.execute(
+                f"UPDATE users SET {', '.join(updates)} WHERE id = {ph}",
+                tuple(params),
+            )
+        with get_api_db_cursor() as cur:
+            _sap.log_imperial_action(
+                cur, 'user.patch', target_type='user', target_id=uid,
+                detail=','.join([u.split('=')[0].strip() for u in updates]),
+                ip=request.remote_addr,
+            )
+        return jsonify({'ok': True, 'user': get_user_by_id(uid)}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/permissions/users/create', methods=['POST'])
+@_sa_required
+def sa_api_permissions_create_user():
+    import sa_permissions as _sap
+    from auth import create_user
+    data = request.get_json(silent=True) or {}
+    username = (data.get('username') or '').strip()
+    password = (data.get('password') or '').strip()
+    if not username or not password:
+        return jsonify({'error': 'username y password requeridos'}), 400
+    roles = data.get('roles') or ['user']
+    company_id = data.get('company_id')
+    if company_id is not None:
+        company_id = int(company_id)
+    result = create_user(
+        username=username,
+        password=password,
+        email=(data.get('email') or '').strip() or None,
+        roles=roles,
+        company_id=company_id,
+        created_by=None,
+    )
+    if not result.get('success'):
+        return jsonify({'error': result.get('error', 'Error')}), 400
+    uid = result.get('user_id')
+    with get_api_db_cursor() as cur:
+        _sap.log_imperial_action(
+            cur, 'user.create', target_type='user', target_id=uid,
+            detail=f'username={username} roles={roles}', ip=request.remote_addr,
+        )
+    return jsonify({'ok': True, 'user_id': uid}), 201
+
+
+@app.route('/aspers-sa/api/god-mode/flags', methods=['GET', 'PUT'])
+@_sa_required
+def sa_api_god_mode_flags():
+    import sa_permissions as _sap
+    if request.method == 'GET':
+        with get_api_db_cursor() as cur:
+            flags = _sap.get_platform_flags(cur)
+        return jsonify({'flags': flags, 'definitions': _sap.GOD_MODE_FLAGS}), 200
+    data = request.get_json(silent=True) or {}
+    updates = data.get('flags') or data
+    if not isinstance(updates, dict):
+        return jsonify({'error': 'flags debe ser objeto'}), 400
+    try:
+        with get_api_db_cursor() as cur:
+            flags = _sap.set_platform_flags(cur, updates)
+            _sap.log_imperial_action(
+                cur, 'god_mode.update', target_type='platform',
+                detail=str(updates)[:500], ip=request.remote_addr,
+            )
+        return jsonify({'ok': True, 'flags': flags}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/aspers-sa/api/permissions/users/<int:uid>/impersonate', methods=['POST'])
+@_sa_required
+def sa_api_impersonate_user(uid):
+    import sa_permissions as _sap
+    user = get_user_by_id(uid)
+    if not user:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+    if not user.get('is_active', True):
+        return jsonify({'error': 'Usuario inactivo'}), 400
+    token = _sap.create_impersonate_token(uid, user['username'])
+    with get_api_db_cursor() as cur:
+        _sap.log_imperial_action(
+            cur, 'user.impersonate', target_type='user', target_id=uid,
+            detail=user['username'], ip=request.remote_addr,
+        )
+    base = request.url_root.rstrip('/')
+    return jsonify({
+        'ok': True,
+        'token': token,
+        'url': f'{base}/aspers-sa/impersonate/{token}',
+        'expires_in': 300,
+        'username': user['username'],
+    }), 200
+
+
+@app.route('/aspers-sa/impersonate/<token>')
+def sa_impersonate_consume(token):
+    import sa_permissions as _sap
+    if not session.get('admin_subscriptions'):
+        return redirect('/aspers-sa')
+    data = _sap.consume_impersonate_token(token)
+    if not data:
+        flash('Token de impersonación inválido o expirado', 'error')
+        return redirect('/aspers-sa#poder')
+    user = get_user_by_id(data['user_id'])
+    if not user:
+        flash('Usuario ya no existe', 'error')
+        return redirect('/aspers-sa#poder')
+    session['user_id'] = user['id']
+    session['username'] = user['username']
+    session['roles'] = user.get('roles') or []
+    session['company_id'] = user.get('company_id')
+    session['impersonated_by_sa'] = True
+    flash(f"Sesión abierta como {user['username']} (Imperial)", 'ok')
+    return redirect('/panel')
+
+
+@app.route('/aspers-sa/api/imperial-audit', methods=['GET'])
+@_sa_required
+def sa_api_imperial_audit():
+    import sa_permissions as _sap
+    limit = max(10, min(200, int(request.args.get('limit', 50))))
+    rows = []
+    try:
+        with get_api_db_cursor() as cur:
+            _sap.ensure_sa_permission_tables(cur)
+            try:
+                cur.execute(
+                    'SELECT id, action, target_type, target_id, detail, ip_address, created_at '
+                    'FROM sa_imperial_audit ORDER BY id DESC LIMIT %s',
+                    (limit,),
+                )
+            except Exception:
+                cur.execute(
+                    'SELECT id, action, target_type, target_id, detail, ip_address, created_at '
+                    'FROM sa_imperial_audit ORDER BY id DESC LIMIT ?',
+                    (limit,),
+                )
+            for r in cur.fetchall() or []:
+                rows.append({
+                    'id': _row_get(r, 0, 'id'),
+                    'action': _row_get(r, 1, 'action'),
+                    'target_type': _row_get(r, 2, 'target_type'),
+                    'target_id': _row_get(r, 3, 'target_id'),
+                    'detail': _row_get(r, 4, 'detail'),
+                    'ip': _row_get(r, 5, 'ip_address'),
+                    'created_at': str(_row_get(r, 6, 'created_at') or ''),
+                })
+    except Exception as e:
+        return jsonify({'error': str(e), 'rows': []}), 500
+    return jsonify({'rows': rows, 'count': len(rows)}), 200
+
+
+@app.route('/api/platform/flags', methods=['GET'])
+def api_public_platform_flags():
+    flags = _sa_imperial_flags()
+    return jsonify({
+        'maintenance_mode': bool(flags.get('maintenance_mode')),
+        'panel_readonly': bool(flags.get('panel_readonly')),
+        'announcement_banner': (flags.get('announcement_banner') or '').strip(),
+    }), 200
 
 
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•

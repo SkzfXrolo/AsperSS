@@ -9161,3 +9161,23 @@ async function openRepeatOffendersModal(opts) {
 }
 
 window.openRepeatOffendersModal = openRepeatOffendersModal;
+
+// Imperial God Mode — banner global desde Super Admin
+(function () {
+    fetch('/api/platform/flags', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            var msg = (d.announcement_banner || '').trim();
+            if (!msg && !d.maintenance_mode && !d.panel_readonly) return;
+            var bar = document.createElement('div');
+            bar.id = 'imperial-platform-banner';
+            bar.style.cssText = 'position:sticky;top:0;z-index:9999;padding:10px 16px;text-align:center;font-size:13px;font-weight:600;background:linear-gradient(90deg,rgba(196,30,58,.25),rgba(212,160,23,.2));border-bottom:1px solid rgba(196,30,58,.4);color:#F0E4E8';
+            var parts = [];
+            if (d.maintenance_mode) parts.push('🔧 Mantenimiento — scans pausados');
+            if (d.panel_readonly) parts.push('🔒 Panel solo lectura');
+            if (msg) parts.push(msg);
+            bar.textContent = parts.join(' · ');
+            document.body.prepend(bar);
+        })
+        .catch(function () {});
+})();
