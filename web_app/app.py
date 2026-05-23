@@ -20159,6 +20159,19 @@ try:
 except Exception as _argus_admin_boot_err:
     print(f'[boot] argus_admin_api no disponible: {_argus_admin_boot_err}')
 
+try:
+    from sa_imperial_api import register_sa_imperial_routes as _register_sa_imperial
+    _register_sa_imperial(
+        app,
+        get_api_db_cursor=get_api_db_cursor,
+        row_get=_row_get,
+        sa_required_fn=_sa_required,
+        get_user_by_id_fn=get_user_by_id,
+    )
+    print('[boot] Imperial API v2 registrada (/aspers-sa/api/v2/*)')
+except Exception as _sa_imperial_boot_err:
+    print(f'[boot] sa_imperial_api no disponible: {_sa_imperial_boot_err}')
+
 
 if __name__ == '__main__':
     _port = int(os.environ.get('PORT', '8080'))
