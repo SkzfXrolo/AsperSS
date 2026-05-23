@@ -1,5 +1,5 @@
 """
-Argus Scanner — UI enhancements (120 mejoras EXE, sección A).
+Argus Scanner — UI enhancements (sección A) + Visual Pack B (80+ mejoras).
 Se integra con ModernUI vía patch_modern_ui().
 """
 from __future__ import annotations
@@ -503,3 +503,10 @@ def patch_modern_ui(cls):
     )
     for _name in _method_names:
         setattr(cls, _name, locals()[_name])
+
+    try:
+        from ui_visual_pack_b import patch_visual_pack_b
+        cls._visual_pack_count = patch_visual_pack_b(cls)
+    except Exception as _vb_err:
+        cls._visual_pack_count = 0
+        print(f'[ui] Visual Pack B no cargado: {_vb_err}')

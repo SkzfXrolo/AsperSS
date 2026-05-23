@@ -388,10 +388,14 @@ class ModernUI:
                  font=('Segoe UI', 10, 'bold'),
                  bg=C['bg_primary'], fg=C['text_primary'],
                  anchor='w').pack(anchor='w')
-        tk.Label(brand, text="by Argus Projects",
+        sub_fr = tk.Frame(brand, bg=C['bg_primary'])
+        sub_fr.pack(anchor='w')
+        tk.Label(sub_fr, text='·', font=('Segoe UI', 7, 'bold'),
+                 bg=C['bg_primary'], fg=C['accent']).pack(side=tk.LEFT, padx=(0, 4))
+        tk.Label(sub_fr, text='Argus Projects',
                  font=('Segoe UI', 7),
                  bg=C['bg_primary'], fg=C['text_muted'],
-                 anchor='w').pack(anchor='w')
+                 anchor='w').pack(side=tk.LEFT)
 
         # ── Right: chrome + versión + badge ─────────────────────────────────
         right = tk.Frame(inner, bg=C['bg_primary'])
