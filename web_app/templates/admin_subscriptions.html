@@ -15,10 +15,12 @@
     <div class="imp-ambient"></div>
     <div class="imp-grid-bg"></div>
     <div id="imp-toast-host" class="imp-toast-host"></div>
+    <div id="imp-modal-root" class="imp-modal-root"></div>
 
     <script>window._IMP_COMPANIES = {{ companies|tojson }};</script>
 
     <div class="imp-app">
+        <div class="imp-sidebar-overlay" id="imp-sidebar-overlay"></div>
         <aside class="imp-sidebar">
             <div class="imp-brand">
                 <div class="imp-brand-icon">◆</div>
@@ -58,7 +60,11 @@
                     </div>
                 </div>
                 <div class="imp-topbar-actions">
-                    <div class="imp-search"><span>🔍</span><input type="text" id="imp-search-input" placeholder="Buscar…"><kbd>Ctrl K</kbd></div>
+                    <div class="imp-search-wrap">
+                        <div class="imp-search"><span>🔍</span><input type="text" id="imp-search-input" placeholder="Buscar empresa o usuario…" autocomplete="off"><kbd>Ctrl K</kbd></div>
+                        <div id="imp-search-results" class="imp-search-results"></div>
+                    </div>
+                    <button type="button" class="imp-btn imp-btn-ghost imp-btn-sm" onclick="Imp.refreshAll()" title="Actualizar datos">↻</button>
                     <a href="/panel" class="imp-btn imp-btn-ghost imp-btn-sm" target="_blank">Panel staff</a>
                     <a href="/aspers-sa/logout" class="imp-btn imp-btn-ghost imp-btn-sm">Salir</a>
                 </div>
@@ -71,93 +77,171 @@
                         <p>Tu espacio imperial — más cómodo que el panel staff. Todo queda auditado.</p>
                     </div>
                     <div id="inicio-alert"></div>
-                    <div class="imp-kpi-row">
-                        <div class="imp-kpi"><div class="imp-kpi-label">Empresas</div><div class="imp-kpi-val gold" id="kpi-companies">—</div></div>
-                        <div class="imp-kpi"><div class="imp-kpi-label">Usuarios</div><div class="imp-kpi-val" id="kpi-users">—</div></div>
-                        <div class="imp-kpi"><div class="imp-kpi-label">MRR</div><div class="imp-kpi-val gold" id="kpi-mrr">—</div></div>
-                        <div class="imp-kpi"><div class="imp-kpi-label">Mal asignados</div><div class="imp-kpi-val rose" id="kpi-mis">—</div></div>
-                        <div class="imp-kpi"><div class="imp-kpi-label">Tokens sorteo</div><div class="imp-kpi-val green" id="kpi-tokens">—</div></div>
+                    <div class="imp-quick-row">
+                        <button type="button" class="imp-quick-btn" data-quick="migraciones">Migraciones</button>
+                        <button type="button" class="imp-quick-btn" data-quick="regalos">Regalo</button>
+                        <button type="button" class="imp-quick-btn" data-quick="sorteos">Sorteos</button>
+                        <button type="button" class="imp-quick-btn" data-quick="cartera">Cartera</button>
                     </div>
-                    <div id="inicio-stats"></div>
+                    <div class="imp-kpi-row">
+                        <div class="imp-kpi">
+                            <div class="imp-kpi-label">Empresas activas</div>
+                            <div class="imp-kpi-val gold" id="kpi-companies">—</div>
+                            <div class="imp-kpi-sub" id="kpi-companies-sub">en plataforma</div>
+                        </div>
+                        <div class="imp-kpi">
+                            <div class="imp-kpi-label">MRR estimado</div>
+                            <div class="imp-kpi-val gold" id="kpi-mrr">—</div>
+                            <div class="imp-kpi-sub">suscripciones activas</div>
+                        </div>
+                        <div class="imp-kpi">
+                            <div class="imp-kpi-label">Usuarios</div>
+                            <div class="imp-kpi-val" id="kpi-users">—</div>
+                            <div class="imp-kpi-sub"><span id="kpi-individuals">—</span> individuales</div>
+                        </div>
+                        <div class="imp-kpi">
+                            <div class="imp-kpi-label">Atención</div>
+                            <div class="imp-kpi-val rose" id="kpi-mis">—</div>
+                            <div class="imp-kpi-sub">mal asignados · <span id="kpi-tokens">—</span> tokens libres</div>
+                        </div>
+                    </div>
+                    <div class="imp-card">
+                        <div class="imp-card-head">
+                            <span class="imp-card-title">Actividad reciente</span>
+                            <span class="imp-card-sub">últimas 24h / 30d</span>
+                        </div>
+                        <div class="imp-card-body" id="inicio-stats">Cargando…</div>
+                    </div>
                 </section>
 
                 <section class="imp-view" id="view-cartera">
+                    <p class="imp-section-intro">Listado de empresas con cupo, vencimiento y acciones rápidas. Usá el filtro para encontrar por nombre o ID.</p>
                     <div class="imp-card">
                         <div class="imp-card-head">
-                            <span class="imp-card-title">Empresas ({{ companies|length }})</span>
-                            <a href="/aspers-sa/api/export/companies.csv" class="imp-btn imp-btn-ghost imp-btn-sm" download>↓ CSV</a>
+                            <div>
+                                <span class="imp-card-title">Cartera</span>
+                                <div class="imp-card-desc"><span id="cartera-count">{{ companies|length }}</span> empresas</div>
+                            </div>
+                            <div class="imp-toolbar">
+                                <input type="search" id="cartera-filter" class="imp-input" placeholder="Buscar empresa…">
+                                <a href="/aspers-sa/api/export/companies.csv" class="imp-btn imp-btn-ghost imp-btn-sm" download>Exportar CSV</a>
+                            </div>
                         </div>
                         <div class="imp-table-wrap">
-                            <table class="imp-table">
-                                <thead><tr><th>Empresa</th><th>Estado</th><th>Precio</th><th>Usuarios</th><th>Expira</th><th>Acciones</th></tr></thead>
-                                <tbody id="cartera-tbody"><tr><td colspan="6" class="imp-empty">Cargando…</td></tr></tbody>
+                            <table class="imp-table imp-table-compact">
+                                <thead><tr><th>Empresa</th><th>Plan</th><th>Cupo</th><th>Vence</th><th class="imp-col-actions">Acciones</th></tr></thead>
+                                <tbody id="cartera-tbody"><tr><td colspan="5" class="imp-empty">Cargando…</td></tr></tbody>
                             </table>
                         </div>
                     </div>
                 </section>
 
                 <section class="imp-view" id="view-planes">
+                    <p class="imp-section-intro">Planes predefinidos para dar de alta empresas o usuarios individuales en un clic.</p>
                     <div class="imp-card">
-                        <div class="imp-card-head"><span class="imp-card-title">Catálogo de planes</span></div>
+                        <div class="imp-card-head">
+                            <span class="imp-card-title">Catálogo</span>
+                            <span class="imp-card-sub">individual · enterprise</span>
+                        </div>
                         <div class="imp-card-body"><div class="imp-plans-grid" id="planes-grid">Cargando…</div></div>
                     </div>
                 </section>
 
                 <section class="imp-view" id="view-regalos">
+                    <p class="imp-section-intro">Crea una cuenta individual gratuita. La contraseña se muestra una sola vez al crearla.</p>
                     <div class="imp-card">
-                        <div class="imp-card-head"><span class="imp-card-title">Usuario individual de regalo</span></div>
-                        <div class="imp-card-body">
-                            <p style="color:var(--imp-muted);margin-bottom:16px;font-size:13px">Cuenta individual con contraseña temporal.</p>
-                            <div class="imp-form-row">
-                                <div class="imp-field"><label>Username</label><input id="gift-username"></div>
-                                <div class="imp-field"><label>Email</label><input id="gift-email" type="email"></div>
+                        <div class="imp-card-head"><span class="imp-card-title">Nuevo regalo</span></div>
+                        <div class="imp-card-body imp-form-block">
+                            <div class="imp-form-row imp-form-row-2">
+                                <div class="imp-field">
+                                    <label for="gift-username">Nombre de usuario</label>
+                                    <span class="imp-field-hint">Sin espacios. Ej: patrocinador_mayo</span>
+                                    <input id="gift-username" class="imp-input" placeholder="usuario_regalo" autocomplete="off">
+                                </div>
+                                <div class="imp-field">
+                                    <label for="gift-email">Correo</label>
+                                    <span class="imp-field-hint">Opcional — para recuperación</span>
+                                    <input id="gift-email" class="imp-input" type="email" placeholder="correo@ejemplo.com">
+                                </div>
                             </div>
-                            <button type="button" class="imp-btn imp-btn-gold" onclick="Imp.createGiftUser()">Crear regalo</button>
-                            <div id="gift-result" style="margin-top:16px"></div>
+                            <div class="imp-form-actions">
+                                <button type="button" class="imp-btn imp-btn-ghost imp-btn-sm" onclick="Imp.suggestGiftUsername()">Generar nombre</button>
+                                <button type="button" class="imp-btn imp-btn-gold" onclick="Imp.createGiftUser()">Crear cuenta regalo</button>
+                            </div>
+                            <div id="gift-result"></div>
                         </div>
                     </div>
                 </section>
 
                 <section class="imp-view" id="view-sorteos">
+                    <p class="imp-section-intro">Links de registro para cuentas individuales (Discord, sorteos, promos).</p>
                     <div class="imp-card">
-                        <div class="imp-card-head"><span class="imp-card-title">Generar tokens sorteo</span></div>
-                        <div class="imp-card-body">
-                            <div class="imp-form-row">
-                                <div class="imp-field"><label>Cantidad</label><input id="sorteo-count" type="number" value="5" min="1" max="50"></div>
-                                <div class="imp-field"><label>Horas validez</label><input id="sorteo-hours" type="number" value="168"></div>
-                                <div class="imp-field"><label>Etiqueta</label><input id="sorteo-label" placeholder="Sorteo Discord"></div>
+                        <div class="imp-card-head"><span class="imp-card-title">Nuevo lote</span></div>
+                        <div class="imp-card-body imp-form-block">
+                            <div class="imp-form-row imp-form-row-3">
+                                <div class="imp-field">
+                                    <label for="sorteo-count">Cantidad</label>
+                                    <span class="imp-field-hint">Máximo 50 por lote</span>
+                                    <input id="sorteo-count" class="imp-input" type="number" value="5" min="1" max="50">
+                                </div>
+                                <div class="imp-field">
+                                    <label for="sorteo-hours">Validez (horas)</label>
+                                    <span class="imp-field-hint">168 h = 7 días</span>
+                                    <input id="sorteo-hours" class="imp-input" type="number" value="168" min="1">
+                                </div>
+                                <div class="imp-field">
+                                    <label for="sorteo-label">Nombre del lote</label>
+                                    <span class="imp-field-hint">Aparece en el listado</span>
+                                    <input id="sorteo-label" class="imp-input" placeholder="Sorteo Discord Mayo">
+                                </div>
                             </div>
-                            <button type="button" class="imp-btn imp-btn-gold" onclick="Imp.createSorteoTokens()">Generar</button>
-                            <div id="sorteo-result" style="margin-top:20px"></div>
+                            <div class="imp-form-actions">
+                                <button type="button" class="imp-btn imp-btn-gold" onclick="Imp.createSorteoTokens()">Generar tokens</button>
+                            </div>
+                            <div id="sorteo-result"></div>
                         </div>
                     </div>
                     <div class="imp-card">
-                        <div class="imp-card-head"><span class="imp-card-title">Tokens existentes</span></div>
+                        <div class="imp-card-head">
+                            <span class="imp-card-title">Historial</span>
+                            <span class="imp-card-sub" id="sorteo-stats">—</span>
+                        </div>
                         <div class="imp-table-wrap">
-                            <table class="imp-table">
-                                <thead><tr><th>Desc</th><th>Estado</th><th>Expira</th><th>Link</th><th></th></tr></thead>
-                                <tbody id="sorteos-tbody"><tr><td colspan="5" class="imp-empty">—</td></tr></tbody>
+                            <table class="imp-table imp-table-compact">
+                                <thead><tr><th>Lote</th><th>Estado</th><th>Vence</th><th class="imp-col-actions">Copiar</th></tr></thead>
+                                <tbody id="sorteos-tbody"><tr><td colspan="4" class="imp-empty">—</td></tr></tbody>
                             </table>
                         </div>
                     </div>
                 </section>
 
                 <section class="imp-view" id="view-migraciones">
-                    <div class="imp-alert imp-alert-warn" style="margin-bottom:16px">
-                        Usuarios con rol empresa/staff sin company_id — movélos con <strong>force</strong> (ignora cupo).
-                    </div>
+                    <p class="imp-section-intro">Usuarios con rol de staff/empresa pero sin empresa asignada. Al moverlos se ignora el cupo máximo.</p>
+                    <div class="imp-detail-panel" id="mig-summary">Cargando resumen…</div>
                     <div class="imp-card">
                         <div class="imp-card-head">
-                            <span class="imp-card-title">Fix usuarios bugueados</span>
-                            <div style="display:flex;gap:8px">
-                                <select id="mig-company-select" style="padding:8px;min-width:220px;background:var(--imp-bg3);color:var(--imp-text);border:1px solid var(--imp-border);border-radius:8px"></select>
-                                <button type="button" class="imp-btn imp-btn-gold imp-btn-sm" onclick="Imp.bulkAttach()">Mover seleccionados</button>
+                            <span class="imp-card-title">Asignar a empresa</span>
+                        </div>
+                        <div class="imp-card-body">
+                            <div class="imp-mig-toolbar">
+                                <div class="imp-field">
+                                    <label for="mig-company-select">Empresa destino (lote)</label>
+                                    <span class="imp-field-hint">Para mover varios marcados a la vez</span>
+                                    <select id="mig-company-select" class="imp-select"></select>
+                                </div>
+                                <button type="button" class="imp-btn imp-btn-gold" onclick="Imp.bulkAttach()">Mover seleccionados</button>
                             </div>
                         </div>
+                    </div>
+                    <div class="imp-card">
+                        <div class="imp-card-head"><span class="imp-card-title">Usuarios a corregir</span></div>
                         <div class="imp-table-wrap">
-                            <table class="imp-table">
-                                <thead><tr><th></th><th>Usuario</th><th>Roles</th><th>Problema</th><th></th><th></th></tr></thead>
-                                <tbody id="mig-tbody"><tr><td colspan="6" class="imp-empty">Cargando…</td></tr></tbody>
+                            <table class="imp-table imp-table-compact">
+                                <thead><tr>
+                                    <th style="width:36px"><input type="checkbox" id="mig-select-all" title="Todos" onchange="Imp.toggleMigSelectAll(this.checked)"></th>
+                                    <th>Usuario</th><th>Qué pasa</th><th>Destino</th><th class="imp-col-actions">Acción</th>
+                                </tr></thead>
+                                <tbody id="mig-tbody"><tr><td colspan="5" class="imp-empty">Cargando…</td></tr></tbody>
                             </table>
                         </div>
                     </div>
@@ -193,15 +277,16 @@
                 </section>
 
                 <section class="imp-view" id="view-ingresos">
+                    <p class="imp-section-intro">Ingresos recurrentes estimados según precio de suscripción activo.</p>
                     <div class="imp-kpi-row">
-                        <div class="imp-kpi"><div class="imp-kpi-label">MRR</div><div class="imp-kpi-val gold" id="ing-mrr">—</div></div>
-                        <div class="imp-kpi"><div class="imp-kpi-label">De pago</div><div class="imp-kpi-val" id="ing-paying">—</div></div>
-                        <div class="imp-kpi"><div class="imp-kpi-label">Gratis</div><div class="imp-kpi-val" id="ing-free">—</div></div>
+                        <div class="imp-kpi"><div class="imp-kpi-label">MRR</div><div class="imp-kpi-val gold" id="ing-mrr">—</div><div class="imp-kpi-sub">mensual</div></div>
+                        <div class="imp-kpi"><div class="imp-kpi-label">De pago</div><div class="imp-kpi-val" id="ing-paying">—</div><div class="imp-kpi-sub">empresas</div></div>
+                        <div class="imp-kpi"><div class="imp-kpi-label">Gratis / trial</div><div class="imp-kpi-val" id="ing-free">—</div><div class="imp-kpi-sub">resto activas</div></div>
                     </div>
                     <div class="imp-card">
                         <div class="imp-table-wrap">
                             <table class="imp-table">
-                                <thead><tr><th>Precio</th><th>Empresas</th><th>Subtotal</th></tr></thead>
+                                <thead><tr><th>Precio</th><th>Empresas</th><th>Subtotal</th><th>% MRR</th></tr></thead>
                                 <tbody id="ing-tbody"></tbody>
                             </table>
                         </div>

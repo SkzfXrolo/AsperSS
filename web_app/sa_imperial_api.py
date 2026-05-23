@@ -579,10 +579,16 @@ def register_sa_imperial_routes(app, *, get_api_db_cursor, row_get, sa_required_
         from auth import _auth_cursor, _ph
         ph = _ph()
         with _auth_cursor() as ac:
-            ac.execute(
-                f'UPDATE registration_tokens SET is_used = TRUE, used_at = NOW() WHERE token = {ph}',
-                (token,),
-            )
+            try:
+                ac.execute(
+                    f'UPDATE registration_tokens SET is_used = TRUE, used_at = NOW() WHERE token = {ph}',
+                    (token,),
+                )
+            except Exception:
+                ac.execute(
+                    f"UPDATE registration_tokens SET is_used = 1, used_at = datetime('now') WHERE token = {ph}",
+                    (token,),
+                )
         with get_api_db_cursor() as cur:
             _log(cur, 'tokens.revoke', detail=token[:12], ip=request.remote_addr)
         return jsonify({'ok': True}), 200
@@ -639,6 +645,19 @@ def register_sa_imperial_routes(app, *, get_api_db_cursor, row_get, sa_required_
         _log(cur, 'plan.duplicate', detail=f'{plan_id}->{new_id}', ip=request.remote_addr)
         return jsonify({'ok': True, 'plan': plan}), 201
 
+    @app.route('/aspers-sa/api/v2/companies', methods=['GET'])
+    @sa_required_fn
+    def sa_v2_companies():
+        from auth import list_companies
+        companies = list_companies() or []
+        for c in companies:
+            if c.get('subscription_price') is not None:
+                try:
+                    c['subscription_price'] = float(c['subscription_price'])
+                except Exception:
+                    c['subscription_price'] = 0.0
+        return jsonify({'companies': companies, 'count': len(companies)}), 200
+
     @app.route('/aspers-sa/api/v2/quick-search', methods=['GET'])
     @sa_required_fn
     def sa_v2_search():
@@ -651,6 +670,14 @@ def register_sa_imperial_routes(app, *, get_api_db_cursor, row_get, sa_required_
             if q in (c.get('name') or '').lower():
                 results.append({'type': 'company', 'id': c['id'], 'label': c.get('name'), 'view': 'cartera'})
         for u in list_users() or []:
-            if q in (u.get('username') or '').lower() or q in (u.get('email') or '').lower():
-                results.append({'type': 'user', 'id': u['id'], 'label': u.get('username'), 'view': 'migraciones'})
-        return jsonify({'results': results[:20]}), 200
+            un = (u.get('username') or '').lower()
+            em = (u.get('email') or '').lower()
+            if q in un or q in em or q == str(u.get('id', '')):
+                results.append({
+                    'type': 'user',
+                    'id': u['id'],
+                    'label': u.get('username'),
+                    'sub': u.get('email') or ('empresa #' + str(u.get('company_id')) if u.get('company_id') else 'individual'),
+                    'view': 'migraciones' if not u.get('company_id') else 'cartera',
+                })
+        return jsonify({'results': results[:25]}), 200
