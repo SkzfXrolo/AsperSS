@@ -63,7 +63,7 @@ except ImportError:
 try:
     from config.version import SCANNER_VERSION
 except ImportError:
-    SCANNER_VERSION = "1.6.56"
+    SCANNER_VERSION = "1.6.57"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re

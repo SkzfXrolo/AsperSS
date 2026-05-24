@@ -99,6 +99,17 @@ VISUAL_IMPROVEMENTS: List[Tuple[str, str]] = [
 ]
 
 
+def _stack_lower(widget, below=None):
+    """Baja un widget en el stacking order (Canvas sobrescribe .lower())."""
+    try:
+        if below is not None:
+            widget.tk.call('lower', widget._w, below._w)
+        else:
+            widget.tk.call('lower', widget._w)
+    except Exception:
+        pass
+
+
 def _motion_ok(cls) -> bool:
     prefs = getattr(cls, '_ui_prefs', {}) or {}
     return not prefs.get('ui_reduced_motion', False)
@@ -183,7 +194,7 @@ def _post_apply_window_style(cls, root, *_a, **_k):
                 bg=C['bg_primary'], fg=C['bg_secondary'],
             )
             wm.place(relx=0.5, rely=0.5, anchor='center')
-            wm.lower()
+            _stack_lower(wm)
             cls._watermark_label = wm
     except Exception:
         pass
@@ -251,7 +262,7 @@ def _post_create_progress(cls, widgets, parent, *_a, **_k):
 
     grid = tk.Canvas(card, bg=C['bg_card'], highlightthickness=0, bd=0)
     grid.place(relx=0, rely=0, relwidth=1, relheight=1)
-    grid.lower()
+    _stack_lower(grid)
 
     def _grid(_e=None):
         grid.delete('g')

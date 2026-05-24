@@ -1,2 +1,2 @@
 """Versión compilada del scanner (fuente única para integraciones)."""
-SCANNER_VERSION = "1.6.56"
+SCANNER_VERSION = "1.6.57"

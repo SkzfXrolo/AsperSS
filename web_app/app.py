@@ -435,7 +435,7 @@ def audit_action(action_name: str, resource_type: str = ''):
 CORS(app)
 
 # Inicializar base de datos de autenticaciÃ³n al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.56'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
+_ARGUS_VERSION = '1.6.57'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
 # URL de invitacion permanente al Discord oficial. Se inyecta en todos los
 # templates como `discord_invite` via @app.context_processor (ver mas abajo).
@@ -8131,7 +8131,7 @@ def debug_last_scan():
 
 
 # Current released scanner version â€” update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.6.56"
+CURRENT_SCANNER_VERSION = "1.6.57"
 
 @app.route('/sw.js')
 def service_worker():
