@@ -6440,229 +6440,156 @@ class ArgusApp:
     def scan_drive_exhaustive(self, drive, start_progress, end_progress):
         """Escanea una unidad completa - VERSIÓN OPTIMIZADA CON LÍMITES"""
         import time
-        
+        try:
+            from config.scan_paths import (
+                depth_at_root,
+                filter_relevant_files,
+                get_critical_paths,
+                max_depth_for_root,
+                prune_walk_dirs,
+                scan_timeout_seconds,
+            )
+        except ImportError:
+            from scan_paths import (  # type: ignore
+                depth_at_root,
+                filter_relevant_files,
+                get_critical_paths,
+                max_depth_for_root,
+                prune_walk_dirs,
+                scan_timeout_seconds,
+            )
+
         try:
             print(f"🔍 INICIANDO ESCANEO OPTIMIZADO DE UNIDAD: {drive}")
             print(f"📊 Rango de progreso: {start_progress}% - {end_progress}%")
-            
+
             if not os.path.exists(drive):
                 print(f"❌ Unidad {drive} no existe, saltando...")
                 return
-            
+
             start_time = time.time()
-            
-            # Timeout agresivo: objetivo < 90s totales para todo el scan
-            # Esta fase ocupa ~80% del tiempo, así que le damos 65s max por unidad
+
             try:
                 cpu_count = psutil.cpu_count() or 2
-                if cpu_count < 4:
-                    total_timeout = 80   # hardware lento
-                elif cpu_count < 8:
-                    total_timeout = 65
-                else:
-                    total_timeout = 55   # hardware rápido
-                print(f"⚙️ Hardware {cpu_count} cores → timeout por unidad: {total_timeout}s (objetivo total <90s)")
+                total_timeout = scan_timeout_seconds(cpu_count)
+                print(f"⚙️ Hardware {cpu_count} cores → timeout por unidad: {total_timeout}s")
             except Exception:
-                total_timeout = 65
+                total_timeout = 75
                 print(f"⚠️ No se pudo detectar hardware, usando timeout: {total_timeout}s")
-            
+
             scanned_files = 0
-            max_files_per_folder = None  # Sin límite de archivos por carpeta (solo timeout total)
             last_progress_update = start_time
-            
-            # Actualizar contador global
+
             if not hasattr(self, 'total_files_scanned'):
                 self.total_files_scanned = 0
             if not hasattr(self, 'total_dirs_scanned'):
                 self.total_dirs_scanned = 0
-            
-            max_depth = 4   # Reducido de 8 → 4 para velocidad (Minecraft no tiene más de 4 niveles relevantes)
+            if not hasattr(self, '_issues_lock'):
+                import threading
+                self._issues_lock = threading.Lock()
 
-            skip_folders = {
-                'node_modules', '.git', '__pycache__', 'venv', '.venv',
-                'WinSxS', 'servicing', 'en-US', 'MUI', 'winsxs',
-                # Directorios de navegadores — generan cientos de false positives
-                # porque sus subcarpetas internas tienen nombres como "ClientCertificates"
-                'User Data', 'Default', 'Profiles',  # Chrome/Edge profile dirs
-                'chrome', 'Chrome', 'firefox', 'Firefox', 'edge', 'Edge',
-                'Brave-Browser', 'vivaldi', 'opera',
-                # Drivers y sistema
-                'DriverStore', 'SystemResources', 'Panther',
-                # Cache del sistema — no relevante para hacks de Minecraft
-                'Temp', 'temp', 'tmp', 'cache', 'Cache',
-            }
+            user_home = os.path.expanduser('~')
+            critical_paths = get_critical_paths(user_home, drive)
+            print(f"📂 Rutas críticas ({len(critical_paths)}): profundidad adaptativa + pruning inteligente")
 
-            # Solo rutas relevantes para Minecraft hacks — no System32 ni Program Files completos
-            user_home = os.path.expanduser("~")
-            critical_paths = [
-                # Minecraft y clientes (sin AppData\\Roaming completo — demasiado I/O)
-                os.path.join(user_home, "AppData", "Roaming", ".minecraft"),
-                os.path.join(user_home, "AppData", "Roaming", "lunarclient"),
-                os.path.join(user_home, "AppData", "Roaming", "lunar-launcher"),
-                os.path.join(user_home, "AppData", "Roaming", "feather"),
-                os.path.join(user_home, "AppData", "Roaming", ".feather"),
-                os.path.join(user_home, "AppData", "Roaming", "PrismLauncher"),
-                os.path.join(user_home, "AppData", "Roaming", "gdlauncher"),
-                os.path.join(user_home, "AppData", "Roaming", "MultiMC"),
-                os.path.join(user_home, "AppData", "Roaming", "ATLauncher"),
-                os.path.join(user_home, "AppData", "Roaming", "cosmic"),
-                os.path.join(user_home, "AppData", "Roaming", "Badlion Client"),
-                os.path.join(user_home, "AppData", "Local", "Overwolf"),
-                os.path.join(user_home, "AppData", "Local", "Programs"),
-                os.path.join(user_home, "AppData", "Roaming", ".vape"),
-                # Carpetas de usuario
-                os.path.join(user_home, "Downloads"),
-                os.path.join(user_home, "Desktop"),
-                os.path.join(user_home, "Documents"),
-                os.path.join(user_home, "AppData", "Local", "Temp"),
-                # Sin AppData\Local completo (millones de archivos de browsers)
-                # Temp del sistema (pequeño)
-                os.path.join(drive, "Windows", "Temp"),
-                os.path.join(drive, "Windows", "Prefetch"),
-            ]
-
-            # Agregar .minecraft de otros usuarios en el mismo equipo
-            users_dir = os.path.join(drive, "Users")
-            if os.path.exists(users_dir):
-                try:
-                    for user_folder in os.listdir(users_dir):
-                        user_path = os.path.join(users_dir, user_folder)
-                        if os.path.isdir(user_path) and user_folder not in ['Default', 'Public', 'All Users']:
-                            mc_path = os.path.join(user_path, "AppData", "Roaming", ".minecraft")
-                            if mc_path not in critical_paths:
-                                critical_paths.append(mc_path)
-                            for client in (
-                                "lunar-launcher", "lunarclient", "feather", ".feather",
-                                "cosmic", "PrismLauncher", "gdlauncher", "MultiMC",
-                                "Badlion Client",
-                            ):
-                                cp = os.path.join(user_path, "AppData", "Roaming", client)
-                                if cp not in critical_paths:
-                                    critical_paths.append(cp)
-                except Exception:
-                    pass
-            
-            # Primero escanear carpetas específicas con límites
-            for critical_path in critical_paths:
-                if not os.path.exists(critical_path):
-                    continue
-                    
+            def _scan_one_critical(critical_path: str):
+                nonlocal scanned_files, last_progress_update
+                if time.time() - start_time > total_timeout:
+                    return
                 folder_start_time = time.time()
                 folder_scanned = 0
-                print(f"📁 ESCANEANDO CARPETA CRÍTICA: {critical_path}")
-                
+                path_max_depth = max_depth_for_root(critical_path)
+                print(f"📁 ESCANEANDO: {critical_path} (max depth {path_max_depth})")
+
                 try:
                     for root, dirs, files in os.walk(critical_path):
-                        self.total_dirs_scanned += 1  # Contar cada carpeta visitada
-                        # Verificar timeout total (no por carpeta)
+                        self.total_dirs_scanned += 1
                         if time.time() - start_time > total_timeout:
-                            print(f"⏰ Timeout total alcanzado después de {total_timeout//60} minutos - finalizando escaneo...")
+                            print(f"⏰ Timeout total ({total_timeout}s) — fin parcial")
                             break
-                        
-                        # Limitar profundidad
-                        depth = root.count(os.sep) - critical_path.count(os.sep)
-                        if depth > max_depth:
-                            dirs[:] = []  # No explorar más profundo
-                            continue
-                        
-                        # Saltar carpetas problemáticas
-                        dirs[:] = [d for d in dirs if not any(skip in os.path.join(root, d).lower() for skip in skip_folders)]
-                        
-                        # Sin límite de archivos (solo timeout total)
-                        # Verificar timeout total continuamente
-                        if time.time() - start_time > total_timeout:
-                            break
-                        
-                        # Filtrar archivos por extensión
-                        relevant_extensions = (
-                            '.jar', '.exe', '.dll', '.bat', '.cmd', '.ps1', '.vbs', '.js', '.py', 
-                            '.class', '.java', '.lua', '.txt', '.log', '.cfg', '.config', '.json', 
-                            '.properties', '.yml', '.yaml', '.xml', '.dat', '.bin', '.cache',
-                            '.tmp', '.temp', '.bak', '.backup', '.old', '.new', '.mod', '.minecraft',
-                            '.zip', '.rar', '.7z', '.tar', '.gz', '.msi', '.msm', '.msp'
-                        )
-                        relevant_files = [f for f in files if f.lower().endswith(relevant_extensions)]
-                        # Contar solo archivos relevantes (evita inflar "15973 archivos")
-                        self.total_files_scanned += len(relevant_files)
-                        scanned_files += len(relevant_files)
-                        folder_scanned += len(relevant_files)
 
-                        # Verificar carpetas sospechosas
+                        if depth_at_root(root, critical_path) > path_max_depth:
+                            dirs[:] = []
+                            continue
+
+                        prune_walk_dirs(root, dirs)
+
+                        relevant_files = filter_relevant_files(files)
+                        n_rel = len(relevant_files)
+                        self.total_files_scanned += n_rel
+                        scanned_files += n_rel
+                        folder_scanned += n_rel
+
                         _root_lower = root.lower()
                         for dir_name in dirs:
                             if _is_hack_folder(dir_name, _root_lower):
-                                self.issues_found.append({
+                                issue = {
                                     'nombre': dir_name,
                                     'ruta': root,
                                     'archivo': os.path.join(root, dir_name),
                                     'tipo': 'folder',
                                     'categoria': 'HACKS',
-                                    'alerta': 'SOSPECHOSO'
-                                })
-                            
-                        # Procesar TODOS los archivos (sin límite por lote)
+                                    'alerta': 'SOSPECHOSO',
+                                }
+                                with self._issues_lock:
+                                    self.issues_found.append(issue)
+
                         for file in relevant_files:
+                            if time.time() - start_time > total_timeout:
+                                break
                             try:
                                 file_path = os.path.join(root, file)
-                                
                                 if self.is_suspicious_file(file_path):
-                                    self.issues_found.append({
+                                    issue = {
                                         'nombre': file,
                                         'ruta': root,
                                         'archivo': file_path,
                                         'tipo': 'file',
                                         'categoria': 'HACKS',
-                                        'alerta': 'SOSPECHOSO'
-                                    })
-                                
-                                # Actualizar progreso cada 2000 archivos O cada 3 segundos
-                                _now = time.time()
-                                if scanned_files % 2000 == 0 or (_now - last_progress_update) >= 3:
-                                    last_progress_update = _now
-                                    elapsed = _now - start_time
-                                    rate = scanned_files / elapsed if elapsed > 0 else 0
-                                    remaining = total_timeout - elapsed
-                                    print(f"📁 {drive}: {scanned_files} archivos ({rate:.0f} arch/s) - Tiempo restante: {remaining:.0f}s...")
-                                    # Actualizar barra de progreso dinámicamente
-                                    elapsed_pct = min(79, int(start_progress + (elapsed / total_timeout) * (end_progress - start_progress)))
-                                    self._update_progress_safe(elapsed_pct, f"🔍 Escaneando {drive}", f"{scanned_files:,} archivos · {rate:.0f} arch/s")
-                                
-                                # Verificar timeout total (sin límite de archivos)
-                                if time.time() - start_time > total_timeout:
-                                    break
-                                    
-                            except (PermissionError, OSError):
-                                continue
+                                        'alerta': 'SOSPECHOSO',
+                                    }
+                                    with self._issues_lock:
+                                        self.issues_found.append(issue)
                             except Exception:
                                 continue
-                        
-                        # Verificar timeout total (sin límite de archivos)
-                        if time.time() - start_time > total_timeout:
-                            break
-                                
-                except Exception as e:
-                    print(f"⚠️ Error en {critical_path}: {e} - continuando...")
-                    continue
-            
-            
-            # Calcular estadísticas de velocidad
-            end_time = time.time()
-            elapsed_time = end_time - start_time
-            files_per_second = scanned_files / elapsed_time if elapsed_time > 0 else 0
-            
-            print(f"📊 TOTAL ESCANEADO EN {drive}: {scanned_files} archivos")
-            print(f"⚡ VELOCIDAD: {files_per_second:.1f} archivos/segundo")
-            print(f"⏱️ TIEMPO EN {drive}: {elapsed_time:.1f} segundos")
-            
-            # Actualizar progreso final para esta unidad
+
+                        if time.time() - last_progress_update > 2:
+                            elapsed = time.time() - start_time
+                            print(f"⏱️ {scanned_files} archivos · {self.total_dirs_scanned} dirs · {elapsed:.0f}s")
+                            last_progress_update = time.time()
+
+                    print(f"✅ {critical_path}: {folder_scanned} archivos en {time.time() - folder_start_time:.1f}s")
+                except PermissionError:
+                    print(f"🔒 Sin permiso: {critical_path}")
+                except Exception as ex:
+                    print(f"⚠️ Error en {critical_path}: {ex}")
+
+            # Escaneo paralelo de rutas independientes (más FPS en multi-core)
             try:
-                self._update_progress_safe(end_progress, f"✅ Completado {drive}", f"Escaneados {scanned_files} archivos - {files_per_second:.1f} arch/seg")
-            except:
+                import concurrent.futures
+                workers = min(4, max(2, (psutil.cpu_count() or 2)))
+                with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                    list(pool.map(_scan_one_critical, critical_paths))
+            except Exception:
+                for cp in critical_paths:
+                    _scan_one_critical(cp)
+
+            elapsed_total = time.time() - start_time
+            rate = scanned_files / elapsed_total if elapsed_total > 0 else 0
+            print(f"🏁 Unidad {drive}: {scanned_files} archivos · {rate:.0f} arch/s · {elapsed_total:.1f}s")
+            try:
+                self._update_progress_safe(
+                    end_progress,
+                    f"✅ Completado {drive}",
+                    f"{scanned_files:,} archivos · {rate:.0f}/s",
+                )
+            except Exception:
                 pass
-                            
         except Exception as e:
-            print(f"Error escaneando unidad {drive}: {e}")
-    
+            print(f"❌ Error escaneando unidad {drive}: {e}")
+            import traceback
+            traceback.print_exc()
+
     def _process_file_batch(self, file_batch):
         """Procesa un lote de archivos de manera eficiente"""
         try:
@@ -7643,14 +7570,21 @@ class ArgusApp:
                 if os.path.exists(location):
                     print(f"📁 ESCANEANDO CARPETAS EN: {location}")
                     try:
-                        # Limitar profundidad para evitar cuelgues
-                        max_depth = 3
+                        # Limitar profundidad (más profundo en AppData que en raíz de unidad)
+                        max_depth = 5
+                        if 'appdata' in location.lower():
+                            max_depth = 7
                         for root, dirs, files in os.walk(location):
                             # Saltar directorios de navegadores ANTES de explorar subdirectorios
                             _root_lower = root.lower()
                             if any(frag in _root_lower for frag in _BROWSER_SKIP):
                                 dirs[:] = []  # No descender en directorios de navegadores
                                 continue
+                            try:
+                                from config.scan_paths import prune_walk_dirs
+                            except ImportError:
+                                from scan_paths import prune_walk_dirs  # type: ignore
+                            prune_walk_dirs(root, dirs)
                             # Controlar profundidad
                             depth = root[len(location):].count(os.sep)
                             if depth >= max_depth:
@@ -12130,8 +12064,15 @@ class ArgusApp:
                 'xray hack', 'flymod', 'speedhack', 'scaffold',
             ]
 
-            scan_roots = [appdata, desktop, downloads,
-                          os.path.join(appdata, '.minecraft')]
+            scan_roots = [
+                appdata, desktop, downloads,
+                os.path.join(appdata, '.minecraft'),
+                os.path.join(appdata, 'PrismLauncher'),
+                os.path.join(appdata, 'MultiMC'),
+                os.path.join(appdata, '.tlauncher'),
+                os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Temp'),
+                os.path.join(os.environ.get('LOCALAPPDATA', ''), 'ModrinthApp'),
+            ]
             for root in scan_roots:
                 if not os.path.isdir(root):
                     continue
