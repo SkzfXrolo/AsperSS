@@ -61,6 +61,14 @@ def load_ui_prefs():
 def patch_modern_ui(cls):
     """Añade métodos de mejora a la clase ModernUI."""
     prefs = load_ui_prefs()
+    try:
+        from config.lite_mode import is_lite_needed, lite_ui_config
+        if is_lite_needed():
+            lite = lite_ui_config()
+            prefs.update(lite)
+            print("[ui] Lite Mode UI: animaciones off, compacta")
+    except ImportError:
+        pass
     cls._ui_prefs = prefs
     cls._phase_history = []
     cls._risk_history = []
