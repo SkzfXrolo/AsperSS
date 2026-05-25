@@ -277,26 +277,24 @@ class ModernUI:
 
     @classmethod
     def _start_ambient_motion(cls, ring_canvas, draw_callback):
-        """Activa un ticker suave que reinvoca el dibujo del ring."""
+        """Activa un ticker suave que reinvoca el dibujo del ring para
+        que las particulas/halos se animen. Si ya hay uno corriendo, no
+        crea otro."""
         if cls._ring_after_id is not None:
             return
-        prefs = getattr(cls, '_ui_prefs', {}) or {}
-        if prefs.get('ui_reduced_motion'):
-            draw_callback(cls._ring_pct, ambient=False)
-            return
         cls._ambient_phase = 0.0
-        tick_ms = int(prefs.get('ambient_tick_ms', 40))
 
         def _tick():
             try:
                 cls._ambient_phase = (cls._ambient_phase + 0.025) % (2 * math.pi)
+                # Redibujamos el ring en el porcentaje actual con la fase
                 draw_callback(cls._ring_pct, ambient=True)
-                cls._ring_after_id = ring_canvas.after(tick_ms, _tick)
+                cls._ring_after_id = ring_canvas.after(40, _tick)
             except Exception:
                 pass
 
         try:
-            cls._ring_after_id = ring_canvas.after(tick_ms, _tick)
+            cls._ring_after_id = ring_canvas.after(40, _tick)
         except Exception:
             pass
 
@@ -511,13 +509,10 @@ class ModernUI:
                         min(w, x_seg + band_w / steps), 0,
                         fill=color, width=1
                     )
-                _s_ms = int((getattr(cls, '_ui_prefs', None) or {}).get('shimmer_tick_ms', 60))
-                cls._shimmer_after_id = sep_canvas.after(_s_ms, _draw_shimmer)
+                cls._shimmer_after_id = sep_canvas.after(60, _draw_shimmer)
             except Exception:
                 pass
-        _prefs_sh = getattr(cls, '_ui_prefs', None) or {}
-        if not _prefs_sh.get('ui_reduced_motion'):
-            sep_canvas.after(120, _draw_shimmer)
+        sep_canvas.after(120, _draw_shimmer)
 
         try:
             if not getattr(cls, '_ui_enh_patch', False):
@@ -807,15 +802,14 @@ class ModernUI:
 
         bar_c._draw = _draw_bar
 
-        _bar_prefs = getattr(cls, '_ui_prefs', None) or {}
-        if not _bar_prefs.get('ui_reduced_motion'):
-            def _shimmer_tick():
-                try:
-                    _draw_bar(cls._ring_pct)
-                    bar_c.after(80, _shimmer_tick)
-                except Exception:
-                    pass
-            bar_c.after(150, _shimmer_tick)
+        # Tick continuo del shimmer aunque el pct no cambie
+        def _shimmer_tick():
+            try:
+                _draw_bar(cls._ring_pct)
+                bar_c.after(80, _shimmer_tick)
+            except Exception:
+                pass
+        bar_c.after(150, _shimmer_tick)
 
         # ── Bottom row: timer + resources ───────────────────────────────────
         bot = tk.Frame(card, bg=C['bg_card'])

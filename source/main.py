@@ -63,7 +63,7 @@ except ImportError:
 try:
     from config.version import SCANNER_VERSION
 except ImportError:
-    SCANNER_VERSION = "1.6.58"
+    SCANNER_VERSION = "1.6.57"
 
 # ── Detección de carpetas hack — lógica centralizada ─────────────────────────
 import re as _re
@@ -5718,44 +5718,29 @@ class ArgusApp:
             # Inicializar contador global de archivos escaneados
             self.total_files_scanned = 0
 
-            # ── Detección de hardware: Lite Mode ────────────────────────────
-            try:
-                from config.lite_mode import (
-                    is_lite_needed, lite_max_workers, lite_scan_timeout,
-                    lite_phase_timeout, should_skip_phase, print_lite_banner,
-                )
-            except ImportError:
-                is_lite_needed = lambda: False
-                lite_max_workers = lambda: psutil.cpu_count() * 2
-                lite_scan_timeout = lambda: 85
-                lite_phase_timeout = lambda: 8
-                should_skip_phase = lambda _n: False
-                print_lite_banner = lambda: None
-
-            self._lite_mode = is_lite_needed()
-            if self._lite_mode:
-                print_lite_banner()
-
-            print("🚀 INICIANDO ESCANEO — REVISIÓN COMPLETA")
-            print(f"🔧 CPU cores: {psutil.cpu_count()} · RAM libre: {psutil.virtual_memory().available / (1024**3):.1f} GB")
-            if self._lite_mode:
-                print("📦 MODO LITE: menos hilos, fases esenciales, sin animaciones pesadas")
-            else:
-                print("⚡ MODO COMPLETO: máximos hilos y profundidad")
-
+            print("🚀 INICIANDO ESCANEO ULTRA RÁPIDO - REVISIÓN COMPLETA DE TODA LA PC")
+            print(f"🔧 CPU cores disponibles: {psutil.cpu_count()}")
+            print(f"💾 Memoria disponible: {psutil.virtual_memory().available / (1024**3):.1f} GB")
+            print("⚡ MODO TURBO ACTIVADO - ESCANEO COMPLETO SIN LÍMITES DE PROFUNDIDAD")
+            print("⏱️ CRONÓMETRO INICIADO - MIDIENDO VELOCIDAD MÁXIMA")
+            print("🔥 OPTIMIZACIONES: 2x hilos, procesamiento en lotes, filtrado inteligente")
+            print("📁 ESCANEO COMPLETO: Revisando TODA la PC sin límites")
+            
             # Fase 1: Escaneo de unidades (0-80%)
-            self._update_progress_safe(0, "🔍 Iniciando escaneo", "Preparando sistema...")
-
+            self._update_progress_safe(0, "🔍 Iniciando escaneo exhaustivo", "Preparando sistema...")
+            
+            # Obtener todas las unidades
             drives = []
             for drive in range(ord('A'), ord('Z') + 1):
                 drive_letter = chr(drive) + ":\\"
                 if os.path.exists(drive_letter):
                     drives.append(drive_letter)
-
+            
             print(f"📁 UNIDADES DETECTADAS: {drives}")
-
-            max_workers = lite_max_workers() if self._lite_mode else min(psutil.cpu_count() * 2, 8)
-            print(f"⚡ Usando {max_workers} hilos")
+            
+            # Escanear cada unidad en paralelo con rendimiento optimizado
+            max_workers = psutil.cpu_count() * 2  # Usar 2x más hilos para estabilidad
+            print(f"⚡ Usando {max_workers} hilos para velocidad optimizada")
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = []
                 progress_per_drive = 80 // len(drives) if drives else 80
@@ -5789,14 +5774,9 @@ class ArgusApp:
                 self._phase_lock = threading.Lock()
             self._update_progress_safe(80, "⚡ Fases paralelas iniciadas", "Procesos · DNS · Registro · Red · IA...")
 
-            _phase_timeout = lite_phase_timeout() if self._lite_mode else 8
-
             def _run_safe(fn, *a, **kw):
-                """Ejecuta fn con timeout; en Lite Mode omite fases pesadas."""
+                """Ejecuta fn con timeout de 8s; si se excede, continúa sin esperar."""
                 if getattr(self, '_scan_cancel_event', None) and self._scan_cancel_event.is_set():
-                    return None
-                fn_name = getattr(fn, '__name__', '')
-                if should_skip_phase(fn_name):
                     return None
                 _result = [None]
                 def _wrapper():
@@ -5805,12 +5785,12 @@ class ArgusApp:
                     try:
                         _result[0] = fn(*a, **kw)
                     except Exception as ex:
-                        print(f"⚠️ Error en {fn_name}: {ex}")
+                        print(f"⚠️ Error en {fn.__name__}: {ex}")
                 t = threading.Thread(target=_wrapper, daemon=True)
                 t.start()
-                t.join(timeout=_phase_timeout)
+                t.join(timeout=8)
                 if t.is_alive():
-                    print(f"⏱️ Timeout en {fn_name} ({_phase_timeout}s) — continuando")
+                    print(f"⏱️ Timeout en {fn.__name__} (8s) — continuando")
                 return _result[0]
 
             def _extend_safe(result):
@@ -6188,34 +6168,24 @@ class ArgusApp:
                 except Exception as ex:
                     print(f"⚠️ SS Forensics: {ex}")
 
-            if self._lite_mode:
-                secondary_workers = 1
-                print(f"📦 Lite Mode: ejecutando fases secuencialmente (1 hilo)")
-                for grp in (_group_processes, _group_files, _group_registry,
-                            _group_hack_locations, _group_hardware,
-                            _group_advanced, _group_forensics):
+            # Ejecutar todos los grupos en paralelo (ítem #111: tope de 4 workers)
+            secondary_workers = 4
+            print(f"⚡ Ejecutando fases secundarias con {secondary_workers} workers en paralelo")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=secondary_workers) as sec_exec:
+                sec_futures = [
+                    sec_exec.submit(_group_processes),
+                    sec_exec.submit(_group_files),
+                    sec_exec.submit(_group_registry),
+                    sec_exec.submit(_group_hardware),
+                    sec_exec.submit(_group_hack_locations),
+                    sec_exec.submit(_group_advanced),
+                    sec_exec.submit(_group_forensics),
+                ]
+                for f in concurrent.futures.as_completed(sec_futures, timeout=80):
                     try:
-                        grp()
+                        f.result()
                     except Exception as ex:
                         print(f"⚠️ Error en grupo de escaneo: {ex}")
-            else:
-                secondary_workers = 4
-                print(f"⚡ Ejecutando fases secundarias con {secondary_workers} workers en paralelo")
-                with concurrent.futures.ThreadPoolExecutor(max_workers=secondary_workers) as sec_exec:
-                    sec_futures = [
-                        sec_exec.submit(_group_processes),
-                        sec_exec.submit(_group_files),
-                        sec_exec.submit(_group_registry),
-                        sec_exec.submit(_group_hardware),
-                        sec_exec.submit(_group_hack_locations),
-                        sec_exec.submit(_group_advanced),
-                        sec_exec.submit(_group_forensics),
-                    ]
-                    for f in concurrent.futures.as_completed(sec_futures, timeout=80):
-                        try:
-                            f.result()
-                        except Exception as ex:
-                            print(f"⚠️ Error en grupo de escaneo: {ex}")
             
             # ── Recolectar hallazgos de monitoreo de mouse ───────────────────
             if self.mouse_detector:
