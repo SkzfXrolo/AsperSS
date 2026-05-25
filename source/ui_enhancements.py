@@ -61,6 +61,9 @@ def load_ui_prefs():
 def patch_modern_ui(cls):
     """Añade métodos de mejora a la clase ModernUI."""
     prefs = load_ui_prefs()
+    if os.environ.get('ARGUS_LITE') == '1':
+        prefs['ui_reduced_motion'] = True
+        prefs['ui_compact'] = True
     cls._ui_prefs = prefs
     cls._phase_history = []
     cls._risk_history = []
