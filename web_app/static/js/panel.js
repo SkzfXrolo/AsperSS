@@ -2208,17 +2208,30 @@ function _resultBadge(scan) {
     if (scan.status === 'running') {
         badge = '<span class="result-badge" style="background:rgba(99,102,241,0.12);color:#818cf8;border-color:rgba(99,102,241,0.3)">⏳ Escaneando</span>';
     } else {
-        const s = scan.verdict || scan.severity_summary || '';
-        if (s === 'hack' || s === 'CRITICO' || s === 'SOSPECHOSO')
+        const v = (scan.verdict || '').toLowerCase();
+        const rs = scan.risk_score;
+        if (v === 'hack')
             badge = '<span class="result-badge result-detected">Detectado</span>';
-        else if (s === 'clean' || s === 'LIMPIO')
+        else if (v === 'clean')
             badge = '<span class="result-badge result-clean">Limpio</span>';
-        else if (s === 'POCO_SOSPECHOSO')
-            badge = '<span class="result-badge result-suspicious">Sospechoso</span>';
-        else if (scan.status === 'completed')
-            badge = '<span class="result-badge result-pending">Pendiente</span>';
-        else
-            badge = '<span class="result-badge result-pending">Pendiente</span>';
+        else if (rs !== undefined && rs !== null) {
+            if (rs >= 70)
+                badge = '<span class="result-badge result-detected">Detectado</span>';
+            else if (rs >= 30)
+                badge = '<span class="result-badge result-suspicious">Sospechoso</span>';
+            else
+                badge = '<span class="result-badge result-clean">Limpio</span>';
+        } else {
+            const s = scan.severity_summary || '';
+            if (s === 'CRITICO' || s === 'SOSPECHOSO')
+                badge = '<span class="result-badge result-detected">Detectado</span>';
+            else if (s === 'LIMPIO')
+                badge = '<span class="result-badge result-clean">Limpio</span>';
+            else if (s === 'POCO_SOSPECHOSO')
+                badge = '<span class="result-badge result-suspicious">Sospechoso</span>';
+            else
+                badge = '<span class="result-badge result-pending">Pendiente</span>';
+        }
     }
     // Risk score mini-badge
     const rs = scan.risk_score;
@@ -4527,8 +4540,7 @@ async function viewScanDetails(scanId) {
             if (detectionBanner) detectionBanner.style.display = 'flex';
         } else if (data.verdict === 'clean' || data.verdict === 'limpio') {
             if (detectionBanner) detectionBanner.style.display = 'none';
-        } else if (severityStats.severe > 0 || severityStats.alert > 0) {
-            // Sin veredicto explícito — mostrar banner si hay hallazgos críticos
+        } else if ((data.risk_score || 0) >= 30 && (severityStats.severe > 0 || severityStats.alert > 0)) {
             if (detectionBanner) detectionBanner.style.display = 'flex';
         } else {
             if (detectionBanner) detectionBanner.style.display = 'none';
