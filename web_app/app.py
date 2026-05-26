@@ -12018,24 +12018,25 @@ def download_with_token(token):
         return jsonify({'error': f'Error al procesar descarga: {str(e)}'}), 500
 
 # Cache de metadatos del .exe (tamano + sha256). Se invalida si mtime cambia.
-_EXE_META_CACHE = {'mtime': None, 'data': None}
+_EXE_META_CACHE: dict = {}
 
-def _get_exe_metadata():
+def _get_exe_metadata(exe_name: str = 'ArgusScanner.exe'):
     """Devuelve dict con {size_mb, size_bytes, sha256, mtime, exists, path}.
     Cachea el SHA-256 entre requests porque calcularlo es caro.
     Si el archivo no existe devuelve un dict 'best-effort' con exists=False."""
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     candidates = [
-        os.path.join(project_root, 'dist', 'ArgusScanner.exe'),
-        os.path.join(project_root, 'downloads', 'ArgusScanner.exe'),
+        os.path.join(project_root, 'dist', exe_name),
+        os.path.join(project_root, 'downloads', exe_name),
     ]
     exe_path = next((p for p in candidates if os.path.exists(p)), None)
     if not exe_path:
         return {'exists': False, 'size_mb': None, 'size_bytes': 0, 'sha256': None, 'mtime': None, 'path': None}
 
     mtime = os.path.getmtime(exe_path)
-    if _EXE_META_CACHE['mtime'] == mtime and _EXE_META_CACHE['data'] is not None:
-        return _EXE_META_CACHE['data']
+    cached = _EXE_META_CACHE.get(exe_name)
+    if cached and cached.get('mtime') == mtime and cached.get('data') is not None:
+        return cached['data']
 
     try:
         import hashlib
@@ -12053,8 +12054,7 @@ def _get_exe_metadata():
             'mtime': mtime,
             'path': exe_path,
         }
-        _EXE_META_CACHE['mtime'] = mtime
-        _EXE_META_CACHE['data'] = data
+        _EXE_META_CACHE[exe_name] = {'mtime': mtime, 'data': data}
         return data
     except Exception as exc:
         print(f"[descargar] error calculando metadata exe: {exc}")
@@ -12066,13 +12066,18 @@ def descargar_page():
     """Pagina publica de descarga de ArgusScanner."""
     base_url = os.environ.get('RENDER_EXTERNAL_URL', request.host_url).rstrip('/')
     exe_url = f"{base_url}/descargar/exe"
+    lite_url = f"{base_url}/descargar/exe-lite"
     meta = _get_exe_metadata()
+    lite_meta = _get_exe_metadata(exe_name='ArgusScannerLite.exe')
     return render_template(
         'descargar.html',
         exe_url=exe_url,
         exe_size_mb=meta.get('size_mb'),
         exe_sha256=meta.get('sha256'),
         exe_exists=meta.get('exists', False),
+        lite_url=lite_url,
+        lite_size_mb=lite_meta.get('size_mb'),
+        lite_exists=lite_meta.get('exists', False),
     )
 
 
@@ -12090,6 +12095,22 @@ def descargar_exe():
         if os.path.exists(path):
             return send_file(path, as_attachment=True, download_name='ArgusScanner.exe')
     return jsonify({'error': 'Ejecutable no disponible aÃºn. Contacta a un administrador.'}), 404
+
+
+@app.route('/descargar/exe-lite')
+def descargar_exe_lite():
+    """Endpoint publico para descargar ArgusScannerLite.exe."""
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    possible_paths = [
+        os.path.join(project_root, 'dist', 'ArgusScannerLite.exe'),
+        os.path.join(project_root, 'downloads', 'ArgusScannerLite.exe'),
+        os.path.join(project_root, 'source', 'dist', 'ArgusScannerLite.exe'),
+        os.path.join(project_root, 'ArgusScannerLite.exe'),
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            return send_file(path, as_attachment=True, download_name='ArgusScannerLite.exe')
+    return jsonify({'error': 'ArgusScannerLite.exe no disponible aún. Contacta a un administrador.'}), 404
 
 
 @app.route('/descargar/linux')

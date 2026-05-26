@@ -811,6 +811,34 @@
                 </div>
                 {% endif %}
 
+                <!-- ── Lite version ──────────────────────────────── -->
+                <div style="margin-top:8px;margin-bottom:20px;padding:20px;background:linear-gradient(135deg,rgba(16,185,129,0.08),rgba(6,78,59,0.12));border:1px solid rgba(16,185,129,0.30);border-radius:14px;position:relative;z-index:1;">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:rgba(16,185,129,0.18);border:1px solid rgba(52,211,153,0.45);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.15em;color:#6EE7B7;text-transform:uppercase;">
+                            <span style="width:5px;height:5px;border-radius:50%;background:#6EE7B7;box-shadow:0 0 8px #6EE7B7;"></span>
+                            LITE
+                        </span>
+                        <span style="font-size:13px;color:var(--text-m);">Para PCs de bajos recursos (4 GB RAM, Windows 8.1+)</span>
+                    </div>
+                    <a href="{{ lite_url }}" class="download-btn" id="dl-btn-lite" style="background:linear-gradient(135deg,#10B981 0%,#047857 45%,#064E3B 100%);border-color:rgba(52,211,153,0.55);box-shadow:0 14px 32px rgba(16,185,129,0.30),inset 0 1px 0 rgba(167,243,208,0.30),inset 0 -2px 0 rgba(6,78,59,0.30);margin-bottom:8px;">
+                        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                            <path d="M11 3v11M11 14l-4-4M11 14l4-4M3 19h16" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Descargar ArgusScannerLite.exe</span>
+                    </a>
+                    <div class="file-info" style="margin-bottom:0;">
+                        <span>ArgusScannerLite.exe</span>
+                        <span class="pin"></span>
+                        <span>Windows 8.1 / 10 / 11</span>
+                        <span class="pin"></span>
+                        <span>64-bit</span>
+                        {% if lite_size_mb %}
+                        <span class="pin"></span>
+                        <span>{{ lite_size_mb }} MB</span>
+                        {% endif %}
+                    </div>
+                </div>
+
                 <div class="steps-title">CÓMO USARLO</div>
                 <div class="steps">
                     <div class="step">
@@ -1190,16 +1218,22 @@
         }
 
         // Animacion al click en Descargar
-        document.getElementById('dl-btn')?.addEventListener('click', function() {
-            const btn = this;
-            const original = btn.innerHTML;
-            btn.style.background = 'linear-gradient(135deg, #10B981 0%, #047857 100%)';
-            btn.innerHTML = '<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M5 11l4 4 8-8" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Descarga iniciada</span>';
-            setTimeout(() => {
-                btn.innerHTML = original;
-                btn.style.background = '';
-            }, 2400);
-        });
+        function animateDownloadBtn(btnId, successBg) {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            btn.addEventListener('click', function() {
+                const original = this.innerHTML;
+                const origBg = this.style.background;
+                this.style.background = successBg || 'linear-gradient(135deg, #10B981 0%, #047857 100%)';
+                this.innerHTML = '<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M5 11l4 4 8-8" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Descarga iniciada</span>';
+                setTimeout(() => {
+                    this.innerHTML = original;
+                    this.style.background = origBg;
+                }, 2400);
+            });
+        }
+        animateDownloadBtn('dl-btn', 'linear-gradient(135deg, #10B981 0%, #047857 100%)');
+        animateDownloadBtn('dl-btn-lite', 'linear-gradient(135deg, #059669 0%, #047857 100%)');
     </script>
     <script src="{{ url_for('static', filename='js/argus-public.js') }}" defer></script>
 </body>
