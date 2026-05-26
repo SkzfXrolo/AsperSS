@@ -8396,66 +8396,71 @@ class ArgusApp:
             step_var = [0]  # 0=ToS, 1=Token
 
             card = tk.Frame(auth_frame, bg=card_c, highlightbackground=C.get('border_bright', '#3A2C1C'), highlightthickness=1)
-            card.place(relx=0.5, rely=0.5, anchor='center', width=520, height=380)
+            card.place(relx=0.5, rely=0.5, anchor='center', width=500, height=400)
 
             # ──────── STEP 0: TERMS & CONDITIONS ────────
             tos_frame = tk.Frame(card, bg=card_c)
             tos_frame.place(x=0, y=0, relwidth=1.0, relheight=1.0)
 
-            tk.Label(tos_frame, text="TÉRMINOS Y CONDICIONES", font=('Segoe UI', 11, 'bold'),
-                     bg=card_c, fg=accent_l).pack(pady=(20, 8))
+            tos_inner = tk.Frame(tos_frame, bg=card_c)
+            tos_inner.place(relx=0.5, rely=0.5, anchor='center', relwidth=0.88)
 
-            tos_text_frame = tk.Frame(tos_frame, bg=card_c)
-            tos_text_frame.pack(fill=tk.BOTH, expand=True, padx=24, pady=(0, 8))
+            tk.Label(tos_inner, text="Aviso Legal",
+                     font=('Segoe UI', 16, 'bold'),
+                     bg=card_c, fg=txt_p).pack(anchor='w', pady=(0, 4))
+
+            tk.Frame(tos_inner, bg=accent, height=2).pack(fill=tk.X, pady=(0, 14))
 
             tos_content = (
-                "Al ejecutar Argus Scanner, usted acepta lo siguiente:\n\n"
-                "1. Este software realiza un análisis profundo del sistema para detectar "
-                "software de terceros (hacks, cheats, inyectores, autoclickers, etc.).\n\n"
-                "2. Argus Projects NO se hace responsable por:\n"
-                "   • Falsos positivos en la detección.\n"
-                "   • Problemas de rendimiento durante el escaneo.\n"
-                "   • Conflictos con antivirus u otro software de seguridad.\n"
-                "   • Cualquier denuncia, reclamo o queja posterior a la ejecución.\n\n"
-                "3. El usuario ejecuta este programa bajo su propia responsabilidad y "
-                "de forma voluntaria, entendiendo que el escaneo accede a información "
-                "del sistema (procesos, archivos, registro) con fines de detección.\n\n"
-                "4. Los resultados del escaneo se envían al panel de staff autorizado. "
-                "No se recopila información personal identificable.\n\n"
-                "5. Al presionar 'Aceptar', confirma que ha leído y acepta estos términos."
+                "Argus Scanner analiza procesos, archivos y registros del sistema "
+                "con el único fin de detectar software no autorizado en el contexto "
+                "de servidores de Minecraft.\n\n"
+                "Al continuar, usted declara que ejecuta este programa de forma "
+                "voluntaria y bajo su propia responsabilidad.\n\n"
+                "Argus Projects no se responsabiliza por alertas incorrectas, "
+                "conflictos con software de terceros, ni por cualquier reclamo, "
+                "denuncia o queja derivada del uso de esta herramienta o de los "
+                "resultados que arroje.\n\n"
+                "Los resultados se transmiten exclusivamente al panel de staff "
+                "autorizado del servidor. No se recopilan datos personales."
             )
 
-            tos_textw = tk.Text(tos_text_frame, wrap=tk.WORD, font=('Segoe UI', 9),
-                                bg=card_c, fg=txt_s, relief=tk.FLAT, bd=0,
-                                highlightthickness=0, padx=8, pady=4)
-            tos_scroll = tk.Scrollbar(tos_text_frame, command=tos_textw.yview)
-            tos_textw.configure(yscrollcommand=tos_scroll.set)
-            tos_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-            tos_textw.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-            tos_textw.insert('1.0', tos_content)
-            tos_textw.config(state='disabled')
+            tos_lbl = tk.Label(tos_inner, text=tos_content,
+                               font=('Segoe UI', 9), bg=card_c, fg=txt_s,
+                               wraplength=420, justify='left', anchor='nw')
+            tos_lbl.pack(fill=tk.X, pady=(0, 20))
 
-            tos_btn_frame = tk.Frame(tos_frame, bg=card_c)
-            tos_btn_frame.pack(pady=(0, 16))
+            tos_btn_frame = tk.Frame(tos_inner, bg=card_c)
+            tos_btn_frame.pack(fill=tk.X)
 
             def _accept_tos():
                 tos_frame.place_forget()
                 token_frame.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+                token_entry.focus_set()
 
             def _decline_tos():
                 auth_result[0] = False
                 auth_frame.destroy()
 
-            accept_btn = tk.Button(tos_btn_frame, text="✓  Aceptar", font=('Segoe UI', 10, 'bold'),
-                                   bg=green, fg='#000000', relief=tk.FLAT, bd=0, cursor='hand2',
-                                   padx=24, pady=8, command=_accept_tos)
-            accept_btn.pack(side=tk.LEFT, padx=8)
+            accept_btn = tk.Button(tos_btn_frame, text="Acepto y continúo",
+                                   font=('Segoe UI', 10, 'bold'),
+                                   bg=accent, fg='#FFFFFF', relief=tk.FLAT, bd=0,
+                                   cursor='hand2', padx=20, pady=9,
+                                   activebackground=C.get('accent_hover', '#D4915A'),
+                                   activeforeground='#FFFFFF',
+                                   command=_accept_tos)
+            accept_btn.pack(side=tk.LEFT)
+            accept_btn.bind('<Enter>', lambda _: accept_btn.config(bg=C.get('accent_hover', '#D4915A')))
+            accept_btn.bind('<Leave>', lambda _: accept_btn.config(bg=accent))
 
-            decline_btn = tk.Button(tos_btn_frame, text="✕  Rechazar", font=('Segoe UI', 10, 'bold'),
-                                    bg=card_c, fg=txt_m, relief=tk.FLAT, bd=0, cursor='hand2',
-                                    padx=24, pady=8, command=_decline_tos,
-                                    highlightthickness=1, highlightbackground=C.get('border', '#2A1F14'))
-            decline_btn.pack(side=tk.LEFT, padx=8)
+            decline_btn = tk.Button(tos_btn_frame, text="Salir",
+                                    font=('Segoe UI', 9),
+                                    bg=card_c, fg=txt_m, relief=tk.FLAT, bd=0,
+                                    cursor='hand2', padx=16, pady=9,
+                                    command=_decline_tos)
+            decline_btn.pack(side=tk.RIGHT)
+            decline_btn.bind('<Enter>', lambda _: decline_btn.config(fg=C.get('red', '#FCA5A5')))
+            decline_btn.bind('<Leave>', lambda _: decline_btn.config(fg=txt_m))
 
             # ──────── STEP 1: TOKEN INPUT ────────
             token_frame = tk.Frame(card, bg=card_c)
