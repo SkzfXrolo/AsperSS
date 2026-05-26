@@ -3055,6 +3055,29 @@ class ArgusApp:
         scan()
         return issues
     
+    def _scan_autoclickers_active(self):
+        """Detecta autoclickers corriendo en tiempo real (procesos + filesystem)."""
+        if not self.autoclicker_detector:
+            return
+        try:
+            hits = self.autoclicker_detector.scan_running_processes()
+            for h in hits:
+                self.issues_found.append({
+                    'tipo': 'process',
+                    'nombre': h.get('name', 'Unknown'),
+                    'ruta': h.get('exe', ''),
+                    'archivo': h.get('exe', ''),
+                    'categoria': h.get('type', 'ahk_autoclick'),
+                    'alerta': h.get('alert', 'CRITICAL'),
+                    'confidence': h.get('confidence', 0.9),
+                    'detected_patterns': ['autoclicker_active'],
+                    'is_active_process': True,
+                })
+            if hits:
+                print(f"🖱️ {len(hits)} autoclicker(s) activo(s) detectados")
+        except Exception as e:
+            print(f"⚠️ Error en detección de autoclickers: {e}")
+
     # ============================================================
     # MÉTODOS DE ESCANEO AVANZADO
     # ============================================================
@@ -5824,6 +5847,9 @@ class ArgusApp:
                 self._set_scan_phase("🎮 Procesos Java / Minecraft...")
                 _run_safe(self.scan_processes)
                 _run_safe(self.advanced_minecraft_process_analysis)
+                self._set_scan_phase("🖱️ Autoclickers activos...")
+                _run_safe(self._scan_autoclickers_active)
+                _extend_safe(_run_safe(self.scan_autoclick_tools))
                 self._set_scan_phase("🌳 Árbol de procesos Java (parent analysis)...")
                 _run_safe(self.scan_java_process_parent)
                 self._set_scan_phase("🔒 Procesos deshabilitados / ocultos...")
@@ -18249,13 +18275,22 @@ class ArgusApp:
             'spigotmc.org', 'bukkit.org', 'papermc.io',
         }
 
+        import re as _dl_re
+        _SHORT_KW = frozenset(k for k in HACK_URL_KW if len(k) <= 5)
+        _dl_word_cache = {}
+        def _kw_in_text(kw, text):
+            if kw in _SHORT_KW:
+                if kw not in _dl_word_cache:
+                    _dl_word_cache[kw] = _dl_re.compile(r'(?<![a-z])' + _dl_re.escape(kw) + r'(?![a-z])')
+                return bool(_dl_word_cache[kw].search(text))
+            return kw in text
+
         def _is_hack_url(url: str) -> tuple:
             url_lower = url.lower()
-            # Excluir dominios seguros
             for safe in SAFE_DOMAINS:
                 if safe in url_lower:
                     return False, None
-            hit = next((kw for kw in HACK_URL_KW if kw in url_lower), None)
+            hit = next((kw for kw in HACK_URL_KW if _kw_in_text(kw, url_lower)), None)
             return bool(hit), hit
 
         try:
@@ -18285,9 +18320,8 @@ class ArgusApp:
                             target_path = target_path or ''
                             url         = url or ''
                             fname = os.path.basename(target_path).lower()
-                            # Comprobar URL y nombre de archivo
                             url_hit, url_kw = _is_hack_url(url)
-                            fname_hit = next((kw for kw in HACK_URL_KW if kw in fname), None)
+                            fname_hit = next((kw for kw in HACK_URL_KW if _kw_in_text(kw, fname)), None)
                             if not url_hit and not fname_hit:
                                 continue
                             # Convertir timestamp Chrome (microsegundos desde 1601-01-01)
@@ -18335,7 +18369,7 @@ class ArgusApp:
                             url   = url or ''
                             fname = os.path.basename(dest or '').lower()
                             url_hit, url_kw = _is_hack_url(url)
-                            fname_hit = next((kw for kw in HACK_URL_KW if kw in fname), None)
+                            fname_hit = next((kw for kw in HACK_URL_KW if _kw_in_text(kw, fname)), None)
                             if not url_hit and not fname_hit:
                                 continue
                             hit_kw = url_kw or fname_hit

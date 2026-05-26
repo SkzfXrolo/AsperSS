@@ -8549,6 +8549,11 @@ _SERVER_FP_FRAGMENTS = [
     '.minecraft\\crash-reports', '.minecraft\\logs\\debug',
     # Grabadores de clips
     'medal\\', 'medal.tv',
+    # Emuladores — carpetas "Cheats" y "Mods" son funcionalidades del emulador
+    'cemu\\', 'yuzu\\', 'ryujinx\\', 'dolphin\\', 'citra\\',
+    'rpcs3\\', 'ppsspp\\', 'desmume\\', 'melonds\\',
+    'retroarch\\', 'mame\\', 'pcsx2\\', 'xenia\\',
+    'graphicpacks\\', 'graphic packs\\',
     # Juegos y apps legÃ­timas
     'roblox\\', 'innersloth', 'vseeface',
     'epic games\\launcher', 'riot games\\',
@@ -9123,6 +9128,14 @@ def _is_server_false_positive(result: dict) -> bool:
             return True
         return False
 
+    # El propio scanner jamás es un hallazgo real
+    ruta_raw = result.get('ruta', '') or result.get('issue_path', '') or ''
+    nombre   = (result.get('nombre', '') or result.get('archivo', '')
+                or result.get('issue_name', '') or '')
+    _self = (ruta_raw + '|' + nombre).lower()
+    if 'argusscanner' in _self or 'minecraftsstool' in _self:
+        return True
+
     # Tipos que son FP estructural independientemente de la ruta
     tipo = (result.get('tipo') or result.get('issue_type') or '').lower().replace(' ', '_')
     _NEVER_SCRUB_TYPES = {
@@ -9141,9 +9154,6 @@ def _is_server_false_positive(result: dict) -> bool:
     if categoria in _LEGACY_FP_CATEGORIES:
         return True
 
-    ruta_raw = result.get('ruta', '') or result.get('issue_path', '') or ''
-    nombre   = (result.get('nombre', '') or result.get('archivo', '')
-                or result.get('issue_name', '') or '')
     ruta     = _normalize_path(ruta_raw)
     combined = ruta + '|' + (nombre or '').lower()
 
@@ -10208,6 +10218,22 @@ def submit_scan_results(scan_id):
                 except Exception:
                     pass
                 print(f"[DEBUG] evidence_fingerprints upsert fallÃ³ silenciosamente: {_efp_e}")
+            # Deduplicar resultados antes de insertar (misma key = tipo+nombre+ruta)
+            _seen_keys = set()
+            _deduped = []
+            for _r in results:
+                _dk = (
+                    (_r.get('tipo') or _r.get('issue_type') or ''),
+                    (_r.get('nombre') or _r.get('issue_name') or _r.get('archivo') or '')[:200],
+                    (_r.get('ruta') or _r.get('issue_path') or '')[:200],
+                )
+                if _dk not in _seen_keys:
+                    _seen_keys.add(_dk)
+                    _deduped.append(_r)
+            if len(_deduped) < len(results):
+                print(f"[DEBUG] Dedup: {len(results)} → {len(_deduped)} resultados ({len(results)-len(_deduped)} duplicados removidos)")
+            results = _deduped
+
             print(f"[DEBUG] Insertando {len(results)} resultados en scan_results")
             if results:
                 def _norm_conf(v):
@@ -10285,6 +10311,18 @@ def submit_scan_results(scan_id):
                     cursor.execute('ROLLBACK TO SAVEPOINT risk_score_save')
                 except Exception:
                     pass
+
+            # Recalcular issues_found basado en resultados reales insertados (excluir FILE_ACTIVITY)
+            try:
+                cursor.execute(
+                    f"UPDATE scans SET issues_found = ("
+                    f"  SELECT COUNT(*) FROM scan_results"
+                    f"  WHERE scan_id = {_PH} AND COALESCE(issue_category,'') != 'FILE_ACTIVITY'"
+                    f") WHERE id = {_PH}",
+                    (scan_id, scan_id)
+                )
+            except Exception:
+                pass
 
             # 7-system ensemble verdict (Pack 32 incluye Prior Consensus).
             # Leemos machine_id + minecraft_username del scan actual para
