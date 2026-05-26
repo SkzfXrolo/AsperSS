@@ -8375,53 +8375,90 @@ class ArgusApp:
                     print(f"⚠️ Error validando token existente: {e}")
                     # Continuar con el flujo normal de autenticación
             
-            # Si no hay token válido, mostrar ventana de autenticación
-            # Crear ventana de autenticación con estilo ARGUS PROJECTS
-            auth_window = tk.Toplevel(self.root)
-            auth_window.title("Argus Projects — Autenticación Requerida")
-            auth_window.geometry("600x500")
-            if UI_STYLE_AVAILABLE:
-                auth_window.configure(bg=ModernUI.COLORS['bg_primary'])
-            else:
-                auth_window.configure(bg="#0a0e27")
-            auth_window.resizable(False, False)
-            auth_window.transient(self.root)
-            auth_window.grab_set()
-            
-            # Centrar la ventana
-            auth_window.update_idletasks()
-            x = (auth_window.winfo_screenwidth() // 2) - (600 // 2)
-            y = (auth_window.winfo_screenheight() // 2) - (500 // 2)
-            auth_window.geometry(f"600x500+{x}+{y}")
-            
-            # Variables de autenticación
+            # Si no hay token válido, mostrar autenticación integrada en ventana principal
             auth_result = [False]
-            
-            def generate_web_token():
-                """Genera un token usando la API web"""
-                try:
-                    # Asegurar que self.config esté disponible
-                    if not hasattr(self, 'config') or not self.config:
-                        self.config = self.load_config()
-                    
-                    # Obtener token desde la API web
-                    api_url = self.config.get('api_url', 'https://asperss.onrender.com')
-                    web_url = self.config.get('web_url', 'https://asperss.onrender.com')
-                    
-                    # Abrir navegador para que el staff genere el token desde el panel web
-                    import webbrowser
-                    webbrowser.open(f"{web_url}/panel#tokens-section")
-                    
-                    messagebox.showinfo(
-                        "🔐 Generar Token - ASPERS Projects",
-                        f"Por favor, genera un token desde el panel web:\n\n{web_url}/panel#tokens-section\n\n\n1. Abre el panel web (ya se abrió automáticamente)\n2. Ve a la sección 'Gestión de Tokens'\n3. Haz clic en 'Crear Nuevo Token'\n4. Copia el token generado\n5. Pégalo aquí y haz clic en 'Autenticar'"
-                    )
-                    return None
-                        
-                except Exception as e:
-                    print(f"Error generando token: {e}")
-                    messagebox.showerror("Error", f"No se pudo abrir el panel web. Por favor, accede manualmente a:\n{web_url}/panel#tokens-section")
-                    return None
+            auth_frame = tk.Frame(self.root, bg=ModernUI.COLORS['bg_primary'] if UI_STYLE_AVAILABLE else "#0d1117")
+            auth_frame.place(x=0, y=42, relwidth=1.0, relheight=1.0)
+            auth_frame.lift()
+
+            C = ModernUI.COLORS if UI_STYLE_AVAILABLE else {}
+            bg_c = C.get('bg_primary', '#0d1117')
+            card_c = C.get('bg_card', '#14101E')
+            txt_p = C.get('text_primary', '#EAD8C0')
+            txt_s = C.get('text_secondary', '#A89578')
+            txt_m = C.get('text_muted', '#5A4A38')
+            accent = C.get('accent', '#B87333')
+            accent_l = C.get('accent_light', '#E8A86F')
+            green = C.get('green', '#6EE7B7')
+            red = C.get('red_deep', '#DC2626')
+
+            # --- Step tracking ---
+            step_var = [0]  # 0=ToS, 1=Token
+
+            card = tk.Frame(auth_frame, bg=card_c, highlightbackground=C.get('border_bright', '#3A2C1C'), highlightthickness=1)
+            card.place(relx=0.5, rely=0.5, anchor='center', width=520, height=380)
+
+            # ──────── STEP 0: TERMS & CONDITIONS ────────
+            tos_frame = tk.Frame(card, bg=card_c)
+            tos_frame.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+
+            tk.Label(tos_frame, text="TÉRMINOS Y CONDICIONES", font=('Segoe UI', 11, 'bold'),
+                     bg=card_c, fg=accent_l).pack(pady=(20, 8))
+
+            tos_text_frame = tk.Frame(tos_frame, bg=card_c)
+            tos_text_frame.pack(fill=tk.BOTH, expand=True, padx=24, pady=(0, 8))
+
+            tos_content = (
+                "Al ejecutar Argus Scanner, usted acepta lo siguiente:\n\n"
+                "1. Este software realiza un análisis profundo del sistema para detectar "
+                "software de terceros (hacks, cheats, inyectores, autoclickers, etc.).\n\n"
+                "2. Argus Projects NO se hace responsable por:\n"
+                "   • Falsos positivos en la detección.\n"
+                "   • Problemas de rendimiento durante el escaneo.\n"
+                "   • Conflictos con antivirus u otro software de seguridad.\n"
+                "   • Cualquier denuncia, reclamo o queja posterior a la ejecución.\n\n"
+                "3. El usuario ejecuta este programa bajo su propia responsabilidad y "
+                "de forma voluntaria, entendiendo que el escaneo accede a información "
+                "del sistema (procesos, archivos, registro) con fines de detección.\n\n"
+                "4. Los resultados del escaneo se envían al panel de staff autorizado. "
+                "No se recopila información personal identificable.\n\n"
+                "5. Al presionar 'Aceptar', confirma que ha leído y acepta estos términos."
+            )
+
+            tos_textw = tk.Text(tos_text_frame, wrap=tk.WORD, font=('Segoe UI', 9),
+                                bg=card_c, fg=txt_s, relief=tk.FLAT, bd=0,
+                                highlightthickness=0, padx=8, pady=4)
+            tos_scroll = tk.Scrollbar(tos_text_frame, command=tos_textw.yview)
+            tos_textw.configure(yscrollcommand=tos_scroll.set)
+            tos_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+            tos_textw.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            tos_textw.insert('1.0', tos_content)
+            tos_textw.config(state='disabled')
+
+            tos_btn_frame = tk.Frame(tos_frame, bg=card_c)
+            tos_btn_frame.pack(pady=(0, 16))
+
+            def _accept_tos():
+                tos_frame.place_forget()
+                token_frame.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+
+            def _decline_tos():
+                auth_result[0] = False
+                auth_frame.destroy()
+
+            accept_btn = tk.Button(tos_btn_frame, text="✓  Aceptar", font=('Segoe UI', 10, 'bold'),
+                                   bg=green, fg='#000000', relief=tk.FLAT, bd=0, cursor='hand2',
+                                   padx=24, pady=8, command=_accept_tos)
+            accept_btn.pack(side=tk.LEFT, padx=8)
+
+            decline_btn = tk.Button(tos_btn_frame, text="✕  Rechazar", font=('Segoe UI', 10, 'bold'),
+                                    bg=card_c, fg=txt_m, relief=tk.FLAT, bd=0, cursor='hand2',
+                                    padx=24, pady=8, command=_decline_tos,
+                                    highlightthickness=1, highlightbackground=C.get('border', '#2A1F14'))
+            decline_btn.pack(side=tk.LEFT, padx=8)
+
+            # ──────── STEP 1: TOKEN INPUT ────────
+            token_frame = tk.Frame(card, bg=card_c)
             
             def verify_token(token):
                 """Verifica si el token es válido contra la API web"""
@@ -8609,125 +8646,15 @@ class ArgusApp:
                     traceback.print_exc()
                     return False
             
-            def on_authenticate():
-                """Maneja la autenticación"""
-                token = token_entry.get().strip()
-                
-                if not token:
-                    messagebox.showerror("Error", "Por favor ingresa un token")
-                    return
-                
-                print(f"🔐 Intentando autenticar con token...")
-                if verify_token(token):
-                    # Actualizar token en db_integration si existe
-                    if hasattr(self, 'db_integration') and self.db_integration:
-                        self.db_integration.scan_token = token
-                        print(f"✅ Token actualizado en db_integration")
-                    
-                    auth_result[0] = True
-                    messagebox.showinfo("✅ Éxito", "Token válido. Acceso autorizado.")
-                    auth_window.destroy()
-                else:
-                    error_msg = (
-                        "Código inválido o expirado.\n\n"
-                        "Verifica que:\n"
-                        "• El código de 6 caracteres fue copiado correctamente\n"
-                        "• El código no haya expirado (válido 30 min)\n"
-                        "• El código no fue usado ya (1 solo uso)\n"
-                        f"• El panel: {self.config.get('web_url','https://asperss.onrender.com')}"
-                    )
-                    messagebox.showerror("❌ Error", error_msg)
-                    # No borrar el token para que el usuario pueda revisarlo
-            
-            def on_generate_token():
-                """Genera un nuevo token desde el panel web"""
-                generate_web_token()
-            
-            
-            def on_cancel():
-                """Cancela la autenticación"""
-                auth_result[0] = False
-                auth_window.destroy()
-            
-            # Crear interfaz de autenticación con estilo ARGUS PROJECTS
-            bg_color = ModernUI.COLORS['bg_primary'] if UI_STYLE_AVAILABLE else "#0d1117"
-            card_color = ModernUI.COLORS['bg_card'] if UI_STYLE_AVAILABLE else "#161b22"
-            text_primary = ModernUI.COLORS['text_primary'] if UI_STYLE_AVAILABLE else "#f0f6fc"
-            text_secondary = ModernUI.COLORS['text_secondary'] if UI_STYLE_AVAILABLE else "#8b949e"
-            accent_blue = ModernUI.COLORS['blue'] if UI_STYLE_AVAILABLE else "#1f6feb"
-            accent_green = ModernUI.COLORS['green'] if UI_STYLE_AVAILABLE else "#238636"
-            
-            # Header con estilo moderno
-            header_frame = tk.Frame(auth_window, bg=card_color, height=120)
-            header_frame.pack(fill=tk.X)
-            header_frame.pack_propagate(False)
-            
-            # Borde superior con gradiente
-            border_top = tk.Frame(header_frame, bg=accent_blue, height=3)
-            border_top.pack(fill=tk.X)
-            
-            # Contenido del header
-            header_content = tk.Frame(header_frame, bg=card_color)
-            header_content.pack(fill=tk.BOTH, expand=True, padx=30, pady=20)
-            
-            title_label = tk.Label(
-                header_content,
-                text="ASPERS PROJECTS",
-                font=("Segoe UI", 28, "bold"),
-                fg=text_primary,
-                bg=card_color
-            )
-            title_label.pack()
-            
-            subtitle_label = tk.Label(
-                header_content,
-                text="Autenticación Requerida",
-                font=("Segoe UI", 13),
-                fg=text_secondary,
-                bg=card_color
-            )
-            subtitle_label.pack(pady=(5, 0))
-            
-            # Card principal
-            main_card = tk.Frame(auth_window, bg=card_color, relief=tk.FLAT, bd=0)
-            main_card.pack(fill=tk.BOTH, expand=True, padx=30, pady=20)
-            
-            # Borde del card
-            card_border = tk.Frame(main_card, bg=accent_blue, height=2)
-            card_border.pack(fill=tk.X)
-            
-            # Contenido del card
-            card_content = tk.Frame(main_card, bg=card_color)
-            card_content.pack(fill=tk.BOTH, expand=True, padx=25, pady=25)
-            
-            info_label = tk.Label(
-                card_content,
-                text="Esta aplicación requiere un código de acceso de 6 caracteres.\nPídele a tu staff que genere uno desde el panel.",
-                font=("Segoe UI", 11),
-                fg=text_secondary,
-                bg=card_color,
-                justify="center",
-                wraplength=500
-            )
-            info_label.pack(pady=(0, 25))
-            
-            # Frame para el token
-            token_frame = tk.Frame(card_content, bg=card_color)
-            token_frame.pack(pady=10, fill=tk.X)
-            
-            # Label del token con estilo moderno
-            token_label = tk.Label(
-                token_frame,
-                text="🔑 Código de Acceso (6 caracteres):",
-                font=("Segoe UI", 12, "bold"),
-                fg=text_primary,
-                bg=card_color
-            )
-            token_label.pack(anchor="w", pady=(0, 8))
+            # Token input UI
+            tk_center = tk.Frame(token_frame, bg=card_c)
+            tk_center.place(relx=0.5, rely=0.5, anchor='center')
 
-            # Campo de entrada con estilo moderno
-            entry_frame = tk.Frame(token_frame, bg=card_color)
-            entry_frame.pack(fill=tk.X)
+            tk.Label(tk_center, text="CÓDIGO DE ACCESO", font=('Segoe UI', 11, 'bold'),
+                     bg=card_c, fg=accent_l).pack(pady=(0, 6))
+            tk.Label(tk_center, text="Ingresa el código de 6 caracteres que tu staff te proporcionó.",
+                     font=('Segoe UI', 9), bg=card_c, fg=txt_s, wraplength=400,
+                     justify='center').pack(pady=(0, 20))
 
             code_var = tk.StringVar()
             def _on_code_change(*_):
@@ -8737,154 +8664,61 @@ class ArgusApp:
                 code_var.set(val)
             code_var.trace_add('write', _on_code_change)
 
-            token_entry = tk.Entry(
-                entry_frame,
-                textvariable=code_var,
-                font=("Consolas", 22, "bold"),
-                width=8,
-                bg="#161b22",
-                fg="#a78bfa",
-                insertbackground=text_primary,
-                relief=tk.FLAT,
-                bd=0,
-                highlightthickness=2,
-                highlightbackground=accent_blue,
-                highlightcolor=accent_blue,
-                justify="center"
-            )
-            token_entry.pack(ipady=14)
+            token_entry = tk.Entry(tk_center, textvariable=code_var,
+                                   font=('Consolas', 28, 'bold'), width=8,
+                                   bg=C.get('bg_secondary', '#0E0A18'),
+                                   fg=accent_l,
+                                   insertbackground=txt_p, relief=tk.FLAT, bd=0,
+                                   highlightthickness=2,
+                                   highlightbackground=accent,
+                                   highlightcolor=accent_l,
+                                   justify='center')
+            token_entry.pack(ipady=10, pady=(0, 6))
+
+            status_lbl = tk.Label(tk_center, text="", font=('Segoe UI', 8),
+                                  bg=card_c, fg=txt_m)
+            status_lbl.pack(pady=(0, 16))
+
+            btn_row = tk.Frame(tk_center, bg=card_c)
+            btn_row.pack()
+
+            def on_authenticate():
+                token = token_entry.get().strip()
+                if not token:
+                    status_lbl.config(text="Ingresa un código.", fg=C.get('amber', '#FCD34D'))
+                    return
+                status_lbl.config(text="Verificando...", fg=accent_l)
+                self.root.update()
+                if verify_token(token):
+                    if hasattr(self, 'db_integration') and self.db_integration:
+                        self.db_integration.scan_token = token
+                    auth_result[0] = True
+                    status_lbl.config(text="✓ Acceso autorizado", fg=green)
+                    self.root.after(600, auth_frame.destroy)
+                else:
+                    status_lbl.config(text="✕ Código inválido o expirado", fg=red)
+
+            def on_cancel():
+                auth_result[0] = False
+                auth_frame.destroy()
+
+            auth_btn = tk.Button(btn_row, text="Autenticar", font=('Segoe UI', 10, 'bold'),
+                                 bg=accent, fg='#FFFFFF', relief=tk.FLAT, bd=0,
+                                 cursor='hand2', padx=24, pady=8, command=on_authenticate)
+            auth_btn.pack(side=tk.LEFT, padx=6)
+
+            cancel_btn = tk.Button(btn_row, text="Cancelar", font=('Segoe UI', 10, 'bold'),
+                                   bg=card_c, fg=txt_m, relief=tk.FLAT, bd=0,
+                                   cursor='hand2', padx=24, pady=8, command=on_cancel,
+                                   highlightthickness=1, highlightbackground=C.get('border', '#2A1F14'))
+            cancel_btn.pack(side=tk.LEFT, padx=6)
+
+            token_entry.bind('<Return>', lambda _e: on_authenticate())
+
+            auth_frame.focus_set()
             token_entry.focus_set()
-            
-            # Botones con estilo moderno ASPERS PROJECTS
-            button_frame = tk.Frame(card_content, bg=card_color)
-            button_frame.pack(pady=25)
-            
-            # Botón generar token
-            generate_btn = tk.Button(
-                button_frame,
-                text="🔐 Generar Token",
-                command=on_generate_token,
-                bg=accent_blue,
-                fg="#ffffff",
-                font=("Segoe UI", 11, "bold"),
-                padx=25,
-                pady=12,
-                relief=tk.FLAT,
-                bd=0,
-                cursor="hand2",
-                activebackground="#58a6ff",
-                activeforeground="#ffffff"
-            )
-            generate_btn.pack(side="left", padx=8)
-            
-            # Efecto hover para botón generar
-            def on_gen_enter(e):
-                generate_btn.config(bg="#58a6ff")
-            def on_gen_leave(e):
-                generate_btn.config(bg=accent_blue)
-            generate_btn.bind('<Enter>', on_gen_enter)
-            generate_btn.bind('<Leave>', on_gen_leave)
-            
-            # Botón autenticar
-            auth_btn = tk.Button(
-                button_frame,
-                text="✅ Autenticar",
-                command=on_authenticate,
-                bg=accent_green,
-                fg="#ffffff",
-                font=("Segoe UI", 11, "bold"),
-                padx=25,
-                pady=12,
-                relief=tk.FLAT,
-                bd=0,
-                cursor="hand2",
-                activebackground="#2ea043",
-                activeforeground="#ffffff"
-            )
-            auth_btn.pack(side="left", padx=8)
-            
-            # Efecto hover para botón autenticar
-            def on_auth_enter(e):
-                auth_btn.config(bg="#2ea043")
-            def on_auth_leave(e):
-                auth_btn.config(bg=accent_green)
-            auth_btn.bind('<Enter>', on_auth_enter)
-            auth_btn.bind('<Leave>', on_auth_leave)
-            
-            # Botón cancelar
-            cancel_btn = tk.Button(
-                button_frame,
-                text="❌ Cancelar",
-                command=on_cancel,
-                bg="#21262d",
-                fg=text_primary,
-                font=("Segoe UI", 11, "bold"),
-                padx=25,
-                pady=12,
-                relief=tk.FLAT,
-                bd=0,
-                cursor="hand2",
-                activebackground="#30363d",
-                activeforeground=text_primary
-            )
-            cancel_btn.pack(side="left", padx=8)
-            
-            # Efecto hover para botón cancelar
-            def on_cancel_enter(e):
-                cancel_btn.config(bg="#30363d")
-            def on_cancel_leave(e):
-                cancel_btn.config(bg="#21262d")
-            cancel_btn.bind('<Enter>', on_cancel_enter)
-            cancel_btn.bind('<Leave>', on_cancel_leave)
-            
-            # Separador visual
-            separator = tk.Frame(card_content, bg="#21262d", height=1)
-            separator.pack(fill=tk.X, pady=(15, 15))
-            
-            # Información adicional con estilo moderno
-            info_frame = tk.Frame(card_content, bg="#161b22", relief=tk.FLAT, bd=0)
-            info_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-            
-            info_title = tk.Label(
-                info_frame,
-                text="📋 Instrucciones",
-                font=("Segoe UI", 12, "bold"),
-                fg=text_primary,
-                bg="#161b22"
-            )
-            info_title.pack(anchor="w", padx=15, pady=(15, 10))
-            
-            info_text = tk.Text(
-                info_frame,
-                height=7,
-                width=55,
-                bg="#161b22",
-                fg=text_secondary,
-                font=("Segoe UI", 10),
-                wrap=tk.WORD,
-                relief=tk.FLAT,
-                bd=0,
-                padx=15,
-                pady=10,
-                highlightthickness=0
-            )
-            info_text.pack(fill=tk.BOTH, expand=True, padx=15, pady=(0, 15))
-            
-            info_content = """1. Haz clic en "Generar Token" para crear un nuevo token
-   2. El token se enviará automáticamente a Discord
-   3. Revisa Discord para obtener el token
-4. Copia y pega el token en el campo de arriba
-   5. Haz clic en "Autenticar" para verificar el token
-   
-⚠️ NOTA: Los tokens expiran en 10 minutos por seguridad."""
-            
-            info_text.insert("1.0", info_content)
-            info_text.config(state="disabled")
-            
-            # Centrar la ventana y esperar
-            auth_window.focus_set()
-            auth_window.wait_window()
-            
+            auth_frame.wait_window()
+
             return auth_result[0]
             
         except Exception as e:
