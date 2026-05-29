@@ -113,6 +113,16 @@
         .search button:disabled { opacity: .55; cursor: wait; transform: none; }
         .hint { margin-top: 12px; color: var(--text-d); font-size: 12.5px; }
 
+        .vault-stats { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+        .vstat {
+            display: flex; flex-direction: column; gap: 3px;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 12px 18px; backdrop-filter: blur(12px); min-width: 110px;
+        }
+        .vstat .v { font-family: var(--display); font-weight: 800; font-size: 22px; line-height: 1; }
+        .vstat .k { font-family: var(--mono); font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-d); }
+        .vstat.hot .v { color: var(--red); }
+
         /* ── Result ── */
         #result { margin-top: 36px; display: none; animation: fadeUp .45s ease; }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
@@ -268,6 +278,8 @@
             <button type="submit" id="btn">Consultar</button>
         </form>
         <p class="hint">Solo se muestran datos agregados y anónimos: veredictos, risk score e historial. Nunca IPs, máquinas, staff ni servidores.</p>
+
+        <div class="vault-stats" id="vault-stats" style="display:none"></div>
 
         <div id="result"></div>
 
@@ -449,6 +461,26 @@
                 .catch(function () { wantedSec.style.display = 'none'; });
         }
         loadWanted();
+
+        // ── Stats globales del Vault (hero) ──
+        function loadVaultStats() {
+            var el = document.getElementById('vault-stats');
+            fetch('/api/public/vault-stats')
+                .then(function (r) { return r.json(); })
+                .then(function (s) {
+                    if (!s || (!s.players && !s.scans)) { el.style.display = 'none'; return; }
+                    function n(x) { return (x || 0).toLocaleString('es'); }
+                    var html = '';
+                    html += '<div class="vstat"><span class="v">' + n(s.players) + '</span><span class="k">Jugadores</span></div>';
+                    html += '<div class="vstat"><span class="v">' + n(s.scans) + '</span><span class="k">Scans</span></div>';
+                    html += '<div class="vstat"><span class="v">' + n(s.hacks) + '</span><span class="k">Hacks confirmados</span></div>';
+                    html += '<div class="vstat hot"><span class="v">' + n(s.hacks_7d) + '</span><span class="k">Hacks · 7 días</span></div>';
+                    el.innerHTML = html;
+                    el.style.display = 'flex';
+                })
+                .catch(function () { el.style.display = 'none'; });
+        }
+        loadVaultStats();
     })();
     </script>
 </body>

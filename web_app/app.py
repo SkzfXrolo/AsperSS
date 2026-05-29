@@ -12798,6 +12798,69 @@ def api_public_wanted():
     return resp
 
 
+_vstats_cache = {'data': None, 'ts': 0}
+_VSTATS_TTL = 300
+
+
+@app.route('/api/public/vault-stats', methods=['GET'])
+@_limit("30 per minute")
+def api_public_vault_stats():
+    """Stats globales y publicas del Vault para el hero de /reputacion.
+
+    Solo agregados no sensibles: jugadores rastreados, scans, hacks totales y
+    hacks de los ultimos 7 dias. NUNCA expone identidades ni servidores.
+    """
+    _now = _time_mod.time()
+    if _vstats_cache['data'] is not None and (_now - _vstats_cache['ts']) < _VSTATS_TTL:
+        _r = jsonify(_vstats_cache['data'])
+        _r.headers['Cache-Control'] = 'public, max-age=300'
+        return _r
+
+    out = {'players': 0, 'scans': 0, 'hacks': 0, 'hacks_7d': 0}
+    try:
+        with get_api_db_cursor() as cur:
+            try:
+                cur.execute(
+                    "SELECT COUNT(DISTINCT minecraft_username) FROM scans"
+                    " WHERE minecraft_username IS NOT NULL AND minecraft_username <> ''"
+                )
+                out['players'] = int(_first_value(cur.fetchone()) or 0)
+            except Exception:
+                pass
+            try:
+                cur.execute("SELECT COUNT(*) FROM scans")
+                out['scans'] = int(_first_value(cur.fetchone()) or 0)
+            except Exception:
+                pass
+            try:
+                cur.execute("SELECT COUNT(*) FROM scans WHERE LOWER(verdict)='hack'")
+                out['hacks'] = int(_first_value(cur.fetchone()) or 0)
+            except Exception:
+                pass
+            try:
+                try:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM scans WHERE LOWER(verdict)='hack'"
+                        " AND started_at > NOW() - INTERVAL '7 days'"
+                    )
+                except Exception:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM scans WHERE LOWER(verdict)='hack'"
+                        " AND started_at > datetime('now', '-7 days')"
+                    )
+                out['hacks_7d'] = int(_first_value(cur.fetchone()) or 0)
+            except Exception:
+                pass
+    except Exception:
+        pass  # DB no disponible -> ceros
+
+    _vstats_cache['data'] = out
+    _vstats_cache['ts'] = _now
+    resp = jsonify(out)
+    resp.headers['Cache-Control'] = 'public, max-age=300'
+    return resp
+
+
 @app.route('/descargar/exe')
 def descargar_exe():
     """Endpoint pÃºblico permanente para descargar ArgusScanner.exe sin autenticaciÃ³n."""
