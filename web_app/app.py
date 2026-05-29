@@ -12643,6 +12643,96 @@ def api_public_reputation():
     return resp
 
 
+_wanted_cache = {'data': None, 'ts': 0}
+_WANTED_TTL = 120
+
+
+@app.route('/api/public/wanted', methods=['GET'])
+@_limit("30 per minute")
+def api_public_wanted():
+    """Ranking publico de "mas buscados": jugadores con mas hacks confirmados.
+
+    Solo expone username + conteos agregados (mismo principio de red que la
+    reputacion individual). NUNCA expone IP, machine_id ni servidor/empresa.
+    """
+    _now = _time_mod.time()
+
+    # Mismo throttle por IP que la reputacion (red de seguridad anti-abuso)
+    _ip = (request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+           or request.remote_addr or 'unknown')
+    _bucket = [t for t in _rep_rate.get(_ip, []) if _now - t < _REP_RATE_WINDOW]
+    if len(_bucket) >= _REP_RATE_MAX:
+        _rep_rate[_ip] = _bucket
+        return jsonify({'error': 'demasiadas consultas, espera un momento'}), 429
+    _bucket.append(_now)
+    if len(_rep_rate) > 5000:
+        _rep_rate.clear()
+    _rep_rate[_ip] = _bucket
+
+    if _wanted_cache['data'] is not None and (_now - _wanted_cache['ts']) < _WANTED_TTL:
+        _r = jsonify(_wanted_cache['data'])
+        _r.headers['Cache-Control'] = 'public, max-age=120'
+        return _r
+
+    out = {'players': [], 'generated_at': int(_now)}
+    try:
+        rows = []
+        with get_api_db_cursor() as cur:
+            try:
+                cur.execute(
+                    f"SELECT minecraft_username,"
+                    f" SUM(CASE WHEN LOWER(verdict)='hack' THEN 1 ELSE 0 END) AS hacks,"
+                    f" COUNT(*) AS total"
+                    f" FROM scans"
+                    f" WHERE status={_PH} AND minecraft_username IS NOT NULL AND minecraft_username <> ''"
+                    f" GROUP BY minecraft_username"
+                    f" ORDER BY hacks DESC, total DESC"
+                    f" LIMIT 30",
+                    ('completed',)
+                )
+                rows = cur.fetchall() or []
+            except Exception:
+                try:
+                    cur.execute(
+                        f"SELECT minecraft_username,"
+                        f" SUM(CASE WHEN LOWER(verdict)='hack' THEN 1 ELSE 0 END) AS hacks,"
+                        f" COUNT(*) AS total"
+                        f" FROM scans"
+                        f" WHERE minecraft_username IS NOT NULL AND minecraft_username <> ''"
+                        f" GROUP BY minecraft_username"
+                        f" ORDER BY hacks DESC, total DESC"
+                        f" LIMIT 30"
+                    )
+                    rows = cur.fetchall() or []
+                except Exception:
+                    rows = []
+
+        players = []
+        for r in rows:
+            uname = _row_get(r, 0, 'minecraft_username') or ''
+            hacks = int(_row_get(r, 1, 'hacks') or 0)
+            total = int(_row_get(r, 2, 'total') or 0)
+            if not uname or hacks < 1:
+                continue
+            players.append({
+                'username':  uname,
+                'hacks':     hacks,
+                'scans':     total,
+                'hack_rate': round(hacks / total, 3) if total else 0,
+            })
+            if len(players) >= 15:
+                break
+        out['players'] = players
+    except Exception:
+        pass  # DB no disponible -> ranking vacio
+
+    _wanted_cache['data'] = out
+    _wanted_cache['ts'] = _now
+    resp = jsonify(out)
+    resp.headers['Cache-Control'] = 'public, max-age=120'
+    return resp
+
+
 @app.route('/descargar/exe')
 def descargar_exe():
     """Endpoint pÃºblico permanente para descargar ArgusScanner.exe sin autenticaciÃ³n."""

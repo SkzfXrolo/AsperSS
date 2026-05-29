@@ -198,6 +198,28 @@
             border-top: 1px solid var(--border); padding-top: 16px;
         }
 
+        /* ── Más buscados ── */
+        .wanted-sec { margin-top: 46px; }
+        .wanted-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+        .wanted-head h2 { font-family: var(--display); font-weight: 800; font-size: 22px; }
+        .wanted-head .sub { font-family: var(--mono); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-d); }
+        .wanted-list { display: flex; flex-direction: column; gap: 8px; }
+        .wanted-row {
+            display: flex; align-items: center; gap: 14px; cursor: pointer;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 12px 16px; backdrop-filter: blur(10px);
+            transition: .18s; text-align: left; width: 100%; font: inherit; color: inherit;
+        }
+        .wanted-row:hover { border-color: var(--border-h); transform: translateX(3px); background: rgba(139,123,255,.08); }
+        .wanted-rank { font-family: var(--display); font-weight: 800; font-size: 18px; color: var(--text-d); min-width: 28px; }
+        .wanted-row:nth-child(1) .wanted-rank { color: var(--red); }
+        .wanted-row:nth-child(2) .wanted-rank { color: var(--amber); }
+        .wanted-name { font-family: var(--display); font-weight: 700; font-size: 16px; word-break: break-all; flex: 1; }
+        .wanted-stat { font-family: var(--mono); font-size: 12px; color: var(--text-m); white-space: nowrap; }
+        .wanted-stat b { color: var(--red); }
+        .wanted-rate { font-family: var(--mono); font-size: 11px; color: var(--text-d); min-width: 50px; text-align: right; }
+        @media (max-width: 640px) { .wanted-stat { font-size: 11px; } .wanted-rate { display: none; } }
+
         footer {
             border-top: 1px solid var(--border); padding: 22px 28px;
             display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
@@ -240,6 +262,14 @@
         <p class="hint">Solo se muestran datos agregados y anónimos: veredictos, risk score e historial. Nunca IPs, máquinas, staff ni servidores.</p>
 
         <div id="result"></div>
+
+        <section class="wanted-sec" id="wanted" style="display:none">
+            <div class="wanted-head">
+                <h2>🎯 Más buscados</h2>
+                <span class="sub">Top hacks confirmados · red Argus</span>
+            </div>
+            <div class="wanted-list" id="wanted-list"></div>
+        </section>
     </div>
 
     <footer>
@@ -368,6 +398,42 @@
         var params = new URLSearchParams(location.search);
         var q = params.get('u') || params.get('user');
         if (q) { input.value = q; lookup(q.trim()); }
+
+        // ── Más buscados ──
+        var wantedSec = document.getElementById('wanted');
+        var wantedList = document.getElementById('wanted-list');
+
+        function loadWanted() {
+            fetch('/api/public/wanted')
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    var players = (d && d.players) || [];
+                    if (!players.length) { wantedSec.style.display = 'none'; return; }
+                    var html = '';
+                    players.forEach(function (p, i) {
+                        var pct = Math.round((p.hack_rate || 0) * 100);
+                        html += '<button type="button" class="wanted-row" data-u="' + esc(p.username) + '">';
+                        html +=   '<span class="wanted-rank">' + (i + 1) + '</span>';
+                        html +=   '<span class="wanted-name">' + esc(p.username) + '</span>';
+                        html +=   '<span class="wanted-stat"><b>' + p.hacks + '</b> hacks · ' + p.scans + ' scans</span>';
+                        html +=   '<span class="wanted-rate">' + pct + '%</span>';
+                        html += '</button>';
+                    });
+                    wantedList.innerHTML = html;
+                    wantedSec.style.display = 'block';
+                    Array.prototype.forEach.call(wantedList.querySelectorAll('.wanted-row'), function (el) {
+                        el.addEventListener('click', function () {
+                            var u = el.getAttribute('data-u');
+                            input.value = u;
+                            history.replaceState(null, '', '/reputacion?u=' + encodeURIComponent(u));
+                            lookup(u);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                        });
+                    });
+                })
+                .catch(function () { wantedSec.style.display = 'none'; });
+        }
+        loadWanted();
     })();
     </script>
 </body>
