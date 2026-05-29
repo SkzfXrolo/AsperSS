@@ -25,7 +25,7 @@
     background: rgba(20, 18, 28, 0.92);
     color: var(--text-h, #f1f5f9);
     border: 1px solid var(--border, rgba(255,255,255,0.08));
-    border-left: 3px solid var(--accent, #B87333);
+    border-left: 3px solid var(--accent, #8b7bff);
     border-radius: 10px;
     padding: 12px 14px 12px 14px;
     box-shadow: 0 10px 30px -10px rgba(0,0,0,0.6),
@@ -134,7 +134,7 @@
     height: 84px;
     margin-bottom: 18px;
     opacity: 0.85;
-    color: var(--accent, #B87333);
+    color: var(--accent, #8b7bff);
     filter: drop-shadow(0 4px 12px rgba(var(--accent-rgb), 0.18));
 }
 
@@ -156,7 +156,7 @@
 
 .argus-empty__action {
     margin-top: 4px;
-    background: var(--accent, #B87333);
+    background: var(--accent, #8b7bff);
     color: #fff;
     border: none;
     border-radius: 8px;
@@ -315,11 +315,11 @@
 .argus-tip-trigger {
     position: relative;
     cursor: help;
-    border-bottom: 1px dotted rgba(212,145,90,0.45);
+    border-bottom: 1px dotted rgba(139,123,255,0.45);
     padding-bottom: 1px;
     transition: border-color 220ms ease;
 }
-.argus-tip-trigger:hover { border-color: rgba(212,145,90,0.85); }
+.argus-tip-trigger:hover { border-color: rgba(139,123,255,0.85); }
 
 #argus-tooltip {
     position: fixed;
@@ -328,7 +328,7 @@
     max-width: 320px;
     padding: 10px 13px;
     border-radius: 9px;
-    background: rgba(20, 14, 8, 0.96);
+    background: rgba(12, 12, 34, 0.96);
     color: #f1e6d3;
     border: 1px solid rgba(var(--accent-rgb), 0.45);
     box-shadow:
@@ -362,7 +362,7 @@
     position: absolute;
     width: 8px;
     height: 8px;
-    background: rgba(20, 14, 8, 0.96);
+    background: rgba(12, 12, 34, 0.96);
     border: 1px solid rgba(var(--accent-rgb), 0.45);
     transform: rotate(45deg);
     border-top: none;
@@ -556,7 +556,7 @@ html.argus-fontsize-xlarge body { zoom: 1.24; }
 /* Focus rings mÃ¡s visibles para accesibilidad (Visual #52 b) */
 html.argus-fontsize-large *:focus-visible,
 html.argus-fontsize-xlarge *:focus-visible {
-    outline: 3px solid rgba(212, 145, 90, 0.85) !important;
+    outline: 3px solid rgba(139, 123, 255, 0.85) !important;
     outline-offset: 2px !important;
     border-radius: 4px;
 }
@@ -665,7 +665,7 @@ html.argus-density-compact .stat-value { font-size: calc(28px * var(--argus-text
 
 .scans-view-toggle {
     display: inline-flex;
-    background: rgba(20,14,8,0.45);
+    background: rgba(12,12,34,0.45);
     border: 1px solid rgba(var(--accent-rgb), 0.20);
     border-radius: 8px;
     padding: 3px;
@@ -775,7 +775,7 @@ html.argus-density-compact .stat-value { font-size: calc(28px * var(--argus-text
 
 #argus-confirm-modal #argus-confirm-cancel:hover {
     background: var(--accent-bg, rgba(var(--accent-rgb), 0.08)) !important;
-    color: var(--text, #EAD8C0) !important;
+    color: var(--text, #ECEDFF) !important;
     border-color: var(--border-h, rgba(var(--accent-rgb), 0.55)) !important;
 }
 #argus-confirm-modal #argus-confirm-ok:hover {
@@ -783,7 +783,7 @@ html.argus-density-compact .stat-value { font-size: calc(28px * var(--argus-text
     filter: brightness(1.08);
 }
 #argus-confirm-modal button:focus-visible {
-    outline: 2px solid var(--accent, #B87333);
+    outline: 2px solid var(--accent, #8b7bff);
     outline-offset: 2px;
 }
 
@@ -822,14 +822,14 @@ html.argus-density-compact .stat-value { font-size: calc(28px * var(--argus-text
     justify-content: center;
     gap: 12px;
     padding: 50px 24px;
-    color: var(--text-m, #A89578);
+    color: var(--text-m, #A6A8D0);
     text-align: center;
     min-height: 160px;
 }
 .argus-loading-title {
     font-size: 14px;
     font-weight: 700;
-    color: var(--text, #EAD8C0);
+    color: var(--text, #ECEDFF);
     letter-spacing: 0.2px;
 }
 .argus-loading-sub {
@@ -844,8 +844,8 @@ html.argus-density-compact .stat-value { font-size: calc(28px * var(--argus-text
     height: 36px;
     border-radius: 50%;
     border: 3px solid rgba(var(--accent-rgb), 0.12);
-    border-top-color: var(--accent, #B87333);
-    border-right-color: var(--accent, #B87333);
+    border-top-color: var(--accent, #8b7bff);
+    border-right-color: var(--accent, #8b7bff);
     animation: argusSpin 850ms linear infinite;
     box-shadow: 0 0 18px rgba(var(--accent-rgb), 0.18);
 }
@@ -857,8 +857,8 @@ html.argus-density-compact .stat-value { font-size: calc(28px * var(--argus-text
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--accent, #B87333);
-    box-shadow: 0 0 14px var(--accent, #B87333);
+    background: var(--accent, #8b7bff);
+    box-shadow: 0 0 14px var(--accent, #8b7bff);
     animation: argusPulse 1.4s ease infinite;
 }
 
@@ -876,7 +876,7 @@ html.argus-density-compact .stat-value { font-size: calc(28px * var(--argus-text
         90deg,
         transparent 0%,
         rgba(var(--accent-rgb), 0.10) 45%,
-        rgba(212, 145, 90, 0.20) 50%,
+        rgba(139, 123, 255, 0.20) 50%,
         rgba(var(--accent-rgb), 0.10) 55%,
         transparent 100%
     );
@@ -930,7 +930,7 @@ html.argus-density-compact .stat-value { font-size: calc(28px * var(--argus-text
 .argus-empty-title {
     font-size: 17px;
     font-weight: 800;
-    color: var(--text, #EAD8C0);
+    color: var(--text, #ECEDFF);
     letter-spacing: -0.2px;
     margin-top: 6px;
 }
@@ -946,7 +946,7 @@ html.argus-density-compact .stat-value { font-size: calc(28px * var(--argus-text
     font-weight: 700;
     padding: 9px 18px;
     border-radius: 8px;
-    background: linear-gradient(135deg, var(--accent, #B87333), var(--accent-d, #7A4824));
+    background: linear-gradient(135deg, var(--accent, #8b7bff), var(--accent-d, #5b3fd6));
     color: #fff;
     border: none;
     cursor: pointer;
@@ -975,7 +975,7 @@ html.argus-density-compact .stat-value { font-size: calc(28px * var(--argus-text
     font-weight: 800 !important;
     letter-spacing: -0.4px !important;
     line-height: 1.1 !important;
-    background: linear-gradient(135deg, var(--text, #EAD8C0) 0%, var(--text-m, #A89578) 100%);
+    background: linear-gradient(135deg, var(--text, #ECEDFF) 0%, var(--text-m, #A6A8D0) 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent !important;
@@ -998,7 +998,7 @@ body.light-theme .panel-title {
     font-weight: 800 !important;
     letter-spacing: -0.7px !important;
     line-height: 1.05 !important;
-    color: var(--text, #EAD8C0);
+    color: var(--text, #ECEDFF);
     margin-bottom: 6px;
     position: relative;
     padding-left: 14px;
@@ -1012,7 +1012,7 @@ body.light-theme .panel-title {
     bottom: 14%;
     width: 4px;
     border-radius: 2px;
-    background: linear-gradient(180deg, var(--accent, #B87333), var(--accent-d, #7A4824));
+    background: linear-gradient(180deg, var(--accent, #8b7bff), var(--accent-d, #5b3fd6));
     box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.45);
 }
 @media (max-width: 700px) {
@@ -1027,7 +1027,7 @@ body.light-theme .panel-title {
     font-weight: 700;
     letter-spacing: 1.6px;
     text-transform: uppercase;
-    color: var(--accent, #B87333);
+    color: var(--accent, #8b7bff);
     background: var(--accent-bg, rgba(var(--accent-rgb), 0.10));
     padding: 3px 10px 3px 10px;
     border-radius: 999px;
@@ -1044,7 +1044,7 @@ body.light-theme .panel-title {
 .section-description {
     font-size: 14.5px !important;
     line-height: 1.7 !important;
-    color: var(--text-m, #A89578) !important;
+    color: var(--text-m, #A6A8D0) !important;
     max-width: 720px;
     margin-top: 4px;
     margin-bottom: 26px !important;
@@ -1057,7 +1057,7 @@ body.light-theme .panel-title {
     font-weight: 800 !important;
     letter-spacing: -0.6px !important;
     line-height: 1.1 !important;
-    color: var(--text, #EAD8C0);
+    color: var(--text, #ECEDFF);
     margin: 0 0 4px;
 }
 @media (max-width: 700px) {
@@ -1070,7 +1070,7 @@ body.light-theme .panel-title {
     font-size: 18px !important;
     font-weight: 700 !important;
     letter-spacing: -0.2px !important;
-    color: var(--text, #EAD8C0) !important;
+    color: var(--text, #ECEDFF) !important;
 }
 
 
@@ -1128,7 +1128,7 @@ html.argus-lowmotion *::after {
 }
 .argus-achievement-progress-bar {
     height: 100%;
-    background: linear-gradient(90deg, #B48A62, #EAD8C0);
+    background: linear-gradient(90deg, #8b7bff, #ECEDFF);
     border-radius: 6px;
     transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
     box-shadow: 0 0 12px rgba(234, 216, 192, 0.25);
@@ -1136,7 +1136,7 @@ html.argus-lowmotion *::after {
 .argus-achievement-count {
     font-size: 24px;
     font-weight: 800;
-    color: #EAD8C0;
+    color: #ECEDFF;
     font-feature-settings: 'tnum';
     line-height: 1;
 }
@@ -1196,7 +1196,7 @@ html.argus-lowmotion *::after {
 .argus-achievement-label {
     font-size: 13px;
     font-weight: 700;
-    color: #EAD8C0;
+    color: #ECEDFF;
     line-height: 1.2;
     margin-bottom: 2px;
 }
@@ -1386,7 +1386,7 @@ body.tournament-mode .stat-card .number {
     vertical-align: middle;
 }
 .scans-view-host.scans-view-cards .results-table tbody tr td:first-child {
-    border-left: 3px solid var(--accent, #B87333);
+    border-left: 3px solid var(--accent, #8b7bff);
 }
 
 /* Toggle button hover (independiente del estado activo) */

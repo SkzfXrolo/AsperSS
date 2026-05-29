@@ -666,7 +666,7 @@
         if (!query) {
             box.innerHTML = '<div style="padding:24px;text-align:center;color:rgba(241,230,211,0.5);font-size:13px;">' +
                 'Empieza a escribir para buscar…<br>' +
-                '<span style="font-size:11px;opacity:0.7;">Tip: número = abrir scan · prefijo <code style="background:rgba(184,115,51,0.18);padding:1px 5px;border-radius:3px;">&gt;</code> = solo comandos · Cmd/Ctrl+K abre/cierra.</span>' +
+                '<span style="font-size:11px;opacity:0.7;">Tip: número = abrir scan · prefijo <code style="background:rgba(139,123,255,0.18);padding:1px 5px;border-radius:3px;">&gt;</code> = solo comandos · Cmd/Ctrl+K abre/cierra.</span>' +
                 '</div>';
             return;
         }
@@ -680,15 +680,15 @@
         const html = _qsItems.map((it, i) => {
             const active = (i === _qsActiveIdx);
             const baseStyle = 'display:flex;align-items:center;gap:10px;padding:9px 16px;cursor:pointer;' +
-                'border-left:3px solid ' + (active ? 'rgba(212,145,90,0.95)' : 'transparent') + ';' +
-                'background:' + (active ? 'rgba(184,115,51,0.10)' : 'transparent') + ';';
+                'border-left:3px solid ' + (active ? 'rgba(139,123,255,0.95)' : 'transparent') + ';' +
+                'background:' + (active ? 'rgba(139,123,255,0.10)' : 'transparent') + ';';
 
             // Visual #18 — render diferente para comandos
             if (it.kind === 'cmd') {
                 return '<div class="argus-qs-item" data-kind="cmd" data-cmd-id="' + _qsEscape(it.id) + '" data-idx="' + i + '"' +
                        ' style="' + baseStyle + '">' +
                            '<span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;' +
-                                'background:rgba(184,115,51,0.18);color:#fbbf24;font-size:13px;font-weight:700;flex-shrink:0;">›_</span>' +
+                                'background:rgba(139,123,255,0.18);color:#fbbf24;font-size:13px;font-weight:700;flex-shrink:0;">›_</span>' +
                            '<div style="flex:1;min-width:0;">' +
                                '<div style="font-size:13px;font-weight:600;color:#f1e6d3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
                                    _qsEscape(String(it.title)) +
@@ -1150,8 +1150,8 @@
         document.querySelectorAll('#scans-view-toggle .scans-view-btn').forEach(btn => {
             const active = btn.dataset.scansView === v;
             btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-            btn.style.background = active ? 'rgba(184,115,51,.18)' : 'transparent';
-            btn.style.color      = active ? 'var(--accent, #B87333)' : 'var(--text-h)';
+            btn.style.background = active ? 'rgba(139,123,255,.18)' : 'transparent';
+            btn.style.color      = active ? 'var(--accent, #8b7bff)' : 'var(--text-h)';
             btn.style.fontWeight = active ? '600' : '400';
         });
         try { localStorage.setItem(VIEW_KEY, v); } catch (_e) {}
@@ -1212,7 +1212,7 @@
             });
             // Focus visible (ring bronce coherente con el resto)
             row.addEventListener('focus', () => {
-                row.style.boxShadow = '0 0 0 2px rgba(184,115,51,.6)';
+                row.style.boxShadow = '0 0 0 2px rgba(139,123,255,.6)';
                 row.style.zIndex = '5';
                 row.style.position = 'relative';
             });
@@ -1318,7 +1318,7 @@
             window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if (reduce) return;
         const o = opts || {};
-        const palette = o.palette || ['#10b981', '#34d399', '#6ee7b7', '#B87333', '#fbbf24', '#FFFFFF'];
+        const palette = o.palette || ['#10b981', '#34d399', '#6ee7b7', '#8b7bff', '#fbbf24', '#FFFFFF'];
         const count   = Math.max(30, Math.min(180, o.count || 90));
         const duration = Math.max(700, Math.min(3500, o.duration || 1800));
         const originX = (o.originX != null ? o.originX : 0.5) * window.innerWidth;
@@ -1458,8 +1458,8 @@
         const okLabel     = o.ok     || 'Confirmar';
         const cancelLabel = o.cancel || 'Cancelar';
         const danger = !!o.danger;
-        const okBg     = danger ? 'linear-gradient(135deg,#dc2626,#b91c1c)' : 'linear-gradient(135deg,var(--accent,#B87333),var(--accent-d,#7A4824))';
-        const okShadow = danger ? 'rgba(220,38,38,0.40)' : 'rgba(184,115,51,0.40)';
+        const okBg     = danger ? 'linear-gradient(135deg,#dc2626,#b91c1c)' : 'linear-gradient(135deg,var(--accent,#8b7bff),var(--accent-d,#5b3fd6))';
+        const okShadow = danger ? 'rgba(220,38,38,0.40)' : 'rgba(139,123,255,0.40)';
 
         // Si ya hay uno abierto, lo cerramos primero
         document.getElementById('argus-confirm-modal')?.remove();
@@ -1488,24 +1488,24 @@
 
             root.innerHTML = `
                 <div role="dialog" aria-modal="true" aria-labelledby="argus-confirm-title"
-                     style="background:var(--bg-2,#15110A);color:var(--text,#EAD8C0);
-                            border:1px solid var(--border-m,rgba(184,115,51,0.28));
+                     style="background:var(--bg-2,#0d0d22);color:var(--text,#ECEDFF);
+                            border:1px solid var(--border-m,rgba(139,123,255,0.28));
                             border-radius:14px;width:min(460px,92vw);
                             box-shadow:0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04) inset;
                             animation:argusConfirmPop 220ms cubic-bezier(0.22,1,0.36,1);overflow:hidden;">
                     <div style="padding:20px 22px 8px;">
-                        <div id="argus-confirm-title" style="font-size:15px;font-weight:700;color:var(--text-h,#EAD8C0);letter-spacing:0.2px;">${title.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+                        <div id="argus-confirm-title" style="font-size:15px;font-weight:700;color:var(--text-h,#ECEDFF);letter-spacing:0.2px;">${title.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
                     </div>
-                    <div style="padding:6px 22px 18px;font-size:13px;line-height:1.55;color:var(--text-m,#A89578);">
+                    <div style="padding:6px 22px 18px;font-size:13px;line-height:1.55;color:var(--text-m,#A6A8D0);">
                         ${bodyHtml}
                     </div>
                     <div style="padding:14px 22px;background:rgba(0,0,0,0.18);
-                                border-top:1px solid var(--border,rgba(184,115,51,0.12));
+                                border-top:1px solid var(--border,rgba(139,123,255,0.12));
                                 display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
                         <button id="argus-confirm-cancel" type="button"
                                 style="font-size:12.5px;font-weight:600;padding:8px 16px;border-radius:8px;
-                                       background:transparent;border:1px solid var(--border-m,rgba(184,115,51,0.28));
-                                       color:var(--text-m,#A89578);cursor:pointer;letter-spacing:0.2px;
+                                       background:transparent;border:1px solid var(--border-m,rgba(139,123,255,0.28));
+                                       color:var(--text-m,#A6A8D0);cursor:pointer;letter-spacing:0.2px;
                                        transition:all 160ms ease;">${cancelLabel.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</button>
                         <button id="argus-confirm-ok" type="button"
                                 style="font-size:12.5px;font-weight:700;padding:8px 18px;border-radius:8px;
@@ -1679,13 +1679,13 @@
         <svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Risk score histórico">
             <defs>
                 <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%"   stop-color="#EAD8C0" stop-opacity="0.32"/>
-                    <stop offset="100%" stop-color="#EAD8C0" stop-opacity="0"/>
+                    <stop offset="0%"   stop-color="#ECEDFF" stop-opacity="0.32"/>
+                    <stop offset="100%" stop-color="#ECEDFF" stop-opacity="0"/>
                 </linearGradient>
             </defs>
             ${yTickHtml}
             <path d="${area}" fill="url(#${gradId})"/>
-            <path d="${line}" fill="none" stroke="#EAD8C0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"${animAttr}/>
+            <path d="${line}" fill="none" stroke="#ECEDFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"${animAttr}/>
             ${dotsHtml}
             ${xLabelHtml}
         </svg>`;

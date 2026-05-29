@@ -79,7 +79,7 @@ setTimeout(() => {
 
 // ── Paleta de colores ──────────────────────────────────────────────────────
 const ARGUS_PALETTES = {
-    copper: { label:'Cobre',   swatch:'#B87333', accent:'#B87333', d:'#7A4824', bg:'rgba(184,115,51,0.08)', glow:'rgba(184,115,51,0.22)', border:'rgba(184,115,51,0.12)', borderM:'rgba(184,115,51,0.28)', borderH:'rgba(184,115,51,0.55)' },
+    cosmic: { label:'Cosmico', swatch:'#8b7bff', accent:'#8b7bff', d:'#5b3fd6', bg:'rgba(139,123,255,0.10)', glow:'rgba(139,123,255,0.28)', border:'rgba(139,123,255,0.12)', borderM:'rgba(139,123,255,0.28)', borderH:'rgba(139,123,255,0.55)' },
     purple: { label:'Morado',  swatch:'#8B5CF6', accent:'#8B5CF6', d:'#6D28D9', bg:'rgba(139,92,246,0.08)', glow:'rgba(139,92,246,0.22)', border:'rgba(139,92,246,0.12)', borderM:'rgba(139,92,246,0.28)', borderH:'rgba(139,92,246,0.55)' },
     blue:   { label:'Azul',    swatch:'#3B82F6', accent:'#3B82F6', d:'#1D4ED8', bg:'rgba(59,130,246,0.08)',  glow:'rgba(59,130,246,0.22)',  border:'rgba(59,130,246,0.12)',  borderM:'rgba(59,130,246,0.28)',  borderH:'rgba(59,130,246,0.55)'  },
     green:  { label:'Verde',   swatch:'#10B981', accent:'#10B981', d:'#059669', bg:'rgba(16,185,129,0.08)',  glow:'rgba(16,185,129,0.22)',  border:'rgba(16,185,129,0.12)',  borderM:'rgba(16,185,129,0.28)',  borderH:'rgba(16,185,129,0.55)'  },
@@ -89,7 +89,7 @@ const ARGUS_PALETTES = {
     cyan:   { label:'Cyan',    swatch:'#06B6D4', accent:'#06B6D4', d:'#0891B2', bg:'rgba(6,182,212,0.08)',   glow:'rgba(6,182,212,0.22)',   border:'rgba(6,182,212,0.12)',   borderM:'rgba(6,182,212,0.28)',   borderH:'rgba(6,182,212,0.55)'   },
     white:  { label:'Blanco',  swatch:'#E2E8F7', accent:'#E2E8F7', d:'#C4CFDF', bg:'rgba(226,232,247,0.08)', glow:'rgba(226,232,247,0.15)', border:'rgba(226,232,247,0.10)', borderM:'rgba(226,232,247,0.22)', borderH:'rgba(226,232,247,0.45)' },
 };
-let _currentPalette = 'copper';
+let _currentPalette = 'cosmic';
 
 function applyPalette(name) {
     const p = ARGUS_PALETTES[name];
@@ -208,7 +208,8 @@ function _loadSavedPalette() {
     if (bgCfg && bgCfg.preset && bgCfg.preset !== 'default') {
         return;
     }
-    const saved = localStorage.getItem('argus_palette');
+    let saved = localStorage.getItem('argus_palette');
+    if (saved === 'copper') { saved = 'cosmic'; }
     if (saved && ARGUS_PALETTES[saved]) applyPalette(saved);
 }
 
@@ -487,7 +488,7 @@ function showToast(message, type = 'info', scanIdOrOpts = null) {
     const onClick  = opts.onClick || null;
 
     const cfg = {
-        info:    { color: '#B87333', bg: 'rgba(184,115,51,0.12)', icon: '◆' },
+        info:    { color: '#8b7bff', bg: 'rgba(139,123,255,0.12)', icon: '◆' },
         success: { color: '#10b981', bg: 'rgba(16,185,129,0.12)',  icon: '✓' },
         error:   { color: '#ef4444', bg: 'rgba(239,68,68,0.12)',   icon: '✗' },
         warning: { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)',  icon: '⚠' },
@@ -685,15 +686,15 @@ async function openShareVerdictModal(scanId) {
     const ctx = canvas.getContext('2d');
 
     const palette = verdictKind === 'clean'
-        ? { bg: '#0E2A1E', accent: '#10b981', accentSoft: 'rgba(16,185,129,0.16)', stripe: '#34d399', text: '#EAD8C0' }
+        ? { bg: '#0E2A1E', accent: '#10b981', accentSoft: 'rgba(16,185,129,0.16)', stripe: '#34d399', text: '#ECEDFF' }
         : verdictKind === 'hack'
-        ? { bg: '#2A0E10', accent: '#ef4444', accentSoft: 'rgba(239,68,68,0.16)', stripe: '#fca5a5', text: '#EAD8C0' }
-        : { bg: '#1A140C', accent: '#B87333', accentSoft: 'rgba(184,115,51,0.18)', stripe: '#D4915A', text: '#EAD8C0' };
+        ? { bg: '#2A0E10', accent: '#ef4444', accentSoft: 'rgba(239,68,68,0.16)', stripe: '#fca5a5', text: '#ECEDFF' }
+        : { bg: '#12122a', accent: '#8b7bff', accentSoft: 'rgba(139,123,255,0.18)', stripe: '#b9a7ff', text: '#ECEDFF' };
 
     // Background con gradiente diagonal
     const grd = ctx.createLinearGradient(0, 0, W, H);
     grd.addColorStop(0,   palette.bg);
-    grd.addColorStop(0.6, '#15110A');
+    grd.addColorStop(0.6, '#0d0d22');
     grd.addColorStop(1,   palette.bg);
     ctx.fillStyle = grd;
     ctx.fillRect(0, 0, W, H);
@@ -703,7 +704,7 @@ async function openShareVerdictModal(scanId) {
     ctx.fillRect(0, 0, 8, H);
 
     // Branding header
-    ctx.fillStyle = '#B87333';
+    ctx.fillStyle = '#8b7bff';
     ctx.font = 'bold 16px "JetBrains Mono", monospace';
     ctx.textBaseline = 'top';
     ctx.fillText('ARGUS · ALL-SEEING', 40, 36);
@@ -775,8 +776,8 @@ async function openShareVerdictModal(scanId) {
 
     // Espacio reservado para el QR (lo cargamos asíncrono y reemplazamos)
     const qrPad = ctx.createLinearGradient(W - 240, H - 240, W, H);
-    qrPad.addColorStop(0, 'rgba(184,115,51,0.10)');
-    qrPad.addColorStop(1, 'rgba(184,115,51,0.04)');
+    qrPad.addColorStop(0, 'rgba(139,123,255,0.10)');
+    qrPad.addColorStop(1, 'rgba(139,123,255,0.04)');
     ctx.fillStyle = qrPad;
     ctx.fillRect(W - 240, H - 240, 200, 200);
     ctx.strokeStyle = palette.accent;
@@ -797,8 +798,8 @@ async function openShareVerdictModal(scanId) {
     root.style.cssText = 'position:fixed;inset:0;z-index:99996;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(8,6,4,0.62);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);animation:argusConfirmFadeIn 180ms ease;';
     root.innerHTML = `
         <div role="dialog" aria-modal="true" aria-labelledby="argus-share-title"
-             style="background:var(--bg-2,#15110A);color:var(--text,#EAD8C0);
-                    border:1px solid var(--border-m,rgba(184,115,51,0.28));
+             style="background:var(--bg-2,#0d0d22);color:var(--text,#ECEDFF);
+                    border:1px solid var(--border-m,rgba(139,123,255,0.28));
                     border-radius:14px;width:min(720px,94vw);max-height:92vh;overflow:auto;
                     box-shadow:0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04) inset;
                     animation:argusConfirmPop 220ms cubic-bezier(0.22,1,0.36,1);">
@@ -814,7 +815,7 @@ async function openShareVerdictModal(scanId) {
                     <button id="argus-share-download" type="button"
                         style="font-size:12.5px;font-weight:700;padding:9px 16px;border-radius:8px;border:none;cursor:pointer;
                                color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-d));
-                               box-shadow:0 6px 18px -6px rgba(184,115,51,0.4);">⬇ Descargar PNG</button>
+                               box-shadow:0 6px 18px -6px rgba(139,123,255,0.4);">⬇ Descargar PNG</button>
                     <button id="argus-share-copy-link" type="button"
                         style="font-size:12.5px;font-weight:600;padding:9px 16px;border-radius:8px;cursor:pointer;
                                background:transparent;color:var(--text-m);border:1px solid var(--border-m);">🔗 Copiar enlace</button>
@@ -848,7 +849,7 @@ async function openShareVerdictModal(scanId) {
     qrImg.onload = () => {
         try {
             // Limpiar el placeholder y dibujar el QR real (con borde claro)
-            ctx.fillStyle = '#15110A';
+            ctx.fillStyle = '#0d0d22';
             ctx.fillRect(W - 240, H - 240, 200, 200);
             ctx.drawImage(qrImg, W - 230, H - 230, 180, 180);
             ctx.strokeStyle = palette.accent;
@@ -909,8 +910,8 @@ async function openMyActivityHeatmap() {
     root.style.cssText = 'position:fixed;inset:0;z-index:99996;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(8,6,4,0.62);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);animation:argusConfirmFadeIn 180ms ease;';
     root.innerHTML = `
         <div role="dialog" aria-modal="true" aria-labelledby="argus-activity-title"
-             style="background:var(--bg-2,#15110A);color:var(--text,#EAD8C0);
-                    border:1px solid var(--border-m,rgba(184,115,51,0.28));
+             style="background:var(--bg-2,#0d0d22);color:var(--text,#ECEDFF);
+                    border:1px solid var(--border-m,rgba(139,123,255,0.28));
                     border-radius:14px;width:min(900px,96vw);max-height:92vh;overflow:auto;
                     box-shadow:0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04) inset;
                     animation:argusConfirmPop 220ms cubic-bezier(0.22,1,0.36,1);">
@@ -923,9 +924,9 @@ async function openMyActivityHeatmap() {
                     style="background:transparent;border:1px solid var(--border-m);color:var(--text-m);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;flex-shrink:0;">×</button>
             </div>
             <div class="argus-chip-tabs" role="tablist" aria-label="Secciones de mi actividad" style="display:flex;gap:6px;padding:14px 22px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
-                <button class="argus-chip-tab" role="tab" aria-selected="true" tabindex="0" data-myact-tab="heatmap" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-m,rgba(184,115,51,0.28));background:rgba(180,138,98,0.18);color:var(--text);font-weight:700;font-size:12.5px;cursor:pointer;letter-spacing:0.3px;">Heatmap</button>
-                <button class="argus-chip-tab" role="tab" aria-selected="false" tabindex="-1" data-myact-tab="risk" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-m,rgba(184,115,51,0.28));background:transparent;color:var(--text-m);font-weight:700;font-size:12.5px;cursor:pointer;letter-spacing:0.3px;">Risk score</button>
-                <button class="argus-chip-tab" role="tab" aria-selected="false" tabindex="-1" data-myact-tab="achievements" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-m,rgba(184,115,51,0.28));background:transparent;color:var(--text-m);font-weight:700;font-size:12.5px;cursor:pointer;letter-spacing:0.3px;">Logros</button>
+                <button class="argus-chip-tab" role="tab" aria-selected="true" tabindex="0" data-myact-tab="heatmap" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-m,rgba(139,123,255,0.28));background:rgba(180,138,98,0.18);color:var(--text);font-weight:700;font-size:12.5px;cursor:pointer;letter-spacing:0.3px;">Heatmap</button>
+                <button class="argus-chip-tab" role="tab" aria-selected="false" tabindex="-1" data-myact-tab="risk" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-m,rgba(139,123,255,0.28));background:transparent;color:var(--text-m);font-weight:700;font-size:12.5px;cursor:pointer;letter-spacing:0.3px;">Risk score</button>
+                <button class="argus-chip-tab" role="tab" aria-selected="false" tabindex="-1" data-myact-tab="achievements" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border-m,rgba(139,123,255,0.28));background:transparent;color:var(--text-m);font-weight:700;font-size:12.5px;cursor:pointer;letter-spacing:0.3px;">Logros</button>
             </div>
             <div id="argus-activity-body" style="padding:22px;">
                 <div style="display:flex;align-items:center;justify-content:center;padding:60px 0;color:var(--text-d);font-size:13px;">Cargando actividad…</div>
@@ -1072,8 +1073,8 @@ async function openCompareScansModal(scanId) {
     root.style.cssText = 'position:fixed;inset:0;z-index:99996;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(8,6,4,0.62);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);animation:argusConfirmFadeIn 180ms ease;';
     root.innerHTML = `
         <div role="dialog" aria-modal="true" aria-labelledby="argus-compare-title"
-             style="background:var(--bg-2,#15110A);color:var(--text,#EAD8C0);
-                    border:1px solid var(--border-m,rgba(184,115,51,0.28));
+             style="background:var(--bg-2,#0d0d22);color:var(--text,#ECEDFF);
+                    border:1px solid var(--border-m,rgba(139,123,255,0.28));
                     border-radius:14px;width:min(960px,96vw);max-height:92vh;overflow:auto;
                     box-shadow:0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04) inset;
                     animation:argusConfirmPop 220ms cubic-bezier(0.22,1,0.36,1);">
@@ -1167,7 +1168,7 @@ function _verdictChip(v) {
         return '<span style="display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:0.5px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.14);color:#34d399;border:1px solid rgba(16,185,129,0.32);">CLEAN</span>';
     if (t.includes('hack'))
         return '<span style="display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:0.5px;padding:2px 8px;border-radius:999px;background:rgba(239,68,68,0.14);color:#f87171;border:1px solid rgba(239,68,68,0.32);">HACK</span>';
-    return '<span style="display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:0.5px;padding:2px 8px;border-radius:999px;background:rgba(184,115,51,0.10);color:var(--text-m);border:1px solid var(--border-m);">PENDIENTE</span>';
+    return '<span style="display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:0.5px;padding:2px 8px;border-radius:999px;background:rgba(139,123,255,0.10);color:var(--text-m);border:1px solid var(--border-m);">PENDIENTE</span>';
 }
 
 function _renderCompareScansBody(container, current, others) {
@@ -1232,7 +1233,7 @@ function _buildCompareGridHtml(a, b) {
 
     const colCss = `display:grid;grid-template-columns:1fr 1fr;gap:12px;`;
     const colHeaderCss = `padding:10px 14px;border-radius:8px;font-size:13px;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;`;
-    const aHeader = `<div style="${colHeaderCss}background:rgba(184,115,51,0.10);border:1px solid rgba(184,115,51,0.30);color:var(--accent);">
+    const aHeader = `<div style="${colHeaderCss}background:rgba(139,123,255,0.10);border:1px solid rgba(139,123,255,0.30);color:var(--accent);">
         <span>Actual · #${a.id}</span><span style="font-size:11px;color:var(--text-d);font-family:JetBrains Mono,monospace;">${(a.started_at || '').slice(0, 16)}</span>
     </div>`;
     const bHeader = `<div style="${colHeaderCss}background:rgba(96,165,250,0.10);border:1px solid rgba(96,165,250,0.32);color:#60a5fa;">
@@ -1245,7 +1246,7 @@ function _buildCompareGridHtml(a, b) {
 
     // Diffs row
     const diffRiskCard = `
-        <div style="padding:14px 16px;background:linear-gradient(135deg, rgba(184,115,51,0.06), rgba(96,165,250,0.06));border:1px dashed var(--border-m);border-radius:10px;flex:1;min-width:160px;">
+        <div style="padding:14px 16px;background:linear-gradient(135deg, rgba(139,123,255,0.06), rgba(96,165,250,0.06));border:1px dashed var(--border-m);border-radius:10px;flex:1;min-width:160px;">
             <div style="font-size:10.5px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-d);">Δ Risk Score</div>
             <div style="font-size:22px;font-weight:800;margin-top:4px;display:flex;align-items:center;gap:10px;">
                 ${arrow(riskA - riskB)}
@@ -1258,13 +1259,13 @@ function _buildCompareGridHtml(a, b) {
     const critA = num(a.issues_critical), critB = num(b.issues_critical);
     const filesA = num(a.total_files_scanned), filesB = num(b.total_files_scanned);
     const diffIssuesCard = `
-        <div style="padding:14px 16px;background:linear-gradient(135deg, rgba(184,115,51,0.06), rgba(96,165,250,0.06));border:1px dashed var(--border-m);border-radius:10px;flex:1;min-width:160px;">
+        <div style="padding:14px 16px;background:linear-gradient(135deg, rgba(139,123,255,0.06), rgba(96,165,250,0.06));border:1px dashed var(--border-m);border-radius:10px;flex:1;min-width:160px;">
             <div style="font-size:10.5px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-d);">Δ Issues</div>
             <div style="font-size:22px;font-weight:800;margin-top:4px;display:flex;align-items:center;gap:10px;">${arrow(issA - issB)}</div>
             <div style="font-size:11.5px;color:var(--text-m);margin-top:3px;">Críticos: ${arrow(critA - critB)}</div>
         </div>`;
     const diffFilesCard = `
-        <div style="padding:14px 16px;background:linear-gradient(135deg, rgba(184,115,51,0.06), rgba(96,165,250,0.06));border:1px dashed var(--border-m);border-radius:10px;flex:1;min-width:160px;">
+        <div style="padding:14px 16px;background:linear-gradient(135deg, rgba(139,123,255,0.06), rgba(96,165,250,0.06));border:1px dashed var(--border-m);border-radius:10px;flex:1;min-width:160px;">
             <div style="font-size:10.5px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-d);">Δ Archivos escaneados</div>
             <div style="font-size:22px;font-weight:800;margin-top:4px;display:flex;align-items:center;gap:10px;">${arrow(filesA - filesB, true)}</div>
             <div style="font-size:11.5px;color:var(--text-m);margin-top:3px;">${pctDelta(filesA, filesB)} variación</div>
@@ -1354,28 +1355,28 @@ function _renderActivityHeatmap(container, data) {
     };
     const colors = [
         'rgba(255,255,255,0.04)',
-        'rgba(184,115,51,0.22)',
-        'rgba(184,115,51,0.45)',
-        'rgba(212,145,90,0.72)',
-        '#D4915A',
+        'rgba(139,123,255,0.22)',
+        'rgba(139,123,255,0.45)',
+        'rgba(139,123,255,0.72)',
+        '#b9a7ff',
     ];
 
     // Stats top row
     const statsHtml = `
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px;">
-            <div style="padding:14px 16px;background:rgba(184,115,51,0.06);border:1px solid var(--border);border-radius:10px;">
+            <div style="padding:14px 16px;background:rgba(139,123,255,0.06);border:1px solid var(--border);border-radius:10px;">
                 <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-d);">Acciones totales</div>
                 <div style="font-size:24px;font-weight:800;color:var(--accent);font-feature-settings:'tnum' 1;margin-top:4px;">${total}</div>
             </div>
-            <div style="padding:14px 16px;background:rgba(184,115,51,0.06);border:1px solid var(--border);border-radius:10px;">
+            <div style="padding:14px 16px;background:rgba(139,123,255,0.06);border:1px solid var(--border);border-radius:10px;">
                 <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-d);">Días activos</div>
                 <div style="font-size:24px;font-weight:800;color:var(--text);font-feature-settings:'tnum' 1;margin-top:4px;">${active} <span style="font-size:13px;font-weight:500;color:var(--text-d);">/ ${daysBack}</span></div>
             </div>
-            <div style="padding:14px 16px;background:rgba(184,115,51,0.06);border:1px solid var(--border);border-radius:10px;">
+            <div style="padding:14px 16px;background:rgba(139,123,255,0.06);border:1px solid var(--border);border-radius:10px;">
                 <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-d);">Racha actual</div>
                 <div style="font-size:24px;font-weight:800;color:${streak >= 7 ? '#fbbf24' : 'var(--text)'};font-feature-settings:'tnum' 1;margin-top:4px;">${streak} <span style="font-size:13px;font-weight:500;color:var(--text-d);">${streak === 1 ? 'día' : 'días'}</span></div>
             </div>
-            <div style="padding:14px 16px;background:rgba(184,115,51,0.06);border:1px solid var(--border);border-radius:10px;">
+            <div style="padding:14px 16px;background:rgba(139,123,255,0.06);border:1px solid var(--border);border-radius:10px;">
                 <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-d);">Mejor racha</div>
                 <div style="font-size:24px;font-weight:800;color:var(--text);font-feature-settings:'tnum' 1;margin-top:4px;">${best} <span style="font-size:13px;font-weight:500;color:var(--text-d);">${best === 1 ? 'día' : 'días'}</span></div>
             </div>
@@ -1410,7 +1411,7 @@ function _renderActivityHeatmap(container, data) {
             const lvl = intensity(c);
             const fill = colors[lvl];
             const isToday = (cellDate.toDateString() === today.toDateString());
-            const stroke = isToday ? '#fbbf24' : (lvl > 0 ? 'rgba(184,115,51,0.32)' : 'rgba(184,115,51,0.10)');
+            const stroke = isToday ? '#fbbf24' : (lvl > 0 ? 'rgba(139,123,255,0.32)' : 'rgba(139,123,255,0.10)');
             const tooltip = c > 0
                 ? `${c} ${c === 1 ? 'acción' : 'acciones'} · ${dateStr}`
                 : `Sin actividad · ${dateStr}`;
@@ -1435,7 +1436,7 @@ function _renderActivityHeatmap(container, data) {
     const legendHtml = `
         <div style="display:flex;align-items:center;gap:10px;margin-top:14px;font-size:11px;color:var(--text-d);font-family:'JetBrains Mono', monospace;">
             <span style="opacity:0.7;">Menos</span>
-            <span style="display:inline-block;width:13px;height:13px;border-radius:2.5px;background:${colors[0]};border:1px solid rgba(184,115,51,0.10);"></span>
+            <span style="display:inline-block;width:13px;height:13px;border-radius:2.5px;background:${colors[0]};border:1px solid rgba(139,123,255,0.10);"></span>
             <span style="display:inline-block;width:13px;height:13px;border-radius:2.5px;background:${colors[1]};"></span>
             <span style="display:inline-block;width:13px;height:13px;border-radius:2.5px;background:${colors[2]};"></span>
             <span style="display:inline-block;width:13px;height:13px;border-radius:2.5px;background:${colors[3]};"></span>
@@ -1470,7 +1471,7 @@ function _renderActivityHeatmap(container, data) {
             if (!text) return;
             if (!tip) {
                 tip = document.createElement('div');
-                tip.style.cssText = 'position:fixed;z-index:99997;pointer-events:none;background:rgba(20,16,10,0.96);color:#EAD8C0;border:1px solid rgba(184,115,51,0.32);border-radius:6px;padding:6px 10px;font-size:11.5px;font-family:JetBrains Mono, monospace;box-shadow:0 8px 22px rgba(0,0,0,0.45);white-space:nowrap;';
+                tip.style.cssText = 'position:fixed;z-index:99997;pointer-events:none;background:rgba(18,18,46,0.96);color:#ECEDFF;border:1px solid rgba(139,123,255,0.32);border-radius:6px;padding:6px 10px;font-size:11.5px;font-family:JetBrains Mono, monospace;box-shadow:0 8px 22px rgba(0,0,0,0.45);white-space:nowrap;';
                 document.body.appendChild(tip);
             }
             tip.textContent = text;
@@ -2209,7 +2210,7 @@ function _renderEnsembleVerdict(scan) {
                 ${_row('Convergencia', convSys.score||0, 4, '#818cf8')}
                 ${_row('Hash Rep.',    hashSys.score||0, 4, '#ef4444')}
                 ${_row('Temporalidad', tempSys.score||0, 4, '#38bdf8')}
-                ${_row('ML',           mlSys.score||0,   4, '#D4915A')}
+                ${_row('ML',           mlSys.score||0,   4, '#b9a7ff')}
             </div>
             ${topClients ? `<div style="font-size:9px;color:var(--text-d);">Clientes: ${topClients}</div>` : ''}
         </div>`;
@@ -2338,8 +2339,8 @@ async function loadMonthlyChart() {
                 labels,
                 datasets: [{
                     data: values,
-                    borderColor: '#B87333',
-                    backgroundColor: 'rgba(184,115,51,0.10)',
+                    borderColor: '#8b7bff',
+                    backgroundColor: 'rgba(139,123,255,0.10)',
                     borderWidth: 2,
                     pointRadius: 0,
                     tension: 0.4,
@@ -2531,7 +2532,7 @@ async function _loadScanHeatmap() {
                 const bg  = dv > 0
                     ? `rgba(239,68,68,${0.15 + (pct/100)*0.65})`
                     : v > 0
-                        ? `rgba(184,115,51,${0.12 + (pct/100)*0.55})`
+                        ? `rgba(139,123,255,${0.12 + (pct/100)*0.55})`
                         : 'rgba(255,255,255,0.03)';
                 const title = v > 0 ? `${day} ${h}h: ${v} scan(s)${dv>0?', '+dv+' con hacks':''}` : '';
                 html += `<td title="${title}" style="padding:1px;">
@@ -2542,7 +2543,7 @@ async function _loadScanHeatmap() {
         });
         html += '</table>';
         html += `<div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--text-d);">
-            <span><span style="display:inline-block;width:10px;height:10px;background:rgba(184,115,51,0.5);border-radius:2px;margin-right:3px;vertical-align:middle;"></span>Scan</span>
+            <span><span style="display:inline-block;width:10px;height:10px;background:rgba(139,123,255,0.5);border-radius:2px;margin-right:3px;vertical-align:middle;"></span>Scan</span>
             <span><span style="display:inline-block;width:10px;height:10px;background:rgba(239,68,68,0.5);border-radius:2px;margin-right:3px;vertical-align:middle;"></span>Con hack</span>
             <span style="margin-left:auto;">Total: ${data.total_scans} scans en 30d</span>
         </div>`;
@@ -2582,7 +2583,7 @@ async function searchMojangProfile() {
                     </div>
                 </div>
                 <button onclick="searchScansForMojang('${data.username}')"
-                    style="margin-top:8px;width:100%;padding:5px;border-radius:6px;border:1px solid rgba(184,115,51,.4);background:rgba(184,115,51,.1);color:var(--accent);font-size:11px;cursor:pointer;">
+                    style="margin-top:8px;width:100%;padding:5px;border-radius:6px;border:1px solid rgba(139,123,255,.4);background:rgba(139,123,255,.1);color:var(--accent);font-size:11px;cursor:pointer;">
                     Ver scans de ${data.username}
                 </button>
             </div>`;
@@ -2637,7 +2638,7 @@ async function loadTokens() {
                 }
                 
                 const codeDisplay = token.short_code
-                    ? `<span style="font-family:'Consolas',monospace;font-size:18px;font-weight:900;letter-spacing:4px;color:#D4915A;">${token.short_code}</span>`
+                    ? `<span style="font-family:'Consolas',monospace;font-size:18px;font-weight:900;letter-spacing:4px;color:#b9a7ff;">${token.short_code}</span>`
                     : `<code style="font-size:11px;opacity:0.5;">${tokenStr.substring(0, 12)}…</code>`;
                 return `
                 <tr>
@@ -3640,12 +3641,12 @@ function _openScreenshotLightbox(src) {
         <button id="argus-lb-close" aria-label="Cerrar"
             style="position:absolute;top:18px;right:22px;z-index:2;
                    width:38px;height:38px;border-radius:50%;
-                   background:rgba(20,14,8,0.85);border:1px solid rgba(184,115,51,0.45);
+                   background:rgba(12,12,34,0.85);border:1px solid rgba(139,123,255,0.45);
                    color:#f1e6d3;cursor:pointer;font-size:18px;line-height:1;
                    display:flex;align-items:center;justify-content:center;">×</button>
         <div id="argus-lb-hint"
             style="position:absolute;bottom:18px;left:50%;transform:translateX(-50%);
-                   background:rgba(20,14,8,0.75);border:1px solid rgba(184,115,51,0.30);
+                   background:rgba(12,12,34,0.75);border:1px solid rgba(139,123,255,0.30);
                    color:rgba(241,230,211,0.85);font-size:12px;padding:6px 14px;
                    border-radius:20px;pointer-events:none;letter-spacing:0.2px;">
             Rueda: zoom · Arrastrar: pan · Doble click: reset · Esc: cerrar
@@ -3656,7 +3657,7 @@ function _openScreenshotLightbox(src) {
                     transform-origin:center center;
                     transition:transform 100ms cubic-bezier(0.22,1,0.36,1);
                     box-shadow:0 30px 80px -10px rgba(0,0,0,0.7),
-                               0 0 0 1px rgba(212,145,90,0.18) inset;
+                               0 0 0 1px rgba(139,123,255,0.18) inset;
                     border-radius:6px;cursor:grab;">
     `;
     document.body.appendChild(modal);
@@ -3895,7 +3896,7 @@ function renderIssuePage(container, scanId) {
         'GHOST_CLIENT':'#ef4444','HACKS':'#ef4444','FORENSE':'#8b5cf6',
         'RED':'#3b82f6','NETWORK_FORENSICS':'#3b82f6','PROCESO':'#f59e0b','PROCESSES':'#f59e0b',
         'MACRO_DETECTION':'#f59e0b','EXECUTED_FILES':'#10b981','CMD_HISTORY':'#10b981',
-        'JAVA_MEMORY':'#06b6d4','JAVA_AGENT':'#06b6d4','REGISTRY':'#D4915A',
+        'JAVA_MEMORY':'#06b6d4','JAVA_AGENT':'#06b6d4','REGISTRY':'#b9a7ff',
     };
     const chips = cats.map(c => {
         const count = c === 'all' ? all.length : all.filter(r => (r.issue_category || 'Otro') === c).length;
@@ -4111,7 +4112,7 @@ async function confirmVerdict() {
             try {
                 if (window.argusUI && typeof window.argusUI.celebrate === 'function') {
                     window.argusUI.celebrate({
-                        palette: ['#10b981','#34d399','#6ee7b7','#B87333','#fbbf24','#FFFFFF'],
+                        palette: ['#10b981','#34d399','#6ee7b7','#8b7bff','#fbbf24','#FFFFFF'],
                         count: 110,
                         duration: 1900,
                         originY: 0.30,
@@ -5062,7 +5063,7 @@ async function viewScanDetails(scanId) {
         if (cmdList && comandos.length > 0) {
             cmdList.innerHTML = comandos.map(r => {
                 const isSusp = r.alert_level === 'CRITICAL' || r.alert_level === 'SOSPECHOSO';
-                const accent = isSusp ? '#ef4444' : '#D4915A';
+                const accent = isSusp ? '#ef4444' : '#b9a7ff';
                 return `<div style="background:rgba(${isSusp?'239,68,68':'167,139,250'},0.06);border:1px solid ${accent}33;border-radius:8px;padding:12px 14px;">
                     <div style="font-size:12px;font-weight:600;color:${accent};">💻 ${r.issue_name||'—'}</div>
                     ${r.issue_path?`<div style="font-size:11px;color:var(--text-d);margin-top:3px;">${r.issue_path}</div>`:''}
@@ -5476,7 +5477,7 @@ async function loadPreviousScans(machineName) {
                         datasets: [{
                             data: scores,
                             borderColor: '#8b5cf6',
-                            backgroundColor: 'rgba(184,115,51,0.10)',
+                            backgroundColor: 'rgba(139,123,255,0.10)',
                             pointBackgroundColor: colors,
                             pointRadius: 5,
                             tension: 0.3,
@@ -5545,7 +5546,7 @@ async function loadPreviousScans(machineName) {
                             <span class="previous-scan-stat"><strong>${scan.total_files_scanned || 0}</strong> archivos</span>
                             ${scan.risk_score != null ? `<span class="previous-scan-stat" style="color:${scan.risk_score>=70?'#ef4444':scan.risk_score>=30?'#f59e0b':'#10b981'};font-weight:700;">Risk ${scan.risk_score}</span>` : ''}
                             <button onclick="event.stopPropagation();compareScanWith(${scan.id})"
-                                style="margin-left:auto;font-size:10px;padding:2px 8px;background:rgba(184,115,51,0.15);border:1px solid rgba(184,115,51,0.4);color:var(--accent);border-radius:6px;cursor:pointer;">Comparar</button>
+                                style="margin-left:auto;font-size:10px;padding:2px 8px;background:rgba(139,123,255,0.15);border:1px solid rgba(139,123,255,0.4);color:var(--accent);border-radius:6px;cursor:pointer;">Comparar</button>
                             <button onclick="event.stopPropagation();markScanAsBaseline(${scan.id})"
                                 style="font-size:10px;padding:2px 8px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.35);color:#10b981;border-radius:6px;cursor:pointer;">Baseline</button>
                             <button onclick="event.stopPropagation();openScanTrend(${scan.id})"
@@ -7118,8 +7119,8 @@ function toggleAIChat() {
     panel.style.display = _aiChatOpen ? 'flex' : 'none';
     btn.style.transform = _aiChatOpen ? 'scale(1.1)' : 'scale(1)';
     btn.style.boxShadow = _aiChatOpen
-        ? '0 4px 28px rgba(160,90,44,.7)'
-        : '0 4px 20px rgba(160,90,44,.45)';
+        ? '0 4px 28px rgba(139,123,255,.7)'
+        : '0 4px 20px rgba(139,123,255,.45)';
     if (_aiChatOpen) {
         _updateAIChatScanBadge();
         document.getElementById('ai-floating-chat-input').focus();
@@ -7227,7 +7228,7 @@ function _appendChatMsg(container, text, role, isTyping) {
         'line-height:1.5',
         'white-space:pre-wrap',
         'align-self:' + (isUser ? 'flex-end' : 'flex-start'),
-        'background:' + (isUser ? 'rgba(79,70,229,.35)' : 'rgba(160,90,44,.15)'),
+        'background:' + (isUser ? 'rgba(79,70,229,.35)' : 'rgba(139,123,255,.15)'),
     ].join(';');
     el.innerHTML = isTyping ? '<span class="ai-typing-dots">● ● ●</span>' : text;
     container.appendChild(el);
@@ -7312,8 +7313,8 @@ async function _loadAIVerdictSuggestion(scanId) {
     // Mostrar estado cargando
     card.style.display = 'block';
     badge.textContent  = '⋯';
-    badge.style.background = 'rgba(160,90,44,.2)';
-    badge.style.color  = '#D4915A';
+    badge.style.background = 'rgba(139,123,255,.2)';
+    badge.style.color  = '#b9a7ff';
     reasonsEl.innerHTML = '<li style="list-style:none;color:var(--text-d)">Analizando hallazgos...</li>';
     confEl.textContent  = '';
 
@@ -7360,7 +7361,7 @@ async function aiExplainFinding(name, level, btn) {
         if (!expEl) {
             expEl = document.createElement('div');
             expEl.className = 'ai-explain-text';
-            expEl.style.cssText = 'font-size:11px;color:#c4b5fd;margin-top:5px;padding:5px 8px;background:rgba(160,90,44,.1);border-radius:6px;border-left:2px solid #7c3aed;line-height:1.5;';
+            expEl.style.cssText = 'font-size:11px;color:#c4b5fd;margin-top:5px;padding:5px 8px;background:rgba(139,123,255,.1);border-radius:6px;border-left:2px solid #7c3aed;line-height:1.5;';
             if (row) row.querySelector('div[style*="flex:1"]')?.appendChild(expEl);
         }
         expEl.textContent = '🤖 ' + text;
@@ -7394,14 +7395,14 @@ async function aiScanSummary(scanId, btn) {
         if (!el) {
             el = document.createElement('div');
             el.id = containerId;
-            el.style.cssText = 'margin-top:10px;padding:10px 14px;background:rgba(160,90,44,.08);border:1px solid rgba(160,90,44,.25);border-radius:8px;font-size:12px;line-height:1.6;color:var(--text-m);';
+            el.style.cssText = 'margin-top:10px;padding:10px 14px;background:rgba(139,123,255,.08);border:1px solid rgba(139,123,255,.25);border-radius:8px;font-size:12px;line-height:1.6;color:var(--text-m);';
             const card = document.getElementById('ai-verdict-card');
             if (card) card.appendChild(el);
         }
         // Visual #41 — typewriter del resumen IA. Header inmediato + texto con
         // animación typing. Si argusUI.typewriter no está disponible (build vieja
         // de argus-ui.js), volvemos al render plano.
-        el.innerHTML = '<span style="color:#D4915A;font-weight:600">📝 Resumen IA:</span><br><span class="ai-summary-text"></span>';
+        el.innerHTML = '<span style="color:#b9a7ff;font-weight:600">📝 Resumen IA:</span><br><span class="ai-summary-text"></span>';
         el.style.display = 'block';
         const target = el.querySelector('.ai-summary-text');
         if (target && window.argusUI?.typewriter) {
@@ -7409,7 +7410,7 @@ async function aiScanSummary(scanId, btn) {
         } else if (target) {
             target.textContent = text;
         } else {
-            el.innerHTML = '<span style="color:#D4915A;font-weight:600">📝 Resumen IA:</span><br>' + text;
+            el.innerHTML = '<span style="color:#b9a7ff;font-weight:600">📝 Resumen IA:</span><br>' + text;
         }
     } catch(e) {
         console.error('aiScanSummary error', e);
@@ -7610,7 +7611,7 @@ async function runIocExtract() {
         const parts = [
             section('🌐 IPs públicas',    '#60a5fa', d.ips?.public  || []),
             section('🌐 Todas las IPs',   '#94a3b8', (d.ips?.all || []).filter(ip => !(d.ips?.public||[]).includes(ip))),
-            section('🔑 SHA-256',         '#D4915A', d.hashes?.sha256 || []),
+            section('🔑 SHA-256',         '#b9a7ff', d.hashes?.sha256 || []),
             section('🔑 SHA-1',           '#c084fc', d.hashes?.sha1   || []),
             section('🔑 MD5',             '#e879f9', d.hashes?.md5    || []),
             section('🌍 Dominios',        '#34d399', d.domains        || []),
@@ -7699,7 +7700,7 @@ async function _renderPlayerReputation(machineName, allScans) {
                             label: 'Risk Score',
                             data: scores,
                             borderColor: '#8b5cf6',
-                            backgroundColor: 'rgba(184,115,51,0.08)',
+                            backgroundColor: 'rgba(139,123,255,0.08)',
                             pointBackgroundColor: ptColors,
                             pointRadius: 4,
                             tension: 0.3,
@@ -7753,7 +7754,7 @@ async function _renderPlayerReputation(machineName, allScans) {
                 data: {
                     labels: sLabels,
                     datasets: [{ data: sScores, borderColor: '#8b5cf6',
-                        backgroundColor: 'rgba(184,115,51,0.08)',
+                        backgroundColor: 'rgba(139,123,255,0.08)',
                         pointBackgroundColor: sColors, pointRadius: 4,
                         tension: 0.3, fill: true }]
                 },
@@ -8088,7 +8089,7 @@ function _initCustomColorPicker() {
     wrap.style.cssText = 'margin-top:10px;display:flex;align-items:center;gap:8px;';
     wrap.innerHTML = `
         <label style="font-size:11px;color:var(--text-d);">Custom:</label>
-        <input type="color" class="custom-color-input" value="#B87333"
+        <input type="color" class="custom-color-input" value="#8b7bff"
                style="width:28px;height:28px;border:none;border-radius:6px;cursor:pointer;background:none;padding:0;"
                oninput="_applyCustomColor(this.value)">`;
     panel.appendChild(wrap);
@@ -8544,7 +8545,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', resize, { passive: true });
 
     const N = 55;
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#B87333';
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8b7bff';
 
     for (let i = 0; i < N; i++) {
         particles.push({
@@ -8560,7 +8561,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let raf;
     function draw() {
         ctx.clearRect(0, 0, W, H);
-        const col = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#B87333';
+        const col = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8b7bff';
         particles.forEach(p => {
             ctx.beginPath();
             ctx.arc(p.x % W, p.y % H, p.r, 0, Math.PI * 2);
@@ -8752,7 +8753,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const ti = parseInt(document.getElementById('total-issues')?.textContent) || 8;
         const um = parseInt(document.getElementById('unique-machines')?.textContent) || 15;
         const at = parseInt(document.getElementById('active-tokens')?.textContent) || 5;
-        const accent = (getComputedStyle(document.body).getPropertyValue('--accent') || '#B87333').trim() || '#B87333';
+        const accent = (getComputedStyle(document.body).getPropertyValue('--accent') || '#8b7bff').trim() || '#8b7bff';
         _drawSparkline('spark-scans',    makeTrend(ts), accent);
         _drawSparkline('spark-issues',   makeTrend(ti), '#f43f5e');
         _drawSparkline('spark-machines', makeTrend(um), '#06b6d4');
@@ -8764,7 +8765,7 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('argus:preset-changed', () => {
     setTimeout(() => {
         const ts = parseInt(document.getElementById('total-scans')?.textContent) || 20;
-        const accent = (getComputedStyle(document.body).getPropertyValue('--accent') || '#B87333').trim() || '#B87333';
+        const accent = (getComputedStyle(document.body).getPropertyValue('--accent') || '#8b7bff').trim() || '#8b7bff';
         const arr = [];
         let v = ts * 0.6;
         for (let i = 0; i < 8; i++) { v += (Math.random() - 0.4) * (ts * 0.15); arr.push(Math.max(0, v)); }
@@ -8971,7 +8972,7 @@ async function openPlayerTimelineModal(username, opts) {
     // Stats header
     const statsRow = `
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; padding:10px 12px;
-                    background:rgba(184,115,51,.08); border:1px solid var(--border, rgba(255,255,255,.08));
+                    background:rgba(139,123,255,.08); border:1px solid var(--border, rgba(255,255,255,.08));
                     border-radius:8px; font-size:13px;">
             <div><b>${data.scans_total || 0}</b> scan${data.scans_total === 1 ? '' : 's'}</div>
             ${data.hacks    ? `<div style="color:#ef4444;"><b>${data.hacks}</b> hack${data.hacks === 1 ? '' : 's'}</div>` : ''}
@@ -8990,7 +8991,7 @@ async function openPlayerTimelineModal(username, opts) {
         ${statsRow}
         <div class="argus-timeline" style="position:relative; padding-left:36px;">
             <div style="position:absolute; left:13px; top:6px; bottom:6px; width:2px;
-                        background:linear-gradient(180deg, rgba(184,115,51,.5), rgba(184,115,51,.05));"></div>
+                        background:linear-gradient(180deg, rgba(139,123,255,.5), rgba(139,123,255,.05));"></div>
             ${items}
         </div>`;
 
@@ -9060,7 +9061,7 @@ function _renderTimelineEvent(ev) {
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     let icon = '📌';
-    let color = 'var(--accent, #B87333)';
+    let color = 'var(--accent, #8b7bff)';
     let title = '';
     let body  = '';
     let cta   = '';
@@ -9084,7 +9085,7 @@ function _renderTimelineEvent(ev) {
         if (ev.country)   parts.push(`${escape(ev.country)}`);
         body = parts.join(' · ');
         cta = `<a href="javascript:void(0)" onclick="if(window.openScanDetail) window.openScanDetail(${ev.scan_id})"
-                  style="font-size:12px; color:var(--accent, #B87333); text-decoration:none;">Abrir scan →</a>`;
+                  style="font-size:12px; color:var(--accent, #8b7bff); text-decoration:none;">Abrir scan →</a>`;
     } else if (ev.kind === 'verdict_change') {
         icon = '⚖️';
         color = '#8b5cf6';
@@ -9265,7 +9266,7 @@ async function openAIQualityDashboard(opts) {
                         const d = await resp.json();
                         if (resp.ok) { if (window.showToast) showToast('learn-fp aplicado', 'success'); }
                         else { alert('Error: ' + (d.error || resp.status)); }
-                    })()" style="padding:3px 8px;font-size:11px;background:rgba(184,115,51,.15);border:1px solid var(--accent, #B87333);color:var(--accent, #B87333);border-radius:4px;cursor:pointer;">Aplicar</button>
+                    })()" style="padding:3px 8px;font-size:11px;background:rgba(139,123,255,.15);border:1px solid var(--accent, #8b7bff);color:var(--accent, #8b7bff);border-radius:4px;cursor:pointer;">Aplicar</button>
                 </td>
             </tr>`).join('')
         : `<tr><td colspan="3" style="padding:14px;text-align:center;color:var(--text-d);">Sin candidatos en los últimos 30 días.</td></tr>`;
@@ -9403,7 +9404,7 @@ async function openRepeatOffendersModal(opts) {
             <tr style="border-bottom:1px solid var(--border, rgba(255,255,255,.05));">
                 <td style="padding:8px 10px;font-weight:700;color:${rankColor};text-align:center;">#${i+1}</td>
                 <td style="padding:8px 10px;font-weight:600;">
-                    <a href="javascript:void(0)" onclick="if(window.openPlayerTimelineModal) openPlayerTimelineModal('${escape(r.minecraft_username)}')" style="color:var(--accent, #B87333);text-decoration:none;">${escape(r.minecraft_username || '?')}</a>
+                    <a href="javascript:void(0)" onclick="if(window.openPlayerTimelineModal) openPlayerTimelineModal('${escape(r.minecraft_username)}')" style="color:var(--accent, #8b7bff);text-decoration:none;">${escape(r.minecraft_username || '?')}</a>
                 </td>
                 <td style="padding:8px 10px;text-align:center;color:#ef4444;font-weight:700;">${r.hacks}</td>
                 <td style="padding:8px 10px;text-align:center;font-variant-numeric:tabular-nums;">${r.max_risk}</td>

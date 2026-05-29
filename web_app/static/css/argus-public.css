@@ -1,13 +1,13 @@
 /* Argus Projects — Public web enhancements (UI 120 — section B) */
 :root {
-  --argus-copper: #B87333;
-  --argus-copper-l: #E8A86F;
+  --argus-copper: #8b7bff;
+  --argus-copper-l: #b9a7ff;
   --argus-copper-d: #6B3A1D;
-  --argus-cream: #EAD8C0;
+  --argus-cream: #ECEDFF;
   --argus-bg: #0A0805;
   --argus-bg2: #110B07;
-  --argus-text-m: #A89578;
-  --argus-focus: #E8A86F;
+  --argus-text-m: #A6A8D0;
+  --argus-focus: #b9a7ff;
   --argus-discord: #5865F2;
   --argus-radius: 12px;
   --argus-trans: 0.22s cubic-bezier(0.4, 0, 0.2, 1);
@@ -26,12 +26,12 @@ body.argus-public-enhanced.argus-ready { visibility: visible; }
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   background: rgba(10, 8, 5, 0.72) !important;
-  border-bottom: 1px solid rgba(184, 115, 51, 0.2);
+  border-bottom: 1px solid rgba(139, 123, 255, 0.2);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   transition: box-shadow var(--argus-trans), background var(--argus-trans);
 }
 .argus-nav-sticky.is-scrolled {
-  box-shadow: 0 8px 32px rgba(184, 115, 51, 0.12);
+  box-shadow: 0 8px 32px rgba(139, 123, 255, 0.12);
 }
 
 /* CTA shine sweep */
@@ -57,8 +57,8 @@ body.argus-public-enhanced.argus-ready { visibility: visible; }
 }
 .argus-feature-card:hover {
   transform: translateY(-4px);
-  border-color: rgba(184, 115, 51, 0.55) !important;
-  box-shadow: 0 12px 40px rgba(184, 115, 51, 0.15);
+  border-color: rgba(139, 123, 255, 0.55) !important;
+  box-shadow: 0 12px 40px rgba(139, 123, 255, 0.15);
 }
 
 /* Timeline horizontal */
@@ -85,10 +85,10 @@ body.argus-public-enhanced.argus-ready { visibility: visible; }
 .argus-compare-table {
   width: 100%; border-collapse: collapse; font-size: 0.9rem;
   background: rgba(26, 19, 12, 0.6); border-radius: var(--argus-radius);
-  border: 1px solid rgba(184, 115, 51, 0.2);
+  border: 1px solid rgba(139, 123, 255, 0.2);
 }
 .argus-compare-table th, .argus-compare-table td {
-  padding: 0.75rem 1rem; border-bottom: 1px solid rgba(184, 115, 51, 0.12);
+  padding: 0.75rem 1rem; border-bottom: 1px solid rgba(139, 123, 255, 0.12);
   text-align: left;
 }
 .argus-compare-table th { color: var(--argus-cream); font-family: 'Syne', sans-serif; }
@@ -109,13 +109,13 @@ body.argus-public-enhanced.argus-ready { visibility: visible; }
 .argus-testimonial {
   min-width: 280px; padding: 1.25rem;
   background: rgba(26, 19, 12, 0.8);
-  border: 1px solid rgba(184, 115, 51, 0.25);
+  border: 1px solid rgba(139, 123, 255, 0.25);
   border-radius: var(--argus-radius);
 }
 
 /* FAQ accordion */
 .argus-faq details {
-  border: 1px solid rgba(184, 115, 51, 0.2);
+  border: 1px solid rgba(139, 123, 255, 0.2);
   border-radius: var(--argus-radius);
   margin-bottom: 0.5rem; background: rgba(17, 11, 7, 0.6);
 }
@@ -134,7 +134,7 @@ body.argus-public-enhanced.argus-ready { visibility: visible; }
 
 /* Footer unified */
 .argus-footer-unified {
-  border-top: 1px solid rgba(184, 115, 51, 0.2);
+  border-top: 1px solid rgba(139, 123, 255, 0.2);
   padding: 2.5rem 1.5rem; text-align: center;
   background: var(--argus-bg2);
 }
@@ -174,7 +174,7 @@ body.argus-public-enhanced.argus-ready { visibility: visible; }
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 940;
   padding: 0.85rem 1.25rem;
   background: rgba(10, 8, 5, 0.95);
-  border-top: 1px solid rgba(184, 115, 51, 0.3);
+  border-top: 1px solid rgba(139, 123, 255, 0.3);
   display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 1rem;
   font-size: 0.85rem; color: var(--argus-text-m);
   transform: translateY(100%); transition: transform 0.35s ease;
@@ -249,7 +249,7 @@ body.argus-public-enhanced input:focus-visible {
 /* Staff link secondary */
 .argus-staff-link {
   font-size: 0.85rem; opacity: 0.75;
-  border: 1px solid rgba(184, 115, 51, 0.35);
+  border: 1px solid rgba(139, 123, 255, 0.35);
   padding: 0.35rem 0.85rem; border-radius: 8px;
   text-decoration: none; color: var(--argus-text-m);
   transition: opacity var(--argus-trans), border-color var(--argus-trans);
@@ -295,7 +295,7 @@ body.argus-login-page .page {
 .argus-pwa-banner {
   position: fixed; bottom: 4.5rem; left: 1rem; right: 1rem; max-width: 360px;
   margin: 0 auto; z-index: 930;
-  background: var(--argus-bg2); border: 1px solid rgba(184, 115, 51, 0.35);
+  background: var(--argus-bg2); border: 1px solid rgba(139, 123, 255, 0.35);
   border-radius: var(--argus-radius); padding: 1rem;
   display: none; box-shadow: var(--argus-trans);
 }

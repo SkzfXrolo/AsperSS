@@ -256,8 +256,8 @@
     if (qs('.argus-changelog-block')) return;
     var block = document.createElement('div');
     block.className = 'argus-changelog-block argus-reveal';
-    block.style.cssText = 'margin-top:1.5rem;padding:1rem;border:1px solid rgba(184,115,51,.25);border-radius:12px';
-    block.innerHTML = '<strong style="color:#EAD8C0">Novedades</strong><pre style="white-space:pre-wrap;font-size:.8rem;color:#A89578;margin-top:.5rem">' +
+    block.style.cssText = 'margin-top:1.5rem;padding:1rem;border:1px solid rgba(139,123,255,.25);border-radius:12px';
+    block.innerHTML = '<strong style="color:#ECEDFF">Novedades</strong><pre style="white-space:pre-wrap;font-size:.8rem;color:#A6A8D0;margin-top:.5rem">' +
       escapeHtml(String(text).slice(0, 800)) + '</pre>';
     var main = qs('main, .download-section');
     if (main) main.appendChild(block);
@@ -344,7 +344,7 @@
       var step = document.createElement('div');
       step.className = 'argus-timeline-step';
       step.dataset.step = String(i + 1);
-      step.innerHTML = '<strong style="color:#EAD8C0">' + label + '</strong><p style="font-size:.85rem;color:#A89578;margin-top:.5rem">Paso ' + (i + 1) + '</p>';
+      step.innerHTML = '<strong style="color:#ECEDFF">' + label + '</strong><p style="font-size:.85rem;color:#A6A8D0;margin-top:.5rem">Paso ' + (i + 1) + '</p>';
       tl.appendChild(step);
     });
     var main = qs('main, #main, .hero');

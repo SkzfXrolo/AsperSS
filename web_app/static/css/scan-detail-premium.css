@@ -8,7 +8,7 @@
   --sd-radius: 16px;
   --sd-radius-sm: 10px;
   --sd-glass: rgba(14, 12, 28, 0.72);
-  --sd-glow-copper: rgba(184, 115, 51, 0.35);
+  --sd-glow-copper: rgba(139, 123, 255, 0.35);
   --sd-glow-red: rgba(244, 63, 94, 0.4);
   --sd-glow-green: rgba(16, 185, 129, 0.35);
   position: relative;
@@ -22,7 +22,7 @@
   transform: translateX(-50%);
   width: min(900px, 80%);
   height: 280px;
-  background: radial-gradient(ellipse at 50% 0%, rgba(184, 115, 51, 0.08), transparent 70%);
+  background: radial-gradient(ellipse at 50% 0%, rgba(139, 123, 255, 0.08), transparent 70%);
   pointer-events: none;
   z-index: 0;
 }
@@ -281,8 +281,8 @@
 /* ── 101–110: IA card + veredicto ── */
 #issues-detail-section #ai-verdict-card {
   border-radius: var(--sd-radius-sm) !important;
-  background: linear-gradient(135deg, rgba(160, 90, 44, 0.1), rgba(99, 102, 241, 0.06)) !important;
-  border: 1px solid rgba(160, 90, 44, 0.35) !important;
+  background: linear-gradient(135deg, rgba(139, 123, 255, 0.1), rgba(99, 102, 241, 0.06)) !important;
+  border: 1px solid rgba(139, 123, 255, 0.35) !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 #issues-detail-section .scan-verdict-block {
@@ -500,7 +500,7 @@ body.light-theme #issues-detail-section .scan-summary-left,
 body.light-theme #issues-detail-section .scan-summary-chart,
 body.light-theme #issues-detail-section .scan-findings-panel {
   background: rgba(255, 255, 255, 0.92);
-  border-color: rgba(160, 90, 44, 0.15);
+  border-color: rgba(139, 123, 255, 0.15);
 }
 #issues-detail-section .issues-list-scroll > div[style*="padding:40px"],
 #issues-detail-section .scan-issues-empty {
@@ -598,12 +598,12 @@ body.light-theme #issues-detail-section .scan-findings-panel {
 
 /* ── FAB IA (fijo esquina inferior derecha) ── */
 #ai-chat-btn.ai-chat-fab {
-  background: linear-gradient(145deg, #B87333, #7c3aed) !important;
-  box-shadow: 0 8px 32px rgba(184, 115, 51, 0.5), 0 0 0 4px rgba(184, 115, 51, 0.1) !important;
+  background: linear-gradient(145deg, #8b7bff, #7c3aed) !important;
+  box-shadow: 0 8px 32px rgba(139, 123, 255, 0.5), 0 0 0 4px rgba(139, 123, 255, 0.1) !important;
 }
 #ai-chat-btn.ai-chat-fab:hover {
   transform: scale(1.06);
-  box-shadow: 0 12px 40px rgba(184, 115, 51, 0.6) !important;
+  box-shadow: 0 12px 40px rgba(139, 123, 255, 0.6) !important;
 }
 
 /* ── Web history block ── */

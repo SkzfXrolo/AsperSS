@@ -78,7 +78,7 @@
                     <circle cx="9" cy="9" r="2" fill="currentColor"/>
                 </svg>
                 <span>War Room</span>
-                <span style="margin-left:auto;background:linear-gradient(90deg,#B87333,#E8A86F);color:#1a0f08;font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;letter-spacing:.04em;">LIVE</span>
+                <span style="margin-left:auto;background:linear-gradient(90deg,#8b7bff,#46e6ff);color:#06031a;font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;letter-spacing:.04em;">LIVE</span>
             </a>
             <a href="/panel" class="nav-item" data-section="tokens">
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -481,7 +481,7 @@
                                 style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text);font-size:12px;"
                                 onkeydown="if(event.key==='Enter')searchMojangProfile()">
                             <button onclick="searchMojangProfile()"
-                                style="padding:6px 12px;border-radius:7px;border:1px solid var(--accent);background:rgba(184,115,51,.12);color:var(--accent);font-size:12px;cursor:pointer;">
+                                style="padding:6px 12px;border-radius:7px;border:1px solid var(--accent);background:rgba(139,123,255,.12);color:var(--accent);font-size:12px;cursor:pointer;">
                                 🔍
                             </button>
                         </div>
@@ -515,8 +515,8 @@
                             <circle cx="24" cy="24" r="6" fill="url(#argus-g)" opacity=".9"/>
                             <defs>
                                 <linearGradient id="argus-g" x1="2" y1="2" x2="46" y2="46" gradientUnits="userSpaceOnUse">
-                                    <stop stop-color="#B87333"/>
-                                    <stop offset="1" stop-color="#06b6d4"/>
+                                    <stop stop-color="#8b7bff"/>
+                                    <stop offset="1" stop-color="#46e6ff"/>
                                 </linearGradient>
                             </defs>
                         </svg>
@@ -936,9 +936,9 @@
                             const cur = (window.argusUI && window.argusUI.getFontSize) ? window.argusUI.getFontSize() : 'normal';
                             sw.querySelectorAll('button').forEach(b => {
                                 const isActive = b.dataset.fontsize === cur;
-                                b.style.background  = isActive ? 'rgba(184,115,51,0.22)' : 'var(--bg-t)';
+                                b.style.background  = isActive ? 'rgba(139,123,255,0.22)' : 'var(--bg-t)';
                                 b.style.color       = isActive ? '#f3e0c5' : 'var(--text-m)';
-                                b.style.borderColor = isActive ? 'rgba(212,145,90,0.45)' : 'var(--border-m)';
+                                b.style.borderColor = isActive ? 'rgba(139,123,255,0.45)' : 'var(--border-m)';
                             });
                         }
                         sw.addEventListener('click', (e) => {
@@ -960,9 +960,9 @@
                             const cur = (window.argusUI && window.argusUI.getDensity) ? window.argusUI.getDensity() : 'normal';
                             sw.querySelectorAll('button').forEach(b => {
                                 const isActive = b.dataset.density === cur;
-                                b.style.background = isActive ? 'rgba(184,115,51,0.22)' : 'var(--bg-t)';
+                                b.style.background = isActive ? 'rgba(139,123,255,0.22)' : 'var(--bg-t)';
                                 b.style.color      = isActive ? '#f3e0c5' : 'var(--text-m)';
-                                b.style.borderColor= isActive ? 'rgba(212,145,90,0.45)' : 'var(--border-m)';
+                                b.style.borderColor= isActive ? 'rgba(139,123,255,0.45)' : 'var(--border-m)';
                             });
                         }
                         sw.addEventListener('click', (e) => {
@@ -1312,7 +1312,7 @@
                                     <span class="echo-info-value cyan-text" id="detail-connection">—</span>
                                 </div>
                                 <div class="echo-info-item">
-                                    <div class="echo-info-icon" style="color:#D4915A;">
+                                    <div class="echo-info-icon" style="color:#b9a7ff;">
                                         <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="2"/><path d="M7 13C7 13 8 11 10 11C12 11 13 13 13 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M7 8H7.01M13 8H13.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                                     </div>
                                     <span class="echo-info-label">País</span>
@@ -1326,21 +1326,21 @@
                                     <span class="echo-info-value" id="detail-minecraft-username" style="color:#10b981;">—</span>
                                 </div>
                                 <div class="echo-info-item">
-                                    <div class="echo-info-icon" style="color:#D4915A;">
+                                    <div class="echo-info-icon" style="color:#b9a7ff;">
                                         <svg width="13" height="13" viewBox="0 0 20 20" fill="none"><path d="M10 2L3 7V18H17V7L10 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 18V13H12V18" stroke="currentColor" stroke-width="2"/></svg>
                                     </div>
                                     <span class="echo-info-label">Staff SS</span>
-                                    <span class="echo-info-value" id="detail-scanned-by" style="color:#D4915A;">—</span>
+                                    <span class="echo-info-value" id="detail-scanned-by" style="color:#b9a7ff;">—</span>
                                 </div>
                                 <div id="mc-process-info" style="display:none;flex-direction:column;gap:6px;padding-top:4px;border-top:1px solid var(--border-m);">
-                                    <div style="font-size:10px;font-weight:700;color:#D4915A;text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px;">Proceso MC</div>
+                                    <div style="font-size:10px;font-weight:700;color:#b9a7ff;text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px;">Proceso MC</div>
                                     <div style="display:flex;justify-content:space-between;font-size:11px;"><span style="color:var(--text-d);">PID</span><span style="color:#e2e8f7;font-weight:600;" id="detail-mc-pid">—</span></div>
                                     <div style="display:flex;justify-content:space-between;font-size:11px;"><span style="color:var(--text-d);">RAM</span><span style="color:#38bdf8;font-weight:600;" id="detail-mc-ram">—</span></div>
                                     <div style="display:flex;justify-content:space-between;font-size:11px;"><span style="color:var(--text-d);">Inicio</span><span style="color:#e2e8f7;font-weight:600;" id="detail-mc-started">—</span></div>
                                     <div id="mc-conn-row" style="display:none;justify-content:space-between;font-size:11px;"><span style="color:var(--text-d);">Servidor</span><span style="color:#f59e0b;font-weight:600;font-size:10px;" id="detail-mc-conn">—</span></div>
                                 </div>
                                 <div id="mc-info-row" style="display:none;flex-direction:column;gap:5px;padding-top:4px;border-top:1px solid var(--border-m);">
-                                    <div style="font-size:10px;font-weight:700;color:#D4915A;text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px;">Minecraft Activo</div>
+                                    <div style="font-size:10px;font-weight:700;color:#b9a7ff;text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px;">Minecraft Activo</div>
                                     <div style="display:flex;justify-content:space-between;font-size:11px;"><span style="color:var(--text-d);">Versión</span><span style="color:#10b981;font-weight:600;" id="detail-mc-version">—</span></div>
                                     <div style="display:flex;justify-content:space-between;font-size:11px;"><span style="color:var(--text-d);">Launcher</span><span style="color:#f59e0b;font-weight:600;" id="detail-mc-launcher">—</span></div>
                                     <div id="mc-agents-row" style="display:none;justify-content:space-between;font-size:11px;"><span style="color:var(--text-d);">Agentes Java</span><span style="color:#ef4444;font-weight:700;" id="detail-mc-agents">—</span></div>
@@ -1467,18 +1467,18 @@
                             <div id="current-verdict-banner" style="display:none;border-radius:10px;padding:12px 16px;margin-bottom:4px;font-size:13px;"></div>
 
                             <!-- Sugerencia de veredicto por IA (Parte 3 item 22) -->
-                            <div id="ai-verdict-card" style="display:none;border-radius:10px;padding:12px 14px;margin-bottom:6px;border:1px solid rgba(160,90,44,.3);background:rgba(160,90,44,.07);font-size:12px;">
+                            <div id="ai-verdict-card" style="display:none;border-radius:10px;padding:12px 14px;margin-bottom:6px;border:1px solid rgba(139,123,255,.3);background:rgba(139,123,255,.07);font-size:12px;">
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                                    <span class="argus-tip-trigger" style="font-weight:700;color:#D4915A;font-size:12px;border-bottom-color:rgba(212,145,90,0.55);"
+                                    <span class="argus-tip-trigger" style="font-weight:700;color:#b9a7ff;font-size:12px;border-bottom-color:rgba(139,123,255,0.55);"
                                           data-argus-tip="<b>🤖 Sugerencia de Argus AI</b><br>Análisis automático del scan que combina todas las heurísticas, el historial del jugador y patrones aprendidos de veredictos anteriores.<br><br><b>Importante:</b> es solo una sugerencia. La decisión final siempre la tomas vos como staff.">🤖 Sugerencia IA</span>
                                     <span id="ai-verdict-badge" class="argus-tip-trigger" style="font-size:11px;font-weight:800;padding:2px 10px;border-radius:20px;border-bottom:none;"
                                           data-argus-tip="Veredicto sugerido por la IA: <b>CLEAN</b> (limpio), <b>WATCH</b> (sospechoso), <b>SUSPECT</b> (alto riesgo) o <b>CHEAT</b> (banear)."></span>
                                 </div>
                                 <ul id="ai-verdict-reasons" style="margin:0 0 0 14px;padding:0;color:var(--text-m);line-height:1.6;"></ul>
-                                <div id="ai-verdict-confidence" class="argus-tip-trigger" style="margin-top:6px;font-size:11px;color:var(--text-d);border-bottom-color:rgba(160,90,44,0.30);"
+                                <div id="ai-verdict-confidence" class="argus-tip-trigger" style="margin-top:6px;font-size:11px;color:var(--text-d);border-bottom-color:rgba(139,123,255,0.30);"
                                      data-argus-tip="<b>Confianza de la IA</b><br>Qué tan segura está Argus de su sugerencia (0–100%).<br><br>• <b>≥85%</b> alta confianza, fiable<br>• <b>60–84%</b> moderada, revisar manualmente<br>• <b>&lt;60%</b> baja, no decidir solo con esto"></div>
                                 <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-                                    <button id="ai-summary-btn" onclick="aiScanSummary(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(160,90,44,.4);background:rgba(160,90,44,.1);color:#D4915A;cursor:pointer;">📝 Resumen IA</button>
+                                    <button id="ai-summary-btn" onclick="aiScanSummary(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(139,123,255,.4);background:rgba(139,123,255,.1);color:#b9a7ff;cursor:pointer;">📝 Resumen IA</button>
                                     <button id="ai-inconsist-btn" onclick="aiShowInconsistencies(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(245,158,11,.35);background:rgba(245,158,11,.08);color:#fbbf24;cursor:pointer;">⚠️ Inconsistencias</button>
                                     <button id="ai-anomaly-btn" onclick="aiCheckAnomaly(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.06);color:#f87171;cursor:pointer;">🔬 Anomalía</button>
                                     <button id="ai-followup-btn" onclick="aiFollowupQuestions(currentScanId, this)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(16,185,129,.35);background:rgba(16,185,129,.06);color:#34d399;cursor:pointer;">❓ Preguntas</button>
@@ -1488,7 +1488,7 @@
                                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10.5a3 3 0 0 0 4.24 0l3-3a3 3 0 0 0-4.24-4.24l-.75.75"/><path d="M10 5.5a3 3 0 0 0-4.24 0l-3 3a3 3 0 0 0 4.24 4.24l.75-.75"/></svg>
                                         Copiar enlace
                                     </button>
-                                    <button onclick="openShareVerdictModal(currentScanId)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(184,115,51,.45);background:rgba(184,115,51,.10);color:#D4915A;cursor:pointer;display:inline-flex;align-items:center;gap:5px;" title="Compartir veredicto: imagen PNG + QR + enlace">
+                                    <button onclick="openShareVerdictModal(currentScanId)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid rgba(139,123,255,.45);background:rgba(139,123,255,.10);color:#b9a7ff;cursor:pointer;display:inline-flex;align-items:center;gap:5px;" title="Compartir veredicto: imagen PNG + QR + enlace">
                                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="8" r="2"/><circle cx="12" cy="3" r="2"/><circle cx="12" cy="13" r="2"/><path d="M5.7 7l4.6-2.7M5.7 9l4.6 2.7"/></svg>
                                         Compartir
                                     </button>
@@ -1666,7 +1666,7 @@
                         <div id="mf-forensics-section">
                             <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
                                 <span style="font-size:22px;">🔬</span>
-                                <h3 style="font-size:16px;font-weight:700;color:#D4915A;">Análisis Forense SS</h3>
+                                <h3 style="font-size:16px;font-weight:700;color:#b9a7ff;">Análisis Forense SS</h3>
                                 <span id="mf-forensics-badge" style="display:none;background:#7c3aed;color:white;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;"></span>
                             </div>
                             <p style="color:var(--text-m);font-size:12px;margin-bottom:16px;">
@@ -1728,7 +1728,7 @@
                     <div style="padding:8px 0 24px;">
                         <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
                             <span style="font-size:22px;">💻</span>
-                            <h3 style="font-size:16px;font-weight:700;color:#D4915A;">Historial de Comandos</h3>
+                            <h3 style="font-size:16px;font-weight:700;color:#b9a7ff;">Historial de Comandos</h3>
                         </div>
                         <p style="color:var(--text-m);font-size:12px;margin-bottom:16px;">Historial de comandos ejecutados via Win+R, CMD, búsquedas de carpeta (TypedPaths, WordWheelQuery) y más.</p>
                         <div id="comandos-list" style="display:flex;flex-direction:column;gap:8px;">
@@ -3138,13 +3138,13 @@
                 <a href="/aspers-sa" target="_blank" style="
                     display:inline-flex;align-items:center;gap:10px;
                     padding:14px 32px;
-                    background:linear-gradient(135deg,#B87333,#7A4824);
+                    background:linear-gradient(135deg,#8b7bff,#5b3fd6);
                     color:white;font-weight:700;font-size:15px;
                     border-radius:10px;text-decoration:none;
-                    box-shadow:0 4px 20px rgba(184,115,51,0.35);
+                    box-shadow:0 4px 20px rgba(139,123,255,0.35);
                     transition:transform 0.15s,box-shadow 0.15s;
-                " onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 28px rgba(184,115,51,0.5)'"
-                   onmouseout="this.style.transform='';this.style.boxShadow='0 4px 20px rgba(184,115,51,0.35)'">
+                " onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 28px rgba(139,123,255,0.5)'"
+                   onmouseout="this.style.transform='';this.style.boxShadow='0 4px 20px rgba(139,123,255,0.35)'">
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                         <path d="M9 1.5C5 1.5 1.5 4.5 1.5 9C1.5 13.5 5 16.5 9 16.5C13 16.5 16.5 13.5 16.5 9" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
                         <path d="M10.5 1.5H16.5V7.5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -3309,7 +3309,7 @@
                 <p style="color:var(--text-secondary);margin-bottom:20px;">Comparte este código con el jugador para que lo ingrese en el escáner.</p>
                 <div style="background:rgba(99,102,241,0.08);border:2px solid rgba(99,102,241,0.4);border-radius:16px;padding:28px 20px;margin-bottom:20px;">
                     <div style="font-size:11px;color:var(--text-disabled);letter-spacing:2px;margin-bottom:10px;">CÓDIGO DE ACCESO</div>
-                    <div id="generated-token" style="font-family:'Consolas','Courier New',monospace;font-size:42px;font-weight:900;letter-spacing:10px;color:#D4915A;line-height:1;">------</div>
+                    <div id="generated-token" style="font-family:'Consolas','Courier New',monospace;font-size:42px;font-weight:900;letter-spacing:10px;color:#b9a7ff;line-height:1;">------</div>
                     <div style="font-size:11px;color:var(--text-disabled);margin-top:10px;">1 uso · 30 minutos</div>
                 </div>
                 <button type="button" class="btn btn-primary" id="copy-token-btn" style="width:100%;margin-bottom:16px;font-size:15px;padding:12px;">Copiar Código</button>
@@ -3430,13 +3430,13 @@
          style="display:none;position:fixed;inset:0;z-index:99500;background:rgba(0,0,0,0.55);
                 backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
                 align-items:flex-start;justify-content:center;padding-top:14vh;">
-        <div style="width:min(640px,92vw);background:linear-gradient(155deg,rgba(28,20,12,0.96),rgba(20,14,8,0.92));
-                    border:1px solid rgba(184,115,51,0.35);border-radius:14px;
+        <div style="width:min(640px,92vw);background:linear-gradient(155deg,rgba(20,18,46,0.96),rgba(12,12,34,0.92));
+                    border:1px solid rgba(139,123,255,0.35);border-radius:14px;
                     box-shadow:0 24px 64px -10px rgba(0,0,0,0.7),0 0 0 1px rgba(255,255,255,0.04) inset;
                     overflow:hidden;animation:argusSubpageSlideIn 0.32s cubic-bezier(0.22,1,0.36,1) both;">
-            <div style="padding:14px 18px;border-bottom:1px solid rgba(184,115,51,0.18);
+            <div style="padding:14px 18px;border-bottom:1px solid rgba(139,123,255,0.18);
                         display:flex;align-items:center;gap:10px;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(212,145,90,0.85)" stroke-width="2"
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(139,123,255,0.85)" stroke-width="2"
                      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="11" cy="11" r="7"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -3445,7 +3445,7 @@
                        placeholder="Buscar por ID, jugador, empresa…   (Esc para cerrar)"
                        style="flex:1;background:transparent;border:none;outline:none;color:#f1e6d3;
                               font-size:15px;font-weight:500;letter-spacing:0.2px;">
-                <kbd style="background:rgba(184,115,51,0.18);border:1px solid rgba(184,115,51,0.35);
+                <kbd style="background:rgba(139,123,255,0.18);border:1px solid rgba(139,123,255,0.35);
                             color:#f3e0c5;border-radius:5px;padding:2px 7px;font-size:11px;
                             font-family:ui-monospace,Consolas,monospace;">Esc</kbd>
             </div>
@@ -3455,15 +3455,15 @@
                     <span style="font-size:11px;opacity:0.7;">Tip: si escribís solo un número, abre ese scan directamente.</span>
                 </div>
             </div>
-            <div style="padding:8px 14px;border-top:1px solid rgba(184,115,51,0.12);
+            <div style="padding:8px 14px;border-top:1px solid rgba(139,123,255,0.12);
                         display:flex;justify-content:space-between;align-items:center;
                         font-size:11px;color:rgba(241,230,211,0.45);">
                 <span>
-                    <kbd style="background:rgba(184,115,51,0.14);border:1px solid rgba(184,115,51,0.30);
+                    <kbd style="background:rgba(139,123,255,0.14);border:1px solid rgba(139,123,255,0.30);
                                 color:#f3e0c5;border-radius:4px;padding:1px 6px;font-size:10px;
                                 font-family:ui-monospace,Consolas,monospace;">↑↓</kbd> navegar
                     &nbsp;
-                    <kbd style="background:rgba(184,115,51,0.14);border:1px solid rgba(184,115,51,0.30);
+                    <kbd style="background:rgba(139,123,255,0.14);border:1px solid rgba(139,123,255,0.30);
                                 color:#f3e0c5;border-radius:4px;padding:1px 6px;font-size:10px;
                                 font-family:ui-monospace,Consolas,monospace;">Enter</kbd> abrir
                 </span>
@@ -3688,7 +3688,7 @@
             </div>
             <div class="bg-preset-card" data-preset="aurora" onclick="setBgPreset('aurora')"
                 style="background:linear-gradient(125deg,#0a0015,#1a0535,#060d2e);">
-                <div style="position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 30% 40%,rgba(184,115,51,0.5),transparent 60%),radial-gradient(ellipse 60% 50% at 70% 70%,rgba(59,130,246,0.35),transparent 55%);"></div>
+                <div style="position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 30% 40%,rgba(139,123,255,0.5),transparent 60%),radial-gradient(ellipse 60% 50% at 70% 70%,rgba(59,130,246,0.35),transparent 55%);"></div>
                 <span>Aurora ✨</span>
             </div>
             <div class="bg-preset-card" data-preset="nebula" onclick="setBgPreset('nebula')"
@@ -3746,7 +3746,7 @@
             <button type="button" class="bg-cursor-opt" data-cursor="argus" onclick="setCursorMode('argus')"
                 style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border-m);background:var(--bg-t);color:var(--text-m);cursor:pointer;font-size:12px;text-align:left;">
                 <span style="display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 20 20"><circle cx="4" cy="4" r="3.5" fill="#B87333"/><circle cx="4" cy="4" r="1.4" fill="white"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 20 20"><circle cx="4" cy="4" r="3.5" fill="#8b7bff"/><circle cx="4" cy="4" r="1.4" fill="white"/></svg>
                 </span>
                 <span><strong style="color:var(--text);">Argus</strong><br><span style="font-size:10px;color:var(--text-d);">Punto cobre/morado animado</span></span>
             </button>

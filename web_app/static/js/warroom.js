@@ -216,16 +216,16 @@
   // ---- Charts ----
   function initCharts(data) {
     if (typeof Chart === 'undefined') return;
-    Chart.defaults.color = '#A89578';
+    Chart.defaults.color = '#A6A8D0';
     Chart.defaults.font.family = "'Inter', sans-serif";
-    var accent = '#B87333', accentL = '#E8A86F';
+    var accent = '#8b7bff', accentL = '#b9a7ff';
 
     var labels24 = [];
     for (var i = 23; i >= 0; i--) labels24.push('-' + i + 'h');
     charts.h24 = new Chart(document.getElementById('wr-chart-24h'), {
       type: 'line',
       data: { labels: labels24, datasets: [{
-        data: data.hours_24 || [], borderColor: accent, backgroundColor: 'rgba(184,115,51,.15)',
+        data: data.hours_24 || [], borderColor: accent, backgroundColor: 'rgba(139,123,255,.15)',
         fill: true, tension: 0.35, pointRadius: 0, borderWidth: 2
       }] },
       options: baseOpts({ yBeginZero: true })
@@ -261,8 +261,8 @@
       indexAxis: o.indexAxis || 'x',
       plugins: { legend: { display: false } },
       scales: {
-        x: { grid: { color: 'rgba(184,115,51,.08)' }, ticks: { font: { size: 10 } } },
-        y: { grid: { color: 'rgba(184,115,51,.08)' }, beginAtZero: !!o.yBeginZero, ticks: { font: { size: 10 }, precision: 0 } }
+        x: { grid: { color: 'rgba(139,123,255,.08)' }, ticks: { font: { size: 10 } } },
+        y: { grid: { color: 'rgba(139,123,255,.08)' }, beginAtZero: !!o.yBeginZero, ticks: { font: { size: 10 }, precision: 0 } }
       }
     };
     return opt;
