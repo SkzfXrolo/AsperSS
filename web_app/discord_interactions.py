@@ -184,6 +184,63 @@ def _cmd_reputacion(options: list) -> dict:
         return _msg(f'⚠️ Error: {e}')
 
 
+def _cmd_buscados() -> dict:
+    try:
+        from app import get_api_db_cursor, _PH, _row_get
+        with get_api_db_cursor() as cur:
+            try:
+                cur.execute(
+                    "SELECT minecraft_username,"
+                    " SUM(CASE WHEN LOWER(verdict)='hack' THEN 1 ELSE 0 END) AS hacks,"
+                    " COUNT(*) AS total"
+                    " FROM scans"
+                    f" WHERE status={_PH} AND minecraft_username IS NOT NULL AND minecraft_username <> ''"
+                    " GROUP BY minecraft_username"
+                    " ORDER BY hacks DESC, total DESC LIMIT 30",
+                    ('completed',)
+                )
+                rows = cur.fetchall() or []
+            except Exception:
+                cur.execute(
+                    "SELECT minecraft_username,"
+                    " SUM(CASE WHEN LOWER(verdict)='hack' THEN 1 ELSE 0 END) AS hacks,"
+                    " COUNT(*) AS total"
+                    " FROM scans"
+                    " WHERE minecraft_username IS NOT NULL AND minecraft_username <> ''"
+                    " GROUP BY minecraft_username"
+                    " ORDER BY hacks DESC, total DESC LIMIT 30"
+                )
+                rows = cur.fetchall() or []
+        players = []
+        for r in rows:
+            uname = _row_get(r, 0, 'minecraft_username') or ''
+            hacks = int(_row_get(r, 1, 'hacks') or 0)
+            total = int(_row_get(r, 2, 'total') or 0)
+            if not uname or hacks < 1:
+                continue
+            players.append((uname, hacks, total))
+            if len(players) >= 10:
+                break
+        if not players:
+            return _msg('🛰️ Todavía no hay hacks confirmados en la red.', ephemeral=False)
+        medals = ['🥇', '🥈', '🥉']
+        lines = []
+        for i, (u, h, t) in enumerate(players):
+            rank = medals[i] if i < 3 else f'`#{i+1}`'
+            pct = round(h / t * 100) if t else 0
+            lines.append(f'{rank} **{u}** — {h} hacks · {t} scans · {pct}%')
+        panel_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://asperss.onrender.com').rstrip('/')
+        return _embed({
+            'title': '🎯 Más buscados — red Argus',
+            'url': f'{panel_url}/reputacion',
+            'description': '\n'.join(lines),
+            'color': 0xE74C3C,
+            'footer': {'text': 'Argus Vault · top hacks confirmados'},
+        })
+    except Exception as e:
+        return _msg(f'⚠️ Error: {e}')
+
+
 def _cmd_veredicto(options: list, member: dict) -> dict:
     if not _has_staff(member):
         return _msg('❌ No tienes el rol de staff.')
@@ -266,6 +323,8 @@ def handle_interaction(data: dict) -> dict:
             return _cmd_scan(options)
         if name == 'reputacion':
             return _cmd_reputacion(options)
+        if name == 'buscados':
+            return _cmd_buscados()
         if name == 'veredicto':
             return _cmd_veredicto(options, member)
         if name == 'ss':
