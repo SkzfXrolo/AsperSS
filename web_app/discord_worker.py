@@ -29,6 +29,16 @@ def get_conn():
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor, connect_timeout=10)
 
 
+def _rep_link(username):
+    """Link a la reputación pública del jugador (Argus Vault). None si no hay user válido."""
+    u = (username or '').strip()
+    if not u or u.upper() in ('N/A', 'NO DETECTADO', '—', '-'):
+        return None
+    from urllib.parse import quote
+    base = os.environ.get('RENDER_EXTERNAL_URL', 'https://asperss.onrender.com').rstrip('/')
+    return f'{base}/reputacion?u={quote(u)}'
+
+
 def poll_queue(bot_instance, bot_loop):
     """Lee eventos pendientes de discord_queue y los procesa."""
     import discord
@@ -78,6 +88,9 @@ def poll_queue(bot_instance, bot_loop):
                             f'**Hallazgos:** {data.get("issues_found", 0)}'
                         ),
                     )
+                    _link = _rep_link(data.get('username'))
+                    if _link:
+                        embed.add_field(name='🛡️ Reputación', value=f'[Ver historial en Argus Vault]({_link})', inline=False)
                     asyncio.run_coroutine_threadsafe(send_embed(embed), bot_loop).result(timeout=10)
 
                 elif event_type == 'verdict_change':
@@ -94,6 +107,9 @@ def poll_queue(bot_instance, bot_loop):
                             f'**Por:** {data.get("changed_by", "-")}'
                         ),
                     )
+                    _link = _rep_link(data.get('username'))
+                    if _link:
+                        embed.add_field(name='🛡️ Reputación', value=f'[Ver historial en Argus Vault]({_link})', inline=False)
                     asyncio.run_coroutine_threadsafe(send_embed(embed), bot_loop).result(timeout=10)
 
             except Exception as e:

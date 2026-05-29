@@ -457,6 +457,16 @@ def _make_bot():
 
 # ── Notification helpers ──────────────────────────────────────────────────────
 
+def _rep_link(username):
+    """Link a la reputación pública del jugador (Argus Vault). None si no hay user válido."""
+    u = (username or '').strip()
+    if not u or u.upper() in ('N/A', 'NO DETECTADO', '—', '-'):
+        return None
+    from urllib.parse import quote
+    base = os.environ.get('RENDER_EXTERNAL_URL', 'https://asperss.onrender.com').rstrip('/')
+    return f'{base}/reputacion?u={quote(u)}'
+
+
 def notify_new_scan(scan_id: int, machine_name: str, username: str,
                     risk_score: int = 0, issues_found: int = 0):
     """Llamado desde app.py cuando llega un scan nuevo."""
@@ -478,6 +488,9 @@ def notify_new_scan(scan_id: int, machine_name: str, username: str,
                 f'Usa `/veredicto {scan_id} hack|clean <razón>` para marcar veredicto.'
             ),
         )
+        _link = _rep_link(username)
+        if _link:
+            embed.add_field(name='🛡️ Reputación', value=f'[Ver historial en Argus Vault]({_link})', inline=False)
         await _send_to_channel(_bot_instance, int(DISCORD_CHANNEL), embed)
 
     if _bot_loop and not _bot_loop.is_closed():
@@ -506,6 +519,9 @@ def notify_verdict_change(scan_id: int, machine_name: str, username: str,
                 f'**Por:** {changed_by}'
             ),
         )
+        _link = _rep_link(username)
+        if _link:
+            embed.add_field(name='🛡️ Reputación', value=f'[Ver historial en Argus Vault]({_link})', inline=False)
         await _send_to_channel(_bot_instance, int(DISCORD_CHANNEL), embed)
 
     if _bot_loop and not _bot_loop.is_closed():
