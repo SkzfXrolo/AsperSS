@@ -205,9 +205,9 @@
     <div class="login-container">
         <div class="login-card">
             <div class="login-header">
-                <span class="brand-icon">🛡️</span>
-                <h1>Argus Projects</h1>
-                <p>Crear Cuenta</p>
+                <img class="brand-wordmark" src="{{ url_for('static', filename='img/argus-wordmark.png') }}" alt="Argus Projects" style="height:48px;width:auto;display:block;margin:0 auto 12px;filter:drop-shadow(0 0 18px rgba(139,123,255,.45));">
+                <h1 style="font-size:17px;letter-spacing:1px;font-weight:600;">Crear Cuenta</h1>
+                <p>Ingresá tu token de registro para empezar</p>
             </div>
 
             {% if error %}
