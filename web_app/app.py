@@ -12525,7 +12525,15 @@ def reputacion_page():
     return render_template('reputacion.html')
 
 
+_rep_cache = {}
+_REP_CACHE_TTL = 60
+_rep_rate = {}            # ip -> [timestamps] (throttle propio, independiente de Flask-Limiter)
+_REP_RATE_MAX = 30
+_REP_RATE_WINDOW = 60
+
+
 @app.route('/api/public/reputation', methods=['GET'])
+@_limit("40 per minute")
 def api_public_reputation():
     """ReputaciÃ³n pÃºblica agregada de un jugador por minecraft_username.
 
@@ -12536,7 +12544,29 @@ def api_public_reputation():
     """
     username = (request.args.get('u') or request.args.get('user') or '').strip()
     if not _rep_username_ok(username):
-        return jsonify({'error': 'username invÃ¡lido'}), 400
+        return jsonify({'error': 'username invalido'}), 400
+
+    _key = username.lower()
+    _now = _time_mod.time()
+
+    # Throttle propio por IP (red de seguridad contra enumeracion/abuso)
+    _ip = (request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+           or request.remote_addr or 'unknown')
+    _bucket = [t for t in _rep_rate.get(_ip, []) if _now - t < _REP_RATE_WINDOW]
+    if len(_bucket) >= _REP_RATE_MAX:
+        _rep_rate[_ip] = _bucket
+        _r429 = jsonify({'error': 'demasiadas consultas, espera un momento'})
+        return _r429, 429
+    _bucket.append(_now)
+    if len(_rep_rate) > 5000:
+        _rep_rate.clear()
+    _rep_rate[_ip] = _bucket
+
+    _hit = _rep_cache.get(_key)
+    if _hit and (_now - _hit[1]) < _REP_CACHE_TTL:
+        _r = jsonify(_hit[0])
+        _r.headers['Cache-Control'] = 'public, max-age=60'
+        return _r
 
     out = {
         'username':    username,
@@ -12603,8 +12633,11 @@ def api_public_reputation():
                 for r in rows[:25]
             ]
     except Exception:
-        pass  # DB no disponible â†’ se devuelve out en cero
+        pass  # DB no disponible -> se devuelve out en cero
 
+    if len(_rep_cache) > 1000:
+        _rep_cache.clear()
+    _rep_cache[_key] = (out, _now)
     resp = jsonify(out)
     resp.headers['Cache-Control'] = 'public, max-age=60'
     return resp

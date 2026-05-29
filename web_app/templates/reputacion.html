@@ -140,6 +140,13 @@
         }
         .rep-badge::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
         .rep-sub { color: var(--text-m); font-size: 13.5px; margin-top: 10px; }
+        .rep-seen { font-family: var(--mono); font-size: 11.5px; color: var(--text-d); margin-top: 8px; letter-spacing: .3px; }
+        .copy-btn {
+            margin-top: 12px; background: rgba(139,123,255,.1); border: 1px solid var(--border-h);
+            color: var(--accent); font-family: var(--mono); font-size: 11px; font-weight: 700;
+            letter-spacing: .5px; padding: 7px 14px; border-radius: 9px; cursor: pointer; transition: .2s;
+        }
+        .copy-btn:hover { background: rgba(139,123,255,.2); }
 
         .lvl-clean   { --c: var(--green); }
         .lvl-susp    { --c: var(--amber); }
@@ -259,6 +266,16 @@
 
         function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); }
 
+        window.argusCopyLink = function (btn) {
+            var url = location.href;
+            var done = function () { var t = btn.textContent; btn.textContent = '¡Copiado!'; setTimeout(function () { btn.textContent = t; }, 1500); };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(done).catch(function () { window.prompt('Copiá el link:', url); });
+            } else {
+                window.prompt('Copiá el link:', url);
+            }
+        };
+
         function fmtDate(s) {
             if (!s) return '—';
             var d = new Date(String(s).replace(' ', 'T'));
@@ -289,6 +306,10 @@
             html +=     '<div class="rep-name">' + esc(d.username) + '</div>';
             html +=     '<span class="rep-badge ' + lvl.badge + '">' + lvl.label + '</span>';
             html +=     '<div class="rep-sub">' + esc(lvl.sub) + '</div>';
+            if (d.first_seen || d.last_seen) {
+                html += '<div class="rep-seen">Primer scan ' + fmtDate(d.first_seen) + ' · Último ' + fmtDate(d.last_seen) + '</div>';
+            }
+            html +=     '<button class="copy-btn" type="button" onclick="argusCopyLink(this)">Copiar link</button>';
             html +=   '</div>';
             html += '</div>';
 
