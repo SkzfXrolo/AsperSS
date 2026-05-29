@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#B87333">
+    <title>Argus War Room — Centro de mando</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/logo.png') }}" type="image/png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/warroom.css') }}?v=1">
+</head>
+<body>
+    <div class="wr-scanline"></div>
+
+    <header class="wr-top">
+        <a class="wr-brand" href="/panel">
+            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Argus">
+            <span class="wr-bt">ARGUS <span>WAR ROOM</span></span>
+        </a>
+        <div class="wr-top-right">
+            <div class="wr-conn" id="wr-conn"><span class="wr-conn-dot"></span><span id="wr-conn-txt">Conectando…</span></div>
+            <div class="wr-clock" id="wr-clock">--:--:--</div>
+            <a class="wr-back" href="/panel">← Panel</a>
+        </div>
+    </header>
+
+    <main class="wr-main">
+        <!-- KPIs -->
+        <section class="wr-kpis">
+            <div class="wr-kpi" data-k="today">
+                <div class="wr-kpi-label">SS de hoy</div>
+                <div class="wr-kpi-val" id="kpi-today">0</div>
+            </div>
+            <div class="wr-kpi wr-kpi-red" data-k="det">
+                <div class="wr-kpi-label">Detecciones hoy</div>
+                <div class="wr-kpi-val" id="kpi-det">0</div>
+            </div>
+            <div class="wr-kpi wr-kpi-live" data-k="active">
+                <div class="wr-kpi-label">Activos ahora <span class="wr-live-pip"></span></div>
+                <div class="wr-kpi-val" id="kpi-active">0</div>
+            </div>
+            <div class="wr-kpi" data-k="risk">
+                <div class="wr-kpi-label">Riesgo promedio</div>
+                <div class="wr-kpi-val" id="kpi-risk">0<small>/100</small></div>
+            </div>
+        </section>
+
+        <!-- Map + Feed -->
+        <section class="wr-grid-main">
+            <div class="wr-card wr-map-card">
+                <div class="wr-card-head">
+                    <h2>🗺️ Mapa global en vivo</h2>
+                    <span class="wr-card-sub" id="wr-map-sub">esperando actividad…</span>
+                </div>
+                <div id="wr-map"></div>
+            </div>
+
+            <div class="wr-card wr-feed-card">
+                <div class="wr-card-head">
+                    <h2>📡 Feed en tiempo real</h2>
+                    <button class="wr-mini-btn" id="wr-feed-clear" title="Limpiar">limpiar</button>
+                </div>
+                <div class="wr-feed" id="wr-feed">
+                    <div class="wr-feed-empty" id="wr-feed-empty">Sin eventos todavía. Cuando alguien ejecute el scanner, aparecerá aquí al instante.</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Active scans -->
+        <section class="wr-card wr-active-card">
+            <div class="wr-card-head">
+                <h2>🛰️ Scans activos</h2>
+                <span class="wr-card-sub" id="wr-active-sub">0 en curso</span>
+            </div>
+            <div class="wr-active-grid" id="wr-active-grid">
+                <div class="wr-active-empty" id="wr-active-empty">Nadie escaneando en este momento.</div>
+            </div>
+        </section>
+
+        <!-- Charts -->
+        <section class="wr-grid-charts">
+            <div class="wr-card">
+                <div class="wr-card-head"><h2>📈 Actividad (24h)</h2></div>
+                <div class="wr-chart-wrap"><canvas id="wr-chart-24h"></canvas></div>
+            </div>
+            <div class="wr-card">
+                <div class="wr-card-head"><h2>🌍 Países top</h2></div>
+                <div class="wr-chart-wrap"><canvas id="wr-chart-countries"></canvas></div>
+            </div>
+            <div class="wr-card">
+                <div class="wr-card-head"><h2>⚖️ Veredictos</h2></div>
+                <div class="wr-chart-wrap"><canvas id="wr-chart-verdicts"></canvas></div>
+            </div>
+        </section>
+
+        <!-- AI summary -->
+        <section class="wr-card wr-ai-card">
+            <div class="wr-card-head">
+                <h2>🤖 Resumen del día (IA)</h2>
+                <button class="wr-mini-btn" id="wr-ai-refresh">actualizar</button>
+            </div>
+            <p class="wr-ai-text" id="wr-ai-text">Generando resumen…</p>
+        </section>
+
+        <footer class="wr-foot">
+            <span>Argus War Room · módulo 1 de la plataforma</span>
+            <span class="wr-roadmap">Próximo:
+                <a href="/warroom/vision">👁️ Vision</a> ·
+                <a href="/warroom/replay">🎯 Replay</a> ·
+                <a href="/warroom/network">🌐 Network</a>
+            </span>
+        </footer>
+    </main>
+
+    <audio id="wr-ping" preload="auto"></audio>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" integrity="sha384-MjKb3XbAcsL1U0q7Q2E31E4n4t4DccnE9vrFica8FWHQrQQizxgxYkWwaP42QikI" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="{{ url_for('static', filename='js/warroom.js') }}?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#B87333">
+    <title>{{ mod.name }} — Argus</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/logo.png') }}" type="image/png">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/warroom.css') }}?v=1">
+    <style>
+        .soon-wrap { max-width: 720px; margin: 0 auto; padding: 60px 22px; position: relative; z-index: 1; }
+        .soon-ico { font-size: 64px; line-height: 1; }
+        .soon-badge { display: inline-block; margin-top: 18px; padding: 5px 14px; border-radius: 20px;
+            background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.4); color: var(--amber);
+            font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+        .soon-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 42px; margin: 16px 0 6px; }
+        .soon-tag { color: var(--accent-l); font-size: 17px; font-weight: 600; margin-bottom: 18px; }
+        .soon-desc { color: var(--text-m); font-size: 15.5px; line-height: 1.8; }
+        .soon-feats { list-style: none; margin: 28px 0; display: grid; gap: 12px; }
+        .soon-feats li { display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+            background: var(--card); border: 1px solid var(--border); border-radius: 12px; font-size: 14.5px; }
+        .soon-feats li::before { content: '◆'; color: var(--accent); font-size: 12px; }
+        .soon-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 30px; }
+        .soon-btn { text-decoration: none; padding: 12px 22px; border-radius: 12px; font-weight: 700; font-size: 14px; transition: all .2s; }
+        .soon-btn.primary { background: linear-gradient(90deg, var(--accent), var(--accent-l)); color: #1a0f08; }
+        .soon-btn.primary:hover { filter: brightness(1.08); transform: translateY(-1px); }
+        .soon-btn.ghost { border: 1px solid var(--border-h); color: var(--text-m); }
+        .soon-btn.ghost:hover { color: var(--text); background: rgba(184,115,51,.1); }
+    </style>
+</head>
+<body>
+    <div class="wr-scanline"></div>
+    <header class="wr-top">
+        <a class="wr-brand" href="/warroom">
+            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Argus">
+            <span class="wr-bt">ARGUS <span>PLATAFORMA</span></span>
+        </a>
+        <div class="wr-top-right">
+            <a class="wr-back" href="/warroom">← War Room</a>
+        </div>
+    </header>
+
+    <main class="soon-wrap">
+        <div class="soon-ico">{{ mod.icon }}</div>
+        <div class="soon-badge">En desarrollo</div>
+        <h1 class="soon-title">{{ mod.name }}</h1>
+        <div class="soon-tag">{{ mod.tagline }}</div>
+        <p class="soon-desc">{{ mod.desc }}</p>
+        <ul class="soon-feats">
+            {% for f in mod.features %}<li>{{ f }}</li>{% endfor %}
+        </ul>
+        <div class="soon-actions">
+            <a class="soon-btn primary" href="/warroom">Volver al War Room</a>
+            <a class="soon-btn ghost" href="/panel">Ir al panel</a>
+        </div>
+    </main>
+</body>
+</html>

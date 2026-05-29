@@ -56,6 +56,19 @@ function initArgusSocket() {
     });
     _argusSocket.on('notification', (payload) => {
         const txt = payload && payload.message ? payload.message : 'Nueva notificación en tiempo real';
+        // SS en vivo: el jugador acaba de ejecutar el scanner
+        if (payload && payload.kind === 'scan_started') {
+            try { if (typeof playNotificationSound === 'function') playNotificationSound(); } catch (_) {}
+            if (typeof showToast === 'function') showToast(txt, 'success');
+            try { typeof _addNotification === 'function' && _addNotification({ icon: '🛰️', text: txt, scanId: payload.scan_id, time: new Date() }); } catch (_) {}
+            try { _ssLiveAdd(payload); } catch (_) {}
+            try { typeof loadScans === 'function' && loadScans(); } catch (_) {}
+            return;
+        }
+        // Scan completado: sacarlo del feed en vivo si está
+        if (payload && payload.kind === 'scan_completed' && payload.scan_id != null) {
+            try { _ssLiveRemove(payload.scan_id); } catch (_) {}
+        }
         if (typeof showToast === 'function') showToast(txt, 'info');
     });
 }
@@ -2699,6 +2712,202 @@ function setupEventListeners() {
     document.getElementById('download-app-btn')?.addEventListener('click', async () => {
         await downloadApp();
     });
+
+    // Descargar scanner con licencia firmada (para SS, sin token manual)
+    document.getElementById('download-ss-btn')?.addEventListener('click', async () => {
+        await downloadSignedScanner();
+    });
+
+    // Copiar link de descarga firmada para pegar en el PC del jugador
+    document.getElementById('copy-ss-link-btn')?.addEventListener('click', async () => {
+        await generateSsLink();
+    });
+    document.getElementById('ss-link-copy-again')?.addEventListener('click', () => {
+        const inp = document.getElementById('ss-link-url');
+        if (inp) { _copyTextToClipboard(inp.value); if (window.argusUI?.toast) window.argusUI.toast('Link copiado', 'success'); }
+    });
+    document.getElementById('ss-link-regen')?.addEventListener('click', () => generateSsLink());
+    document.getElementById('ss-link-test')?.addEventListener('click', () => testSsLicense());
+    document.getElementById('ss-snip-copy')?.addEventListener('click', () => {
+        const code = document.getElementById('ss-snip-code');
+        if (code) { _copyTextToClipboard(code.textContent); if (window.argusUI?.toast) window.argusUI.toast('Comando copiado', 'success'); }
+    });
+    document.querySelectorAll('.ss-snip-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.ss-snip-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            _renderSsSnippet(tab.dataset.snip);
+        });
+    });
+}
+
+// Atajo global: Alt+S genera y copia un link de SS desde cualquier parte del panel
+document.addEventListener('keydown', (e) => {
+    if (e.altKey && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        if (typeof generateSsLink === 'function') generateSsLink();
+    }
+});
+
+// Copia texto al portapapeles con fallback a execCommand
+async function _copyTextToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch (_) {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
+            return true;
+        } catch (e) { return false; }
+    }
+}
+
+let _ssLinkCountdownTimer = null;
+let _ssLastLicense = null;   // guarda {download_url, license, ps_oneliner}
+async function generateSsLink() {
+    const btn = document.getElementById('copy-ss-link-btn');
+    const statusEl = document.getElementById('ga-status-text');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.7'; }
+    if (statusEl) statusEl.textContent = 'Generando link…';
+    try {
+        const resp = await fetch('/api/ss-license', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'fetch', 'Accept': 'application/json' }
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.success) {
+            const msg = data.error || 'No se pudo generar el link.';
+            if (window.argusUI?.toast) window.argusUI.toast(msg, 'error'); else alert('⚠️ ' + msg);
+            if (statusEl) statusEl.textContent = 'Link bloqueado';
+            return;
+        }
+        _ssLastLicense = data;
+        await _copyTextToClipboard(data.download_url);
+        const card = document.getElementById('ss-link-result');
+        const inp = document.getElementById('ss-link-url');
+        const exp = document.getElementById('ss-link-expiry');
+        const testBox = document.getElementById('ss-test-result');
+        if (inp) inp.value = data.download_url;
+        if (card) card.hidden = false;
+        if (testBox) testBox.hidden = true;
+        _renderSsSnippet(document.querySelector('.ss-snip-tab.active')?.dataset.snip || 'ps');
+        // Countdown de expiración (cambia de color cerca del final)
+        if (_ssLinkCountdownTimer) clearInterval(_ssLinkCountdownTimer);
+        let secs = Math.round((data.expires_in_hours || 6) * 3600);
+        const tick = () => {
+            if (!exp) return;
+            if (secs <= 0) { exp.textContent = 'expirado — regenerá'; exp.className = 'ss-link-expiry ss-exp-red'; clearInterval(_ssLinkCountdownTimer); return; }
+            const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+            exp.textContent = 'expira en ' + (h ? h + 'h ' : '') + m + 'm ' + String(s).padStart(2, '0') + 's';
+            exp.className = 'ss-link-expiry' + (secs < 300 ? ' ss-exp-red' : (secs < 900 ? ' ss-exp-amber' : ''));
+            secs--;
+        };
+        tick();
+        _ssLinkCountdownTimer = setInterval(tick, 1000);
+        if (statusEl) statusEl.textContent = 'Link copiado — pegalo en el PC del jugador';
+        if (window.argusUI?.toast) window.argusUI.toast('Link copiado al portapapeles. Pegalo en el navegador del jugador (AnyDesk).', 'success');
+    } catch (err) {
+        if (window.argusUI?.toast) window.argusUI.toast('Error: ' + err.message, 'error'); else alert('Error: ' + err.message);
+        if (statusEl) statusEl.textContent = 'Error al generar link';
+    } finally {
+        if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+    }
+}
+
+function _renderSsSnippet(kind) {
+    const codeEl = document.getElementById('ss-snip-code');
+    if (!codeEl || !_ssLastLicense) return;
+    const url = _ssLastLicense.download_url;
+    if (kind === 'cmd') {
+        codeEl.textContent = `curl -L "${url}" -o "%TEMP%\\ArgusSS.zip" && tar -xf "%TEMP%\\ArgusSS.zip" -C "%TEMP%\\ArgusSS" && "%TEMP%\\ArgusSS\\ArgusScanner.exe"`;
+    } else {
+        codeEl.textContent = _ssLastLicense.ps_oneliner || `iwr '${url}' -OutFile "$env:TEMP\\ArgusSS.zip"`;
+    }
+}
+
+async function testSsLicense() {
+    const box = document.getElementById('ss-test-result');
+    if (!_ssLastLicense || !box) return;
+    box.hidden = false;
+    box.className = 'ss-test-result ss-test-loading';
+    box.textContent = 'Probando licencia…';
+    try {
+        const resp = await fetch('/api/ss-license/info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+            body: JSON.stringify({ license: _ssLastLicense.license })
+        });
+        const d = await resp.json().catch(() => ({}));
+        if (d.valid) {
+            box.className = 'ss-test-result ss-test-ok';
+            box.textContent = '✓ ' + (d.message || 'Licencia válida y suscripción activa.');
+        } else {
+            box.className = 'ss-test-result ss-test-bad';
+            box.textContent = '✕ ' + (d.error || 'Licencia inválida.');
+        }
+    } catch (e) {
+        box.className = 'ss-test-result ss-test-bad';
+        box.textContent = '✕ Error probando: ' + e.message;
+    }
+}
+
+// ── Feed "SS en curso" en vivo ──────────────────────────────────────────────
+const _ssLiveScans = new Map(); // scan_id -> {who, country, startedMs, el}
+let _ssLiveTimer = null;
+
+function _ssLiveAdd(payload) {
+    const id = payload.scan_id;
+    if (id == null) return;
+    if (!_ssLiveScans.has(id)) {
+        _ssLiveScans.set(id, {
+            who: payload.minecraft_username || payload.machine_name || 'PC',
+            country: payload.country || '',
+            launcher: payload.launcher || '',
+            startedMs: Date.now(),
+        });
+    }
+    _ssLiveRender();
+    if (!_ssLiveTimer) _ssLiveTimer = setInterval(_ssLiveRender, 1000);
+}
+
+function _ssLiveRender() {
+    const list = document.getElementById('ss-livefeed-list');
+    const card = document.getElementById('ss-livefeed');
+    const chip = document.getElementById('ss-live-chip');
+    // Expirar entradas viejas (>3 min sin completar)
+    const now = Date.now();
+    for (const [id, s] of _ssLiveScans) {
+        if (now - s.startedMs > 180000) _ssLiveScans.delete(id);
+    }
+    const n = _ssLiveScans.size;
+    const countEls = [document.getElementById('ss-live-count'), document.getElementById('ss-livefeed-count')];
+    countEls.forEach(el => { if (el) el.textContent = n; });
+    if (chip) chip.hidden = n === 0;
+    if (card) card.hidden = n === 0;
+    if (n === 0) { if (_ssLiveTimer) { clearInterval(_ssLiveTimer); _ssLiveTimer = null; } if (list) list.innerHTML = ''; return; }
+    if (!list) return;
+    const rows = [];
+    for (const [id, s] of _ssLiveScans) {
+        const secs = Math.floor((now - s.startedMs) / 1000);
+        const mm = String(Math.floor(secs / 60)).padStart(2, '0'), ss = String(secs % 60).padStart(2, '0');
+        const meta = [s.country, s.launcher].filter(Boolean).join(' · ');
+        rows.push(
+            `<div class="ss-live-item" onclick="(typeof openScanDetail==='function')&&openScanDetail(${id})">
+                <span class="ss-live-pulse"></span>
+                <span class="ss-live-who">${(s.who + '').replace(/[<>&]/g, '')}</span>
+                ${meta ? `<span class="ss-live-meta">${meta.replace(/[<>&]/g, '')}</span>` : ''}
+                <span class="ss-live-timer">${mm}:${ss}</span>
+            </div>`
+        );
+    }
+    list.innerHTML = rows.join('');
+}
+
+function _ssLiveRemove(id) {
+    if (_ssLiveScans.has(id)) { _ssLiveScans.delete(id); _ssLiveRender(); }
 }
 
 async function _copyToClipboard(text, btn, defaultLabel, copiedLabel) {
@@ -5966,6 +6175,57 @@ async function downloadApp() {
         }
     } catch (error) {
         alert('Error al descargar aplicación: ' + error.message);
+    }
+}
+
+// ============================================================
+// DESCARGAR SCANNER CON LICENCIA FIRMADA (para SS)
+// ------------------------------------------------------------
+// Trae un ZIP con ArgusScanner.exe + config.json que ya incluye una
+// licencia firmada ligada a tu empresa. El scanner se autentica solo:
+// no hay que generar ni tipear ningún token. El backend bloquea la
+// descarga si la suscripción no está activa.
+// ============================================================
+async function downloadSignedScanner() {
+    const btn = document.getElementById('download-ss-btn');
+    const statusEl = document.getElementById('ga-status-text');
+    const origHTML = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.7'; }
+    if (statusEl) statusEl.textContent = 'Generando licencia…';
+    try {
+        const resp = await fetch('/descargar/scanner-firmado', {
+            headers: { 'X-Requested-With': 'fetch', 'Accept': 'application/json' }
+        });
+        const ct = resp.headers.get('content-type') || '';
+        if (!resp.ok || ct.includes('application/json')) {
+            let msg = 'No se pudo generar la descarga.';
+            try { const j = await resp.json(); msg = j.error || msg; } catch (_) {}
+            if (window.argusUI?.toast) window.argusUI.toast(msg, 'error');
+            else alert('⚠️ ' + msg);
+            if (statusEl) statusEl.textContent = 'Descarga bloqueada';
+            return;
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'ArgusScanner.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        if (statusEl) statusEl.textContent = 'Licencia lista — extraé y ejecutá';
+        if (window.argusUI?.toast) {
+            window.argusUI.toast('Scanner descargado. Extraé el ZIP y ejecutá ArgusScanner.exe: se autentica solo.', 'success');
+        } else {
+            alert('✅ Descarga iniciada (ArgusScanner.zip).\n\nExtraé el ZIP y ejecutá ArgusScanner.exe junto al config.json: se autentica solo, sin token.');
+        }
+    } catch (err) {
+        if (window.argusUI?.toast) window.argusUI.toast('Error al descargar: ' + err.message, 'error');
+        else alert('Error al descargar el scanner firmado: ' + err.message);
+        if (statusEl) statusEl.textContent = 'Error al descargar';
+    } finally {
+        if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.innerHTML = origHTML; }
     }
 }
 

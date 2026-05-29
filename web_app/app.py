@@ -435,7 +435,7 @@ def audit_action(action_name: str, resource_type: str = ''):
 CORS(app)
 
 # Inicializar base de datos de autenticaciÃ³n al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.57'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
+_ARGUS_VERSION = '1.6.58'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
 # URL de invitacion permanente al Discord oficial. Se inyecta en todos los
 # templates como `discord_invite` via @app.context_processor (ver mas abajo).
@@ -952,9 +952,16 @@ def require_api_key(f):
 
 @app.route('/')
 def index():
-    """PÃ¡gina principal - Sobre ASPERS"""
+    """Página oficial de Argus Projects — hub que deriva a cada proyecto."""
+    response = make_response(render_template('hub.html'))
+    response.headers['Cache-Control'] = 'public, max-age=300'  # 5 minutos
+    return response
+
+
+@app.route('/scanner')
+def scanner_landing():
+    """Sub-index del producto Argus Scanner (la landing anterior de /)."""
     response = make_response(render_template('index.html'))
-    # Agregar headers de cachÃ© para recursos estÃ¡ticos
     response.headers['Cache-Control'] = 'public, max-age=300'  # 5 minutos
     return response
 
@@ -1554,6 +1561,272 @@ def panel():
         scanner_version=_ARGUS_VERSION,
         is_panel_owner=is_panel_owner,
     )
+
+
+# ============================================================================
+#  ARGUS WAR ROOM  ·  Centro de mando en tiempo real
+#  Vista nueva que reusa la auth de staff, el Socket.IO existente y la tabla
+#  scans. NO toca nada del panel actual. Es la "cara" de la plataforma sobre la
+#  que despues se enchufan los modulos Vision / Replay / Network.
+# ============================================================================
+
+@app.route('/warroom')
+@login_required
+def warroom():
+    """Centro de mando en tiempo real del staff."""
+    user = get_user_by_id(session.get('user_id'))
+    if user and isinstance(user.get('roles'), str):
+        try:
+            user['roles'] = json.loads(user['roles'])
+        except Exception:
+            user['roles'] = [user.get('roles', 'user')]
+    staff_role = get_staff_role(user) if user else 'helper'
+    return render_template(
+        'warroom.html',
+        user=user,
+        staff_role=staff_role,
+        scanner_version=_ARGUS_VERSION,
+    )
+
+
+def _warroom_scope(user):
+    """Devuelve (where_extra, params) para limitar scans a la empresa del staff.
+    Superadmin global ve todo; el resto solo su empresa."""
+    try:
+        if user and is_super_admin(user):
+            return '', []
+    except Exception:
+        pass
+    cid = int(session.get('company_id') or 0)
+    if cid > 0:
+        return f' AND s.company_id = {_PH}', [cid]
+    return '', []
+
+
+def _wr_parse_dt(val):
+    """Parsea started_at/completed_at sea datetime o string en algo comparable."""
+    if val is None:
+        return None
+    if isinstance(val, datetime.datetime):
+        return val
+    s = str(val).strip().replace('T', ' ').replace('Z', '')
+    if not s:
+        return None
+    for fmt in ('%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d'):
+        try:
+            return datetime.datetime.strptime(s[:26], fmt)
+        except Exception:
+            continue
+    return None
+
+
+def _warroom_collect(user):
+    """Lee scans recientes (scoped por empresa) y arma todos los agregados que
+    consume el War Room. Aggrega en Python para ser agnostico de BD."""
+    where_extra, params = _warroom_scope(user)
+    rows = []
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT s.id, s.machine_name, s.minecraft_username, s.started_at, "
+                f"s.completed_at, s.status, s.risk_score, s.verdict, s.country, "
+                f"s.ip_address "
+                f"FROM scans s WHERE s.deleted_at IS NULL{where_extra} "
+                f"ORDER BY s.started_at DESC LIMIT 1500",
+                tuple(params)
+            )
+            rows = cur.fetchall() or []
+    except Exception as e:
+        print(f"[warroom] query error: {e}")
+        rows = []
+
+    now = datetime.datetime.now()
+    today = now.date()
+    hour_buckets = [0] * 24             # ultimas 24h (indice 0 = hace 23h ... 23 = esta hora)
+    top_countries = {}
+    verdicts = {'clean': 0, 'suspicious': 0, 'hack': 0, 'pending': 0}
+    map_points = {}                     # country -> {count, hits, last_risk}
+    active, recent = [], []
+    today_total = 0
+    today_detections = 0
+    risk_sum = 0
+    risk_n = 0
+
+    for r in rows:
+        sid = _row_get(r, 0, 'id')
+        machine = _row_get(r, 1, 'machine_name') or ''
+        mc = _row_get(r, 2, 'minecraft_username') or ''
+        started = _wr_parse_dt(_row_get(r, 3, 'started_at'))
+        completed = _wr_parse_dt(_row_get(r, 4, 'completed_at'))
+        status = str(_row_get(r, 5, 'status') or '').lower()
+        risk = int(_row_get(r, 6, 'risk_score') or 0)
+        verdict = str(_row_get(r, 7, 'verdict') or '').lower()
+        country = (str(_row_get(r, 8, 'country') or '').strip() or 'Desconocido')
+        who = mc or machine or 'PC sin nombre'
+
+        is_hack = (verdict == 'hack') or (risk >= 70)
+        is_susp = (not is_hack) and (verdict == 'suspicious' or risk >= 30)
+
+        # Verdict distribution
+        if verdict in ('clean', 'suspicious', 'hack'):
+            verdicts[verdict] += 1
+        elif is_hack:
+            verdicts['hack'] += 1
+        elif is_susp:
+            verdicts['suspicious'] += 1
+        else:
+            verdicts['pending'] += 1
+
+        # Map + countries
+        mp = map_points.setdefault(country, {'count': 0, 'hits': 0, 'max_risk': 0})
+        mp['count'] += 1
+        mp['max_risk'] = max(mp['max_risk'], risk)
+        if is_hack:
+            mp['hits'] += 1
+        top_countries[country] = top_countries.get(country, 0) + 1
+
+        # Today + 24h buckets
+        if started:
+            if started.date() == today:
+                today_total += 1
+                if is_hack:
+                    today_detections += 1
+                risk_sum += risk
+                risk_n += 1
+            delta_h = (now - started).total_seconds() / 3600.0
+            if 0 <= delta_h < 24:
+                hour_buckets[23 - int(delta_h)] += 1
+
+        # Active (running, sin completar, iniciado hace < 30 min)
+        is_running = (status in ('running', 'in_progress', 'scanning')) or (completed is None and status not in ('completed', 'done', 'finished'))
+        if is_running and started and (now - started).total_seconds() < 1800:
+            active.append({
+                'scan_id': sid, 'who': who, 'country': country,
+                'started_at': started.isoformat(), 'risk': risk,
+            })
+
+        if len(recent) < 24:
+            recent.append({
+                'scan_id': sid, 'who': who, 'country': country,
+                'started_at': started.isoformat() if started else '',
+                'risk': risk, 'verdict': verdict or ('hack' if is_hack else ('suspicious' if is_susp else 'pending')),
+            })
+
+    top_sorted = sorted(top_countries.items(), key=lambda kv: kv[1], reverse=True)[:8]
+    map_list = [{'country': k, **v} for k, v in sorted(map_points.items(), key=lambda kv: kv[1]['count'], reverse=True)[:60]]
+
+    return {
+        'kpis': {
+            'today_total': today_total,
+            'today_detections': today_detections,
+            'active_count': len(active),
+            'avg_risk': round(risk_sum / risk_n) if risk_n else 0,
+            'total_window': len(rows),
+        },
+        'active': active[:30],
+        'recent': recent,
+        'hours_24': hour_buckets,
+        'top_countries': [{'country': c, 'count': n} for c, n in top_sorted],
+        'verdicts': verdicts,
+        'map_points': map_list,
+        'server_time': now.isoformat(),
+    }
+
+
+@app.route('/api/warroom/overview', methods=['GET'])
+@login_required
+def warroom_overview():
+    user = get_user_by_id(session.get('user_id'))
+    try:
+        return jsonify({'success': True, **_warroom_collect(user)}), 200
+    except Exception as e:
+        print(f"[warroom] overview error: {e}\n{traceback.format_exc()}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+_WARROOM_MODULES = {
+    'vision': {
+        'icon': '👁️', 'name': 'Argus Vision',
+        'tagline': 'IA / visión por computadora aplicada al anti-cheat',
+        'desc': 'Analiza capturas y la pantalla del sospechoso durante el SS y detecta '
+                'visualmente clientes de cheats, overlays y procesos sospechosos. El moat: '
+                'difícil de copiar, dominio nuevo, ayuda directa al staff.',
+        'features': ['Detección visual de clientes de cheats', 'Clasificación de overlays sospechosos',
+                     'OCR de ventanas y procesos', 'Resaltado automático de hallazgos'],
+    },
+    'replay': {
+        'icon': '🎯', 'name': 'Argus Replay',
+        'tagline': 'Repetición forense + ML de comportamiento',
+        'desc': 'Graba la sesión del sospechoso y la reproduce con timeline: heatmap de mouse, '
+                'tiempos de reacción y anomalías de aim detectadas por modelos de comportamiento. '
+                'Pruebas claras para que el staff decida con evidencia.',
+        'features': ['Timeline de la sesión', 'Heatmap de movimiento de mouse',
+                     'Análisis de tiempos de reacción', 'Detección de anomalías de aim'],
+    },
+    'network': {
+        'icon': '🌐', 'name': 'Argus Network',
+        'tagline': 'Red de reputación compartida entre servidores',
+        'desc': 'Base de datos colaborativa de tramposos entre servidores con un explorador tipo '
+                'grafo. Efecto red: cuantos más servidores aportan, más fuerte protege a todos.',
+        'features': ['Reputación compartida entre servers', 'Explorador de grafo de relaciones',
+                     'Alertas de reincidentes', 'API para integrar otros servidores'],
+    },
+}
+
+
+@app.route('/warroom/<module>')
+@login_required
+def warroom_module(module):
+    """Placeholder de los próximos módulos de la plataforma (Vision/Replay/Network)."""
+    mod = _WARROOM_MODULES.get(str(module).lower())
+    if not mod:
+        return redirect('/warroom')
+    return render_template('warroom_soon.html', mod=mod, module=module)
+
+
+@app.route('/api/warroom/summary', methods=['GET'])
+@login_required
+def warroom_summary():
+    """Resumen del dia en lenguaje natural. Usa la IA si esta disponible, con
+    fallback a un resumen templado a partir de las metricas."""
+    user = get_user_by_id(session.get('user_id'))
+    try:
+        data = _warroom_collect(user)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    k = data['kpis']
+    top = data['top_countries']
+    peak_h = max(range(24), key=lambda i: data['hours_24'][i]) if any(data['hours_24']) else None
+    top_txt = top[0]['country'] if top else 'sin datos'
+    peak_txt = f"hace {23 - peak_h}h aprox." if peak_h is not None else 's/d'
+
+    fallback = (
+        f"Hoy se realizaron {k['today_total']} SS, con {k['today_detections']} "
+        f"detecciones de riesgo alto. Riesgo promedio del dia: {k['avg_risk']}/100. "
+        f"Pais mas activo: {top_txt}. Pico de actividad: {peak_txt}. "
+        f"Scans activos ahora mismo: {k['active_count']}."
+    )
+
+    summary = fallback
+    try:
+        import argus_ai_assistant as A
+        prompt = (
+            "Resume en 2-3 frases, tono profesional y claro, el estado de hoy de un "
+            "centro de anti-cheat de Minecraft con estos datos: "
+            f"SS hoy={k['today_total']}, detecciones={k['today_detections']}, "
+            f"riesgo_promedio={k['avg_risk']}/100, activos_ahora={k['active_count']}, "
+            f"pais_top={top_txt}. Da una conclusion accionable al final."
+        )
+        out = A.generate_response(prompt, None, None, None)
+        ans = (out or {}).get('answer')
+        if ans and len(ans.strip()) > 10:
+            summary = ans.strip()
+    except Exception:
+        pass
+
+    return jsonify({'success': True, 'summary': summary, 'kpis': k}), 200
+
 
 @app.route('/aspers-sa', methods=['GET', 'POST'])
 def admin_subscriptions():
@@ -7920,8 +8193,139 @@ def delete_token(token_id):
 # ENDPOINTS PARA EL CLIENTE .EXE (sin login requerido, usan scan token)
 # ============================================================
 
+# ============================================================
+# Licencia de escaneo firmada (reemplaza el token manual de 6 chars)
+# ------------------------------------------------------------
+# Una "licencia" es un blob firmado (itsdangerous) que un staff logueado
+# y con suscripcion activa mina al descargar el scanner. Viaja embebida en
+# el config.json del .exe (campo scan_token) y se verifica en
+# /api/validate-token y /api/scans. No necesita fila en scan_tokens: la
+# atribucion a empresa sale del propio blob (company + staff username), y
+# la prueba de "soy staff que paga" la da la firma + el chequeo de
+# suscripcion. Asi nadie tiene que tipear un codigo a mano.
+# ============================================================
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+
+_LICENSE_PREFIX = 'argus_lic_'
+_LICENSE_SALT = 'argus-scan-license-v1'
+# Ventana de validez del blob (segundos). Por defecto 6h: cubre un SS largo
+# y un par de descargas, sin volverse un token permanente.
+_LICENSE_MAX_AGE = int(os.environ.get('ARGUS_LICENSE_MAX_AGE', str(6 * 3600)))
+
+
+def _license_serializer():
+    return URLSafeTimedSerializer(app.secret_key, salt=_LICENSE_SALT)
+
+
+def _mint_scan_license(company_id, username):
+    """Firma una licencia de escaneo para una empresa/staff concretos."""
+    payload = {'c': int(company_id or 0), 'u': (username or '')[:64]}
+    return _LICENSE_PREFIX + _license_serializer().dumps(payload)
+
+
+def _parse_sub_end_date(raw):
+    if not raw:
+        return None
+    try:
+        if isinstance(raw, str):
+            return datetime.datetime.fromisoformat(raw.replace('Z', '+00:00')).replace(tzinfo=None)
+        if hasattr(raw, 'tzinfo'):
+            return raw.replace(tzinfo=None)
+        return raw
+    except Exception:
+        return None
+
+
+def _company_subscription_active(company_id):
+    """True si la empresa existe, esta activa y su suscripcion no vencio."""
+    if not company_id:
+        return False
+    try:
+        comp = get_company_by_id(company_id)
+    except Exception:
+        comp = None
+    if not comp:
+        return False
+    if not comp.get('is_active', True):
+        return False
+    status = (comp.get('subscription_status') or '').strip().lower()
+    if status not in ('active', 'trial', 'trialing'):
+        return False
+    end = _parse_sub_end_date(comp.get('subscription_end_date'))
+    if end is not None and datetime.datetime.now() > end:
+        return False
+    return True
+
+
+def _verify_scan_license(raw):
+    """Devuelve None si 'raw' no es una licencia firmada (para que caiga al
+    flujo de token clasico). Si lo es, devuelve dict con created_by/company_id
+    o {'error': ...} cuando la firma/expiracion/suscripcion no validan."""
+    if not raw or not isinstance(raw, str) or not raw.startswith(_LICENSE_PREFIX):
+        return None
+    blob = raw[len(_LICENSE_PREFIX):]
+    try:
+        data = _license_serializer().loads(blob, max_age=_LICENSE_MAX_AGE)
+    except SignatureExpired:
+        return {'error': 'Licencia expirada. Descargá el scanner de nuevo desde tu panel.'}
+    except (BadSignature, Exception):
+        return {'error': 'Licencia inválida.'}
+    company_id = data.get('c')
+    username = data.get('u') or ''
+    if not _company_subscription_active(company_id):
+        return {'error': 'Suscripción inactiva o vencida. Renová para usar el scanner.'}
+    return {'company_id': company_id, 'created_by': username, 'is_license': True}
+
+
+def _notify_company_scan_started(company_id, who, country, scan_id, launcher=None):
+    """Ping a los webhooks (Discord/Telegram) de la empresa cuando arranca un SS.
+    Best-effort: cualquier fallo se ignora para no romper el inicio del scan."""
+    if not company_id:
+        return
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT type, webhook_url, enabled FROM company_notification_settings "
+                f"WHERE company_id = {_PH} AND enabled = TRUE",
+                (int(company_id),)
+            )
+            rows = cur.fetchall() or []
+    except Exception:
+        rows = []
+    if not rows:
+        return
+    _loc = f" · {country}" if country else ''
+    _lz = f" · {launcher}" if launcher else ''
+    for r in rows:
+        d = dict(r) if not isinstance(r, dict) else r
+        url = str(d.get('webhook_url') or '').strip()
+        if not url:
+            continue
+        ntype = str(d.get('type') or '').strip().lower()
+        try:
+            if ntype == 'discord':
+                requests.post(url, json={'content': f"🛰️ **SS iniciado** · {who}{_loc}{_lz} · scan #{scan_id}"}, timeout=4)
+            elif ntype == 'telegram':
+                requests.post(url, json={'text': f"🛰️ SS iniciado: {who}{_loc}{_lz} (scan #{scan_id})"}, timeout=4)
+            else:
+                requests.post(url, json={'event': 'scan_started', 'who': who, 'country': country,
+                                         'scan_id': scan_id, 'company_id': int(company_id)}, timeout=4)
+        except Exception as _e:
+            print(f"[ss_notify] webhook error type={ntype}: {_e}")
+
+
 def _validate_scan_token_direct(token):
-    """Valida un token de escaneo en la BD. Retorna (token_id, error_msg, created_by, allowed_mods)."""
+    """Valida un token de escaneo en la BD. Retorna (token_id, error_msg, created_by, allowed_mods).
+
+    Primero intenta interpretar 'token' como una licencia firmada
+    (argus_lic_...). Si no lo es, cae al flujo clasico de scan_tokens.
+    Para licencias, token_id es None (no hay fila): el resto del pipeline
+    (start_scan) deriva la empresa desde created_by."""
+    lic = _verify_scan_license(token)
+    if lic is not None:
+        if lic.get('error'):
+            return None, lic['error'], None, None
+        return None, None, lic.get('created_by'), []
     try:
         # CÃ³digos cortos (â‰¤8 chars) se buscan en short_code; tokens largos en token
         use_short = len(token) <= 8
@@ -8131,7 +8535,7 @@ def debug_last_scan():
 
 
 # Current released scanner version â€” update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.6.57"
+CURRENT_SCANNER_VERSION = "1.6.58"
 
 @app.route('/sw.js')
 def service_worker():
@@ -8424,6 +8828,32 @@ def start_scan():
                         pass
 
         print(f"[DEBUG start_scan] scan_id={scan_id} creado OK")
+
+        # SS en vivo: avisar al staff (room de empresa) que el jugador ya
+        # ejecuto el scanner. Llega como toast + sonido en el panel.
+        if company_id:
+            _who = (mc_username or machine_name or 'PC sin nombre')
+            _loc = f" · {country}" if country else ''
+            _launcher = (data.get('mc_launcher') or '') if isinstance(data, dict) else ''
+            try:
+                _emit_realtime_notification(company_id=company_id, payload={
+                    'kind': 'scan_started',
+                    'message': f"🛰️ SS en vivo: {_who} empezó a escanear{_loc}",
+                    'scan_id': scan_id,
+                    'machine_name': machine_name,
+                    'minecraft_username': mc_username,
+                    'country': country,
+                    'launcher': _launcher,
+                    'ip_address': ip_address,
+                    'started_at': datetime.datetime.utcnow().isoformat() + 'Z',
+                })
+            except Exception as _ws_e:
+                print(f"[ws] no se pudo emitir scan_started: {_ws_e}")
+            try:
+                _notify_company_scan_started(company_id, _who, country, scan_id, _launcher)
+            except Exception as _wh_e:
+                print(f"[ss_notify] {_wh_e}")
+
         return jsonify({'success': True, 'scan_id': scan_id, 'status': 'running', 'message': 'Escaneo iniciado'}), 201
     except Exception as e:
         print(f"[DEBUG start_scan] ERROR: {e}\n{traceback.format_exc()}")
@@ -12095,6 +12525,229 @@ def descargar_exe():
         if os.path.exists(path):
             return send_file(path, as_attachment=True, download_name='ArgusScanner.exe')
     return jsonify({'error': 'Ejecutable no disponible aÃºn. Contacta a un administrador.'}), 404
+
+
+def _locate_scanner_exe():
+    """Devuelve la ruta del ArgusScanner.exe compilado, o None."""
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for p in (
+        os.path.join(project_root, 'dist', 'ArgusScanner.exe'),
+        os.path.join(project_root, 'downloads', 'ArgusScanner.exe'),
+        os.path.join(project_root, 'source', 'dist', 'ArgusScanner.exe'),
+        os.path.join(project_root, 'ArgusScanner.exe'),
+    ):
+        if os.path.exists(p):
+            return p
+    return None
+
+
+_SCANNER_README = (
+    "ARGUS SCANNER — Paquete autorizado para Screen Share\n"
+    "====================================================\n\n"
+    "1. Extraé TODO este ZIP en una carpeta (no ejecutes desde dentro del .zip).\n"
+    "2. Dejá ArgusScanner.exe junto a config.json en la misma carpeta.\n"
+    "3. Ejecutá ArgusScanner.exe como administrador.\n"
+    "4. Se autentica solo con la licencia firmada — NO hay que tipear ningún código.\n"
+    "5. Dejá la ventana abierta hasta que el staff te lo indique.\n\n"
+    "La licencia caduca sola. Si ves 'Licencia expirada', pedile al staff un link nuevo.\n"
+)
+
+
+def _no_store(resp):
+    """Evita que proxies/navegadores cacheen una descarga con licencia."""
+    try:
+        resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
+        resp.headers['Pragma'] = 'no-cache'
+        resp.headers['X-Content-Type-Options'] = 'nosniff'
+    except Exception:
+        pass
+    return resp
+
+
+def _send_scanner_zip_with_license(license_str):
+    """Arma y envia un ZIP con ArgusScanner.exe + config.json (con la licencia
+    firmada embebida) + README.txt. Devuelve (response, None) o (None, error_msg)."""
+    import zipfile
+    import tempfile
+    import threading as _threading
+    import json as json_lib
+
+    exe_path = _locate_scanner_exe()
+    if not exe_path:
+        return None, 'El ejecutable no está disponible todavía. Contactá a un administrador.'
+
+    api_url = (get_api_url('').rstrip('/api')) or 'https://asperss.onrender.com'
+    web_url = request.host_url.rstrip('/') if not IS_RENDER else os.environ.get('RENDER_EXTERNAL_URL', request.host_url).rstrip('/')
+    config_data = {
+        "discord_webhook": "",
+        "auth_token": "",
+        "scan_timeout": 300,
+        "scan_token": license_str,   # los .exe actuales leen scan_token y auto-validan
+        "license": license_str,      # alias semantico para builds nuevos
+        "api_url": api_url,
+        "web_url": web_url,
+        "enable_db_integration": True,
+        "enable_ai_analysis": True,
+        "enable_discord_report": False,
+        "enable_web_report": True,
+    }
+
+    temp_dir = tempfile.gettempdir()
+    zip_path = os.path.join(temp_dir, f'ArgusScanner_lic_{secrets.token_hex(8)}.zip')
+    try:
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            zipf.write(exe_path, 'ArgusScanner.exe')
+            zipf.writestr('config.json', json_lib.dumps(config_data, indent=2))
+            zipf.writestr('LEEME.txt', _SCANNER_README)
+    except Exception as e:
+        print(f"[scanner-firmado] error creando ZIP: {e}")
+        return None, 'Error generando el paquete de descarga.'
+
+    resp = send_file(zip_path, as_attachment=True, download_name='ArgusScanner.zip', mimetype='application/zip')
+    _no_store(resp)
+
+    def _cleanup():
+        import time as _t
+        _t.sleep(5)
+        try:
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+        except Exception:
+            pass
+    _threading.Thread(target=_cleanup, daemon=True).start()
+    return resp, None
+
+
+def _scanner_firmado_html_error(msg, code=403):
+    if request.headers.get('X-Requested-With') == 'fetch' or 'application/json' in (request.headers.get('Accept') or ''):
+        return jsonify({'error': msg}), code
+    return Response(
+        '<!doctype html><meta charset="utf-8">'
+        '<body style="background:#0d1117;color:#e6edf3;font-family:Segoe UI,system-ui,sans-serif;'
+        'display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center">'
+        f'<div style="max-width:480px;padding:24px"><h2 style="color:#f87171">No se pudo generar la descarga</h2>'
+        f'<p style="color:#a1a1aa">{msg}</p>'
+        '<a href="/panel" style="color:#E8A86F">Volver al panel</a></div></body>',
+        status=code, mimetype='text/html'
+    )
+
+
+@app.route('/descargar/scanner-firmado')
+@login_required
+@_limit("40 per hour")
+@audit_action('scanner.license.download', 'company')
+def descargar_scanner_firmado():
+    """Descarga ArgusScanner con una LICENCIA firmada embebida en config.json.
+
+    Reemplaza el token manual de 6 chars: solo un staff logueado cuya empresa
+    tenga suscripcion activa puede generar la licencia, que prueba "soy staff
+    que paga" sin que nadie tenga que tipear un codigo. El staff abre este link
+    (p. ej. via AnyDesk en el PC del jugador), descarga el ZIP y corre el .exe:
+    se autentica solo."""
+    user = get_user_by_id(session.get('user_id'))
+    if not user:
+        return _scanner_firmado_html_error('Sesión inválida. Iniciá sesión de nuevo.', 401)
+
+    company_id = user.get('company_id')
+    if not company_id:
+        return _scanner_firmado_html_error('Tu cuenta no está asociada a una empresa. Usá una cuenta de empresa para generar la licencia del scanner.')
+    if not _company_subscription_active(company_id):
+        return _scanner_firmado_html_error('La suscripción de tu empresa está inactiva o vencida. Renová para usar el scanner.')
+
+    license_str = _mint_scan_license(company_id, user.get('username'))
+    resp, err = _send_scanner_zip_with_license(license_str)
+    if err:
+        return _scanner_firmado_html_error(err, 404 if 'no está disponible' in err else 500)
+    return resp
+
+
+def _ss_base_url():
+    return os.environ.get('RENDER_EXTERNAL_URL', request.host_url).rstrip('/') if IS_RENDER else request.host_url.rstrip('/')
+
+
+@app.route('/api/ss-license', methods=['POST'])
+@login_required
+@_limit("60 per hour")
+@audit_action('scanner.license.mint', 'company')
+def api_ss_license():
+    """Mina una licencia firmada y devuelve un LINK publico de descarga listo
+    para pegar (p. ej. en el navegador del PC del jugador via AnyDesk).
+
+    El link NO requiere login: la licencia firmada que lleva en la URL es la
+    prueba de que un staff que paga la genero. Caduca con la licencia."""
+    user = get_user_by_id(session.get('user_id'))
+    if not user:
+        return jsonify({'success': False, 'error': 'Sesión inválida'}), 401
+    company_id = user.get('company_id')
+    if not company_id:
+        return jsonify({'success': False, 'error': 'Tu cuenta no está asociada a una empresa.'}), 403
+    if not _company_subscription_active(company_id):
+        return jsonify({'success': False, 'error': 'Suscripción inactiva o vencida. Renová para usar el scanner.'}), 403
+
+    license_str = _mint_scan_license(company_id, user.get('username'))
+    download_url = f"{_ss_base_url()}/dl/ss/{license_str}"
+    expires_at = (datetime.datetime.utcnow() + datetime.timedelta(seconds=_LICENSE_MAX_AGE)).isoformat() + 'Z'
+    # Snippet PowerShell "SS instantaneo": descarga, extrae y ejecuta en un comando
+    ps_oneliner = (
+        "$d=\"$env:TEMP\\ArgusSS\";"
+        f"iwr '{download_url}' -OutFile \"$d.zip\";"
+        "Expand-Archive \"$d.zip\" $d -Force;"
+        "Start-Process \"$d\\ArgusScanner.exe\" -Verb RunAs"
+    )
+    return jsonify({
+        'success': True,
+        'download_url': download_url,
+        'license': license_str,
+        'expires_in_hours': round(_LICENSE_MAX_AGE / 3600, 1),
+        'expires_at': expires_at,
+        'ps_oneliner': ps_oneliner,
+        'company_id': company_id,
+    })
+
+
+@app.route('/api/ss-license/info', methods=['POST'])
+@login_required
+def api_ss_license_info():
+    """Decodifica/valida una licencia (para el boton 'Probar mi licencia').
+    No descarga nada: solo dice si esta verde y cuanto le queda."""
+    data = request.json or {}
+    blob = (data.get('license') or '').strip()
+    if not blob:
+        return jsonify({'success': False, 'error': 'Licencia no proporcionada'}), 400
+    if not blob.startswith(_LICENSE_PREFIX):
+        return jsonify({'success': False, 'valid': False, 'error': 'No parece una licencia Argus.'}), 200
+    lic = _verify_scan_license(blob)
+    if lic is None:
+        return jsonify({'success': False, 'valid': False, 'error': 'Formato inválido.'}), 200
+    if lic.get('error'):
+        return jsonify({'success': True, 'valid': False, 'error': lic['error']}), 200
+    # Tiempo restante: re-firmar para leer el timestamp es caro; estimamos por el max_age
+    return jsonify({
+        'success': True,
+        'valid': True,
+        'company_id': lic.get('company_id'),
+        'created_by': lic.get('created_by'),
+        'message': 'Licencia válida y suscripción activa.',
+    })
+
+
+@app.route('/dl/ss/<path:blob>')
+@_limit("120 per hour")
+def dl_ss_public(blob):
+    """Descarga publica del scanner usando una licencia firmada en la URL.
+    Pensado para pegar el link en el PC del jugador (AnyDesk): descarga el ZIP
+    con la licencia ya embebida y el .exe se autentica solo."""
+    lic = _verify_scan_license(blob)
+    if lic is None:
+        return _scanner_firmado_html_error('Link inválido.', 400)
+    if lic.get('error'):
+        # Mensaje fino segun expiracion vs suscripcion
+        code = 410 if 'expirad' in lic['error'].lower() else 403
+        return _scanner_firmado_html_error(lic['error'], code)
+    resp, err = _send_scanner_zip_with_license(blob)
+    if err:
+        return _scanner_firmado_html_error(err, 404 if 'no está disponible' in err else 500)
+    return resp
 
 
 @app.route('/descargar/exe-lite')

@@ -4377,6 +4377,89 @@ body.focus-mode #issues-detail-section { position: relative; z-index: 10; }
     filter: brightness(1.08);
 }
 .ga2-btn-dl:active { transform: translateY(0); filter: brightness(.95); }
+.ga2-btn-dl:disabled { opacity: .6; cursor: progress; transform: none; }
+.ga2-btn-ghost {
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.14);
+    color: rgba(255,255,255,.82);
+    box-shadow: none;
+    font-weight: 600;
+}
+.ga2-btn-ghost:hover {
+    background: rgba(255,255,255,.1);
+    box-shadow: 0 4px 16px rgba(0,0,0,.3);
+    filter: none;
+}
+/* Tarjeta del link firmado para SS */
+.ss-link-card {
+    margin-top: 16px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    border: 1px solid rgba(var(--accent-rgb), .35);
+    background: linear-gradient(135deg, rgba(var(--accent-rgb), .10), rgba(255,255,255,.02));
+    box-shadow: 0 6px 24px rgba(0,0,0,.25);
+    animation: ssLinkIn .35s cubic-bezier(.4,0,.2,1);
+}
+@keyframes ssLinkIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.ss-link-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.ss-link-badge {
+    font-size: 10.5px; font-weight: 800; letter-spacing: .08em;
+    color: #fff; background: linear-gradient(135deg, #10B981, #059669);
+    padding: 3px 9px; border-radius: 6px;
+}
+.ss-link-expiry { font-size: 11.5px; color: rgba(255,255,255,.6); font-variant-numeric: tabular-nums; }
+.ss-link-hint { font-size: 12px; color: rgba(255,255,255,.62); margin: 0 0 10px; line-height: 1.45; }
+.ss-link-row { display: flex; gap: 8px; align-items: stretch; }
+.ss-link-input {
+    flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.14); background: rgba(0,0,0,.3);
+    color: #e6edf3; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px;
+}
+.ss-link-row .ga2-btn-dl { padding: 10px 18px; font-size: 13px; }
+.ss-link-expiry.ss-exp-amber { color: #fbbf24; }
+.ss-link-expiry.ss-exp-red { color: #f87171; }
+/* Snippets terminal */
+.ss-snip-tabs { display: flex; align-items: center; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
+.ss-snip-tab {
+    font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 8px; cursor: pointer;
+    color: rgba(255,255,255,.6); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+}
+.ss-snip-tab.active { color: #fff; background: rgba(var(--accent-rgb), .25); border-color: rgba(var(--accent-rgb), .5); }
+.ss-snip-help { font-size: 11px; color: rgba(255,255,255,.45); margin-left: 4px; }
+.ss-snip-row { display: flex; gap: 8px; align-items: stretch; margin-top: 8px; }
+.ss-snip-code {
+    flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.4);
+    color: #9fe2c0; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 11.5px;
+    white-space: nowrap; overflow-x: auto; line-height: 1.6;
+}
+.ss-snip-row .ga2-btn-dl { padding: 8px 14px; font-size: 12px; }
+.ss-test-result { margin-top: 10px; font-size: 12.5px; padding: 8px 12px; border-radius: 9px; }
+.ss-test-loading { color: rgba(255,255,255,.6); background: rgba(255,255,255,.05); }
+.ss-test-ok { color: #6ee7b7; background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.3); }
+.ss-test-bad { color: #fca5a5; background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.3); }
+/* Chip "SS en curso" + dot pulsante */
+.ss-live-chip { border-color: rgba(16,185,129,.4); background: rgba(16,185,129,.1); color: #a7f3d0; }
+.ss-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #10B981; box-shadow: 0 0 0 0 rgba(16,185,129,.6); animation: ssPulse 1.6s infinite; }
+@keyframes ssPulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,.55); } 70% { box-shadow: 0 0 0 7px rgba(16,185,129,0); } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
+/* Feed SS en vivo */
+.ss-livefeed-card {
+    margin-top: 18px; padding: 14px 16px; border-radius: 14px;
+    border: 1px solid rgba(16,185,129,.28); background: linear-gradient(135deg, rgba(16,185,129,.08), rgba(255,255,255,.02));
+    animation: ssLinkIn .35s cubic-bezier(.4,0,.2,1);
+}
+.ss-livefeed-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; color: #d1fae5; margin-bottom: 10px; }
+.ss-livefeed-count { margin-left: auto; font-variant-numeric: tabular-nums; background: rgba(16,185,129,.2); color: #6ee7b7; padding: 2px 9px; border-radius: 999px; font-size: 12px; }
+.ss-livefeed-list { display: flex; flex-direction: column; gap: 6px; }
+.ss-live-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px;
+    background: rgba(0,0,0,.22); border: 1px solid rgba(255,255,255,.06); cursor: pointer; transition: background .15s;
+}
+.ss-live-item:hover { background: rgba(255,255,255,.06); }
+.ss-live-pulse { width: 7px; height: 7px; border-radius: 50%; background: #10B981; animation: ssPulse 1.6s infinite; flex-shrink: 0; }
+.ss-live-who { font-weight: 600; color: #e6edf3; font-size: 13px; }
+.ss-live-meta { font-size: 11.5px; color: rgba(255,255,255,.5); }
+.ss-live-timer { margin-left: auto; font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; color: #6ee7b7; font-size: 13px; }
 .ga2-btn-version {
     font-size: 11px;
     font-weight: 600;

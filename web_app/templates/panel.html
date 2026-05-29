@@ -72,6 +72,15 @@
             </a>
 
             <div class="nav-group-label">HERRAMIENTAS</div>
+            <a href="/warroom" class="nav-item" target="_self" title="Centro de mando en tiempo real">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.5"/>
+                    <path d="M9 2v3M9 13v3M2 9h3M13 9h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    <circle cx="9" cy="9" r="2" fill="currentColor"/>
+                </svg>
+                <span>War Room</span>
+                <span style="margin-left:auto;background:linear-gradient(90deg,#B87333,#E8A86F);color:#1a0f08;font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;letter-spacing:.04em;">LIVE</span>
+            </a>
             <a href="/panel" class="nav-item" data-section="tokens">
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                     <path d="M11 3.5C12.933 3.5 14.5 5.067 14.5 7C14.5 8.933 12.933 10.5 11 10.5C10.18 10.5 9.426 10.22 8.83 9.75L4 14.5L3.5 14.5L3.5 12L5 12L5 10.5L6.5 10.5L6.5 9L8.25 9.17C8.04 8.49 7.5 6.93 7.5 7C7.5 5.067 9.067 3.5 11 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
@@ -527,20 +536,80 @@
                         </div>
                     </div>
                     <div class="ga2-hero-actions">
-                        <button class="ga2-btn-dl" id="download-app-btn">
+                        <button class="ga2-btn-dl" id="download-ss-btn"
+                                title="Descarga el scanner ya autorizado para tu SS: trae una licencia firmada, no hay que tipear ningún código.">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M10 2.5l5.5 2.2v3.6c0 3.4-2.3 6.5-5.5 7.7-3.2-1.2-5.5-4.3-5.5-7.7V4.7L10 2.5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                                <path d="M7.5 9.8l1.8 1.8 3.4-3.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            Descargar para SS
+                            <span class="ga2-btn-version">licencia</span>
+                        </button>
+                        <button class="ga2-btn-dl ga2-btn-ghost" id="copy-ss-link-btn"
+                                title="Genera un link de descarga ya autorizado para pegar en el navegador del jugador (AnyDesk). No necesita login ni token.">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M8 12a3 3 0 004.2 0l3-3a3 3 0 10-4.2-4.2l-1 1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M12 8a3 3 0 00-4.2 0l-3 3a3 3 0 104.2 4.2l1-1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            Copiar link para SS
+                        </button>
+                        <button class="ga2-btn-dl ga2-btn-ghost" id="download-app-btn"
+                                title="Descarga el .exe sin licencia (requiere token manual).">
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                                 <path d="M10 3v11M4 10l6 7 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                 <path d="M2 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
-                            Descargar
+                            .exe solo
                             <span class="ga2-btn-version">v{{ scanner_version or '1.6.22' }}</span>
                         </button>
                         <div class="ga2-live-pill">
                             <span class="ga-status-dot"></span>
                             <span id="ga-status-text">Listo para descargar</span>
                         </div>
+                        <div class="ga2-live-pill ss-live-chip" id="ss-live-chip" hidden
+                             title="Scans que arrancaron en los últimos minutos">
+                            <span class="ss-live-dot"></span>
+                            <span><strong id="ss-live-count">0</strong> SS en curso</span>
+                        </div>
+                    </div>
+                    <!-- Resultado del link firmado para SS -->
+                    <div class="ss-link-card" id="ss-link-result" hidden>
+                        <div class="ss-link-head">
+                            <span class="ss-link-badge">LINK LISTO</span>
+                            <span class="ss-link-expiry" id="ss-link-expiry">expira en —</span>
+                        </div>
+                        <p class="ss-link-hint">Pegá este link en el navegador del PC del jugador (AnyDesk). Descarga el scanner ya autorizado: se autentica solo, sin token.</p>
+                        <div class="ss-link-row">
+                            <input type="text" id="ss-link-url" class="ss-link-input" readonly value="">
+                            <button class="ga2-btn-dl" id="ss-link-copy-again" type="button">Copiar</button>
+                            <button class="ga2-btn-dl ga2-btn-ghost" id="ss-link-test" type="button"
+                                    title="Verifica contra el servidor que la licencia esté válida y la suscripción activa.">Probar</button>
+                            <button class="ga2-btn-dl ga2-btn-ghost" id="ss-link-regen" type="button"
+                                    title="Genera un link nuevo (el anterior deja de mostrarse).">Regenerar</button>
+                        </div>
+                        <!-- Snippets para staff que prefiere terminal en el PC remoto -->
+                        <div class="ss-snip-tabs">
+                            <button class="ss-snip-tab active" data-snip="ps" type="button">PowerShell</button>
+                            <button class="ss-snip-tab" data-snip="cmd" type="button">CMD</button>
+                            <span class="ss-snip-help">Pegá en una terminal del PC del jugador: descarga, extrae y ejecuta en un paso.</span>
+                        </div>
+                        <div class="ss-snip-row">
+                            <code class="ss-snip-code" id="ss-snip-code"></code>
+                            <button class="ga2-btn-dl ga2-btn-ghost" id="ss-snip-copy" type="button">Copiar</button>
+                        </div>
+                        <div class="ss-test-result" id="ss-test-result" hidden></div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Feed SS en vivo -->
+            <div class="ss-livefeed-card" id="ss-livefeed" hidden>
+                <div class="ss-livefeed-head">
+                    <span class="ss-live-dot"></span>
+                    <span>SS en curso</span>
+                    <span class="ss-livefeed-count" id="ss-livefeed-count">0</span>
+                </div>
+                <div class="ss-livefeed-list" id="ss-livefeed-list"></div>
             </div>
 
             <!-- STATS DE IA -->

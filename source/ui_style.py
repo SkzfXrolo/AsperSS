@@ -1,9 +1,8 @@
 """
-Argus Scanner — UI Style v4 (Clean Redesign)
-=============================================
-Rediseño completo: ventana única con 3 pantallas (ToS → Token → Scan).
-Fondo con escudo Argus flotante animado.
-Solo barra de progreso + fase actual durante el escaneo.
+Argus Scanner — UI Style v5 (Minimal × Eye Hybrid)
+===================================================
+Dark minimal base + warm copper accents + orbit progress animation.
+Floating shields, clean typography, no heavy cards.
 
 API pública (usada por main.py):
     apply_window_style, create_header, create_progress_section,
@@ -13,13 +12,7 @@ API pública (usada por main.py):
 """
 import tkinter as tk
 from tkinter import ttk, scrolledtext
-import os
-import sys
-import math
-import random
-import ctypes
-import base64
-import io
+import os, sys, math, random, ctypes, base64, io
 
 try:
     from PIL import Image, ImageTk
@@ -44,31 +37,31 @@ def _load_shield_b64():
 
 
 class ModernUI:
-    """Argus Scanner — Clean UI v4."""
+    """Argus Scanner — Minimal × Eye Hybrid UI."""
 
     COLORS = {
-        'bg_primary':     '#080510',
-        'bg_secondary':   '#0E0A18',
-        'bg_card':        '#14101E',
-        'bg_hover':       '#1C1630',
-        'text_primary':   '#EAD8C0',
-        'text_secondary': '#A89578',
-        'text_muted':     '#5A4A38',
+        'bg_primary':     '#09090b',
+        'bg_secondary':   '#0f0f11',
+        'bg_card':        '#111113',
+        'bg_hover':       '#1a1a1e',
+        'text_primary':   '#f5f5f5',
+        'text_secondary': '#a1a1aa',
+        'text_muted':     '#3f3f46',
         'accent':         '#B87333',
         'accent_light':   '#E8A86F',
         'accent_hover':   '#D4915A',
         'accent_deep':    '#6B3A1D',
         'accent_glow':    '#FFC899',
-        'green':          '#6EE7B7',
+        'green':          '#22c55e',
         'green_glow':     '#34D399',
         'amber':          '#FCD34D',
-        'red':            '#FCA5A5',
+        'red':            '#f87171',
         'red_deep':       '#DC2626',
         'blue':           '#7DD3FC',
         'gold':           '#D4A017',
-        'border':         '#2A1F14',
-        'border_bright':  '#3A2C1C',
-        'separator':      '#1F1610',
+        'border':         '#1f1f23',
+        'border_bright':  '#27272a',
+        'separator':      '#18181b',
     }
 
     FONTS = {
@@ -120,6 +113,13 @@ class ModernUI:
     _shield_images = []
     _shield_items = []
     _bg_anim_id = None
+
+    # orbit animation
+    _orbit_canvas = None
+    _orbit_after_id = None
+    _orbit_angle = 0.0
+    _orbit_pct_text = None
+    _orbit_pct_sign = None
 
     @classmethod
     def set_app_version(cls, version: str):
@@ -178,8 +178,8 @@ class ModernUI:
         cls._shield_images = []
         cls._shield_items = []
 
-        sizes = [32, 40, 48, 56, 64]
-        num_shields = 8
+        sizes = [28, 34, 40, 48, 56]
+        num_shields = 7
 
         def _make_ghost(img, alpha_factor):
             r, g, b, a = img.split()
@@ -188,19 +188,19 @@ class ModernUI:
 
         for i in range(num_shields):
             sz = sizes[i % len(sizes)]
-            alpha = random.uniform(0.06, 0.18)
+            alpha = random.uniform(0.03, 0.08)
             ghost = _make_ghost(base_img.resize((sz, sz), Image.LANCZOS), alpha)
             photo = ImageTk.PhotoImage(ghost)
             cls._shield_images.append(photo)
 
-            x = random.randint(0, 700)
-            y = random.randint(0, 500)
-            vx = random.uniform(-0.3, 0.3)
-            vy = random.uniform(-0.2, 0.2)
-            if abs(vx) < 0.05:
-                vx = 0.1
-            if abs(vy) < 0.05:
-                vy = 0.1
+            x = random.randint(0, 620)
+            y = random.randint(0, 480)
+            vx = random.uniform(-0.2, 0.2)
+            vy = random.uniform(-0.15, 0.15)
+            if abs(vx) < 0.04:
+                vx = 0.08
+            if abs(vy) < 0.04:
+                vy = 0.06
 
             item_id = canvas.create_image(x, y, image=photo, anchor='center')
             cls._shield_items.append({
@@ -213,9 +213,9 @@ class ModernUI:
                 cw = canvas.winfo_width()
                 ch = canvas.winfo_height()
                 if cw < 10:
-                    cw = 700
+                    cw = 620
                 if ch < 10:
-                    ch = 500
+                    ch = 480
                 for s in cls._shield_items:
                     s['x'] += s['vx']
                     s['y'] += s['vy']
@@ -233,7 +233,7 @@ class ModernUI:
             except Exception:
                 pass
 
-        canvas.after(200, _animate)
+        canvas.after(300, _animate)
         return canvas
 
     # ══════════════════════════════════════════════════════════════════════
@@ -264,14 +264,14 @@ class ModernUI:
         try:
             root.attributes('-alpha', 0.0)
             def _fade(step=0):
-                a = min(1.0, step / 12.0)
+                a = min(1.0, step / 10.0)
                 try:
                     root.attributes('-alpha', a)
                 except Exception:
                     return
                 if a < 1.0:
-                    root.after(25, lambda: _fade(step + 1))
-            root.after(50, _fade)
+                    root.after(20, lambda: _fade(step + 1))
+            root.after(40, _fade)
         except Exception:
             pass
 
@@ -306,7 +306,7 @@ class ModernUI:
             root.withdraw()
             root.after(15, root.deiconify)
 
-            RADIUS = 18
+            RADIUS = 16
             ww = root.winfo_width() or w
             hh = root.winfo_height() or h
             hrgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, ww + 1, hh + 1, RADIUS * 2, RADIUS * 2)
@@ -336,14 +336,13 @@ class ModernUI:
             pass
 
     # ══════════════════════════════════════════════════════════════════════
-    #  HEADER (compact title bar)
+    #  HEADER — Clean bar with eye icon
     # ══════════════════════════════════════════════════════════════════════
     @classmethod
     def create_header(cls, parent):
         C = cls.COLORS
-        hdr = tk.Frame(parent, bg='')
-        hdr.configure(bg=C['bg_primary'])
-        hdr.place(x=0, y=0, relwidth=1.0, height=42)
+        hdr = tk.Frame(parent, bg=C['bg_primary'])
+        hdr.place(x=0, y=0, relwidth=1.0, height=40)
         hdr.lift()
 
         inner = tk.Frame(hdr, bg=C['bg_primary'])
@@ -371,48 +370,63 @@ class ModernUI:
         left = tk.Frame(inner, bg=C['bg_primary'])
         left.pack(side=tk.LEFT)
 
-        tk.Label(left, text="ARGUS SCANNER",
+        # Eye icon
+        tk.Label(left, text="\U0001F441\uFE0F",
+                 font=('Segoe UI', 11),
+                 bg=C['bg_primary']).pack(side=tk.LEFT, padx=(0, 6))
+
+        tk.Label(left, text="ARGUS",
                  font=('Segoe UI', 10, 'bold'),
-                 bg=C['bg_primary'], fg=C['accent_light']).pack(side=tk.LEFT)
+                 bg=C['bg_primary'], fg=C['text_primary']).pack(side=tk.LEFT)
+
+        tk.Label(left, text=" \u00b7 ",
+                 font=('Segoe UI', 9),
+                 bg=C['bg_primary'], fg=C['border_bright']).pack(side=tk.LEFT)
 
         if cls._app_version:
-            tk.Label(left, text=f"  v{cls._app_version}",
-                     font=('Consolas', 7),
+            tk.Label(left, text=f"v{cls._app_version}",
+                     font=('Consolas', 8),
                      bg=C['bg_primary'], fg=C['text_muted']).pack(side=tk.LEFT)
 
         right = tk.Frame(inner, bg=C['bg_primary'])
         right.pack(side=tk.RIGHT)
 
-        badge_canvas = tk.Canvas(right, width=92, height=20,
-                                 bg=C['bg_primary'], highlightthickness=0, bd=0)
-        badge_canvas.pack(side=tk.RIGHT, padx=(0, 6))
-        cls._status_badge_canvas = badge_canvas
-        badge = tk.Label(badge_canvas, text="●  LISTO",
+        # Status badge — green dot + text
+        badge_frame = tk.Frame(right, bg=C['bg_primary'])
+        badge_frame.pack(side=tk.RIGHT, padx=(0, 4))
+
+        badge_dot = tk.Canvas(badge_frame, width=7, height=7,
+                              bg=C['bg_primary'], highlightthickness=0, bd=0)
+        badge_dot.pack(side=tk.LEFT, padx=(0, 4), pady=1)
+        badge_dot.create_oval(1, 1, 6, 6, fill=C['green'], outline='')
+
+        badge = tk.Label(badge_frame, text="ONLINE",
                          font=('Segoe UI', 7, 'bold'),
-                         bg=C['bg_card'], fg=C['green'], padx=8, pady=2)
-        badge_canvas.create_window(46, 10, window=badge, anchor='center')
+                         bg=C['bg_primary'], fg=C['green'])
+        badge.pack(side=tk.LEFT)
         cls._status_badge = badge
+        cls._status_badge_canvas = badge_dot
 
         r = cls._root_ref
         chrome = tk.Frame(right, bg=C['bg_primary'])
         chrome.pack(side=tk.RIGHT, padx=(0, 8))
 
         def _chrome_btn(text, cmd, hover_fg=None):
-            b = tk.Label(chrome, text=text, font=('Segoe UI', 9),
+            b = tk.Label(chrome, text=text, font=('Segoe UI', 10),
                          bg=C['bg_primary'], fg=C['text_muted'],
-                         padx=6, cursor='hand2')
+                         padx=4, cursor='hand2')
             b.pack(side=tk.LEFT, padx=1)
             b.bind('<Button-1>', lambda _e: cmd())
-            hf = hover_fg or C['accent_light']
+            hf = hover_fg or C['text_secondary']
             b.bind('<Enter>', lambda _e: b.config(fg=hf))
             b.bind('<Leave>', lambda _e: b.config(fg=C['text_muted']))
             return b
 
         if r is not None:
-            _chrome_btn('—', lambda: r.iconify())
-            _chrome_btn('✕', lambda: r.destroy(), hover_fg=C['red'])
+            _chrome_btn('\u2014', lambda: r.iconify())
+            _chrome_btn('\u2715', lambda: r.destroy(), hover_fg=C['red'])
 
-        sep = tk.Frame(hdr, bg=C['accent_deep'], height=1)
+        sep = tk.Frame(hdr, bg=C['border'], height=1)
         sep.pack(fill=tk.X, side=tk.BOTTOM)
 
         try:
@@ -423,79 +437,116 @@ class ModernUI:
         return hdr
 
     # ══════════════════════════════════════════════════════════════════════
-    #  PROGRESS SECTION (scan view: just progress bar + phase)
+    #  ORBIT PROGRESS INDICATOR
+    # ══════════════════════════════════════════════════════════════════════
+    @classmethod
+    def _create_orbit(cls, parent, size=170):
+        C = cls.COLORS
+        canvas = tk.Canvas(parent, width=size, height=size,
+                           bg=C['bg_primary'], highlightthickness=0, bd=0)
+
+        cx, cy = size // 2, size // 2
+        r1 = size // 2 - 4
+        r2 = r1 - 20
+
+        canvas.create_oval(cx - r1, cy - r1, cx + r1, cy + r1,
+                           outline='#1a1a1e', width=1)
+        canvas.create_oval(cx - r2, cy - r2, cx + r2, cy + r2,
+                           outline='#111113', width=1)
+
+        glow_r = 4
+        glow_id = canvas.create_oval(0, 0, glow_r * 2, glow_r * 2,
+                                     fill=C['accent'], outline='')
+        glow_halo = canvas.create_oval(0, 0, glow_r * 4, glow_r * 4,
+                                       fill='', outline=C['accent_deep'], width=1)
+
+        pct_text = canvas.create_text(cx, cy - 2, text="0",
+                                      font=('Segoe UI', 34, 'bold'),
+                                      fill=C['text_primary'])
+        pct_sign = canvas.create_text(cx + 30, cy + 8, text="%",
+                                      font=('Segoe UI', 14),
+                                      fill=C['text_muted'])
+
+        cls._orbit_canvas = canvas
+        cls._orbit_pct_text = pct_text
+        cls._orbit_pct_sign = pct_sign
+
+        cls._orbit_angle = 0.0
+
+        def _spin():
+            try:
+                cls._orbit_angle += 0.04
+                if cls._orbit_angle > 2 * math.pi:
+                    cls._orbit_angle -= 2 * math.pi
+                gx = cx + r1 * math.cos(cls._orbit_angle)
+                gy = cy + r1 * math.sin(cls._orbit_angle)
+                canvas.coords(glow_id,
+                              gx - glow_r, gy - glow_r,
+                              gx + glow_r, gy + glow_r)
+                canvas.coords(glow_halo,
+                              gx - glow_r * 2, gy - glow_r * 2,
+                              gx + glow_r * 2, gy + glow_r * 2)
+                cls._orbit_after_id = canvas.after(30, _spin)
+            except Exception:
+                pass
+
+        canvas.after(200, _spin)
+        return canvas
+
+    @classmethod
+    def _update_orbit_pct(cls, pct_val):
+        if cls._orbit_canvas is None:
+            return
+        try:
+            iv = int(pct_val)
+            cls._orbit_canvas.itemconfig(cls._orbit_pct_text, text=str(iv))
+            tx_bbox = cls._orbit_canvas.bbox(cls._orbit_pct_text)
+            if tx_bbox:
+                cls._orbit_canvas.coords(cls._orbit_pct_sign,
+                                         tx_bbox[2] + 4,
+                                         (tx_bbox[1] + tx_bbox[3]) // 2 + 6)
+        except Exception:
+            pass
+
+    # ══════════════════════════════════════════════════════════════════════
+    #  PROGRESS SECTION (scan view)
     # ══════════════════════════════════════════════════════════════════════
     @classmethod
     def create_progress_section(cls, parent):
         cls._apply_ttk_style()
         C = cls.COLORS
 
-        outer = tk.Frame(parent, bg='')
-        outer.configure(bg=C['bg_primary'])
-        outer.place(x=0, y=42, relwidth=1.0, relheight=1.0)
+        outer = tk.Frame(parent, bg=C['bg_primary'])
+        outer.place(x=0, y=40, relwidth=1.0, relheight=1.0)
         outer.lift()
 
-        # Make sure bg canvas stays behind
         if cls._bg_canvas:
-            cls._bg_canvas.lower()
+            cls._bg_canvas.tk.call('lower', cls._bg_canvas._w)
 
-        card = tk.Frame(outer, bg=C['bg_card'],
-                        highlightbackground=C['border_bright'],
-                        highlightthickness=1)
-        card.place(relx=0.5, rely=0.5, anchor='center',
-                   relwidth=0.85, relheight=0.75)
+        # Orbit indicator
+        orbit = cls._create_orbit(outer, size=170)
+        orbit.place(relx=0.5, rely=0.36, anchor='center')
 
-        center = tk.Frame(card, bg=C['bg_card'])
-        center.place(relx=0.5, rely=0.45, anchor='center')
-
-        # Logo
-        try:
-            logo_path = os.path.join(cls._base_path(), 'assets', 'logo.png')
-            if os.path.exists(logo_path) and _PIL_OK:
-                _raw = Image.open(logo_path).resize((48, 48), Image.LANCZOS)
-                _photo = ImageTk.PhotoImage(_raw)
-                logo_lbl = tk.Label(center, image=_photo, bg=C['bg_card'], bd=0)
-                logo_lbl.image = _photo
-                logo_lbl.pack(pady=(0, 12))
-        except Exception:
-            pass
-
-        tk.Label(center, text="ANALIZANDO",
-                 font=('Segoe UI', 8, 'bold'),
-                 bg=C['bg_card'], fg=C['accent'],
-                 letterspace=6 if hasattr(tk.Label, 'letterspace') else None
-                 ).pack()
-
-        status = tk.Label(center, text="Iniciando escaneo...",
-                          font=('Segoe UI', 13, 'bold'),
-                          bg=C['bg_card'], fg=C['text_primary'],
-                          wraplength=400, justify='center')
-        status.pack(pady=(8, 4))
+        # Status text below orbit
+        status = tk.Label(outer, text="Iniciando escaneo...",
+                          font=('Segoe UI', 11),
+                          bg=C['bg_primary'], fg=C['text_secondary'])
+        status.place(relx=0.5, rely=0.59, anchor='center')
         cls._status_label_ref = status
 
-        detail = tk.Label(center, text="",
+        detail = tk.Label(outer, text="Preparando sistema...",
                           font=('Consolas', 9),
-                          bg=C['bg_card'], fg=C['text_secondary'],
-                          wraplength=400, justify='center')
-        detail.pack(pady=(0, 16))
+                          bg=C['bg_primary'], fg=C['text_muted'])
+        detail.place(relx=0.5, rely=0.64, anchor='center')
         cls._detail_label_ref = detail
 
-        # Progress bar
-        bar_frame = tk.Frame(card, bg=C['bg_card'])
-        bar_frame.place(relx=0.5, rely=0.72, anchor='center', relwidth=0.7, height=30)
+        # Thin progress bar
+        bar_frame = tk.Frame(outer, bg=C['bg_primary'])
+        bar_frame.place(relx=0.5, rely=0.74, anchor='center', width=260, height=20)
 
-        pct_lbl = tk.Label(bar_frame, text="0%",
-                           font=('Segoe UI', 9, 'bold'),
-                           bg=C['bg_card'], fg=C['accent_light'])
-        pct_lbl.pack(anchor='e')
-
-        bar_wrap = tk.Frame(bar_frame, bg=C['border'], height=6)
-        bar_wrap.pack(fill=tk.X, pady=(2, 0))
-        bar_wrap.pack_propagate(False)
-
-        bar_c = tk.Canvas(bar_wrap, height=6,
-                          bg=C['bg_secondary'], highlightthickness=0, bd=0)
-        bar_c.pack(fill=tk.BOTH, expand=True)
+        bar_c = tk.Canvas(bar_frame, height=3,
+                          bg=C['border'], highlightthickness=0, bd=0)
+        bar_c.pack(fill=tk.X, pady=(0, 0))
         bar_c._shimmer_x = 0
 
         def _draw_bar(pct_val):
@@ -505,38 +556,39 @@ class ModernUI:
                 return
             fw = max(0, int(w * pct_val / 100))
             if fw > 0:
-                bar_c.create_rectangle(0, 0, fw, 6,
+                bar_c.create_rectangle(0, 0, fw, 3,
                                        fill=C['accent'], outline='', tags='bar')
-                tip_w = min(12, fw)
-                bar_c.create_rectangle(fw - tip_w, 0, fw, 6,
+                tip_w = min(16, fw)
+                bar_c.create_rectangle(fw - tip_w, 0, fw, 3,
                                        fill=C['accent_light'], outline='', tags='bar')
-                bar_c.create_rectangle(fw - 1, 0, fw, 6,
-                                       fill='#FFFFFF', outline='', tags='bar')
-            try:
-                pct_lbl.config(text=f"{int(pct_val)}%")
-            except Exception:
-                pass
+            cls._update_orbit_pct(pct_val)
 
         bar_c._draw = _draw_bar
 
-        # Timer + resources
-        bot = tk.Frame(card, bg=C['bg_card'])
-        bot.place(relx=0.5, rely=0.88, anchor='center', relwidth=0.7)
+        # Timer + small percentage
+        meta = tk.Frame(outer, bg=C['bg_primary'])
+        meta.place(relx=0.5, rely=0.78, anchor='center', width=260)
 
-        timer = tk.Label(bot, text="Tiempo 00:00:00",
+        timer = tk.Label(meta, text="00:00:00",
                          font=('Consolas', 8),
-                         bg=C['bg_card'], fg=C['text_muted'])
+                         bg=C['bg_primary'], fg=C['text_muted'])
         timer.pack(side=tk.LEFT)
 
-        resources = tk.Label(bot, text="",
-                             font=('Segoe UI', 7),
-                             bg=C['bg_card'], fg=C['text_muted'])
-        resources.pack(side=tk.RIGHT)
+        pct_lbl = tk.Label(meta, text="0%",
+                           font=('Segoe UI', 8, 'bold'),
+                           bg=C['bg_primary'], fg=C['text_muted'])
+        pct_lbl.pack(side=tk.RIGHT)
 
-        # Hidden counters (keep API compat)
+        resources = tk.Label(outer, text="",
+                             font=('Segoe UI', 7),
+                             bg=C['bg_primary'], fg=C['text_muted'])
+        resources.place(relx=0.5, rely=0.83, anchor='center')
+
+        # Hidden counters (API compat)
         cls._counter_labels = {}
         for key in ('critical', 'suspicious', 'low', 'clean'):
-            cls._counter_labels[key] = tk.Label(card, text="", bg=C['bg_card'], fg=C['bg_card'])
+            cls._counter_labels[key] = tk.Label(outer, text="",
+                                                bg=C['bg_primary'], fg=C['bg_primary'])
 
         cls._risk_canvas = None
         cls._risk_label = None
@@ -544,31 +596,31 @@ class ModernUI:
         cls._ram_bar_canvas = None
         cls._phase_dots_canvas = None
 
-        # Cancel button
-        cancel_row = tk.Frame(card, bg=C['bg_card'])
-        cancel_row.place(relx=1.0, rely=1.0, anchor='se', x=-12, y=-8)
-        cancel_btn = tk.Button(cancel_row, text="✕ Cancelar",
+        # Cancel button (subtle, bottom-right)
+        cancel_row = tk.Frame(outer, bg=C['bg_primary'])
+        cancel_row.place(relx=1.0, rely=1.0, anchor='se', x=-18, y=-14)
+        cancel_btn = tk.Button(cancel_row, text="\u2715 Cancelar",
                                font=('Segoe UI', 8),
-                               bg=C['bg_card'], fg=C['text_muted'],
+                               bg=C['bg_primary'], fg=C['text_muted'],
                                activebackground=C['bg_hover'],
                                activeforeground=C['red'],
                                relief=tk.FLAT, bd=0, cursor='hand2',
                                padx=8, pady=3)
         cancel_btn.pack()
 
-        # compat ttk bar
-        pb = ttk.Progressbar(card, mode='determinate', maximum=100,
+        # ttk bar compat
+        pb = ttk.Progressbar(outer, mode='determinate', maximum=100,
                              style='Argus.Horizontal.TProgressbar')
 
         try:
-            cls.create_sparkline(card)
-            cls.attach_files_counter(card)
+            cls.create_sparkline(outer)
+            cls.attach_files_counter(outer)
         except Exception:
             pass
 
         return {
             'container':  outer,
-            'card':       card,
+            'card':       outer,
             'status':     status,
             'progress':   pb,
             'detail':     detail,
@@ -589,41 +641,36 @@ class ModernUI:
         C = cls.COLORS
         outer = tk.Frame(parent, bg=C['bg_primary'])
 
-        card = tk.Frame(outer, bg=C['bg_card'],
-                        highlightbackground=C['border_bright'],
-                        highlightthickness=1)
-        card.pack(fill=tk.BOTH, expand=True, padx=40, pady=20)
-
-        center = tk.Frame(card, bg=C['bg_card'])
-        center.place(relx=0.5, rely=0.5, anchor='center')
+        center = tk.Frame(outer, bg=C['bg_primary'])
+        center.place(relx=0.5, rely=0.45, anchor='center')
 
         icon_c = tk.Canvas(center, width=56, height=56,
-                           bg=C['bg_card'], highlightthickness=0)
+                           bg=C['bg_primary'], highlightthickness=0)
         icon_c.pack(pady=(0, 14))
-        icon_c.create_oval(2, 2, 54, 54, outline=C['accent_deep'], width=1.4, fill=C['bg_card'])
+        icon_c.create_oval(2, 2, 54, 54, outline=C['border_bright'], width=1, fill=C['bg_primary'])
 
         main_lbl = tk.Label(center, text="Esperando inicio",
-                            font=('Segoe UI', 14, 'bold'),
-                            bg=C['bg_card'], fg=C['text_secondary'])
+                            font=('Segoe UI', 15, 'bold'),
+                            bg=C['bg_primary'], fg=C['text_secondary'])
         main_lbl.pack()
 
         sub_lbl = tk.Label(center, text="",
                            font=('Segoe UI', 9),
-                           bg=C['bg_card'], fg=C['text_muted'])
+                           bg=C['bg_primary'], fg=C['text_muted'])
         sub_lbl.pack(pady=(6, 0))
 
         top_find = tk.Label(center, text="",
                             font=('Consolas', 7),
-                            bg=C['bg_card'], fg=C['accent_light'],
+                            bg=C['bg_primary'], fg=C['accent_light'],
                             wraplength=380, justify='center')
-        top_find.pack(pady=(8, 0))
+        top_find.pack(pady=(10, 0))
         cls._top_finding_label = top_find
 
         outer.pack_forget()
 
         widgets = {
             'outer':       outer,
-            'card':        card,
+            'card':        outer,
             'icon_canvas': icon_c,
             'main_label':  main_lbl,
             'sub_label':   sub_lbl,
@@ -656,7 +703,7 @@ class ModernUI:
             if cont is not None:
                 try:
                     if scanning:
-                        cont.place(x=0, y=42, relwidth=1.0, relheight=1.0)
+                        cont.place(x=0, y=40, relwidth=1.0, relheight=1.0)
                         cont.lift()
                     else:
                         cont.place_forget()
@@ -730,16 +777,10 @@ class ModernUI:
             return
         col = color or cls.COLORS['accent']
         try:
-            up = (text or '').upper()
-            if 'LISTO' in up or 'OK' in up:
-                icon = '✓'
-            elif 'ESCANE' in up:
-                icon = '◉'
-            elif 'ERROR' in up or 'CANCEL' in up:
-                icon = '✕'
-            else:
-                icon = '●'
-            cls._status_badge.config(text=f"{icon}  {text}", fg=col)
+            cls._status_badge.config(text=(text or '').upper(), fg=col)
+            if cls._status_badge_canvas:
+                cls._status_badge_canvas.delete('all')
+                cls._status_badge_canvas.create_oval(1, 1, 6, 6, fill=col, outline='')
         except Exception:
             pass
 
@@ -814,9 +855,8 @@ class ModernUI:
 
         if icon_c:
             icon_c.delete('all')
-            color = C['green_glow'] if success else C['red_deep']
-            bg = C['bg_card']
-            icon_c.create_oval(2, 2, 54, 54, outline=color, width=1.5, fill=bg)
+            color = C['green'] if success else C['red_deep']
+            icon_c.create_oval(2, 2, 54, 54, outline=color, width=1.5, fill=C['bg_primary'])
             if success:
                 icon_c.create_line(16, 27, 24, 37, 38, 17,
                                    fill=color, width=2.5,
@@ -827,7 +867,7 @@ class ModernUI:
 
         if main_lbl:
             txt = message or ("Escaneo completado" if success else "Error en el escaneo")
-            main_lbl.config(text=txt, fg=C['green_glow'] if success else C['red_deep'])
+            main_lbl.config(text=txt, fg=C['green'] if success else C['red_deep'])
 
         if sub_lbl:
             if counts:
@@ -839,9 +879,9 @@ class ModernUI:
                 if low:
                     parts.append(f"BAJO {low}")
                 parts.append(f"Total {total}")
-                line = " · ".join(parts)
+                line = " \u00b7 ".join(parts)
                 if sub:
-                    line = f"{line} — {sub}"
+                    line = f"{line} \u2014 {sub}"
                 sub_lbl.config(text=line, fg=C['text_secondary'])
             else:
                 sub_lbl.config(text=sub or "", fg=C['text_secondary'])
@@ -853,7 +893,7 @@ class ModernUI:
         except Exception:
             pass
 
-    # Stubs for ambient motion (no ring in v4)
+    # Stubs for ambient motion (unused in v5)
     @classmethod
     def _start_ambient_motion(cls, *a, **kw):
         pass

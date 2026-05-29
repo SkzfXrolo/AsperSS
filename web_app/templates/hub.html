@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#B87333">
+    <title>Argus Projects — Ecosistema</title>
+    <meta name="description" content="Argus Projects — herramientas de seguridad anti-cheat, asistencia con IA y más. Un ecosistema, una marca.">
+    <link rel="icon" href="{{ url_for('static', filename='img/logo.png') }}" type="image/png">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/logo.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg0: #080508; --bg1: #0E0805; --card: rgba(22,16,10,.85);
+            --border: rgba(184,115,51,.18); --border-h: rgba(212,145,90,.55);
+            --accent: #B87333; --accent-l: #E8A86F; --accent-d: #6B3A1D;
+            --gold: #B8860B; --text: #EAD8C0; --text-m: #A89578; --text-d: #5A4A38;
+            --green: #34D399; --blue: #38BDF8; --discord: #5865F2;
+            --radius: 16px;
+        }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Inter', sans-serif; background: var(--bg0); color: var(--text);
+            -webkit-font-smoothing: antialiased; overflow-x: hidden; min-height: 100vh;
+        }
+        body::before {
+            content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+            background:
+                radial-gradient(ellipse 70% 50% at 50% -10%, rgba(184,115,51,.14) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 40% at 85% 90%, rgba(92,46,26,.10) 0%, transparent 55%);
+        }
+        .wrap { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; padding: 0 22px; }
+
+        /* ── Topbar ── */
+        header {
+            position: sticky; top: 0; z-index: 20; backdrop-filter: blur(14px);
+            background: rgba(8,5,8,.72); border-bottom: 1px solid var(--border);
+        }
+        .nav { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+        .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; color: var(--text); }
+        .brand img { width: 34px; height: 34px; border-radius: 8px; }
+        .brand .bt { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 18px; letter-spacing: .01em; }
+        .brand .bt span { color: var(--accent-l); }
+        .nav-right { display: flex; align-items: center; gap: 10px; }
+        .nav-link {
+            color: var(--text-m); text-decoration: none; font-size: 13.5px; font-weight: 500;
+            padding: 8px 14px; border-radius: 10px; transition: all .2s;
+        }
+        .nav-link:hover { color: var(--text); background: rgba(184,115,51,.1); }
+        .discord-pill {
+            display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
+            color: #fff; background: var(--discord); padding: 8px 15px; border-radius: 10px;
+            font-size: 13.5px; font-weight: 600; transition: transform .2s, filter .2s;
+        }
+        .discord-pill:hover { transform: translateY(-1px); filter: brightness(1.1); }
+        .discord-pill svg { width: 17px; height: 17px; fill: currentColor; }
+
+        /* ── Hero ── */
+        .hero { text-align: center; padding: 84px 0 54px; }
+        .eyebrow {
+            display: inline-flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', monospace;
+            font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--accent-l);
+            border: 1px solid var(--border); border-radius: 999px; padding: 6px 15px; margin-bottom: 26px;
+        }
+        .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 0 rgba(52,211,153,.6); animation: pulse 1.8s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(52,211,153,.5);} 70% { box-shadow: 0 0 0 8px rgba(52,211,153,0);} 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0);} }
+        .hero h1 {
+            font-family: 'Syne', sans-serif; font-weight: 800; line-height: 1.04;
+            font-size: clamp(38px, 7vw, 72px); letter-spacing: -.02em; margin-bottom: 20px;
+        }
+        .hero h1 .grad { background: linear-gradient(120deg, var(--accent-l), var(--gold)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+        .hero p { max-width: 620px; margin: 0 auto; color: var(--text-m); font-size: clamp(15px, 2vw, 18px); line-height: 1.6; }
+
+        /* ── Section title ── */
+        .sec-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-d); margin: 40px 0 18px; }
+
+        /* ── Project cards ── */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
+        .card {
+            position: relative; display: flex; flex-direction: column; padding: 24px;
+            background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+            transition: transform .22s, border-color .22s, box-shadow .22s; overflow: hidden;
+        }
+        .card::after { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, var(--accent), transparent); opacity: .55; }
+        .card:hover { transform: translateY(-4px); border-color: var(--border-h); box-shadow: 0 18px 40px rgba(0,0,0,.4); }
+        .card.soon { opacity: .82; }
+        .card.soon::after { background: linear-gradient(90deg, var(--text-d), transparent); }
+        .c-top { display: flex; align-items: center; gap: 13px; margin-bottom: 14px; }
+        .c-ico { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(135deg, rgba(184,115,51,.22), rgba(184,115,51,.05)); border: 1px solid var(--border); flex-shrink: 0; }
+        .c-ico svg { width: 26px; height: 26px; stroke: var(--accent-l); fill: none; stroke-width: 1.6; }
+        .c-name { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 19px; }
+        .badge { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; padding: 3px 9px; border-radius: 6px; text-transform: uppercase; }
+        .badge.live { color: #062; background: var(--green); }
+        .badge.beta { color: #04263a; background: var(--blue); }
+        .badge.soon { color: var(--text); background: rgba(255,255,255,.08); border: 1px solid var(--border); }
+        .c-desc { color: var(--text-m); font-size: 14px; line-height: 1.55; margin-bottom: 16px; flex: 1; }
+        .c-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+        .tag { font-size: 11px; color: var(--text-m); background: rgba(184,115,51,.08); border: 1px solid var(--border); padding: 3px 9px; border-radius: 999px; }
+        .c-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .btn { display: inline-flex; align-items: center; gap: 7px; text-decoration: none; font-size: 13.5px; font-weight: 600; padding: 10px 16px; border-radius: 10px; transition: all .2s; cursor: pointer; border: none; }
+        .btn-primary { color: #1a0f06; background: linear-gradient(135deg, var(--accent-l), var(--accent)); }
+        .btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); }
+        .btn-ghost { color: var(--text); background: rgba(255,255,255,.05); border: 1px solid var(--border); }
+        .btn-ghost:hover { background: rgba(255,255,255,.1); border-color: var(--border-h); }
+        .btn-disabled { color: var(--text-d); background: rgba(255,255,255,.03); border: 1px solid var(--border); cursor: not-allowed; }
+
+        /* ── Footer ── */
+        footer { margin-top: 70px; padding: 34px 0 50px; border-top: 1px solid var(--border); color: var(--text-d); font-size: 13px; }
+        .foot { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between; }
+        .foot a { color: var(--text-m); text-decoration: none; }
+        .foot a:hover { color: var(--accent-l); }
+        @media (max-width: 600px) {
+            .nav-link.hide-sm { display: none; }
+            .hero { padding: 60px 0 40px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="wrap nav">
+            <a href="/" class="brand">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Argus">
+                <span class="bt">Argus<span>Projects</span></span>
+            </a>
+            <nav class="nav-right">
+                <a href="/scanner" class="nav-link hide-sm">Scanner</a>
+                <a href="/panel" class="nav-link hide-sm">Panel staff</a>
+                <a href="{{ discord_invite }}" class="discord-pill" target="_blank" rel="noopener">
+                    <svg viewBox="0 0 24 24"><path d="M19.95 5.67a17.4 17.4 0 0 0-4.35-1.34c-.16.29-.34.65-.5 1.02a16.2 16.2 0 0 0-4.85 0c-.15-.34-.34-.73-.52-1.07A17.4 17.4 0 0 0 5.3 5.66 18.27 18.27 0 0 0 2.34 17.86a17.6 17.6 0 0 0 5.34 2.69c.43-.59.81-1.21 1.14-1.85-.63-.24-1.23-.53-1.79-.86.15-.11.3-.23.44-.34a12.44 12.44 0 0 0 10.83 0c.14.12.29.23.43.34-.56.33-1.16.62-1.79.86.33.64.71 1.26 1.14 1.85a17.65 17.65 0 0 0 5.42-2.7 18.2 18.2 0 0 0-2.97-12.23zM8.05 15.5c-.99 0-1.81-.92-1.81-2.05 0-1.13.81-2.05 1.81-2.05s1.81.92 1.81 2.05c0 1.13-.81 2.05-1.81 2.05zm7.9 0c-.99 0-1.81-.92-1.81-2.05 0-1.13.81-2.05 1.81-2.05.99 0 1.81.92 1.81 2.05 0 1.13-.81 2.05-1.81 2.05z"/></svg>
+                    Discord
+                </a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="wrap">
+        <section class="hero">
+            <span class="eyebrow"><span class="dot"></span>Ecosistema Argus</span>
+            <h1>Una marca,<br><span class="grad">varias herramientas.</span></h1>
+            <p>Software de seguridad anti-cheat, asistencia con IA y más. Elegí un proyecto para empezar — todos comparten la misma identidad y el mismo nivel de cuidado.</p>
+        </section>
+
+        <div class="sec-title">Productos activos</div>
+        <div class="grid">
+            <!-- Argus Scanner -->
+            <article class="card">
+                <div class="c-top">
+                    <div class="c-ico">
+                        <svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.4-3 8.3-7 9.5C8 19.3 5 15.4 5 11V6l7-3z"/><path d="M9 11.5l2 2 4-4.2"/></svg>
+                    </div>
+                    <div style="flex:1;">
+                        <div class="c-name">Argus Scanner</div>
+                        <span class="badge live">Activo</span>
+                    </div>
+                </div>
+                <p class="c-desc">Anti-cheat de Screen Share con IA autónoma para Minecraft. Detecta ghost clients, inyección Java, macros y más en menos de 60 segundos. Licencia firmada: cero tokens manuales.</p>
+                <div class="c-tags"><span class="tag">Windows · Linux · Android</span><span class="tag">IA autoaprendizaje</span><span class="tag">Plugin /ss</span></div>
+                <div class="c-actions">
+                    <a href="/scanner" class="btn btn-primary">Ver producto</a>
+                    <a href="/descargar" class="btn btn-ghost">Descargar</a>
+                    <a href="/panel" class="btn btn-ghost">Panel staff</a>
+                </div>
+            </article>
+
+            <!-- Argus Assistant -->
+            <article class="card">
+                <div class="c-top">
+                    <div class="c-ico">
+                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>
+                    </div>
+                    <div style="flex:1;">
+                        <div class="c-name">Argus Assistant</div>
+                        <span class="badge beta">Beta</span>
+                    </div>
+                </div>
+                <p class="c-desc">Asistente de escritorio con voz e IA: control del sistema, respuestas rápidas y automatizaciones. Pensado para staff que vive en la PC. En beta privada.</p>
+                <div class="c-tags"><span class="tag">Voz + wake word</span><span class="tag">Windows</span><span class="tag">Local-first</span></div>
+                <div class="c-actions">
+                    <a href="{{ discord_invite }}" target="_blank" rel="noopener" class="btn btn-ghost">Pedir acceso beta</a>
+                </div>
+            </article>
+        </div>
+
+        <div class="sec-title">En desarrollo · roadmap</div>
+        <div class="grid">
+            <!-- Argus Sentinel -->
+            <article class="card soon">
+                <div class="c-top">
+                    <div class="c-ico">
+                        <svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.4-3 8.3-7 9.5C8 19.3 5 15.4 5 11V6l7-3z"/><path d="M12 8v5M12 16h.01"/></svg>
+                    </div>
+                    <div style="flex:1;">
+                        <div class="c-name">Argus Sentinel</div>
+                        <span class="badge soon">En desarrollo</span>
+                    </div>
+                </div>
+                <p class="c-desc">Anti-cheat <strong>en vivo</strong> del lado del servidor (plugin): detección de reach, aim-assist y autoclicker por comportamiento, alimentando el mismo panel que el Scanner.</p>
+                <div class="c-tags"><span class="tag">Spigot · Paper</span><span class="tag">Tiempo real</span></div>
+                <div class="c-actions"><button class="btn btn-disabled" disabled>Próximamente</button></div>
+            </article>
+
+            <!-- Argus Vault -->
+            <article class="card soon">
+                <div class="c-top">
+                    <div class="c-ico">
+                        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M8 15h3"/></svg>
+                    </div>
+                    <div style="flex:1;">
+                        <div class="c-name">Argus Vault</div>
+                        <span class="badge soon">En desarrollo</span>
+                    </div>
+                </div>
+                <p class="c-desc">Base de datos compartida de reputación de jugadores entre servidores. Consultá el historial de un sospechoso <strong>antes</strong> del SS. Efecto de red entre comunidades.</p>
+                <div class="c-tags"><span class="tag">API pública</span><span class="tag">B2B</span></div>
+                <div class="c-actions"><button class="btn btn-disabled" disabled>Próximamente</button></div>
+            </article>
+
+            <!-- Argus Bot -->
+            <article class="card soon">
+                <div class="c-top">
+                    <div class="c-ico">
+                        <svg viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 7V4M9 13h.01M15 13h.01"/></svg>
+                    </div>
+                    <div style="flex:1;">
+                        <div class="c-name">Argus Bot</div>
+                        <span class="badge soon">En desarrollo</span>
+                    </div>
+                </div>
+                <p class="c-desc">Bot de Discord para todo el flujo de SS: <code>/ss</code> genera el link firmado, postea resultados, gestiona apelaciones y notifica al staff en vivo.</p>
+                <div class="c-tags"><span class="tag">Slash commands</span><span class="tag">Webhooks</span></div>
+                <div class="c-actions"><button class="btn btn-disabled" disabled>Próximamente</button></div>
+            </article>
+        </div>
+    </main>
+
+    <footer>
+        <div class="wrap foot">
+            <span>© Argus Projects — Hecho con cuidado por la comunidad anti-cheat.</span>
+            <span>
+                <a href="/scanner">Scanner</a> ·
+                <a href="/descargar">Descargar</a> ·
+                <a href="/panel">Panel</a> ·
+                <a href="/terminos">Términos</a> ·
+                <a href="{{ discord_invite }}" target="_blank" rel="noopener">Discord</a>
+            </span>
+        </div>
+    </footer>
+</body>
+</html>

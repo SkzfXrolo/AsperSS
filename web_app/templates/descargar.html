@@ -784,6 +784,11 @@
                     </div>
                 </div>
 
+                <div id="ss-verified-banner" style="display:none;margin-bottom:12px;padding:12px 16px;border-radius:12px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.4);color:#bbf7d0;font-size:13px;">
+                    <strong>✓ Acceso verificado</strong> — tu staff preparó esta descarga. El scanner se autentica solo, sin código.
+                    <span id="ss-verified-auto" style="display:block;color:#86efac;margin-top:4px;font-size:12px;"></span>
+                </div>
+
                 <a href="{{ exe_url }}" class="download-btn" id="dl-btn">
                     <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
                         <path d="M11 3v11M11 14l-4-4M11 14l4-4M3 19h16" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -843,20 +848,33 @@
                 <div class="steps">
                     <div class="step">
                         <div class="step-num">1</div>
-                        <div>Descarga y ejecuta <strong>ArgusScanner.exe</strong> como administrador.</div>
+                        <div>El staff abre su <strong>panel de Argus</strong> y toca <strong>“Copiar link para SS”</strong>
+                            (o “Descargar para SS”). Eso genera una descarga <strong>ya autorizada</strong>: nadie tiene
+                            que tipear códigos.</div>
                     </div>
                     <div class="step">
                         <div class="step-num">2</div>
-                        <div>Ingresa el <strong>código de 6 caracteres</strong> que tu staff te proporcionó.</div>
+                        <div>Pegá ese link en el navegador de este PC (o abrí el ZIP descargado) y
+                            <strong>extraé</strong> los archivos. Mantené <code class="inline-code">ArgusScanner.exe</code>
+                            junto a <code class="inline-code">config.json</code>.</div>
                     </div>
                     <div class="step">
                         <div class="step-num">3</div>
-                        <div>Haz clic en <strong>Autenticar</strong> y deja al scanner trabajar; el análisis tarda menos de 60 segundos.</div>
+                        <div>Ejecutá <strong>ArgusScanner.exe</strong> como administrador. Se
+                            <strong>autentica solo</strong> con la licencia firmada — el análisis tarda menos de 60 segundos.</div>
                     </div>
                     <div class="step">
                         <div class="step-num">4</div>
-                        <div>El staff revisará el veredicto en el panel. Mantén el programa abierto hasta que te indiquen.</div>
+                        <div>El staff ve el veredicto en el panel <strong>en vivo</strong>. Mantené el programa abierto
+                            hasta que te indiquen.</div>
                     </div>
+                </div>
+                <div class="hash-row" style="margin-top:12px;background:rgba(148,163,184,0.08);border:1px solid rgba(148,163,184,0.22);">
+                    <span class="label" style="color:#94a3b8;">FALLBACK</span>
+                    <span class="value" style="color:#cbd5e1;font-family:inherit;font-size:12px;">
+                        ¿Te pasaron un <strong>código de 6 caracteres</strong> (método clásico)? Abrí el .exe,
+                        ingresá el código y tocá <strong>Autenticar</strong>. Sigue funcionando.
+                    </span>
                 </div>
             </div>
 
@@ -1108,7 +1126,7 @@
 
             <div class="warning">
                 <span style="flex-shrink:0;">⚠</span>
-                <span>El código de acceso es de <strong>1 solo uso</strong> y expira a los <strong>30 minutos</strong>. Si no tienes uno, pídelo al staff de tu servidor o entra a nuestro Discord antes de descargar.</span>
+                <span>El acceso es <strong>temporal</strong> y atado al staff de tu servidor: el <strong>link firmado</strong> caduca solo, y el <strong>código de 6 chars</strong> (método clásico) es de 1 uso y expira a los 30 minutos. Si no tienes ninguno, pídelo al staff o entra a nuestro Discord antes de descargar.</span>
             </div>
 
             <div class="discord-card">
@@ -1234,6 +1252,41 @@
         }
         animateDownloadBtn('dl-btn', 'linear-gradient(135deg, #10B981 0%, #047857 100%)');
         animateDownloadBtn('dl-btn-lite', 'linear-gradient(135deg, #059669 0%, #047857 100%)');
+
+        // ── Acceso firmado: si la URL trae ?ss=<licencia>, esta descarga ya
+        //    está autorizada. Apuntamos el botón al link firmado, mostramos el
+        //    badge verde y lanzamos la descarga automáticamente. ──────────────
+        (function handleSignedSs() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const blob = params.get('ss');
+                if (!blob || !blob.startsWith('argus_lic_')) return;
+                const dlUrl = '/dl/ss/' + encodeURIComponent(blob);
+                const btn = document.getElementById('dl-btn');
+                if (btn) {
+                    btn.setAttribute('href', dlUrl);
+                    const lbl = btn.querySelector('span');
+                    if (lbl) lbl.textContent = 'Descargar ArgusScanner (autorizado)';
+                }
+                const banner = document.getElementById('ss-verified-banner');
+                if (banner) banner.style.display = 'block';
+                const auto = document.getElementById('ss-verified-auto');
+                let n = 3;
+                const tick = () => {
+                    if (auto) auto.textContent = 'La descarga empieza en ' + n + 's…';
+                    if (n <= 0) {
+                        if (auto) auto.textContent = 'Descarga iniciada. Extraé el ZIP y ejecutá ArgusScanner.exe.';
+                        const a = document.createElement('a');
+                        a.href = dlUrl; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                        clearInterval(iv);
+                        return;
+                    }
+                    n--;
+                };
+                tick();
+                const iv = setInterval(tick, 1000);
+            } catch (_) {}
+        })();
     </script>
     <script src="{{ url_for('static', filename='js/argus-public.js') }}" defer></script>
 </body>

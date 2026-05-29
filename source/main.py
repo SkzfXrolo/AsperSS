@@ -21,6 +21,39 @@ import winreg
 import json
 from datetime import datetime, timedelta
 import subprocess
+
+# ── Ocultar TODA ventana de consola que abran los subprocess ────────────────
+# El .exe corre en modo windowed (sin consola). Cada subprocess.run/Popen que
+# se olvide de creationflags abre un pantallazo negro de PowerShell/CMD/wmic.
+# Parcheamos Popen UNA sola vez para forzar CREATE_NO_WINDOW + STARTUPINFO
+# oculto por defecto en Windows. Cubre run(), check_output(), call() y todos
+# los módulos que usen subprocess dentro de este proceso.
+if os.name == 'nt':
+    try:
+        _CREATE_NO_WINDOW = 0x08000000
+        _CREATE_NEW_CONSOLE = 0x00000010
+        _orig_popen_init = subprocess.Popen.__init__
+
+        def _hidden_popen_init(self, *args, **kwargs):
+            # Si el caller pidió EXPLÍCITAMENTE una consola nueva, respetarlo.
+            flags = kwargs.get('creationflags', 0) or 0
+            if not (flags & _CREATE_NEW_CONSOLE):
+                kwargs['creationflags'] = flags | _CREATE_NO_WINDOW
+            si = kwargs.get('startupinfo')
+            if si is None:
+                si = subprocess.STARTUPINFO()
+            try:
+                si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                si.wShowWindow = 0  # SW_HIDE
+            except Exception:
+                pass
+            kwargs['startupinfo'] = si
+            return _orig_popen_init(self, *args, **kwargs)
+
+        subprocess.Popen.__init__ = _hidden_popen_init
+    except Exception:
+        pass
+
 import hashlib
 from pathlib import Path
 import time
@@ -63,7 +96,7 @@ except ImportError:
 try:
     from config.version import SCANNER_VERSION
 except ImportError:
-    SCANNER_VERSION = "1.6.57"
+    SCANNER_VERSION = "1.6.58"
 
 try:
     from config.lite_mode import (
@@ -1588,6 +1621,13 @@ class ArgusApp:
         
         # Cargar configuración PRIMERO para verificar si hay token
         self.config = self.load_config()
+        # Licencia firmada embebida (nuevo flujo "Descargar para SS"): si el
+        # config trae 'license' (blob argus_lic_...) y no hay scan_token, la
+        # usamos como scan_token. El backend la valida igual que un token, así
+        # el scanner se auto-autentica sin que nadie tipee un código. Si la
+        # licencia expiró/es inválida, cae al flujo manual de token (fallback).
+        if not self.config.get('scan_token') and self.config.get('license'):
+            self.config['scan_token'] = self.config['license']
         # P5 #35 — apply --profile override if requested
         self._apply_profile_env(self.config)
 
@@ -8377,61 +8417,55 @@ class ArgusApp:
             
             # Si no hay token válido, mostrar autenticación integrada en ventana principal
             auth_result = [False]
-            auth_frame = tk.Frame(self.root, bg=ModernUI.COLORS['bg_primary'] if UI_STYLE_AVAILABLE else "#0d1117")
-            auth_frame.place(x=0, y=42, relwidth=1.0, relheight=1.0)
-            auth_frame.lift()
-
             C = ModernUI.COLORS if UI_STYLE_AVAILABLE else {}
-            bg_c = C.get('bg_primary', '#0d1117')
-            card_c = C.get('bg_card', '#14101E')
-            txt_p = C.get('text_primary', '#EAD8C0')
-            txt_s = C.get('text_secondary', '#A89578')
-            txt_m = C.get('text_muted', '#5A4A38')
+            bg = C.get('bg_primary', '#09090b')
+            txt_p = C.get('text_primary', '#f5f5f5')
+            txt_s = C.get('text_secondary', '#a1a1aa')
+            txt_m = C.get('text_muted', '#3f3f46')
             accent = C.get('accent', '#B87333')
             accent_l = C.get('accent_light', '#E8A86F')
-            green = C.get('green', '#6EE7B7')
+            green = C.get('green', '#22c55e')
             red = C.get('red_deep', '#DC2626')
+            border_c = C.get('border', '#1f1f23')
 
-            # --- Step tracking ---
-            step_var = [0]  # 0=ToS, 1=Token
-
-            card = tk.Frame(auth_frame, bg=card_c, highlightbackground=C.get('border_bright', '#3A2C1C'), highlightthickness=1)
-            card.place(relx=0.5, rely=0.5, anchor='center', width=500, height=400)
+            auth_frame = tk.Frame(self.root, bg=bg)
+            auth_frame.place(x=0, y=40, relwidth=1.0, relheight=1.0)
+            auth_frame.lift()
 
             # ──────── STEP 0: TERMS & CONDITIONS ────────
-            tos_frame = tk.Frame(card, bg=card_c)
+            tos_frame = tk.Frame(auth_frame, bg=bg)
             tos_frame.place(x=0, y=0, relwidth=1.0, relheight=1.0)
 
-            tos_inner = tk.Frame(tos_frame, bg=card_c)
-            tos_inner.place(relx=0.5, rely=0.5, anchor='center', relwidth=0.88)
+            tos_center = tk.Frame(tos_frame, bg=bg)
+            tos_center.place(relx=0.5, rely=0.48, anchor='center')
 
-            tk.Label(tos_inner, text="Aviso Legal",
-                     font=('Segoe UI', 16, 'bold'),
-                     bg=card_c, fg=txt_p).pack(anchor='w', pady=(0, 4))
+            tk.Label(tos_center, text="\U0001F441\uFE0F",
+                     font=('Segoe UI', 24), bg=bg).pack(pady=(0, 12))
 
-            tk.Frame(tos_inner, bg=accent, height=2).pack(fill=tk.X, pady=(0, 14))
+            tk.Label(tos_center, text="Aviso Legal",
+                     font=('Segoe UI', 14, 'bold'),
+                     bg=bg, fg=txt_p).pack()
+
+            sep_c = tk.Canvas(tos_center, width=36, height=2,
+                              bg=bg, highlightthickness=0, bd=0)
+            sep_c.pack(pady=(6, 14))
+            sep_c.create_line(0, 1, 36, 1, fill=accent, width=1)
 
             tos_content = (
-                "Argus Scanner analiza procesos, archivos y registros del sistema "
-                "con el único fin de detectar software no autorizado en el contexto "
-                "de servidores de Minecraft.\n\n"
-                "Al continuar, usted declara que ejecuta este programa de forma "
-                "voluntaria y bajo su propia responsabilidad.\n\n"
-                "Argus Projects no se responsabiliza por alertas incorrectas, "
-                "conflictos con software de terceros, ni por cualquier reclamo, "
-                "denuncia o queja derivada del uso de esta herramienta o de los "
-                "resultados que arroje.\n\n"
-                "Los resultados se transmiten exclusivamente al panel de staff "
-                "autorizado del servidor. No se recopilan datos personales."
+                "Al ejecutar Argus Scanner aceptas que el software realiza un "
+                "análisis automatizado del sistema. Argus Technologies no se "
+                "responsabiliza por falsos positivos, interferencias con otros "
+                "programas ni acciones disciplinarias derivadas de los resultados "
+                "del escaneo. Este programa se ofrece \"tal cual\", sin garantías "
+                "de ningún tipo."
             )
 
-            tos_lbl = tk.Label(tos_inner, text=tos_content,
-                               font=('Segoe UI', 9), bg=card_c, fg=txt_s,
-                               wraplength=420, justify='left', anchor='nw')
-            tos_lbl.pack(fill=tk.X, pady=(0, 20))
+            tk.Label(tos_center, text=tos_content,
+                     font=('Segoe UI', 10), bg=bg, fg='#71717a',
+                     wraplength=400, justify='center').pack(pady=(0, 28))
 
-            tos_btn_frame = tk.Frame(tos_inner, bg=card_c)
-            tos_btn_frame.pack(fill=tk.X)
+            tos_btn_frame = tk.Frame(tos_center, bg=bg)
+            tos_btn_frame.pack()
 
             def _accept_tos():
                 tos_frame.place_forget()
@@ -8444,26 +8478,30 @@ class ArgusApp:
 
             accept_btn = tk.Button(tos_btn_frame, text="Acepto y continúo",
                                    font=('Segoe UI', 10, 'bold'),
-                                   bg=accent, fg='#FFFFFF', relief=tk.FLAT, bd=0,
-                                   cursor='hand2', padx=20, pady=9,
-                                   activebackground=C.get('accent_hover', '#D4915A'),
+                                   bg=bg, fg=accent_l, relief=tk.FLAT, bd=0,
+                                   cursor='hand2', padx=24, pady=10,
+                                   activebackground=bg,
                                    activeforeground='#FFFFFF',
+                                   highlightthickness=1,
+                                   highlightbackground=C.get('accent_deep', '#6B3A1D'),
                                    command=_accept_tos)
-            accept_btn.pack(side=tk.LEFT)
-            accept_btn.bind('<Enter>', lambda _: accept_btn.config(bg=C.get('accent_hover', '#D4915A')))
-            accept_btn.bind('<Leave>', lambda _: accept_btn.config(bg=accent))
+            accept_btn.pack(side=tk.LEFT, padx=(0, 8))
+            accept_btn.bind('<Enter>', lambda _: accept_btn.config(fg='#FFFFFF', highlightbackground=accent))
+            accept_btn.bind('<Leave>', lambda _: accept_btn.config(fg=accent_l, highlightbackground=C.get('accent_deep', '#6B3A1D')))
 
             decline_btn = tk.Button(tos_btn_frame, text="Salir",
-                                    font=('Segoe UI', 9),
-                                    bg=card_c, fg=txt_m, relief=tk.FLAT, bd=0,
-                                    cursor='hand2', padx=16, pady=9,
+                                    font=('Segoe UI', 10),
+                                    bg=bg, fg='#52525b', relief=tk.FLAT, bd=0,
+                                    cursor='hand2', padx=18, pady=10,
+                                    highlightthickness=1,
+                                    highlightbackground='#27272a',
                                     command=_decline_tos)
-            decline_btn.pack(side=tk.RIGHT)
-            decline_btn.bind('<Enter>', lambda _: decline_btn.config(fg=C.get('red', '#FCA5A5')))
-            decline_btn.bind('<Leave>', lambda _: decline_btn.config(fg=txt_m))
+            decline_btn.pack(side=tk.LEFT)
+            decline_btn.bind('<Enter>', lambda _: decline_btn.config(fg=txt_s, highlightbackground='#3f3f46'))
+            decline_btn.bind('<Leave>', lambda _: decline_btn.config(fg='#52525b', highlightbackground='#27272a'))
 
             # ──────── STEP 1: TOKEN INPUT ────────
-            token_frame = tk.Frame(card, bg=card_c)
+            token_frame = tk.Frame(auth_frame, bg=bg)
             
             def verify_token(token):
                 """Verifica si el token es válido contra la API web"""
@@ -8652,14 +8690,17 @@ class ArgusApp:
                     return False
             
             # Token input UI
-            tk_center = tk.Frame(token_frame, bg=card_c)
-            tk_center.place(relx=0.5, rely=0.5, anchor='center')
+            tk_center = tk.Frame(token_frame, bg=bg)
+            tk_center.place(relx=0.5, rely=0.48, anchor='center')
 
-            tk.Label(tk_center, text="CÓDIGO DE ACCESO", font=('Segoe UI', 11, 'bold'),
-                     bg=card_c, fg=accent_l).pack(pady=(0, 6))
-            tk.Label(tk_center, text="Ingresa el código de 6 caracteres que tu staff te proporcionó.",
-                     font=('Segoe UI', 9), bg=card_c, fg=txt_s, wraplength=400,
-                     justify='center').pack(pady=(0, 20))
+            tk.Label(tk_center, text="\U0001F510",
+                     font=('Segoe UI', 20), bg=bg).pack(pady=(0, 12))
+
+            tk.Label(tk_center, text="CÓDIGO DE ACCESO",
+                     font=('Segoe UI', 12, 'bold'),
+                     bg=bg, fg=txt_p).pack(pady=(0, 4))
+            tk.Label(tk_center, text="Token de 6 caracteres \u00b7 proporcionado por staff",
+                     font=('Segoe UI', 9), bg=bg, fg=txt_m).pack(pady=(0, 22))
 
             code_var = tk.StringVar()
             def _on_code_change(*_):
@@ -8670,22 +8711,18 @@ class ArgusApp:
             code_var.trace_add('write', _on_code_change)
 
             token_entry = tk.Entry(tk_center, textvariable=code_var,
-                                   font=('Consolas', 28, 'bold'), width=8,
-                                   bg=C.get('bg_secondary', '#0E0A18'),
-                                   fg=accent_l,
-                                   insertbackground=txt_p, relief=tk.FLAT, bd=0,
-                                   highlightthickness=2,
-                                   highlightbackground=accent,
-                                   highlightcolor=accent_l,
+                                   font=('Consolas', 22), width=10,
+                                   bg=bg, fg=txt_p,
+                                   insertbackground=accent_l, relief=tk.FLAT, bd=0,
+                                   highlightthickness=1,
+                                   highlightbackground=border_c,
+                                   highlightcolor=accent,
                                    justify='center')
-            token_entry.pack(ipady=10, pady=(0, 6))
+            token_entry.pack(ipady=12, pady=(0, 6))
 
             status_lbl = tk.Label(tk_center, text="", font=('Segoe UI', 8),
-                                  bg=card_c, fg=txt_m)
-            status_lbl.pack(pady=(0, 16))
-
-            btn_row = tk.Frame(tk_center, bg=card_c)
-            btn_row.pack()
+                                  bg=bg, fg=txt_m)
+            status_lbl.pack(pady=(0, 18))
 
             def on_authenticate():
                 token = token_entry.get().strip()
@@ -8698,25 +8735,35 @@ class ArgusApp:
                     if hasattr(self, 'db_integration') and self.db_integration:
                         self.db_integration.scan_token = token
                     auth_result[0] = True
-                    status_lbl.config(text="✓ Acceso autorizado", fg=green)
+                    status_lbl.config(text="\u2713 Acceso autorizado", fg=green)
                     self.root.after(600, auth_frame.destroy)
                 else:
-                    status_lbl.config(text="✕ Código inválido o expirado", fg=red)
+                    status_lbl.config(text="\u2715 Código inválido o expirado", fg=C.get('red', '#f87171'))
 
             def on_cancel():
                 auth_result[0] = False
                 auth_frame.destroy()
 
-            auth_btn = tk.Button(btn_row, text="Autenticar", font=('Segoe UI', 10, 'bold'),
-                                 bg=accent, fg='#FFFFFF', relief=tk.FLAT, bd=0,
-                                 cursor='hand2', padx=24, pady=8, command=on_authenticate)
-            auth_btn.pack(side=tk.LEFT, padx=6)
+            auth_btn = tk.Button(tk_center, text="Autenticar",
+                                 font=('Segoe UI', 10, 'bold'),
+                                 bg=bg, fg=accent_l, relief=tk.FLAT, bd=0,
+                                 cursor='hand2', padx=24, pady=10,
+                                 activebackground=bg, activeforeground='#FFFFFF',
+                                 highlightthickness=1,
+                                 highlightbackground=C.get('accent_deep', '#6B3A1D'),
+                                 command=on_authenticate)
+            auth_btn.pack(pady=(0, 8))
+            auth_btn.bind('<Enter>', lambda _: auth_btn.config(fg='#FFFFFF', highlightbackground=accent))
+            auth_btn.bind('<Leave>', lambda _: auth_btn.config(fg=accent_l, highlightbackground=C.get('accent_deep', '#6B3A1D')))
 
-            cancel_btn = tk.Button(btn_row, text="Cancelar", font=('Segoe UI', 10, 'bold'),
-                                   bg=card_c, fg=txt_m, relief=tk.FLAT, bd=0,
-                                   cursor='hand2', padx=24, pady=8, command=on_cancel,
-                                   highlightthickness=1, highlightbackground=C.get('border', '#2A1F14'))
-            cancel_btn.pack(side=tk.LEFT, padx=6)
+            cancel_btn = tk.Button(tk_center, text="Cancelar",
+                                   font=('Segoe UI', 9),
+                                   bg=bg, fg=txt_m, relief=tk.FLAT, bd=0,
+                                   cursor='hand2', padx=16, pady=6,
+                                   command=on_cancel)
+            cancel_btn.pack()
+            cancel_btn.bind('<Enter>', lambda _: cancel_btn.config(fg=txt_s))
+            cancel_btn.bind('<Leave>', lambda _: cancel_btn.config(fg=txt_m))
 
             token_entry.bind('<Return>', lambda _e: on_authenticate())
 
