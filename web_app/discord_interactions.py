@@ -133,6 +133,57 @@ def _cmd_scan(options: list) -> dict:
         return _msg(f'⚠️ Error: {e}')
 
 
+def _cmd_reputacion(options: list) -> dict:
+    jugador = (_opt(options, 'jugador') or '').strip()
+    if not jugador:
+        return _msg('❌ Indicá un nombre de jugador.')
+    try:
+        from app import get_api_db_cursor, _PH, _row_get
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f'''SELECT verdict, risk_score, started_at FROM scans
+                    WHERE LOWER(minecraft_username) = LOWER({_PH}) AND status = {_PH}
+                    ORDER BY id DESC LIMIT 100''',
+                (jugador, 'completed')
+            )
+            rows = cur.fetchall() or []
+        total = len(rows)
+        if not total:
+            return _msg(f'🛰️ Sin registros para **{jugador}** en la red Argus.', ephemeral=False)
+        verdicts = [(_row_get(r, 0, 'verdict') or '').lower() for r in rows]
+        risks    = [int(_row_get(r, 1, 'risk_score') or 0) for r in rows]
+        last_seen = str(_row_get(rows[0], 2, 'started_at') or '')[:10]
+        hacks = verdicts.count('hack')
+        clean = verdicts.count('clean')
+        hack_rate = hacks / total
+        avg_risk = round(sum(risks) / total, 1)
+        if hack_rate >= 0.5:
+            rep, color = 'ALTO RIESGO 🔴', 0xE74C3C
+        elif hack_rate >= 0.2:
+            rep, color = 'SOSPECHOSO 🟠', 0xF39C12
+        else:
+            rep, color = 'LIMPIO 🟢', 0x2ECC71
+        from urllib.parse import quote as _q
+        panel_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://asperss.onrender.com').rstrip('/')
+        return _embed({
+            'title': f'🛡️ Reputación — {jugador}',
+            'url': f'{panel_url}/reputacion?u={_q(jugador)}',
+            'description': f'**{rep}**',
+            'color': color,
+            'fields': [
+                {'name': 'Scans',       'value': str(total),                 'inline': True},
+                {'name': 'Hacks 🔴',    'value': str(hacks),                 'inline': True},
+                {'name': 'Limpios 🟢',  'value': str(clean),                 'inline': True},
+                {'name': 'Hack rate',   'value': f'{round(hack_rate*100)}%', 'inline': True},
+                {'name': 'Risk prom.',  'value': f'{avg_risk}/100',          'inline': True},
+                {'name': 'Último scan', 'value': last_seen or 'N/A',         'inline': True},
+            ],
+            'footer': {'text': 'Argus Vault · datos agregados de la red'},
+        })
+    except Exception as e:
+        return _msg(f'⚠️ Error: {e}')
+
+
 def _cmd_veredicto(options: list, member: dict) -> dict:
     if not _has_staff(member):
         return _msg('❌ No tienes el rol de staff.')
@@ -213,6 +264,8 @@ def handle_interaction(data: dict) -> dict:
             return _cmd_stats()
         if name == 'scan':
             return _cmd_scan(options)
+        if name == 'reputacion':
+            return _cmd_reputacion(options)
         if name == 'veredicto':
             return _cmd_veredicto(options, member)
         if name == 'ss':

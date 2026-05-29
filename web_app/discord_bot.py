@@ -131,6 +131,61 @@ def _make_bot():
         except Exception as e:
             await interaction.followup.send(f'⚠️ Error: {e}')
 
+    # ── /reputacion ─────────────────────────────────────────────────────────────
+    @tree.command(
+        name='reputacion',
+        description='Reputación anti-cheat de un jugador en la red Argus',
+        guild=guild_obj,
+    )
+    @app_commands.describe(jugador='Nombre de Minecraft del jugador')
+    async def cmd_reputacion(interaction: discord.Interaction, jugador: str):
+        await interaction.response.defer(ephemeral=False)
+        try:
+            from app import get_api_db_cursor, _PH, _row_get
+            with get_api_db_cursor() as cursor:
+                cursor.execute(
+                    f'''SELECT verdict, risk_score, started_at FROM scans
+                        WHERE LOWER(minecraft_username) = LOWER({_PH}) AND status = {_PH}
+                        ORDER BY id DESC LIMIT 100''',
+                    (jugador, 'completed')
+                )
+                rows = cursor.fetchall() or []
+            total = len(rows)
+            if not total:
+                await interaction.followup.send(f'🛰️ Sin registros para **{jugador}** en la red Argus.')
+                return
+            verdicts = [(_row_get(r, 0, 'verdict') or '').lower() for r in rows]
+            risks    = [int(_row_get(r, 1, 'risk_score') or 0) for r in rows]
+            last_seen = str(_row_get(rows[0], 2, 'started_at') or '')[:10]
+            hacks = verdicts.count('hack')
+            clean = verdicts.count('clean')
+            hack_rate = hacks / total
+            avg_risk = round(sum(risks) / total, 1)
+            if hack_rate >= 0.5:
+                rep, color = 'ALTO RIESGO 🔴', discord.Color.red()
+            elif hack_rate >= 0.2:
+                rep, color = 'SOSPECHOSO 🟠', discord.Color.orange()
+            else:
+                rep, color = 'LIMPIO 🟢', discord.Color.green()
+            panel_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://asperss.onrender.com').rstrip('/')
+            from urllib.parse import quote as _q
+            embed = discord.Embed(
+                title=f'🛡️ Reputación — {jugador}',
+                description=f'**{rep}**',
+                color=color,
+                url=f'{panel_url}/reputacion?u={_q(jugador)}',
+            )
+            embed.add_field(name='Scans',       value=str(total),                 inline=True)
+            embed.add_field(name='Hacks 🔴',    value=str(hacks),                 inline=True)
+            embed.add_field(name='Limpios 🟢',  value=str(clean),                 inline=True)
+            embed.add_field(name='Hack rate',   value=f'{round(hack_rate*100)}%', inline=True)
+            embed.add_field(name='Risk prom.',  value=f'{avg_risk}/100',          inline=True)
+            embed.add_field(name='Último scan', value=last_seen or 'N/A',         inline=True)
+            embed.set_footer(text='Argus Vault · datos agregados de la red')
+            await interaction.followup.send(embed=embed)
+        except Exception as e:
+            await interaction.followup.send(f'⚠️ Error: {e}')
+
     # ── /veredicto ────────────────────────────────────────────────────────────
     @tree.command(
         name='veredicto',
