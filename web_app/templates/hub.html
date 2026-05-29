@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#B87333">
+    <meta name="theme-color" content="#0a0a1f">
     <title>Argus Projects — Ecosistema</title>
     <meta name="description" content="Argus Projects — herramientas de seguridad anti-cheat, asistencia con IA y más. Un ecosistema, una marca.">
     <link rel="icon" href="{{ url_for('static', filename='img/logo.png') }}" type="image/png">
@@ -12,13 +12,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/cosmic.css') }}?v=1">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
-            --bg0: #080508; --bg1: #0E0805; --card: rgba(22,16,10,.85);
-            --border: rgba(184,115,51,.18); --border-h: rgba(212,145,90,.55);
-            --accent: #B87333; --accent-l: #E8A86F; --accent-d: #6B3A1D;
-            --gold: #B8860B; --text: #EAD8C0; --text-m: #A89578; --text-d: #5A4A38;
+            --bg0: #04030e; --bg1: #08071c; --card: rgba(18,18,42,.6);
+            --border: rgba(139,123,255,.18); --border-h: rgba(139,123,255,.5);
+            --accent: #8b7bff; --accent-l: #b9a7ff; --accent-d: #5b3fd6;
+            --gold: #46e6ff; --text: #ECEDFF; --text-m: #A6A8D0; --text-d: #6E7199;
             --green: #34D399; --blue: #38BDF8; --discord: #5865F2;
             --radius: 16px;
         }
@@ -27,22 +28,16 @@
             font-family: 'Inter', sans-serif; background: var(--bg0); color: var(--text);
             -webkit-font-smoothing: antialiased; overflow-x: hidden; min-height: 100vh;
         }
-        body::before {
-            content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
-            background:
-                radial-gradient(ellipse 70% 50% at 50% -10%, rgba(184,115,51,.14) 0%, transparent 60%),
-                radial-gradient(ellipse 50% 40% at 85% 90%, rgba(92,46,26,.10) 0%, transparent 55%);
-        }
         .wrap { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; padding: 0 22px; }
 
         /* ── Topbar ── */
         header {
             position: sticky; top: 0; z-index: 20; backdrop-filter: blur(14px);
-            background: rgba(8,5,8,.72); border-bottom: 1px solid var(--border);
+            background: rgba(8,7,24,.72); border-bottom: 1px solid var(--border);
         }
         .nav { display: flex; align-items: center; justify-content: space-between; height: 64px; }
         .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; color: var(--text); }
-        .brand img { width: 34px; height: 34px; border-radius: 8px; }
+        .brand img { height: 28px; width: auto; display: block; filter: drop-shadow(0 0 11px rgba(139,123,255,.55)); }
         .brand .bt { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 18px; letter-spacing: .01em; }
         .brand .bt span { color: var(--accent-l); }
         .nav-right { display: flex; align-items: center; gap: 10px; }
@@ -50,7 +45,7 @@
             color: var(--text-m); text-decoration: none; font-size: 13.5px; font-weight: 500;
             padding: 8px 14px; border-radius: 10px; transition: all .2s;
         }
-        .nav-link:hover { color: var(--text); background: rgba(184,115,51,.1); }
+        .nav-link:hover { color: var(--text); background: rgba(139,123,255,.12); }
         .discord-pill {
             display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
             color: #fff; background: var(--discord); padding: 8px 15px; border-radius: 10px;
@@ -90,7 +85,7 @@
         .card.soon { opacity: .82; }
         .card.soon::after { background: linear-gradient(90deg, var(--text-d), transparent); }
         .c-top { display: flex; align-items: center; gap: 13px; margin-bottom: 14px; }
-        .c-ico { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(135deg, rgba(184,115,51,.22), rgba(184,115,51,.05)); border: 1px solid var(--border); flex-shrink: 0; }
+        .c-ico { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(135deg, rgba(139,123,255,.28), rgba(70,230,255,.06)); border: 1px solid var(--border); flex-shrink: 0; }
         .c-ico svg { width: 26px; height: 26px; stroke: var(--accent-l); fill: none; stroke-width: 1.6; }
         .c-name { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 19px; }
         .badge { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; padding: 3px 9px; border-radius: 6px; text-transform: uppercase; }
@@ -99,7 +94,7 @@
         .badge.soon { color: var(--text); background: rgba(255,255,255,.08); border: 1px solid var(--border); }
         .c-desc { color: var(--text-m); font-size: 14px; line-height: 1.55; margin-bottom: 16px; flex: 1; }
         .c-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
-        .tag { font-size: 11px; color: var(--text-m); background: rgba(184,115,51,.08); border: 1px solid var(--border); padding: 3px 9px; border-radius: 999px; }
+        .tag { font-size: 11px; color: var(--text-m); background: rgba(139,123,255,.1); border: 1px solid var(--border); padding: 3px 9px; border-radius: 999px; }
         .c-actions { display: flex; flex-wrap: wrap; gap: 8px; }
         .btn { display: inline-flex; align-items: center; gap: 7px; text-decoration: none; font-size: 13.5px; font-weight: 600; padding: 10px 16px; border-radius: 10px; transition: all .2s; cursor: pointer; border: none; }
         .btn-primary { color: #1a0f06; background: linear-gradient(135deg, var(--accent-l), var(--accent)); }
@@ -120,11 +115,13 @@
     </style>
 </head>
 <body>
+    <div class="cosmic-bg" aria-hidden="true"></div>
+    <div class="cosmic-vignette" aria-hidden="true"></div>
     <header>
         <div class="wrap nav">
             <a href="/" class="brand">
-                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Argus">
-                <span class="bt">Argus<span>Projects</span></span>
+                <img src="{{ url_for('static', filename='img/argus-wordmark.png') }}" alt="Argus Projects">
+                <span class="bt"><span>Projects</span></span>
             </a>
             <nav class="nav-right">
                 <a href="/scanner" class="nav-link hide-sm">Scanner</a>

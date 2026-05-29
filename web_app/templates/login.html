@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#B87333">
+    <meta name="theme-color" content="#0a0a1f">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Iniciar Sesión — Argus Projects</title>
@@ -12,19 +12,20 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-mobile-fix.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/cosmic.css') }}?v=1">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --bg:        #09091C;
+            --bg:        #04030e;
             --bg-2:      #0E0E28;
-            --bg-card:   rgba(12, 12, 38, 0.92);
-            --border:    rgba(139, 92, 246, 0.15);
-            --border-h:  rgba(139, 92, 246, 0.50);
-            --accent:    #8B5CF6;
-            --accent-d:  #6D28D9;
-            --accent-g:  rgba(139, 92, 246, 0.10);
-            --accent2:   #10B981;
+            --bg-card:   rgba(16, 16, 40, 0.82);
+            --border:    rgba(139, 123, 255, 0.16);
+            --border-h:  rgba(139, 123, 255, 0.50);
+            --accent:    #8b7bff;
+            --accent-d:  #5b3fd6;
+            --accent-g:  rgba(139, 123, 255, 0.10);
+            --accent2:   #46e6ff;
             --text:      #E2E8F7;
             --text-m:    #7C7FA6;
             --text-d:    #3D3F6E;
@@ -110,12 +111,8 @@
         }
 
         .logo {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 74px;
-            height: 74px;
-            margin-bottom: 20px;
+            display: block;
+            margin: 0 auto 14px;
         }
 
         .header h1 {
@@ -380,16 +377,18 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-public.css') }}">
 </head>
 <body class="argus-login-page">
+    <div class="cosmic-bg" aria-hidden="true"></div>
+    <div class="cosmic-vignette" aria-hidden="true"></div>
     <div class="page">
         <div class="card">
 
             <div class="header">
                 <div class="logo">
-                    <img src="{{ url_for('static', filename='img/logo.png') }}"
+                    <img src="{{ url_for('static', filename='img/argus-wordmark.png') }}"
                          alt="Argus Projects"
-                         style="width:54px;height:54px;object-fit:contain;filter:drop-shadow(0 0 12px rgba(139,92,246,0.5));">
+                         style="width:min(248px,80%);height:auto;display:block;margin:0 auto;filter:drop-shadow(0 0 18px rgba(139,123,255,0.45));">
                 </div>
-                <h1>ARGUS PROJECTS</h1>
+                <h1 style="font-size:18px;letter-spacing:6px;">PROJECTS</h1>
                 <div class="tagline">All-Seeing. Always Watching.</div>
                 <p>Acceso al panel de control</p>
             </div>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#B87333">
+    <meta name="theme-color" content="#0a0a1f">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -15,6 +15,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/argus-mobile-fix.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/cosmic.css') }}?v=1">
     <meta property="og:title" content="Descargar Argus Scanner v{{ argus_version }}">
     <meta property="og:description" content="Anti-cheat de nueva generacion para Minecraft. Descarga gratuita, soporte 24/7 en Discord.">
     <meta property="og:image" content="{{ url_for('static', filename='img/logo.png', _external=True) }}">
@@ -23,22 +24,22 @@
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --bg0:        #080508;
-            --bg1:        #0E0805;
-            --bg2:        #15100A;
-            --bg3:        #1C150F;
-            --card:       rgba(22, 16, 10, 0.92);
-            --border:     rgba(184, 115, 51, 0.18);
-            --border-h:   rgba(212, 145, 90, 0.50);
-            --cobre:      #B87333;
-            --cobre-l:    #D4915A;
-            --cobre-glow: #E8A86F;
-            --cobre-d:    #6B3A1D;
-            --oro:        #B8860B;
-            --oro-l:      #D4A017;
-            --crema:      #EAD8C0;
-            --text-m:     #A89578;
-            --text-d:     #5A4A38;
+            --bg0:        #04030e;
+            --bg1:        #08071c;
+            --bg2:        #0d0b26;
+            --bg3:        #14122e;
+            --card:       rgba(18, 18, 42, 0.78);
+            --border:     rgba(139, 123, 255, 0.18);
+            --border-h:   rgba(139, 123, 255, 0.50);
+            --cobre:      #8b7bff;
+            --cobre-l:    #b9a7ff;
+            --cobre-glow: #cbbcff;
+            --cobre-d:    #5b3fd6;
+            --oro:        #46e6ff;
+            --oro-l:      #7af0ff;
+            --crema:      #ECEDFF;
+            --text-m:     #A6A8D0;
+            --text-d:     #6E7199;
             --discord:    #5865F2;
             --discord-l:  #7A85F5;
         }
@@ -61,17 +62,17 @@
             content: '';
             position: fixed; inset: 0; z-index: 0;
             background:
-                radial-gradient(ellipse 80% 50% at 50% -10%, rgba(184,115,51,0.18) 0%, transparent 60%),
-                radial-gradient(ellipse 50% 35% at 100% 100%, rgba(92,46,26,0.12) 0%, transparent 50%),
-                radial-gradient(ellipse 50% 35% at 0% 100%, rgba(184,115,51,0.08) 0%, transparent 50%);
+                radial-gradient(ellipse 80% 50% at 50% -10%, rgba(139,123,255,0.18) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 35% at 100% 100%, rgba(70,230,255,0.12) 0%, transparent 50%),
+                radial-gradient(ellipse 50% 35% at 0% 100%, rgba(139,123,255,0.08) 0%, transparent 50%);
             pointer-events: none;
         }
         body::after {
             content: '';
             position: fixed; inset: 0; z-index: 0;
             background-image:
-                linear-gradient(rgba(184,115,51,0.030) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(184,115,51,0.030) 1px, transparent 1px);
+                linear-gradient(rgba(139,123,255,0.030) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(139,123,255,0.030) 1px, transparent 1px);
             background-size: 64px 64px;
             mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, black 30%, transparent 80%);
             -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, black 30%, transparent 80%);
@@ -88,9 +89,9 @@
         /* ── Logo hero ─────────────────────────────────────── */
         .hero-logo {
             position: relative;
-            width: clamp(120px, 18vw, 160px);
-            height: clamp(120px, 18vw, 160px);
-            margin: 12px auto 28px;
+            width: clamp(260px, 46vw, 480px);
+            height: auto;
+            margin: 12px auto 24px;
             display: block;
         }
         .hero-logo::before {
@@ -98,8 +99,8 @@
             position: absolute;
             inset: -30%;
             background: radial-gradient(circle at 50% 50%,
-                rgba(212,145,90,0.45) 0%,
-                rgba(184,115,51,0.18) 30%,
+                rgba(185,167,255,0.45) 0%,
+                rgba(139,123,255,0.18) 30%,
                 transparent 65%);
             filter: blur(28px);
             border-radius: 50%;
@@ -109,12 +110,12 @@
         .hero-logo img {
             position: relative;
             width: 100%;
-            height: 100%;
+            height: auto;
             object-fit: contain;
             filter:
                 brightness(1.15) saturate(1.25)
-                drop-shadow(0 0 18px rgba(212,145,90,0.65))
-                drop-shadow(0 0 44px rgba(184,115,51,0.30));
+                drop-shadow(0 0 18px rgba(185,167,255,0.65))
+                drop-shadow(0 0 44px rgba(139,123,255,0.30));
             animation: floatLogo 6s ease-in-out infinite;
         }
         @keyframes heroPulse {
@@ -133,8 +134,8 @@
             gap: 8px;
             padding: 6px 14px;
             border-radius: 999px;
-            border: 1px solid rgba(212,145,90,0.45);
-            background: linear-gradient(135deg, rgba(184,115,51,0.18), rgba(184,115,51,0.04));
+            border: 1px solid rgba(185,167,255,0.45);
+            background: linear-gradient(135deg, rgba(139,123,255,0.18), rgba(139,123,255,0.04));
             font-family: 'JetBrains Mono', monospace;
             font-size: 11px;
             font-weight: 600;
@@ -142,7 +143,7 @@
             color: var(--cobre-glow);
             text-transform: uppercase;
             margin: 0 auto 18px;
-            box-shadow: 0 4px 14px rgba(184,115,51,0.18);
+            box-shadow: 0 4px 14px rgba(139,123,255,0.18);
         }
         .eyebrow .dot {
             width: 6px;
@@ -168,11 +169,11 @@
             margin-bottom: 12px;
         }
         h1 .grad {
-            background: linear-gradient(135deg, #FFEFE0 0%, var(--crema) 30%, var(--cobre-l) 100%);
+            background: linear-gradient(135deg, #EAF0FF 0%, var(--crema) 30%, var(--cobre-l) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            text-shadow: 0 0 32px rgba(212,145,90,0.22);
+            text-shadow: 0 0 32px rgba(185,167,255,0.22);
         }
 
         .subtitle {
@@ -187,13 +188,13 @@
         /* ── Release card ──────────────────────────────────── */
         .release-card {
             background: linear-gradient(160deg, rgba(40,28,18,0.92) 0%, rgba(22,16,10,0.96) 60%, rgba(15,11,7,0.98) 100%);
-            border: 1px solid rgba(212,145,90,0.30);
+            border: 1px solid rgba(185,167,255,0.30);
             border-radius: 24px;
             padding: 36px;
             box-shadow:
                 0 32px 72px rgba(0,0,0,0.60),
-                0 0 0 1px rgba(212,145,90,0.10) inset,
-                0 0 60px rgba(184,115,51,0.10);
+                0 0 0 1px rgba(185,167,255,0.10) inset,
+                0 0 60px rgba(139,123,255,0.10);
             position: relative;
             overflow: hidden;
         }
@@ -217,7 +218,7 @@
             bottom: -30%;
             width: 60%;
             height: 60%;
-            background: radial-gradient(circle, rgba(212,145,90,0.16) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(185,167,255,0.16) 0%, transparent 70%);
             pointer-events: none;
         }
 
@@ -230,7 +231,7 @@
             gap: 16px;
             margin-bottom: 28px;
             padding-bottom: 22px;
-            border-bottom: 1px solid rgba(184,115,51,0.18);
+            border-bottom: 1px solid rgba(139,123,255,0.18);
             position: relative;
             z-index: 1;
         }
@@ -241,7 +242,7 @@
             margin-bottom: 24px;
             padding: 4px;
             background: rgba(0,0,0,0.40);
-            border: 1px solid rgba(184,115,51,0.22);
+            border: 1px solid rgba(139,123,255,0.22);
             border-radius: 12px;
             position: relative;
             z-index: 2;
@@ -267,9 +268,9 @@
         }
         .plat-tab:hover { color: rgba(255,255,255,0.85); }
         .plat-tab.active {
-            background: linear-gradient(135deg, rgba(212,145,90,0.85), rgba(184,115,51,0.78));
+            background: linear-gradient(135deg, rgba(185,167,255,0.85), rgba(139,123,255,0.78));
             color: #fff;
-            box-shadow: 0 4px 14px rgba(184,115,51,0.35);
+            box-shadow: 0 4px 14px rgba(139,123,255,0.35);
         }
         .plat-tab .plat-badge {
             display: inline-block;
@@ -297,7 +298,7 @@
             display: inline-block;
             padding: 2px 7px;
             background: rgba(0,0,0,0.55);
-            border: 1px solid rgba(184,115,51,0.30);
+            border: 1px solid rgba(139,123,255,0.30);
             color: #f1d6b8;
             border-radius: 5px;
             font-family: 'JetBrains Mono','Fira Code',Consolas,monospace;
@@ -308,7 +309,7 @@
             margin-top: 8px;
             padding: 10px 12px;
             background: rgba(0,0,0,0.55);
-            border: 1px solid rgba(184,115,51,0.30);
+            border: 1px solid rgba(139,123,255,0.30);
             color: #f1d6b8;
             border-radius: 8px;
             font-family: 'JetBrains Mono','Fira Code',Consolas,monospace;
@@ -323,15 +324,15 @@
             gap: 10px;
             padding: 8px 14px;
             border-radius: 10px;
-            background: linear-gradient(135deg, rgba(212,145,90,0.22), rgba(184,115,51,0.08));
-            border: 1px solid rgba(212,145,90,0.40);
+            background: linear-gradient(135deg, rgba(185,167,255,0.22), rgba(139,123,255,0.08));
+            border: 1px solid rgba(185,167,255,0.40);
             font-family: 'JetBrains Mono', monospace;
             font-weight: 700;
             font-size: 14px;
             color: var(--cobre-glow);
-            box-shadow: 0 4px 12px rgba(184,115,51,0.16);
+            box-shadow: 0 4px 12px rgba(139,123,255,0.16);
         }
-        .version-tag .v-number { color: #FFEFE0; }
+        .version-tag .v-number { color: #EAF0FF; }
         .version-tag::before {
             content: '';
             width: 8px;
@@ -363,7 +364,7 @@
             gap: 14px;
             width: 100%;
             padding: 22px 28px;
-            background: linear-gradient(135deg, #D4915A 0%, #B87333 45%, #8B4513 100%);
+            background: linear-gradient(135deg, #b9a7ff 0%, #8b7bff 45%, #5b3fd6 100%);
             color: #FFFFFF;
             font-family: 'Syne', sans-serif;
             font-size: 18px;
@@ -373,11 +374,11 @@
             border-radius: 14px;
             cursor: pointer;
             text-decoration: none;
-            text-shadow: 0 1px 0 rgba(92,46,26,0.30);
+            text-shadow: 0 1px 0 rgba(70,230,255,0.30);
             box-shadow:
-                0 14px 32px rgba(184,115,51,0.40),
+                0 14px 32px rgba(139,123,255,0.40),
                 inset 0 1px 0 rgba(255,235,210,0.30),
-                inset 0 -2px 0 rgba(92,46,26,0.30);
+                inset 0 -2px 0 rgba(70,230,255,0.30);
             transition: transform 0.25s cubic-bezier(0.4,0,0.2,1), box-shadow 0.25s ease;
             position: relative;
             overflow: hidden;
@@ -398,12 +399,12 @@
         }
         .download-btn:hover {
             transform: translateY(-2px);
-            background: linear-gradient(135deg, #E8A86F 0%, #D4915A 45%, #B87333 100%);
+            background: linear-gradient(135deg, #cbbcff 0%, #b9a7ff 45%, #8b7bff 100%);
             box-shadow:
-                0 20px 44px rgba(184,115,51,0.55),
+                0 20px 44px rgba(139,123,255,0.55),
                 0 0 0 1px rgba(232,168,111,0.65),
                 inset 0 1px 0 rgba(255,235,210,0.45),
-                inset 0 -2px 0 rgba(92,46,26,0.30);
+                inset 0 -2px 0 rgba(70,230,255,0.30);
         }
         .download-btn:hover::before { transform: translateX(100%); }
         .download-btn:active { transform: translateY(0); }
@@ -450,7 +451,7 @@
             content: '';
             flex: 1;
             height: 1px;
-            background: linear-gradient(90deg, rgba(212,145,90,0.40), transparent);
+            background: linear-gradient(90deg, rgba(185,167,255,0.40), transparent);
         }
 
         .steps {
@@ -465,7 +466,7 @@
             padding: 14px 16px;
             border-radius: 12px;
             background: linear-gradient(180deg, rgba(15,11,7,0.55), rgba(22,16,10,0.55));
-            border: 1px solid rgba(184,115,51,0.12);
+            border: 1px solid rgba(139,123,255,0.12);
             margin-bottom: 10px;
             font-size: 13.5px;
             color: var(--text-m);
@@ -473,7 +474,7 @@
             transition: border-color 0.25s ease, transform 0.25s ease, background 0.25s ease;
         }
         .step:hover {
-            border-color: rgba(212,145,90,0.45);
+            border-color: rgba(185,167,255,0.45);
             background: linear-gradient(180deg, rgba(28,20,12,0.65), rgba(22,16,10,0.55));
             transform: translateX(2px);
         }
@@ -481,8 +482,8 @@
         .step-num {
             width: 28px;
             height: 28px;
-            background: linear-gradient(135deg, rgba(212,145,90,0.30), rgba(184,115,51,0.10));
-            border: 1px solid rgba(212,145,90,0.40);
+            background: linear-gradient(135deg, rgba(185,167,255,0.30), rgba(139,123,255,0.10));
+            border: 1px solid rgba(185,167,255,0.40);
             border-radius: 8px;
             display: flex;
             align-items: center;
@@ -517,7 +518,7 @@
         /* ── SHA hash ──────────────────────────────────────── */
         .hash-row {
             background: linear-gradient(180deg, #0A0805, #0F0B07);
-            border: 1px solid rgba(184,115,51,0.22);
+            border: 1px solid rgba(139,123,255,0.22);
             border-radius: 10px;
             padding: 10px 14px;
             display: flex;
@@ -546,8 +547,8 @@
             opacity: 0.85;
         }
         .hash-row button {
-            background: rgba(184,115,51,0.18);
-            border: 1px solid rgba(212,145,90,0.35);
+            background: rgba(139,123,255,0.18);
+            border: 1px solid rgba(185,167,255,0.35);
             color: var(--cobre-glow);
             border-radius: 6px;
             padding: 4px 8px;
@@ -557,7 +558,7 @@
             transition: all 0.2s ease;
         }
         .hash-row button:hover {
-            background: rgba(212,145,90,0.28);
+            background: rgba(185,167,255,0.28);
             color: #FFFFFF;
         }
 
@@ -675,15 +676,15 @@
         .reveal.visible { opacity: 1; transform: translateY(0); }
 
         ::selection {
-            background: rgba(212,145,90,0.45);
-            color: #FFEFE0;
+            background: rgba(185,167,255,0.45);
+            color: #EAF0FF;
         }
 
         /* Scrollbar */
         ::-webkit-scrollbar { width: 10px; }
         ::-webkit-scrollbar-track { background: var(--bg0); }
         ::-webkit-scrollbar-thumb {
-            background: linear-gradient(180deg, rgba(184,115,51,0.45), rgba(122,72,36,0.55));
+            background: linear-gradient(180deg, rgba(139,123,255,0.45), rgba(91,63,214,0.55));
             border-radius: 999px;
             border: 2px solid var(--bg0);
         }
@@ -692,10 +693,12 @@
     <script>window.ARGUS_API_BASE = '';</script>
 </head>
 <body>
+    <div class="cosmic-bg" aria-hidden="true"></div>
+    <div class="cosmic-vignette" aria-hidden="true"></div>
     <div class="wrap">
 
         <div class="hero-logo reveal">
-            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Argus Projects">
+            <img src="{{ url_for('static', filename='img/argus-wordmark.png') }}" alt="Argus Projects">
         </div>
 
         <div style="text-align:center;">
@@ -978,7 +981,7 @@
                             <span>arm64 / armv7 / x86_64</span>
                         </div>
                     </div>
-                    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;background:rgba(255,255,255,0.04);padding:10px;border-radius:10px;border:1px solid rgba(184,115,51,0.25);">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;background:rgba(255,255,255,0.04);padding:10px;border-radius:10px;border:1px solid rgba(139,123,255,0.25);">
                         <img id="android-qr"
                              src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=8&color=EAD8C0&bgcolor=15110A&data="
                              alt="QR para descargar APK"
@@ -1114,8 +1117,8 @@
                     </div>
                 </div>
 
-                <div class="hash-row" style="background:rgba(184,115,51,0.10);border:1px solid rgba(184,115,51,0.30);margin-top:14px;">
-                    <span class="label" style="color:#d4915a;">PERMISOS</span>
+                <div class="hash-row" style="background:rgba(139,123,255,0.10);border:1px solid rgba(139,123,255,0.30);margin-top:14px;">
+                    <span class="label" style="color:#b9a7ff;">PERMISOS</span>
                     <span class="value" style="color:#eacba8;font-family:inherit;font-size:12px;">
                         <code>argus.ss.use</code> (default OP) · <code>argus.ss.bypass</code> (inmune al SS)
                         · <code>argus.ss.notify</code> (recibe broadcast) · <code>argus.admin</code> (reload/info/test).

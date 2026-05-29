@@ -1,0 +1,48 @@
+/* ============================================================
+   ARGUS · Tema cósmico / nebula — fondo reutilizable
+   Incluí <div class="cosmic-bg"></div> justo después de <body>
+   y enlazá este archivo. Pinta nebulosas animadas + campo de
+   estrellas en CSS detrás de todo el contenido (z-index -3).
+   ============================================================ */
+.cosmic-bg {
+    position: fixed; inset: 0; z-index: -3; pointer-events: none; overflow: hidden;
+    background:
+        radial-gradient(ellipse 90% 60% at 28% -12%, rgba(123,90,255,.20), transparent 60%),
+        radial-gradient(ellipse 80% 60% at 82% 8%,  rgba(255,106,213,.13), transparent 60%),
+        radial-gradient(ellipse 75% 60% at 50% 112%, rgba(70,230,255,.13), transparent 60%),
+        #04030e;
+}
+/* Nubes de nebulosa que derivan suavemente */
+.cosmic-bg::before {
+    content: ''; position: absolute; inset: -20%;
+    background:
+        radial-gradient(circle at 22% 30%, rgba(123,90,255,.30), transparent 38%),
+        radial-gradient(circle at 78% 18%, rgba(255,106,213,.22), transparent 42%),
+        radial-gradient(circle at 60% 82%, rgba(70,230,255,.20), transparent 45%);
+    filter: blur(46px); mix-blend-mode: screen;
+    animation: cosmicDrift 32s ease-in-out infinite; will-change: transform;
+}
+/* Campo de estrellas (tres capas tileadas) + titileo */
+.cosmic-bg::after {
+    content: ''; position: absolute; inset: -50px;
+    background-image:
+        radial-gradient(1.6px 1.6px at 20px 30px,  #ffffff, transparent),
+        radial-gradient(1px 1px   at 130px 80px,  #cfd3ff, transparent),
+        radial-gradient(1.6px 1.6px at 200px 160px, #bfa6ff, transparent),
+        radial-gradient(1px 1px   at 90px 200px,  #a6ecff, transparent),
+        radial-gradient(1.4px 1.4px at 250px 60px,  #ffffff, transparent),
+        radial-gradient(1px 1px   at 320px 230px, #ffc2ec, transparent),
+        radial-gradient(1.2px 1.2px at 60px 300px,  #cfd3ff, transparent);
+    background-size: 340px 340px;
+    opacity: .55; animation: cosmicTwinkle 5.5s ease-in-out infinite;
+}
+@keyframes cosmicDrift { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(2.5%,2%) scale(1.07); } }
+@keyframes cosmicTwinkle { 0%,100% { opacity: .35; } 50% { opacity: .72; } }
+
+/* Vignette sutil para dar profundidad al borde */
+.cosmic-vignette { position: fixed; inset: 0; z-index: -2; pointer-events: none;
+    background: radial-gradient(ellipse 120% 80% at 50% -10%, transparent 42%, rgba(4,3,14,.55) 100%); }
+
+@media (prefers-reduced-motion: reduce) {
+    .cosmic-bg::before, .cosmic-bg::after { animation: none; }
+}

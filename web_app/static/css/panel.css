@@ -5,11 +5,11 @@
 
 :root {
     /* Backgrounds â€” deep space indigo */
-    --bg:          #0A0905;
-    --bg-2:        #0E0C08;
-    --bg-3:        #15110A;
-    --bg-card:     rgba(20, 14, 8, 0.82);
-    --bg-overlay:  rgba(10,9,5,0.94);
+    --bg:          #05040f;
+    --bg-2:        #0a0820;
+    --bg-3:        #110e2e;
+    --bg-card:     rgba(18, 18, 42, 0.72);
+    --bg-overlay:  rgba(8,7,22,0.94);
 
     /* Borders â€” violet tint */
     --border:      rgba(var(--accent-rgb), 0.12);
@@ -17,9 +17,9 @@
     --border-h:    rgba(var(--accent-rgb), 0.55);
 
     /* Accent â€” electric violet */
-    --accent:      #B87333;
+    --accent:      #8b7bff;
     --accent-d:    #7A4824;
-    --accent-rgb:  184, 115, 51;   /* RGB triple del accent: usado por todos los rgba(var(--accent-rgb), X) para que cambie con el preset */
+    --accent-rgb:  139, 123, 255;   /* RGB triple del accent: usado por todos los rgba(var(--accent-rgb), X) para que cambie con el preset */
     --accent-bg:   rgba(var(--accent-rgb), 0.08);
     --accent-glow: rgba(var(--accent-rgb), 0.22);
 
@@ -36,12 +36,12 @@
     --yellow-bg:   rgba(251,191,36,0.10);
 
     /* Text â€” Visual #51 (WCAG AA pass): --text-d antes era #5A4A38
-     * (contrast ~2.2:1 sobre #161616, fail). Subido a #8E7B65 que da
+     * (contrast ~2.2:1 sobre #161616, fail). Subido a #7E81AD que da
      * contrast ~4.6:1 sobre los backgrounds dark del panel manteniendo
      * el feel cobre. */
-    --text:        #EAD8C0;
-    --text-m:      #A89578;
-    --text-d:      #8E7B65;
+    --text:        #ECEDFF;
+    --text-m:      #A6A8D0;
+    --text-d:      #7E81AD;
 
     /* Misc */
     --radius:      14px;
@@ -56,7 +56,7 @@
     /* Shorthand aliases (used in inline styles) */
     --bg-s:        #0E0E28;
     --bg-t:        transparent;
-    --text-h:      #EAD8C0;
+    --text-h:      #ECEDFF;
 }
 
 /* â”€â”€ Cursor Themes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -99,7 +99,7 @@ body.light-theme {
 
     --text:        #3A2A18;
     --text-m:      #6B5240;
-    /* Visual #51 (WCAG AA): #A89578 sobre #FAF6F0 daba contrast ~3:1.
+    /* Visual #51 (WCAG AA): #A6A8D0 sobre #FAF6F0 daba contrast ~3:1.
      * Bajado a #7E6952 (~5.0:1) â€” mismo undertone bronce, legible. */
     --text-d:      #7E6952;
 
@@ -134,11 +134,32 @@ body {
 /* â”€â”€ Custom background layer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #argus-bg {
     position: fixed; inset: 0; z-index: -2;
+    background:
+        radial-gradient(ellipse 90% 60% at 28% -12%, rgba(139,123,255,.20), transparent 60%),
+        radial-gradient(ellipse 80% 60% at 82% 8%,  rgba(255,106,213,.13), transparent 60%),
+        radial-gradient(ellipse 75% 60% at 50% 112%, rgba(70,230,255,.13), transparent 60%),
+        #05040f;
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
     transition: opacity 0.5s ease, filter 0.5s ease;
 }
+/* Estrellas por defecto (los presets bg-* lo sobreescriben con su propio ::before) */
+#argus-bg::before {
+    content: ''; position: absolute; inset: -50px; pointer-events: none;
+    background-image:
+        radial-gradient(1.6px 1.6px at 20px 30px,  #ffffff, transparent),
+        radial-gradient(1px 1px   at 130px 80px,  #cfd3ff, transparent),
+        radial-gradient(1.6px 1.6px at 200px 160px, #bfa6ff, transparent),
+        radial-gradient(1px 1px   at 90px 200px,  #a6ecff, transparent),
+        radial-gradient(1.4px 1.4px at 250px 60px,  #ffffff, transparent),
+        radial-gradient(1px 1px   at 320px 230px, #ffc2ec, transparent),
+        radial-gradient(1.2px 1.2px at 60px 300px,  #cfd3ff, transparent);
+    background-size: 340px 340px;
+    opacity: .5; animation: argusTwinkle 5.5s ease-in-out infinite;
+}
+@keyframes argusTwinkle { 0%,100% { opacity: .3; } 50% { opacity: .65; } }
+@media (prefers-reduced-motion: reduce) { #argus-bg::before { animation: none; } }
 #argus-bg-overlay {
     position: fixed; inset: 0; z-index: -1;
     background: var(--bg-overlay-color, rgba(9,9,28,0.72));
@@ -1236,7 +1257,7 @@ body.light-theme button.argus-quicksearch-trigger kbd {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #B87333 0%, #7A4824 100%);
+    background: linear-gradient(135deg, #8b7bff 0%, #7A4824 100%);
     color: #fff;
     box-shadow: 0 4px 16px rgba(var(--accent-rgb), 0.30);
 }
@@ -4673,13 +4694,13 @@ body.light-theme ::selection {
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, var(--accent-d, #7A4824), var(--accent, #B87333));
+    background: linear-gradient(180deg, var(--accent-d, #7A4824), var(--accent, #8b7bff));
     border-radius: 10px;
     border: 2px solid transparent;
     background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, var(--accent, #B87333), var(--accent-d, #7A4824));
+    background: linear-gradient(180deg, var(--accent, #8b7bff), var(--accent-d, #7A4824));
     background-clip: padding-box;
 }
 
@@ -4942,7 +4963,7 @@ button {
 }
 .argus-modal {
     background: var(--bg-2, #0E0C08);
-    border: 1px solid var(--border-m, rgba(184,115,51,0.28));
+    border: 1px solid var(--border-m, rgba(139,123,255,0.28));
     border-radius: 14px;
     width: min(96vw, 680px);
     max-height: 88vh;
@@ -4957,7 +4978,7 @@ button {
 .argus-modal-header {
     display: flex; align-items: center; gap: 10px;
     padding: 16px 20px;
-    border-bottom: 1px solid var(--border, rgba(184,115,51,0.12));
+    border-bottom: 1px solid var(--border, rgba(139,123,255,0.12));
     flex-shrink: 0;
 }
 .argus-modal-header h3 {
@@ -4979,7 +5000,7 @@ button {
 }
 .argus-modal-footer {
     padding: 14px 20px;
-    border-top: 1px solid var(--border, rgba(184,115,51,0.12));
+    border-top: 1px solid var(--border, rgba(139,123,255,0.12));
     display: flex; gap: 8px; justify-content: flex-end;
     flex-shrink: 0;
 }
