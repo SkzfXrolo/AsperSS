@@ -60,6 +60,22 @@ def _opt(options: list, name: str):
     return None
 
 
+def _parse_dt(s):
+    """Parsea started_at de forma tolerante. None si no puede."""
+    if isinstance(s, datetime.datetime):
+        return s
+    if not s:
+        return None
+    x = str(s).strip().replace(' ', 'T').split('+')[0].split('Z')[0]
+    try:
+        return datetime.datetime.fromisoformat(x)
+    except Exception:
+        try:
+            return datetime.datetime.fromisoformat(x[:19])
+        except Exception:
+            return None
+
+
 # ── Command handlers ───────────────────────────────────────────────────────
 
 def _n(row):
@@ -163,21 +179,30 @@ def _cmd_reputacion(options: list) -> dict:
             rep, color = 'SOSPECHOSO 🟠', 0xF39C12
         else:
             rep, color = 'LIMPIO 🟢', 0x2ECC71
+        _now = datetime.datetime.utcnow()
+        hacks_7d = sum(
+            1 for r in rows
+            if (_row_get(r, 0, 'verdict') or '').lower() == 'hack'
+            and (lambda d: d and (_now - d).days <= 7)(_parse_dt(_row_get(r, 2, 'started_at')))
+        )
         from urllib.parse import quote as _q
         panel_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://asperss.onrender.com').rstrip('/')
+        fields = [
+            {'name': 'Scans',       'value': str(total),                 'inline': True},
+            {'name': 'Hacks 🔴',    'value': str(hacks),                 'inline': True},
+            {'name': 'Limpios 🟢',  'value': str(clean),                 'inline': True},
+            {'name': 'Hack rate',   'value': f'{round(hack_rate*100)}%', 'inline': True},
+            {'name': 'Risk prom.',  'value': f'{avg_risk}/100',          'inline': True},
+            {'name': 'Último scan', 'value': last_seen or 'N/A',         'inline': True},
+        ]
+        if hacks_7d:
+            fields.append({'name': '🔥 Reciente', 'value': f'{hacks_7d} hack(s) en 7 días', 'inline': True})
         return _embed({
             'title': f'🛡️ Reputación — {jugador}',
             'url': f'{panel_url}/reputacion?u={_q(jugador)}',
             'description': f'**{rep}**',
             'color': color,
-            'fields': [
-                {'name': 'Scans',       'value': str(total),                 'inline': True},
-                {'name': 'Hacks 🔴',    'value': str(hacks),                 'inline': True},
-                {'name': 'Limpios 🟢',  'value': str(clean),                 'inline': True},
-                {'name': 'Hack rate',   'value': f'{round(hack_rate*100)}%', 'inline': True},
-                {'name': 'Risk prom.',  'value': f'{avg_risk}/100',          'inline': True},
-                {'name': 'Último scan', 'value': last_seen or 'N/A',         'inline': True},
-            ],
+            'fields': fields,
             'footer': {'text': 'Argus Vault · datos agregados de la red'},
         })
     except Exception as e:

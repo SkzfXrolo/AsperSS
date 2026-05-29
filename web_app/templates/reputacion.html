@@ -141,6 +141,14 @@
         .rep-badge::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
         .rep-sub { color: var(--text-m); font-size: 13.5px; margin-top: 10px; }
         .rep-seen { font-family: var(--mono); font-size: 11.5px; color: var(--text-d); margin-top: 8px; letter-spacing: .3px; }
+        .rep-hot {
+            display: inline-flex; align-items: center; gap: 7px; margin-top: 10px;
+            font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: .3px;
+            color: var(--red); background: rgba(244,80,110,.1); border: 1px solid rgba(244,80,110,.3);
+            padding: 6px 12px; border-radius: 999px;
+        }
+        .rep-hot.warn { color: var(--amber); background: rgba(251,191,36,.1); border-color: rgba(251,191,36,.3); }
+        .wanted-hot { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--red); margin-left: 8px; }
         .copy-btn {
             margin-top: 12px; background: rgba(139,123,255,.1); border: 1px solid var(--border-h);
             color: var(--accent); font-family: var(--mono); font-size: 11px; font-weight: 700;
@@ -339,6 +347,12 @@
             if (d.first_seen || d.last_seen) {
                 html += '<div class="rep-seen">Primer scan ' + fmtDate(d.first_seen) + ' · Último ' + fmtDate(d.last_seen) + '</div>';
             }
+            var rec = d.recent || {};
+            if (rec.hacks_7d > 0) {
+                html += '<div class="rep-hot">🔥 ' + rec.hacks_7d + ' hack' + (rec.hacks_7d > 1 ? 's' : '') + ' en los últimos 7 días</div>';
+            } else if (rec.hacks_30d > 0) {
+                html += '<div class="rep-hot warn">⚠️ ' + rec.hacks_30d + ' hack' + (rec.hacks_30d > 1 ? 's' : '') + ' en los últimos 30 días</div>';
+            }
             html +=     '<button class="copy-btn" type="button" onclick="argusCopyLink(this)">Copiar link</button>';
             html +=   '</div>';
             html += '</div>';
@@ -412,9 +426,10 @@
                     var html = '';
                     players.forEach(function (p, i) {
                         var pct = Math.round((p.hack_rate || 0) * 100);
+                        var hot = p.recent_hacks_7d > 0 ? '<span class="wanted-hot" title="Hacks en los últimos 7 días">🔥' + p.recent_hacks_7d + '</span>' : '';
                         html += '<button type="button" class="wanted-row" data-u="' + esc(p.username) + '">';
                         html +=   '<span class="wanted-rank">' + (i + 1) + '</span>';
-                        html +=   '<span class="wanted-name">' + esc(p.username) + '</span>';
+                        html +=   '<span class="wanted-name">' + esc(p.username) + hot + '</span>';
                         html +=   '<span class="wanted-stat"><b>' + p.hacks + '</b> hacks · ' + p.scans + ' scans</span>';
                         html +=   '<span class="wanted-rate">' + pct + '%</span>';
                         html += '</button>';

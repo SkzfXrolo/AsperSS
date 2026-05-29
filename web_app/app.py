@@ -12518,6 +12518,23 @@ def _rep_username_ok(u):
     return bool(u) and 1 <= len(u) <= 32 and all(c.isalnum() or c == '_' for c in u)
 
 
+def _rep_parse_dt(s):
+    """Parsea started_at (datetime o string) de forma tolerante. None si no puede."""
+    if isinstance(s, datetime.datetime):
+        return s
+    if not s:
+        return None
+    t = str(s).strip().replace(' ', 'T')
+    t = t.split('+')[0].split('Z')[0]
+    try:
+        return datetime.datetime.fromisoformat(t)
+    except Exception:
+        try:
+            return datetime.datetime.fromisoformat(t[:19])
+        except Exception:
+            return None
+
+
 @app.route('/reputacion')
 @app.route('/reputation')
 def reputacion_page():
@@ -12578,6 +12595,7 @@ def api_public_reputation():
         'reputation':  None,
         'first_seen':  None,
         'last_seen':   None,
+        'recent':      {'scans_7d': 0, 'hacks_7d': 0, 'hacks_30d': 0},
         'history':     [],
     }
     try:
@@ -12632,6 +12650,21 @@ def api_public_reputation():
                 }
                 for r in rows[:25]
             ]
+            _now_dt = datetime.datetime.utcnow()
+            _rec = {'scans_7d': 0, 'hacks_7d': 0, 'hacks_30d': 0}
+            for r in rows:
+                _d = _rep_parse_dt(_row_get(r, 2, 'started_at'))
+                if not _d:
+                    continue
+                _age = (_now_dt - _d).days
+                _v = (_row_get(r, 0, 'verdict') or '').lower()
+                if _age <= 7:
+                    _rec['scans_7d'] += 1
+                    if _v == 'hack':
+                        _rec['hacks_7d'] += 1
+                if _age <= 30 and _v == 'hack':
+                    _rec['hacks_30d'] += 1
+            out['recent'] = _rec
     except Exception:
         pass  # DB no disponible -> se devuelve out en cero
 
@@ -12719,9 +12752,41 @@ def api_public_wanted():
                 'hacks':     hacks,
                 'scans':     total,
                 'hack_rate': round(hacks / total, 3) if total else 0,
+                'recent_hacks_7d': 0,
             })
             if len(players) >= 15:
                 break
+
+        # Recencia: hacks confirmados en los ultimos 7 dias (marca reincidencia activa)
+        recent_map = {}
+        try:
+            with get_api_db_cursor() as cur2:
+                try:
+                    cur2.execute(
+                        "SELECT minecraft_username, COUNT(*) AS cnt FROM scans"
+                        " WHERE LOWER(verdict)='hack' AND started_at > NOW() - INTERVAL '7 days'"
+                        " AND minecraft_username IS NOT NULL AND minecraft_username <> ''"
+                        " GROUP BY minecraft_username"
+                    )
+                    rr = cur2.fetchall() or []
+                except Exception:
+                    cur2.execute(
+                        "SELECT minecraft_username, COUNT(*) AS cnt FROM scans"
+                        " WHERE LOWER(verdict)='hack' AND started_at > datetime('now', '-7 days')"
+                        " AND minecraft_username IS NOT NULL AND minecraft_username <> ''"
+                        " GROUP BY minecraft_username"
+                    )
+                    rr = cur2.fetchall() or []
+            for r in rr:
+                _u = (_row_get(r, 0, 'minecraft_username') or '').lower()
+                if _u:
+                    recent_map[_u] = int(_row_get(r, 1, 'cnt') or 0)
+        except Exception:
+            recent_map = {}
+
+        for p in players:
+            p['recent_hacks_7d'] = recent_map.get(p['username'].lower(), 0)
+
         out['players'] = players
     except Exception:
         pass  # DB no disponible -> ranking vacio

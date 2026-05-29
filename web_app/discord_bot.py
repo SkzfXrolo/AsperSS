@@ -42,6 +42,22 @@ _bot_thread   = None
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _parse_dt(s):
+    """Parsea started_at de forma tolerante. None si no puede."""
+    if isinstance(s, datetime.datetime):
+        return s
+    if not s:
+        return None
+    x = str(s).strip().replace(' ', 'T').split('+')[0].split('Z')[0]
+    try:
+        return datetime.datetime.fromisoformat(x)
+    except Exception:
+        try:
+            return datetime.datetime.fromisoformat(x[:19])
+        except Exception:
+            return None
+
+
 def _has_staff_role(member: 'discord.Member') -> bool:
     """Devuelve True si el miembro tiene el rol de staff configurado."""
     if not DISCORD_STAFF_ROLE:
@@ -167,6 +183,12 @@ def _make_bot():
                 rep, color = 'SOSPECHOSO 🟠', discord.Color.orange()
             else:
                 rep, color = 'LIMPIO 🟢', discord.Color.green()
+            _now = datetime.datetime.utcnow()
+            hacks_7d = sum(
+                1 for r in rows
+                if (_row_get(r, 0, 'verdict') or '').lower() == 'hack'
+                and (lambda d: d and (_now - d).days <= 7)(_parse_dt(_row_get(r, 2, 'started_at')))
+            )
             panel_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://asperss.onrender.com').rstrip('/')
             from urllib.parse import quote as _q
             embed = discord.Embed(
@@ -181,6 +203,8 @@ def _make_bot():
             embed.add_field(name='Hack rate',   value=f'{round(hack_rate*100)}%', inline=True)
             embed.add_field(name='Risk prom.',  value=f'{avg_risk}/100',          inline=True)
             embed.add_field(name='Último scan', value=last_seen or 'N/A',         inline=True)
+            if hacks_7d:
+                embed.add_field(name='🔥 Reciente', value=f'{hacks_7d} hack(s) en 7 días', inline=True)
             embed.set_footer(text='Argus Vault · datos agregados de la red')
             await interaction.followup.send(embed=embed)
         except Exception as e:
