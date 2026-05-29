@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0a1f">
+    <title>Reputación de Jugadores — Argus Projects</title>
+    <meta name="description" content="Consultá el historial de reputación anti-cheat de un jugador de Minecraft entre servidores de la red Argus. Veredictos, risk score y actividad.">
+    <link rel="icon" href="{{ url_for('static', filename='img/logo.png') }}" type="image/png">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/logo.png') }}">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Argus Projects">
+    <meta property="og:title" content="Reputación de Jugadores — Argus">
+    <meta property="og:description" content="Historial de reputación anti-cheat cross-server. Consultá a un sospechoso antes del SS.">
+    <meta property="og:image" content="{{ url_for('static', filename='img/og-banner.png', _external=True) }}">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/cosmic.css') }}?v=1">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg0: #04030e;
+            --accent: #8b7bff;
+            --accent-2: #46e6ff;
+            --text: #ECEDFF;
+            --text-m: #A6A8D0;
+            --text-d: #7E81AD;
+            --card: rgba(18, 18, 42, 0.72);
+            --border: rgba(139, 123, 255, 0.16);
+            --border-h: rgba(139, 123, 255, 0.45);
+            --green: #34d399;
+            --amber: #fbbf24;
+            --red: #f4506e;
+            --radius: 16px;
+            --font: 'Inter', system-ui, sans-serif;
+            --display: 'Syne', 'Inter', sans-serif;
+            --mono: 'JetBrains Mono', 'Consolas', monospace;
+        }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: var(--font);
+            background: var(--bg0);
+            color: var(--text);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Nav ── */
+        .nav {
+            position: sticky; top: 0; z-index: 30;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 28px;
+            background: rgba(8, 7, 22, 0.6);
+            backdrop-filter: blur(14px);
+            border-bottom: 1px solid var(--border);
+        }
+        .nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+        .nav-brand img { height: 30px; width: auto; filter: drop-shadow(0 0 14px rgba(139,123,255,.45)); }
+        .nav-links { display: flex; align-items: center; gap: 8px; }
+        .nav-links a {
+            color: var(--text-m); text-decoration: none; font-size: 13px; font-weight: 600;
+            padding: 8px 14px; border-radius: 10px; transition: .2s; letter-spacing: .2px;
+        }
+        .nav-links a:hover { color: var(--text); background: rgba(139,123,255,.1); }
+        .nav-links a.cta {
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            color: #06031a; font-weight: 700;
+        }
+        .nav-links a.cta:hover { filter: brightness(1.08); }
+
+        /* ── Hero / search ── */
+        .wrap { width: min(860px, 92vw); margin: 0 auto; padding: 56px 0 80px; flex: 1; }
+        .eyebrow {
+            display: inline-flex; align-items: center; gap: 8px;
+            font-family: var(--mono); font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+            color: var(--accent); border: 1px solid var(--border);
+            padding: 6px 14px; border-radius: 999px; background: rgba(139,123,255,.06);
+        }
+        .eyebrow::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-2); box-shadow: 0 0 10px var(--accent-2); }
+        h1 {
+            font-family: var(--display); font-weight: 800; font-size: clamp(30px, 6vw, 52px);
+            line-height: 1.05; margin: 18px 0 12px; letter-spacing: -1px;
+        }
+        h1 .grad {
+            background: linear-gradient(120deg, var(--accent) 0%, var(--accent-2) 100%);
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .lead { color: var(--text-m); font-size: 16px; max-width: 600px; line-height: 1.6; }
+
+        .search {
+            margin-top: 30px; display: flex; gap: 10px; flex-wrap: wrap;
+        }
+        .search input {
+            flex: 1; min-width: 220px;
+            background: rgba(10, 9, 26, 0.7); border: 1px solid var(--border-h);
+            border-radius: 14px; padding: 16px 18px; color: var(--text);
+            font-size: 16px; font-family: var(--mono); letter-spacing: .5px; outline: none;
+            transition: .2s;
+        }
+        .search input::placeholder { color: var(--text-d); }
+        .search input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(139,123,255,.14); }
+        .search button {
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            color: #06031a; font-weight: 800; font-size: 15px;
+            border: none; border-radius: 14px; padding: 0 26px; cursor: pointer;
+            transition: .2s; letter-spacing: .3px;
+        }
+        .search button:hover { filter: brightness(1.08); transform: translateY(-1px); }
+        .search button:disabled { opacity: .55; cursor: wait; transform: none; }
+        .hint { margin-top: 12px; color: var(--text-d); font-size: 12.5px; }
+
+        /* ── Result ── */
+        #result { margin-top: 36px; display: none; animation: fadeUp .45s ease; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
+        .rep-head {
+            display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 24px 26px; backdrop-filter: blur(16px);
+        }
+        .rep-ring {
+            --c: var(--accent);
+            width: 92px; height: 92px; border-radius: 50%; flex-shrink: 0;
+            display: grid; place-items: center; position: relative;
+            background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.04), transparent 70%);
+            border: 2px solid var(--c); box-shadow: 0 0 28px -4px var(--c), inset 0 0 18px -8px var(--c);
+        }
+        .rep-ring .score { font-family: var(--display); font-weight: 800; font-size: 30px; color: var(--c); line-height: 1; }
+        .rep-ring .score small { display: block; font-family: var(--mono); font-size: 9px; color: var(--text-d); letter-spacing: 1px; margin-top: 3px; font-weight: 500; }
+        .rep-meta { flex: 1; min-width: 200px; }
+        .rep-name { font-family: var(--display); font-weight: 800; font-size: 26px; word-break: break-all; }
+        .rep-badge {
+            display: inline-flex; align-items: center; gap: 7px; margin-top: 8px;
+            font-family: var(--mono); font-weight: 700; font-size: 12px; letter-spacing: 1.5px;
+            padding: 6px 14px; border-radius: 999px; text-transform: uppercase;
+        }
+        .rep-badge::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
+        .rep-sub { color: var(--text-m); font-size: 13.5px; margin-top: 10px; }
+
+        .lvl-clean   { --c: var(--green); }
+        .lvl-susp    { --c: var(--amber); }
+        .lvl-high    { --c: var(--red); }
+        .lvl-none    { --c: var(--text-d); }
+        .badge-clean { color: var(--green); background: rgba(52,211,153,.1);  border: 1px solid rgba(52,211,153,.3); }
+        .badge-susp  { color: var(--amber); background: rgba(251,191,36,.1);  border: 1px solid rgba(251,191,36,.3); }
+        .badge-high  { color: var(--red);   background: rgba(244,80,110,.1);  border: 1px solid rgba(244,80,110,.3); }
+        .badge-none  { color: var(--text-d);background: rgba(126,129,173,.1); border: 1px solid rgba(126,129,173,.3); }
+
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 14px; }
+        .stat {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 14px; padding: 16px 18px; backdrop-filter: blur(12px);
+        }
+        .stat .v { font-family: var(--display); font-weight: 800; font-size: 24px; }
+        .stat .k { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-d); margin-top: 4px; }
+
+        .hist-title { font-family: var(--mono); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-d); margin: 28px 0 12px; }
+        .hist { display: flex; flex-direction: column; gap: 8px; }
+        .hist-row {
+            display: flex; align-items: center; gap: 14px;
+            background: var(--card); border: 1px solid var(--border);
+            border-left-width: 3px; border-radius: 10px; padding: 12px 16px; backdrop-filter: blur(10px);
+        }
+        .hist-row .date { font-family: var(--mono); font-size: 12.5px; color: var(--text-m); min-width: 130px; }
+        .hist-row .chip {
+            font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .5px;
+            padding: 3px 10px; border-radius: 999px; text-transform: uppercase;
+        }
+        .hist-row .risk { margin-left: auto; font-family: var(--mono); font-size: 13px; color: var(--text-m); }
+        .hist-row .risk b { color: var(--text); }
+        .row-hack  { border-left-color: var(--red); }
+        .row-clean { border-left-color: var(--green); }
+        .row-pending { border-left-color: var(--text-d); }
+        .chip-hack  { color: var(--red);   background: rgba(244,80,110,.12); }
+        .chip-clean { color: var(--green); background: rgba(52,211,153,.12); }
+        .chip-pending { color: var(--text-d); background: rgba(126,129,173,.12); }
+
+        .empty {
+            text-align: center; padding: 48px 20px; color: var(--text-m);
+            background: var(--card); border: 1px dashed var(--border-h); border-radius: var(--radius);
+        }
+        .empty .big { font-size: 42px; margin-bottom: 12px; }
+        .empty h3 { font-family: var(--display); font-size: 20px; color: var(--text); margin-bottom: 6px; }
+
+        .disclaimer {
+            margin-top: 22px; font-size: 12px; color: var(--text-d); line-height: 1.6;
+            border-top: 1px solid var(--border); padding-top: 16px;
+        }
+
+        footer {
+            border-top: 1px solid var(--border); padding: 22px 28px;
+            display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+            color: var(--text-d); font-size: 13px;
+        }
+        footer a { color: var(--text-m); text-decoration: none; }
+        footer a:hover { color: var(--accent); }
+
+        @media (max-width: 640px) {
+            .stats { grid-template-columns: repeat(2, 1fr); }
+            .nav-links a:not(.cta) { display: none; }
+            .hist-row .date { min-width: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="cosmic-bg" aria-hidden="true"></div>
+    <div class="cosmic-vignette" aria-hidden="true"></div>
+
+    <nav class="nav">
+        <a class="nav-brand" href="/">
+            <img src="{{ url_for('static', filename='img/argus-wordmark.png') }}" alt="Argus Projects">
+        </a>
+        <div class="nav-links">
+            <a href="/scanner">Scanner</a>
+            <a href="/descargar">Descargar</a>
+            <a class="cta" href="{{ discord_invite }}" target="_blank" rel="noopener">Discord</a>
+        </div>
+    </nav>
+
+    <div class="wrap">
+        <span class="eyebrow">Argus // Reputation Network</span>
+        <h1>Reputación de <span class="grad">jugadores</span></h1>
+        <p class="lead">Consultá el historial anti-cheat de un jugador de Minecraft entre todos los servidores de la red Argus. Verificá a un sospechoso <strong>antes</strong> del Screen Share.</p>
+
+        <form class="search" id="form" autocomplete="off">
+            <input type="text" id="username" name="u" placeholder="Nombre de Minecraft (ej: Notch)" maxlength="32" spellcheck="false" required>
+            <button type="submit" id="btn">Consultar</button>
+        </form>
+        <p class="hint">Solo se muestran datos agregados y anónimos: veredictos, risk score e historial. Nunca IPs, máquinas, staff ni servidores.</p>
+
+        <div id="result"></div>
+    </div>
+
+    <footer>
+        <span>© Argus Projects · Reputation Network</span>
+        <span>
+            <a href="/">Inicio</a> ·
+            <a href="/terminos">Términos</a> ·
+            <a href="{{ discord_invite }}" target="_blank" rel="noopener">Discord</a>
+        </span>
+    </footer>
+
+    <script>
+    (function () {
+        var form = document.getElementById('form');
+        var input = document.getElementById('username');
+        var btn = document.getElementById('btn');
+        var result = document.getElementById('result');
+
+        var LEVELS = {
+            'LIMPIO':      { cls: 'clean', ring: 'lvl-clean', badge: 'badge-clean', label: 'Limpio',      sub: 'Sin antecedentes de trampas en la red.' },
+            'SOSPECHOSO':  { cls: 'susp',  ring: 'lvl-susp',  badge: 'badge-susp',  label: 'Sospechoso',  sub: 'Registra veredictos de hack en parte de su historial.' },
+            'ALTO_RIESGO': { cls: 'high',  ring: 'lvl-high',  badge: 'badge-high',  label: 'Alto riesgo', sub: 'Mayoría de scans con veredicto de hack. Tratar con cautela.' }
+        };
+
+        function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); }
+
+        function fmtDate(s) {
+            if (!s) return '—';
+            var d = new Date(String(s).replace(' ', 'T'));
+            if (isNaN(d.getTime())) return esc(String(s).slice(0, 16));
+            return d.toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+
+        function renderEmpty(name) {
+            result.innerHTML =
+                '<div class="empty">' +
+                  '<div class="big">🛰️</div>' +
+                  '<h3>Sin registros para “' + esc(name) + '”</h3>' +
+                  '<p>Este jugador todavía no fue escaneado en la red Argus, o el nombre está mal escrito. ' +
+                  'Un historial vacío no implica inocencia ni culpa.</p>' +
+                '</div>';
+            result.style.display = 'block';
+        }
+
+        function render(d) {
+            if (!d || !d.scan_count) { renderEmpty(d && d.username ? d.username : input.value); return; }
+            var lvl = LEVELS[d.reputation] || { cls: 'none', ring: 'lvl-none', badge: 'badge-none', label: 'Sin clasificar', sub: '' };
+            var pct = Math.round((d.hack_rate || 0) * 100);
+
+            var html = '';
+            html += '<div class="rep-head">';
+            html +=   '<div class="rep-ring ' + lvl.ring + '"><div class="score">' + (d.avg_risk != null ? d.avg_risk : '—') + '<small>RISK AVG</small></div></div>';
+            html +=   '<div class="rep-meta">';
+            html +=     '<div class="rep-name">' + esc(d.username) + '</div>';
+            html +=     '<span class="rep-badge ' + lvl.badge + '">' + lvl.label + '</span>';
+            html +=     '<div class="rep-sub">' + esc(lvl.sub) + '</div>';
+            html +=   '</div>';
+            html += '</div>';
+
+            html += '<div class="stats">';
+            html +=   '<div class="stat"><div class="v">' + d.scan_count + '</div><div class="k">Scans totales</div></div>';
+            html +=   '<div class="stat"><div class="v" style="color:var(--red)">' + d.hack_count + '</div><div class="k">Veredicto hack</div></div>';
+            html +=   '<div class="stat"><div class="v" style="color:var(--green)">' + d.clean_count + '</div><div class="k">Veredicto limpio</div></div>';
+            html +=   '<div class="stat"><div class="v">' + pct + '%</div><div class="k">Hack rate</div></div>';
+            html += '</div>';
+
+            if (d.history && d.history.length) {
+                html += '<div class="hist-title">Historial reciente (' + d.history.length + ')</div>';
+                html += '<div class="hist">';
+                d.history.forEach(function (h) {
+                    var v = (h.verdict || 'pending');
+                    var rowCls = v === 'hack' ? 'row-hack' : v === 'clean' ? 'row-clean' : 'row-pending';
+                    var chipCls = v === 'hack' ? 'chip-hack' : v === 'clean' ? 'chip-clean' : 'chip-pending';
+                    var vlabel = v === 'hack' ? 'Hack' : v === 'clean' ? 'Limpio' : 'Pendiente';
+                    html += '<div class="hist-row ' + rowCls + '">';
+                    html +=   '<span class="date">' + fmtDate(h.date) + '</span>';
+                    html +=   '<span class="chip ' + chipCls + '">' + vlabel + '</span>';
+                    html +=   '<span class="risk">risk <b>' + (h.risk != null ? h.risk : 0) + '</b></span>';
+                    html += '</div>';
+                });
+                html += '</div>';
+            }
+
+            html += '<p class="disclaimer">La reputación se calcula a partir de los veredictos emitidos por el staff de los servidores que usan Argus. ' +
+                    'Es una herramienta de apoyo, no una prueba definitiva. El veredicto final siempre lo decide el staff humano.</p>';
+
+            result.innerHTML = html;
+            result.style.display = 'block';
+        }
+
+        function lookup(name) {
+            btn.disabled = true; btn.textContent = 'Buscando…';
+            fetch('/api/public/reputation?u=' + encodeURIComponent(name))
+                .then(function (r) { return r.json(); })
+                .then(function (d) { render(d); })
+                .catch(function () {
+                    result.innerHTML = '<div class="empty"><div class="big">⚠️</div><h3>Error de conexión</h3><p>No se pudo consultar la red en este momento. Probá de nuevo en unos segundos.</p></div>';
+                    result.style.display = 'block';
+                })
+                .finally(function () { btn.disabled = false; btn.textContent = 'Consultar'; });
+        }
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var name = input.value.trim();
+            if (!name) return;
+            history.replaceState(null, '', '/reputacion?u=' + encodeURIComponent(name));
+            lookup(name);
+        });
+
+        // Auto-búsqueda si viene ?u= en la URL
+        var params = new URLSearchParams(location.search);
+        var q = params.get('u') || params.get('user');
+        if (q) { input.value = q; lookup(q.trim()); }
+    })();
+    </script>
+</body>
+</html>

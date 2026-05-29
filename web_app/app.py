@@ -12511,6 +12511,105 @@ def descargar_page():
     )
 
 
+# â”€â”€ ReputaciÃ³n pÃºblica de jugadores (read-only, efecto de red cross-server) â”€â”€
+
+def _rep_username_ok(u):
+    """Valida un nombre de Minecraft: 1-32 chars alfanumÃ©ricos o guion bajo."""
+    return bool(u) and 1 <= len(u) <= 32 and all(c.isalnum() or c == '_' for c in u)
+
+
+@app.route('/reputacion')
+@app.route('/reputation')
+def reputacion_page():
+    """PÃ¡gina pÃºblica de reputaciÃ³n de jugadores (solo lectura)."""
+    return render_template('reputacion.html')
+
+
+@app.route('/api/public/reputation', methods=['GET'])
+def api_public_reputation():
+    """ReputaciÃ³n pÃºblica agregada de un jugador por minecraft_username.
+
+    Solo expone agregados NO sensibles: conteos de scans, veredictos,
+    risk_score promedio, etiqueta de reputaciÃ³n y un historial anonimizado
+    (fecha + veredicto + risk). NUNCA devuelve IP, machine_id, empresa/servidor
+    ni quiÃ©n hizo el scan.
+    """
+    username = (request.args.get('u') or request.args.get('user') or '').strip()
+    if not _rep_username_ok(username):
+        return jsonify({'error': 'username invÃ¡lido'}), 400
+
+    out = {
+        'username':    username,
+        'scan_count':  0,
+        'hack_count':  0,
+        'clean_count': 0,
+        'hack_rate':   0,
+        'avg_risk':    0,
+        'reputation':  None,
+        'first_seen':  None,
+        'last_seen':   None,
+        'history':     [],
+    }
+    try:
+        rows = []
+        with get_api_db_cursor() as cur:
+            try:
+                cur.execute(
+                    f"SELECT verdict, risk_score, started_at FROM scans"
+                    f" WHERE LOWER(minecraft_username)=LOWER({_PH}) AND status={_PH}"
+                    f" ORDER BY id DESC LIMIT 100",
+                    (username, 'completed')
+                )
+                rows = cur.fetchall() or []
+            except Exception:
+                # Fallback defensivo si falta alguna columna (status/risk/verdict)
+                try:
+                    cur.execute(
+                        f"SELECT verdict, risk_score, started_at FROM scans"
+                        f" WHERE LOWER(minecraft_username)=LOWER({_PH})"
+                        f" ORDER BY id DESC LIMIT 100",
+                        (username,)
+                    )
+                    rows = cur.fetchall() or []
+                except Exception:
+                    rows = []
+
+        verdicts = [(_row_get(r, 0, 'verdict') or '').lower() for r in rows]
+        risks    = [int(_row_get(r, 1, 'risk_score') or 0) for r in rows]
+        dates    = [_row_get(r, 2, 'started_at') for r in rows]
+
+        total       = len(rows)
+        hack_count  = verdicts.count('hack')
+        clean_count = verdicts.count('clean')
+        out['scan_count']  = total
+        out['hack_count']  = hack_count
+        out['clean_count'] = clean_count
+        if total:
+            out['hack_rate'] = round(hack_count / total, 3)
+            out['avg_risk']  = round(sum(risks) / total, 1)
+            out['reputation'] = ('ALTO_RIESGO' if out['hack_rate'] >= 0.5
+                                 else 'SOSPECHOSO' if out['hack_rate'] >= 0.2
+                                 else 'LIMPIO')
+            _ds = [str(d) for d in dates if d]
+            if _ds:
+                out['last_seen']  = _ds[0]
+                out['first_seen'] = _ds[-1]
+            out['history'] = [
+                {
+                    'date':    str(_row_get(r, 2, 'started_at') or ''),
+                    'verdict': (_row_get(r, 0, 'verdict') or 'pending').lower(),
+                    'risk':    int(_row_get(r, 1, 'risk_score') or 0),
+                }
+                for r in rows[:25]
+            ]
+    except Exception:
+        pass  # DB no disponible â†’ se devuelve out en cero
+
+    resp = jsonify(out)
+    resp.headers['Cache-Control'] = 'public, max-age=60'
+    return resp
+
+
 @app.route('/descargar/exe')
 def descargar_exe():
     """Endpoint pÃºblico permanente para descargar ArgusScanner.exe sin autenticaciÃ³n."""
