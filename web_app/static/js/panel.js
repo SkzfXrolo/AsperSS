@@ -894,6 +894,18 @@ async function openShareVerdictModal(scanId) {
 }
 window.openShareVerdictModal = openShareVerdictModal;
 
+// Abre la reputacion publica (Argus Vault) del jugador del scan abierto
+window.openVaultForCurrent = function () {
+    var d = (typeof _currentScanData !== 'undefined' && _currentScanData) ? _currentScanData : (window._currentScanData || {});
+    var u = d.minecraft_username || d.minecraft_user || '';
+    u = String(u || '').trim();
+    if (!u || u === '\u2014' || u.toLowerCase() === 'no detectado') {
+        if (typeof window.showToast === 'function') window.showToast('Este scan no tiene username de Minecraft', 'warn');
+        return;
+    }
+    window.open('/reputacion?u=' + encodeURIComponent(u), '_blank', 'noopener');
+};
+
 
 /**
  * Visual #11 — Heatmap GitHub-style de actividad del staff loggeado.
