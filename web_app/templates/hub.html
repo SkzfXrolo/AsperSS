@@ -105,6 +105,9 @@
         .badge.soon { color: var(--text); background: rgba(255,255,255,.08); border: 1px solid var(--border); }
         .c-desc { color: var(--text-m); font-size: 14px; line-height: 1.55; margin-bottom: 16px; flex: 1; }
         .c-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+        .c-vault-stat { display: flex; flex-wrap: wrap; gap: 16px; margin: -6px 0 16px; font-size: 12.5px; color: var(--text-m); }
+        .c-vault-stat span b { color: var(--text); font-weight: 800; }
+        .c-vault-stat .hot b { color: #f4506e; }
         .tag { font-size: 11px; color: var(--text-m); background: rgba(139,123,255,.1); border: 1px solid var(--border); padding: 3px 9px; border-radius: 999px; }
         .c-actions { display: flex; flex-wrap: wrap; gap: 8px; }
         .btn { display: inline-flex; align-items: center; gap: 7px; text-decoration: none; font-size: 13.5px; font-weight: 600; padding: 10px 16px; border-radius: 10px; transition: all .2s; cursor: pointer; border: none; }
@@ -205,6 +208,7 @@
                 </div>
                 <p class="c-desc">Reputación de jugadores entre servidores. Consultá el historial anti-cheat de un sospechoso <strong>antes</strong> del SS. Efecto de red entre comunidades.</p>
                 <div class="c-tags"><span class="tag">Pública</span><span class="tag">Cross-server</span></div>
+                <div class="c-vault-stat" id="vault-mini" style="display:none"></div>
                 <div class="c-actions"><a href="/reputacion" class="btn btn-primary">Consultar reputación</a></div>
             </article>
         </div>
@@ -257,5 +261,24 @@
             </span>
         </div>
     </footer>
+
+    <script>
+    (function () {
+        var el = document.getElementById('vault-mini');
+        if (!el) return;
+        fetch('/api/public/vault-stats')
+            .then(function (r) { return r.json(); })
+            .then(function (s) {
+                if (!s || (!s.players && !s.scans)) return;
+                function n(x) { return (x || 0).toLocaleString('es'); }
+                el.innerHTML =
+                    '<span><b>' + n(s.players) + '</b> jugadores</span>' +
+                    '<span><b>' + n(s.hacks) + '</b> hacks</span>' +
+                    '<span class="hot"><b>' + n(s.hacks_7d) + '</b> esta semana</span>';
+                el.style.display = 'flex';
+            })
+            .catch(function () {});
+    })();
+    </script>
 </body>
 </html>
