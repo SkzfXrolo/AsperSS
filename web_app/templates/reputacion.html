@@ -17,7 +17,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/cosmic.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/cosmic.css') }}?v=2">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
@@ -34,6 +34,8 @@
             --amber: #fbbf24;
             --red: #f4506e;
             --radius: 16px;
+            --radius-lg: 22px;
+            --glow: rgba(139, 123, 255, 0.35);
             --font: 'Inter', system-ui, sans-serif;
             --display: 'Syne', 'Inter', sans-serif;
             --mono: 'JetBrains Mono', 'Consolas', monospace;
@@ -73,7 +75,16 @@
         .nav-links a.cta:hover { filter: brightness(1.08); }
 
         /* ── Hero / search ── */
-        .wrap { width: min(860px, 92vw); margin: 0 auto; padding: 56px 0 80px; flex: 1; }
+        .wrap { width: min(920px, 92vw); margin: 0 auto; padding: 48px 0 88px; flex: 1; }
+        .hero-brand {
+            display: flex; justify-content: center; margin-bottom: 28px;
+            animation: fadeUp .6s ease both;
+        }
+        .hero-wordmark {
+            height: clamp(36px, 8vw, 52px); width: auto;
+            filter: drop-shadow(0 0 28px rgba(139, 123, 255, 0.45));
+        }
+        .hero-block { animation: fadeUp .6s .08s ease both; }
         .eyebrow {
             display: inline-flex; align-items: center; gap: 8px;
             font-family: var(--mono); font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
@@ -92,52 +103,97 @@
         .lead { color: var(--text-m); font-size: 16px; max-width: 600px; line-height: 1.6; }
 
         .search {
-            margin-top: 30px; display: flex; gap: 10px; flex-wrap: wrap;
+            margin-top: 28px; display: flex; gap: 10px; flex-wrap: wrap;
+            padding: 6px; border-radius: 18px;
+            background: linear-gradient(135deg, rgba(139,123,255,.12), rgba(70,230,255,.06));
+            border: 1px solid var(--border);
+            box-shadow: 0 12px 40px -20px var(--glow);
         }
         .search input {
             flex: 1; min-width: 220px;
-            background: rgba(10, 9, 26, 0.7); border: 1px solid var(--border-h);
+            background: rgba(6, 5, 18, 0.85); border: 1px solid transparent;
             border-radius: 14px; padding: 16px 18px; color: var(--text);
             font-size: 16px; font-family: var(--mono); letter-spacing: .5px; outline: none;
-            transition: .2s;
+            transition: border-color .2s, box-shadow .2s;
         }
         .search input::placeholder { color: var(--text-d); }
-        .search input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(139,123,255,.14); }
+        .search input:focus {
+            border-color: rgba(139, 123, 255, 0.5);
+            box-shadow: 0 0 0 3px rgba(139,123,255,.12);
+        }
         .search button {
             background: linear-gradient(135deg, var(--accent), var(--accent-2));
             color: #06031a; font-weight: 800; font-size: 15px;
-            border: none; border-radius: 14px; padding: 0 26px; cursor: pointer;
-            transition: .2s; letter-spacing: .3px;
+            border: none; border-radius: 14px; padding: 0 28px; cursor: pointer;
+            transition: transform .2s, filter .2s, box-shadow .2s; letter-spacing: .3px;
+            box-shadow: 0 8px 24px -8px rgba(139, 123, 255, 0.55);
         }
-        .search button:hover { filter: brightness(1.08); transform: translateY(-1px); }
-        .search button:disabled { opacity: .55; cursor: wait; transform: none; }
-        .hint { margin-top: 12px; color: var(--text-d); font-size: 12.5px; }
+        .search button:hover {
+            filter: brightness(1.1);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px -6px rgba(139, 123, 255, 0.6);
+        }
+        .search button:disabled { opacity: .55; cursor: wait; transform: none; box-shadow: none; }
+        .hint {
+            margin-top: 14px; color: var(--text-d); font-size: 12.5px; line-height: 1.55;
+            max-width: 640px;
+        }
 
-        .vault-stats { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
-        .vstat {
-            display: flex; flex-direction: column; gap: 3px;
-            background: var(--card); border: 1px solid var(--border);
-            border-radius: 12px; padding: 12px 18px; backdrop-filter: blur(12px); min-width: 110px;
+        .vault-stats {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+            margin-top: 28px; animation: fadeUp .5s .15s ease both;
         }
+        .vstat {
+            display: flex; flex-direction: column; gap: 4px;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 14px; padding: 14px 16px; backdrop-filter: blur(14px);
+            transition: border-color .2s, transform .2s;
+        }
+        .vstat:hover { border-color: var(--border-h); transform: translateY(-2px); }
         .vstat .v { font-family: var(--display); font-weight: 800; font-size: 22px; line-height: 1; }
-        .vstat .k { font-family: var(--mono); font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-d); }
+        .vstat .k { font-family: var(--mono); font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-d); }
+        .vstat.hot { border-color: rgba(244, 80, 110, 0.35); }
         .vstat.hot .v { color: var(--red); }
+
+        .loading {
+            margin-top: 36px; text-align: center; padding: 48px 24px;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: var(--radius-lg); backdrop-filter: blur(16px);
+        }
+        .loading-ring {
+            width: 48px; height: 48px; margin: 0 auto 16px; border-radius: 50%;
+            border: 2px solid rgba(139, 123, 255, 0.2);
+            border-top-color: var(--accent-2);
+            animation: spin .9s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading p { color: var(--text-m); font-size: 14px; letter-spacing: .3px; }
 
         /* ── Result ── */
         #result { margin-top: 36px; display: none; animation: fadeUp .45s ease; }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 
         .rep-head {
-            display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
-            background: var(--card); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 24px 26px; backdrop-filter: blur(16px);
+            display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+            background: linear-gradient(145deg, rgba(22, 20, 48, 0.9), rgba(12, 11, 28, 0.75));
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg); padding: 26px 28px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 20px 50px -30px var(--glow);
+            position: relative; overflow: hidden;
+        }
+        .rep-head::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent), var(--accent-2), transparent);
+            opacity: 0.7;
         }
         .rep-ring {
             --c: var(--accent);
-            width: 92px; height: 92px; border-radius: 50%; flex-shrink: 0;
+            width: 96px; height: 96px; border-radius: 50%; flex-shrink: 0;
             display: grid; place-items: center; position: relative;
-            background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.04), transparent 70%);
-            border: 2px solid var(--c); box-shadow: 0 0 28px -4px var(--c), inset 0 0 18px -8px var(--c);
+            background: radial-gradient(circle at 50% 40%, rgba(139,123,255,.12), transparent 65%);
+            border: 2px solid var(--c);
+            box-shadow: 0 0 32px -6px var(--c), inset 0 0 24px -12px var(--c);
         }
         .rep-ring .score { font-family: var(--display); font-weight: 800; font-size: 30px; color: var(--c); line-height: 1; }
         .rep-ring .score small { display: block; font-family: var(--mono); font-size: 9px; color: var(--text-d); letter-spacing: 1px; margin-top: 3px; font-weight: 500; }
@@ -152,19 +208,36 @@
         .rep-sub { color: var(--text-m); font-size: 13.5px; margin-top: 10px; }
         .rep-seen { font-family: var(--mono); font-size: 11.5px; color: var(--text-d); margin-top: 8px; letter-spacing: .3px; }
         .rep-hot {
-            display: inline-flex; align-items: center; gap: 7px; margin-top: 10px;
-            font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: .3px;
+            display: inline-flex; align-items: center; gap: 8px; margin-top: 10px;
+            font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .4px;
+            text-transform: uppercase;
             color: var(--red); background: rgba(244,80,110,.1); border: 1px solid rgba(244,80,110,.3);
             padding: 6px 12px; border-radius: 999px;
         }
-        .rep-hot.warn { color: var(--amber); background: rgba(251,191,36,.1); border-color: rgba(251,191,36,.3); }
-        .wanted-hot { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--red); margin-left: 8px; }
-        .copy-btn {
-            margin-top: 12px; background: rgba(139,123,255,.1); border: 1px solid var(--border-h);
-            color: var(--accent); font-family: var(--mono); font-size: 11px; font-weight: 700;
-            letter-spacing: .5px; padding: 7px 14px; border-radius: 9px; cursor: pointer; transition: .2s;
+        .rep-hot::before {
+            content: ''; width: 6px; height: 6px; border-radius: 50%;
+            background: currentColor; box-shadow: 0 0 8px currentColor;
+            animation: pulseDot 1.5s ease-in-out infinite;
         }
-        .copy-btn:hover { background: rgba(139,123,255,.2); }
+        @keyframes pulseDot { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+        .rep-hot.warn { color: var(--amber); background: rgba(251,191,36,.1); border-color: rgba(251,191,36,.3); }
+        .rep-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+        .wanted-hot {
+            font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .5px;
+            text-transform: uppercase; color: var(--red);
+            background: rgba(244,80,110,.12); border: 1px solid rgba(244,80,110,.25);
+            padding: 3px 8px; border-radius: 6px; margin-left: 8px;
+        }
+        .copy-btn, .link-btn {
+            background: rgba(139,123,255,.1); border: 1px solid var(--border-h);
+            color: var(--accent); font-family: var(--mono); font-size: 11px; font-weight: 700;
+            letter-spacing: .5px; padding: 8px 14px; border-radius: 10px; cursor: pointer;
+            transition: background .2s, border-color .2s, color .2s;
+        }
+        .copy-btn:hover, .link-btn:hover {
+            background: rgba(139,123,255,.22); border-color: var(--accent); color: var(--text);
+        }
+        .link-btn { color: var(--accent-2); text-decoration: none; display: inline-block; }
 
         .lvl-clean   { --c: var(--green); }
         .lvl-susp    { --c: var(--amber); }
@@ -179,8 +252,19 @@
         .stat {
             background: var(--card); border: 1px solid var(--border);
             border-radius: 14px; padding: 16px 18px; backdrop-filter: blur(12px);
+            transition: transform .2s, border-color .2s;
         }
+        .stat:hover { transform: translateY(-2px); border-color: var(--border-h); }
         .stat .v { font-family: var(--display); font-weight: 800; font-size: 24px; }
+        .hack-bar-wrap {
+            margin-top: 16px; height: 6px; border-radius: 999px;
+            background: rgba(139, 123, 255, 0.08); overflow: hidden;
+        }
+        .hack-bar {
+            height: 100%; border-radius: 999px;
+            background: linear-gradient(90deg, var(--green), var(--amber) 45%, var(--red));
+            transition: width .6s cubic-bezier(.4, 0, .2, 1);
+        }
         .stat .k { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-d); margin-top: 4px; }
 
         .hist-title { font-family: var(--mono); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-d); margin: 28px 0 12px; }
@@ -188,8 +272,12 @@
         .hist-row {
             display: flex; align-items: center; gap: 14px;
             background: var(--card); border: 1px solid var(--border);
-            border-left-width: 3px; border-radius: 10px; padding: 12px 16px; backdrop-filter: blur(10px);
+            border-left-width: 3px; border-radius: 12px; padding: 12px 16px;
+            backdrop-filter: blur(10px);
+            animation: fadeUp .4s ease both;
+            transition: border-color .2s, background .2s;
         }
+        .hist-row:hover { background: rgba(139, 123, 255, 0.06); border-color: var(--border-h); }
         .hist-row .date { font-family: var(--mono); font-size: 12.5px; color: var(--text-m); min-width: 130px; }
         .hist-row .chip {
             font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .5px;
@@ -205,11 +293,22 @@
         .chip-pending { color: var(--text-d); background: rgba(126,129,173,.12); }
 
         .empty {
-            text-align: center; padding: 48px 20px; color: var(--text-m);
-            background: var(--card); border: 1px dashed var(--border-h); border-radius: var(--radius);
+            text-align: center; padding: 52px 28px; color: var(--text-m);
+            background: linear-gradient(160deg, rgba(18, 18, 42, 0.8), rgba(10, 9, 26, 0.6));
+            border: 1px dashed var(--border-h); border-radius: var(--radius-lg);
         }
-        .empty .big { font-size: 42px; margin-bottom: 12px; }
-        .empty h3 { font-family: var(--display); font-size: 20px; color: var(--text); margin-bottom: 6px; }
+        .empty-icon {
+            width: 56px; height: 56px; margin: 0 auto 18px; border-radius: 50%;
+            border: 2px solid rgba(139, 123, 255, 0.25);
+            background: radial-gradient(circle, rgba(139,123,255,.15), transparent 70%);
+            position: relative;
+        }
+        .empty-icon::after {
+            content: ''; position: absolute; inset: 14px; border-radius: 50%;
+            border: 2px dashed rgba(126, 129, 173, 0.4);
+        }
+        .empty h3 { font-family: var(--display); font-size: 20px; color: var(--text); margin-bottom: 8px; }
+        .empty p { max-width: 420px; margin: 0 auto; line-height: 1.6; font-size: 14px; }
 
         .disclaimer {
             margin-top: 22px; font-size: 12px; color: var(--text-d); line-height: 1.6;
@@ -217,9 +316,21 @@
         }
 
         /* ── Más buscados ── */
-        .wanted-sec { margin-top: 46px; }
-        .wanted-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-        .wanted-head h2 { font-family: var(--display); font-weight: 800; font-size: 22px; }
+        .wanted-sec {
+            margin-top: 52px; padding-top: 36px;
+            border-top: 1px solid var(--border);
+            animation: fadeUp .5s .2s ease both;
+        }
+        .wanted-head {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; margin-bottom: 18px; flex-wrap: wrap;
+        }
+        .wanted-head h2 {
+            font-family: var(--display); font-weight: 800; font-size: 22px;
+            background: linear-gradient(120deg, var(--text), var(--accent-2));
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
         .wanted-head .sub { font-family: var(--mono); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-d); }
         .wanted-toggle { display: flex; gap: 4px; background: rgba(10,9,26,.5); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
         .wt-btn {
@@ -255,10 +366,21 @@
         footer a { color: var(--text-m); text-decoration: none; }
         footer a:hover { color: var(--accent); }
 
-        @media (max-width: 640px) {
+        @media (max-width: 720px) {
+            .vault-stats { grid-template-columns: repeat(2, 1fr); }
             .stats { grid-template-columns: repeat(2, 1fr); }
+            .wanted-head { flex-direction: column; align-items: flex-start; }
+        }
+        @media (max-width: 640px) {
             .nav-links a:not(.cta) { display: none; }
             .hist-row .date { min-width: 0; }
+            .rep-head { justify-content: center; text-align: center; }
+            .rep-meta { display: flex; flex-direction: column; align-items: center; }
+            .rep-actions { justify-content: center; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .loading-ring, .rep-hot::before, .hero-brand, .hero-block, .vault-stats, .wanted-sec { animation: none; }
+            .hist-row { animation: none; }
         }
     </style>
 </head>
@@ -271,6 +393,7 @@
             <img src="{{ url_for('static', filename='img/argus-wordmark.png') }}" alt="Argus Projects">
         </a>
         <div class="nav-links">
+            <a href="/">Hub</a>
             <a href="/scanner">Scanner</a>
             <a href="/descargar">Descargar</a>
             <a class="cta" href="{{ discord_invite }}" target="_blank" rel="noopener">Discord</a>
@@ -278,9 +401,14 @@
     </nav>
 
     <div class="wrap">
-        <span class="eyebrow">Argus // Reputation Network</span>
-        <h1>Reputación de <span class="grad">jugadores</span></h1>
-        <p class="lead">Consultá el historial anti-cheat de un jugador de Minecraft entre todos los servidores de la red Argus. Verificá a un sospechoso <strong>antes</strong> del Screen Share.</p>
+        <div class="hero-brand">
+            <img class="hero-wordmark" src="{{ url_for('static', filename='img/argus-wordmark.png') }}" alt="Argus Projects">
+        </div>
+        <div class="hero-block">
+            <span class="eyebrow">Argus Vault · Reputation Network</span>
+            <h1>Reputación de <span class="grad">jugadores</span></h1>
+            <p class="lead">Historial anti-cheat compartido entre servidores de la red Argus. Consultá a un sospechoso <strong>antes</strong> del Screen Share — datos agregados, sin exponer información sensible.</p>
+        </div>
 
         <form class="search" id="form" autocomplete="off">
             <input type="text" id="username" name="u" placeholder="Nombre de Minecraft (ej: Notch)" maxlength="32" spellcheck="false" required>
@@ -294,7 +422,7 @@
 
         <section class="wanted-sec" id="wanted" style="display:none">
             <div class="wanted-head">
-                <h2>🎯 Más buscados</h2>
+                <h2>Más buscados</h2>
                 <div class="wanted-toggle">
                     <button type="button" class="wt-btn active" data-mode="hist">Histórico</button>
                     <button type="button" class="wt-btn" data-mode="recent">Activos 7d</button>
@@ -345,10 +473,19 @@
             return d.toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' });
         }
 
+        function showLoading() {
+            result.innerHTML =
+                '<div class="loading">' +
+                  '<div class="loading-ring"></div>' +
+                  '<p>Consultando la red Argus…</p>' +
+                '</div>';
+            result.style.display = 'block';
+        }
+
         function renderEmpty(name) {
             result.innerHTML =
                 '<div class="empty">' +
-                  '<div class="big">🛰️</div>' +
+                  '<div class="empty-icon" aria-hidden="true"></div>' +
                   '<h3>Sin registros para “' + esc(name) + '”</h3>' +
                   '<p>Este jugador todavía no fue escaneado en la red Argus, o el nombre está mal escrito. ' +
                   'Un historial vacío no implica inocencia ni culpa.</p>' +
@@ -373,11 +510,14 @@
             }
             var rec = d.recent || {};
             if (rec.hacks_7d > 0) {
-                html += '<div class="rep-hot">🔥 ' + rec.hacks_7d + ' hack' + (rec.hacks_7d > 1 ? 's' : '') + ' en los últimos 7 días</div>';
+                html += '<div class="rep-hot">' + rec.hacks_7d + ' hack' + (rec.hacks_7d > 1 ? 's' : '') + ' · últimos 7 días</div>';
             } else if (rec.hacks_30d > 0) {
-                html += '<div class="rep-hot warn">⚠️ ' + rec.hacks_30d + ' hack' + (rec.hacks_30d > 1 ? 's' : '') + ' en los últimos 30 días</div>';
+                html += '<div class="rep-hot warn">' + rec.hacks_30d + ' hack' + (rec.hacks_30d > 1 ? 's' : '') + ' · últimos 30 días</div>';
             }
-            html +=     '<button class="copy-btn" type="button" onclick="argusCopyLink(this)">Copiar link</button>';
+            html +=     '<div class="rep-actions">';
+            html +=       '<button class="copy-btn" type="button" onclick="argusCopyLink(this)">Copiar link</button>';
+            html +=       '<a class="link-btn" href="/scanner">Ir al scanner</a>';
+            html +=     '</div>';
             html +=   '</div>';
             html += '</div>';
 
@@ -387,16 +527,18 @@
             html +=   '<div class="stat"><div class="v" style="color:var(--green)">' + d.clean_count + '</div><div class="k">Veredicto limpio</div></div>';
             html +=   '<div class="stat"><div class="v">' + pct + '%</div><div class="k">Hack rate</div></div>';
             html += '</div>';
+            html += '<div class="hack-bar-wrap" aria-hidden="true"><div class="hack-bar" style="width:' + pct + '%"></div></div>';
 
             if (d.history && d.history.length) {
                 html += '<div class="hist-title">Historial reciente (' + d.history.length + ')</div>';
                 html += '<div class="hist">';
-                d.history.forEach(function (h) {
+                d.history.forEach(function (h, i) {
                     var v = (h.verdict || 'pending');
                     var rowCls = v === 'hack' ? 'row-hack' : v === 'clean' ? 'row-clean' : 'row-pending';
                     var chipCls = v === 'hack' ? 'chip-hack' : v === 'clean' ? 'chip-clean' : 'chip-pending';
                     var vlabel = v === 'hack' ? 'Hack' : v === 'clean' ? 'Limpio' : 'Pendiente';
-                    html += '<div class="hist-row ' + rowCls + '">';
+                    var delay = Math.min(i * 0.04, 0.4);
+                    html += '<div class="hist-row ' + rowCls + '" style="animation-delay:' + delay + 's">';
                     html +=   '<span class="date">' + fmtDate(h.date) + '</span>';
                     html +=   '<span class="chip ' + chipCls + '">' + vlabel + '</span>';
                     html +=   '<span class="risk">risk <b>' + (h.risk != null ? h.risk : 0) + '</b></span>';
@@ -414,11 +556,12 @@
 
         function lookup(name) {
             btn.disabled = true; btn.textContent = 'Buscando…';
+            showLoading();
             fetch('/api/public/reputation?u=' + encodeURIComponent(name))
                 .then(function (r) { return r.json(); })
                 .then(function (d) { render(d); })
                 .catch(function () {
-                    result.innerHTML = '<div class="empty"><div class="big">⚠️</div><h3>Error de conexión</h3><p>No se pudo consultar la red en este momento. Probá de nuevo en unos segundos.</p></div>';
+                    result.innerHTML = '<div class="empty"><div class="empty-icon" aria-hidden="true"></div><h3>Error de conexión</h3><p>No se pudo consultar la red en este momento. Probá de nuevo en unos segundos.</p></div>';
                     result.style.display = 'block';
                 })
                 .finally(function () { btn.disabled = false; btn.textContent = 'Consultar'; });
@@ -458,7 +601,7 @@
             var html = '';
             players.forEach(function (p, i) {
                 var pct = Math.round((p.hack_rate || 0) * 100);
-                var hot = p.recent_hacks_7d > 0 ? '<span class="wanted-hot" title="Hacks en los últimos 7 días">🔥' + p.recent_hacks_7d + '</span>' : '';
+                var hot = p.recent_hacks_7d > 0 ? '<span class="wanted-hot" title="Hacks en los últimos 7 días">7d · ' + p.recent_hacks_7d + '</span>' : '';
                 var metric = wantedMode === 'recent'
                     ? '<span class="wanted-stat"><b>' + p.recent_hacks_7d + '</b> hacks 7d · ' + p.hacks + ' total</span>'
                     : '<span class="wanted-stat"><b>' + p.hacks + '</b> hacks · ' + p.scans + ' scans</span>';

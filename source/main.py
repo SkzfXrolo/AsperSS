@@ -96,7 +96,7 @@ except ImportError:
 try:
     from config.version import SCANNER_VERSION
 except ImportError:
-    SCANNER_VERSION = "1.6.58"
+    SCANNER_VERSION = "1.6.59"
 
 try:
     from config.lite_mode import (
@@ -1719,15 +1719,13 @@ class ArgusApp:
             # Asegurar que legitimate_patterns sea None si falla
             self.legitimate_patterns = None
         
-        self.root.protocol('WM_DELETE_WINDOW', lambda: None)
+        self._exit_scheduled = False
+        self._user_quit_requested = False
+        self.root.protocol('WM_DELETE_WINDOW', self._quit_app)
 
         # Hotkey de emergencia — solo staff que conoce la combinación
         def _emergency_exit(event=None):
-            try:
-                self.root.destroy()
-            except Exception:
-                import os as _os
-                _os.abort()
+            self._quit_app(force=True)
         self.root.bind('<Control-Alt-Shift-Q>', _emergency_exit)
         self.root.bind('<Control-Alt-Shift-q>', _emergency_exit)
 
@@ -1736,10 +1734,11 @@ class ArgusApp:
 
         if UI_STYLE_AVAILABLE and ModernUI:
             try:
+                ModernUI.set_quit_callback(self._quit_app)
                 ModernUI.set_token_status(bool(self.config.get('scan_token')))
                 _api = self.config.get('api_url', 'https://asperss.onrender.com')
                 ModernUI.check_update_async(_api, SCANNER_VERSION)
-                ModernUI.setup_tray(self.root, on_quit=lambda: self.root.destroy())
+                ModernUI.setup_tray(self.root, on_quit=self._quit_app)
             except Exception:
                 pass
 
@@ -4983,25 +4982,8 @@ class ArgusApp:
             self.progress_value = 0
             self._scan_cancel_event = threading.Event()
 
-            # Wire up cancel button
             if self._cancel_btn_widget:
-                def _on_cancel_scan():
-                    self._scan_cancel_event.set()
-                    if self._cancel_btn_widget:
-                        self._cancel_btn_widget.config(
-                            text="✕  Cancelando...",
-                            state='disabled',
-                            fg=ModernUI.COLORS['red']
-                        )
-                    self._update_progress_safe(
-                        getattr(self, 'progress_value', 0),
-                        "⛔ Cancelando escaneo...",
-                        "Esperando que finalicen los módulos actuales"
-                    )
-                try:
-                    ModernUI.wire_cancel_confirm(self._cancel_btn_widget, _on_cancel_scan)
-                except Exception:
-                    self._cancel_btn_widget.config(command=_on_cancel_scan)
+                self._cancel_btn_widget.config(command=self._request_cancel_scan)
 
             # Scan button (hidden — escaneo arranca automáticamente)
             btn_container = tk.Frame(main_panel, bg=ModernUI.COLORS['bg_primary'], height=0)
@@ -5012,7 +4994,7 @@ class ArgusApp:
                 "INICIAR ESCANEO",
                 self.full_scan_with_discord,
                 style='primary',
-                icon='🚀'
+                icon=''
             )
             scan_btn_frame.pack(fill=tk.X)
             self.scan_button = None
@@ -5176,6 +5158,14 @@ class ArgusApp:
         """Actualiza la barra de progreso con detalles adicionales - Animación suave de 1 en 1"""
         # Asegurar que el valor esté entre 0 y 100
         value = max(0, min(100, int(value)))
+
+        if UI_STYLE_AVAILABLE:
+            try:
+                from ui_style import sanitize_ui_text
+                message = sanitize_ui_text(message)
+                detail = sanitize_ui_text(detail)
+            except Exception:
+                pass
         
         # Actualizar detalle inmediatamente
         if hasattr(self, 'progress_detail_label'):
@@ -5252,7 +5242,8 @@ class ArgusApp:
                             if hasattr(self, 'progress_bar'):
                                 self.progress_bar['value'] = v
                             if hasattr(self, 'progress_label'):
-                                self.progress_label.config(text=msg)
+                                show = msg.split('(')[0].strip() if '(' in msg else msg
+                                self.progress_label.config(text=show or msg)
                             if hasattr(self, 'progress_percent_label') and self.progress_percent_label:
                                 self.progress_percent_label.config(text=f"{v}%")
                             if hasattr(self, '_progress_canvas') and self._progress_canvas:
@@ -5288,7 +5279,7 @@ class ArgusApp:
                             if hasattr(self, 'progress_bar'):
                                 self.progress_bar['value'] = final_value
                             if hasattr(self, 'progress_label'):
-                                self.progress_label.config(text=f"{final_message} ({final_value}%)")
+                                self.progress_label.config(text=final_message)
                             if hasattr(self, 'progress_percent_label') and self.progress_percent_label:
                                 self.progress_percent_label.config(text=f"{final_value}%")
                         except:
@@ -5398,8 +5389,9 @@ class ArgusApp:
             elapsed = time.time() - self.scan_start_time
             hours, remainder = divmod(elapsed, 3600)
             minutes, seconds = divmod(remainder, 60)
-            time_str = f"⏱️ Tiempo total: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
-            self.timer_label.config(text=time_str, fg="#ffff00")
+            time_str = f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
+            fg = ModernUI.COLORS['accent_light'] if UI_STYLE_AVAILABLE else "#46e6ff"
+            self.timer_label.config(text=time_str, fg=fg)
             print(f"🕐 ESCANEO COMPLETADO EN: {time_str}")
     
     def _timer_loop(self):
@@ -5410,19 +5402,19 @@ class ArgusApp:
                 elapsed = time.time() - self.scan_start_time
                 hours, remainder = divmod(elapsed, 3600)
                 minutes, seconds = divmod(remainder, 60)
-                time_str = f"⏱️ Tiempo: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
-                
-                # Obtener recursos del sistema
+                time_str = f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
+
                 try:
                     cpu_percent = psutil.cpu_percent(interval=0.1)
                     memory = psutil.virtual_memory()
                     ram_percent = memory.percent
                     ram_used_gb = memory.used / (1024**3)
                     ram_total_gb = memory.total / (1024**3)
-                    _files = getattr(self, 'total_files_scanned', 0)
-                    _files_s = f" | 📁 {_files:,}" if _files else ""
-                    resources_str = f"💻 CPU: {cpu_percent:.1f}% | 🧠 RAM: {ram_percent:.1f}% ({ram_used_gb:.1f}GB/{ram_total_gb:.1f}GB){_files_s}"
-                except:
+                    resources_str = (
+                        f"CPU {cpu_percent:.1f}%  ·  RAM {ram_percent:.1f}% "
+                        f"({ram_used_gb:.1f}/{ram_total_gb:.1f} GB)"
+                    )
+                except Exception:
                     resources_str = ""
                 
                 # Actualizar en el hilo principal de forma segura
@@ -5436,7 +5428,7 @@ class ArgusApp:
         """Actualiza la visualización del timer y recursos de forma segura"""
         try:
             if self.timer_label:
-                self.timer_label.config(text=time_str.replace('⏱️ ', 'Tiempo '))
+                self.timer_label.config(text=time_str)
             if self.resources_label and resources_str:
                 self.resources_label.config(text=resources_str)
             if UI_STYLE_AVAILABLE and ModernUI and resources_str:
@@ -5509,11 +5501,11 @@ class ArgusApp:
                 if hasattr(self, '_cancel_row') and self._cancel_row:
                     self.root.after(0, self._cancel_row.pack_forget)
 
-                # Si el usuario canceló, cerrar sin enviar
-                if getattr(self, '_scan_cancel_event', None) and self._scan_cancel_event.is_set():
-                    self._update_progress_safe(0, "⛔ Escaneo cancelado", "El escaneo fue interrumpido por el usuario")
+                if self._scan_cancelled():
+                    self._update_progress_safe(
+                        0, "Escaneo cancelado", "Interrumpido por el usuario")
                     self.scanning_mode = False
-                    self.root.after(3000, self.root.destroy)
+                    self._schedule_app_exit(2)
                     return
 
                 # Envío a Web (filtrado + IA ya se aplicaron dentro de execute_full_scan_silent)
@@ -5578,7 +5570,7 @@ class ArgusApp:
                                 print("✅ Resultados enviados a Web/BD")
                                 # Cerrar solo DESPUÉS de subir — si se cierra antes, el POST se corta
                                 # y el panel queda en "running" con 0 archivos (scan #107–109).
-                                self.root.after(0, lambda: self._schedule_close_after_upload(6))
+                                self._schedule_close_after_upload(4)
                             else:
                                 self._update_progress_safe(100, "⚠️ Error al enviar", "No cierres el scanner — reintenta o avisa al staff")
                                 if UI_STYLE_AVAILABLE and ModernUI:
@@ -5595,14 +5587,17 @@ class ArgusApp:
                         print("⚠️ No se puede enviar resultados: no hay token de escaneo configurado")
                         print("💡 Por favor, autentícate primero con un token válido")
                 
-                # Desactivar modo silencioso
                 self.scanning_mode = False
-                
+                if not getattr(self, '_exit_scheduled', False):
+                    self._schedule_app_exit(6)
+
             except Exception as e:
                 self.scanning_mode = False
                 import traceback
                 print(f"❌ Error en escaneo completo: {e}\n{traceback.format_exc()}")
                 self.root.after(0, lambda: self.log(f"Error en escaneo completo: {str(e)}", "danger"))
+                if not getattr(self, '_exit_scheduled', False):
+                    self._schedule_app_exit(8)
             finally:
                 # Si el API creó el scan pero no hubo submit (crash/cierre), cerrarlo en servidor
                 try:
@@ -5636,17 +5631,75 @@ class ArgusApp:
         # daemon=False: el proceso no debe matar el hilo de upload al cerrar la ventana
         threading.Thread(target=scan_and_report, daemon=False, name='ArgusScanUpload').start()
 
-    def _schedule_close_after_upload(self, delay_sec: int = 6):
-        """Cierra la app solo cuando el upload ya terminó (evita scans colgados en el panel)."""
+    def _scan_cancelled(self):
+        ev = getattr(self, '_scan_cancel_event', None)
+        return bool(ev and ev.is_set()) or getattr(self, '_user_quit_requested', False)
+
+    def _request_cancel_scan(self):
+        """Cancela el escaneo en curso (un clic)."""
+        if getattr(self, '_scan_cancel_event', None):
+            self._scan_cancel_event.set()
+        self.scanning = False
+        try:
+            if self._cancel_btn_widget:
+                self._cancel_btn_widget.config(
+                    text='Cancelando...',
+                    state='disabled',
+                    fg=ModernUI.COLORS['red'] if UI_STYLE_AVAILABLE else '#f4506e',
+                )
+        except Exception:
+            pass
+        self._update_progress_safe(
+            getattr(self, 'progress_value', 0),
+            'Cancelando escaneo...',
+            'Deteniendo módulos activos',
+        )
+
+    def _quit_app(self, force=True):
+        """Cierra ventana y proceso (X, bandeja, fin de escaneo)."""
+        self._user_quit_requested = True
+        if getattr(self, '_scan_cancel_event', None):
+            self._scan_cancel_event.set()
+        self.scanning = False
+        self.timer_running = False
+        try:
+            if UI_STYLE_AVAILABLE and ModernUI:
+                ModernUI._stop_section_bg_anim()
+                ModernUI._stop_solar_animation()
+        except Exception:
+            pass
+        try:
+            self.root.quit()
+        except Exception:
+            pass
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+        if force:
+            def _hard_exit():
+                import os
+                os._exit(0)
+            threading.Timer(0.8, _hard_exit).start()
+
+    def _schedule_app_exit(self, delay_sec=4):
+        if getattr(self, '_exit_scheduled', False):
+            return
+        self._exit_scheduled = True
+        delay_ms = max(800, int(float(delay_sec) * 1000))
+        try:
+            self.root.after(delay_ms, lambda: self._quit_app(force=True))
+        except Exception:
+            self._quit_app(force=True)
+
+    def _schedule_close_after_upload(self, delay_sec: int = 4):
+        """Cierra la app cuando el upload terminó."""
         try:
             if UI_STYLE_AVAILABLE and ModernUI:
                 ModernUI.set_status_badge("SUBIDO", ModernUI.COLORS.get('green', '#22c55e'))
         except Exception:
             pass
-        try:
-            self.root.after(max(2000, int(delay_sec * 1000)), self.root.destroy)
-        except Exception:
-            pass
+        self._schedule_app_exit(delay_sec)
     
     def _run_pre_scan_predict(self):
         """P3 #35 — Llama a /api/predict con señales rápidas antes de escanear.
@@ -5752,12 +5805,10 @@ class ArgusApp:
         # Resetear evento de cancelación y mostrar botón cancel
         if hasattr(self, '_scan_cancel_event'):
             self._scan_cancel_event.clear()
-        if hasattr(self, '_cancel_row') and self._cancel_row:
-            self.root.after(0, lambda: self._cancel_row.pack(fill=tk.X, pady=(4, 0)))
         if hasattr(self, '_cancel_btn_widget') and self._cancel_btn_widget:
             self.root.after(0, lambda: self._cancel_btn_widget.config(
-                text="✕  Cancelar escaneo", state='normal',
-                fg=ModernUI.COLORS.get('text_secondary', '#545880') if UI_STYLE_AVAILABLE else '#545880'
+                text="Cancelar escaneo", state='normal',
+                fg=ModernUI.COLORS.get('text_secondary', '#A6A8D0') if UI_STYLE_AVAILABLE else '#A6A8D0'
             ))
 
         # ── Snapshot USB al inicio + arrancar monitor de desconexiones ───────
@@ -5820,11 +5871,15 @@ class ArgusApp:
             max_workers = lite_max_workers() if _is_lite else min(psutil.cpu_count() * 2, 8)
             _scan_timeout = lite_scan_timeout() if _is_lite else 85
             print(f"⚡ Usando {max_workers} hilos · timeout {_scan_timeout}s")
+            if self._scan_cancelled():
+                print("⛔ Escaneo cancelado — omitiendo unidades")
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = []
                 progress_per_drive = 80 // len(drives) if drives else 80
                 
                 for i, drive in enumerate(drives):
+                    if self._scan_cancelled():
+                        break
                     start_progress = i * progress_per_drive
                     end_progress = (i + 1) * progress_per_drive
 
@@ -5835,6 +5890,10 @@ class ArgusApp:
                     futures.append(future)
                 
                 for future in concurrent.futures.as_completed(futures, timeout=_scan_timeout):
+                    if self._scan_cancelled():
+                        for f in futures:
+                            f.cancel()
+                        break
                     try:
                         future.result()
                         print(f"✅ Unidad escaneada exitosamente")
@@ -6254,11 +6313,15 @@ class ArgusApp:
                 except Exception as ex:
                     print(f"⚠️ SS Forensics: {ex}")
 
-            if _is_lite:
+            if self._scan_cancelled():
+                print("⛔ Escaneo cancelado — omitiendo fases secundarias")
+            elif _is_lite:
                 print("📦 Lite: fases secundarias secuenciales (1 hilo)")
                 for _grp in (_group_processes, _group_files, _group_registry,
                              _group_hack_locations, _group_hardware,
                              _group_advanced, _group_forensics):
+                    if self._scan_cancelled():
+                        break
                     try:
                         _grp()
                     except Exception as ex:
@@ -6277,6 +6340,10 @@ class ArgusApp:
                         sec_exec.submit(_group_forensics),
                     ]
                     for f in concurrent.futures.as_completed(sec_futures, timeout=80):
+                        if self._scan_cancelled():
+                            for sf in sec_futures:
+                                sf.cancel()
+                            break
                         try:
                             f.result()
                         except Exception as ex:
@@ -6598,6 +6665,8 @@ class ArgusApp:
 
                 try:
                     for root, dirs, files in os.walk(critical_path):
+                        if self._scan_cancelled():
+                            break
                         self.total_dirs_scanned += 1
                         if time.time() - start_time > total_timeout:
                             print(f"⏰ Timeout total ({total_timeout}s) — fin parcial")
@@ -8439,8 +8508,12 @@ class ArgusApp:
             tos_center = tk.Frame(tos_frame, bg=bg)
             tos_center.place(relx=0.5, rely=0.48, anchor='center')
 
-            tk.Label(tos_center, text="\U0001F441\uFE0F",
-                     font=('Segoe UI', 24), bg=bg).pack(pady=(0, 12))
+            if UI_STYLE_AVAILABLE:
+                from ui_style import create_wordmark_label
+                create_wordmark_label(tos_center, height=52, pady=(0, 12))
+            else:
+                tk.Label(tos_center, text="ARGUS",
+                         font=('Segoe UI', 18, 'bold'), bg=bg, fg=accent_l).pack(pady=(0, 12))
 
             tk.Label(tos_center, text="Aviso Legal",
                      font=('Segoe UI', 14, 'bold'),
@@ -8693,8 +8766,12 @@ class ArgusApp:
             tk_center = tk.Frame(token_frame, bg=bg)
             tk_center.place(relx=0.5, rely=0.48, anchor='center')
 
-            tk.Label(tk_center, text="\U0001F510",
-                     font=('Segoe UI', 20), bg=bg).pack(pady=(0, 12))
+            if UI_STYLE_AVAILABLE:
+                from ui_style import create_wordmark_label
+                create_wordmark_label(tk_center, height=48, pady=(0, 12))
+            else:
+                tk.Label(tk_center, text="ARGUS",
+                         font=('Segoe UI', 18, 'bold'), bg=bg, fg=accent_l).pack(pady=(0, 12))
 
             tk.Label(tk_center, text="CÓDIGO DE ACCESO",
                      font=('Segoe UI', 12, 'bold'),
@@ -22564,7 +22641,7 @@ def main():
                 print(f"\n⚠️ Señal recibida ({signum}), cancelando escaneo de forma segura...")
                 if getattr(app, '_scan_cancel_event', None):
                     app._scan_cancel_event.set()
-                root.after(200, root.destroy)
+                app._quit_app(force=True)
             except Exception:
                 pass
 

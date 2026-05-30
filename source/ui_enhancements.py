@@ -123,12 +123,14 @@ def patch_modern_ui(cls):
             splash.attributes('-alpha', 0.0)
         except Exception:
             pass
-        tk.Label(splash, text='Argus Scanner', font=('Segoe UI', 14, 'bold'),
-                 bg=C['bg_primary'], fg=C['accent_light']).pack(pady=(28, 4))
+        try:
+            from ui_style import create_wordmark_label
+            create_wordmark_label(splash, height=36, pady=(24, 8))
+        except Exception:
+            tk.Label(splash, text='ARGUS', font=('Segoe UI', 14, 'bold'),
+                     bg=C['bg_primary'], fg=C['accent_light']).pack(pady=(28, 4))
         tk.Label(splash, text=f'v{version}', font=('Consolas', 9),
                  bg=C['bg_primary'], fg=C['text_secondary']).pack()
-        tk.Label(splash, text='Argus Projects', font=('Segoe UI', 7),
-                 bg=C['bg_primary'], fg=C['text_muted']).pack(pady=(12, 0))
 
         def _fade_in(step=0):
             try:
@@ -168,13 +170,13 @@ def patch_modern_ui(cls):
         C = cls.COLORS
         parent = right or inner
         # Red / Sin red
-        net = tk.Label(parent, text='● Online', font=('Segoe UI', 7),
+        net = tk.Label(parent, text='Online', font=('Segoe UI', 7),
                        bg=C['bg_primary'], fg=C['green'])
         net.pack(side=tk.RIGHT, padx=(0, 8))
         cls._net_indicator = net
 
         # Token indicator
-        tok = tk.Label(parent, text='🔑', font=('Segoe UI', 8),
+        tok = tk.Label(parent, text='Token', font=('Segoe UI', 7),
                        bg=C['bg_primary'], fg=C['text_muted'])
         tok.pack(side=tk.RIGHT, padx=(0, 6))
         cls._token_indicator = tok
@@ -199,33 +201,42 @@ def patch_modern_ui(cls):
         cls._network_ok = bool(online)
         if cls._net_indicator:
             if online:
-                cls._net_indicator.config(text='● Online', fg=cls.COLORS['green'])
+                cls._net_indicator.config(text='Online', fg=cls.COLORS['green'])
             else:
-                cls._net_indicator.config(text='○ Sin red', fg=cls.COLORS['red'])
+                cls._net_indicator.config(text='Sin red', fg=cls.COLORS['red'])
 
     @classmethod
     def set_token_status(cls, valid: bool | None):
         if not cls._token_indicator:
             return
         if valid is True:
-            cls._token_indicator.config(text='🔑 OK', fg=cls.COLORS['green'])
+            cls._token_indicator.config(text='Token OK', fg=cls.COLORS['green'])
         elif valid is False:
-            cls._token_indicator.config(text='🔑 ✕', fg=cls.COLORS['red'])
+            cls._token_indicator.config(text='Token err', fg=cls.COLORS['red'])
         else:
-            cls._token_indicator.config(text='🔑', fg=cls.COLORS['text_muted'])
+            cls._token_indicator.config(text='Token', fg=cls.COLORS['text_muted'])
 
     @classmethod
     def append_phase_history(cls, text: str):
         if not text:
             return
+        try:
+            from ui_style import sanitize_ui_text
+            text = sanitize_ui_text(text)
+        except Exception:
+            pass
         cls._phase_history.append(text)
         cls._phase_history = cls._phase_history[-5:]
         if cls._phase_list_frame:
             for w in cls._phase_list_frame.winfo_children():
                 w.destroy()
             C = cls.COLORS
+            try:
+                from ui_style import sanitize_ui_text as _san
+            except Exception:
+                _san = lambda x: x
             for line in cls._phase_history:
-                tk.Label(cls._phase_list_frame, text=line[:60],
+                tk.Label(cls._phase_list_frame, text=_san(line)[:60],
                          font=('Consolas', 7), bg=C['bg_primary'],
                          fg=C['text_muted'], anchor='w').pack(fill=tk.X)
 
@@ -241,8 +252,9 @@ def patch_modern_ui(cls):
     @classmethod
     def create_sparkline(cls, parent):
         C = cls.COLORS
-        c = tk.Canvas(parent, width=80, height=24, bg=C['bg_card'],
-                      highlightthickness=0)
+        bg = C.get('bg_primary', '#09090b')
+        c = tk.Canvas(parent, width=80, height=24, bg=bg, highlightthickness=0)
+        c.place(relx=1.0, rely=0.0, anchor='ne', x=-12, y=52)
         cls._sparkline_canvas = c
         return c
 
@@ -279,10 +291,25 @@ def patch_modern_ui(cls):
 
     @classmethod
     def attach_files_counter(cls, parent):
+        """Contador de archivos; si hay barra superior de progreso, no duplicar."""
+        if getattr(cls, '_files_count_label', None):
+            try:
+                if cls._files_count_label.winfo_exists():
+                    return cls._files_count_label
+            except Exception:
+                pass
         C = cls.COLORS
-        lbl = tk.Label(parent, text='0 archivos', font=('Consolas', 7),
-                       bg=C['bg_card'], fg=C['text_muted'])
-        lbl.pack(anchor='e', padx=12)
+        top = getattr(cls, '_progress_top_bar', None)
+        if top is not None:
+            try:
+                if top.winfo_exists():
+                    return cls._files_count_label
+            except Exception:
+                pass
+        bg = C.get('bg_secondary', C.get('bg_primary', '#04030e'))
+        lbl = tk.Label(parent, text='0 archivos', font=('Consolas', 8),
+                       bg=bg, fg=C['text_muted'])
+        lbl.place(relx=1.0, rely=0.0, anchor='ne', x=-14, y=10)
         cls._files_count_label = lbl
         return lbl
 
@@ -332,11 +359,11 @@ def patch_modern_ui(cls):
             return
         C = cls.COLORS
         if state == 'pending':
-            lbl.config(text='◌ Enviando al panel…', fg=C['amber'])
+            lbl.config(text='Enviando al panel…', fg=C['amber'])
         elif state == 'ok':
-            lbl.config(text='✓ Enviado', fg=C['green'])
+            lbl.config(text='Enviado', fg=C['green'])
         elif state == 'error':
-            lbl.config(text=f'⚠ Error{": " + detail if detail else ""}', fg=C['red'])
+            lbl.config(text=f'Error{": " + detail if detail else ""}', fg=C['red'])
         else:
             lbl.config(text='', fg=C['text_muted'])
 
@@ -354,7 +381,7 @@ def patch_modern_ui(cls):
         def _reset():
             cls._cancel_confirm_pending = False
             try:
-                cancel_btn.config(text='✕  Cancelar escaneo', fg=cls.COLORS['text_muted'])
+                cancel_btn.config(text='Cancelar escaneo', fg=cls.COLORS['text_muted'])
             except Exception:
                 pass
 
@@ -372,9 +399,9 @@ def patch_modern_ui(cls):
             ctypes.windll.dwmapi.DwmSetWindowAttribute(
                 hwnd, 34, ctypes.byref(ctypes.c_int(color)), ctypes.sizeof(ctypes.c_int))
             def _revert():
-                copper = ctypes.c_int(0x003373B8)
+                border = ctypes.c_int(0x00FF7B8B)  # BGR #8b7bff
                 ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                    hwnd, 34, ctypes.byref(copper), ctypes.sizeof(copper))
+                    hwnd, 34, ctypes.byref(border), ctypes.sizeof(border))
             root.after(800, _revert)
         except Exception:
             pass
@@ -415,8 +442,13 @@ def patch_modern_ui(cls):
         win.configure(bg=C['bg_primary'])
         win.geometry('400x220')
         win.resizable(False, False)
-        tk.Label(win, text='✕ Autenticación fallida', font=('Segoe UI', 12, 'bold'),
-                 bg=C['bg_primary'], fg=C['red_deep']).pack(pady=(24, 8))
+        try:
+            from ui_style import create_wordmark_label
+            create_wordmark_label(win, height=32, pady=(16, 8))
+        except Exception:
+            pass
+        tk.Label(win, text='Autenticación fallida', font=('Segoe UI', 12, 'bold'),
+                 bg=C['bg_primary'], fg=C['red_deep']).pack(pady=(8, 8))
         tk.Label(win, text=message[:200], wraplength=360, justify='center',
                  font=('Segoe UI', 9), bg=C['bg_primary'], fg=C['text_secondary']).pack(padx=20)
         tk.Button(win, text='Cerrar', command=lambda: (win.destroy(), root.destroy()),

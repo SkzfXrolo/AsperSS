@@ -162,14 +162,14 @@ def _draw_corner_accents(canvas, w, h, color, tag='vb_corner', size=14):
 def _apply_color_tokens(cls):
     C = cls.COLORS
     extras = {
-        'bg_elevated': '#1E1610',
-        'bg_inset': '#0D0A07',
-        'shadow': '#050403',
-        'accent_soft': '#8B5A2B',
-        'accent_muted': '#4A3020',
-        'success_soft': '#064E3B',
-        'danger_soft': '#450A0A',
-        'overlay': '#000000',
+        'bg_elevated': '#12122a',
+        'bg_inset': '#0d0d20',
+        'shadow': '#252340',
+        'accent_soft': '#12122a',
+        'accent_muted': '#1a1835',
+        'success_soft': '#0d2e28',
+        'danger_soft': '#3a1020',
+        'overlay': '#04030e',
     }
     for k, v in extras.items():
         C.setdefault(k, v)
@@ -185,19 +185,7 @@ def _apply_font_tokens(cls):
 
 def _post_apply_window_style(cls, root, *_a, **_k):
     C = cls.COLORS
-    try:
-        panel = [c for c in root.winfo_children() if isinstance(c, tk.Frame)]
-        if panel:
-            main = panel[0]
-            wm = tk.Label(
-                main, text='ARGUS', font=('Segoe UI', 48, 'bold'),
-                bg=C['bg_primary'], fg=C['bg_secondary'],
-            )
-            wm.place(relx=0.5, rely=0.5, anchor='center')
-            _stack_lower(wm)
-            cls._watermark_label = wm
-    except Exception:
-        pass
+    # Marca de agua desactivada: tapaba el escudo de fondo y generaba parches negros
     try:
         def _esc(_e=None):
             if _e and _e.keysym == 'Escape':
@@ -231,7 +219,7 @@ def _post_create_header(cls, hdr, parent, *_a, **_k):
         pass
     if getattr(cls, '_update_available', None) and not getattr(cls, '_update_banner', None):
         banner = tk.Label(
-            hdr, text=f'↑ Actualización v{cls._update_available} disponible',
+            hdr, text=f'Actualización v{cls._update_available} disponible',
             font=('Segoe UI', 7, 'bold'),
             bg=C['accent_muted'], fg=C['accent_glow'],
             pady=2,
@@ -245,69 +233,23 @@ def _post_create_progress(cls, widgets, parent, *_a, **_k):
     card = widgets.get('card')
     if not card:
         return
-    # VB006-007, VB059, VB085: decoración card
-    deco = tk.Canvas(card, height=4, bg=C['bg_card'], highlightthickness=0, bd=0)
-    deco.pack(fill=tk.X, side=tk.TOP)
-    cls._card_deco_canvas = deco
-
-    def _redraw_deco(_e=None):
-        deco.delete('vb')
-        w = deco.winfo_width()
-        if w < 4:
-            return
-        deco.create_rectangle(0, 0, w, 2, fill=C['accent'], outline='', tags='vb')
-        deco.create_rectangle(0, 2, w, 4, fill=C['accent_muted'], outline='', tags='vb')
-
-    deco.bind('<Configure>', _redraw_deco)
-
-    grid = tk.Canvas(card, bg=C['bg_card'], highlightthickness=0, bd=0)
-    grid.place(relx=0, rely=0, relwidth=1, relheight=1)
-    _stack_lower(grid)
-
-    def _grid(_e=None):
-        grid.delete('g')
-        w, h = grid.winfo_width(), grid.winfo_height()
-        if w < 10:
-            return
-        step = 24
-        for x in range(0, w, step):
-            grid.create_line(x, 0, x, h, fill=C['bg_inset'], tags='g')
-        for y in range(0, h, step):
-            grid.create_line(0, y, w, y, fill=C['bg_inset'], tags='g')
-
-    grid.bind('<Configure>', _grid)
-    cls._card_grid_canvas = grid
-
-    corner = tk.Canvas(card, bg=C['bg_card'], highlightthickness=0, bd=0)
-    corner.place(relx=1.0, rely=1.0, anchor='se', width=40, height=40)
-
-    def _corners(_e=None):
-        _draw_corner_accents(corner, 40, 40, C['accent_soft'])
-
-    corner.bind('<Configure>', _corners)
-    cls._card_corner_canvas = corner
-
-    strip = tk.Frame(card, bg=C['accent'], width=3)
-    strip.place(relx=0, rely=0, relheight=1, width=3)
-    cls._scan_mode_strip = strip
-
-    # VB008
-    top = card.winfo_children()
-    if top:
+    bg = C.get('bg_primary', '#09090b')
+    # VB008 — barra superior ya creada en create_progress_section
+    if not getattr(cls, '_progress_top_bar', None):
         sec = tk.Label(
             card, text='PROGRESO DEL ESCANEO',
-            font=('Segoe UI', 6, 'bold'),
-            bg=C['bg_card'], fg=C['text_muted'],
+            font=('Segoe UI', 7, 'bold'),
+            bg=bg, fg=C['text_muted'],
         )
-        sec.place(x=16, y=8)
+        sec.place(x=14, y=8)
         cls._section_label = sec
 
-    # VB009-010 timer
+    # VB009-010 timer (solo HH:MM:SS; etiqueta TIEMPO va aparte)
     timer = widgets.get('timer')
     if timer:
         try:
-            timer.config(text='⏱  Tiempo 00:00:00')
-            cls._timer_base_fg = C['text_secondary']
+            timer.config(text='00:00:00', fg=C['accent_light'])
+            cls._timer_base_fg = C['accent_light']
             cls._timer_widget = timer
         except Exception:
             pass
@@ -318,7 +260,7 @@ def _post_create_progress(cls, widgets, parent, *_a, **_k):
         try:
             t = res.cget('text') or ''
             if 'CPU' not in t and t:
-                res.config(text='🖥 ' + t)
+                res.config(text=t)
             cls._res_icons_done = True
         except Exception:
             pass
@@ -367,11 +309,6 @@ def _post_create_progress(cls, widgets, parent, *_a, **_k):
         cancel.bind('<Leave>', _cout)
         cancel.bind('<FocusIn>', lambda _e: cancel.config(highlightbackground=C['accent_light']))
         cancel.bind('<FocusOut>', _cout)
-
-    # VB060 shadow line
-    sh = tk.Frame(card, bg=C['shadow'], height=1)
-    sh.pack(fill=tk.X, side=tk.BOTTOM)
-    cls._card_shadow_line = sh
 
     cls._progress_widgets_ref = widgets
 
@@ -690,9 +627,11 @@ def _wrap_append_phase(cls):
 
     @classmethod
     def append(cls_inner, text: str):
-        t = (text or '')[:58]
-        if t and not t.startswith('▸'):
-            t = '▸ ' + t
+        try:
+            from ui_style import sanitize_ui_text
+            t = sanitize_ui_text(text)[:58]
+        except Exception:
+            t = (text or '')[:58]
         orig(t)
 
     cls.append_phase_history = append

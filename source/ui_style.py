@@ -1,7 +1,7 @@
 """
 Argus Scanner — UI Style v5 (Minimal × Eye Hybrid)
 ===================================================
-Dark minimal base + warm copper accents + orbit progress animation.
+Dark cosmic base + violet/cyan accents + orbit progress animation.
 Floating shields, clean typography, no heavy cards.
 
 API pública (usada por main.py):
@@ -12,7 +12,7 @@ API pública (usada por main.py):
 """
 import tkinter as tk
 from tkinter import ttk, scrolledtext
-import os, sys, math, random, ctypes, base64, io
+import os, sys, math, random, ctypes, base64, io, re
 
 try:
     from PIL import Image, ImageTk
@@ -36,32 +36,153 @@ def _load_shield_b64():
     return _SHIELD_B64
 
 
+_EMOJI_UI_RE = re.compile(
+    "["
+    "\U0001F300-\U0001FAFF"
+    "\U00002600-\U000027BF"
+    "\U00002300-\U000024FF"
+    "\U00002B50"
+    "\U0000FE0F"
+    "\U0000200D"
+    "]+",
+    flags=re.UNICODE,
+)
+
+
+def sanitize_ui_text(text):
+    """Quita emojis/símbolos decorativos del texto mostrado en la UI."""
+    if not text:
+        return ""
+    s = _EMOJI_UI_RE.sub("", str(text))
+    return " ".join(s.split())
+
+
+def _assets_dir():
+    if getattr(sys, "frozen", False):
+        return os.path.join(sys._MEIPASS, "assets")
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+
+
+def create_wordmark_label(parent, height=40, pady=(0, 12), pack_opts=None):
+    """Logo cósmico ARGUS (assets/argus-wordmark.png). Sin emojis."""
+    try:
+        bg = parent.cget("bg")
+    except Exception:
+        bg = "#04030e"
+
+    def _fallback_text():
+        return tk.Label(
+            parent, text="ARGUS",
+            font=("Segoe UI", max(14, height // 3), "bold"),
+            bg=bg, fg="#8b7bff",
+        )
+
+    def _do_pack(lbl):
+        if pack_opts is False:
+            return
+        if isinstance(pack_opts, dict):
+            lbl.pack(**pack_opts)
+        else:
+            lbl.pack(pady=pady)
+
+    path = os.path.join(_assets_dir(), "argus-wordmark.png")
+    if not _PIL_OK or not os.path.isfile(path):
+        lbl = _fallback_text()
+        _do_pack(lbl)
+        return lbl
+    try:
+        img = Image.open(path).convert("RGBA")
+        iw, ih = img.size
+        nh = max(16, int(height))
+        nw = max(40, int(iw * nh / max(ih, 1)))
+        img = img.resize((nw, nh), Image.LANCZOS)
+        photo = ImageTk.PhotoImage(img)
+        lbl = tk.Label(parent, image=photo, bg=bg)
+        lbl.image = photo
+        _do_pack(lbl)
+        return lbl
+    except Exception:
+        lbl = _fallback_text()
+        _do_pack(lbl)
+        return lbl
+
+
+def create_shield_label(parent, size=56, pady=(0, 12), pack_opts=None):
+    """Compat: usa el wordmark cósmico (height ~= size)."""
+    return create_wordmark_label(parent, height=size, pady=pady, pack_opts=pack_opts)
+
+
+class _CanvasTextProxy:
+    """Texto en canvas (compatible con Label.config / cget de main.py)."""
+
+    def __init__(self, canvas, item_id):
+        self._canvas = canvas
+        self._item_id = item_id
+
+    @staticmethod
+    def _clean_status(text):
+        """El % vive en el sol; no repetir (12%) en la línea de estado."""
+        t = sanitize_ui_text(str(text or ''))
+        return re.sub(r'\s*\(\s*\d+\s*%\s*\)\s*$', '', t).strip() or t
+
+    def config(self, **kw):
+        if 'text' in kw:
+            txt = str(kw['text'])
+            if getattr(ModernUI, '_hud_status_proxy', None) is self:
+                txt = self._clean_status(txt)
+            self._canvas.itemconfig(self._item_id, text=txt)
+        if 'fg' in kw:
+            self._canvas.itemconfig(self._item_id, fill=kw['fg'])
+
+    def cget(self, key):
+        if key == 'text':
+            return self._canvas.itemcget(self._item_id, 'text')
+        if key == 'fg':
+            return self._canvas.itemcget(self._item_id, 'fill')
+        return ''
+
+
+class _CanvasBarProxy:
+    """Barra de progreso dibujada en el canvas de fondo."""
+
+    def __init__(self, draw_fn):
+        self._draw = draw_fn
+
+
 class ModernUI:
-    """Argus Scanner — Minimal × Eye Hybrid UI."""
+    """Argus Scanner — UI cósmica (alineada con Argus Vault / web)."""
+
+    # Color clave para “agujeros” sobre el fondo animado (Windows).
+    UI_CHROMA = '#010102'
+    SCAN_BG_ASSET = 'cosmic-scan-bg.gif'
 
     COLORS = {
-        'bg_primary':     '#09090b',
-        'bg_secondary':   '#0f0f11',
-        'bg_card':        '#111113',
-        'bg_hover':       '#1a1a1e',
-        'text_primary':   '#f5f5f5',
-        'text_secondary': '#a1a1aa',
-        'text_muted':     '#3f3f46',
-        'accent':         '#B87333',
-        'accent_light':   '#E8A86F',
-        'accent_hover':   '#D4915A',
-        'accent_deep':    '#6B3A1D',
-        'accent_glow':    '#FFC899',
-        'green':          '#22c55e',
-        'green_glow':     '#34D399',
-        'amber':          '#FCD34D',
-        'red':            '#f87171',
+        'bg_primary':     '#04030e',
+        'bg_secondary':   '#0a0a1f',
+        'bg_card':        '#12122a',
+        'bg_hover':       '#1a1a3a',
+        'bg_inset':       '#0d0d20',
+        'text_primary':   '#ECEDFF',
+        'text_secondary': '#A6A8D0',
+        'text_muted':     '#7E81AD',
+        'accent':         '#8b7bff',
+        'accent_light':   '#46e6ff',
+        'accent_hover':   '#a89bff',
+        'accent_deep':    '#3d3580',
+        'accent_glow':    '#46e6ff',
+        'accent_muted':   '#1a1835',
+        'accent_soft':    '#12122a',
+        'success_soft':   '#0d2e28',
+        'green':          '#34d399',
+        'green_glow':     '#6ee7b7',
+        'amber':          '#fbbf24',
+        'red':            '#f4506e',
         'red_deep':       '#DC2626',
-        'blue':           '#7DD3FC',
-        'gold':           '#D4A017',
-        'border':         '#1f1f23',
-        'border_bright':  '#27272a',
-        'separator':      '#18181b',
+        'blue':           '#46e6ff',
+        'gold':           '#c4b5fd',
+        'border':         '#252340',
+        'border_bright':  '#3d3580',
+        'separator':      '#18182e',
     }
 
     FONTS = {
@@ -89,6 +210,7 @@ class ModernUI:
     _shimmer_offset = 0
     _app_version = ''
     _root_ref = None
+    _quit_callback = None
     _phase_dots_canvas = None
     _risk_canvas = None
     _risk_label = None
@@ -113,13 +235,31 @@ class ModernUI:
     _shield_images = []
     _shield_items = []
     _bg_anim_id = None
+    _section_bg_canvas = None
+    _section_bg_image_id = None
+    _section_bg_frames = None
+    _section_bg_photos = None
+    _section_bg_anim_id = None
 
-    # orbit animation
+    # sistema solar (dibujado sobre el fondo animado)
     _orbit_canvas = None
     _orbit_after_id = None
-    _orbit_angle = 0.0
+    _orbit_arc = None
     _orbit_pct_text = None
     _orbit_pct_sign = None
+    _solar_planets = []
+    _solar_cx = _solar_cy = _solar_r = 0
+    _hud_status_id = None
+    _hud_detail_id = None
+    _hud_timer_id = None
+    _hud_resources_id = None
+    _hud_bar_y = 0
+    _solar_layout_key = None
+    _solar_reposition_after = None
+
+    @classmethod
+    def set_quit_callback(cls, callback):
+        cls._quit_callback = callback
 
     @classmethod
     def set_app_version(cls, version: str):
@@ -128,6 +268,10 @@ class ModernUI:
     @classmethod
     def set_scanning_active(cls, active: bool):
         cls._scanning_active = bool(active)
+        if active:
+            cls._start_solar_animation()
+        else:
+            cls._stop_solar_animation()
 
     @classmethod
     def _apply_ttk_style(cls):
@@ -159,81 +303,140 @@ class ModernUI:
     #  FLOATING SHIELD BACKGROUND
     # ══════════════════════════════════════════════════════════════════════
     @classmethod
+    def _paint_nebula_on_canvas(cls, canvas, tag='nebula'):
+        """Gradiente cósmico en un canvas (reutilizable en root y sección de escaneo)."""
+        canvas.delete(tag)
+        w = max(canvas.winfo_width(), 400)
+        h = max(canvas.winfo_height(), 320)
+        canvas.create_oval(
+            -w * 0.2, -h * 0.15, w * 0.55, h * 0.45,
+            fill='#15122a', outline='', tags=tag)
+        canvas.create_oval(
+            w * 0.35, -h * 0.1, w * 1.1, h * 0.42,
+            fill='#1a1038', outline='', tags=tag)
+        canvas.create_oval(
+            w * 0.1, h * 0.45, w * 0.9, h * 1.05,
+            fill='#0c1428', outline='', tags=tag)
+        canvas.create_oval(
+            w * 0.25, h * 0.2, w * 0.75, h * 0.55,
+            fill='#121830', outline='', tags=tag)
+
+    @classmethod
     def _create_floating_bg(cls, parent):
+        """Fondo cósmico en la ventana raíz."""
         C = cls.COLORS
         canvas = tk.Canvas(parent, bg=C['bg_primary'], highlightthickness=0, bd=0)
         canvas.place(x=0, y=0, relwidth=1.0, relheight=1.0)
         cls._bg_canvas = canvas
-
-        b64 = _load_shield_b64()
-        if not b64 or not _PIL_OK:
-            return canvas
-
-        try:
-            raw = base64.b64decode(b64)
-            base_img = Image.open(io.BytesIO(raw)).convert('RGBA')
-        except Exception:
-            return canvas
-
         cls._shield_images = []
         cls._shield_items = []
 
-        sizes = [28, 34, 40, 48, 56]
-        num_shields = 7
+        def _paint(_e=None):
+            cls._paint_nebula_on_canvas(canvas)
 
-        def _make_ghost(img, alpha_factor):
-            r, g, b, a = img.split()
-            a = a.point(lambda p: int(p * alpha_factor))
-            return Image.merge('RGBA', (r, g, b, a))
+        canvas.bind('<Configure>', _paint)
+        canvas.after(100, _paint)
+        return canvas
 
-        for i in range(num_shields):
-            sz = sizes[i % len(sizes)]
-            alpha = random.uniform(0.03, 0.08)
-            ghost = _make_ghost(base_img.resize((sz, sz), Image.LANCZOS), alpha)
-            photo = ImageTk.PhotoImage(ghost)
-            cls._shield_images.append(photo)
+    @classmethod
+    def _scan_bg_reduced_motion(cls) -> bool:
+        try:
+            return bool(getattr(cls, '_ui_prefs', {}).get('ui_reduced_motion'))
+        except Exception:
+            return False
 
-            x = random.randint(0, 620)
-            y = random.randint(0, 480)
-            vx = random.uniform(-0.2, 0.2)
-            vy = random.uniform(-0.15, 0.15)
-            if abs(vx) < 0.04:
-                vx = 0.08
-            if abs(vy) < 0.04:
-                vy = 0.06
+    @classmethod
+    def _load_scan_bg_frames(cls):
+        if cls._section_bg_frames is not None:
+            return cls._section_bg_frames
+        cls._section_bg_frames = []
+        if not _PIL_OK:
+            return cls._section_bg_frames
+        path = os.path.join(cls._base_path(), 'assets', cls.SCAN_BG_ASSET)
+        if not os.path.isfile(path):
+            return cls._section_bg_frames
+        try:
+            im = Image.open(path)
+            photos = []
+            idx = 0
+            while True:
+                try:
+                    im.seek(idx)
+                except EOFError:
+                    break
+                photos.append(ImageTk.PhotoImage(im.copy().convert('RGB')))
+                idx += 1
+            cls._section_bg_frames = photos
+            cls._section_bg_photos = photos
+        except Exception:
+            cls._section_bg_frames = []
+        return cls._section_bg_frames
 
-            item_id = canvas.create_image(x, y, image=photo, anchor='center')
-            cls._shield_items.append({
-                'id': item_id, 'x': float(x), 'y': float(y),
-                'vx': vx, 'vy': vy, 'sz': sz,
-            })
-
-        def _animate():
+    @classmethod
+    def _stop_section_bg_anim(cls):
+        if cls._section_bg_anim_id and cls._root_ref:
             try:
-                cw = canvas.winfo_width()
-                ch = canvas.winfo_height()
-                if cw < 10:
-                    cw = 620
-                if ch < 10:
-                    ch = 480
-                for s in cls._shield_items:
-                    s['x'] += s['vx']
-                    s['y'] += s['vy']
-                    half = s['sz'] / 2
-                    if s['x'] < -half:
-                        s['x'] = cw + half
-                    elif s['x'] > cw + half:
-                        s['x'] = -half
-                    if s['y'] < -half:
-                        s['y'] = ch + half
-                    elif s['y'] > ch + half:
-                        s['y'] = -half
-                    canvas.coords(s['id'], s['x'], s['y'])
-                cls._bg_anim_id = canvas.after(50, _animate)
+                cls._root_ref.after_cancel(cls._section_bg_anim_id)
+            except Exception:
+                pass
+        cls._section_bg_anim_id = None
+
+    @classmethod
+    def _start_section_bg_anim(cls, canvas, image_id):
+        frames = cls._load_scan_bg_frames()
+        if len(frames) < 2 or cls._scan_bg_reduced_motion():
+            return
+
+        def _tick(idx=0):
+            try:
+                if not canvas.winfo_exists():
+                    return
+                canvas.itemconfig(image_id, image=frames[idx % len(frames)])
+                cls._raise_scan_layers(canvas)
+                cls._section_bg_anim_id = canvas.after(85, lambda: _tick((idx + 1) % len(frames)))
             except Exception:
                 pass
 
-        canvas.after(300, _animate)
+        cls._stop_section_bg_anim()
+        _tick(0)
+
+    @classmethod
+    def _raise_scan_layers(cls, canvas):
+        try:
+            canvas.tag_lower('scan_bg')
+            for tag in ('hud_bar', 'solar', 'hud'):
+                canvas.tag_raise(tag)
+        except Exception:
+            pass
+
+    @classmethod
+    def _create_section_bg(cls, parent):
+        """Fondo animado (GIF) o nebulosa estática de respaldo."""
+        C = cls.COLORS
+        canvas = tk.Canvas(parent, bg=C['bg_primary'], highlightthickness=0, bd=0)
+        canvas.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+        cls._section_bg_canvas = canvas
+        frames = cls._load_scan_bg_frames()
+
+        if frames:
+            def _place_img(_e=None):
+                canvas.delete('scan_bg')
+                cw = max(canvas.winfo_width(), 620)
+                ch = max(canvas.winfo_height(), 440)
+                cls._section_bg_image_id = canvas.create_image(
+                    cw // 2, ch // 2, image=frames[0], tags='scan_bg')
+                cls._raise_scan_layers(canvas)
+                cls._start_section_bg_anim(canvas, cls._section_bg_image_id)
+
+            canvas.bind('<Configure>', _place_img)
+            parent.after(80, _place_img)
+            return canvas
+
+        def _paint(_e=None):
+            cls._paint_nebula_on_canvas(canvas)
+
+        canvas.bind('<Configure>', _paint)
+        parent.after(50, _paint)
         return canvas
 
     # ══════════════════════════════════════════════════════════════════════
@@ -283,12 +486,19 @@ class ModernUI:
         except Exception:
             pass
         try:
-            png = os.path.join(base, 'assets', 'logo.png')
-            if os.path.exists(png) and _PIL_OK:
-                _img = Image.open(png).resize((32, 32), Image.LANCZOS)
-                _photo = ImageTk.PhotoImage(_img)
-                root.iconphoto(True, _photo)
-                root._icon_ref = _photo
+            for png_name in ('argus-wordmark.png', 'logo.png'):
+                png = os.path.join(base, 'assets', png_name)
+                if os.path.exists(png) and _PIL_OK:
+                    _img = Image.open(png).convert('RGBA')
+                    iw, ih = _img.size
+                    side = 32
+                    nh = side
+                    nw = max(side, int(iw * nh / max(ih, 1)))
+                    _img = _img.resize((nw, nh), Image.LANCZOS)
+                    _photo = ImageTk.PhotoImage(_img)
+                    root.iconphoto(True, _photo)
+                    root._icon_ref = _photo
+                    break
         except Exception:
             pass
 
@@ -318,8 +528,9 @@ class ModernUI:
             except Exception:
                 pass
             try:
-                copper_colorref = ctypes.c_int(0x003373B8)
-                ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 34, ctypes.byref(copper_colorref), ctypes.sizeof(copper_colorref))
+                border_colorref = ctypes.c_int(0x00FF7B8B)  # BGR #8b7bff
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                    hwnd, 34, ctypes.byref(border_colorref), ctypes.sizeof(border_colorref))
             except Exception:
                 pass
         except Exception:
@@ -370,18 +581,8 @@ class ModernUI:
         left = tk.Frame(inner, bg=C['bg_primary'])
         left.pack(side=tk.LEFT)
 
-        # Eye icon
-        tk.Label(left, text="\U0001F441\uFE0F",
-                 font=('Segoe UI', 11),
-                 bg=C['bg_primary']).pack(side=tk.LEFT, padx=(0, 6))
-
-        tk.Label(left, text="ARGUS",
-                 font=('Segoe UI', 10, 'bold'),
-                 bg=C['bg_primary'], fg=C['text_primary']).pack(side=tk.LEFT)
-
-        tk.Label(left, text=" \u00b7 ",
-                 font=('Segoe UI', 9),
-                 bg=C['bg_primary'], fg=C['border_bright']).pack(side=tk.LEFT)
+        # Logo cósmico ARGUS (sin emojis ni texto duplicado)
+        create_wordmark_label(left, height=24, pack_opts={'side': tk.LEFT, 'padx': (0, 10)})
 
         if cls._app_version:
             tk.Label(left, text=f"v{cls._app_version}",
@@ -423,8 +624,15 @@ class ModernUI:
             return b
 
         if r is not None:
+            def _close_app():
+                cb = cls._quit_callback
+                if callable(cb):
+                    cb()
+                else:
+                    r.destroy()
+
             _chrome_btn('\u2014', lambda: r.iconify())
-            _chrome_btn('\u2715', lambda: r.destroy(), hover_fg=C['red'])
+            _chrome_btn('\u2715', _close_app, hover_fg=C['red'])
 
         sep = tk.Frame(hdr, bg=C['border'], height=1)
         sep.pack(fill=tk.X, side=tk.BOTTOM)
@@ -437,61 +645,220 @@ class ModernUI:
         return hdr
 
     # ══════════════════════════════════════════════════════════════════════
-    #  ORBIT PROGRESS INDICATOR
+    #  SISTEMA SOLAR — indicador de carga (sin canvas negro)
     # ══════════════════════════════════════════════════════════════════════
     @classmethod
-    def _create_orbit(cls, parent, size=170):
+    def _stop_solar_animation(cls):
+        if cls._orbit_after_id and cls._orbit_canvas:
+            try:
+                cls._orbit_canvas.after_cancel(cls._orbit_after_id)
+            except Exception:
+                pass
+        cls._orbit_after_id = None
+
+    @classmethod
+    def _solar_tick(cls):
+        canvas = cls._orbit_canvas
+        if canvas is None:
+            return
+        try:
+            if not canvas.winfo_exists():
+                return
+            cx, cy = cls._solar_cx, cls._solar_cy
+            for p in cls._solar_planets:
+                p['angle'] += p['speed']
+                x = cx + p['r'] * math.cos(p['angle'])
+                y = cy + p['r'] * math.sin(p['angle'])
+                s = p['size']
+                canvas.coords(p['id'], x - s, y - s, x + s, y + s)
+                hs = s + 2
+                canvas.coords(p['halo'], x - hs, y - hs, x + hs, y + hs)
+            cls._orbit_after_id = canvas.after(42, cls._solar_tick)
+        except Exception:
+            pass
+
+    @classmethod
+    def _start_solar_animation(cls):
+        cls._stop_solar_animation()
+        if cls._scan_bg_reduced_motion():
+            return
+        cls._solar_tick()
+
+    @classmethod
+    def _build_solar_system(cls, canvas, cx, cy, r_outer=78):
+        """Dibuja sol, órbitas y planetas sobre el fondo animado."""
         C = cls.COLORS
-        canvas = tk.Canvas(parent, width=size, height=size,
-                           bg=C['bg_primary'], highlightthickness=0, bd=0)
-
-        cx, cy = size // 2, size // 2
-        r1 = size // 2 - 4
-        r2 = r1 - 20
-
-        canvas.create_oval(cx - r1, cy - r1, cx + r1, cy + r1,
-                           outline='#1a1a1e', width=1)
-        canvas.create_oval(cx - r2, cy - r2, cx + r2, cy + r2,
-                           outline='#111113', width=1)
-
-        glow_r = 4
-        glow_id = canvas.create_oval(0, 0, glow_r * 2, glow_r * 2,
-                                     fill=C['accent'], outline='')
-        glow_halo = canvas.create_oval(0, 0, glow_r * 4, glow_r * 4,
-                                       fill='', outline=C['accent_deep'], width=1)
-
-        pct_text = canvas.create_text(cx, cy - 2, text="0",
-                                      font=('Segoe UI', 34, 'bold'),
-                                      fill=C['text_primary'])
-        pct_sign = canvas.create_text(cx + 30, cy + 8, text="%",
-                                      font=('Segoe UI', 14),
-                                      fill=C['text_muted'])
+        tag = 'solar'
+        canvas.delete(tag)
+        cls._stop_solar_animation()
 
         cls._orbit_canvas = canvas
-        cls._orbit_pct_text = pct_text
-        cls._orbit_pct_sign = pct_sign
+        cls._solar_cx, cls._solar_cy, cls._solar_r = cx, cy, r_outer
+        cls._solar_planets = []
 
-        cls._orbit_angle = 0.0
+        rings = (r_outer, r_outer - 24, r_outer - 42)
+        for ro in rings:
+            canvas.create_oval(
+                cx - ro, cy - ro, cx + ro, cy + ro,
+                outline='#2a2850', width=1, tags=tag,
+            )
 
-        def _spin():
+        cls._orbit_track = canvas.create_oval(
+            cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer,
+            outline='#3d3580', width=2, tags=tag,
+        )
+        cls._orbit_arc = canvas.create_arc(
+            cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer,
+            start=90, extent=0, outline=C['accent_light'], width=3,
+            style='arc', tags=tag,
+        )
+
+        for sr, col in ((16, '#3d3580'), (11, C['accent']), (7, C['accent_light']), (4, '#ECEDFF')):
+            canvas.create_oval(
+                cx - sr, cy - sr, cx + sr, cy + sr,
+                fill=col, outline='', tags=tag,
+            )
+
+        cls._orbit_pct_text = canvas.create_text(
+            cx, cy - 2, text='0',
+            font=('Segoe UI', 32, 'bold'),
+            fill=C['text_primary'], tags=tag,
+        )
+        cls._orbit_pct_sign = canvas.create_text(
+            cx + 28, cy + 6, text='%',
+            font=('Segoe UI', 13),
+            fill=C['text_muted'], tags=tag,
+        )
+
+        planet_specs = (
+            {'r': r_outer - 6, 'speed': 0.028, 'phase': 0.0, 'size': 5, 'color': C['accent_light']},
+            {'r': r_outer - 26, 'speed': -0.02, 'phase': 2.1, 'size': 4, 'color': C['accent']},
+            {'r': r_outer - 40, 'speed': 0.015, 'phase': 4.5, 'size': 3, 'color': C['gold']},
+            {'r': r_outer - 16, 'speed': 0.045, 'phase': 1.0, 'size': 2, 'color': C['green_glow']},
+        )
+        for spec in planet_specs:
+            ang = spec['phase']
+            pr = spec['r']
+            px = cx + pr * math.cos(ang)
+            py = cy + pr * math.sin(ang)
+            s = spec['size']
+            body = canvas.create_oval(
+                px - s, py - s, px + s, py + s,
+                fill=spec['color'], outline=C['accent_deep'], width=1, tags=tag,
+            )
+            halo = canvas.create_oval(
+                px - s - 2, py - s - 2, px + s + 2, py + s + 2,
+                outline=spec['color'], width=1, tags=tag,
+            )
+            cls._solar_planets.append({
+                **spec, 'id': body, 'halo': halo, 'angle': ang,
+            })
+
+        cls._layout_hud_text(canvas)
+        cls._sync_hud_proxies()
+        cls._raise_scan_layers(canvas)
+        cls._start_solar_animation()
+
+    @classmethod
+    def _sync_hud_proxies(cls):
+        canvas = cls._section_bg_canvas
+        for proxy, iid in (
+            (getattr(cls, '_hud_status_proxy', None), cls._hud_status_id),
+            (getattr(cls, '_hud_detail_proxy', None), cls._hud_detail_id),
+            (getattr(cls, '_hud_timer_proxy', None), cls._hud_timer_id),
+            (getattr(cls, '_hud_resources_proxy', None), cls._hud_resources_id),
+        ):
+            if proxy and iid and canvas:
+                proxy._canvas = canvas
+                proxy._item_id = iid
+
+    @classmethod
+    def _layout_hud_text(cls, canvas):
+        """Texto y barra bajo el sol — todo en el canvas (sin cajas negras)."""
+        C = cls.COLORS
+        cx, cy, ro = cls._solar_cx, cls._solar_cy, cls._solar_r
+        canvas.delete('hud')
+        canvas.delete('hud_bar')
+
+        cls._hud_bar_y = cy + ro + 72
+        cls._hud_status_id = canvas.create_text(
+            cx, cy + ro + 30, text='Iniciando escaneo...',
+            font=('Segoe UI', 11), fill=C['text_primary'],
+            tags='hud', anchor='center',
+        )
+        cls._hud_detail_id = canvas.create_text(
+            cx, cy + ro + 52, text='Preparando sistema...',
+            font=('Consolas', 9), fill=C['text_muted'],
+            tags='hud', anchor='center',
+        )
+        cls._hud_timer_id = canvas.create_text(
+            cx, cls._hud_bar_y + 28, text='00:00:00',
+            font=('Consolas', 13, 'bold'), fill=C['accent_light'],
+            tags='hud', anchor='center',
+        )
+        cls._hud_resources_id = canvas.create_text(
+            cx, cls._hud_bar_y + 50, text='',
+            font=('Segoe UI', 8), fill=C['text_muted'],
+            tags='hud', anchor='center',
+        )
+        cls._draw_hud_bar(0)
+
+    @classmethod
+    def _draw_hud_bar(cls, pct_val):
+        canvas = cls._section_bg_canvas
+        if canvas is None:
+            return
+        C = cls.COLORS
+        cx, y = cls._solar_cx, cls._hud_bar_y
+        half = 130
+        canvas.delete('hud_bar')
+        canvas.create_rectangle(
+            cx - half, y, cx + half, y + 3,
+            fill=C['border'], outline='', tags='hud_bar',
+        )
+        fw = max(0, int(half * 2 * float(pct_val) / 100))
+        if fw > 0:
+            canvas.create_rectangle(
+                cx - half, y, cx - half + fw, y + 3,
+                fill=C['accent'], outline='', tags='hud_bar',
+            )
+            tip = min(14, fw)
+            canvas.create_rectangle(
+                cx - half + fw - tip, y, cx - half + fw, y + 3,
+                fill=C['accent_light'], outline='', tags='hud_bar',
+            )
+        cls._raise_scan_layers(canvas)
+
+    @classmethod
+    def _attach_solar_system(cls, parent):
+        canvas = cls._section_bg_canvas
+        if canvas is None:
+            return
+
+        def _reposition(_e=None):
             try:
-                cls._orbit_angle += 0.04
-                if cls._orbit_angle > 2 * math.pi:
-                    cls._orbit_angle -= 2 * math.pi
-                gx = cx + r1 * math.cos(cls._orbit_angle)
-                gy = cy + r1 * math.sin(cls._orbit_angle)
-                canvas.coords(glow_id,
-                              gx - glow_r, gy - glow_r,
-                              gx + glow_r, gy + glow_r)
-                canvas.coords(glow_halo,
-                              gx - glow_r * 2, gy - glow_r * 2,
-                              gx + glow_r * 2, gy + glow_r * 2)
-                cls._orbit_after_id = canvas.after(30, _spin)
+                ch = max(parent.winfo_height(), 360)
+                cw = max(parent.winfo_width(), 400)
+                key = (cw, ch)
+                if key == cls._solar_layout_key:
+                    return
+                cls._solar_layout_key = key
+                cx, cy = cw // 2, 34 + int((ch - 34) * 0.34)
+                cls._build_solar_system(canvas, cx, cy, r_outer=min(78, int(cw * 0.12)))
             except Exception:
                 pass
 
-        canvas.after(200, _spin)
-        return canvas
+        def _reposition_debounced(_e=None):
+            if cls._solar_reposition_after and cls._root_ref:
+                try:
+                    cls._root_ref.after_cancel(cls._solar_reposition_after)
+                except Exception:
+                    pass
+            r = cls._root_ref or parent
+            cls._solar_reposition_after = r.after(120, _reposition)
+
+        parent.bind('<Configure>', _reposition_debounced, add='+')
+        parent.after(150, _reposition)
 
     @classmethod
     def _update_orbit_pct(cls, pct_val):
@@ -505,6 +872,10 @@ class ModernUI:
                 cls._orbit_canvas.coords(cls._orbit_pct_sign,
                                          tx_bbox[2] + 4,
                                          (tx_bbox[1] + tx_bbox[3]) // 2 + 6)
+            arc = getattr(cls, '_orbit_arc', None)
+            if arc is not None:
+                extent = max(0, min(360, int(360 * iv / 100)))
+                cls._orbit_canvas.itemconfig(arc, extent=-extent)
         except Exception:
             pass
 
@@ -520,75 +891,66 @@ class ModernUI:
         outer.place(x=0, y=40, relwidth=1.0, relheight=1.0)
         outer.lift()
 
-        if cls._bg_canvas:
-            cls._bg_canvas.tk.call('lower', cls._bg_canvas._w)
+        cls._create_section_bg(outer)
 
-        # Orbit indicator
-        orbit = cls._create_orbit(outer, size=170)
-        orbit.place(relx=0.5, rely=0.36, anchor='center')
+        # Barra superior
+        top = tk.Frame(outer, bg=C['bg_secondary'], height=34)
+        top.place(x=0, y=0, relwidth=1.0, height=34)
+        top.pack_propagate(False)
+        cls._progress_top_bar = top
 
-        # Status text below orbit
-        status = tk.Label(outer, text="Iniciando escaneo...",
-                          font=('Segoe UI', 11),
-                          bg=C['bg_primary'], fg=C['text_secondary'])
-        status.place(relx=0.5, rely=0.59, anchor='center')
-        cls._status_label_ref = status
+        tk.Label(
+            top, text='PROGRESO DEL ESCANEO',
+            font=('Segoe UI', 7, 'bold'),
+            bg=C['bg_secondary'], fg=C['text_muted'],
+        ).pack(side=tk.LEFT, padx=(14, 0), pady=8)
 
-        detail = tk.Label(outer, text="Preparando sistema...",
-                          font=('Consolas', 9),
-                          bg=C['bg_primary'], fg=C['text_muted'])
-        detail.place(relx=0.5, rely=0.64, anchor='center')
-        cls._detail_label_ref = detail
+        cancel_row = tk.Frame(top, bg=C['bg_secondary'])
+        cancel_row.pack(side=tk.RIGHT, padx=(0, 10), pady=4)
+        cancel_btn = tk.Button(
+            cancel_row, text='Cancelar escaneo',
+            font=('Segoe UI', 8),
+            bg=C['bg_secondary'], fg=C['text_secondary'],
+            activebackground=C['bg_hover'],
+            activeforeground=C['red'],
+            relief=tk.FLAT, bd=0, cursor='hand2',
+            padx=6, pady=2,
+        )
+        cancel_btn.pack(side=tk.RIGHT)
 
-        # Thin progress bar
-        bar_frame = tk.Frame(outer, bg=C['bg_primary'])
-        bar_frame.place(relx=0.5, rely=0.74, anchor='center', width=260, height=20)
+        files_lbl = tk.Label(
+            top, text='0 archivos',
+            font=('Consolas', 8),
+            bg=C['bg_secondary'], fg=C['text_muted'],
+        )
+        files_lbl.pack(side=tk.RIGHT, padx=(0, 14), pady=8)
+        cls._files_count_label = files_lbl
 
-        bar_c = tk.Canvas(bar_frame, height=3,
-                          bg=C['border'], highlightthickness=0, bd=0)
-        bar_c.pack(fill=tk.X, pady=(0, 0))
-        bar_c._shimmer_x = 0
+        tk.Frame(outer, bg=C['border'], height=1).place(x=0, y=34, relwidth=1.0, height=1)
+
+        canvas = cls._section_bg_canvas
+        cls._hud_status_proxy = _CanvasTextProxy(canvas, 0)
+        cls._hud_detail_proxy = _CanvasTextProxy(canvas, 0)
+        cls._hud_timer_proxy = _CanvasTextProxy(canvas, 0)
+        cls._hud_resources_proxy = _CanvasTextProxy(canvas, 0)
+        cls._status_label_ref = cls._hud_status_proxy
+        cls._detail_label_ref = cls._hud_detail_proxy
+        cls._timer_widget = cls._hud_timer_proxy
+
+        cls._attach_solar_system(outer)
 
         def _draw_bar(pct_val):
-            bar_c.delete('bar')
-            w = bar_c.winfo_width()
-            if w < 2:
-                return
-            fw = max(0, int(w * pct_val / 100))
-            if fw > 0:
-                bar_c.create_rectangle(0, 0, fw, 3,
-                                       fill=C['accent'], outline='', tags='bar')
-                tip_w = min(16, fw)
-                bar_c.create_rectangle(fw - tip_w, 0, fw, 3,
-                                       fill=C['accent_light'], outline='', tags='bar')
+            cls._draw_hud_bar(pct_val)
             cls._update_orbit_pct(pct_val)
 
-        bar_c._draw = _draw_bar
+        bar_c = _CanvasBarProxy(_draw_bar)
 
-        # Timer + small percentage
-        meta = tk.Frame(outer, bg=C['bg_primary'])
-        meta.place(relx=0.5, rely=0.78, anchor='center', width=260)
-
-        timer = tk.Label(meta, text="00:00:00",
-                         font=('Consolas', 8),
-                         bg=C['bg_primary'], fg=C['text_muted'])
-        timer.pack(side=tk.LEFT)
-
-        pct_lbl = tk.Label(meta, text="0%",
-                           font=('Segoe UI', 8, 'bold'),
-                           bg=C['bg_primary'], fg=C['text_muted'])
-        pct_lbl.pack(side=tk.RIGHT)
-
-        resources = tk.Label(outer, text="",
-                             font=('Segoe UI', 7),
-                             bg=C['bg_primary'], fg=C['text_muted'])
-        resources.place(relx=0.5, rely=0.83, anchor='center')
-
-        # Hidden counters (API compat)
         cls._counter_labels = {}
         for key in ('critical', 'suspicious', 'low', 'clean'):
-            cls._counter_labels[key] = tk.Label(outer, text="",
-                                                bg=C['bg_primary'], fg=C['bg_primary'])
+            cls._counter_labels[key] = tk.Label(
+                outer, text='',
+                bg=C['bg_primary'], fg=C['bg_primary'],
+            )
 
         cls._risk_canvas = None
         cls._risk_label = None
@@ -596,37 +958,20 @@ class ModernUI:
         cls._ram_bar_canvas = None
         cls._phase_dots_canvas = None
 
-        # Cancel button (subtle, bottom-right)
-        cancel_row = tk.Frame(outer, bg=C['bg_primary'])
-        cancel_row.place(relx=1.0, rely=1.0, anchor='se', x=-18, y=-14)
-        cancel_btn = tk.Button(cancel_row, text="\u2715 Cancelar",
-                               font=('Segoe UI', 8),
-                               bg=C['bg_primary'], fg=C['text_muted'],
-                               activebackground=C['bg_hover'],
-                               activeforeground=C['red'],
-                               relief=tk.FLAT, bd=0, cursor='hand2',
-                               padx=8, pady=3)
-        cancel_btn.pack()
-
-        # ttk bar compat
-        pb = ttk.Progressbar(outer, mode='determinate', maximum=100,
-                             style='Argus.Horizontal.TProgressbar')
-
-        try:
-            cls.create_sparkline(outer)
-            cls.attach_files_counter(outer)
-        except Exception:
-            pass
+        pb = ttk.Progressbar(
+            outer, mode='determinate', maximum=100,
+            style='Argus.Horizontal.TProgressbar',
+        )
 
         return {
             'container':  outer,
             'card':       outer,
-            'status':     status,
+            'status':     cls._hud_status_proxy,
             'progress':   pb,
-            'detail':     detail,
-            'timer':      timer,
-            'resources':  resources,
-            'percent':    pct_lbl,
+            'detail':     cls._hud_detail_proxy,
+            'timer':      cls._hud_timer_proxy,
+            'resources':  cls._hud_resources_proxy,
+            'percent':    None,
             '_canvas':    bar_c,
             '_ring':      bar_c,
             'cancel_row': cancel_row,
@@ -768,7 +1113,7 @@ class ModernUI:
     def format_phase_label(cls, text, max_len=52):
         if not text:
             return ""
-        one_line = " ".join(str(text).split())
+        one_line = sanitize_ui_text(str(text))
         return one_line[:max_len - 1] + "\u2026" if len(one_line) > max_len else one_line
 
     @classmethod
@@ -843,6 +1188,9 @@ class ModernUI:
             cls._ring_pct = float(pct_val)
             if hasattr(canvas, '_draw'):
                 canvas._draw(pct_val)
+            else:
+                cls._draw_hud_bar(pct_val)
+                cls._update_orbit_pct(pct_val)
         except Exception:
             pass
 
