@@ -244,6 +244,7 @@
             <div class="nav-links">
                 <a href="#que-es" class="nav-link">Sistema</a>
                 <a href="#como-funciona" class="nav-link">Proceso</a>
+                <a href="#vault" class="nav-link">Vault</a>
                 <a href="#planes" class="nav-link">Planes</a>
                 <a href="#comunidad" class="nav-link">Comunidad</a>
                 <a href="{{ discord_invite }}" class="discord-pill" target="_blank" rel="noopener" aria-label="Únete a nuestro Discord">
@@ -392,6 +393,66 @@
             </div>
         </div>
     </section>
+
+    <div class="divider"></div>
+
+    <!-- ARGUS VAULT -->
+    <section class="section" id="vault">
+        <div class="section-inner">
+            <div class="section-header reveal">
+                <span class="section-eyebrow">Efecto de red</span>
+                <h2 class="section-title">Argus <span>Vault</span></h2>
+                <p class="section-subtitle">La reputación anti-cheat de cada jugador, compartida entre todos los servidores de la red. Verificá a un sospechoso <strong>antes</strong> del Screen Share.</p>
+            </div>
+            <div class="stats-inner" id="vault-live" style="grid-template-columns:repeat(3,1fr); max-width:760px; margin:0 auto 30px; display:none;">
+                <div class="stat-item">
+                    <div class="stat-value" id="vault-players">0</div>
+                    <div class="stat-label">Jugadores rastreados</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="vault-hacks">0</div>
+                    <div class="stat-label">Hacks confirmados</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="vault-week">0</div>
+                    <div class="stat-label">Esta semana</div>
+                </div>
+            </div>
+            <div class="reveal" style="text-align:center;">
+                <a href="/reputacion" class="btn-hero-primary" style="display:inline-flex;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v5c0 4.4-3 8.3-7 9.5C8 19.3 5 15.4 5 11V6l7-3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9.5 11.5l1.8 1.8 3.2-3.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Consultar reputación
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <script>
+    (function () {
+        var box = document.getElementById('vault-live');
+        if (!box) return;
+        function anim(el, target) {
+            if (!el) return;
+            if (!target) { el.textContent = '0'; return; }
+            var dur = 1000, start = null;
+            function tick(now) {
+                if (start === null) start = now;
+                var p = Math.min((now - start) / dur, 1);
+                var e = 1 - Math.pow(1 - p, 3);
+                el.textContent = Math.round(target * e).toLocaleString('es');
+                if (p < 1) requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+        }
+        fetch('/api/public/vault-stats').then(function (r) { return r.json(); }).then(function (s) {
+            if (!s || (!s.players && !s.scans)) return;
+            box.style.display = 'grid';
+            anim(document.getElementById('vault-players'), s.players || 0);
+            anim(document.getElementById('vault-hacks'), s.hacks || 0);
+            anim(document.getElementById('vault-week'), s.hacks_7d || 0);
+        }).catch(function () {});
+    })();
+    </script>
 
     <div class="divider"></div>
 
