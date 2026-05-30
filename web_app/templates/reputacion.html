@@ -221,6 +221,15 @@
         .wanted-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
         .wanted-head h2 { font-family: var(--display); font-weight: 800; font-size: 22px; }
         .wanted-head .sub { font-family: var(--mono); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-d); }
+        .wanted-toggle { display: flex; gap: 4px; background: rgba(10,9,26,.5); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+        .wt-btn {
+            background: transparent; border: none; color: var(--text-d);
+            font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+            padding: 6px 12px; border-radius: 7px; cursor: pointer; transition: .18s;
+        }
+        .wt-btn.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #06031a; }
+        .wt-btn:not(.active):hover { color: var(--text); }
+        .wanted-empty { color: var(--text-d); font-size: 13px; padding: 20px; text-align: center; font-family: var(--mono); }
         .wanted-list { display: flex; flex-direction: column; gap: 8px; }
         .wanted-row {
             display: flex; align-items: center; gap: 14px; cursor: pointer;
@@ -286,7 +295,10 @@
         <section class="wanted-sec" id="wanted" style="display:none">
             <div class="wanted-head">
                 <h2>🎯 Más buscados</h2>
-                <span class="sub">Top hacks confirmados · red Argus</span>
+                <div class="wanted-toggle">
+                    <button type="button" class="wt-btn active" data-mode="hist">Histórico</button>
+                    <button type="button" class="wt-btn" data-mode="recent">Activos 7d</button>
+                </div>
             </div>
             <div class="wanted-list" id="wanted-list"></div>
         </section>
@@ -428,55 +440,107 @@
         // ── Más buscados ──
         var wantedSec = document.getElementById('wanted');
         var wantedList = document.getElementById('wanted-list');
+        var wantedPlayers = [];
+        var wantedMode = 'hist';
+
+        function renderWantedList() {
+            var players = wantedPlayers.slice();
+            if (wantedMode === 'recent') {
+                players = players
+                    .filter(function (p) { return p.recent_hacks_7d > 0; })
+                    .sort(function (a, b) { return b.recent_hacks_7d - a.recent_hacks_7d; });
+            }
+            if (!players.length) {
+                wantedList.innerHTML = '<div class="wanted-empty">' +
+                    (wantedMode === 'recent' ? 'Sin hacks confirmados en los últimos 7 días.' : 'Sin datos.') + '</div>';
+                return;
+            }
+            var html = '';
+            players.forEach(function (p, i) {
+                var pct = Math.round((p.hack_rate || 0) * 100);
+                var hot = p.recent_hacks_7d > 0 ? '<span class="wanted-hot" title="Hacks en los últimos 7 días">🔥' + p.recent_hacks_7d + '</span>' : '';
+                var metric = wantedMode === 'recent'
+                    ? '<span class="wanted-stat"><b>' + p.recent_hacks_7d + '</b> hacks 7d · ' + p.hacks + ' total</span>'
+                    : '<span class="wanted-stat"><b>' + p.hacks + '</b> hacks · ' + p.scans + ' scans</span>';
+                html += '<button type="button" class="wanted-row" data-u="' + esc(p.username) + '">';
+                html +=   '<span class="wanted-rank">' + (i + 1) + '</span>';
+                html +=   '<span class="wanted-name">' + esc(p.username) + hot + '</span>';
+                html +=   metric;
+                html +=   '<span class="wanted-rate">' + pct + '%</span>';
+                html += '</button>';
+            });
+            wantedList.innerHTML = html;
+            Array.prototype.forEach.call(wantedList.querySelectorAll('.wanted-row'), function (el) {
+                el.addEventListener('click', function () {
+                    var u = el.getAttribute('data-u');
+                    input.value = u;
+                    history.replaceState(null, '', '/reputacion?u=' + encodeURIComponent(u));
+                    lookup(u);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                });
+            });
+        }
 
         function loadWanted() {
             fetch('/api/public/wanted')
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
-                    var players = (d && d.players) || [];
-                    if (!players.length) { wantedSec.style.display = 'none'; return; }
-                    var html = '';
-                    players.forEach(function (p, i) {
-                        var pct = Math.round((p.hack_rate || 0) * 100);
-                        var hot = p.recent_hacks_7d > 0 ? '<span class="wanted-hot" title="Hacks en los últimos 7 días">🔥' + p.recent_hacks_7d + '</span>' : '';
-                        html += '<button type="button" class="wanted-row" data-u="' + esc(p.username) + '">';
-                        html +=   '<span class="wanted-rank">' + (i + 1) + '</span>';
-                        html +=   '<span class="wanted-name">' + esc(p.username) + hot + '</span>';
-                        html +=   '<span class="wanted-stat"><b>' + p.hacks + '</b> hacks · ' + p.scans + ' scans</span>';
-                        html +=   '<span class="wanted-rate">' + pct + '%</span>';
-                        html += '</button>';
-                    });
-                    wantedList.innerHTML = html;
+                    wantedPlayers = (d && d.players) || [];
+                    if (!wantedPlayers.length) { wantedSec.style.display = 'none'; return; }
                     wantedSec.style.display = 'block';
-                    Array.prototype.forEach.call(wantedList.querySelectorAll('.wanted-row'), function (el) {
-                        el.addEventListener('click', function () {
-                            var u = el.getAttribute('data-u');
-                            input.value = u;
-                            history.replaceState(null, '', '/reputacion?u=' + encodeURIComponent(u));
-                            lookup(u);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                        });
-                    });
+                    renderWantedList();
                 })
                 .catch(function () { wantedSec.style.display = 'none'; });
         }
+
+        Array.prototype.forEach.call(document.querySelectorAll('.wt-btn'), function (b) {
+            b.addEventListener('click', function () {
+                wantedMode = b.getAttribute('data-mode');
+                Array.prototype.forEach.call(document.querySelectorAll('.wt-btn'), function (x) {
+                    x.classList.toggle('active', x === b);
+                });
+                renderWantedList();
+            });
+        });
         loadWanted();
 
         // ── Stats globales del Vault (hero) ──
+        function animateCount(el, target) {
+            if (!target) { el.textContent = '0'; return; }
+            var dur = 900, start = null;
+            function tick(now) {
+                if (start === null) start = now;
+                var p = Math.min((now - start) / dur, 1);
+                var eased = 1 - Math.pow(1 - p, 3);
+                el.textContent = Math.round(target * eased).toLocaleString('es');
+                if (p < 1) requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+        }
+
         function loadVaultStats() {
             var el = document.getElementById('vault-stats');
             fetch('/api/public/vault-stats')
                 .then(function (r) { return r.json(); })
                 .then(function (s) {
                     if (!s || (!s.players && !s.scans)) { el.style.display = 'none'; return; }
-                    function n(x) { return (x || 0).toLocaleString('es'); }
+                    var items = [
+                        { v: s.players, k: 'Jugadores', hot: false },
+                        { v: s.scans, k: 'Scans', hot: false },
+                        { v: s.hacks, k: 'Hacks confirmados', hot: false },
+                        { v: s.hacks_7d, k: 'Hacks · 7 días', hot: true }
+                    ];
                     var html = '';
-                    html += '<div class="vstat"><span class="v">' + n(s.players) + '</span><span class="k">Jugadores</span></div>';
-                    html += '<div class="vstat"><span class="v">' + n(s.scans) + '</span><span class="k">Scans</span></div>';
-                    html += '<div class="vstat"><span class="v">' + n(s.hacks) + '</span><span class="k">Hacks confirmados</span></div>';
-                    html += '<div class="vstat hot"><span class="v">' + n(s.hacks_7d) + '</span><span class="k">Hacks · 7 días</span></div>';
+                    items.forEach(function (it) {
+                        html += '<div class="vstat' + (it.hot ? ' hot' : '') + '">' +
+                                '<span class="v" data-target="' + (it.v || 0) + '">0</span>' +
+                                '<span class="k">' + it.k + '</span></div>';
+                    });
                     el.innerHTML = html;
                     el.style.display = 'flex';
+                    Array.prototype.forEach.call(el.querySelectorAll('.v'), function (n) {
+                        animateCount(n, parseInt(n.getAttribute('data-target'), 10) || 0);
+                    });
                 })
                 .catch(function () { el.style.display = 'none'; });
         }
