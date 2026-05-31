@@ -6,20 +6,20 @@
 (function () {
   'use strict';
 
-  // ---- Coordenadas por país (nombre ES/EN + ISO2). Para el mapa en vivo. ----
+  // ---- Coordenadas por país (lat, lng — orden Leaflet). Capitales / hubs. ----
   var COUNTRY_COORDS = {
-    'argentina': [-38.4, -63.6], 'ar': [-38.4, -63.6],
-    'mexico': [23.6, -102.5], 'méxico': [23.6, -102.5], 'mx': [23.6, -102.5],
+    'argentina': [-34.6, -58.4], 'ar': [-34.6, -58.4],
+    'mexico': [19.4, -99.1], 'méxico': [19.4, -99.1], 'mx': [19.4, -99.1],
     'españa': [40.4, -3.7], 'espana': [40.4, -3.7], 'spain': [40.4, -3.7], 'es': [40.4, -3.7],
-    'colombia': [4.6, -74.3], 'co': [4.6, -74.3],
-    'chile': [-35.7, -71.5], 'cl': [-35.7, -71.5],
-    'peru': [-9.2, -75.0], 'perú': [-9.2, -75.0], 'pe': [-9.2, -75.0],
-    'venezuela': [6.4, -66.6], 've': [6.4, -66.6],
-    'ecuador': [-1.8, -78.2], 'ec': [-1.8, -78.2],
-    'bolivia': [-16.3, -63.6], 'bo': [-16.3, -63.6],
-    'paraguay': [-23.4, -58.4], 'py': [-23.4, -58.4],
-    'uruguay': [-32.5, -55.8], 'uy': [-32.5, -55.8],
-    'brasil': [-14.2, -51.9], 'brazil': [-14.2, -51.9], 'br': [-14.2, -51.9],
+    'colombia': [4.7, -74.1], 'co': [4.7, -74.1],
+    'chile': [-33.4, -70.6], 'cl': [-33.4, -70.6],
+    'peru': [-12.0, -77.0], 'perú': [-12.0, -77.0], 'pe': [-12.0, -77.0],
+    'venezuela': [10.5, -66.9], 've': [10.5, -66.9],
+    'ecuador': [-0.2, -78.5], 'ec': [-0.2, -78.5],
+    'bolivia': [-16.5, -68.1], 'bo': [-16.5, -68.1],
+    'paraguay': [-25.3, -57.6], 'py': [-25.3, -57.6],
+    'uruguay': [-34.9, -56.2], 'uy': [-34.9, -56.2],
+    'brasil': [-15.8, -47.9], 'brazil': [-15.8, -47.9], 'br': [-15.8, -47.9],
     'estados unidos': [37.1, -95.7], 'united states': [37.1, -95.7], 'usa': [37.1, -95.7], 'us': [37.1, -95.7],
     'guatemala': [15.8, -90.2], 'gt': [15.8, -90.2],
     'honduras': [15.2, -86.2], 'hn': [15.2, -86.2],
@@ -38,20 +38,17 @@
     'reino unido': [55.4, -3.4], 'united kingdom': [55.4, -3.4], 'gb': [55.4, -3.4], 'uk': [55.4, -3.4]
   };
 
-  function coordsFor(country) {
-    if (!country) return null;
-    var key = String(country).trim().toLowerCase();
-    if (COUNTRY_COORDS[key]) return COUNTRY_COORDS[key];
-    // jitter determinista para desconocidos, cerca del Atlántico
-    return null;
+  function countryKey(country) {
+    if (!country) return '';
+    return String(country).trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   }
 
-  function jitter(base, seed) {
-    var s = 0;
-    for (var i = 0; i < seed.length; i++) s += seed.charCodeAt(i);
-    var dx = ((s % 13) - 6) * 0.9;
-    var dy = (((s * 7) % 13) - 6) * 0.9;
-    return [base[0] + dx, base[1] + dy];
+  function coordsFor(country) {
+    var key = countryKey(country);
+    if (!key || key === 'desconocido' || key === 'unknown') return null;
+    if (COUNTRY_COORDS[key]) return COUNTRY_COORDS[key];
+    return null;
   }
 
   // ---- Estado ----
@@ -83,12 +80,17 @@
       attribution: '© OpenStreetMap · © CARTO', subdomains: 'abcd', maxZoom: 19
     }).addTo(map);
     markersLayer = L.layerGroup().addTo(map);
+    function fitMap() {
+      try { map.invalidateSize(); } catch (e) {}
+    }
+    setTimeout(fitMap, 80);
+    window.addEventListener('resize', fitMap);
   }
 
   function makePulseIcon(hit) {
     return L.divIcon({
       className: '', html: '<div class="wr-pulse' + (hit ? ' hit' : '') + '"></div>',
-      iconSize: [14, 14], iconAnchor: [7, 7]
+      iconSize: [14, 14], iconAnchor: [7, 7], popupAnchor: [0, -8]
     });
   }
 
@@ -99,9 +101,8 @@
     (points || []).forEach(function (p) {
       var c = coordsFor(p.country);
       if (!c) return;
-      var pos = jitter(c, p.country);
       var hit = (p.hits || 0) > 0;
-      L.marker(pos, { icon: makePulseIcon(hit) })
+      L.marker(c, { icon: makePulseIcon(hit) })
         .bindPopup('<b>' + escapeHtml(p.country) + '</b><br>' + p.count + ' scan(s)' +
           (hit ? '<br><span style="color:#F4506E">⚠ ' + p.hits + ' detección(es)</span>' : ''))
         .addTo(markersLayer);
@@ -115,9 +116,8 @@
     if (!map || !markersLayer) return;
     var c = coordsFor(country);
     if (!c) return;
-    var pos = jitter(c, country || 'x');
-    var m = L.marker(pos, { icon: makePulseIcon(hit) }).addTo(markersLayer);
-    try { map.flyTo(pos, Math.max(map.getZoom(), 4), { duration: 0.8 }); } catch (e) {}
+    var m = L.marker(c, { icon: makePulseIcon(hit) }).addTo(markersLayer);
+    try { map.flyTo(c, Math.max(map.getZoom(), 4), { duration: 0.8 }); } catch (e) {}
     m.bindPopup('<b>' + escapeHtml(country || 'Desconocido') + '</b><br>SS en vivo').openPopup();
   }
 
