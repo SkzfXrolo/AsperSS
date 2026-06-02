@@ -524,7 +524,7 @@
                     <div class="ga2-hero-text">
                         <div class="ga2-hero-label">ARGUS PROJECTS</div>
                         <h1 class="ga2-hero-title">Argus Scanner</h1>
-                        <p class="ga2-hero-desc">Sistema anti-cheat autónomo para servidores de Minecraft</p>
+                        <p class="ga2-hero-desc">SS forense v1.7: 89 módulos nuevos, licencia firmada, mouse/prison y arranque fluido sin congelar el PC</p>
                         <div class="ga2-hero-badges">
                             <span class="ga-badge ga-badge-version">v{{ scanner_version or '1.6.22' }}</span>
                             <span class="ga-badge ga-badge-platform">
@@ -601,6 +601,22 @@
                 </div>
             </div>
 
+            <!-- Filtros de escaneo (beta v1.7) -->
+            <div class="ss-link-card" id="scan-filters-beta" style="margin-top:14px">
+                <div class="ss-link-head">
+                    <span class="ss-link-badge">BETA · FILTROS</span>
+                    <span class="ss-link-expiry">exe + panel sincronizados</span>
+                </div>
+                <p class="ss-link-hint">Patrones/rutas que el scanner ignora al filtrar. Pack <strong>v1.7</strong>: <strong>89 módulos nuevos</strong> (28 scanners pkg + 28 SSForensics + 30 launchers/remote + 3 minado). <kbd>Ctrl+Shift+M</kbd> en el .exe para activar/desactivar. IA aprende FP sola cada noche.</p>
+                <textarea id="scan-filters-json" class="ss-link-input" rows="5" style="font-family:JetBrains Mono,monospace;font-size:11px"
+                    placeholder='{"exclude_patterns":["nvidia","discord"],"exclude_paths":["program files"],"min_confidence":30}'></textarea>
+                <div class="ss-link-row" style="margin-top:8px">
+                    <button class="ga2-btn-dl" type="button" id="scan-filters-save">Guardar filtros</button>
+                    <button class="ga2-btn-dl ga2-btn-ghost" type="button" id="scan-filters-load">Recargar</button>
+                </div>
+                <div class="ss-test-result" id="scan-filters-msg" hidden></div>
+            </div>
+
             <!-- Feed SS en vivo -->
             <div class="ss-livefeed-card" id="ss-livefeed" hidden>
                 <div class="ss-livefeed-head">
@@ -666,12 +682,12 @@
                         Capacidades de detección
                     </div>
                     <ul class="ga2-feat-list">
-                        <li><span class="ga2-feat-dot ga2-dot-red"></span>Ghost clients &amp; hacked mods</li>
-                        <li><span class="ga2-feat-dot ga2-dot-orange"></span>Java injection &amp; DLL hijacking</li>
-                        <li><span class="ga2-feat-dot ga2-dot-yellow"></span>Macro &amp; autoclicker</li>
-                        <li><span class="ga2-feat-dot ga2-dot-purple"></span>Historial de navegador</li>
-                        <li><span class="ga2-feat-dot ga2-dot-teal"></span>Descargas no ejecutadas</li>
-                        <li><span class="ga2-feat-dot ga2-dot-blue"></span>IA autoaprendizaje continuo</li>
+                        <li><span class="ga2-feat-dot ga2-dot-red"></span>Pack 89: pkg + SSForensics + launchers/remote</li>
+                        <li><span class="ga2-feat-dot ga2-dot-orange"></span>Mouse prison: peso, click-bug y uso pasado</li>
+                        <li><span class="ga2-feat-dot ga2-dot-yellow"></span>Licencia <code>argus_lic_</code> sin tipear token</li>
+                        <li><span class="ga2-feat-dot ga2-dot-purple"></span>Hashes y DB offline embebidos (~53 MiB)</li>
+                        <li><span class="ga2-feat-dot ga2-dot-teal"></span>Filtros empresa + IA aprende FP sola</li>
+                        <li><span class="ga2-feat-dot ga2-dot-blue"></span>Arranque async: token sin lagazo</li>
                     </ul>
                 </div>
                 <div class="ga2-changelog-card">
@@ -681,28 +697,36 @@
                     </div>
                     <ul class="ga2-cl-list">
                         <li>
-                            <span class="ga2-cl-tag ga2-tag-fix">FIX</span>
-                            Risk Score coherente con veredicto ensemble
-                        </li>
-                        <li>
-                            <span class="ga2-cl-tag ga2-tag-fix">FIX</span>
-                            Fuera de instancia → SOSPECHOSO, no CRITICAL
-                        </li>
-                        <li>
-                            <span class="ga2-cl-tag ga2-tag-fix">FIX</span>
-                            SS_Manual_* ya no se marca como Forense
-                        </li>
-                        <li>
-                            <span class="ga2-cl-tag ga2-tag-fix">FIX</span>
-                            WerSvc eliminado — demasiados falsos positivos
+                            <span class="ga2-cl-tag ga2-tag-new">NEW</span>
+                            Pack v1.7: 89 módulos forenses (28 pkg + 28 SSForensics + 30 nov + 3 minado)
                         </li>
                         <li>
                             <span class="ga2-cl-tag ga2-tag-new">NEW</span>
-                            Dominios hack clients detectados en red
+                            Offline real: SQLite, catálogo SHA256, lexicon, guía staff embebida
                         </li>
                         <li>
                             <span class="ga2-cl-tag ga2-tag-new">NEW</span>
-                            Esquinas redondeadas en Windows 10
+                            Mouse: evidencia histórica (setupapi, Event Log, BAM, Prefetch)
+                        </li>
+                        <li>
+                            <span class="ga2-cl-tag ga2-tag-new">NEW</span>
+                            Beta <kbd>Ctrl+Shift+M</kbd> — activar módulos por toggle
+                        </li>
+                        <li>
+                            <span class="ga2-cl-tag ga2-tag-fix">FIX</span>
+                            Token en hilo aparte — ya no congela la app ni el PC al autenticar
+                        </li>
+                        <li>
+                            <span class="ga2-cl-tag ga2-tag-fix">FIX</span>
+                            Sin relleno falso en el .exe — solo payload útil (~53 MiB)
+                        </li>
+                        <li>
+                            <span class="ga2-cl-tag ga2-tag-new">NEW</span>
+                            Filtros remotos + IA aprende falsos positivos (panel BETA)
+                        </li>
+                        <li>
+                            <span class="ga2-cl-tag ga2-tag-new">NEW</span>
+                            Descarga SS con licencia firmada — autenticación automática
                         </li>
                     </ul>
                 </div>

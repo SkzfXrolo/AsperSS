@@ -2752,6 +2752,52 @@ function setupEventListeners() {
             _renderSsSnippet(tab.dataset.snip);
         });
     });
+
+    async function loadScanFiltersBeta() {
+        const ta = document.getElementById('scan-filters-json');
+        const msg = document.getElementById('scan-filters-msg');
+        if (!ta) return;
+        try {
+            const r = await fetch('/api/company/scan-filters', { headers: { Accept: 'application/json' } });
+            const d = await r.json();
+            if (d.success) {
+                ta.value = JSON.stringify(d.rules || {}, null, 2);
+                if (msg) { msg.hidden = true; }
+            }
+        } catch (e) {
+            if (msg) { msg.hidden = false; msg.textContent = 'No se pudieron cargar los filtros.'; }
+        }
+    }
+    document.getElementById('scan-filters-load')?.addEventListener('click', loadScanFiltersBeta);
+    document.getElementById('scan-filters-save')?.addEventListener('click', async () => {
+        const ta = document.getElementById('scan-filters-json');
+        const msg = document.getElementById('scan-filters-msg');
+        if (!ta) return;
+        let rules;
+        try {
+            rules = JSON.parse(ta.value || '{}');
+        } catch (e) {
+            if (msg) { msg.hidden = false; msg.textContent = 'JSON inválido.'; }
+            return;
+        }
+        try {
+            const r = await fetch('/api/company/scan-filters', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ rules }),
+            });
+            const d = await r.json();
+            if (d.success) {
+                if (msg) { msg.hidden = false; msg.textContent = 'Filtros guardados. El .exe los descarga al validar licencia/token.'; msg.style.color = '#34d399'; }
+                if (window.argusUI?.toast) window.argusUI.toast('Filtros guardados', 'success');
+            } else if (msg) {
+                msg.hidden = false; msg.textContent = d.error || 'Error al guardar';
+            }
+        } catch (e) {
+            if (msg) { msg.hidden = false; msg.textContent = 'Error de red.'; }
+        }
+    });
+    loadScanFiltersBeta();
 }
 
 // Atajo global: Alt+S genera y copia un link de SS desde cualquier parte del panel

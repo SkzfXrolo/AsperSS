@@ -435,7 +435,7 @@ def audit_action(action_name: str, resource_type: str = ''):
 CORS(app)
 
 # Inicializar base de datos de autenticaciÃ³n al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.6.59'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
+_ARGUS_VERSION = '1.7.0'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
 # URL de invitacion permanente al Discord oficial. Se inyecta en todos los
 # templates como `discord_invite` via @app.context_processor (ver mas abajo).
@@ -868,6 +868,8 @@ try:
                        id='daily_digest_email', replace_existing=True)
     _scheduler.add_job(lambda: globals().get('aggregate_fp_feedback', lambda: None)(), 'cron', hour=7, minute=30,
                        id='aggregate_fp_feedback', replace_existing=True)
+    _scheduler.add_job(lambda: globals().get('autonomous_fp_learn', lambda: None)(), 'cron', hour=8, minute=0,
+                       id='autonomous_fp_learn', replace_existing=True)
     _scheduler.add_job(lambda: globals().get('audit_retention_cleanup', lambda: None)(), 'cron', hour=4, minute=15,
                        id='audit_retention_cleanup', replace_existing=True)
     _scheduler.add_job(lambda: globals().get('purge_soft_deleted_older_than_90d', lambda: None)(), 'cron', hour=4, minute=45,
@@ -3430,6 +3432,40 @@ def _ensure_plugin_keys_schema():
                     cursor.execute("CREATE INDEX IF NOT EXISTS idx_afa_date ON ai_feedback_aggregations(agg_date DESC)")
                 except Exception:
                     pass
+
+                # Falsos positivos IA — registro persistente + aprendizaje autónomo (v1.7)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_false_positives (
+                        id SERIAL PRIMARY KEY,
+                        company_id INTEGER,
+                        pattern_type VARCHAR(40) NOT NULL,
+                        pattern_value TEXT NOT NULL,
+                        feature_name VARCHAR(80),
+                        reason TEXT,
+                        source VARCHAR(24) DEFAULT 'manual',
+                        weight_adjustment REAL DEFAULT -0.15,
+                        hit_count INTEGER DEFAULT 1,
+                        is_active BOOLEAN DEFAULT TRUE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                try:
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_afp_company ON ai_false_positives(company_id)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_afp_pattern ON ai_false_positives(pattern_type, pattern_value)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_afp_active ON ai_false_positives(is_active)")
+                except Exception:
+                    pass
+
+                # Filtros de escaneo por empresa (exe + panel)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS company_scan_filters (
+                        company_id INTEGER PRIMARY KEY,
+                        rules_json TEXT NOT NULL DEFAULT '{}',
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_by VARCHAR(80)
+                    )
+                """)
 
                 # Marketplace de reglas compartidas (#181)
                 cursor.execute("""
@@ -8477,14 +8513,216 @@ def validate_token_endpoint():
         if error:
             return jsonify({'valid': False, 'error': error}), 200
 
-        return jsonify({
+        payload = {
             'valid': True, 'token_id': token_id, 'created_by': created_by,
             'allowed_mods': allowed_mods or [],
             'message': 'Token valido',
-        }), 200
+        }
+        if token.startswith(_LICENSE_PREFIX):
+            lic = _verify_scan_license(token)
+            if lic and not lic.get('error'):
+                cid = lic.get('company_id')
+                comp_name = ''
+                try:
+                    comp = get_company_by_id(cid) if cid else None
+                    if comp:
+                        comp_name = comp.get('name') or ''
+                except Exception:
+                    pass
+                payload.update({
+                    'is_license': True,
+                    'company_id': cid,
+                    'company_name': comp_name,
+                    'license_expires_in_hours': round(_LICENSE_MAX_AGE / 3600, 1),
+                    'auth_mode': 'license',
+                })
+        return jsonify(payload), 200
     except Exception as e:
         print(f"Error en validate_token_endpoint: {e}\n{traceback.format_exc()}")
         return jsonify({'valid': False, 'error': str(e)}), 500
+
+
+@app.route('/api/scanner/filter-rules', methods=['GET'])
+def api_scanner_filter_rules():
+    """Reglas de filtro para el .exe (token o licencia en query/body)."""
+    token = (request.args.get('token') or (request.json or {}).get('token') or '').strip()
+    if not token:
+        return jsonify({'success': False, 'error': 'Token requerido'}), 400
+    token_id, error, created_by, _ = _validate_scan_token_direct(token)
+    if error:
+        return jsonify({'success': False, 'error': error}), 403
+    company_id = None
+    lic = _verify_scan_license(token)
+    if lic and not lic.get('error'):
+        company_id = lic.get('company_id')
+    elif token_id:
+        try:
+            with get_api_db_cursor() as cur:
+                cur.execute(f'SELECT u.company_id FROM scan_tokens t JOIN users u ON u.username = t.created_by WHERE t.id = {_PH}', (token_id,))
+                row = cur.fetchone()
+                if row:
+                    company_id = _row_get(row, 0, 'company_id')
+        except Exception:
+            pass
+    rules = {'exclude_paths': [], 'exclude_patterns': [], 'min_confidence': 30}
+    fp_rules = []
+    try:
+        with get_api_db_cursor() as cur:
+            if company_id:
+                cur.execute(f'SELECT rules_json FROM company_scan_filters WHERE company_id = {_PH}', (int(company_id),))
+                row = cur.fetchone()
+                if row:
+                    raw = _row_get(row, 0, 'rules_json')
+                    if raw:
+                        rules.update(json.loads(raw) if isinstance(raw, str) else (raw or {}))
+                cur.execute(
+                    f"SELECT pattern_type, pattern_value, feature_name, weight_adjustment "
+                    f"FROM ai_false_positives WHERE is_active = TRUE AND (company_id IS NULL OR company_id = {_PH}) "
+                    f"ORDER BY updated_at DESC LIMIT 500",
+                    (int(company_id),)
+                )
+                for r in cur.fetchall() or []:
+                    fp_rules.append({
+                        'pattern_type': _row_get(r, 0, 'pattern_type'),
+                        'pattern_value': _row_get(r, 1, 'pattern_value'),
+                        'feature_name': _row_get(r, 2, 'feature_name'),
+                        'weight_adjustment': float(_row_get(r, 3, 'weight_adjustment') or -0.15),
+                    })
+    except Exception as e:
+        print(f"[filter-rules] {e}")
+    return jsonify({
+        'success': True,
+        'company_id': company_id,
+        'rules': rules,
+        'ai_false_positives': fp_rules,
+        'scanner_version': CURRENT_SCANNER_VERSION,
+    }), 200
+
+
+@app.route('/api/scanner/fp-learn', methods=['POST'])
+def api_scanner_fp_learn():
+    """El .exe envía candidatos FP tras scans limpios (aprendizaje autónomo)."""
+    data = request.json or {}
+    token = (data.get('token') or '').strip()
+    if not token:
+        return jsonify({'success': False, 'error': 'Token requerido'}), 400
+    _tid, error, _staff, _ = _validate_scan_token_direct(token)
+    if error:
+        return jsonify({'success': False, 'error': error}), 403
+    candidates = data.get('candidates') or []
+    if not isinstance(candidates, list):
+        return jsonify({'success': False, 'error': 'candidates inválido'}), 400
+    inserted = 0
+    try:
+        with get_api_db_cursor() as cur:
+            for c in candidates[:20]:
+                if not isinstance(c, dict):
+                    continue
+                pv = (c.get('pattern_value') or '').strip()[:500]
+                if len(pv) < 4:
+                    continue
+                ptype = (c.get('pattern_type') or 'path')[:40]
+                feat = (c.get('feature_name') or '')[:80]
+                cur.execute(
+                    f"INSERT INTO ai_false_positives (company_id, pattern_type, pattern_value, feature_name, reason, source, hit_count) "
+                    f"VALUES (NULL, {_PH}, {_PH}, {_PH}, 'scanner_auto_clean', 'scanner', 1)",
+                    (ptype, pv, feat),
+                )
+                inserted += 1
+    except Exception as e:
+        print(f"[fp-learn] {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    return jsonify({'success': True, 'inserted': inserted}), 200
+
+
+@app.route('/api/company/scan-filters', methods=['GET', 'PUT'])
+@login_required
+def api_company_scan_filters():
+    """Panel: leer/guardar filtros de la empresa del usuario."""
+    user = get_user_by_id(session.get('user_id'))
+    if not user or not user.get('company_id'):
+        return jsonify({'success': False, 'error': 'Sin empresa'}), 403
+    cid = int(user['company_id'])
+    if request.method == 'GET':
+        rules = {}
+        try:
+            with get_api_db_cursor() as cur:
+                cur.execute(f'SELECT rules_json, updated_at FROM company_scan_filters WHERE company_id = {_PH}', (cid,))
+                row = cur.fetchone()
+                if row:
+                    raw = _row_get(row, 0, 'rules_json')
+                    rules = json.loads(raw) if isinstance(raw, str) else (raw or {})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': True, 'rules': rules}), 200
+    data = request.json or {}
+    rules = data.get('rules') or {}
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"INSERT INTO company_scan_filters (company_id, rules_json, updated_by) VALUES ({_PH}, {_PH}, {_PH}) "
+                f"ON CONFLICT (company_id) DO UPDATE SET rules_json = EXCLUDED.rules_json, updated_by = EXCLUDED.updated_by, updated_at = CURRENT_TIMESTAMP",
+                (cid, json.dumps(rules, ensure_ascii=False), user.get('username')),
+            )
+    except Exception:
+        try:
+            with get_api_db_cursor() as cur:
+                cur.execute(f'DELETE FROM company_scan_filters WHERE company_id = {_PH}', (cid,))
+                cur.execute(
+                    f'INSERT INTO company_scan_filters (company_id, rules_json, updated_by) VALUES ({_PH}, {_PH}, {_PH})',
+                    (cid, json.dumps(rules, ensure_ascii=False), user.get('username')),
+                )
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    return jsonify({'success': True}), 200
+
+
+def autonomous_fp_learn():
+    """Aprendizaje autónomo: feedback histórico (label limpio / texto FP) → ai_false_positives."""
+    try:
+        with get_api_db_cursor() as cur:
+            cur.execute(
+                f"SELECT COALESCE(reasoning, ''), COUNT(*) AS c "
+                f"FROM ai_feedback WHERE created_at >= CURRENT_DATE - INTERVAL '14 days' "
+                f"AND (label < 0.35 OR LOWER(COALESCE(reasoning,'')) LIKE '%false%positive%' "
+                f"OR LOWER(COALESCE(reasoning,'')) LIKE '%falso%positivo%' OR LOWER(COALESCE(reasoning,'')) LIKE '%legit%') "
+                f"GROUP BY COALESCE(reasoning, '')"
+            )
+            for r in cur.fetchall() or []:
+                reason = str(_row_get(r, 0, 'reasoning') or '')[:500]
+                cnt = int(_row_get(r, 1, 'c') or 0)
+                if cnt < 2 or len(reason) < 8:
+                    continue
+                pat_val = reason[:120]
+                cur.execute(
+                    f"INSERT INTO ai_false_positives (company_id, pattern_type, pattern_value, feature_name, reason, source, weight_adjustment, hit_count) "
+                    f"VALUES (NULL, 'text', {_PH}, 'staff_feedback', {_PH}, 'auto', {_PH}, {_PH})",
+                    (pat_val, reason[:200], -min(0.35, 0.05 * cnt), cnt),
+                )
+            try:
+                cur.execute(
+                    f"SELECT s.company_id, i.issue_type, i.file_path, COUNT(*) AS c "
+                    f"FROM scan_issues i JOIN scans s ON s.id = i.scan_id "
+                    f"WHERE s.verdict = 'clean' AND s.completed_at >= CURRENT_DATE - INTERVAL '7 days' "
+                    f"GROUP BY s.company_id, i.issue_type, i.file_path HAVING COUNT(*) >= 3"
+                )
+                for r in cur.fetchall() or []:
+                    cid = _row_get(r, 0, 'company_id')
+                    itype = str(_row_get(r, 1, 'issue_type') or '')[:80]
+                    path = str(_row_get(r, 2, 'file_path') or '')[:240]
+                    if not path and not itype:
+                        continue
+                    cur.execute(
+                        f"INSERT INTO ai_false_positives (company_id, pattern_type, pattern_value, feature_name, reason, source, hit_count) "
+                        f"VALUES ({_PH}, 'path', {_PH}, {_PH}, 'auto_clean_scan', 'auto', 1)",
+                        (cid, path or itype, itype),
+                    )
+            except Exception as _si:
+                print(f"[ai] autonomous_fp_learn scan_issues skip: {_si}")
+        _app_cache.delete("ai_weights:0")
+        print("[ai] autonomous_fp_learn completado")
+    except Exception as e:
+        print(f"[ai] autonomous_fp_learn error: {e}")
 
 
 @app.route('/api/debug/last-scan')
@@ -8535,7 +8773,7 @@ def debug_last_scan():
 
 
 # Current released scanner version â€” update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.6.59"
+CURRENT_SCANNER_VERSION = "1.7.0"
 
 @app.route('/sw.js')
 def service_worker():

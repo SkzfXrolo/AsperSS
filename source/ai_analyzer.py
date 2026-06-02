@@ -12,10 +12,12 @@ from typing import Dict, List, Tuple
 class AIAnalyzer:
     """Analizador de IA para resultados de escaneo con aprendizaje progresivo"""
     
-    def __init__(self, database_path='scanner_db.sqlite', api_url=None, scan_token=None):
+    def __init__(self, database_path='scanner_db.sqlite', api_url=None, scan_token=None,
+                 defer_api_load=False):
         self.database_path = database_path
         self.api_url = api_url
         self.scan_token = scan_token
+        self._defer_api_load = defer_api_load
         
         # Patrones base (iniciales)
         self.suspicious_patterns = {
@@ -35,9 +37,10 @@ class AIAnalyzer:
         
         # Cargar patrones aprendidos (primero de BD local, luego de API si está disponible)
         self.load_learned_patterns()
-        
-        # Intentar cargar desde API si está configurada
-        if self.api_url:
+        self._load_bundled_model_file()
+
+        # API en arranque solo si no se difiere (evita lag al ingresar token)
+        if self.api_url and not defer_api_load:
             self.load_patterns_from_api()
         
         # Patrones de ofuscación
@@ -51,11 +54,37 @@ class AIAnalyzer:
         # Hashes aprendidos (se cargan dinámicamente)
         self.learned_hashes = set()
         self.load_learned_hashes()
+
+        # Falsos positivos aprendidos (API / tabla ai_false_positives) — v1.7
+        self.fp_suppressions = []
         
-        # Intentar cargar hashes desde API si está configurada
-        if self.api_url:
+        if self.api_url and not defer_api_load:
             self.load_hashes_from_api()
     
+    def _load_bundled_model_file(self):
+        """Modelo IA embebido en el .exe (PyInstaller bundle)."""
+        try:
+            from bundle_runtime import offline_ai_model_path
+            path = offline_ai_model_path()
+            if not path:
+                return
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f) or {}
+            patterns = data.get('patterns') or {}
+            for category in ('high_risk', 'medium_risk', 'low_risk'):
+                if category in patterns and category in self.suspicious_patterns:
+                    for item in patterns[category]:
+                        val = item.get('value', item) if isinstance(item, dict) else item
+                        if val and val not in self.suspicious_patterns[category]:
+                            self.suspicious_patterns[category].append(str(val))
+            for hash_data in data.get('hashes') or []:
+                if isinstance(hash_data, dict) and hash_data.get('is_hack') and hash_data.get('hash'):
+                    self.learned_hashes.add(hash_data['hash'])
+            if patterns or data.get('hashes'):
+                print(f'[bundle] Modelo IA offline cargado desde ejecutable')
+        except Exception:
+            pass
+
     def load_learned_patterns(self):
         """Carga patrones aprendidos de la base de datos"""
         try:
@@ -207,6 +236,27 @@ class AIAnalyzer:
         except Exception as e:
             print(f"⚠️ Error cargando modelo local: {e}")
     
+    def load_fp_suppressions(self, rules_list):
+        """rules_list: items from /api/scanner/filter-rules ai_false_positives."""
+        self.fp_suppressions = []
+        for item in rules_list or []:
+            pv = (item.get('pattern_value') or '').strip().lower()
+            if pv:
+                self.fp_suppressions.append({
+                    'pattern': pv,
+                    'type': (item.get('pattern_type') or 'text').lower(),
+                    'weight': float(item.get('weight_adjustment') or -0.15),
+                })
+        if self.fp_suppressions:
+            print(f"✅ {len(self.fp_suppressions)} supresiones FP IA cargadas")
+
+    def _is_fp_suppressed(self, issue: Dict) -> bool:
+        blob = f"{issue.get('nombre', '')} {issue.get('ruta', '')} {issue.get('archivo', '')} {issue.get('tipo', '')}".lower()
+        for sup in self.fp_suppressions:
+            if sup['pattern'] in blob:
+                return True
+        return False
+
     def reload_learned_data(self):
         """Recarga patrones y hashes aprendidos (útil después de actualizaciones)"""
         self.load_learned_patterns()
@@ -337,10 +387,18 @@ class AIAnalyzer:
         return analysis
     
     def analyze_batch(self, issues: List[Dict]) -> List[Dict]:
-        """Analiza un lote de issues"""
+        """Analiza un lote de issues; omite o degrada FP aprendidos automáticamente."""
         analyzed_issues = []
-        
+        skipped_fp = 0
+
         for issue in issues:
+            if self._is_fp_suppressed(issue):
+                if (issue.get('alerta') or '').upper() not in ('CRITICAL',):
+                    skipped_fp += 1
+                    continue
+                issue['ai_fp_suppressed'] = True
+                issue['confidence'] = max(0, float(issue.get('confidence') or 50) * 0.5)
+
             ai_analysis = self.analyze_issue(issue)
             
             # Agregar análisis al issue
@@ -351,7 +409,9 @@ class AIAnalyzer:
             issue['ai_risk_factors'] = ai_analysis.get('risk_factors', [])
             
             analyzed_issues.append(issue)
-        
+
+        if skipped_fp:
+            print(f"🤖 IA omitió {skipped_fp} hallazgo(s) por reglas FP aprendidas")
         return analyzed_issues
     
     def get_statistics(self, issues: List[Dict]) -> Dict:

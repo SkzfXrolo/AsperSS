@@ -13,6 +13,9 @@ Detection methods:
   2. HID registry timestamps       — mouse connected < 20 min before scan
   3. Background device monitor     — mouse plugged/unplugged DURING the session
   4. Click pattern analysis        — mechanical regularity via GetAsyncKeyState polling
+  5. Historical (pre-SS) artifacts — setupapi, Event Log PnP, Prefetch, BAM, USB enum,
+     connect/disconnect bursts → aggregated past-usage verdict (no OS log for "weight on
+     button"; we infer from surviving traces of click-bug / reconnect / deleted tools)
 """
 
 import ctypes
@@ -31,7 +34,23 @@ except Exception:
     _user32 = None
 
 SUSPICION_RECENT_MINUTES = 20   # mouse connected < this → suspicious
+_HISTORICAL_LOOKBACK_H   = 48   # past-weight scoring window
 _FILETIME_EPOCH = datetime(1601, 1, 1)
+
+# Weight for aggregated "past usage" verdict (physical weight leaves no direct log)
+_PAST_SCORE_WEIGHTS = {
+    'MOUSE_REPEATED_RECONNECT_HISTORY': 35,
+    'MOUSE_CONNECT_DISCONNECT_BURST':     40,
+    'MOUSE_RECENTLY_CONNECTED':         25,
+    'MOUSE_RECENT_CONNECT_SETUPAPI':     22,
+    'MOUSE_EVENTLOG_CONNECT':           18,
+    'MOUSE_EVENTLOG_REPEATED':           15,
+    'MOUSE_AUTOCLICK_PREFETCH':          28,
+    'MOUSE_BAM_AUTOCLICK':               30,
+    'MOUSE_REGISTRY_CONNECT_6H':         12,
+    'MOUSE_USB_ENUM_RECENT':             18,
+    'MOUSE_PNP_REMOVAL_THEN_CONNECT':    32,
+}
 
 
 def _filetime_to_dt(ft: int) -> datetime:
@@ -308,7 +327,7 @@ class MouseWeightDetector:
         _t = threading.Thread(target=_run_historical, daemon=True,
                               name="MouseWeight-Historical")
         _t.start()
-        _t.join(timeout=20)   # wait up to 20s (PowerShell query)
+        _t.join(timeout=35)   # wait for historical pass (setupapi + Event Log)
 
         with self._lock:
             findings.extend(self._historical_findings)
@@ -345,6 +364,18 @@ class MouseWeightDetector:
 
         # ── Click pattern analysis ───────────────────────────────────────────
         findings.extend(self._analyze_click_patterns())
+
+        # ── Second historical pass (events during long scans) ────────────────
+        try:
+            extra = self.rescan_historical_at_end()
+            seen = {(f.get('tipo'), f.get('nombre')) for f in findings}
+            for f in extra:
+                key = (f.get('tipo'), f.get('nombre'))
+                if key not in seen:
+                    findings.append(f)
+                    seen.add(key)
+        except Exception:
+            pass
 
         return findings
 
@@ -443,14 +474,22 @@ class MouseWeightDetector:
         findings = []
         for method in (
             self._parse_setupapi_log,
+            self._detect_setupapi_disconnect_bursts,
             self._query_pnp_events,
+            self._detect_pnp_removal_then_connect,
             self._check_prefetch_autoclick,
             self._check_registry_history,
+            self._check_usb_mouse_enum_history,
         ):
             try:
                 findings.extend(method())
             except Exception as e:
                 print(f"[MouseWeight] {method.__name__} error: {e}")
+
+        verdict = self._build_past_weight_verdict(findings)
+        if verdict:
+            findings = [f for f in findings if f.get('tipo') != 'MOUSE_WEIGHT_PAST_USAGE']
+            findings.append(verdict)
         return findings
 
     # ── Source 1: setupapi.dev.log ────────────────────────────────────────────
@@ -558,6 +597,104 @@ class MouseWeightDetector:
 
         return findings
 
+    def _detect_setupapi_disconnect_bursts(self) -> list:
+        """
+        setupapi.dev.log also logs removals. Rapid connect→disconnect→connect within
+        minutes is the classic prison click-bug cycle (unplug while weight holds click).
+        """
+        import re, os
+        log_path = r'C:\Windows\inf\setupapi.dev.log'
+        if not os.path.exists(log_path):
+            return []
+
+        findings = []
+        ts_re = re.compile(r'^\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})')
+        hid_re = re.compile(r'HID\\VID_[0-9A-Fa-f]{4}&PID_[0-9A-Fa-f]{4}', re.IGNORECASE)
+        mouse_re = re.compile(r'mouse', re.IGNORECASE)
+        install_re = re.compile(
+            r'device install|devnode.*install|>>>.*install', re.IGNORECASE)
+        remove_re = re.compile(
+            r'remov|uninstall|devnode.*remov|>>>.*uninstall|disconnect', re.IGNORECASE)
+
+        now = datetime.utcnow()
+        lookback = timedelta(hours=_HISTORICAL_LOOKBACK_H)
+
+        try:
+            with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
+                f.seek(0, 2)
+                size = f.tell()
+                f.seek(max(0, size - 350_000))
+                content = f.read()
+        except PermissionError:
+            return []
+
+        blocks = re.split(r'\n(?=\[)', content)
+        # device_id -> list of (ts, 'in'|'out')
+        timeline: dict = {}
+
+        for block in blocks:
+            lines = block.strip().splitlines()
+            if not lines:
+                continue
+            m = ts_re.match(lines[0])
+            if not m:
+                continue
+            try:
+                ts = datetime.strptime(m.group(1), '%Y/%m/%d %H:%M:%S')
+            except ValueError:
+                continue
+            if now - ts > lookback:
+                continue
+            block_text = '\n'.join(lines)
+            if not (mouse_re.search(block_text) or hid_re.search(block_text)):
+                continue
+            hid_match = hid_re.search(block_text)
+            device_id = hid_match.group(0) if hid_match else 'HID_MOUSE'
+            if install_re.search(block_text):
+                timeline.setdefault(device_id, []).append((ts, 'in'))
+            elif remove_re.search(block_text):
+                timeline.setdefault(device_id, []).append((ts, 'out'))
+
+        for device_id, events in timeline.items():
+            events.sort(key=lambda x: x[0])
+            bursts = 0
+            for i in range(len(events) - 2):
+                t0, k0 = events[i]
+                t1, k1 = events[i + 1]
+                t2, k2 = events[i + 2]
+                span = (t2 - t0).total_seconds()
+                if span > 900:  # 15 min max for a 3-step burst
+                    continue
+                if k0 == 'in' and k1 == 'out' and k2 == 'in':
+                    bursts += 1
+                elif k0 == 'out' and k1 == 'in' and k2 == 'out':
+                    bursts += 1
+            if bursts >= 1:
+                last_ts = events[-1][0]
+                delta_h = (now - last_ts).total_seconds() / 3600
+                severity = 'CRITICAL' if bursts >= 2 or delta_h < 2 else 'SOSPECHOSO'
+                findings.append({
+                    'tipo':        'MOUSE_CONNECT_DISCONNECT_BURST',
+                    'nombre':      (
+                        f'setupapi: ciclo conectar/desconectar x{bursts} '
+                        f'({device_id[:40]})'
+                    ),
+                    'ruta':        log_path,
+                    'detalle':     (
+                        f'{len(events)} eventos en {int((events[-1][0]-events[0][0]).total_seconds()/60)} min '
+                        f'— último: {last_ts.strftime("%H:%M")} UTC'
+                    ),
+                    'alerta':      severity,
+                    'categoria':   'MOUSE_WEIGHT',
+                    'descripcion': (
+                        f'setupapi.dev.log muestra {bursts} ciclo(s) rápido(s) de '
+                        'conexión y desconexión del mouse. En prison mode es la técnica '
+                        'habitual para activar/desactivar el click-bug con peso en el botón '
+                        'sin dejar software. El log es de sistema y sobrevive al borrado del jugador.'
+                    ),
+                })
+        return findings
+
     # ── Source 2: Windows Event Log (Kernel-PnP) ─────────────────────────────
 
     def _query_pnp_events(self) -> list:
@@ -648,6 +785,86 @@ class MouseWeightDetector:
                     'para activar/desactivar el click-bug.'
                 ),
             })
+
+        return findings
+
+    def _detect_pnp_removal_then_connect(self) -> list:
+        """
+        Kernel-PnP: removal (6420) shortly followed by arrival (6416) on HID/mouse —
+        strong indicator of deliberate unplug to reset click-bug before SS.
+        """
+        import subprocess, re
+        findings = []
+        now = datetime.now()
+
+        ps_cmd = (
+            "Get-WinEvent -LogName System -MaxEvents 800 -ErrorAction SilentlyContinue "
+            "| Where-Object {$_.Id -in @(6416,6419,6420)} "
+            "| Select-Object -First 200 TimeCreated,Id,Message "
+            "| Sort-Object TimeCreated "
+            "| ForEach-Object {"
+            "  $_.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss') + '|' + $_.Id + '|' + "
+            "  ($_.Message -replace '\\s+', ' ')"
+            "} | Out-String"
+        )
+        try:
+            result = subprocess.run(
+                ['powershell', '-NonInteractive', '-NoProfile', '-Command', ps_cmd],
+                capture_output=True, text=True, timeout=18,
+                creationflags=0x08000000,
+            )
+            output = result.stdout.strip()
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            return []
+
+        ts_re = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\|(\d+)\|(.*)')
+        mouse_re = re.compile(r'mouse|HID', re.IGNORECASE)
+        events = []
+
+        for line in output.splitlines():
+            m = ts_re.match(line.strip())
+            if not m:
+                continue
+            try:
+                ts = datetime.strptime(m.group(1), '%Y-%m-%d %H:%M:%S')
+                eid = int(m.group(2))
+                msg = m.group(3)
+            except (ValueError, IndexError):
+                continue
+            if (now - ts).total_seconds() > _HISTORICAL_LOOKBACK_H * 3600:
+                continue
+            if mouse_re.search(msg):
+                events.append((ts, eid, msg[:100]))
+
+        events.sort(key=lambda x: x[0])
+        for i in range(len(events) - 1):
+            t0, e0, _ = events[i]
+            t1, e1, msg1 = events[i + 1]
+            gap_min = (t1 - t0).total_seconds() / 60
+            if gap_min > 25:
+                continue
+            if e0 in (6419, 6420) and e1 == 6416:
+                delta_h = (now - t1).total_seconds() / 3600
+                severity = 'CRITICAL' if delta_h < 1 else 'SOSPECHOSO'
+                findings.append({
+                    'tipo':        'MOUSE_PNP_REMOVAL_THEN_CONNECT',
+                    'nombre':      (
+                        f'Event Log: mouse desconectado y reconectado en {int(gap_min)} min'
+                    ),
+                    'ruta':        'System Event Log (Kernel-PnP)',
+                    'detalle':     (
+                        f'ID {e0} → {e1} entre {t0.strftime("%H:%M")} y {t1.strftime("%H:%M")} '
+                        f'— {msg1[:70]}'
+                    ),
+                    'alerta':      severity,
+                    'categoria':   'MOUSE_WEIGHT',
+                    'descripcion': (
+                        'El registro del sistema muestra que un dispositivo HID/mouse fue '
+                        'retirado y vuelto a conectar en pocos minutos. Coincide con ocultar '
+                        'el click-bug o quitar el peso justo antes de una SS por AnyDesk.'
+                    ),
+                })
+                break  # one representative finding is enough
 
         return findings
 
@@ -822,3 +1039,146 @@ class MouseWeightDetector:
             pass  # BAM not available on very old Windows
 
         return findings
+
+    def _check_usb_mouse_enum_history(self) -> list:
+        """
+        USB enumeration path (not only HID): last_write on Enum\\USB\\...\\Mouse class.
+        Complements HID checks when the device enumerates as composite USB.
+        """
+        findings = []
+        now_utc = datetime.utcnow()
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SYSTEM\CurrentControlSet\Enum\USB",
+            ) as usb_root:
+                i = 0
+                while True:
+                    try:
+                        vid_key_name = winreg.EnumKey(usb_root, i)
+                    except OSError:
+                        break
+                    i += 1
+                    try:
+                        with winreg.OpenKey(usb_root, vid_key_name) as vid_key:
+                            j = 0
+                            while True:
+                                try:
+                                    inst = winreg.EnumKey(vid_key, j)
+                                except OSError:
+                                    break
+                                j += 1
+                                try:
+                                    with winreg.OpenKey(vid_key, inst) as inst_key:
+                                        try:
+                                            cls, _ = winreg.QueryValueEx(inst_key, "Class")
+                                        except OSError:
+                                            continue
+                                        if str(cls).lower() != "mouse":
+                                            continue
+                                        info = winreg.QueryInfoKey(inst_key)
+                                        lw = _filetime_to_dt(info[2])
+                                        delta_h = (now_utc - lw).total_seconds() / 3600
+                                        if delta_h > _HISTORICAL_LOOKBACK_H:
+                                            continue
+                                        try:
+                                            friendly, _ = winreg.QueryValueEx(
+                                                inst_key, "FriendlyName")
+                                            friendly = str(friendly)
+                                        except OSError:
+                                            friendly = vid_key_name
+                                        severity = (
+                                            'CRITICAL' if delta_h < 0.5
+                                            else 'SOSPECHOSO' if delta_h < 6
+                                            else 'POCO_SOSPECHOSO'
+                                        )
+                                        findings.append({
+                                            'tipo':        'MOUSE_USB_ENUM_RECENT',
+                                            'nombre':      (
+                                                f'USB Enum: mouse "{friendly}" '
+                                                f'hace {delta_h:.1f}h'
+                                            ),
+                                            'ruta':        (
+                                                f'HKLM\\...\\Enum\\USB\\{vid_key_name}\\{inst}'
+                                            ),
+                                            'detalle':     (
+                                                f'last_write: {lw.strftime("%Y-%m-%d %H:%M")} UTC'
+                                            ),
+                                            'alerta':      severity,
+                                            'categoria':   'MOUSE_WEIGHT',
+                                            'descripcion': (
+                                                f'El registro USB indica actividad del mouse '
+                                                f'"{friendly}" hace {delta_h:.1f}h. '
+                                                'Útil cuando el jugador reconectó el periférico '
+                                                'antes de la SS (peso / click-bug).'
+                                            ),
+                                        })
+                                except OSError:
+                                    continue
+                    except OSError:
+                        continue
+        except OSError:
+            pass
+        return findings
+
+    def _build_past_weight_verdict(self, historical: list) -> dict | None:
+        """
+        Single staff-facing finding: inferred past use of weight / click-bug from
+        persistent artifacts (Windows never logs "physical weight" directly).
+        """
+        if not historical:
+            return None
+
+        score = 0
+        reasons = []
+        seen_types = set()
+
+        for f in historical:
+            tipo = f.get('tipo', '')
+            if tipo in seen_types:
+                continue
+            w = _PAST_SCORE_WEIGHTS.get(tipo, 0)
+            if w <= 0:
+                continue
+            seen_types.add(tipo)
+            score += w
+            reasons.append(f.get('nombre', tipo)[:80])
+
+        if score < 20:
+            return None
+
+        if score >= 55:
+            alerta = 'CRITICAL'
+            conf_txt = 'muy probable'
+        elif score >= 35:
+            alerta = 'SOSPECHOSO'
+            conf_txt = 'probable'
+        else:
+            alerta = 'POCO_SOSPECHOSO'
+            conf_txt = 'posible'
+
+        return {
+            'tipo':        'MOUSE_WEIGHT_PAST_USAGE',
+            'nombre':      f'Uso pasado de peso/click-bug: {conf_txt} (puntuación {score})',
+            'ruta':        '',
+            'detalle':     (
+                f'{len(reasons)} indicador(es) histórico(s) en las últimas '
+                f'{_HISTORICAL_LOOKBACK_H}h. '
+                + ' | '.join(reasons[:5])
+                + (' …' if len(reasons) > 5 else '')
+            ),
+            'alerta':      alerta,
+            'categoria':   'MOUSE_WEIGHT',
+            'past_score':  score,
+            'descripcion': (
+                'Windows no guarda un registro literal de "peso en el mouse", pero sí deja '
+                'rastros cuando se usa la técnica de prison: reconectar el mouse, ciclos '
+                'conectar/desconectar, herramientas de autoclick ya borradas (Prefetch/BAM) '
+                'y timestamps en registros USB/HID. Esta alerta resume esas pruebas del pasado; '
+                'no sustituye la detección en vivo (botón sostenido o patrón mecánico durante el scan).'
+            ),
+        }
+
+    def rescan_historical_at_end(self) -> list:
+        """Second pass at end of SS — catches events while scan was running."""
+        return self.scan_historical_evidence()

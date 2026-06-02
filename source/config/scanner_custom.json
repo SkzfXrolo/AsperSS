@@ -1,0 +1,16 @@
+{
+  "beta_customization": true,
+  "version": "1.7.0",
+  "skip_main_ss_forensics_block": true,
+  "skip_main_modular_scanners": true,
+  "modules": {},
+  "ui": {
+    "theme": "cosmic",
+    "show_splash": true,
+    "show_wordmark": true
+  },
+  "performance": {
+    "module_pool_size": 6,
+    "module_default_timeout_sec": 10
+  }
+}

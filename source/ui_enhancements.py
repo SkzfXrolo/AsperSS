@@ -131,6 +131,20 @@ def patch_modern_ui(cls):
                      bg=C['bg_primary'], fg=C['accent_light']).pack(pady=(28, 4))
         tk.Label(splash, text=f'v{version}', font=('Consolas', 9),
                  bg=C['bg_primary'], fg=C['text_secondary']).pack()
+        feats = ()
+        if version.startswith('1.7'):
+            feats = (
+                'Pack 89 módulos · offline ~53 MiB real',
+                'Token sin lag · mouse histórico · IA FP',
+                'Licencia SS · Beta Ctrl+Shift+M',
+            )
+            sw, sh = 340, 200
+            x = (splash.winfo_screenwidth() - sw) // 2
+            y = (splash.winfo_screenheight() - sh) // 2
+            splash.geometry(f'{sw}x{sh}+{x}+{y}')
+            for line in feats:
+                tk.Label(splash, text=line, font=('Segoe UI', 8),
+                         bg=C['bg_primary'], fg=C['text_muted']).pack()
 
         def _fade_in(step=0):
             try:
@@ -149,7 +163,7 @@ def patch_modern_ui(cls):
                 on_done()
 
         splash.after(80, _fade_in)
-        splash.after(1500, _close)
+        splash.after(2200 if version.startswith('1.7') else 1500, _close)
 
     @classmethod
     def fade_out_and_quit(cls, root):
@@ -180,6 +194,20 @@ def patch_modern_ui(cls):
                        bg=C['bg_primary'], fg=C['text_muted'])
         tok.pack(side=tk.RIGHT, padx=(0, 6))
         cls._token_indicator = tok
+
+        # Beta settings (v1.7)
+        beta = tk.Label(parent, text='Beta', font=('Segoe UI', 7),
+                        bg=C['bg_primary'], fg=C['text_muted'], cursor='hand2')
+        beta.pack(side=tk.RIGHT, padx=(0, 6))
+        if cls._root_ref:
+            def _open_beta(_e=None):
+                try:
+                    from scanner_beta_ui import open_beta_settings
+                    open_beta_settings(cls._root_ref, cls.COLORS)
+                except Exception as ex:
+                    print(f'[beta] {ex}')
+            beta.bind('<Button-1>', _open_beta)
+            cls._root_ref.bind('<Control-Shift-M>', _open_beta)
 
         # Toggle expandido
         tg = tk.Label(parent, text='⤢', font=('Segoe UI', 9),
@@ -215,6 +243,21 @@ def patch_modern_ui(cls):
             cls._token_indicator.config(text='Token err', fg=cls.COLORS['red'])
         else:
             cls._token_indicator.config(text='Token', fg=cls.COLORS['text_muted'])
+
+    @classmethod
+    def set_license_status(cls, active: bool, company: str = '', hours=None):
+        """Licencia firmada embebida (flujo SS sin código manual)."""
+        if not cls._token_indicator:
+            return
+        if active:
+            label = 'Licencia activa'
+            if company:
+                label = f'Licencia · {company[:18]}'
+            if hours is not None:
+                label += f' · {hours}h'
+            cls._token_indicator.config(text=label, fg=cls.COLORS['accent_light'])
+        else:
+            cls.set_token_status(False)
 
     @classmethod
     def append_phase_history(cls, text: str):
@@ -530,7 +573,7 @@ def patch_modern_ui(cls):
 
     _method_names = (
         'apply_ui_prefs', 'toggle_expanded_mode', 'show_splash', 'fade_out_and_quit',
-        'enhance_header', 'set_network_status', 'set_token_status', 'append_phase_history',
+        'enhance_header', 'set_network_status', 'set_token_status', 'set_license_status', 'append_phase_history',
         'create_phase_sidebar', 'create_sparkline', 'push_risk_sample', 'set_files_scanned',
         'attach_files_counter', 'enhance_completion_panel', 'set_upload_status',
         'wire_cancel_confirm', 'flash_dwm_border', 'play_complete_sound', 'check_update_async',

@@ -96,7 +96,7 @@ except ImportError:
 try:
     from config.version import SCANNER_VERSION
 except ImportError:
-    SCANNER_VERSION = "1.6.59"
+    SCANNER_VERSION = "1.7.0"
 
 try:
     from config.lite_mode import (
@@ -1620,6 +1620,8 @@ class ArgusApp:
                 pass
         
         # Cargar configuración PRIMERO para verificar si hay token
+        self._remote_filter_rules = {}
+        self._remote_fp_rules = []
         self.config = self.load_config()
         # Licencia firmada embebida (nuevo flujo "Descargar para SS"): si el
         # config trae 'license' (blob argus_lic_...) y no hay scan_token, la
@@ -1655,6 +1657,89 @@ class ArgusApp:
             threading.Thread(target=self._check_for_update, daemon=True).start()
         except Exception:
             pass
+
+        # Motor pesado en segundo plano (evita lag al validar token)
+        self._begin_async_engine_startup()
+        return
+
+    def _begin_async_engine_startup(self):
+        """Inicializa DB, forensics, hashes, etc. sin bloquear la UI."""
+        self._engine_ready = False
+        self._startup_error = None
+        self._show_startup_overlay()
+        def _worker():
+            try:
+                self._initialize_scan_engine()
+            except Exception as exc:
+                self._startup_error = exc
+                import traceback
+                traceback.print_exc()
+            finally:
+                self._engine_ready = True
+        threading.Thread(target=_worker, name='ArgusEngineInit', daemon=True).start()
+        self.root.after(50, self._poll_engine_ready)
+
+    def _poll_engine_ready(self):
+        if not getattr(self, '_engine_ready', False):
+            self.root.after(80, self._poll_engine_ready)
+            return
+        self._hide_startup_overlay()
+        if getattr(self, '_startup_error', None):
+            try:
+                from tkinter import messagebox
+                messagebox.showerror(
+                    'Error al iniciar',
+                    f'No se pudo preparar el scanner:\n{self._startup_error}',
+                )
+            except Exception:
+                pass
+            try:
+                self.root.destroy()
+            except Exception:
+                pass
+            return
+        self._finish_ui_and_scan()
+
+    def _show_startup_overlay(self):
+        import tkinter as tk
+        C = ModernUI.COLORS if UI_STYLE_AVAILABLE else {}
+        bg = C.get('bg_primary', '#09090b')
+        txt = C.get('text_secondary', '#a1a1aa')
+        accent = C.get('accent_light', '#E8A86F')
+        self._startup_frame = tk.Frame(self.root, bg=bg)
+        self._startup_frame.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+        self._startup_frame.lift()
+        tk.Label(
+            self._startup_frame, text='ARGUS',
+            font=('Segoe UI', 16, 'bold'), bg=bg, fg=accent,
+        ).pack(pady=(120, 8))
+        self._startup_status = tk.Label(
+            self._startup_frame,
+            text='Preparando motor de escaneo…',
+            font=('Segoe UI', 10), bg=bg, fg=txt,
+        )
+        self._startup_status.pack()
+        try:
+            self.root.update_idletasks()
+        except Exception:
+            pass
+
+    def _hide_startup_overlay(self):
+        fr = getattr(self, '_startup_frame', None)
+        if fr is not None:
+            try:
+                fr.destroy()
+            except Exception:
+                pass
+            self._startup_frame = None
+
+    def _initialize_scan_engine(self):
+        """Todo lo pesado post-token (sin Tk). Corre en hilo de fondo."""
+        try:
+            from bundle_runtime import ensure_scanner_db
+            self._bundled_db_path = ensure_scanner_db()
+        except Exception:
+            self._bundled_db_path = 'scanner_db.sqlite'
 
         # Variables
         self.scanning = False
@@ -1721,39 +1806,6 @@ class ArgusApp:
         
         self._exit_scheduled = False
         self._user_quit_requested = False
-        self.root.protocol('WM_DELETE_WINDOW', self._quit_app)
-
-        # Hotkey de emergencia — solo staff que conoce la combinación
-        def _emergency_exit(event=None):
-            self._quit_app(force=True)
-        self.root.bind('<Control-Alt-Shift-Q>', _emergency_exit)
-        self.root.bind('<Control-Alt-Shift-q>', _emergency_exit)
-
-        # Crear interfaz mejorada con estilo moderno
-        self.create_ui()
-
-        if UI_STYLE_AVAILABLE and ModernUI:
-            try:
-                ModernUI.set_quit_callback(self._quit_app)
-                ModernUI.set_token_status(bool(self.config.get('scan_token')))
-                _api = self.config.get('api_url', 'https://asperss.onrender.com')
-                ModernUI.check_update_async(_api, SCANNER_VERSION)
-                ModernUI.setup_tray(self.root, on_quit=self._quit_app)
-            except Exception:
-                pass
-
-        self._click_test_result = None
-
-        def _start_scan_after_splash():
-            self.root.after(400, self.full_scan_with_discord)
-
-        if UI_STYLE_AVAILABLE and ModernUI:
-            try:
-                ModernUI.show_splash(self.root, SCANNER_VERSION, on_done=_start_scan_after_splash)
-            except Exception:
-                self.root.after(800, self.full_scan_with_discord)
-        else:
-            self.root.after(800, self.full_scan_with_discord)
 
         # Inicializar variables de cronómetro
         self.scan_start_time = None
@@ -1767,9 +1819,18 @@ class ArgusApp:
         self.progress_target_value = 0
         self._progress_message = ""
         
-        # Base de datos de hashes SHA256 de archivos conocidos (hacks detectados)
+        # Base de datos de hashes SHA256 (local primero; cloud en background)
         self.known_hack_hashes = set()
-        self.load_known_hack_hashes()
+        self.load_known_hack_hashes(local_only=True)
+        try:
+            threading.Thread(
+                target=self.load_known_hack_hashes,
+                kwargs={'local_only': False},
+                name='ArgusHashCloud',
+                daemon=True,
+            ).start()
+        except Exception:
+            pass
         
         # Cache de análisis de archivos para evitar re-analizar
         self.file_analysis_cache = {}
@@ -1788,9 +1849,18 @@ class ArgusApp:
             self.ai_analyzer = AIAnalyzer(
                 database_path=db_path,
                 api_url=api_url if api_url else None,
-                scan_token=scan_token if scan_token else None
+                scan_token=scan_token if scan_token else None,
+                defer_api_load=True,
             )
-            print("✅ Analizador de IA inicializado (con aprendizaje progresivo y actualización dinámica)")
+            print("✅ Analizador de IA inicializado (API en segundo plano)")
+            try:
+                threading.Thread(
+                    target=self._warm_ai_analyzer_from_api,
+                    name='ArgusAIWarm',
+                    daemon=True,
+                ).start()
+            except Exception:
+                pass
         except ImportError:
             print("⚠️ Módulo ai_analyzer no disponible")
         except Exception as e:
@@ -1880,19 +1950,80 @@ class ArgusApp:
         except Exception as e:
             print(f"⚠️ Error inicializando detector de mouse: {e}")
             self.mouse_detector = None
-    
-    def load_known_hack_hashes(self):
-        """Carga base de datos de hashes SHA256 de hacks conocidos - SISTEMA DE APRENDIZAJE CON ACTUALIZACIÓN DINÁMICA"""
+
+    def _finish_ui_and_scan(self):
+        """UI y arranque del scan — solo hilo principal Tk."""
+        self.root.protocol('WM_DELETE_WINDOW', self._quit_app)
+
+        def _emergency_exit(event=None):
+            self._quit_app(force=True)
+        self.root.bind('<Control-Alt-Shift-Q>', _emergency_exit)
+        self.root.bind('<Control-Alt-Shift-q>', _emergency_exit)
+
+        self.create_ui()
+
+        if UI_STYLE_AVAILABLE and ModernUI:
+            try:
+                ModernUI.set_quit_callback(self._quit_app)
+                ModernUI.set_token_status(bool(self.config.get('scan_token')))
+                _api = self.config.get('api_url', 'https://asperss.onrender.com')
+                ModernUI.check_update_async(_api, SCANNER_VERSION)
+                ModernUI.setup_tray(self.root, on_quit=self._quit_app)
+            except Exception:
+                pass
+
+        self._click_test_result = None
+
+        def _start_scan_after_splash():
+            self.root.after(400, self.full_scan_with_discord)
+
+        if UI_STYLE_AVAILABLE and ModernUI:
+            try:
+                ModernUI.show_splash(self.root, SCANNER_VERSION, on_done=_start_scan_after_splash)
+            except Exception:
+                self.root.after(800, self.full_scan_with_discord)
+        else:
+            self.root.after(800, self.full_scan_with_discord)
+
+    def _warm_ai_analyzer_from_api(self):
+        """Carga patrones/hashes de IA desde API sin bloquear el arranque."""
+        ai = getattr(self, 'ai_analyzer', None)
+        if not ai:
+            return
+        try:
+            ai._load_bundled_model_file()
+        except Exception:
+            pass
+        api_url = (self.config.get('api_url') or '').strip()
+        token = self.config.get('scan_token', '')
+        if not api_url:
+            return
+        ai.api_url = api_url
+        ai.scan_token = token or None
+        try:
+            ai.load_patterns_from_api()
+            ai.load_hashes_from_api()
+            fp = getattr(self, '_remote_fp_rules', None) or []
+            if fp:
+                ai.load_fp_suppressions(fp)
+            print('[IA] Modelo remoto cargado en segundo plano')
+        except Exception as e:
+            print(f'[IA] Warm API omitido: {e}')
+
+    def load_known_hack_hashes(self, local_only=False):
+        """Carga hashes SHA256: local inmediato; red opcional (no bloquear token/UI)."""
         import sqlite3
         import os
         import json
         import requests
         
-        # Hashes conocidos iniciales (ejemplos)
-        known_hashes = []
-        
+        if local_only:
+            known_hashes = []
+        else:
+            known_hashes = list(getattr(self, 'known_hack_hashes', None) or [])
+
         # Cargar hashes aprendidos de la base de datos local
-        db_path = 'scanner_db.sqlite'
+        db_path = getattr(self, '_bundled_db_path', None) or 'scanner_db.sqlite'
         if os.path.exists(db_path):
             try:
                 conn = sqlite3.connect(db_path)
@@ -1913,7 +2044,27 @@ class ArgusApp:
             except Exception as e:
                 print(f"⚠️ Error cargando hashes aprendidos: {e}")
         
-        # Intentar cargar hashes desde API
+        if local_only:
+            try:
+                from bundle_runtime import load_hash_catalog_hex, load_cloud_hashes_json
+                catalog = load_hash_catalog_hex()
+                for v in catalog:
+                    if v and v not in known_hashes:
+                        known_hashes.append(v)
+                if catalog:
+                    print(f'[bundle] Catálogo offline: {len(catalog)} SHA256')
+                for h in load_cloud_hashes_json():
+                    v = h.get('sha256', '') if isinstance(h, dict) else ''
+                    if v and v not in known_hashes:
+                        known_hashes.append(v)
+            except Exception as _be:
+                print(f'[bundle] offline hashes: {_be}')
+            self.known_hack_hashes = set(known_hashes)
+            if not hasattr(self, '_cloud_hash_frequency'):
+                self._cloud_hash_frequency = {}
+            return
+
+        # Intentar cargar hashes desde API (puede correr en hilo de fondo)
         api_url = self.config.get('api_url', '').rstrip('/')
         if api_url and requests is not None:
             # 1. Endpoint dedicado de hashes de hacks conocidos (cloud hash DB)
@@ -3707,8 +3858,141 @@ class ArgusApp:
             pass
         return False
 
+    def _apply_remote_fp_rules(self, issues):
+        """Aplica filtros de empresa + tabla ai_false_positives desde API."""
+        rules = getattr(self, '_remote_filter_rules', None) or {}
+        fps = getattr(self, '_remote_fp_rules', None) or []
+        if not rules and not fps:
+            return issues
+        excl = [str(p).lower() for p in (rules.get('exclude_patterns') or []) if p]
+        excl_paths = [str(p).lower() for p in (rules.get('exclude_paths') or []) if p]
+        min_conf = int(rules.get('min_confidence') or 0)
+        out = []
+        for iss in issues:
+            blob = f"{iss.get('nombre', '')} {iss.get('ruta', '')} {iss.get('archivo', '')}".lower()
+            conf = iss.get('confidence', 100)
+            if isinstance(conf, float) and conf <= 1:
+                conf = conf * 100
+            if min_conf and conf < min_conf and iss.get('alerta') not in ('CRITICAL',):
+                continue
+            skip = False
+            for p in excl:
+                if p in blob:
+                    skip = True
+                    break
+            if not skip:
+                for p in excl_paths:
+                    if p in (iss.get('ruta') or '').lower():
+                        skip = True
+                        break
+            if not skip:
+                for fp in fps:
+                    pv = (fp.get('pattern_value') or '').lower()
+                    if pv and pv in blob:
+                        skip = True
+                        break
+            if not skip:
+                out.append(iss)
+        dropped = len(issues) - len(out)
+        if dropped:
+            print(f"[filtros] Reglas remotas descartaron {dropped} hallazgo(s)")
+        return out
+
+    def _offer_discord_summary(self):
+        """Copia resumen SS al portapapeles (staff pega en Discord)."""
+        try:
+            from scan_report import build_discord_summary, copy_to_clipboard
+            text = build_discord_summary(self)
+            if copy_to_clipboard(self.root, text):
+                print("[report] Resumen Discord copiado al portapapeles")
+                if UI_STYLE_AVAILABLE and ModernUI:
+                    try:
+                        ModernUI.set_status_badge("LISTO · resumen copiado", ModernUI.COLORS.get('green', '#34D399'))
+                    except Exception:
+                        pass
+        except ImportError:
+            pass
+
+    def _push_fp_candidates_to_api(self):
+        """Envía candidatos FP cuando el scan es limpio (aprendizaje autónomo)."""
+        if not self.db_integration or not getattr(self.db_integration, 'scan_token', ''):
+            return
+        crit = sum(1 for i in (self.issues_found or []) if (i.get('alerta') or '').upper() == 'CRITICAL')
+        if crit > 0:
+            return
+        api_url = (self.config or {}).get('api_url', '').rstrip('/')
+        if not api_url:
+            return
+        try:
+            import requests
+            low = [i for i in (self.issues_found or []) if (i.get('alerta') or '').upper() in ('POCO_SOSPECHOSO', 'NORMAL')]
+            payload = {
+                'token': self.db_integration.scan_token,
+                'candidates': [
+                    {'pattern_type': 'path', 'pattern_value': (i.get('ruta') or i.get('nombre', ''))[:200],
+                     'feature_name': i.get('tipo', '')}
+                    for i in low[:15]
+                ],
+            }
+            if not payload['candidates']:
+                return
+            requests.post(f"{api_url}/api/scanner/fp-learn", json=payload, timeout=12)
+            print(f"[ai] Enviados {len(payload['candidates'])} candidatos FP al servidor")
+        except Exception as e:
+            print(f"[ai] fp-learn: {e}")
+
+    def _pack_custom_config(self):
+        try:
+            from config.scanner_custom import load_scanner_custom
+            return load_scanner_custom()
+        except Exception:
+            return {}
+
+    def _pack_replaces_ss_forensics(self):
+        return bool(self._pack_custom_config().get('skip_main_ss_forensics_block', True))
+
+    def _pack_replaces_modular_scanners(self):
+        return bool(self._pack_custom_config().get('skip_main_modular_scanners', True))
+
+    def _schedule_remote_filters_load(self):
+        """Filtros remotos sin bloquear UI (post-token)."""
+        token = self.config.get('scan_token', '')
+        api_url = self.config.get('api_url', '')
+        if not token or not api_url:
+            return
+        threading.Thread(
+            target=self._load_remote_scan_filters,
+            args=(token, api_url),
+            name='ArgusRemoteFilters',
+            daemon=True,
+        ).start()
+
+    def _load_remote_scan_filters(self, scan_token, api_url):
+        """Carga filtros de empresa + FP de IA desde la API (v1.7)."""
+        if not scan_token or not api_url:
+            return
+        try:
+            import requests
+            r = requests.get(
+                f"{api_url.rstrip('/')}/api/scanner/filter-rules",
+                params={'token': scan_token},
+                timeout=8,
+            )
+            if r.status_code != 200:
+                return
+            data = r.json() or {}
+            if not data.get('success'):
+                return
+            self._remote_filter_rules = data.get('rules') or {}
+            self._remote_fp_rules = data.get('ai_false_positives') or []
+            print(f"[filtros] Remotos: {len(self._remote_fp_rules)} FP IA, "
+                  f"{len((self._remote_filter_rules.get('exclude_patterns') or []))} patrones")
+        except Exception as e:
+            print(f"[filtros] No se cargaron reglas remotas: {e}")
+
     def filter_false_positives(self, issues):
         """Filtrado MEJORADO - Detecta hacks reales pero menos estricto"""
+        issues = self._apply_remote_fp_rules(issues)
         filtered = []
         hacks_critical = []
         hacks_sospechoso = []
@@ -4745,6 +5029,13 @@ class ArgusApp:
     # ── Click-speed test (P3 #26 — hardware autoclicker button detection) ────
     def _show_click_test(self):
         """
+        DEPRECATED v1.7 — sin ventana de test. La detección de mouse/autoclick
+        es silenciosa (mouse_weight_detector + _start_click_timing_monitor).
+        """
+        return
+
+    def _show_click_test_legacy(self):
+        """
         Muestra un test de velocidad de clicks antes del scan.
         Pide al jugador hacer clic 15 veces para analizar el patrón.
         - CV < 0.04 y CPS > 8  → botón de autoclicker hardware (CRITICAL)
@@ -5568,6 +5859,10 @@ class ArgusApp:
                                     except Exception:
                                         pass
                                 print("✅ Resultados enviados a Web/BD")
+                                try:
+                                    self._offer_discord_summary()
+                                except Exception as _ds:
+                                    print(f"[report] discord summary: {_ds}")
                                 # Cerrar solo DESPUÉS de subir — si se cierra antes, el POST se corta
                                 # y el panel queda en "running" con 0 archivos (scan #107–109).
                                 self._schedule_close_after_upload(4)
@@ -6037,7 +6332,10 @@ class ArgusApp:
                 self._set_scan_phase("🧾 Args sospechosos en tareas...")
                 _run_safe(self.scan_scheduled_tasks_suspicious_args)
                 self._set_scan_phase("🔬 Scanners modulares (WMI/DNS/registro)...")
-                _run_safe(self.scan_modular_scanners)
+                if self._pack_replaces_modular_scanners():
+                    print("[PACK v1.7] scan_modular_scanners omitido (módulos pkg_*)")
+                else:
+                    _run_safe(self.scan_modular_scanners)
                 self._set_scan_phase("⏰ Tareas programadas recientes (persistencia)...")
                 _run_safe(self.scan_recent_install_tasks)
                 self._set_scan_phase("🧱 COM hijacking candidates...")
@@ -6301,6 +6599,9 @@ class ArgusApp:
             def _group_forensics():
                 if not self.ss_forensics:
                     return
+                if self._pack_replaces_ss_forensics():
+                    print("[PACK v1.7] SSForensics scan_all omitido (módulos forensic_*)")
+                    return
                 try:
                     findings = self.ss_forensics.scan_all()
                     if findings:
@@ -6362,6 +6663,17 @@ class ArgusApp:
                 except Exception as _me:
                     print(f"⚠️ Error recolectando hallazgos de mouse: {_me}")
 
+            # Pack v1.7 — 70 módulos extendidos + 3 de minado (paralelo, configurable)
+            self._set_scan_phase("Pack v1.7 — superficies forenses nuevas…")
+            try:
+                from scan_modules.executor import run_pack_modules
+                _pack_issues = run_pack_modules(self, progress_cb=self._set_scan_phase)
+                if _pack_issues:
+                    self.issues_found.extend(_pack_issues)
+                    print(f"[PACK v1.7] {len(_pack_issues)} hallazgos de módulos extendidos")
+            except Exception as _pack_err:
+                print(f"[PACK v1.7] No se ejecutó el pack de módulos: {_pack_err}")
+
             # Análisis de evasión activa (post-scan, requiere todos los hallazgos previos)
             self._set_scan_phase("🎭 Detección de evasión activa...")
             _run_safe(self.scan_evasion_indicators)
@@ -6375,6 +6687,13 @@ class ArgusApp:
                     self.issues_found.extend(_ff)
                     print(f"[FILTRO] Fusionados {len(_ff)} hallazgos forenses en issues_found")
             print(f"[FILTRO] Issues antes de filtrar: {len(self.issues_found)} | Archivos escaneados: {self.total_files_scanned} | Dirs: {self.total_dirs_scanned}")
+
+            # Mouse / peso — fusionar tras recolección (no pasan por filtro agresivo)
+            if getattr(self, 'mouse_findings', None):
+                _mf = self.mouse_findings
+                if _mf:
+                    self.issues_found.extend(_mf)
+                    print(f"[FILTRO] Fusionados {len(_mf)} hallazgos de mouse (detección silenciosa)")
 
             # Aplicar filtro ultra inteligente
             pre_filter = len(self.issues_found)
@@ -6396,6 +6715,8 @@ class ArgusApp:
             # Aplicar análisis de IA si está disponible
             if self.ai_analyzer and self.issues_found:
                 try:
+                    if getattr(self, '_remote_fp_rules', None):
+                        self.ai_analyzer.load_fp_suppressions(self._remote_fp_rules)
                     self._update_progress_safe(100, "🤖 Analizando con IA", "Aplicando análisis inteligente...")
                     self.issues_found = self.ai_analyzer.analyze_batch(self.issues_found)
                     print(f"✅ Análisis de IA aplicado - {len(self.issues_found)} issues analizados")
@@ -6493,6 +6814,10 @@ class ArgusApp:
                         counts['clean'] += 1
                 counts['total'] = len(self.issues_found)
                 self._last_scan_counts = counts
+                try:
+                    threading.Thread(target=self._push_fp_candidates_to_api, daemon=True).start()
+                except Exception:
+                    pass
                 for k, v in counts.items():
                     if k != 'total':
                         ModernUI.update_counter(k, v)
@@ -8438,6 +8763,113 @@ class ArgusApp:
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("Error de actualización", str(e)))
 
+    def _resolve_api_url(self):
+        """URL de API con failsafe (sin localhost / endpoints viejos)."""
+        _bad = (
+            'http://localhost', 'https://localhost',
+            'http://127.0.0.1', 'https://127.0.0.1',
+            'https://ssapi-cfni.onrender.com',
+        )
+        if not hasattr(self, 'config') or not self.config:
+            self.config = self.load_config()
+        api_url = (self.config.get('api_url') or '').strip()
+        if not api_url or any(api_url.startswith(p) for p in _bad):
+            api_url = 'https://asperss.onrender.com'
+            self.config['api_url'] = api_url
+        web_url = (self.config.get('web_url') or '').strip()
+        if not web_url or any(web_url.startswith(p) for p in _bad):
+            self.config['web_url'] = 'https://asperss.onrender.com'
+        return api_url
+
+    def _validate_token_http(self, token, timeout=8, max_retries=2):
+        """POST validate-token; no bloquear más de ~20s en total."""
+        import time
+        import requests
+        api_url = self._resolve_api_url()
+        last_err = None
+        for attempt in range(max_retries):
+            if attempt > 0:
+                time.sleep(1.2 * attempt)
+            try:
+                response = requests.post(
+                    f"{api_url.rstrip('/')}/api/validate-token",
+                    json={'token': token},
+                    timeout=timeout,
+                )
+                if response.status_code == 200:
+                    return True, response.json() or {}
+                if 400 <= response.status_code < 500:
+                    return False, {'error': f'HTTP {response.status_code}'}
+            except requests.exceptions.Timeout as e:
+                last_err = e
+            except requests.exceptions.ConnectionError as e:
+                last_err = e
+            except Exception as e:
+                last_err = e
+        return False, {'error': str(last_err) if last_err else 'sin respuesta'}
+
+    def _apply_valid_token(self, token, data):
+        """Persiste token y metadatos tras validación OK."""
+        self.config['scan_token'] = token
+        if data.get('created_by'):
+            self.config['staff_name'] = data['created_by']
+        if data.get('is_license'):
+            self.config['auth_mode'] = 'license'
+            self.config['company_id'] = data.get('company_id')
+            self.config['company_name'] = data.get('company_name') or ''
+            if UI_STYLE_AVAILABLE and ModernUI:
+                try:
+                    ModernUI.set_license_status(
+                        True,
+                        company=self.config.get('company_name') or '',
+                        hours=data.get('license_expires_in_hours'),
+                    )
+                except Exception:
+                    pass
+        if data.get('allowed_mods'):
+            self.config['server_allowed_mods'] = data['allowed_mods']
+        if hasattr(self, 'db_integration') and self.db_integration:
+            self.db_integration.scan_token = token
+        self._save_token_config_file(token)
+        self._schedule_remote_filters_load()
+        try:
+            threading.Thread(target=self._save_current_profile, daemon=True).start()
+        except Exception:
+            pass
+        return True
+
+    def _save_token_config_file(self, token):
+        """Guarda scan_token en config.json persistente (AppData si frozen)."""
+        import os
+        import json
+        import sys
+        try:
+            if getattr(sys, 'frozen', False):
+                appdata_roaming = os.path.join(
+                    os.environ.get('APPDATA', ''), 'ASPERSProjectsSS')
+                os.makedirs(appdata_roaming, exist_ok=True)
+                config_path = os.path.join(appdata_roaming, 'config.json')
+            else:
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                config_path = os.path.join(script_dir, 'config.json')
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    existing_config = json.load(f)
+                existing_config['scan_token'] = token
+                existing_config['api_url'] = self.config.get(
+                    'api_url', existing_config.get('api_url', 'https://asperss.onrender.com'))
+                existing_config['web_url'] = self.config.get(
+                    'web_url', existing_config.get('web_url', 'https://asperss.onrender.com'))
+                self.config = existing_config
+            else:
+                self.config['scan_token'] = token
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(self.config, f, indent=2, ensure_ascii=False)
+            self.config_path = config_path
+            print(f"💾 Token guardado en {config_path}")
+        except Exception as save_error:
+            print(f"⚠️ No se pudo guardar token en archivo: {save_error}")
+
     def check_authentication(self):
         """Sistema de autenticación usando Discord para generar tokens"""
         try:
@@ -8452,37 +8884,15 @@ class ArgusApp:
             scan_token = self.config.get('scan_token', '')
             if scan_token:
                 print(f"🔑 Token encontrado en config, verificando validez...")
-                api_url = self.config.get('api_url', 'https://asperss.onrender.com')
-                
-                # Intentar validar el token sin mostrar ventana
-                try:
-                    response = requests.post(
-                        f"{api_url}/api/validate-token",
-                        json={'token': scan_token},
-                        timeout=10
-                    )
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data.get('valid', False):
-                            print(f"✅ Token válido encontrado en config, autenticación automática exitosa")
-                            if data.get('created_by'):
-                                self.config['staff_name'] = data['created_by']
-                            # P2 #2 — guardar allowed_mods del servidor en config
-                            if data.get('allowed_mods'):
-                                self.config['server_allowed_mods'] = data['allowed_mods']
-                            if hasattr(self, 'db_integration') and self.db_integration:
-                                self.db_integration.scan_token = scan_token
-                            # P5 #35 — persist profile
-                            threading.Thread(target=self._save_current_profile, daemon=True).start()
-                            return True
-                        else:
-                            print(f"⚠️ Token en config no es válido, solicitando nuevo token")
-                    else:
-                        print(f"⚠️ Error validando token existente: {response.status_code}")
-                except Exception as e:
-                    print(f"⚠️ Error validando token existente: {e}")
-                    # Continuar con el flujo normal de autenticación
+                ok, data = self._validate_token_http(scan_token, timeout=8, max_retries=2)
+                if ok and data.get('valid', False):
+                    print("✅ Token válido en config — autenticación automática")
+                    self._apply_valid_token(scan_token, data)
+                    return True
+                if ok:
+                    print("⚠️ Token en config no es válido, solicitando nuevo token")
+                else:
+                    print(f"⚠️ Error validando token existente: {data.get('error', '?')}")
             
             # Si no hay token válido, mostrar autenticación integrada en ventana principal
             auth_result = [False]
@@ -8575,193 +8985,8 @@ class ArgusApp:
 
             # ──────── STEP 1: TOKEN INPUT ────────
             token_frame = tk.Frame(auth_frame, bg=bg)
-            
-            def verify_token(token):
-                """Verifica si el token es válido contra la API web"""
-                try:
-                    import requests
-                    
-                    # Asegurar que self.config esté disponible
-                    if not hasattr(self, 'config') or not self.config:
-                        self.config = self.load_config()
-                    
-                    # Obtener URL de la API desde la configuración (con failsafe anti-localhost)
-                    _bad = ('http://localhost', 'https://localhost', 'http://127.0.0.1', 'https://127.0.0.1', 'https://ssapi-cfni.onrender.com')
-                    api_url = self.config.get('api_url', '') or ''
-                    if not api_url or any(api_url.startswith(p) for p in _bad):
-                        api_url = 'https://asperss.onrender.com'
-                        self.config['api_url'] = api_url
-                    web_url = self.config.get('web_url', '') or ''
-                    if not web_url or any(web_url.startswith(p) for p in _bad):
-                        self.config['web_url'] = 'https://asperss.onrender.com'
-                    print(f"🔍 Validando token contra API: {api_url}")
-                    print(f"🔍 Código de acceso recibido: {token}")
-                    
-                    # Validar token contra la API con reintentos (Render puede estar "despertando")
-                    import time
-                    max_retries = 3
-                    retry_delay = 2  # segundos
-                    timeout = 30  # Aumentado a 30 segundos para Render
-                    
-                    for attempt in range(max_retries):
-                        try:
-                            if attempt > 0:
-                                print(f"🔄 Reintentando validación de token (intento {attempt + 1}/{max_retries})...")
-                                time.sleep(retry_delay * attempt)  # Backoff exponencial
-                            
-                            response = requests.post(
-                                f"{api_url}/api/validate-token",
-                                json={'token': token},
-                                timeout=timeout
-                            )
-                            
-                            print(f"📡 Respuesta de API: Status {response.status_code}")
-                            
-                            if response.status_code == 200:
-                                data = response.json()
-                                print(f"📡 Datos de respuesta: {data}")
-                                
-                                if data.get('valid', False):
-                                    print(f"✅ Token válido verificado contra API")
-                                    # Guardar token y dueño en configuración
-                                    self.config['scan_token'] = token
-                                    if data.get('created_by'):
-                                        self.config['staff_name'] = data['created_by']
-                                    
-                                    # Actualizar también en db_integration inmediatamente
-                                    if hasattr(self, 'db_integration') and self.db_integration:
-                                        self.db_integration.scan_token = token
-                                        print(f"✅ Token actualizado en db_integration inmediatamente")
-                                    
-                                    # Guardar token en archivo de configuración (ubicación persistente)
-                                    try:
-                                        import os
-                                        import json
-                                        import sys
-                                        
-                                        # Determinar ubicación persistente para config.json
-                                        # SIEMPRE usar AppData\Roaming para ejecutables compilados (más persistente)
-                                        if getattr(sys, 'frozen', False):
-                                            # Usar AppData\Roaming (persistente, no temporal)
-                                            appdata_roaming = os.path.join(os.environ.get('APPDATA', ''), 'ASPERSProjectsSS')
-                                            os.makedirs(appdata_roaming, exist_ok=True)
-                                            config_path = os.path.join(appdata_roaming, 'config.json')
-                                            print(f"📁 Guardando config en ubicación persistente: {config_path}")
-                                        else:
-                                            # Si está en desarrollo, buscar en el directorio del script
-                                            script_dir = os.path.dirname(os.path.abspath(__file__))
-                                            config_path = os.path.join(script_dir, 'config.json')
-                                        
-                                        # Leer config existente para no sobrescribir otros valores
-                                        try:
-                                            if os.path.exists(config_path):
-                                                with open(config_path, 'r', encoding='utf-8') as f:
-                                                    existing_config = json.load(f)
-                                                existing_config['scan_token'] = token
-                                                existing_config['api_url'] = self.config.get('api_url', existing_config.get('api_url', 'https://asperss.onrender.com'))
-                                                existing_config['web_url'] = self.config.get('web_url', existing_config.get('web_url', 'https://asperss.onrender.com'))
-                                                self.config = existing_config
-                                            else:
-                                                # Si no existe, usar el config actual y agregar token
-                                                self.config['scan_token'] = token
-                                        except Exception as read_error:
-                                            # Si falla al leer, usar el config actual
-                                            print(f"⚠️ Error leyendo config existente: {read_error}")
-                                            self.config['scan_token'] = token
-                                        
-                                        # Guardar config
-                                        with open(config_path, 'w', encoding='utf-8') as f:
-                                            json.dump(self.config, f, indent=2, ensure_ascii=False)
-                                        print(f"💾 Token guardado en {config_path}")
+            _auth_busy = [False]
 
-                                        # También actualizar self.config_path para futuras lecturas
-                                        self.config_path = config_path
-                                    except Exception as save_error:
-                                        import traceback
-                                        print(f"⚠️ No se pudo guardar token en archivo: {str(save_error)}")
-                                        print(f"   Traceback: {traceback.format_exc()}")
-
-                                    # P5 #35 — persist profile
-                                    threading.Thread(target=self._save_current_profile, daemon=True).start()
-                                    return True  # Token válido
-                                else:
-                                    # Token inválido, no reintentar
-                                    error_msg = data.get('error', 'Token inválido')
-                                    print(f"❌ Token inválido según API: {error_msg}")
-                                    return False
-                            else:
-                                # Error HTTP, reintentar si no es 4xx (errores del cliente)
-                                if response.status_code < 400 or response.status_code >= 500:
-                                    if attempt < max_retries - 1:
-                                        continue  # Reintentar
-                                    else:
-                                        raise Exception(f"Error HTTP {response.status_code} después de {max_retries} intentos")
-                                else:
-                                    # Error 4xx, no reintentar
-                                    break
-                        except requests.exceptions.Timeout:
-                            if attempt < max_retries - 1:
-                                print(f"⏱️ Timeout en intento {attempt + 1}, reintentando...")
-                                continue
-                            else:
-                                print(f"❌ Timeout después de {max_retries} intentos. La API puede estar sobrecargada o inactiva.")
-                                raise
-                        except requests.exceptions.ConnectionError as e:
-                            if attempt < max_retries - 1:
-                                print(f"🔌 Error de conexión en intento {attempt + 1}, reintentando...")
-                                continue
-                            else:
-                                print(f"❌ Error de conexión después de {max_retries} intentos: {str(e)}")
-                                raise
-                        except Exception as e:
-                            if attempt < max_retries - 1:
-                                print(f"⚠️ Error en intento {attempt + 1}: {str(e)}, reintentando...")
-                                continue
-                            else:
-                                raise
-                            
-                    # Si llegamos aquí después de todos los reintentos sin éxito, retornar False
-                    print(f"❌ No se pudo validar el token después de {max_retries} intentos")
-                    return False
-                            
-                except requests.exceptions.ConnectionError as conn_err:
-                    print(f"⚠️ No se pudo conectar con la API en {api_url}")
-                    print(f"⚠️ Error de conexión: {conn_err}")
-                    print(f"💡 Asegúrate de que:")
-                    print(f"   1. La API esté corriendo en {api_url}")
-                    print(f"   2. No haya firewall bloqueando la conexión")
-                    try:
-                        messagebox.showerror(
-                            "Error de Conexión",
-                            f"No se pudo conectar con la API en {api_url}\n\n"
-                            f"Posibles causas:\n"
-                            f"• El servidor está despertando (Render free tier, espera 30s)\n"
-                            f"• Sin conexión a internet\n\n"
-                            f"Cierra y vuelve a abrir el scanner para reintentar."
-                        )
-                    except:
-                        pass
-                    return False
-                except Exception as e:
-                    print(f"❌ Error al validar token: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    return False
-                    
-                except ImportError:
-                    print(f"❌ Módulo requests no disponible para validar token")
-                    messagebox.showerror(
-                        "Error",
-                        "El módulo 'requests' no está instalado.\n\n"
-                        "Instálalo con: pip install requests"
-                    )
-                    return False
-                except Exception as e:
-                    print(f"❌ Error verificando token: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    return False
-            
             # Token input UI
             tk_center = tk.Frame(token_frame, bg=bg)
             tk_center.place(relx=0.5, rely=0.48, anchor='center')
@@ -8777,7 +9002,16 @@ class ArgusApp:
                      font=('Segoe UI', 12, 'bold'),
                      bg=bg, fg=txt_p).pack(pady=(0, 4))
             tk.Label(tk_center, text="Token de 6 caracteres \u00b7 proporcionado por staff",
-                     font=('Segoe UI', 9), bg=bg, fg=txt_m).pack(pady=(0, 22))
+                     font=('Segoe UI', 9), bg=bg, fg=txt_m).pack(pady=(0, 8))
+            _lic_blob = (self.config.get('scan_token') or self.config.get('license') or '')
+            if str(_lic_blob).startswith('argus_lic_'):
+                tk.Label(tk_center,
+                         text="La licencia embebida expiró o la suscripción no está activa.\n"
+                              "Descargá de nuevo desde el panel (Descargar para SS).",
+                         font=('Segoe UI', 9), bg=bg, fg=C.get('amber', '#F59E0B'),
+                         wraplength=360, justify='center').pack(pady=(0, 14))
+            else:
+                tk.Frame(tk_center, height=6, bg=bg).pack()
 
             code_var = tk.StringVar()
             def _on_code_change(*_):
@@ -8802,20 +9036,45 @@ class ArgusApp:
             status_lbl.pack(pady=(0, 18))
 
             def on_authenticate():
+                if _auth_busy[0]:
+                    return
                 token = token_entry.get().strip()
                 if not token:
                     status_lbl.config(text="Ingresa un código.", fg=C.get('amber', '#FCD34D'))
                     return
-                status_lbl.config(text="Verificando...", fg=accent_l)
-                self.root.update()
-                if verify_token(token):
-                    if hasattr(self, 'db_integration') and self.db_integration:
-                        self.db_integration.scan_token = token
-                    auth_result[0] = True
-                    status_lbl.config(text="\u2713 Acceso autorizado", fg=green)
-                    self.root.after(600, auth_frame.destroy)
-                else:
-                    status_lbl.config(text="\u2715 Código inválido o expirado", fg=C.get('red', '#f87171'))
+                _auth_busy[0] = True
+                auth_btn.config(state='disabled')
+                token_entry.config(state='disabled')
+                status_lbl.config(text="Verificando en línea…", fg=accent_l)
+
+                def _worker():
+                    ok, data = self._validate_token_http(token, timeout=8, max_retries=2)
+                    if ok and data.get('valid', False):
+                        self._apply_valid_token(token, data)
+                        def _ok():
+                            auth_result[0] = True
+                            status_lbl.config(text="\u2713 Acceso autorizado", fg=green)
+                            self.root.after(400, auth_frame.destroy)
+                        self.root.after(0, _ok)
+                    else:
+                        err = (data.get('error') if ok else data.get('error')) or 'inválido'
+                        def _fail():
+                            _auth_busy[0] = False
+                            auth_btn.config(state='normal')
+                            token_entry.config(state='normal')
+                            if 'connect' in str(err).lower() or 'timeout' in str(err).lower():
+                                status_lbl.config(
+                                    text="\u2715 Sin conexión con el servidor (reintenta)",
+                                    fg=C.get('red', '#f87171'),
+                                )
+                            else:
+                                status_lbl.config(
+                                    text="\u2715 Código inválido o expirado",
+                                    fg=C.get('red', '#f87171'),
+                                )
+                        self.root.after(0, _fail)
+
+                threading.Thread(target=_worker, name='ArgusTokenAuth', daemon=True).start()
 
             def on_cancel():
                 auth_result[0] = False
@@ -10288,17 +10547,26 @@ class ArgusApp:
         else:
             return  # patrón humano normal
 
-        self.issues_found.append({
-            'tipo':     'autoclick_timing',
-            'nombre':   f'Patrón de click anómalo: {desc}',
-            'ruta':     '',
-            'archivo':  '',
-            'categoria':'AUTOCLICK',
-            'alerta':   alerta,
-            'confidence': conf,
+        finding = {
+            'tipo':        'MOUSE_MECHANICAL_CLICK_TIMING',
+            'nombre':      f'Patrón de click anómalo: {desc}',
+            'ruta':        '',
+            'archivo':     '',
+            'detalle':     f'σ={sigma:.1f}ms, CPS={cps:.1f}, muestras={len(ts)}',
+            'categoria':   'MOUSE_WEIGHT',
+            'alerta':      alerta,
+            'confidence':  conf,
             'detected_patterns': [f'sigma:{sigma:.1f}ms', f'cps:{cps:.1f}'],
-        })
-        print(f"🚨 AUTOCLICK DETECTADO POR TIMING: {desc}")
+            'descripcion': (
+                'Muestreo silencioso del botón izquierdo durante el escaneo: intervalo '
+                'demasiado regular para un humano. Compatible con peso en el botón, '
+                'click-bug o autoclicker activo.'
+            ),
+        }
+        if not getattr(self, 'mouse_findings', None):
+            self.mouse_findings = []
+        self.mouse_findings.append(finding)
+        print(f"🚨 AUTOCLICK / PESO (timing): {desc}")
 
     def scan_input_hook_processes(self):
         """Detecta procesos con global hooks de teclado/mouse (WH_KEYBOARD_LL, WH_MOUSE_LL)
@@ -21863,10 +22131,10 @@ class ArgusApp:
                 </span>
             </h2>
             <p style="color:#ffa0a0;margin-bottom:16px;font-size:0.95em;">
-                ⚠️  Se detectaron indicadores de <strong>peso sobre el mouse</strong>,
-                <strong>click-bug activo</strong> o <strong>desconexión/reconexión de dispositivo</strong>
-                durante la sesión de SS. Estas técnicas se usan en prison mode para obtener
-                autoclick sin software detectable.
+                ⚠️  Indicadores de <strong>peso / click-bug</strong>, manipulación en vivo o
+                <strong>evidencia histórica del pasado</strong> (setupapi, Event Log, Prefetch, BAM, USB).
+                Windows no registra el peso físico; el veredicto <em>Uso pasado de peso/click-bug</em>
+                agrupa rastros que sobreviven aunque quiten el peso antes de la SS.
             </p>
             {rows}
         </div>"""
