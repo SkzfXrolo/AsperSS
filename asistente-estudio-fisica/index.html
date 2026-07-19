@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Física · Guía + videos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0e1218; --panel: #171d27; --soft: #222b38; --line: #2f3b4d;
+      --text: #eef3f8; --muted: #8b9cb0; --teal: #3dd6c6; --orange: #f4a261;
+      --red: #e76f51; --blue: #5dade2; --green: #7dcea0; --yellow: #f7dc6f;
+      --font: "DM Sans", system-ui, sans-serif; --mono: "JetBrains Mono", monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; }
+    .top {
+      display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;
+      padding: 0.85rem 1rem; border-bottom: 1px solid var(--line);
+      background: var(--panel); position: sticky; top: 0; z-index: 10;
+    }
+    .brand { font-weight: 700; margin-right: 0.4rem; color: var(--teal); font-size: 0.95rem; }
+    .top button {
+      font: 600 0.78rem var(--font); padding: 0.45rem 0.7rem; border-radius: 999px;
+      border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer;
+    }
+    .top button.on { background: var(--teal); color: #0a1210; border-color: var(--teal); }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 1rem 1rem 4rem; }
+    .view[hidden] { display: none !important; }
+
+    .hero h1 { font-size: clamp(1.4rem, 4vw, 1.9rem); margin-bottom: 0.4rem; }
+    .hero h1 span { color: var(--teal); }
+    .hero p { color: var(--muted); max-width: 36rem; margin-bottom: 1.2rem; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.6rem; }
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+      padding: 1rem; cursor: pointer; transition: border-color 0.15s;
+    }
+    .card:hover { border-color: var(--teal); }
+    .card .n { font-family: var(--mono); color: var(--teal); font-size: 0.72rem; margin-bottom: 0.25rem; }
+    .card h3 { font-size: 1rem; margin-bottom: 0.25rem; }
+    .card p { font-size: 0.82rem; color: var(--muted); }
+
+    .guide-block {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+      padding: 1.15rem 1.25rem; margin-bottom: 1rem;
+    }
+    .guide-block h2 { font-size: 1.25rem; margin-bottom: 0.35rem; }
+    .guide-block .chip {
+      display: inline-block; font-size: 0.7rem; font-weight: 700; color: var(--teal);
+      background: var(--soft); padding: 0.2rem 0.5rem; border-radius: 4px; margin-bottom: 0.5rem;
+    }
+    .idea {
+      border-left: 3px solid var(--teal); padding: 0.55rem 0.85rem; margin: 0.75rem 0;
+      color: var(--muted); font-size: 0.95rem; background: rgba(61,214,198,0.06); border-radius: 0 8px 8px 0;
+    }
+    .idea b { color: var(--text); }
+    .steps-plain { list-style: none; counter-reset: sp; margin: 0.75rem 0; }
+    .steps-plain li {
+      counter-increment: sp; position: relative; padding: 0.65rem 0 0.65rem 2.5rem;
+      border-bottom: 1px solid var(--line); font-size: 0.95rem;
+    }
+    .steps-plain li:last-child { border-bottom: none; }
+    .steps-plain li::before {
+      content: counter(sp); position: absolute; left: 0; top: 0.65rem;
+      width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--soft);
+      color: var(--teal); font: 700 0.75rem var(--mono);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .formula {
+      font-family: var(--mono); background: #0a0e14; border: 1px solid var(--line);
+      border-radius: 8px; padding: 0.6rem 0.85rem; margin: 0.45rem 0;
+      font-size: 0.88rem; color: #b8e0d8; overflow-x: auto;
+    }
+    .calc-box {
+      background: #0a0e14; border: 1px solid var(--line); border-radius: 10px;
+      padding: 0.7rem 0.85rem; margin: 0.6rem 0;
+    }
+    .calc-box .lbl { font-size: 0.68rem; font-weight: 700; color: var(--orange); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.3rem; }
+    .calc-box code { font-family: var(--mono); font-size: 0.85rem; color: var(--text); }
+    .result {
+      margin-top: 0.75rem; padding: 0.75rem 0.9rem; border-radius: 8px;
+      background: rgba(61,214,198,0.08); border: 1px solid rgba(61,214,198,0.35);
+      font-size: 0.92rem;
+    }
+    .result strong { color: var(--teal); }
+    .syms { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.6rem 0; }
+    .sym {
+      font-size: 0.75rem; padding: 0.35rem 0.55rem; border-radius: 8px;
+      background: var(--soft); border: 1px solid var(--line);
+    }
+    .sym code { font-family: var(--mono); color: var(--teal); font-weight: 700; }
+
+    .video-wrap {
+      margin: 1rem 0 0.25rem; border-radius: 12px; overflow: hidden;
+      border: 1px solid var(--line); background: #000; aspect-ratio: 16/9;
+    }
+    .video-wrap iframe { width: 100%; height: 100%; border: 0; display: block; }
+    .video-cap { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.75rem; }
+    .video-cap a { color: var(--teal); }
+
+    .table-mini {
+      width: 100%; border-collapse: collapse; font-size: 0.85rem;
+      font-family: var(--mono); margin: 0.6rem 0;
+    }
+    .table-mini th, .table-mini td {
+      border: 1px solid var(--line); padding: 0.35rem 0.5rem; text-align: center;
+    }
+    .table-mini th { background: var(--soft); color: var(--teal); }
+
+    .lesson { display: grid; grid-template-columns: 1.2fr 0.9fr; gap: 0.85rem; margin-top: 1rem; }
+    @media (max-width: 800px) { .lesson { grid-template-columns: 1fr; } }
+    .stage {
+      background: #0a0e14; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; min-height: 340px;
+    }
+    .stage canvas { width: 100%; display: block; }
+    .side {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+      padding: 1rem; display: flex; flex-direction: column; gap: 0.65rem;
+    }
+    .pill { font: 500 0.72rem var(--mono); color: var(--teal); letter-spacing: 0.06em; }
+    .dots { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+    .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--line); display: block; }
+    .dots i.on { background: var(--teal); transform: scale(1.3); }
+    .dots i.done { background: var(--muted); }
+    .headline { font-size: 1.15rem; font-weight: 700; }
+    .one-liner { font-size: 0.92rem; color: var(--muted); }
+    .one-liner b { color: var(--text); }
+    .keys { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; font-family: var(--mono); font-size: 0.78rem; }
+    .key { background: var(--soft); border: 1px solid var(--line); padding: 0.28rem 0.45rem; border-radius: 6px; }
+    .key.eq { background: var(--teal); color: #0a1210; font-weight: 700; border-color: var(--teal); }
+    .key.op { color: var(--orange); }
+    .nav { display: flex; gap: 0.4rem; margin-top: auto; padding-top: 0.4rem; }
+    .btn {
+      font: 600 0.88rem var(--font); padding: 0.6rem 1rem; border-radius: 10px;
+      border: none; cursor: pointer; background: var(--teal); color: #0a1210;
+    }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+    .hint { font-size: 0.85rem; color: var(--orange); margin-top: 0.4rem; }
+    details.more { margin-top: 0.75rem; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+    details.more summary {
+      padding: 0.65rem 0.9rem; cursor: pointer; font-weight: 600; font-size: 0.9rem;
+      background: var(--soft); list-style: none;
+    }
+    details.more summary::-webkit-details-marker { display: none; }
+    details.more .body { padding: 0.85rem 1rem; }
+
+    .prac-tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+    .prac-tabs button {
+      font: 600 0.8rem var(--font); padding: 0.5rem 0.85rem; border-radius: 999px;
+      border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer;
+    }
+    .prac-tabs button.on { background: var(--orange); color: #1a1208; border-color: var(--orange); }
+    .prac-item {
+      background: #0a0e14; border: 1px solid var(--line); border-radius: 12px;
+      padding: 1rem; margin-bottom: 0.75rem;
+    }
+    .prac-item h4 { font-size: 0.95rem; margin-bottom: 0.45rem; color: var(--teal); }
+    .prac-item .q { font-size: 0.95rem; margin-bottom: 0.65rem; color: var(--text); }
+    .prac-item .ans {
+      display: none; margin-top: 0.65rem; padding: 0.75rem 0.9rem; border-radius: 8px;
+      background: rgba(125,206,160,0.1); border: 1px solid rgba(125,206,160,0.35);
+      font-size: 0.9rem;
+    }
+    .prac-item .ans.show { display: block; }
+    .prac-item .ans strong { color: var(--green); }
+    .prac-item .hint-p { font-size: 0.82rem; color: var(--muted); margin: 0.35rem 0; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div class="brand">Física flash</div>
+    <button type="button" class="on" data-go="home">Inicio</button>
+    <button type="button" data-go="ej1">Ej. 1</button>
+    <button type="button" data-go="ej2">Ej. 2</button>
+    <button type="button" data-go="ej3">Ej. 3</button>
+    <button type="button" data-go="ej4">Ej. 4</button>
+    <button type="button" data-go="ej5">Ej. 5</button>
+    <button type="button" data-go="practica">Práctica ×25</button>
+    <button type="button" data-go="chuleta">Chuleta</button>
+  </div>
+
+  <div class="wrap">
+    <!-- HOME -->
+    <section id="home" class="view hero">
+      <h1>Guía para <span>ineptos</span> (con cariño)</h1>
+      <p>Paso a paso de los 5 del examen + videos en español + <b style="color:var(--orange)">25 ejercicios de práctica</b> (5 por tema). Empezá por la teoría y después Práctica.</p>
+      <div class="cards">
+        <div class="card" data-go="ej1"><div class="n">Fuerzas · gráfico</div><h3>Ejercicio 1</h3><p>Sumar fuerzas dibujando</p></div>
+        <div class="card" data-go="ej2"><div class="n">Fuerzas · cuentas</div><h3>Ejercicio 2</h3><p>Lo mismo con fórmulas</p></div>
+        <div class="card" data-go="ej3"><div class="n">Rampa + resorte</div><h3>Ejercicio 3</h3><p>Equilibrio en plano liso</p></div>
+        <div class="card" data-go="ej4"><div class="n">Tabla V(t)</div><h3>Ejercicio 4</h3><p>Gráfico y aceleración</p></div>
+        <div class="card" data-go="ej5"><div class="n">Pelota</div><h3>Ejercicio 5</h3><p>Tiro vertical al suelo</p></div>
+        <div class="card" data-go="practica"><div class="n">5 × 5 temas</div><h3>Práctica</h3><p>25 ejercicios para resolver</p></div>
+        <div class="card" data-go="chuleta"><div class="n">Resumen</div><h3>Chuleta final</h3><p>Solo respuestas</p></div>
+      </div>
+    </section>
+
+    <!-- EJ 1 -->
+    <section id="ej1" class="view" hidden>
+      <div class="guide-block">
+        <div class="chip">2 puntos · Método gráfico</div>
+        <h2>Ejercicio 1 — Fuerza neta (dibujando)</h2>
+        <div class="idea"><b>Idea:</b> varias fuerzas tiran a la vez. La <b>fuerza neta</b> es “todas juntas, ¿hacia dónde y con cuánta fuerza?”.</div>
+
+        <div class="syms">
+          <span class="sym"><code>F</code> fuerza (Newtons)</span>
+          <span class="sym"><code>Fneta</code> suma de todas</span>
+          <span class="sym"><code>→</code> derecha / <code>←</code> izquierda</span>
+        </div>
+
+        <h3 style="color:var(--teal);margin:1rem 0 0.4rem;font-size:1rem">Caso A — misma línea</h3>
+        <ol class="steps-plain">
+          <li>Elegí sentido +: <b>derecha = +</b>, izquierda = −</li>
+          <li>Escribí: +150 − 400 − 200</li>
+          <li>Resultado: <b>−450</b> → el menos significa izquierda</li>
+          <li>En el dibujo: flechas a escala y medí el resultante</li>
+        </ol>
+        <div class="calc-box">
+          <div class="lbl">Calculadora / Google</div>
+          <code>150 - 400 - 200</code>
+        </div>
+        <div class="result">✅ <strong>A:</strong> 450 N horizontal a la <strong>izquierda</strong></div>
+
+        <h3 style="color:var(--teal);margin:1.25rem 0 0.4rem;font-size:1rem">Caso B — una ↑ y una →</h3>
+        <ol class="steps-plain">
+          <li>Dibujá 70 N a la derecha y 90 N arriba (forman una L)</li>
+          <li>La diagonal es Fneta (método del paralelogramo)</li>
+          <li>Módulo con Pitágoras: √(90² + 70²)</li>
+          <li>Ángulo con la horizontal: arctan(90/70)</li>
+        </ol>
+        <div class="formula">F = √(90² + 70²) = √13000 ≈ 114 N</div>
+        <div class="formula">θ = arctan(90/70) ≈ 52°</div>
+        <div class="calc-box">
+          <div class="lbl">Google (importante)</div>
+          <code>sqrt(90*90 + 70*70)</code> → 114<br>
+          <code>arctan(90/70) in degrees</code> → 52,1°
+        </div>
+        <p class="hint">Si te da ~3: apretaste tan en vez de tan⁻¹ / arctan.</p>
+        <div class="result">✅ <strong>B:</strong> ≈ 114 N a ≈ 52° sobre la horizontal (arriba-derecha)</div>
+
+        <div class="video-wrap">
+          <iframe src="https://www.youtube.com/embed/gG_wtHYXSwU" title="Fuerza neta perpendiculares" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+        </div>
+        <p class="video-cap">Video 1 — Fuerza neta con fuerzas perpendiculares (Pitágoras), en español. <a href="https://www.youtube.com/watch?v=gG_wtHYXSwU" target="_blank" rel="noopener">Abrir en YouTube</a></p>
+
+        <div class="video-wrap">
+          <iframe src="https://www.youtube.com/embed/mSYtbXDKPkw" title="Suma gráfica de vectores" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+        </div>
+        <p class="video-cap">Video 2 — Suma de vectores método gráfico. <a href="https://www.youtube.com/watch?v=mSYtbXDKPkw" target="_blank" rel="noopener">Abrir en YouTube</a></p>
+      </div>
+    </section>
+
+    <!-- EJ 2 -->
+    <section id="ej2" class="view" hidden>
+      <div class="guide-block">
+        <div class="chip">2 puntos · Método analítico</div>
+        <h2>Ejercicio 2 — Justificar con cuentas</h2>
+        <div class="idea"><b>Idea:</b> es el <b>mismo</b> ejercicio 1, pero en vez de medir el dibujo, usás fórmulas. Los números tienen que coincidir.</div>
+
+        <div class="syms">
+          <span class="sym"><code>ΣFx</code> suma en horizontal</span>
+          <span class="sym"><code>ΣFy</code> suma en vertical</span>
+          <span class="sym"><code>θ</code> ángulo</span>
+        </div>
+
+        <ol class="steps-plain">
+          <li><b>Caso A:</b> ΣFx = 150 − 400 − 200 = −450 N → 450 N ←</li>
+          <li><b>Caso B:</b> ΣFx = 70 · ΣFy = 90</li>
+          <li>F = √(ΣFx² + ΣFy²) = 114 N</li>
+          <li>θ = arctan(ΣFy/ΣFx) = 52,1° (reportá 3 cifras significativas)</li>
+        </ol>
+        <div class="formula">A: ΣFx = 150 − 400 − 200 = −450 N</div>
+        <div class="formula">B: F = √(70²+90²) = 114 N · θ = arctan(90/70) = 52,1°</div>
+        <div class="result">✅ Mismos resultados que el Ej. 1. Eso <strong>justifica</strong> el método gráfico.</div>
+
+        <div class="video-wrap">
+          <iframe src="https://www.youtube.com/embed/gG_wtHYXSwU" title="Método analítico fuerzas" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+        </div>
+        <p class="video-cap">Mismo video base: gráfico + Pitágoras = método analítico del caso B. <a href="https://www.youtube.com/watch?v=gG_wtHYXSwU" target="_blank" rel="noopener">YouTube</a></p>
+      </div>
+    </section>
+
+    <!-- EJ 3 -->
+    <section id="ej3" class="view" hidden>
+      <div class="guide-block">
+        <div class="chip">2 puntos · Plano + resorte</div>
+        <h2>Ejercicio 3 — Carrito en la rampa</h2>
+        <div class="idea"><b>Idea:</b> plano <b>liso</b> = sin fricción. Está <b>quieto</b> → ΣF = 0. El resorte cancela lo que lo tira abajo.</div>
+        <p style="color:var(--muted);font-size:0.9rem;margin-bottom:0.5rem">Datos: m=2,00 kg · θ=20° · N=18,8 N · k=120 N/m</p>
+
+        <div class="syms">
+          <span class="sym"><code>m</code> masa</span>
+          <span class="sym"><code>g</code> 9,8 m/s²</span>
+          <span class="sym"><code>θ</code> ángulo 20°</span>
+          <span class="sym"><code>N</code> normal</span>
+          <span class="sym"><code>Fe</code> resorte</span>
+          <span class="sym"><code>k</code> dureza</span>
+          <span class="sym"><code>Δx</code> estiramiento</span>
+        </div>
+
+        <ol class="steps-plain">
+          <li><b>Peso:</b> P = m·g = 2×9,8 = <b>19,6 N</b> ↓ (siempre vertical)</li>
+          <li><b>Se parte en 2:</b> ∥ = mg senθ (quiere bajar) · ⊥ = mg cosθ (aprieta)</li>
+          <li><b>Paralela:</b> 19,6×sen20° ≈ <b>6,70 N</b></li>
+          <li><b>Normal:</b> dato del enunciado = <b>18,8 N</b> ⊥ al plano</li>
+          <li><b>Resorte:</b> como está quieto → Fe = 6,70 N hacia arriba de la rampa</li>
+          <li><b>Estiramiento:</b> Δx = Fe/k = 6,70/120 = <b>5,58 cm</b></li>
+        </ol>
+        <div class="calc-box">
+          <div class="lbl">Calculadora</div>
+          <code>2 * 9.8</code> → 19,6<br>
+          <code>2 * 9.8 * sin(20)</code> → 6,70<br>
+          <code>6.70 / 120</code> → 0,0558 m (= 5,58 cm)
+        </div>
+        <div class="result">✅ P=19,6 N · N=18,8 N · Fe=6,70 N · Δx=<strong>5,58 cm</strong></div>
+        <p class="hint">Frase mágica: liso + quieto ⇒ Fe = mg senθ</p>
+
+        <div class="video-wrap">
+          <iframe src="https://www.youtube.com/embed/24yCD077l2k" title="Plano inclinado fuerzas" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+        </div>
+        <p class="video-cap">Video — Plano inclinado: peso, normal y componentes (español). <a href="https://www.youtube.com/watch?v=24yCD077l2k" target="_blank" rel="noopener">YouTube</a></p>
+
+        <details class="more">
+          <summary>▶ Animación paso a paso (dibujito)</summary>
+          <div class="body">
+            <div class="lesson">
+              <div class="stage"><canvas id="c3" width="560" height="360"></canvas></div>
+              <div class="side" id="side3"></div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- EJ 4 -->
+    <section id="ej4" class="view" hidden>
+      <div class="guide-block">
+        <div class="chip">2 puntos · Cinemática</div>
+        <h2>Ejercicio 4 — Velocidad vs tiempo</h2>
+        <div class="idea"><b>Idea:</b> la tabla son puntitos (t, V). Los unís = gráfico. La <b>pendiente</b> de cada tramo es la aceleración.</div>
+
+        <table class="table-mini">
+          <thead><tr><th>V (m/s)</th><th>T (s)</th></tr></thead>
+          <tbody>
+            <tr><td>5</td><td>0</td></tr><tr><td>10</td><td>4</td></tr><tr><td>15</td><td>8</td></tr><tr><td>20</td><td>12</td></tr>
+            <tr><td>20</td><td>18</td></tr><tr><td>20</td><td>24</td></tr><tr><td>10</td><td>48</td></tr><tr><td>0</td><td>72</td></tr>
+          </tbody>
+        </table>
+
+        <div class="syms">
+          <span class="sym"><code>V</code> velocidad</span>
+          <span class="sym"><code>t</code> tiempo</span>
+          <span class="sym"><code>a</code> aceleración = Δv/Δt</span>
+          <span class="sym"><code>MRU</code> a=0</span>
+          <span class="sym"><code>MRUV</code> a constante ≠0</span>
+        </div>
+
+        <ol class="steps-plain">
+          <li>Graficá V en vertical, t en horizontal · uní los puntos</li>
+          <li><b>0→12 s:</b> sube de 5 a 20 → acelera · a=(20−5)/12=<b>1,25</b></li>
+          <li><b>12→24 s:</b> chato en 20 → MRU · a=<b>0</b></li>
+          <li><b>24→72 s:</b> baja de 20 a 0 → frena · a=(0−20)/48=<b>−0,417</b></li>
+          <li>Gráfico a(t): tres <b>escalones</b> horizontales (1,25 · 0 · −0,417)</li>
+        </ol>
+        <div class="calc-box">
+          <div class="lbl">Calculadora</div>
+          <code>(20 - 5) / 12</code> → 1,25<br>
+          <code>(20 - 20) / 12</code> → 0<br>
+          <code>(0 - 20) / 48</code> → −0,417
+        </div>
+        <div class="result">✅ Movimiento: <strong>acelera → crucero → frena</strong>. a = 1,25 · 0 · −0,417 m/s²</div>
+
+        <div class="video-wrap">
+          <iframe src="https://www.youtube.com/embed/Q3W6LQhvBHE" title="Gráficas V-t" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+        </div>
+        <p class="video-cap">Video — Lectura de gráficas velocidad-tiempo (MRU / MRUA). <a href="https://www.youtube.com/watch?v=Q3W6LQhvBHE" target="_blank" rel="noopener">YouTube</a></p>
+
+        <div class="video-wrap">
+          <iframe src="https://www.youtube.com/embed/SVlQHM-Q-DY" title="MRU y MRUA" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+        </div>
+        <p class="video-cap">Video extra — MRU y MRUA explicados. <a href="https://www.youtube.com/watch?v=SVlQHM-Q-DY" target="_blank" rel="noopener">YouTube</a></p>
+
+        <details class="more">
+          <summary>▶ Animación del gráfico</summary>
+          <div class="body">
+            <div class="lesson">
+              <div class="stage"><canvas id="c4" width="560" height="360"></canvas></div>
+              <div class="side" id="side4"></div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- EJ 5 -->
+    <section id="ej5" class="view" hidden>
+      <div class="guide-block">
+        <div class="chip">2 puntos · Tiro vertical</div>
+        <h2>Ejercicio 5 — Pelota desde la azotea</h2>
+        <div class="idea"><b>Idea:</b> tirás <b>arriba</b> desde 25 m. Sube, se frena, cae, pasa la azotea y pega en el piso. Gravedad siempre tira abajo.</div>
+        <p style="color:var(--muted);font-size:0.9rem">H=25 m · v₀=36 km/h ↑ · g=9,8 · sin aire</p>
+
+        <div class="syms">
+          <span class="sym"><code>y₀</code> altura inicial 25 m</span>
+          <span class="sym"><code>v₀</code> vel. inicial</span>
+          <span class="sym"><code>a</code> −9,8 m/s²</span>
+          <span class="sym"><code>t</code> tiempo</span>
+          <span class="sym"><code>y=0</code> suelo</span>
+        </div>
+
+        <ol class="steps-plain">
+          <li><b>Convertí:</b> 36÷3,6 = <b>10 m/s</b></li>
+          <li><b>Signos:</b> arriba=+ · y₀=25 · v₀=+10 · a=−9,8 · suelo y=0</li>
+          <li><b>Fórmula:</b> y = y₀ + v₀t + ½at² → 0 = 25 + 10t − 4,9t²</li>
+          <li><b>Cuadrática:</b> 4,9t² − 10t − 25 = 0 → t ≈ <b>3,50 s</b> (descartá el negativo)</li>
+          <li><b>Impacto:</b> v = 10 − 9,8×3,50 = <b>−24,3 m/s</b> → 24,3 m/s ↓</li>
+        </ol>
+        <div class="calc-box">
+          <div class="lbl">Google</div>
+          <code>36 / 3.6</code> → 10<br>
+          <code>(10 + sqrt(590)) / 9.8</code> → 3,50<br>
+          <code>10 - 9.8 * 3.50</code> → −24,3<br>
+          <code>sqrt(590)</code> → 24,3 (atajo)
+        </div>
+        <div class="result">✅ Tiempo total <strong>≈ 3,50 s</strong> · Impacto <strong>24,3 m/s hacia abajo</strong></div>
+
+        <div class="video-wrap">
+          <iframe src="https://www.youtube.com/embed/NT0hZi4hCaw" title="Tiro vertical unicoos" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+        </div>
+        <p class="video-cap">Video — Tiro vertical / caída libre desde azotea (Unicoos, español). <a href="https://www.youtube.com/watch?v=NT0hZi4hCaw" target="_blank" rel="noopener">YouTube</a></p>
+
+        <div class="video-wrap">
+          <iframe src="https://www.youtube.com/embed/QXXkxAa_8EM" title="Caída libre secundaria" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+        </div>
+        <p class="video-cap">Video extra — Caída libre paso a paso. <a href="https://www.youtube.com/watch?v=QXXkxAa_8EM" target="_blank" rel="noopener">YouTube</a></p>
+
+        <details class="more">
+          <summary>▶ Animación de la pelota</summary>
+          <div class="body">
+            <div class="lesson">
+              <div class="stage"><canvas id="c5" width="560" height="380"></canvas></div>
+              <div class="side" id="side5"></div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- PRÁCTICA 25 -->
+    <section id="practica" class="view" hidden>
+      <div class="guide-block">
+        <div class="chip">25 ejercicios · 5 por tema</div>
+        <h2>Práctica — similares al examen</h2>
+        <p class="idea">Intentá solo. Después tocá <b>Ver respuesta</b>. Son del mismo estilo que la hoja.</p>
+        <div class="prac-tabs" id="pracTabs"></div>
+        <div id="pracList"></div>
+      </div>
+    </section>
+
+    <!-- CHULETA -->
+    <section id="chuleta" class="view" hidden>
+      <div class="guide-block">
+        <div class="chip">Copiá esto al margen</div>
+        <h2>Chuleta del examen</h2>
+        <table class="table-mini">
+          <thead><tr><th>Ej</th><th>Respuesta</th></tr></thead>
+          <tbody>
+            <tr><td>1A</td><td>450 N ←</td></tr>
+            <tr><td>1B</td><td>114 N a ~52°</td></tr>
+            <tr><td>2</td><td>Igual que 1 (analítico)</td></tr>
+            <tr><td>3</td><td>Fe=6,70 N · Δx=5,58 cm</td></tr>
+            <tr><td>4</td><td>a=1,25 · 0 · −0,417</td></tr>
+            <tr><td>5</td><td>t≈3,50 s · 24,3 m/s ↓</td></tr>
+          </tbody>
+        </table>
+        <div class="formula">a = (vf − vi) / (tf − ti)</div>
+        <div class="formula">Fe = mg senθ &nbsp;|&nbsp; Δx = Fe/k</div>
+        <div class="formula">y = y₀ + v₀t + ½at² &nbsp;|&nbsp; km/h → m/s: ÷3,6</div>
+        <div class="formula">Google ángulo: arctan(90/70) in degrees</div>
+      </div>
+    </section>
+  </div>
+
+<script>
+const PRACTICE = {
+  t1: {
+    name: "Tema 1 · Fuerza gráfica",
+    items: [
+      {
+        q: "F₁ = 120 N → derecha · F₂ = 300 N → izquierda · F₃ = 50 N → izquierda. Hallá Fneta (módulo y dirección).",
+        hint: "Derecha +, izquierda −.",
+        ans: "ΣF = 120 − 300 − 50 = −230 N → <strong>230 N a la izquierda</strong>."
+      },
+      {
+        q: "F₁ = 80 N ↑ · F₂ = 60 N →. Hallá Fneta y el ángulo con la horizontal.",
+        hint: "Pitágoras + arctan(opuesto/adyacente).",
+        ans: "F = √(80²+60²) = √10000 = <strong>100 N</strong> · θ = arctan(80/60) ≈ <strong>53,1°</strong> sobre la horizontal."
+      },
+      {
+        q: "F₁ = 200 N → · F₂ = 200 N ←. ¿Cuál es Fneta?",
+        hint: "Se cancelan.",
+        ans: "200 − 200 = 0 → <strong>Fneta = 0</strong> (equilibrio)."
+      },
+      {
+        q: "F₁ = 40 N → · F₂ = 30 N → · F₃ = 100 N ←. Fneta?",
+        hint: "Sumá las que van al mismo lado primero.",
+        ans: "ΣF = 40 + 30 − 100 = −30 → <strong>30 N a la izquierda</strong>."
+      },
+      {
+        q: "F₁ = 50 N ↑ · F₂ = 120 N →. Módulo de Fneta?",
+        hint: "√(50²+120²) — triángulo 5-12-13.",
+        ans: "√(2500+14400) = √16900 = <strong>130 N</strong> · θ = arctan(50/120) ≈ <strong>22,6°</strong>."
+      }
+    ]
+  },
+  t2: {
+    name: "Tema 2 · Método analítico",
+    items: [
+      {
+        q: "Planteá ΣFx y ΣFy: F₁=150 N a 0° (→) · F₂=150 N a 90° (↑). Calculá F y θ.",
+        hint: "Componentes: Fx=F cosθ, Fy=F senθ.",
+        ans: "ΣFx=150 · ΣFy=150 · F=√(2·150²)=150√2≈<strong>212 N</strong> · θ=arctan(1)=<strong>45°</strong>."
+      },
+      {
+        q: "F₁ = 90 N ← · F₂ = 40 N ← · F₃ = 200 N →. Justificá Fneta analíticamente (→ = +).",
+        hint: "ΣFx = …",
+        ans: "ΣFx = −90 − 40 + 200 = <strong>+70 N</strong> → 70 N a la derecha."
+      },
+      {
+        q: "Fₓ = 25 N · Fᵧ = 60 N. Hallá Fneta con 3 cifras significativas.",
+        hint: "√(25²+60²).",
+        ans: "√(625+3600)=√4225=<strong>65,0 N</strong> · θ=arctan(60/25)≈<strong>67,4°</strong>."
+      },
+      {
+        q: "Dos fuerzas perpendiculares de 9 N y 12 N. ¿Fneta?",
+        hint: "Triángulo 3-4-5 ×3.",
+        ans: "√(81+144)=√225=<strong>15 N</strong>."
+      },
+      {
+        q: "ΣFx = −80 N · ΣFy = 0. Escribí módulo y dirección de Fneta.",
+        hint: "Solo hay componente x negativa.",
+        ans: "|F|=<strong>80 N</strong> horizontal a la <strong>izquierda</strong>."
+      }
+    ]
+  },
+  t3: {
+    name: "Tema 3 · Plano + resorte",
+    items: [
+      {
+        q: "m=3,00 kg · θ=30° · plano liso · en reposo · k=150 N/m. Hallá Fe y Δx. (g=9,8)",
+        hint: "Fe = mg senθ · Δx = Fe/k",
+        ans: "Fe = 3×9,8×sen30° = 29,4×0,5 = <strong>14,7 N</strong> · Δx = 14,7/150 = <strong>0,098 m = 9,8 cm</strong>."
+      },
+      {
+        q: "m=2,00 kg · θ=20° · g=9,8. Calculá solo la componente paralela del peso.",
+        hint: "P∥ = mg senθ",
+        ans: "P∥ = 19,6×sen20° ≈ <strong>6,70 N</strong> (igual que en el examen)."
+      },
+      {
+        q: "Fe = 12 N · k = 200 N/m. ¿Cuánto se estira el resorte?",
+        hint: "Hooke: Δx = F/k",
+        ans: "Δx = 12/200 = <strong>0,060 m = 6,0 cm</strong>."
+      },
+      {
+        q: "m=1,5 kg · θ=40° · liso · reposo · k=80 N/m. Fe y Δx (g=9,8).",
+        hint: "sen40°≈0,6428",
+        ans: "Fe = 1,5×9,8×0,6428 ≈ <strong>9,45 N</strong> · Δx = 9,45/80 ≈ <strong>0,118 m ≈ 11,8 cm</strong>."
+      },
+      {
+        q: "Si el plano es liso y NO hay resorte, ¿puede el carrito quedar en reposo en una rampa?",
+        hint: "Pensá ΣF paralelamente.",
+        ans: "<strong>No</strong>. Sin fricción ni resorte, mg senθ ≠ 0 → acelera cuesta abajo."
+      }
+    ]
+  },
+  t4: {
+    name: "Tema 4 · V(t) y aceleración",
+    items: [
+      {
+        q: "De t=0 a t=5 s la velocidad pasa de 2 m/s a 12 m/s. Calculá a.",
+        hint: "a = Δv/Δt",
+        ans: "a = (12−2)/5 = <strong>2,0 m/s²</strong> (MRUV acelerado)."
+      },
+      {
+        q: "V=15 m/s constante entre t=4 s y t=10 s. ¿a? ¿Qué movimiento es?",
+        hint: "Δv = 0",
+        ans: "a = <strong>0</strong> → <strong>MRU</strong> (línea horizontal en V(t))."
+      },
+      {
+        q: "De t=10 s a t=20 s: V baja de 30 m/s a 10 m/s. Hallá a.",
+        hint: "El signo importa.",
+        ans: "a = (10−30)/10 = <strong>−2,0 m/s²</strong> (frena)."
+      },
+      {
+        q: "Tabla: (0s,0) (4s,8) (8s,8) (12s,0). Describí los 3 tramos y sus a.",
+        hint: "Sube / chato / baja.",
+        ans: "0–4: a=(8−0)/4=<strong>2 m/s²</strong> · 4–8: a=<strong>0</strong> · 8–12: a=(0−8)/4=<strong>−2 m/s²</strong>."
+      },
+      {
+        q: "En un gráfico a(t), a vale 1,5 de 0 a 6 s y después 0 hasta 10 s. ¿Cómo se ve V(t) cualitativamente?",
+        hint: "Pendiente de V = a.",
+        ans: "V sube con pendiente 1,5 hasta t=6, después <strong>queda horizontal</strong> (velocidad constante)."
+      }
+    ]
+  },
+  t5: {
+    name: "Tema 5 · Tiro vertical / azotea",
+    items: [
+      {
+        q: "Convertí 54 km/h a m/s.",
+        hint: "÷ 3,6",
+        ans: "54/3,6 = <strong>15 m/s</strong>."
+      },
+      {
+        q: "Desde 20 m se lanza hacia arriba a 10 m/s. g=9,8. Planteá la ecuación con y=0 en el suelo (↑=+).",
+        hint: "y = y₀ + v₀t + ½at²",
+        ans: "0 = 20 + 10t − 4,9t² &nbsp;→&nbsp; <strong>4,9t² − 10t − 20 = 0</strong>."
+      },
+      {
+        q: "Misma situación: resolvé t positivo. (√(100+392)=√492≈22,18)",
+        hint: "t = [10 + √492] / 9,8",
+        ans: "t ≈ (10+22,18)/9,8 ≈ <strong>3,28 s</strong>."
+      },
+      {
+        q: "v₀=10 m/s ↑ · t=3,28 s · a=−9,8. Velocidad de impacto?",
+        hint: "v = v₀ + at",
+        ans: "v = 10 − 9,8×3,28 ≈ <strong>−22,1 m/s</strong> → 22,1 m/s ↓."
+      },
+      {
+        q: "Atajo: v₀=10 · Δy=−20 (del techo al suelo) · a=−9,8. Hallá |v| con v²=v₀²+2aΔy.",
+        hint: "v² = 100 + 2(−9,8)(−20)",
+        ans: "v² = 100 + 392 = 492 → |v|=√492≈<strong>22,2 m/s</strong> ↓."
+      }
+    ]
+  }
+};
+
+let pracKey = "t1";
+function renderPractica() {
+  const tabs = document.getElementById("pracTabs");
+  const list = document.getElementById("pracList");
+  if (!tabs || !list) return;
+  tabs.innerHTML = Object.keys(PRACTICE).map(k =>
+    `<button type="button" class="${k===pracKey?"on":""}" data-pk="${k}">${PRACTICE[k].name}</button>`
+  ).join("");
+  tabs.querySelectorAll("button").forEach(b => b.onclick = () => { pracKey = b.dataset.pk; renderPractica(); });
+  const pack = PRACTICE[pracKey];
+  list.innerHTML = pack.items.map((it, i) => `
+    <div class="prac-item" data-i="${i}">
+      <h4>Práctica ${i+1}</h4>
+      <div class="q">${it.q}</div>
+      <p class="hint-p">💡 ${it.hint}</p>
+      <button type="button" class="btn" data-reveal="${i}">Ver respuesta</button>
+      <div class="ans" id="ans-${pracKey}-${i}">${it.ans}</div>
+    </div>`).join("");
+  list.querySelectorAll("[data-reveal]").forEach(btn => {
+    btn.onclick = () => {
+      const el = document.getElementById(`ans-${pracKey}-${btn.dataset.reveal}`);
+      el.classList.toggle("show");
+      btn.textContent = el.classList.contains("show") ? "Ocultar" : "Ver respuesta";
+    };
+  });
+}
+
+function go(id) {
+  document.querySelectorAll(".view").forEach(v => v.hidden = true);
+  document.getElementById(id).hidden = false;
+  document.querySelectorAll(".top button").forEach(b => b.classList.toggle("on", b.dataset.go === id));
+  if (id === "ej3") L3.go(0);
+  if (id === "ej4") L4.go(0);
+  if (id === "ej5") L5.go(0);
+  if (id === "practica") renderPractica();
+}
+document.querySelectorAll("[data-go]").forEach(el => el.addEventListener("click", () => go(el.dataset.go)));
+
+function arrow(ctx, x1, y1, x2, y2, color, label, lw = 3) {
+  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = lw;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  const ah = 10;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - ah*ux + ah*0.4*uy, y2 - ah*uy - ah*0.4*ux);
+  ctx.lineTo(x2 - ah*ux - ah*0.4*uy, y2 - ah*uy + ah*0.4*ux);
+  ctx.closePath(); ctx.fill();
+  if (label) { ctx.font = "700 13px DM Sans"; ctx.fillText(label, x2 + 6*ux, y2 + 6*uy); }
+}
+function ease(t) { return 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3); }
+function keysHTML(parts, result) {
+  if (!parts) return "";
+  const html = parts.map(p => {
+    if (p === "→") return `<span style="color:#8b9cb0">→</span>`;
+    if (p === "=") return `<span class="key eq">=</span>`;
+    if (["+","−","-","×","÷"].includes(p)) return `<span class="key op">${p}</span>`;
+    return `<span class="key">${p}</span>`;
+  }).join("");
+  return `<div class="calc-box"><div class="lbl">Teclas</div><div class="keys">${html}</div>${result?`<div style="color:#7dcea0;font-family:var(--mono);margin-top:.4rem;font-weight:700">${result}</div>`:""}</div>`;
+}
+function symsHTML(arr) {
+  return `<div class="syms">${arr.map(([s,m]) => `<span class="sym"><code>${s}</code> ${m}</span>`).join("")}</div>`;
+}
+function makeLesson(canvasId, sideId, steps) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return { go() {}, get i() { return 0; } };
+  const ctx = canvas.getContext("2d");
+  const side = document.getElementById(sideId);
+  const state = { i: 0, raf: null, t0: 0, playing: false };
+  function stop() { state.playing = false; if (state.raf) cancelAnimationFrame(state.raf); }
+  function go(i) {
+    stop();
+    state.i = Math.max(0, Math.min(steps.length - 1, i));
+    const s = steps[state.i];
+    side.innerHTML = `
+      <div class="pill">PASO ${state.i+1}/${steps.length}</div>
+      <div class="dots">${steps.map((_,j)=>`<i class="${j===state.i?"on":j<state.i?"done":""}"></i>`).join("")}</div>
+      <div class="headline">${s.title}</div>
+      <p class="one-liner">${s.line}</p>
+      ${s.syms ? symsHTML(s.syms) : ""}
+      ${s.keys ? keysHTML(s.keys, s.result) : (s.result ? `<div class="result">${s.result}</div>` : "")}
+      <div class="nav">
+        <button class="btn ghost" type="button" data-a="prev" ${state.i===0?"disabled":""}>←</button>
+        <button class="btn" type="button" data-a="next">${state.i===steps.length-1?"✓":"→"}</button>
+        <button class="btn ghost" type="button" data-a="rep">↻</button>
+      </div>`;
+    side.querySelector('[data-a="prev"]').onclick = () => go(state.i - 1);
+    side.querySelector('[data-a="next"]').onclick = () => { if (state.i < steps.length-1) go(state.i+1); };
+    side.querySelector('[data-a="rep"]').onclick = () => go(state.i);
+    state.t0 = performance.now(); state.playing = true;
+    const step = steps[state.i];
+    const loop = (now) => {
+      if (!state.playing) return;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle = "#0a0e14"; ctx.fillRect(0,0,canvas.width,canvas.height);
+      step.draw(ctx, canvas, (now - state.t0)/1000);
+      state.raf = requestAnimationFrame(loop);
+    };
+    state.raf = requestAnimationFrame(loop);
+  }
+  return { go, get i() { return state.i; } };
+}
+
+function rampBase(ctx) {
+  const x0=50,y0=300,L=380,ang=20*Math.PI/180;
+  ctx.strokeStyle="#6a7f94"; ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.moveTo(x0,y0); ctx.lineTo(x0+L*Math.cos(ang), y0-L*Math.sin(ang));
+  ctx.lineTo(x0+L*Math.cos(ang)+25,y0); ctx.closePath();
+  ctx.fillStyle="rgba(61,214,198,0.05)"; ctx.fill(); ctx.stroke();
+  return {x0,y0,L,ang};
+}
+function cartAt(r,s){ return {x:r.x0+s*Math.cos(r.ang), y:r.y0-s*Math.sin(r.ang)}; }
+function drawCart(ctx,p,ang){
+  ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(-ang);
+  ctx.fillStyle="#3dd6c6"; ctx.fillRect(-22,-28,44,28); ctx.restore();
+}
+
+const L3 = makeLesson("c3","side3",[
+  { title:"La rampa", line:"Carrito de <b>2 kg</b>, rampa <b>20°</b>, liso, quieto.",
+    draw(ctx,c,t){ const r=rampBase(ctx); drawCart(ctx,cartAt(r,170+Math.sin(t*2)*3),r.ang); ctx.fillStyle="#3dd6c6"; ctx.font="14px DM Sans"; ctx.fillText("θ=20°",90,280);} },
+  { title:"Peso", line:"P = m·g = <b>19,6 N</b> ↓",
+    keys:["2","×","9.8","="], result:"P = 19,6 N",
+    draw(ctx,c,t){ const r=rampBase(ctx); const p=cartAt(r,170); drawCart(ctx,p,r.ang); const g=ease(t/0.5); arrow(ctx,p.x,p.y,p.x,p.y+75*g,"#e76f51",g>0.8?"P":""); } },
+  { title:"Se parte", line:"∥ = mg senθ ≈ <b>6,70 N</b> (baja por la rampa)",
+    keys:["2","×","9.8","×","sin","20","="], result:"6,70 N",
+    draw(ctx,c,t){ const r=rampBase(ctx); const p=cartAt(r,170); drawCart(ctx,p,r.ang); const px=Math.cos(r.ang),py=-Math.sin(r.ang); const g=ease(t/0.5); arrow(ctx,p.x,p.y,p.x-65*px*g,p.y-65*py*g,"#f4a261","∥"); } },
+  { title:"Normal + Fe", line:"N=<b>18,8</b> · Fe=<b>6,70</b> equilibra",
+    result:"Fe = mg senθ",
+    draw(ctx,c,t){ const r=rampBase(ctx); const p=cartAt(r,170); const px=Math.cos(r.ang),py=-Math.sin(r.ang); const nx=-Math.sin(r.ang),ny=-Math.cos(r.ang); drawCart(ctx,p,r.ang); arrow(ctx,p.x,p.y,p.x+60*nx,p.y+60*ny,"#5dade2","N"); arrow(ctx,p.x,p.y,p.x+55*px,p.y+55*py,"#f7dc6f","Fe"); } },
+  { title:"Δx", line:"Δx = Fe/k = <b>5,58 cm</b>",
+    keys:["6.70","÷","120","="], result:"0,0558 m",
+    draw(ctx,c,t){ const r=rampBase(ctx); const st=90+40*ease(t/1); const p=cartAt(r,50+st); drawCart(ctx,p,r.ang); ctx.fillStyle="#7dcea0"; ctx.font="700 18px JetBrains Mono"; ctx.fillText("Δx=5,58 cm",300,80);} }
+]);
+
+const VT=[[0,5],[4,10],[8,15],[12,20],[18,20],[24,20],[48,10],[72,0]];
+function axes(ctx,w,h,pad,xMax,yMax,yMin){
+  const ox=pad,oy=h-pad,pw=w-pad*2,ph=h-pad*2;
+  ctx.strokeStyle="#2f3b4d"; ctx.beginPath(); ctx.moveTo(ox,pad); ctx.lineTo(ox,oy); ctx.lineTo(w-pad,oy); ctx.stroke();
+  return {X:t=>ox+(t/xMax)*pw, Y:v=>oy-((v-yMin)/(yMax-yMin))*ph};
+}
+const L4 = makeLesson("c4","side4",[
+  { title:"Puntos", line:"Cada fila = un punto <b>(t, V)</b>",
+    draw(ctx,c,t){ const m=axes(ctx,c.width,c.height,40,72,22,0); const n=Math.min(8,Math.floor(t*3)+1); ctx.fillStyle="#3dd6c6"; for(let i=0;i<n;i++){const [v,tt]=VT[i]; ctx.beginPath(); ctx.arc(m.X(tt),m.Y(v),5,0,Math.PI*2); ctx.fill();} } },
+  { title:"Acelera", line:"0→12 s · a=<b>1,25</b>", keys:["(20−5)","÷","12","="], result:"1,25 m/s²",
+    draw(ctx,c,t){ const m=axes(ctx,c.width,c.height,40,72,22,0); ctx.strokeStyle="#3dd6c6"; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(m.X(0),m.Y(5)); ctx.lineTo(m.X(12),m.Y(20)); ctx.stroke(); } },
+  { title:"Crucero", line:"12→24 s · a=<b>0</b>", result:"MRU",
+    draw(ctx,c,t){ const m=axes(ctx,c.width,c.height,40,72,22,0); ctx.strokeStyle="#f4a261"; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(m.X(12),m.Y(20)); ctx.lineTo(m.X(24),m.Y(20)); ctx.stroke(); } },
+  { title:"Frena", line:"24→72 s · a=<b>−0,417</b>", keys:["(0−20)","÷","48","="], result:"−0,417 m/s²",
+    draw(ctx,c,t){ const m=axes(ctx,c.width,c.height,40,72,22,0); ctx.strokeStyle="#e76f51"; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(m.X(24),m.Y(20)); ctx.lineTo(m.X(72),m.Y(0)); ctx.stroke(); } }
+]);
+
+const L5 = makeLesson("c5","side5",[
+  { title:"Convertí", line:"36 km/h ÷ 3,6 = <b>10 m/s</b>", keys:["36","÷","3.6","="], result:"10 m/s ↑",
+    draw(ctx,c,t){ ctx.fillStyle="#8b9cb0"; ctx.font="20px DM Sans"; ctx.fillText("36 km/h",220,120); const g=ease(t/0.7); ctx.fillStyle=`rgba(61,214,198,${g})`; ctx.font="700 40px JetBrains Mono"; if(g>0.1) ctx.fillText("10 m/s",180,200); } },
+  { title:"Ecuación", line:"0 = 25 + 10t − 4,9t²", result:"t ≈ 3,50 s",
+    draw(ctx,c,t){ ctx.fillStyle="#b8e0d8"; ctx.font="18px JetBrains Mono"; ctx.fillText("4,9t² − 10t − 25 = 0",120,140); const g=ease((t-0.5)/0.6); if(g>0){ ctx.fillStyle=`rgba(125,206,160,${g})`; ctx.font="700 28px JetBrains Mono"; ctx.fillText("t = 3,50 s",180,220);} } },
+  { title:"Impacto", line:"v = 10 − 9,8·3,50 = <b>−24,3</b>", keys:["10","−","9.8","×","3.5","="], result:"24,3 m/s ↓",
+    draw(ctx,c,t){ ctx.fillStyle="#222b38"; ctx.fillRect(80,60,80,260); const tt=Math.min(t%3.8,3.5); const y=25+10*tt-4.9*tt*tt; const py=320-Math.max(0,y)*(240/25); ctx.fillStyle="#f4a261"; ctx.beginPath(); ctx.arc(200,py,12,0,Math.PI*2); ctx.fill(); if(tt>3.4){ ctx.fillStyle="#e76f51"; ctx.font="700 18px JetBrains Mono"; ctx.fillText("24,3 m/s ↓",240,300);} } }
+]);
+</script>
+</body>
+</html>
