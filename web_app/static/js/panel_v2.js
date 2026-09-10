@@ -565,9 +565,23 @@
       a.classList.toggle('active', a.getAttribute('href') === '#' + (mScan ? '/revision' : h));
     });
     window.scrollTo(0, 0);
+    closeSidebar();
     if (mScan) return renderScan(mScan[1]);
     (routes[h] || renderInicio)();
   }
+
+  /* sidebar móvil */
+  var sidebar = document.getElementById('sidebar');
+  var scrim = document.getElementById('scrim');
+  function closeSidebar() { if (sidebar) sidebar.classList.remove('open'); if (scrim) scrim.classList.remove('on'); }
+  function toggleSidebar() {
+    if (!sidebar) return;
+    var open = sidebar.classList.toggle('open');
+    if (scrim) scrim.classList.toggle('on', open);
+  }
+  var menuBtn = document.getElementById('menu-btn');
+  if (menuBtn) menuBtn.onclick = toggleSidebar;
+  if (scrim) scrim.onclick = closeSidebar;
 
   view.addEventListener('click', function (e) {
     var tr = e.target.closest('tr[data-scan]');
