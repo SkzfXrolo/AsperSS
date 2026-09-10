@@ -241,16 +241,18 @@
           '</div>' +
         '</div></div>' +
       '</div>' +
-      '<div class="panel-card"><header>Hallazgos <span class="grow"></span><span class="muted">' + results.length + '</span></header>' +
+      '<div class="panel-card"><header>Hallazgos <span class="grow"></span><span class="muted mono">' + results.length + '</span></header>' +
         '<div class="body">' + (results.length ?
-          '<div class="table-wrap"><table class="tbl"><thead><tr><th>Nivel</th><th>Hallazgo</th><th>Ruta</th><th>Conf.</th><th>Patrones</th></tr></thead><tbody>' +
+          '<div class="table-wrap"><table class="tbl tbl-find"><thead><tr><th>Nivel</th><th>Hallazgo</th><th>Ruta</th><th class="num">Conf.</th><th>Patrones</th></tr></thead><tbody>' +
           results.map(function (r) {
-            return '<tr style="cursor:default">' +
+            var conf = r.confidence != null ? Math.round(r.confidence * (r.confidence <= 1 ? 100 : 1)) : null;
+            var pats = (r.detected_patterns || []).join(', ');
+            return '<tr>' +
               '<td>' + alertBadge(r.alert_level) + '</td>' +
-              '<td class="strong">' + esc(r.issue_name || r.name || '–') + '</td>' +
-              '<td class="muted mono" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.issue_path || '') + '</td>' +
-              '<td>' + (r.confidence != null ? Math.round(r.confidence * (r.confidence <= 1 ? 100 : 1)) + '%' : '–') + '</td>' +
-              '<td class="muted">' + esc((r.detected_patterns || []).join(', ')) + '</td>' +
+              '<td class="strong" title="' + esc(r.issue_name || '') + '">' + esc(r.issue_name || r.name || '–') + '</td>' +
+              '<td class="muted mono ellip" title="' + esc(r.issue_path || '') + '">' + esc(r.issue_path || '–') + '</td>' +
+              '<td class="num mono' + (conf != null && conf >= 70 ? ' hot' : '') + '">' + (conf != null ? conf + '%' : '–') + '</td>' +
+              '<td class="muted mono ellip" title="' + esc(pats) + '">' + esc(pats || '–') + '</td>' +
             '</tr>';
           }).join('') + '</tbody></table></div>' : emptyBox('Sin hallazgos — scan limpio.', '✔')) +
         '</div></div>' +
@@ -488,12 +490,14 @@
         return '<div class="kpi ' + o[1] + '"><div class="k-label">' + o[0] + '</div><div class="k-value">' + num(bl[o[0]] || 0) + '</div></div>';
       }).join('');
       var listBox = function (rows, key) {
-        return rows && rows.length
-          ? '<div class="body pad">' + rows.map(function (r) {
-              return '<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-soft)">' +
-                '<span>' + esc(r[key]) + '</span><span class="mono muted">' + num(r.c) + '</span></div>';
-            }).join('') + '</div>'
-          : emptyBox('Sin violaciones en 24 h.', '◈');
+        if (!rows || !rows.length) return emptyBox('Sin violaciones en 24 h.', '◈');
+        var top = rows[0].c || 1;
+        return '<div class="body pad"><ol class="rank">' + rows.map(function (r, i) {
+          return '<li><span class="rank-n">' + (i + 1) + '</span>' +
+            '<span class="rank-name">' + esc(r[key]) + '</span>' +
+            '<span class="rank-bar"><i style="width:' + Math.max(6, Math.round(100 * (r.c / top))) + '%"></i></span>' +
+            '<span class="rank-c mono">' + num(r.c) + '</span></li>';
+        }).join('') + '</ol></div>';
       };
       $('#ac-checks').innerHTML = listBox(d.top_checks, 'check_name');
       $('#ac-players').innerHTML = listBox(d.top_players, 'player_name');

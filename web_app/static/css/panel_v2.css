@@ -258,9 +258,11 @@ button { font: inherit; cursor: pointer; color: inherit; }
 
 /* ---- KPIs (lectura de instrumento) ----------------------------------- */
 .kpi-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
-  gap: 14px; margin-bottom: 26px;
+  display: grid; gap: 14px; margin-bottom: 26px;
+  grid-template-columns: repeat(2, 1fr);
 }
+@media (min-width: 620px)  { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1080px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
 .kpi {
   position: relative; overflow: hidden;
   background: var(--panel); border: 1px solid var(--border);
@@ -353,15 +355,19 @@ table.tbl tbody tr[data-scan]:focus-visible { outline: 2px solid var(--accent); 
 /* ---- Ranking / mini bar-chart ------------------------------------ */
 ol.rank { list-style: none; display: flex; flex-direction: column; gap: 2px; }
 ol.rank li {
-  display: grid; grid-template-columns: 22px 1fr 120px 44px; align-items: center;
-  gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--border-soft);
+  display: grid; grid-template-columns: 20px minmax(90px, 1fr) minmax(48px, 130px) 42px;
+  align-items: center; gap: 12px; padding: 8px 4px;
+  border-bottom: 1px solid var(--border-soft);
 }
 ol.rank li:last-child { border-bottom: 0; }
 .rank-n {
   font-family: var(--mono); font-size: 11px; color: var(--text-mute);
   text-align: right; font-weight: 600;
 }
-.rank-name { font-size: 13.5px; color: var(--text-dim); }
+.rank-name {
+  font-size: 13.5px; color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .rank-bar { height: 5px; border-radius: 3px; background: var(--bg-3); overflow: hidden; }
 .rank-bar i {
   display: block; height: 100%; border-radius: 3px;
@@ -394,6 +400,15 @@ table.tbl td.mono, table.tbl td .mono { font-family: var(--mono); }
 table.tbl th.num, table.tbl td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 table.tbl-scans td:first-child { max-width: 190px; }
 table.tbl-scans td.strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* tabla de hallazgos: truncar rutas/patrones largos */
+table.tbl-find { table-layout: fixed; }
+table.tbl-find th:nth-child(1) { width: 130px; }
+table.tbl-find th:nth-child(2) { width: 22%; }
+table.tbl-find th:nth-child(4) { width: 70px; }
+table.tbl-find td.ellip { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.tbl-find td.strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.tbl-find td.num.hot { color: var(--red); }
 table.tbl tr:last-child td { border-bottom: 0; }
 table.tbl tbody tr { transition: background .12s var(--ease); }
 table.tbl tbody tr[data-scan] { cursor: pointer; outline: none; }
