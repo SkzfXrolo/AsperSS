@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/panel_v2.css') }}?v=9">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/panel_v2.css') }}?v=10">
 </head>
 <body>
 <div class="app">
@@ -66,6 +66,6 @@
     scannerVersion: {{ (scanner_version or '') | tojson }}
   };
 </script>
-<script src="{{ url_for('static', filename='js/panel_v2.js') }}?v=9"></script>
+<script src="{{ url_for('static', filename='js/panel_v2.js') }}?v=10"></script>
 </body>
 </html>

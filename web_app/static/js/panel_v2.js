@@ -97,9 +97,11 @@
   async function renderInicio() {
     titleEl.textContent = 'Inicio'; subEl.textContent = 'resumen operativo';
     view.innerHTML = '<div class="kpi-grid">' + Array(6).fill('<div class="kpi">' + skel() + '</div>').join('') + '</div>';
-    var st = {}, ext = {};
-    try { st = await api('/api/statistics'); } catch (e) {}
-    try { ext = await api('/api/dashboard/extended'); } catch (e) {}
+    // Los 3 fetch son independientes → en paralelo, no en serie.
+    var pStats = api('/api/statistics').catch(function () { return {}; });
+    var pExt = api('/api/dashboard/extended').catch(function () { return {}; });
+    var pRecent = api('/api/scans?limit=8').catch(function () { return null; });
+    var st = await pStats, ext = await pExt;
 
     var v = ext.verdicts || {};
     var kpis = [
@@ -126,10 +128,8 @@
         '<a class="btn sm" href="#/revision">Ver todos →</a></header>' +
         '<div class="body" id="recent">' + skel() + '</div></div>';
 
-    try {
-      var d = await api('/api/scans?limit=8');
-      $('#recent').innerHTML = scanTable(d.scans || d.results || d || []);
-    } catch (e) { $('#recent').innerHTML = emptyBox('No se pudo cargar.', '⚠'); }
+    var d = await pRecent;
+    $('#recent').innerHTML = d ? scanTable(d.scans || d.results || d || []) : emptyBox('No se pudo cargar.', '⚠');
   }
 
   /* ================================================================== *
@@ -175,6 +175,8 @@
   async function renderScan(id) {
     titleEl.textContent = 'Scan #' + id; subEl.textContent = '';
     view.innerHTML = '<a class="btn sm ghost" href="#/revision">← volver</a><div class="panel-card" style="margin-top:14px"><div class="body pad">' + skel() + '</div></div>';
+    // scan + notas en paralelo (notas es independiente del detalle)
+    var pNotes = api('/api/scans/' + id + '/notes').catch(function () { return null; });
     var s;
     try { s = await api('/api/scans/' + id); }
     catch (e) { view.innerHTML = emptyBox('No se pudo cargar el scan: ' + e.message, '⚠'); return; }
@@ -250,7 +252,8 @@
     });
     // notas
     try {
-      var nd = await api('/api/scans/' + id + '/notes');
+      var nd = await pNotes;
+      if (!nd) throw new Error('sin datos');
       var notes = nd.notes || [];
       $('#notes').innerHTML = (notes.length ? notes.map(function (n) {
         return '<div style="padding:8px 0;border-bottom:1px solid var(--border-soft)">' +
@@ -302,7 +305,10 @@
       } catch (e) { toast('No se pudo generar: ' + e.message, true); }
       $('#sv-new').disabled = false; $('#sv-new').textContent = '+ Generar token SS';
     };
-    try { var v = await api('/api/scanner/version'); $('#sv-ver').textContent = 'scanner ' + (v.version || v.latest || CFG.scannerVersion || '?'); } catch (e) {}
+    // la versión no bloquea la carga de tokens: se actualiza sola al llegar.
+    api('/api/scanner/version')
+      .then(function (v) { $('#sv-ver').textContent = 'scanner ' + (v.version || v.latest || CFG.scannerVersion || '?'); })
+      .catch(function () { $('#sv-ver').textContent = 'scanner ' + (CFG.scannerVersion || '?'); });
     loadServidores();
   }
   async function loadServidores() {
@@ -470,8 +476,10 @@
     titleEl.textContent = 'Argus AI'; subEl.textContent = 'oráculo y acuerdo con el staff';
     view.innerHTML = '<div class="kpi-grid" id="ia-kpi">' + Array(3).fill('<div class="kpi">' + skel() + '</div>').join('') + '</div>' +
       '<div class="panel-card"><header>Jugadores evaluados por la IA</header><div class="body" id="ia-players">' + skel() + '</div></div>';
+    var pAgree = api('/api/ai/agreement-rate').catch(function () { return {}; });
+    var pScores = api('/api/ai/scores').catch(function () { return null; });
     try {
-      var ar = await api('/api/ai/agreement-rate').catch(function () { return {}; });
+      var ar = await pAgree;
       $('#ia-kpi').innerHTML =
         '<div class="kpi good"><div class="k-label">Acuerdo IA ↔ staff</div><div class="k-value">' + (ar.agreement_rate != null ? Math.round(ar.agreement_rate) + '%' : '–') + '</div>' +
           '<div class="k-sub">' + num(ar.sample_size) + ' veredictos</div></div>' +
@@ -479,7 +487,8 @@
         '<div class="kpi alert"><div class="k-label">IA equivocada</div><div class="k-value">' + num(ar.confirmed_wrong) + '</div></div>';
     } catch (e) { $('#ia-kpi').innerHTML = ''; }
     try {
-      var d = await api('/api/ai/scores');
+      var d = await pScores;
+      if (!d) throw new Error('sin datos');
       var rows = d.scores || [];
       $('#ia-players').innerHTML = rows.length ? '<div class="table-wrap"><table class="tbl"><thead><tr>' +
         '<th>Jugador</th><th>Score</th><th>Confianza</th><th>Acción sugerida</th><th>Evaluaciones</th><th>Última</th></tr></thead><tbody>' +
@@ -505,16 +514,20 @@
     titleEl.textContent = 'Administración'; subEl.textContent = 'empresas y plataforma';
     view.innerHTML = '<div class="kpi-grid" id="ad-kpi">' + Array(4).fill('<div class="kpi">' + skel() + '</div>').join('') + '</div>' +
       '<div class="panel-card"><header>Empresas</header><div class="body" id="ad-comp">' + skel() + '</div></div>';
+    var pStats = api('/api/statistics').catch(function () { return null; });
+    var pComp = api('/api/admin/companies').catch(function (e) { return { __err: e }; });
     try {
-      var st = await api('/api/statistics');
+      var st = await pStats;
+      if (!st) throw new Error('sin datos');
       $('#ad-kpi').innerHTML = [
         ['Escaneos', num(st.total_scans)], ['Máquinas', num(st.unique_machines)],
         ['Detecciones críticas', num(st.severe_detections)], ['Baneos', num(st.total_bans)]
       ].map(function (k) { return '<div class="kpi"><div class="k-label">' + k[0] + '</div><div class="k-value">' + k[1] + '</div></div>'; }).join('');
     } catch (e) { $('#ad-kpi').innerHTML = ''; }
     try {
-      var d = await api('/api/admin/companies');
-      var rows = d.companies || [];
+      var d = await pComp;
+      if (d && d.__err) throw d.__err;
+      var rows = (d && d.companies) || [];
       $('#ad-comp').innerHTML = rows.length ? '<div class="table-wrap"><table class="tbl"><thead><tr>' +
         '<th>Empresa</th><th>Usuarios</th><th>Admins</th><th>Plan</th><th>Estado</th><th>Vence</th></tr></thead><tbody>' +
         rows.map(function (co) {
