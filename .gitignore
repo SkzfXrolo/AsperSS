@@ -15,6 +15,7 @@ venv/
 env/
 ENV/
 .venv
+.venv*/
 
 # Bases de datos locales (no subir datos de desarrollo)
 *.sqlite
@@ -26,6 +27,15 @@ ENV/
 source/build/
 source/dist/*
 !source/dist/ArgusScanner.exe
+
+# Builds PyInstaller alternativos (60/new/new2/...) y bundles offline — artefactos, ~500 MB
+source/build_*/
+source/dist_*/
+source/bundle/
+source/argus_report_local.html
+web_app/downloads/
+.coverage
+.coverage.*
 
 # Archivos sensibles
 .env
