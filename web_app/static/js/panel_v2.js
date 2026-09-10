@@ -361,7 +361,7 @@
             '<td class="muted mono" style="max-width:220px;overflow:hidden;text-overflow:ellipsis">' + esc(t.token) + '</td>' +
             '<td>' + esc(t.used_count || 0) + '/' + (t.max_uses === -1 ? '∞' : esc(t.max_uses)) + '</td>' +
             '<td class="muted">' + esc(t.created_by || '—') + '</td>' +
-            '<td class="muted">' + esc(fmtDate(t.expires_at)) + '</td>' +
+            '<td class="muted nowrap">' + esc(fmtDate(t.expires_at)) + '</td>' +
             '<td><button class="btn sm danger" data-deltoken="' + esc(t.id) + '">borrar</button></td>' +
           '</tr>';
         }).join('') + '</tbody></table></div>';
@@ -429,7 +429,7 @@
             '<td class="strong">' + esc(u.username) + '</td>' +
             '<td class="muted">' + esc(roles) + '</td>' +
             '<td>' + (active ? '<span class="badge clean plain">activo</span>' : '<span class="badge pend plain">inactivo</span>') + '</td>' +
-            '<td class="muted">' + esc(fmtDate(u.last_login)) + '</td>' +
+            '<td class="muted nowrap">' + esc(fmtDate(u.last_login)) + '</td>' +
             '<td class="row" style="gap:6px">' +
               (active
                 ? '<button class="btn sm" data-deact="' + esc(u.id) + '">desactivar</button>'
@@ -465,7 +465,7 @@
             '<td class="mono" style="max-width:200px;overflow:hidden;text-overflow:ellipsis">' + esc(t.token) + '</td>' +
             '<td>' + esc(t.description || '—') + '</td>' +
             '<td>' + (t.is_admin_token ? 'sí' : '—') + '</td>' +
-            '<td class="muted">' + esc(fmtDate(t.expires_at)) + '</td>' +
+            '<td class="muted nowrap">' + esc(fmtDate(t.expires_at)) + '</td>' +
             '<td>' + (t.is_used || t.used_at ? '<span class="badge pend plain">usado</span>' : '<span class="badge clean plain">pendiente</span>') + '</td>' +
           '</tr>';
         }).join('') + '</tbody></table></div>';
@@ -539,7 +539,7 @@
             '<td class="muted">' + (r.confidence != null ? Math.round(r.confidence * 100) + '%' : '–') + '</td>' +
             '<td class="muted">' + esc(r.last_action || 'none') + '</td>' +
             '<td class="muted">' + num(r.evaluations_count) + '</td>' +
-            '<td class="muted">' + esc(fmtDate(r.last_evaluated_at)) + '</td>' +
+            '<td class="muted nowrap">' + esc(fmtDate(r.last_evaluated_at)) + '</td>' +
           '</tr>';
         }).join('') + '</tbody></table></div>' : emptyBox('La IA todavía no evaluó jugadores.', '✦');
     } catch (e) { $('#ia-players').innerHTML = emptyBox('Error: ' + e.message, '⚠'); }
@@ -575,7 +575,7 @@
             '<td>' + num(co.current_admins) + '/' + num(co.max_admins) + '</td>' +
             '<td class="muted">' + esc(co.subscription_type || '—') + '</td>' +
             '<td>' + (co.is_active ? '<span class="badge clean plain">activa</span>' : '<span class="badge pend plain">inactiva</span>') + '</td>' +
-            '<td class="muted">' + esc(fmtDate(co.subscription_end_date)) + '</td>' +
+            '<td class="muted nowrap">' + esc(fmtDate(co.subscription_end_date)) + '</td>' +
           '</tr>';
         }).join('') + '</tbody></table></div>' : emptyBox('Sin empresas.', '⚙');
     } catch (e) {
