@@ -76,17 +76,21 @@
   function scanTable(rows, opts) {
     opts = opts || {};
     if (!rows || !rows.length) return emptyBox('Sin escaneos.', '≣');
-    return '<div class="table-wrap"><table class="tbl"><thead><tr>' +
-      '<th>Máquina</th><th>Usuario MC</th><th>Veredicto</th><th>Hallazgos</th>' +
-      (opts.dur ? '<th>Duración</th>' : '') + '<th>Fecha</th></tr></thead><tbody>' +
+    return '<div class="table-wrap"><table class="tbl tbl-scans"><thead><tr>' +
+      '<th>Máquina</th><th>Usuario MC</th><th>Veredicto</th><th class="num">Hallazgos</th>' +
+      (opts.dur ? '<th class="num">Duración</th>' : '') + '<th class="num">Fecha</th></tr></thead><tbody>' +
       rows.map(function (s) {
-        return '<tr data-scan="' + esc(s.id) + '">' +
+        var risk = s.risk_score;
+        var sev = (String(s.verdict || '').toLowerCase() === 'hack' || risk >= 70) ? 'hi'
+                : (String(s.verdict || '').toLowerCase() === 'suspicious' || risk >= 30) ? 'mid' : 'lo';
+        var n = s.issues_found || 0;
+        return '<tr data-scan="' + esc(s.id) + '" data-sev="' + sev + '" tabindex="0">' +
           '<td class="strong">' + esc(s.machine_name || s.machine_id || '–') + '</td>' +
-          '<td>' + esc(s.minecraft_username || s.mc_username || '–') + '</td>' +
-          '<td>' + verdictBadge(s.verdict, s.risk_score) + '</td>' +
-          '<td>' + num(s.issues_found) + '</td>' +
-          (opts.dur ? '<td class="muted">' + (s.scan_duration ? Math.round(s.scan_duration) + 's' : '–') + '</td>' : '') +
-          '<td class="muted" title="' + esc(fmtDate(s.started_at || s.created_at)) + '">' + esc(ago(s.started_at || s.created_at) || fmtDate(s.started_at)) + '</td>' +
+          '<td class="muted">' + esc(s.minecraft_username || s.mc_username || '–') + '</td>' +
+          '<td>' + verdictBadge(s.verdict, risk) + '</td>' +
+          '<td class="num mono' + (n ? '' : ' muted') + '">' + num(n) + '</td>' +
+          (opts.dur ? '<td class="num mono muted">' + (s.scan_duration ? Math.round(s.scan_duration) + 's' : '–') + '</td>' : '') +
+          '<td class="num muted" title="' + esc(fmtDate(s.started_at || s.created_at)) + '">' + esc(ago(s.started_at || s.created_at) || fmtDate(s.started_at)) + '</td>' +
         '</tr>';
       }).join('') + '</tbody></table></div>';
   }
@@ -151,15 +155,19 @@
         '</select>' +
         '<button class="btn primary" id="rv-go">Filtrar</button>' +
         '<span class="grow"></span>' +
-        '<button class="btn sm" id="rv-prev">←</button><button class="btn sm" id="rv-next">→</button>' +
+        '<span class="rv-range mono muted" id="rv-range"></span>' +
+        '<button class="btn sm ico-btn" id="rv-prev" aria-label="Anteriores">←</button>' +
+        '<button class="btn sm ico-btn" id="rv-next" aria-label="Siguientes">→</button>' +
       '</div>' +
       '<div class="panel-card"><div class="body" id="rv-body">' + skel() + '</div></div>';
-    $('#rv-go').onclick = function () {
+    var apply = function () {
       rev.search = $('#rv-q').value.trim(); rev.verdict = $('#rv-v').value; rev.offset = 0; loadRevision();
     };
-    $('#rv-q').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('#rv-go').click(); });
-    $('#rv-prev').onclick = function () { rev.offset = Math.max(0, rev.offset - rev.limit); loadRevision(); };
-    $('#rv-next').onclick = function () { rev.offset += rev.limit; loadRevision(); };
+    $('#rv-go').onclick = apply;
+    $('#rv-v').onchange = apply;
+    $('#rv-q').addEventListener('keydown', function (e) { if (e.key === 'Enter') apply(); });
+    $('#rv-prev').onclick = function () { if (rev.offset > 0) { rev.offset = Math.max(0, rev.offset - rev.limit); loadRevision(); } };
+    $('#rv-next').onclick = function () { if (!rev._end) { rev.offset += rev.limit; loadRevision(); } };
     loadRevision();
   }
   async function loadRevision() {
@@ -167,10 +175,20 @@
     if (rev.search) q.set('search', rev.search);
     if (rev.verdict) q.set('verdict', rev.verdict);
     $('#rv-body').innerHTML = skel();
+    $('#rv-prev').disabled = true; $('#rv-next').disabled = true;
     try {
       var d = await api('/api/scans?' + q);
-      $('#rv-body').innerHTML = scanTable(d.scans || d.results || d || [], { dur: true });
-    } catch (e) { $('#rv-body').innerHTML = emptyBox('Error: ' + e.message, '⚠'); }
+      var list = d.scans || d.results || d || [];
+      rev._end = list.length < rev.limit;
+      $('#rv-body').innerHTML = scanTable(list, { dur: true });
+      var from = list.length ? rev.offset + 1 : 0;
+      $('#rv-range').textContent = from + '–' + (rev.offset + list.length);
+      $('#rv-prev').disabled = rev.offset === 0;
+      $('#rv-next').disabled = rev._end;
+    } catch (e) {
+      $('#rv-body').innerHTML = emptyBox('Error: ' + e.message, '⚠');
+      $('#rv-range').textContent = '';
+    }
   }
 
   async function renderScan(id) {
@@ -289,25 +307,34 @@
       '<div class="toolbar">' +
         '<button class="btn primary" id="sv-new">+ Generar token SS</button>' +
         '<span class="grow"></span>' +
-        '<span class="pill" id="sv-ver">scanner …</span>' +
+        '<span class="pill" id="sv-ver">SCANNER …</span>' +
       '</div>' +
       '<div id="sv-fresh"></div>' +
       '<div class="panel-card"><header>Tokens activos <span class="grow"></span>' +
-        '<button class="btn sm" id="sv-reload">↻</button></header>' +
+        '<button class="btn sm ico-btn" id="sv-reload" aria-label="Recargar">↻</button></header>' +
         '<div class="body" id="sv-body">' + skel() + '</div></div>';
     $('#sv-reload').onclick = loadServidores;
     $('#sv-new').onclick = async function () {
       $('#sv-new').disabled = true; $('#sv-new').textContent = 'Generando…';
       try {
         var r = await api('/api/tokens', { method: 'POST' });
+        var code = r.short_code || '——';
         $('#sv-fresh').innerHTML =
-          '<div class="panel-card" style="border-color:var(--accent)"><div class="body pad">' +
-            '<div class="muted" style="font-size:12.5px">Nuevo token · dáselo al jugador · expira en 30 min</div>' +
-            '<div class="row" style="gap:14px;margin-top:8px;align-items:baseline">' +
-              '<span style="font-size:28px;font-weight:700;letter-spacing:.15em" class="mono">' + esc(r.short_code || '——') + '</span>' +
-              '<span class="muted mono" style="font-size:12px">' + esc(r.token || '') + '</span>' +
-            '</div></div></div>';
-        toast('Token generado: ' + (r.short_code || ''));
+          '<div class="handoff">' +
+            '<div class="handoff-head"><span class="hud">TOKEN NUEVO</span>' +
+              '<span class="muted">expira en 30 min</span></div>' +
+            '<div class="handoff-code">' + esc(code).split('').map(function (ch) {
+              return '<span>' + esc(ch) + '</span>';
+            }).join('') + '</div>' +
+            '<div class="handoff-foot"><code class="mono">' + esc(r.token || '') + '</code>' +
+              '<button class="btn sm" id="sv-copy">Copiar</button></div>' +
+          '</div>';
+        var cp = $('#sv-copy');
+        if (cp) cp.onclick = function () {
+          try { navigator.clipboard.writeText(r.token || code); toast('Copiado'); }
+          catch (e) { toast('No se pudo copiar', true); }
+        };
+        toast('Token generado: ' + code);
         loadServidores();
       } catch (e) { toast('No se pudo generar: ' + e.message, true); }
       $('#sv-new').disabled = false; $('#sv-new').textContent = '+ Generar token SS';
@@ -592,6 +619,11 @@
 
   view.addEventListener('click', function (e) {
     var tr = e.target.closest('tr[data-scan]');
+    if (tr) location.hash = '/scan/' + tr.dataset.scan;
+  });
+  view.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    var tr = e.target.closest && e.target.closest('tr[data-scan]');
     if (tr) location.hash = '/scan/' + tr.dataset.scan;
   });
 
