@@ -1,0 +1,21 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "panel-local",
+      "runtimeExecutable": "C:/Users/robin/OneDrive/Documentos/aspers/aspersprojectsSS-main/aspersprojectsSS-main/.venv_local/Scripts/python.exe",
+      "runtimeArgs": ["app.py"],
+      "cwd": "web_app",
+      "port": 8080,
+      "env": {
+        "ARGUS_FORCE_SQLITE": "1",
+        "ARGUS_DB_PATH": "C:/Users/robin/OneDrive/Documentos/aspers/aspersprojectsSS-main/aspersprojectsSS-main/web_app/scanner_db.local.sqlite",
+        "ARGUS_LOCAL_DEV": "1",
+        "SECRET_KEY": "devsecret",
+        "FLASK_DEBUG": "1",
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8"
+      }
+    }
+  ]
+}

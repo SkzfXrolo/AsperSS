@@ -171,8 +171,13 @@ from datetime import timedelta as _td
 app.config['PERMANENT_SESSION_LIFETIME'] = _td(days=30)
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-# En produccion HTTPS forzamos cookie segura
-if os.environ.get('RENDER') or os.environ.get('FLASK_ENV') == 'production':
+# En produccion HTTPS forzamos cookie segura (Render / Railway / etc.)
+if (
+    os.environ.get('RENDER')
+    or os.environ.get('RAILWAY_ENVIRONMENT')
+    or os.environ.get('FLY_APP_NAME')
+    or os.environ.get('FLASK_ENV') == 'production'
+):
     app.config['SESSION_COOKIE_SECURE'] = True
 
 if os.environ.get('LOG_FORMAT', '').strip().lower() == 'json' and _JSONFormatter is not None:
@@ -435,7 +440,7 @@ def audit_action(action_name: str, resource_type: str = ''):
 CORS(app)
 
 # Inicializar base de datos de autenticaciÃ³n al iniciar (en background para no bloquear)
-_ARGUS_VERSION = '1.7.0'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
+_ARGUS_VERSION = '1.8.0'  # sincronizar con SCANNER_VERSION en main.py y CURRENT_SCANNER_VERSION abajo
 
 # URL de invitacion permanente al Discord oficial. Se inyecta en todos los
 # templates como `discord_invite` via @app.context_processor (ver mas abajo).
@@ -457,26 +462,38 @@ def _inject_globals():
 
 
 def _notify_new_deploy():
-    """Detecta si es un deploy nuevo comparando RENDER_GIT_COMMIT con el Ãºltimo
-    commit almacenado en BD. Si es nuevo, envÃ­a embed a Discord vÃ­a webhook.
-    Solo se ejecuta en Render (RENDER_GIT_COMMIT presente).
+    """Detecta deploy nuevo (Render/Railway/Fly git SHA) y avisa por Discord webhook.
 
     Variable de entorno requerida:
-      DISCORD_DEPLOY_WEBHOOK â€” URL completa del webhook de Discord
+      DISCORD_DEPLOY_WEBHOOK — URL completa del webhook de Discord
     """
-    commit  = os.environ.get('RENDER_GIT_COMMIT', '').strip()
-    branch  = os.environ.get('RENDER_GIT_BRANCH', 'main').strip()
-    service = os.environ.get('RENDER_SERVICE_NAME', 'argus-web').strip()
+    commit = (
+        os.environ.get('RENDER_GIT_COMMIT')
+        or os.environ.get('RAILWAY_GIT_COMMIT_SHA')
+        or os.environ.get('GITHUB_SHA')
+        or ''
+    ).strip()
+    branch = (
+        os.environ.get('RENDER_GIT_BRANCH')
+        or os.environ.get('RAILWAY_GIT_BRANCH_NAME')
+        or 'main'
+    ).strip()
+    service = (
+        os.environ.get('RENDER_SERVICE_NAME')
+        or os.environ.get('RAILWAY_SERVICE_NAME')
+        or os.environ.get('FLY_APP_NAME')
+        or 'argus-web'
+    ).strip()
     webhook = os.environ.get('DISCORD_DEPLOY_WEBHOOK', '').strip()
 
-    print(f'[Deploy] DEBUG commit={commit[:7] if commit else "VACÃO"} branch={branch} service={service}')
+    print(f'[Deploy] DEBUG commit={commit[:7] if commit else "VACÍO"} branch={branch} service={service}')
     print(f'[Deploy] DEBUG webhook={"SET ("+webhook[:30]+"...)" if webhook else "NO CONFIGURADO"}')
 
     if not commit:
-        print('[Deploy] Sin RENDER_GIT_COMMIT â€” entorno local, saliendo')
+        print('[Deploy] Sin git commit env — entorno local, saliendo')
         return
     if not webhook:
-        print('[Deploy] âŒ DISCORD_DEPLOY_WEBHOOK no estÃ¡ configurado como variable de entorno en Render')
+        print('[Deploy] ❌ DISCORD_DEPLOY_WEBHOOK no está configurado')
         return
 
     try:
@@ -894,19 +911,37 @@ except Exception as _disc_err:
 
 # Health check endpoints (simplificado - sin import externo)
 
-# ConfiguraciÃ³n
-# Detectar si estamos en Render o en desarrollo local
-RENDER_EXTERNAL_URL = os.environ.get('RENDER_EXTERNAL_URL')  # Render proporciona esta variable
-IS_RENDER = bool(RENDER_EXTERNAL_URL)
+# Configuración — URL pública (Render, Railway, Fly, o PUBLIC_BASE_URL manual)
+def _resolve_public_base_url():
+    explicit = (os.environ.get('PUBLIC_BASE_URL') or os.environ.get('RENDER_EXTERNAL_URL') or '').strip()
+    if explicit:
+        return explicit.rstrip('/')
+    railway_domain = (os.environ.get('RAILWAY_PUBLIC_DOMAIN') or '').strip()
+    if railway_domain:
+        return f'https://{railway_domain}'.rstrip('/')
+    fly_app = (os.environ.get('FLY_APP_NAME') or '').strip()
+    if fly_app:
+        return f'https://{fly_app}.fly.dev'.rstrip('/')
+    return None
 
-if IS_RENDER:
-    # La API estÃ¡ integrada en esta misma app â€” usar la propia URL de Render
+RENDER_EXTERNAL_URL = _resolve_public_base_url()  # alias histórico (Render + Railway + Fly)
+IS_CLOUD = bool(RENDER_EXTERNAL_URL) or bool(
+    os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('RENDER') or os.environ.get('FLY_APP_NAME')
+)
+IS_RENDER = IS_CLOUD  # compat: código existente usa IS_RENDER para "producción cloud"
+
+if IS_RENDER and RENDER_EXTERNAL_URL:
+    # La API está integrada en esta misma app — usar la propia URL pública
     api_url_env = os.environ.get('API_URL')
     if api_url_env:
         API_BASE_URL = api_url_env.rstrip('/')
     else:
         API_BASE_URL = RENDER_EXTERNAL_URL.rstrip('/')
-        print(f"âœ… API_URL apunta a esta misma app: {API_BASE_URL}")
+        print(f"✅ API_URL apunta a esta misma app: {API_BASE_URL}")
+elif IS_RENDER and not RENDER_EXTERNAL_URL:
+    api_url_env = os.environ.get('API_URL')
+    API_BASE_URL = (api_url_env or '').rstrip('/') or 'http://127.0.0.1:8080'
+    print("⚠️ Cloud sin PUBLIC_BASE_URL/RAILWAY_PUBLIC_DOMAIN — seteá PUBLIC_BASE_URL")
 elif _is_local_dev():
     # Réplica local de asperss.onrender.com: misma app monolítica en un solo puerto
     _local_port = int(os.environ.get('PORT', '8080'))
@@ -1565,6 +1600,29 @@ def panel():
     )
 
 
+@app.route('/panel/v2')
+@login_required
+def panel_v2():
+    """Rediseño del panel de staff (WIP). Misma auth que /panel, mismas APIs.
+    No reemplaza a /panel — es una cara nueva para revisar antes del switch."""
+    user = get_user_by_id(session.get('user_id'))
+    if user and isinstance(user.get('roles'), str):
+        try:
+            user['roles'] = json.loads(user['roles'])
+        except Exception:
+            user['roles'] = [user.get('roles', 'user')]
+    if user is not None:
+        user = dict(user)
+        user.setdefault('username', session.get('username', 'staff'))
+    return render_template(
+        'panel_v2.html',
+        user=user,
+        staff_role=get_staff_role(user) if user else 'helper',
+        scanner_version=_ARGUS_VERSION,
+        is_panel_owner=_is_panel_owner(user),
+    )
+
+
 # ============================================================================
 #  ARGUS WAR ROOM  ·  Centro de mando en tiempo real
 #  Vista nueva que reusa la auth de staff, el Socket.IO existente y la tabla
@@ -2051,13 +2109,36 @@ def get_statistics():
                 'total_bans': 0
             }
             
-            # Consulta optimizada para PostgreSQL
+            # Agrupadas por tabla: 3 round-trips en vez de 7 (COUNT ... FILTER lo
+            # soportan PostgreSQL y SQLite 3.30+). Cada grupo con su try/except para
+            # que una columna ausente en un deploy viejo no tumbe el resto.
+            def _cols(row):
+                if not row:
+                    return []
+                return [row[k] for k in row.keys()] if hasattr(row, 'keys') else list(row)
+
+            try:
+                cursor.execute("""
+                    SELECT COUNT(*),
+                           COUNT(*) FILTER (WHERE status = 'running'),
+                           COUNT(DISTINCT machine_id) FILTER (WHERE machine_id IS NOT NULL AND machine_id != '')
+                    FROM scans
+                """)
+                c = _cols(cursor.fetchone())
+                if c:
+                    stats['total_scans'], stats['active_scans'], stats['unique_machines'] = (c[0] or 0, c[1] or 0, c[2] or 0)
+            except Exception:
+                pass
+
+            try:
+                cursor.execute("SELECT COUNT(*), COUNT(*) FILTER (WHERE alert_level = 'CRITICAL') FROM scan_results")
+                c = _cols(cursor.fetchone())
+                if c:
+                    stats['total_results'], stats['severe_detections'] = (c[0] or 0, c[1] or 0)
+            except Exception:
+                pass
+
             for query, key in [
-                ("SELECT COUNT(*) FROM scans", 'total_scans'),
-                ("SELECT COUNT(*) FROM scans WHERE status = 'running'", 'active_scans'),
-                ("SELECT COUNT(DISTINCT machine_id) FROM scans WHERE machine_id IS NOT NULL AND machine_id != ''", 'unique_machines'),
-                ("SELECT COUNT(*) FROM scan_results WHERE alert_level = 'CRITICAL'", 'severe_detections'),
-                ("SELECT COUNT(*) FROM scan_results", 'total_results'),
                 ("SELECT COUNT(*) FROM scan_tokens WHERE is_active = TRUE", 'active_tokens'),
                 ("SELECT COUNT(*) FROM ban_history", 'total_bans'),
             ]:
@@ -2092,15 +2173,19 @@ def get_dashboard_extended():
             return jsonify(_stats_cache[cache_key]), 200
     try:
         with get_api_db_cursor() as cursor:
-            # Veredictos
+            # Veredictos — 1 query en vez de 3
             clean = hack = pending = 0
             try:
-                cursor.execute("SELECT COUNT(*) FROM scans WHERE verdict = 'clean'")
-                r = cursor.fetchone(); clean = (_row_get(r, 0, list(r.keys())[0]) if r else 0) or 0
-                cursor.execute("SELECT COUNT(*) FROM scans WHERE verdict = 'hack'")
-                r = cursor.fetchone(); hack = (_row_get(r, 0, list(r.keys())[0]) if r else 0) or 0
-                cursor.execute("SELECT COUNT(*) FROM scans WHERE verdict IS NULL OR verdict = ''")
-                r = cursor.fetchone(); pending = (_row_get(r, 0, list(r.keys())[0]) if r else 0) or 0
+                cursor.execute("""
+                    SELECT COUNT(*) FILTER (WHERE verdict = 'clean'),
+                           COUNT(*) FILTER (WHERE verdict = 'hack'),
+                           COUNT(*) FILTER (WHERE verdict IS NULL OR verdict = '')
+                    FROM scans
+                """)
+                r = cursor.fetchone()
+                _vc = [r[k] for k in r.keys()] if (r and hasattr(r, 'keys')) else (list(r) if r else [])
+                if _vc:
+                    clean, hack, pending = (_vc[0] or 0, _vc[1] or 0, _vc[2] or 0)
             except Exception:
                 pass
 
@@ -4262,7 +4347,11 @@ def api_list_violations():
         if since_min:
             try:
                 since_int = max(1, min(43200, int(since_min)))
-                where.append(f"created_at >= NOW() - INTERVAL '{since_int} minutes'")
+                where.append(
+                    f"created_at >= NOW() - INTERVAL '{since_int} minutes'"
+                    if (_USE_PG or _USE_MYSQL)
+                    else f"created_at >= datetime('now', '-{since_int} minutes')"
+                )
             except Exception:
                 pass
 
@@ -4322,7 +4411,11 @@ def api_violations_stats():
             scope_clause = f"company_id = {_PH} AND "
             params.append(company_id)
 
-        time_clause = f"created_at >= NOW() - INTERVAL '{since_min} minutes'"
+        time_clause = (
+            f"created_at >= NOW() - INTERVAL '{since_min} minutes'"
+            if (_USE_PG or _USE_MYSQL)
+            else f"created_at >= datetime('now', '-{since_min} minutes')"
+        )
         where = scope_clause + time_clause
 
         with get_api_db_cursor() as cursor:
@@ -8773,7 +8866,7 @@ def debug_last_scan():
 
 
 # Current released scanner version â€” update this when distributing a new build
-CURRENT_SCANNER_VERSION = "1.7.0"
+CURRENT_SCANNER_VERSION = "1.8.0"
 
 @app.route('/sw.js')
 def service_worker():
@@ -10389,6 +10482,29 @@ def _calculate_risk_score(results, return_breakdown=False):
         'debugger':         55,
         'process_hacker':   40,
         'explorer_suspicious': 60,
+        'recycle_hash':     85,
+        'remote_access':    45,
+        'rdp_session':      70,
+        'scheduled_task':   55,
+        'ghost_client':     80,
+        'firewall_rule_hack': 60,
+        'yara_java':        75,
+        'deleted_mass':     55,
+        'mass_delete':      55,
+        'recent_docs':      50,
+        'powershell_history': 55,
+        'crash_report':     45,
+        'muicache':         50,
+        'prefetch_referenced': 80,
+        'browser_hack_cookie': 55,
+        'wininet_hack_cookie': 50,
+        'lnk_xaml_hijack':  70,
+        'discord_cache':    60,
+        'srum_suspicious':  50,
+        'shadow_copy':      55,
+        'injected_thread':  85,
+        'av_interference':  40,
+        'minecraft_multi_account': 25,
     }
 
     ALERT_SCORES = {
@@ -10402,13 +10518,13 @@ def _calculate_risk_score(results, return_breakdown=False):
     # - texture_pack: muy fÃ¡cil de confundir, demasiados FPs
     # - event_logs de fecha/hora: lo dispara Windows NTP automÃ¡ticamente
     ZERO_RISK_TYPES = {
-        'texture_pack', 'texture_pack_xray', 'texture_pack_analysis',
-        'resource_pack', 'resource_pack_xray',
+        # texture_pack_xray / crash_dump Java ya NO son zero — aportan a SS
+        'texture_pack_analysis',
         'file_created', 'file_modified',
-        'crash_dump', 'defender_health_event', 'razer_installed',
-        'multiple_javaw',
+        'defender_health_event', 'razer_installed',
+        'multiple_javaw', 'hosts_file_custom', 'virtual_audio_cable',
     }
-    ZERO_RISK_CATS = {'texture_packs', 'resource_packs', 'file_activity'}
+    ZERO_RISK_CATS = {'file_activity'}
 
     _alert_counted = set()
 
@@ -10912,12 +11028,31 @@ def submit_scan_results(scan_id):
                     except (TypeError, ValueError):
                         return 0.0
                 def _extra_json(r_dict):
-                    """Serializa el campo 'extra' a JSON string, o None si no hay."""
-                    raw = r_dict.get('extra')
-                    if not raw or not isinstance(raw, dict):
+                    """Serializa 'extra' + evidencia staff (explicacion/timestamp/related)."""
+                    raw = r_dict.get('extra') if isinstance(r_dict.get('extra'), dict) else {}
+                    merged = dict(raw)
+                    expl = r_dict.get('explicacion') or merged.get('explicacion')
+                    if expl:
+                        merged['explicacion'] = str(expl)[:1200]
+                    ts = r_dict.get('timestamp') or r_dict.get('last_executed') or merged.get('timestamp')
+                    if ts:
+                        merged['timestamp'] = str(ts)[:64]
+                    le = r_dict.get('last_executed') or merged.get('last_executed')
+                    if le:
+                        merged['last_executed'] = str(le)[:64]
+                    for key in (
+                        'related_paths', 'related_tipos', 'related_stem', 'related_count',
+                        'signature', 'combination_penalty',
+                    ):
+                        if r_dict.get(key) is not None and key not in merged:
+                            merged[key] = r_dict.get(key)
+                        # también desde nested si vino en top-level related
+                    if r_dict.get('sha256') and not merged.get('sha256'):
+                        merged['sha256'] = r_dict.get('sha256')
+                    if not merged:
                         return None
                     try:
-                        return json.dumps(raw, ensure_ascii=False)[:4000]
+                        return json.dumps(merged, ensure_ascii=False)[:4000]
                     except (TypeError, ValueError):
                         return None
                 batch = [
@@ -10925,7 +11060,7 @@ def submit_scan_results(scan_id):
                      r.get('tipo', ''), r.get('nombre', '') or r.get('archivo', ''),
                      r.get('ruta', ''), r.get('categoria', ''), r.get('alerta', ''),
                      _norm_conf(r.get('confidence', 0)), json.dumps(r.get('detected_patterns', [])),
-                     r.get('obfuscation', False), r.get('file_hash', ''),
+                     r.get('obfuscation', False), r.get('file_hash', '') or r.get('sha256', ''),
                      r.get('ai_analysis', ''), _norm_conf(r.get('ai_confidence', 0)),
                      _extra_json(r))
                     for r in results
@@ -11247,6 +11382,12 @@ def debug_scan_summary(scan_id):
                         'ai_confidence': _row_get(r, 11, 'ai_confidence'),
                         'feedback_status': _row_get(r, 12, 'feedback_status'),
                         'extra': extra_obj,
+                        'explicacion': extra_obj.get('explicacion') or '',
+                        'timestamp': extra_obj.get('timestamp') or extra_obj.get('last_executed') or '',
+                        'last_executed': extra_obj.get('last_executed') or extra_obj.get('timestamp') or '',
+                        'related_paths': extra_obj.get('related_paths') or [],
+                        'related_tipos': extra_obj.get('related_tipos') or [],
+                        'combination_penalty': extra_obj.get('combination_penalty') or '',
                     })
                 _step('process_results', True, info={'processed': len(results)})
             except Exception as e:
@@ -11370,6 +11511,9 @@ def list_scans():
                         LIMIT {_PH} OFFSET {_PH}
                     ''', params)
                     _has_scn_ver = True
+                    # Consumir el result set ANTES de RELEASE: en sqlite (y psycopg2
+                    # con cursor por defecto) un execute posterior lo descarta → 0 filas.
+                    _scan_rows = cursor.fetchall()
                     try:
                         cursor.execute('RELEASE SAVEPOINT scn_ver_probe')
                     except Exception:
@@ -11392,10 +11536,11 @@ def list_scans():
                         ORDER BY s.started_at DESC
                         LIMIT {_PH} OFFSET {_PH}
                     ''', params)
+                    _scan_rows = cursor.fetchall()
 
                 scans = []
                 scan_ids = []
-                for row in cursor.fetchall():
+                for row in _scan_rows:
                     scan_id = _row_get(row, 0, 'id')
                     scan_ids.append(scan_id)
                     _os_raw = _row_get(row, 15, 'os')
@@ -11482,28 +11627,8 @@ def list_scans():
                             scan['severity_summary'] = 'LIMPIO' if is_clean else 'SOSPECHOSO'
                             scan['severity_badge'] = 'success' if is_clean else 'warning'
 
-                # Obtener verdict y risk_score de columnas opcionales
-                if scan_ids:
-                    try:
-                        cursor.execute('SAVEPOINT opt_verdict')
-                        placeholders2 = ','.join([_PH] * len(scan_ids))
-                        cursor.execute(f'''
-                            SELECT id, verdict, risk_score
-                            FROM scans WHERE id IN ({placeholders2})
-                        ''', scan_ids)
-                        for vrow in cursor.fetchall():
-                            sid = _row_get(vrow, 0, 'id')
-                            for s in scans:
-                                if s['id'] == sid:
-                                    s['verdict'] = _row_get(vrow, 1, 'verdict')
-                                    s['risk_score'] = int(_row_get(vrow, 2, 'risk_score') or 0)
-                                    break
-                        cursor.execute('RELEASE SAVEPOINT opt_verdict')
-                    except Exception:
-                        try:
-                            cursor.execute('ROLLBACK TO SAVEPOINT opt_verdict')
-                        except Exception:
-                            pass
+                # verdict / risk_score ya vienen en el SELECT principal (cols 13-14),
+                # no hace falta re-consultarlos (round-trip + savepoint redundantes).
 
                 result = {'scans': scans}
                 
@@ -11806,6 +11931,12 @@ def get_scan(scan_id):
                         'ai_confidence': _row_get(r, 11, 'ai_confidence'),
                         'feedback_status': _row_get(r, 12, 'feedback_status'),
                         'extra': extra_obj,
+                        'explicacion': extra_obj.get('explicacion') or '',
+                        'timestamp': extra_obj.get('timestamp') or extra_obj.get('last_executed') or '',
+                        'last_executed': extra_obj.get('last_executed') or extra_obj.get('timestamp') or '',
+                        'related_paths': extra_obj.get('related_paths') or [],
+                        'related_tipos': extra_obj.get('related_tipos') or [],
+                        'combination_penalty': extra_obj.get('combination_penalty') or '',
                     })
 
                 # Saneo de display: filtrar FPs de scans antiguos al servirlos al panel
@@ -12692,12 +12823,7 @@ def _get_exe_metadata(exe_name: str = 'ArgusScanner.exe'):
     """Devuelve dict con {size_mb, size_bytes, sha256, mtime, exists, path}.
     Cachea el SHA-256 entre requests porque calcularlo es caro.
     Si el archivo no existe devuelve un dict 'best-effort' con exists=False."""
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    candidates = [
-        os.path.join(project_root, 'dist', exe_name),
-        os.path.join(project_root, 'downloads', exe_name),
-    ]
-    exe_path = next((p for p in candidates if os.path.exists(p)), None)
+    exe_path = next((p for p in _scanner_exe_candidates(exe_name) if os.path.exists(p)), None)
     if not exe_path:
         return {'exists': False, 'size_mb': None, 'size_bytes': 0, 'sha256': None, 'mtime': None, 'path': None}
 
@@ -13099,17 +13225,27 @@ def api_public_vault_stats():
     return resp
 
 
+def _scanner_exe_candidates(exe_name: str = 'ArgusScanner.exe'):
+    """Rutas posibles del .exe (Railway/Docker = solo web_app; local = repo completo)."""
+    web_root = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(web_root)
+    return (
+        # Deploy Nixpacks/Railway: el .exe vive dentro de web_app/
+        os.path.join(web_root, 'downloads', exe_name),
+        os.path.join(web_root, 'dist', exe_name),
+        os.path.join(web_root, exe_name),
+        # Repo completo (dev / Docker con monorepo)
+        os.path.join(project_root, 'dist', exe_name),
+        os.path.join(project_root, 'downloads', exe_name),
+        os.path.join(project_root, 'source', 'dist', exe_name),
+        os.path.join(project_root, exe_name),
+    )
+
+
 @app.route('/descargar/exe')
 def descargar_exe():
     """Endpoint pÃºblico permanente para descargar ArgusScanner.exe sin autenticaciÃ³n."""
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    possible_paths = [
-        os.path.join(project_root, 'dist', 'ArgusScanner.exe'),          # versiÃ³n compilada en git (prioridad)
-        os.path.join(project_root, 'downloads', 'ArgusScanner.exe'),      # fallback: subida manual
-        os.path.join(project_root, 'source', 'dist', 'ArgusScanner.exe'),
-        os.path.join(project_root, 'ArgusScanner.exe'),
-    ]
-    for path in possible_paths:
+    for path in _scanner_exe_candidates('ArgusScanner.exe'):
         if os.path.exists(path):
             return send_file(path, as_attachment=True, download_name='ArgusScanner.exe')
     return jsonify({'error': 'Ejecutable no disponible aÃºn. Contacta a un administrador.'}), 404
@@ -13117,13 +13253,7 @@ def descargar_exe():
 
 def _locate_scanner_exe():
     """Devuelve la ruta del ArgusScanner.exe compilado, o None."""
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    for p in (
-        os.path.join(project_root, 'dist', 'ArgusScanner.exe'),
-        os.path.join(project_root, 'downloads', 'ArgusScanner.exe'),
-        os.path.join(project_root, 'source', 'dist', 'ArgusScanner.exe'),
-        os.path.join(project_root, 'ArgusScanner.exe'),
-    ):
+    for p in _scanner_exe_candidates('ArgusScanner.exe'):
         if os.path.exists(p):
             return p
     return None
@@ -13164,8 +13294,14 @@ def _send_scanner_zip_with_license(license_str):
     if not exe_path:
         return None, 'El ejecutable no está disponible todavía. Contactá a un administrador.'
 
-    api_url = (get_api_url('').rstrip('/api')) or 'https://asperss.onrender.com'
-    web_url = request.host_url.rstrip('/') if not IS_RENDER else os.environ.get('RENDER_EXTERNAL_URL', request.host_url).rstrip('/')
+    api_url = (get_api_url('').rstrip('/api')) or os.environ.get(
+        'PUBLIC_BASE_URL', 'https://aspers-web-production.up.railway.app'
+    ).rstrip('/')
+    web_url = (
+        os.environ.get('PUBLIC_BASE_URL')
+        or os.environ.get('RENDER_EXTERNAL_URL')
+        or request.host_url
+    ).rstrip('/')
     config_data = {
         "discord_webhook": "",
         "auth_token": "",
@@ -14575,8 +14711,7 @@ def set_scan_verdict(scan_id):
     reason  = (data.get('reason') or '').strip()
     if verdict not in ('clean', 'hack', 'pending'):
         return jsonify({'error': 'Veredicto invÃ¡lido. Usar: clean, hack, pending'}), 400
-    if not reason:
-        return jsonify({'error': 'La razÃ³n del veredicto es obligatoria'}), 400
+    # El motivo es opcional.
     user = session.get('username', 'staff')
     user_id = session.get('user_id')
     try:
@@ -21481,7 +21616,13 @@ if __name__ == '__main__':
         print("Tip: copia web_app/.env.local.example → .env.local y usa BAT/INICIAR_PANEL_LOCAL.bat")
         print("Legacy API separada: http://localhost:5000 (INICIAR_SISTEMA_COMPLETO.bat)")
     if socketio is not None:
-        socketio.run(app, host=_host, port=_port, debug=_debug, use_reloader=_reload)
+        # allow_unsafe_werkzeug: solo afecta a `python app.py` en local (dev).
+        # En Render se usa gunicorn y este bloque nunca corre.
+        try:
+            socketio.run(app, host=_host, port=_port, debug=_debug,
+                         use_reloader=_reload, allow_unsafe_werkzeug=True)
+        except TypeError:
+            socketio.run(app, host=_host, port=_port, debug=_debug, use_reloader=_reload)
     else:
         app.run(host=_host, port=_port, debug=_debug, use_reloader=_reload)
 

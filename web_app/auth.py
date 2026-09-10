@@ -19,14 +19,19 @@ USE_POSTGRESQL = False
 
 # Siempre importar sqlite3 como fallback
 import sqlite3
-DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scanner_db.sqlite')
+# ARGUS_DB_PATH permite apuntar a una SQLite de prueba local sin tocar la de prod.
+DATABASE = os.environ.get('ARGUS_DB_PATH') or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), 'scanner_db.sqlite')
 
 try:
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    # ARGUS_FORCE_SQLITE=1 → ignorar DATABASE_URL y usar SQLite (dev local con
+    # scanner_db.local.sqlite, sin tocar .env.local ni la BD de prod).
+    _force_sqlite = os.environ.get('ARGUS_FORCE_SQLITE', '').strip() in ('1', 'true', 'yes')
     # Verificar si está usando PostgreSQL o MySQL ANTES de importar
-    _db_url = os.environ.get('DATABASE_URL', '').strip()
-    _pg_host = os.environ.get('POSTGRES_HOST', '').strip()
-    _mysql_host = os.environ.get('MYSQL_HOST', '').strip()
+    _db_url = '' if _force_sqlite else os.environ.get('DATABASE_URL', '').strip()
+    _pg_host = '' if _force_sqlite else os.environ.get('POSTGRES_HOST', '').strip()
+    _mysql_host = '' if _force_sqlite else os.environ.get('MYSQL_HOST', '').strip()
     print(f"🔍 BD detection — DATABASE_URL={'sí ('+_db_url[:30]+'...)' if _db_url else 'NO'}, POSTGRES_HOST={'sí' if _pg_host else 'NO'}, MYSQL_HOST={'sí' if _mysql_host else 'NO'}")
     USE_POSTGRESQL = bool(_db_url or _pg_host)
     USE_MYSQL = bool(_mysql_host and not USE_POSTGRESQL)

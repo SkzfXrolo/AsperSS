@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="csrf-token" content="{{ csrf_token_value }}">
+  <title>Argus · Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/panel_v2.css') }}?v=9">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><span class="dot"></span> Argus Staff</div>
+
+    <div class="nav-label">Operación</div>
+    <a class="nav-item" href="#/inicio"><span class="ico">◫</span> Inicio</a>
+    <a class="nav-item" href="#/revision"><span class="ico">⚖</span> Revisión</a>
+    <a class="nav-item" href="/warroom"><span class="ico">◎</span> War Room <span class="tag">LIVE</span></a>
+
+    <div class="nav-label">Detección</div>
+    <a class="nav-item" href="#/anticheat"><span class="ico">◈</span> Anticheat</a>
+    <a class="nav-item" href="#/ia"><span class="ico">✦</span> Argus AI</a>
+
+    <div class="nav-label">Configuración</div>
+    <a class="nav-item" href="#/servidores"><span class="ico">⬡</span> Servidores</a>
+    <a class="nav-item" href="#/equipo"><span class="ico">◔</span> Equipo</a>
+
+    <div class="nav-label" data-admin hidden>Plataforma</div>
+    <a class="nav-item" href="#/admin" data-admin hidden><span class="ico">⚙</span> Administración</a>
+
+    <div class="spacer"></div>
+    <div class="foot">
+      <div class="who">
+        <span class="avatar" id="foot-avatar">?</span>
+        <span class="stack">
+          <b id="foot-user" style="color:var(--text-dim)">…</b>
+          <span id="foot-role"></span>
+        </span>
+      </div>
+      <a href="/panel" style="color:var(--blue)">↩ Panel clásico</a>
+      <a href="/logout">Cerrar sesión</a>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h1 id="view-title">Inicio</h1>
+      <span class="sub" id="view-sub"></span>
+      <div class="grow"></div>
+      <span class="pill"><span class="live"></span> conectado</span>
+      <span class="pill">scanner {{ scanner_version }}</span>
+    </div>
+    <div class="content" id="view"></div>
+  </div>
+</div>
+
+<script>
+  window.ARGUS_V2 = {
+    user: {{ (user or {}) | tojson }},
+    staffRole: {{ (staff_role or 'helper') | tojson }},
+    isOwner: {{ (is_panel_owner or false) | tojson }},
+    scannerVersion: {{ (scanner_version or '') | tojson }}
+  };
+</script>
+<script src="{{ url_for('static', filename='js/panel_v2.js') }}?v=9"></script>
+</body>
+</html>

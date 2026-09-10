@@ -96,6 +96,71 @@ def init_postgresql_db():
         raise
     
     try:
+        # Limpiar txn abortada de intentos previos en la misma conexión thread-local
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+        # Evitar race entre workers Gunicorn al CREATE TABLE (pg_type UniqueViolation)
+        cursor.execute("SELECT pg_advisory_lock(%s)", (874201,))
+        conn.commit()
+
+        # Orden crítico en DB vacía: companies/users ANTES de scans (FK company_id)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS companies (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) UNIQUE NOT NULL,
+                contact_email VARCHAR(255),
+                contact_phone VARCHAR(50),
+                subscription_type VARCHAR(50) DEFAULT 'enterprise',
+                subscription_status VARCHAR(50) DEFAULT 'active',
+                subscription_start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                subscription_end_date TIMESTAMP,
+                subscription_price DECIMAL(10, 2) DEFAULT 13.0,
+                max_users INTEGER DEFAULT 8,
+                max_admins INTEGER DEFAULT 3,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by INTEGER,
+                is_active BOOLEAN DEFAULT TRUE,
+                notes TEXT
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_active ON companies(is_active)')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(255) UNIQUE NOT NULL,
+                email VARCHAR(255) UNIQUE,
+                password_hash VARCHAR(255) NOT NULL,
+                roles TEXT DEFAULT '["user"]',
+                company_id INTEGER,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_login TIMESTAMP,
+                created_by VARCHAR(255),
+                FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_company_id ON users(company_id)')
+        conn.commit()
+
+        # Crear empresa default "arefy" si no existe
+        cursor.execute('SELECT COUNT(*) as count FROM companies WHERE name = %s', ('arefy',))
+        result = cursor.fetchone()
+        count = result['count'] if result else 0
+        if count == 0:
+            cursor.execute('''
+                INSERT INTO companies (name, subscription_type, subscription_status, subscription_price, max_users, max_admins, created_by, notes)
+                VALUES (%s, 'enterprise', 'active', 13.0, 8, 3, NULL, 'Empresa default creada automáticamente')
+            ''', ('arefy',))
+            print("✅ Empresa default 'arefy' creada en PostgreSQL")
+        conn.commit()
+
         # Tabla de tokens de escaneo
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS scan_tokens (
@@ -111,15 +176,15 @@ def init_postgresql_db():
             )
         ''')
         
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_token ON scan_tokens(token)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_active ON scan_tokens(is_active, expires_at)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_scan_tokens_token ON scan_tokens(token)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_scan_tokens_active ON scan_tokens(is_active, expires_at)')
         # P2 #2 — allowed_mods por servidor (JSON array de SHA256 o nombres)
         try:
             cursor.execute("ALTER TABLE scan_tokens ADD COLUMN IF NOT EXISTS allowed_mods TEXT DEFAULT NULL")
         except Exception:
-            pass
+            conn.rollback()
         
-        # Tabla de escaneos
+        # Tabla de escaneos (companies ya existe → FK ok)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS scans (
                 id SERIAL PRIMARY KEY,
@@ -151,15 +216,6 @@ def init_postgresql_db():
         # Migraciones: añadir/modificar columnas en tablas existentes
         cursor.execute('ALTER TABLE scans ADD COLUMN IF NOT EXISTS total_dirs_scanned INTEGER DEFAULT 0')
         cursor.execute('ALTER TABLE scans ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL')
-        # Ampliar VARCHAR(255) a TEXT en scan_results para rutas/nombres largos
-        cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_type TYPE TEXT")
-        cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_name TYPE TEXT")
-        cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_category TYPE TEXT")
-        # feedback_status: persiste el veredicto de staff en la fila del resultado
-        cursor.execute("ALTER TABLE scan_results ADD COLUMN IF NOT EXISTS feedback_status VARCHAR(20) DEFAULT NULL")
-        # extra: JSON con metadata adicional (action, timestamp, source, size, etc.)
-        # usado principalmente para el historial de FILE_ACTIVITY (tab Logs del Explore)
-        cursor.execute("ALTER TABLE scan_results ADD COLUMN IF NOT EXISTS extra TEXT DEFAULT NULL")
 
         # Tabla de historial de bans
         cursor.execute('''
@@ -204,6 +260,16 @@ def init_postgresql_db():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_scan_id ON scan_results(scan_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_issue_type ON scan_results(issue_type)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_alert_level ON scan_results(alert_level)')
+
+        # Migraciones scan_results (después de crear la tabla)
+        try:
+            cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_type TYPE TEXT")
+            cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_name TYPE TEXT")
+            cursor.execute("ALTER TABLE scan_results ALTER COLUMN issue_category TYPE TEXT")
+        except Exception:
+            pass
+        cursor.execute("ALTER TABLE scan_results ADD COLUMN IF NOT EXISTS feedback_status VARCHAR(20) DEFAULT NULL")
+        cursor.execute("ALTER TABLE scan_results ADD COLUMN IF NOT EXISTS extra TEXT DEFAULT NULL")
         
         # Tabla de análisis de IA
         cursor.execute('''
@@ -223,63 +289,6 @@ def init_postgresql_db():
         
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_scan_id ON ai_analyses(scan_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_result_id ON ai_analyses(result_id)')
-        
-        # Tabla de empresas
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS companies (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) UNIQUE NOT NULL,
-                contact_email VARCHAR(255),
-                contact_phone VARCHAR(50),
-                subscription_type VARCHAR(50) DEFAULT 'enterprise',
-                subscription_status VARCHAR(50) DEFAULT 'active',
-                subscription_start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                subscription_end_date TIMESTAMP,
-                subscription_price DECIMAL(10, 2) DEFAULT 13.0,
-                max_users INTEGER DEFAULT 8,
-                max_admins INTEGER DEFAULT 3,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                created_by INTEGER,
-                is_active BOOLEAN DEFAULT TRUE,
-                notes TEXT
-            )
-        ''')
-        
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_name ON companies(name)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_active ON companies(is_active)')
-        
-        # Crear empresa default "arefy" si no existe
-        cursor.execute('SELECT COUNT(*) as count FROM companies WHERE name = %s', ('arefy',))
-        result = cursor.fetchone()
-        # RealDictCursor devuelve un diccionario
-        count = result['count'] if result else 0
-        if count == 0:
-            cursor.execute('''
-                INSERT INTO companies (name, subscription_type, subscription_status, subscription_price, max_users, max_admins, created_by, notes)
-                VALUES (%s, 'enterprise', 'active', 13.0, 8, 3, NULL, 'Empresa default creada automáticamente')
-            ''', ('arefy',))
-            print("✅ Empresa default 'arefy' creada en PostgreSQL")
-        
-        # Tabla de usuarios
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                username VARCHAR(255) UNIQUE NOT NULL,
-                email VARCHAR(255) UNIQUE,
-                password_hash VARCHAR(255) NOT NULL,
-                roles TEXT DEFAULT '["user"]',
-                company_id INTEGER,
-                is_active BOOLEAN DEFAULT TRUE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_login TIMESTAMP,
-                created_by VARCHAR(255),
-                FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
-            )
-        ''')
-        
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_username ON users(username)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_email ON users(email)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_company_id ON users(company_id)')
         
         # Tabla de enlaces de descarga
         cursor.execute('''
@@ -631,6 +640,16 @@ def init_postgresql_db():
         traceback.print_exc()
         raise
     finally:
+        if conn and not conn.closed:
+            try:
+                with conn.cursor() as _uc:
+                    _uc.execute("SELECT pg_advisory_unlock(%s)", (874201,))
+                conn.commit()
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
         if cursor:
             cursor.close()
         # NO cerrar la conexión aquí porque es thread-local y se reutiliza

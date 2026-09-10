@@ -1,0 +1,11 @@
+# Railway — panel Argus (reemplazo de Render)
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "gunicorn --config gunicorn_config.py app:app"
+healthcheckPath = "/healthz"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

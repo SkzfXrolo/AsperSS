@@ -1,0 +1,60 @@
+ARGUS PANEL — migrar de Render a Railway (gratis al empezar)
+============================================================
+
+ESTADO (2026-08-05): LIVE
+  URL: https://aspers-web-production.up.railway.app
+  Proyecto Railway: aspers-argus / servicio aspers-web
+  DB: Postgres de Railway (DATABASE_URL = ${{Postgres.DATABASE_URL}}).
+  Nota: Render Postgres ya no responde (SSL closed); panel arranca en DB limpia.
+  Si recuperás un dump de Render: pg_restore sobre este Postgres.
+
+Qué hace Railway
+- Hostea el Flask (web_app) + Postgres opcional
+- Te da crédito gratis al crear cuenta (después puede cobrar poco)
+
+PASO 1 — Login (una sola vez en tu PC)
+  railway login
+  (abre el browser; o: railway login --browserless)
+
+PASO 2 — Desde la carpeta web_app
+  cd web_app
+  railway init
+  # crear proyecto nuevo, ej. "aspers-argus"
+
+PASO 3 — Postgres
+  railway add --database postgres
+  # Railway inyecta DATABASE_URL automáticamente
+
+PASO 4 — Variables de entorno (las mismas que en Render)
+  railway variables set SECRET_KEY="..." SUPER_ADMIN_USER="..." SUPER_ADMIN_PASS="..."
+  railway variables set FLASK_ENV=production
+  # Opcional pero recomendado tras el primer deploy:
+  # railway variables set PUBLIC_BASE_URL="https://TU-DOMINIO.up.railway.app"
+  # GEMINI_API_KEY / DISCORD_* / etc. igual que en Render
+
+PASO 5 — Deploy
+  railway up
+  # o conectar el repo GitHub en el dashboard: Settings → Connect Repo → root: web_app
+
+PASO 6 — Dominio público
+  railway domain
+  # copiá la URL → PUBLIC_BASE_URL + avisar a staff / actualizar scanner API_URL si hace falta
+
+Migrar datos desde Render Postgres
+  1) En Render: External Database URL
+  2) pg_dump "postgresql://..." -Fc -f aspers.dump
+  3) railway connect postgres
+     pg_restore --no-owner -d "$DATABASE_URL" aspers.dump
+
+DNS (opcional)
+  Si tenés dominio propio, en Railway → Settings → Domains
+
+Exe del scanner (descargas del panel)
+  Railway solo sube la carpeta web_app/. Hay que tener el binario en:
+    web_app/downloads/ArgusScanner.exe
+  (copiar desde source/dist/ o dist/ antes de `railway up`)
+
+Nota
+  El .exe del scanner apunta a la API. Cuando cambies de
+  asperss.onrender.com → xxx.up.railway.app hay que actualizar
+  API_URL en el panel/config o recompilar cuando haga el upgrade.

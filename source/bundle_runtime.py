@@ -37,22 +37,69 @@ def ensure_scanner_db() -> str:
     return target
 
 
-def load_offline_lexicon() -> dict:
-    path = bundle_path('offline_lexicon.json')
-    if not os.path.isfile(path):
+def _override_dirs() -> list[str]:
+    """Rutas hot-reload sin recompilar el .exe (v1.8)."""
+    dirs: list[str] = []
+    local = os.environ.get('LOCALAPPDATA') or os.environ.get('APPDATA') or ''
+    if local:
+        dirs.append(os.path.join(local, 'ArgusScanner', 'signatures'))
+    if getattr(sys, 'frozen', False):
+        dirs.append(os.path.join(os.path.dirname(sys.executable), 'signatures'))
+    else:
+        dirs.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'signatures'))
+    return dirs
+
+
+def resolve_signature_file(filename: str) -> str | None:
+    """Prioriza override local → bundle/signatures → bundle raíz."""
+    for d in _override_dirs():
+        p = os.path.join(d, filename)
+        if os.path.isfile(p):
+            return p
+    for cand in (
+        bundle_path('signatures', filename),
+        bundle_path(filename),
+    ):
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
+def load_signature_catalog() -> dict:
+    """Catálogo versionado (semver) de firmas offline."""
+    path = resolve_signature_file('catalog.json')
+    if not path:
         return {}
     try:
         import json
         with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f) or {}
+            data = json.load(f) or {}
+        if data.get('semver'):
+            print(f'[bundle] signatures catalog v{data.get("semver")}')
+        return data
+    except Exception:
+        return {}
+
+
+def load_offline_lexicon() -> dict:
+    path = resolve_signature_file('offline_lexicon.json')
+    if not path:
+        return {}
+    try:
+        import json
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f) or {}
+        if path and 'signatures' in path.replace('\\', '/'):
+            print(f'[bundle] lexicon hot-reload: {path}')
+        return data
     except Exception:
         return {}
 
 
 def load_hash_catalog_hex() -> set[str]:
     """Lee offline_hash_catalog.bin (AHC2) → set de sha256 hex."""
-    path = bundle_path('offline_hash_catalog.bin')
-    if not os.path.isfile(path):
+    path = resolve_signature_file('offline_hash_catalog.bin')
+    if not path:
         return set()
     out: set[str] = set()
     try:
@@ -65,6 +112,8 @@ def load_hash_catalog_hex() -> set[str]:
                 digest = f.read(32)
                 if len(digest) == 32:
                     out.add(digest.hex())
+        if path and 'signatures' in path.replace('\\', '/'):
+            print(f'[bundle] hash catalog hot-reload: {path} ({len(out)})')
     except Exception:
         pass
     return out
@@ -72,8 +121,8 @@ def load_hash_catalog_hex() -> set[str]:
 
 def load_cloud_hashes_json() -> list:
     for name in ('hack_hashes_cloud.json', 'hack_hashes_offline.json'):
-        path = bundle_path(name)
-        if not os.path.isfile(path):
+        path = resolve_signature_file(name) or bundle_path(name)
+        if not path or not os.path.isfile(path):
             continue
         try:
             import json

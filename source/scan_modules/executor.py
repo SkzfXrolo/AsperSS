@@ -17,6 +17,11 @@ from scan_modules.context import ScanContext
 from scan_modules.novel_surfaces import NOVEL_MODULES
 from scan_modules import mining_automation as mining
 
+try:
+    from scan_modules.extended_checks import EXTENDED_MODULES
+except Exception:
+    EXTENDED_MODULES = []
+
 MINING_MODULES = [
     ('mine_001', 'Baritone traces', mining.scan_baritone_traces),
     ('mine_002', 'Auto-mine macros', mining.scan_auto_mine_macros),
@@ -25,7 +30,8 @@ MINING_MODULES = [
 
 
 def _all_modules():
-    return list(NOVEL_MODULES) + list(MINING_MODULES)
+    # extended_checks cableados (v1.8); default enabled=False en Standard vía scanner_custom
+    return list(NOVEL_MODULES) + list(EXTENDED_MODULES) + list(MINING_MODULES)
 
 
 def run_pack_modules(app, progress_cb=None):
@@ -39,9 +45,14 @@ def run_pack_modules(app, progress_cb=None):
     perf = custom.get('performance') or {}
     pool_size = int(perf.get('module_pool_size') or 6)
     timeout = float(perf.get('module_default_timeout_sec') or 10)
+    # ext_* ruidosos: OFF en Standard; ON en Paranoid (salvo override en scanner_custom)
+    paranoid = str(getattr(app, 'scan_mode', '') or '').lower() == 'paranoid'
     enabled = [
         m for m in _all_modules()
-        if is_module_enabled(custom, m[0], default=True)
+        if is_module_enabled(
+            custom, m[0],
+            default=(True if paranoid else (not str(m[0]).startswith('ext_'))),
+        )
     ]
     if not enabled:
         return []

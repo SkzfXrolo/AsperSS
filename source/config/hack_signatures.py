@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+from functools import lru_cache
 from typing import Iterable, Optional
 
 # Nombres que NUNCA deben auto-whitelistearse solo por estar en .minecraft/mods
@@ -15,6 +16,17 @@ NEVER_LEGITIMATE_STEMS: frozenset[str] = frozenset({
     'dripclient', 'ghostclient', 'salhack', 'inertia', 'remix', 'jello',
     'datura', 'azura', 'vertex', 'thunderhack', 'reflexclient', 'rageclient',
     'horion', 'moonclient', 'phobos', 'tenacity', 'weepcraft', 'konas',
+    # catálogo firmas v1.8.1+
+    'doomsday', 'fdpclient', 'nightx', 'ravenbplus', 'rise6', 'sigma5', 'sigma6',
+    'vialcraft', 'exhibition', 'whiteoutclient',
+    'myau', 'dripclient', 'liquidbounceplus', 'meteorrejects', 'mathax',
+    # catálogo 2024-2025 (nombres distintivos — completar con lo que se vea en el server)
+    'slinky', 'slinkyclient', 'prestige', 'prestigeclient', 'nursultan',
+    'augustus', 'augustusclient', 'nekoware', 'nekoclient', 'bewareclient',
+    'chearn', 'phlaze', 'zenithclient', 'wildfireclient', 'abyssalclient',
+    'pyroclient', 'koid', 'disons', 'expensiveclient', 'celestialclient',
+    'novoline2', 'zeqa', 'moonsec', 'raven4b', 'raven-b4', 'wyvernclient',
+    'tenaui', 'motionclient', 'zenith-client',
 })
 
 # Blacklist de mods por nombre de archivo (stems específicos, sin substrings genéricos)
@@ -35,12 +47,14 @@ BLACKLISTED_MOD_STEMS: tuple[str, ...] = (
     'weaveloader', 'xraymod', 'killaura', 'aimbot', 'scaffoldhack',
     'autoclicker', 'clickgui', 'horion', 'moonclient', 'phobos', 'tenacity',
     'konas', 'weepcraft', 'thunderhack',
+    'myau', 'doomsday', 'fdpclient', 'nightx', 'liquidbounceplus',
 )
 
 # Solo como palabra/segmento completo (evita "cheatengine" vs "cheat" en "recheat")
 BOUNDARY_ONLY_MOD_STEMS: tuple[str, ...] = ('cheat', 'inject', 'hacked')
 
 
+@lru_cache(maxsize=1024)
 def _boundary_pattern(stem: str) -> re.Pattern:
     esc = re.escape(stem.lower())
     return re.compile(

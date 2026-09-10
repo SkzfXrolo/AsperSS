@@ -96,7 +96,20 @@ except ImportError:
 try:
     from config.version import SCANNER_VERSION
 except ImportError:
-    SCANNER_VERSION = "1.7.0"
+    SCANNER_VERSION = "1.8.0"
+
+# API/panel canónico (Render → Railway). Los .exe viejos con onrender hardcodeado
+# fallan al validar token porque asperss.onrender.com responde 503.
+ARGUS_DEFAULT_API_URL = os.environ.get(
+    'ARGUS_API_URL', 'https://aspers-web-production.up.railway.app'
+).rstrip('/')
+_ARGUS_OBSOLETE_API_PREFIXES = (
+    'http://localhost', 'https://localhost',
+    'http://127.0.0.1', 'https://127.0.0.1',
+    'https://ssapi-cfni.onrender.com',
+    'https://asperss.onrender.com',
+    'http://asperss.onrender.com',
+)
 
 try:
     from config.lite_mode import (
@@ -236,6 +249,12 @@ _DEFINITE_HACK_NAMES = {
     'rageclient', 'rage-client',
     'biscuit', 'biscuitclient',
     'thunderhack', 'thunder-hack',
+    'doomsday', 'doomsdayclient',
+    'myau', 'myauclient',
+    'fdpclient', 'fdp-client',
+    'nightx', 'nightxclient',
+    'liquidbounceplus', 'meteorrejects',
+    'ravenbplus', 'raven-b+',
 }
 
 # Palabras genéricas que sólo se marcan cuando son palabra completa
@@ -263,6 +282,40 @@ _NEVER_FILTER_TYPES = frozenset({
     'registry_appcompat_hack', 'browser_visited_hack', 'browser_download_hack',
     'ddos_application', 'f3t_resourcepack_exploit', 'defender_exclusion_hack',
     'amcache_hack_execution',
+    # v1.8+ — integridad / veredicto / YARA / BAM no deben morir por SAFE_PATH/LOW_SCORE
+    'ss_integrity', 'ss_verdict', 'yara_java', 'bam_execution', 'bam_hack',
+    'recycle_hack', 'hack_launcher_script', 'userassist_suspicious',
+    'jump_list_suspicious', 'shimcache_suspicious', 'startup_hack_launcher',
+    'dns_cache_hack', 'running_hack_process', 'injector_process',
+    'temp_jar_recent', 'browser_download_hack', 'browser_visited_hack',
+    'usn_ghost_folder', 'hack_string_in_loaded_jar', 'process_memory_keyword',
+    'jar_self_deleted', 'jar_repack_timestamp', 'short_lived_process',
+    'temp_hack_binary', 'remote_access_active', 'rdp_session_active',
+    'scheduled_task_suspicious', 'scheduled_task_args_suspicious',
+    'lolbins_extra_suspicious', 'com_hijack_candidate', 'python_hack_script',
+    'exploit_process', 'exploit_file', 'lunar_unofficial_module',
+    'recycle_hash_match', 'firewall_rule_hack', 'hosts_hack_distro',
+    'texture_pack', 'texture_pack_xray', 'deleted_mass_event',
+    'typed_path_suspicious', 'muicache_suspicious', 'usb_hack_device',
+    'recent_lnk_hack', 'windows_search_hack', 'typed_url_hack',
+    'run_mru_suspicious', 'recent_docs_registry', 'powershell_history_hack',
+    'crash_report_hack', 'recent_lnk_suspicious',
+    'prefetch_referenced_hack', 'browser_hack_cookie', 'wininet_hack_cookie',
+    'lnk_xaml_hijack', 'discord_cache_hack', 'srum_suspicious_activity',
+    'injected_thread', 'dll_sideload_candidate', 'dll_nonstandard',
+    'av_interference',
+})
+
+# Tipos forenses cuya ruta vive en Prefetch/System — no aplicar ABSOLUTE_SAFE_PATHS
+_FORENSIC_PATH_EXEMPT_TYPES = frozenset({
+    'prefetch_hack', 'amcache_hack_execution', 'ss_integrity', 'ss_verdict',
+    'kill_chain', 'evasion_indicators', 'yara_java', 'bam_execution', 'bam_hack',
+    'registry_userassist_hack', 'registry_appcompat_hack', 'registry_run_hack',
+    'cloud_hash_match', 'modified_minecraft_jar',
+    'userassist_suspicious', 'jump_list_suspicious', 'shimcache_suspicious',
+    'recycle_hack', 'hack_launcher_script', 'startup_hack_launcher',
+    'usn_ghost_folder', 'usn_deleted_hack',
+    'prefetch_referenced_hack',
 })
 
 # ── Whitelist de Mods/Launchers Legítimos de Minecraft (Filtro #4) ──────────
@@ -643,6 +696,8 @@ _LEGIT_JAVA_AGENT_TOKENS = (
     'gradle-agent', 'maven-surefire', 'mockito-agent',
     'opentelemetry-javaagent', 'aws-opentelemetry-agent',
     'spring-instrument', 'spring-boot-devtools',
+    'elastic-apm-agent', 'dynatrace', 'sentry-opentelemetry',
+    'skywalking-agent', 'otel-javaagent', 'quasar-core',
 )
 def is_legit_java_agent(filename_or_path: str) -> bool:
     """True si el texto contiene el nombre de un Java agent legítimo
@@ -929,6 +984,11 @@ _TRUSTED_PUBLISHERS = (
     'easy anti-cheat oy', 'easy anti-cheat',
     'battleye innovations', 'battleye',
     'kakao games europe b.v.',
+    # Más vendors comunes en PCs gamer
+    'adobe inc.', 'adobe systems',
+    'apple inc.',
+    'lenovo', 'dell inc', 'hewlett-packard', 'hp inc.',
+    'realtek semiconductor',
 )
 
 
@@ -967,6 +1027,49 @@ def _get_authenticode_publisher(file_path: str):
         return None
 
 
+# Directorios que nunca guardan cheats de Minecraft pero sí millones de
+# archivos. Saltarlos convierte un os.walk("C:\\") de varios minutos en
+# segundos y hace que el presupuesto de tiempo del scanner se gaste en las
+# carpetas de usuario (Downloads/.minecraft/Desktop/AppData) en vez de en
+# C:\Windows\WinSxS.
+_WALK_SKIP_DIRS = frozenset({
+    'windows', 'winsxs', '$recycle.bin', 'system volume information',
+    'program files', 'program files (x86)', 'programdata', 'msocache',
+    'recovery', 'perflogs', 'node_modules', '__pycache__', 'assembly',
+    'anaconda3', 'miniconda3', 'package cache', 'dotnet',
+})
+
+
+def walk_bounded(roots, *, max_depth=8, time_budget=11.0,
+                 skip_dirs=_WALK_SKIP_DIRS, follow_links=False):
+    """os.walk sobre `roots` con tope de profundidad, presupuesto de tiempo y
+    poda de directorios ruidosos. Yields (root, dirs, files) igual que os.walk.
+    Reemplaza los `os.walk(drive)` sin límites que dominaban el tiempo de scan
+    (y que igual el pipeline mataba a los ~12-15s, tirando sus hallazgos)."""
+    import time as _t
+    if isinstance(roots, str):
+        roots = [roots]
+    deadline = _t.time() + max(1.0, float(time_budget))
+    for base in roots:
+        try:
+            if not base or not os.path.isdir(base):
+                continue
+        except Exception:
+            continue
+        base_depth = base.rstrip('\\/').count(os.sep)
+        for root, dirs, files in os.walk(base, followlinks=follow_links):
+            if _t.time() > deadline:
+                dirs[:] = []
+                return
+            depth = root.count(os.sep) - base_depth
+            if depth >= max_depth:
+                dirs[:] = []
+            else:
+                dirs[:] = [d for d in dirs
+                           if d.lower() not in skip_dirs and not d.startswith('$')]
+            yield root, dirs, files
+
+
 def is_trusted_publisher(file_path: str) -> bool:
     """True si el archivo está firmado por un publisher de la whitelist.
     Usar para descartar FPs (Filtro #2). Falla silenciosamente — nunca rompe."""
@@ -994,8 +1097,11 @@ _SAFE_ROOT_FRAGMENTS = {
     'wondershare', 'obs-studio', 'obs studio',
     'site-packages', 'voicemod', 'node_modules',
     'lunarclient', 'badlionclient', 'badlion', 'blclient',
-    'tlauncher', 'prismlauncher', 'multimc', 'polymc',
+    'tlauncher', 'prismlauncher', 'multimc', 'polymc', 'ultimmc',
     'curseforge', 'ftbapp', 'gdlauncher', 'atlauncher', 'overwolf',
+    'modrinth-app', 'modrinth app', 'com.modrinth.theseus',
+    'feather launcher', 'featherclient', 'sklauncher', 'hmcl',
+
     'visual studio', 'intellij idea', 'pycharm', 'webstorm', 'jetbrains',
     'minecraftsstool',
     # LabyMod y su launcher (legítimo, cliente de Minecraft)
@@ -1181,9 +1287,21 @@ def _is_hack_folder(dir_name: str, root_lower: str) -> bool:
     if name_lower in _SAFE_FOLDER_NAMES:
         return False
 
-    # 3. Nombres exactos de hack clients conocidos (substring seguro)
-    if any(hack in name_lower for hack in _DEFINITE_HACK_NAMES):
-        return True
+    # 3. Nombres de hack clients — con límite de palabra (no substring). Antes
+    #    'vertex' matcheaba 'vertex_ai', 'future' matcheaba 'concurrent/futures'.
+    try:
+        from config.hack_signatures import stem_in_filename as _sif
+        from fp_filter import _AMBIGUOUS_HACK_STEMS as _AMB
+    except Exception:
+        _sif = lambda s, n: bool(s) and s in (n or '')
+        _AMB = frozenset()
+    for _hn in _DEFINITE_HACK_NAMES:
+        if _hn in _AMB:
+            # ambiguo: la carpeta debe SER el término o "<término>client/-hack…"
+            if name_lower == _hn or name_lower.startswith((_hn + 'client', _hn + '-client', _hn + ' client', _hn + 'hack')):
+                return True
+        elif _sif(_hn, name_lower):
+            return True
 
     # 4. Palabras genéricas con word-boundary (no substring de otra palabra)
     # Ejemplo: 'hack' matchea 'hack-menu' pero NO 'shack' ni 'unhackable'
@@ -1588,6 +1706,9 @@ class DetallesVentana:
 
 
 class ArgusApp:
+    # Serializa _read_usn_journal cuando el pipeline corre scanners en paralelo.
+    _usn_read_lock = threading.Lock()
+
     def __init__(self, root):
         self.root = root
         
@@ -1762,7 +1883,7 @@ class ArgusApp:
         self.db_integration = None
         try:
             from db_integration import DatabaseIntegration
-            api_url = self.config.get('api_url', 'https://asperss.onrender.com')
+            api_url = self.config.get('api_url', ARGUS_DEFAULT_API_URL)
             scan_token = self.config.get('scan_token', '')
             
             if scan_token:
@@ -1843,7 +1964,7 @@ class ArgusApp:
             from ai_analyzer import AIAnalyzer
             # Pasar ruta de BD y API para que cargue patrones aprendidos dinámicamente
             db_path = 'scanner_db.sqlite'
-            api_url = self.config.get('api_url', 'https://asperss.onrender.com')
+            api_url = self.config.get('api_url', ARGUS_DEFAULT_API_URL)
             scan_token = self.config.get('scan_token', '')
             
             self.ai_analyzer = AIAnalyzer(
@@ -1966,7 +2087,7 @@ class ArgusApp:
             try:
                 ModernUI.set_quit_callback(self._quit_app)
                 ModernUI.set_token_status(bool(self.config.get('scan_token')))
-                _api = self.config.get('api_url', 'https://asperss.onrender.com')
+                _api = self.config.get('api_url', ARGUS_DEFAULT_API_URL)
                 ModernUI.check_update_async(_api, SCANNER_VERSION)
                 ModernUI.setup_tray(self.root, on_quit=self._quit_app)
             except Exception:
@@ -2521,16 +2642,16 @@ class ArgusApp:
                                     if self.is_suspicious_file(full_path):
                                         # Análisis avanzado de contenido
                                         content_analysis = self.analyze_file_content(full_path)
-                                        
+
                                         alert_level = 'SOSPECHOSO'
                                         if content_analysis['is_hack'] and content_analysis['confidence'] >= 80:
                                             alert_level = 'CRITICAL'
-                                        
-                                issues.append({
-                                    'tipo': 'MINECRAFT_FILE',
-                                    'nombre': file,
-                                    'ruta': full_path,
-                                    'archivo': file,
+
+                                        issues.append({
+                                            'tipo': 'MINECRAFT_FILE',
+                                            'nombre': file,
+                                            'ruta': full_path,
+                                            'archivo': file,
                                             'alerta': alert_level,
                                             'categoria': 'MINECRAFT',
                                             'confidence': content_analysis.get('confidence', 0),
@@ -2680,26 +2801,24 @@ class ArgusApp:
             try:
                 # Escanear archivos modificados en las últimas 24 horas
                 cutoff_time = time.time() - (24 * 60 * 60)
-                
-                drives = ['C:\\', 'D:\\', 'E:\\', 'F:\\']
-                for drive in drives:
-                    if os.path.exists(drive):
-                        for root, dirs, files in os.walk(drive):
-                            for file in files:
-                                try:
-                                    file_path = os.path.join(root, file)
-                                    if os.path.getmtime(file_path) > cutoff_time:
-                                        if self.is_suspicious_file(file.lower()):
-                                            issues.append({
-                                                'tipo': 'RECENT_FILE',
-                                                'nombre': file,
-                                                'ruta': file_path,
-                                                'archivo': file,
-                                                'alerta': 'POCO_SOSPECHOSO',
-                                                'categoria': 'RECENT_FILES'
-                                            })
-                                except:
-                                    continue
+
+                for root, dirs, files in walk_bounded(['C:\\', 'D:\\', 'E:\\', 'F:\\']):
+                    for file in files:
+                        try:
+                            if not self.is_suspicious_file(file.lower()):
+                                continue
+                            file_path = os.path.join(root, file)
+                            if os.path.getmtime(file_path) > cutoff_time:
+                                issues.append({
+                                    'tipo': 'RECENT_FILE',
+                                    'nombre': file,
+                                    'ruta': file_path,
+                                    'archivo': file,
+                                    'alerta': 'POCO_SOSPECHOSO',
+                                    'categoria': 'RECENT_FILES'
+                                })
+                        except Exception:
+                            continue
                                     
             except Exception as e:
                 print(f"Error escaneando archivos recientes: {e}")
@@ -3224,20 +3343,17 @@ class ArgusApp:
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                         continue
                 
-                # Escanear archivos
-                drives = ['C:\\', 'D:\\', 'E:\\', 'F:\\']
-                for drive in drives:
-                    if os.path.exists(drive):
-                        for root, dirs, files in os.walk(drive):
-                            for file in files:
-                                if any(pattern in file.lower() for pattern in autoclick_patterns):
-                                    issues.append({
-                                        'tipo': 'AUTOCLICK_FILE',
-                                        'nombre': file,
-                                        'ruta': os.path.join(root, file),
-                                        'alerta': 'CRITICAL',
-                                        'categoria': 'AUTOCLICK_TOOLS'
-                                    })
+                # Escanear archivos (walk acotado: user dirs, no C:\Windows entero)
+                for root, dirs, files in walk_bounded(['C:\\', 'D:\\', 'E:\\', 'F:\\']):
+                    for file in files:
+                        if any(pattern in file.lower() for pattern in autoclick_patterns):
+                            issues.append({
+                                'tipo': 'AUTOCLICK_FILE',
+                                'nombre': file,
+                                'ruta': os.path.join(root, file),
+                                'alerta': 'CRITICAL',
+                                'categoria': 'AUTOCLICK_TOOLS'
+                            })
                                     
             except Exception as e:
                 print(f"Error escaneando herramientas de autoclick: {e}")
@@ -3991,741 +4107,13 @@ class ArgusApp:
             print(f"[filtros] No se cargaron reglas remotas: {e}")
 
     def filter_false_positives(self, issues):
-        """Filtrado MEJORADO - Detecta hacks reales pero menos estricto"""
-        issues = self._apply_remote_fp_rules(issues)
-        filtered = []
-        hacks_critical = []
-        hacks_sospechoso = []
-        hacks_poco_sospechoso = []
-        hacks_normal = []
-        
-        print(f"\n🔍 INICIANDO FILTRADO MEJORADO DE {len(issues)} ELEMENTOS...")
-
-        # Umbral mínimo de confianza — descartar ruido < 30%
-        MIN_CONFIDENCE = 30
-        issues = [i for i in issues if (
-            i.get('tipo', '') in {
-                'ghost_client_config', 'ghost_client_registry', 'jdwp_debug_port',
-                'vpn_active', 'hosts_minecraft_redirect', 'injector_process',
-                'blacklisted_mod', 'modified_minecraft_jar', 'hack_string_in_loaded_jar',
-            } or
-            (i.get('confidence', 100) * (100 if i.get('confidence', 1) <= 1 else 1)) >= MIN_CONFIDENCE
-        )]
-        print(f"📉 Umbral confianza {MIN_CONFIDENCE}%: {len(issues)} elementos restantes")
-        
-        # ============================================================
-        # FILTRO MEJORADO - DETECTA HACKS REALES PERO MENOS ESTRICTO
-        # ============================================================
-        
-        # ── PATRONES DE HACKS REALES — SOLO nombres exclusivos, sin genéricos ──────────
-        # REGLA: si el término aparece en mods legítimos de Minecraft, NO va aquí.
-        # Términos eliminados: inject, bypass, ghost, fly, reach, velocity, scaffold,
-        # nofall, impact, flux, rise, sigma, lb (liquid bounce), ghost, stealth, etc.
-        # Esos términos se evalúan en analyze_file_content() con múltiples co-ocurrencias.
-        real_hack_patterns = list(_DEFINITE_HACK_NAMES) + [
-            # Variantes de nombre con extensión
-            'vape.exe', 'vape.jar', 'entropy.exe', 'entropy.jar',
-            'whiteout.exe', 'liquidbounce.jar', 'wurst.jar',
-            # Módulos cuyo nombre NUNCA aparece en mods legítimos
-            'killaura', 'aimbot', 'triggerbot', 'antikb', 'antiknockback',
-            'xraymod', 'wallhack', 'boxesp', 'chams', 'traceline',
-            'autoclicker', 'clickgui', 'bunnyhop', 'bhop', 'aimassist',
-            'wtap', 'speedhack',
-            # Injectors con nombre específico
-            'dllinjector', 'extremeinjector',
-            # Vape inject / loaders (scan #106 — no filtrar por nombre genérico)
-            'vapeinject', 'vape-inject', 'vape_inject', 'vapeinjector',
-            'vape-loader', 'vape_loader', 'vapeloader',
-            # Weave
-            'weaveloader', 'weave-loader',
-        ]
-        # Deduplicate preservando orden
-        _seen = set()
-        _dedup = []
-        for p in real_hack_patterns:
-            if p not in _seen:
-                _seen.add(p)
-                _dedup.append(p)
-        real_hack_patterns = _dedup
-        
-        # PATRONES DE FALSOS POSITIVOS — solo nombres/rutas muy específicas de software legítimo.
-        # IMPORTANTE: NO incluir palabras genéricas como 'appdata', 'roaming', 'client', 'java',
-        # 'temp', etc. porque esas palabras aparecen en rutas de hack clients reales y los filtrarían.
-        exclude_patterns = [
-            # Sistema Windows (rutas completas específicas)
-            'windows\\system32', 'windows\\syswow64', 'windows\\winsxs',
-            '\\program files\\microsoft', '\\program files (x86)\\microsoft',
-            # Software legítimo (nombres de vendor específicos)
-            'adobe', 'google\\chrome', 'mozilla\\firefox',
-            'nvidia corporation', 'amd\\radeon', 'intel corporation',
-            'nvidia\\cubins', 'nvidia\\displaydriver',
-            'discord\\app-', 'teamspeak 3 client',
-            'skype\\', 'zoom\\', 'microsoft teams',
-            'steam\\steamapps', 'epicgames', 'origin games', 'ubisoft game launcher',
-            # Servidores web (no Minecraft)
-            'xampp\\', 'tomcat\\', '\\webapps\\', 'web-inf\\', 'webalizer',
-            # Librerías Java legítimas (nombres exactos con versión)
-            'gson-2.', 'jackson-core-', 'log4j-', 'authlib-',
-            # Mods legítimos de Minecraft (nombres exactos)
-            'optifine_', 'fabricloader-', 'forge-', 'minecraftforge-',
-            'iris-', 'sodium-', 'lithium-', 'phosphor-', 'rubidium-',
-            'jei-', 'create-', 'botania-', 'cobblemon-',
-            # Launchers legítimos (#25 — whitelist extendida)
-            'tlauncher-', 'prismlauncher', 'lunarclient\\', 'lunar client', 'badlion client\\',
-            'polymc\\', 'atlauncher\\', 'curseforge\\', 'ftb app\\', 'gdlauncher\\', 'multimc\\',
-            'gdlauncher', 'ftbapp', 'ftb_app', 'overwolf\\', 'curseforge\\',
-            # Mods de performance y accesibilidad (#26)
-            'ferritecore-', 'lazydfu-', 'entityculling-', 'dynamicfps-',
-            'smoothboot-', 'starlight-', 'c2me-', 'noxesium-', 'krypton-',
-            # Badlion como permitido (#27)
-            'badlion\\', 'badlionclient\\', 'blclient\\',
-            # DLLs del sistema Windows
-            'api-ms-win-', 'msvcr', 'msvcp', 'vcruntime', 'ucrtbase',
-            'kernel32.dll', 'user32.dll', 'advapi32.dll', 'shell32.dll',
-            # Editores (rutas específicas)
-            '\\vscode\\', '\\.vscode\\', 'node_modules\\', '\\jdk\\',
-            'visual studio\\', 'intellij idea\\', 'pycharm\\',
-            # Herramientas de edición de video y desarrollo
-            'wondershare\\', 'wondershare filmora', 'filmora\\',
-            'jetbrains\\', '\\jetbrains\\', 'rider\\', 'goland\\', 'webstorm\\', 'clion\\',
-            # AppData: rutas de sistema / browsers / apps legítimas (NO son hacks)
-            'webview2runtime', 'trust protection lists', 'pspc_sdk',
-            'appdata\\local\\packages',          # Windows Store apps (firmadas, sandboxed)
-            'appdata\\local\\origin',            # EA Origin
-            'appdata\\local\\nvidia',
-            'appdata\\local\\microsoft\\edge',
-            'appdata\\roaming\\opera software',
-            'electronic arts\\ea desktop',       # EA Desktop launcher
-            'site-packages',                     # librerías Python instaladas
-            'voicemod',                          # voice changer legítimo
-            'minecraftsstool',                   # el propio SS tool del servidor
-            # Juegos de ritmo (Osu!, Beat Saber, Geometry Dash)
-            '\\osu!\\', 'appdata\\local\\osu!', 'appdata\\roaming\\osu!',
-            'appdata\\locallow\\hyperbolic magnetism',  # Beat Saber
-            'appdata\\locallow\\robtop games',          # Geometry Dash
-            # Proyectos de desarrollo
-            '\\.git\\', '\\node_modules\\', '\\dist\\',
-            # Garry's Mod addons
-            'garrysmod\\garrysmod\\addons',
-            # Música
-            'spotify\\', 'virtualdj\\', '\\fl studio\\', 'appdata\\roaming\\image-line',
-            # Process Hacker 3 / System Informer
-            'systeminformer', 'processhacker3', 'process hacker 3',
-            # AHK instalado oficialmente
-            'program files\\autohotkey', 'program files (x86)\\autohotkey',
-        ]
-
-        # ============================================================
-        # FILTRADO MEJORADO
-        # ============================================================
-        
-        # Tipos generados por scanners especializados — siempre pasan el filtro
-        TRUSTED_TYPES = set(_NEVER_FILTER_TYPES)
-
-        # ── Rutas que NUNCA son hacks — se aplican ANTES del bypass de TRUSTED_TYPES ──
-        # Razón: tipos como usn_deleted_hack, prefetch_hack saltaban el exclude_patterns
-        # y flagueaban archivos temporales de Chrome, Edge, Firefox como hacks.
-        ABSOLUTE_SAFE_PATHS = {
-            # Navegadores (sus carpetas de perfil generan cientos de false positives)
-            'google\\chrome', 'appdata\\local\\google',
-            'mozilla\\firefox', 'appdata\\roaming\\mozilla',
-            'microsoft\\edge', 'appdata\\local\\microsoft\\edge',
-            'opera software', 'appdata\\roaming\\opera',
-            'appdata\\local\\brave-browser',
-            'appdata\\local\\vivaldi',
-            # Sistema Windows — prefetch, temp del sistema
-            'windows\\prefetch', 'windows\\system32', 'windows\\syswow64',
-            'windows\\winsxs', 'windows\\softwaredistribution',
-            # Launchers legítimos de Minecraft (clientes oficiales)
-            'lunarclient', 'lunar client', 'lunar-client',
-            'badlion', 'badlionclient', 'blclient',
-            'tlauncher', 'prismlauncher', 'multimc', 'polymc',
-            'curseforge', 'ftb app', 'ftbapp', 'gdlauncher', 'atlauncher', 'overwolf',
-            # Plataformas de juego legítimas
-            'steam\\steamapps', 'epicgames', 'origin games', 'ubisoft game launcher',
-            'riotgames', 'riot games', 'battlenet', 'battle.net',
-            # IDEs y desarrollo
-            'visual studio', 'intellij idea', 'pycharm', 'webstorm', 'clion',
-            'jetbrains', '\\vscode\\', '\\.vscode\\', 'node_modules',
-            # Drivers y software del sistema
-            'nvidia corporation', 'nvidia\\cubins', 'nvidia\\displaydriver',
-            'amd\\radeon', 'intel corporation',
-            # Comunicación
-            'discord\\app-', 'teamspeak 3 client', 'zoom\\', 'skype\\',
-            'microsoft teams',
-            # Software legítimo
-            'appdata\\local\\packages',   # Windows Store (sandboxed)
-            'appdata\\local\\nvidia',
-            'wondershare', 'filmora', 'obs-studio', 'obs studio',
-            'site-packages',              # librerías Python instaladas
-            'voicemod',
-            'program files\\microsoft',
-            'program files (x86)\\microsoft',
-            'minecraftsstool',            # el propio scanner
-            # Juegos de ritmo — sus carpetas de songs contienen palabras como
-            # "riot", "rise", "impact", "extra", "insane" que colisionan con hacks
-            'appdata\\local\\osu!', '\\osu!\\songs\\', '\\osu!\\skins\\',
-            'appdata\\roaming\\osu!',
-            # Beat Saber / Geometry Dash
-            'appdata\\locallow\\hyperbolic magnetism',
-            'appdata\\locallow\\robtop games',
-            # Proyectos de desarrollo
-            '\\.git\\', '\\node_modules\\', '\\dist\\',
-            # Garry's Mod addons (nombres genéricos que colisionan con patrones de hack)
-            'steam\\steamapps\\common\\garrysmod\\garrysmod\\addons',
-            'garrysmod\\garrysmod\\addons',
-            # Música (artistas y géneros con nombres que colisionan)
-            'spotify\\', '\\spotify\\storage\\',
-            'virtualdj\\', '\\fl studio\\',
-            'appdata\\roaming\\image-line',   # FL Studio
-            'appdata\\local\\spotify',
-            # Process Hacker 3 / System Informer (sucesor oficial de PH2 — herramienta legítima)
-            'systeminformer', 'processhacker3', 'process hacker 3',
-            'winsystems\\systeminformer',
-            # AHK instalado en Program Files (instalación oficial — no sospechosa)
-            'program files\\autohotkey', 'program files (x86)\\autohotkey',
-            # F17 — ProgramData y carpetas del sistema que generan FP por fecha
-            'programdata\\microsoft', '\\windows\\fonts\\',
-            'programdata\\packages', 'programdata\\windowsholographic',
-            # F18 — AppData\Local\Microsoft (Office, Edge, Teams, Visual C++ runtimes)
-            'appdata\\local\\microsoft\\',
-            # F19 — Carpetas de datos de launchers (se filtraba el exe pero no sus datos)
-            'appdata\\roaming\\prismlauncher\\',
-            'appdata\\roaming\\multimc\\',
-            'appdata\\local\\gdlauncher_next\\',
-            'appdata\\local\\atlauncher\\',
-            'appdata\\roaming\\lunarclient\\',
-            'appdata\\local\\curseforge\\',
-            'appdata\\local\\packages\\microsoft.',  # Windows Store sandboxed
-        }
-
-        # F33/F34 — Estadísticas de filtrado por motivo (para diagnóstico)
-        _filter_stats = {}
-        _debug_filter = os.environ.get('ARGUS_DEBUG_FILTER') == '1'
-        _discarded_items = [] if _debug_filter else None  # F35: collect if debug mode
-        _legit_mod_count = 0  # F25: cuenta mods legítimos verificados
-        _legit_pattern_count = 0  # whitelist estática + patrones aprendidos
-        def _discard(reason_key, item_nombre, item_ruta=''):
-            _filter_stats[reason_key] = _filter_stats.get(reason_key, 0) + 1
-            if _debug_filter:
-                _discarded_items.append({'reason': reason_key, 'nombre': item_nombre, 'ruta': item_ruta})
-            print(f"✅ [{reason_key}] Descartado: {item_nombre[:60]} @ {item_ruta[:60]}")
-
-        # F5 — ¿Está Minecraft corriendo ahora mismo? (cached para el loop)
-        _mc_running = any(
-            'java' in (p.info.get('name') or '').lower() and
-            'minecraft' in ' '.join(p.info.get('cmdline') or []).lower()
-            for p in psutil.process_iter(['name', 'cmdline'])
-            if True
-        )
+        """Delegado a fp_filter (v1.8)."""
         try:
-            _mc_running  # cache computed above
-        except Exception:
-            _mc_running = False
-
-        for item in issues:
-            nombre = item.get('nombre', '').lower()
-            ruta = item.get('ruta', '').lower()
-            archivo = item.get('archivo', '').lower()
-            tipo = item.get('tipo', '').lower()
-
-            # ── FILTRO ABSOLUTO — se ejecuta antes de cualquier otra lógica ──
-            # Bloquea rutas de software legítimo sin importar el tipo del hallazgo.
-            _combined_path = ruta + '|' + archivo
-            _is_absolute_safe = any(safe in _combined_path for safe in ABSOLUTE_SAFE_PATHS)
-            if _is_absolute_safe:
-                _discard('SAFE_PATH', nombre, ruta)
-                continue
-
-            # F2 — Rutas vanilla de Minecraft: NUNCA contienen hacks activos.
-            # versions/, libraries/, assets/, logs/, crash-reports/, screenshots/, natives/
-            _combined_mc = ruta + '|' + archivo
-            if any(vp in _combined_mc for vp in _VANILLA_MC_PATHS):
-                # Excepción: tipos de confianza absoluta (bytecode analysis, self-deletion, etc.)
-                if tipo not in ('modified_minecraft_jar', 'self_deletion_hack', 'cp_string_hack'):
-                    _discard('VANILLA_MC_PATH', nombre, ruta)
-                    continue
-
-            # F20 — Paths de servidor Minecraft (plugins, no hacks de cliente)
-            _server_fragments = ('\\server\\', '/server/', '\\plugins\\', '/plugins/',
-                                 '\\bukkit\\', '/bukkit/', '\\spigot\\', '/spigot/',
-                                 '\\papermc\\', '/papermc/', '\\purpur\\', '/purpur/')
-            if any(sf in _combined_mc for sf in _server_fragments):
-                _discard('SERVER_PATH', nombre, ruta)
-                continue
-
-            # F21 — Mods desactivados (.disabled, .bak) — el jugador los desactivó a propósito
-            _archivo_raw = item.get('archivo', '') or item.get('ruta', '')
-            if str(_archivo_raw).lower().endswith(('.disabled', '.bak', '.off', '.old')):
-                _discard('MOD_DISABLED', nombre, ruta)
-                continue
-
-            # F9 — Instancia activa según profiles.json del launcher → no degradar
-            _item_path_lower = (item.get('ruta') or item.get('archivo') or '').lower()
-            _in_active_instance = False
-            try:
-                _active_paths = self._get_active_launcher_instance_paths()
-                if _active_paths and any(_item_path_lower.startswith(ap) for ap in _active_paths):
-                    _in_active_instance = True
-            except Exception:
-                pass
-
-            # F6 — Instancias antiguas/abandonadas (>60 días sin lanzar) → bajar severidad
-            # No aplicar si la instancia está marcada como activa en profiles.json (F9)
-            if not _in_active_instance:
-                try:
-                    _abandoned_paths = self._get_abandoned_instance_paths()
-                    if _abandoned_paths and any(_item_path_lower.startswith(ap) for ap in _abandoned_paths):
-                        if item.get('alerta') == 'CRITICAL':
-                            item['alerta'] = 'SOSPECHOSO'
-                            item.setdefault('detected_patterns', []).append('abandoned_instance_60d')
-                        elif item.get('alerta') == 'SOSPECHOSO':
-                            item['alerta'] = 'POCO_SOSPECHOSO'
-                            item.setdefault('detected_patterns', []).append('abandoned_instance_60d')
-                        item['confidence'] = max(0.15, float(item.get('confidence', 0.5)) * 0.6)
-                except Exception:
-                    pass
-
-            # Verificar JARs contra indicadores locales y Modrinth antes de acusarlos
-            if tipo in ('blacklisted_mod', 'jar_file') or archivo.endswith('.jar') or ruta.endswith('.jar'):
-                _jar_path = item.get('archivo') or item.get('ruta') or ''
-                if _jar_path and os.path.isfile(str(_jar_path)):
-                    if self._is_legitimate_mod_jar(str(_jar_path)):
-                        print(f"✅ [ManifestCheck] Mod legítimo (fabric/forge/quilt): {os.path.basename(str(_jar_path))}")
-                        _legit_mod_count += 1
-                        continue
-                    if self._is_modrinth_legitimate(str(_jar_path)):
-                        print(f"✅ [Modrinth] Mod legítimo verificado: {os.path.basename(str(_jar_path))}")
-                        _legit_mod_count += 1
-                        continue
-                    if self._is_curseforge_legitimate(str(_jar_path)):
-                        print(f"✅ [CurseForge] Mod legítimo verificado: {os.path.basename(str(_jar_path))}")
-                        _legit_mod_count += 1
-                        continue
-                    # Fast-path: patrones legítimos (mods MC / rutas conocidas) antes de VT
-                    if self.legitimate_patterns:
-                        try:
-                            _jar_name_lp = os.path.basename(str(_jar_path)).lower()
-                            try:
-                                from config.hack_signatures import filename_is_definite_hack as _is_hack_jar
-                            except ImportError:
-                                def _is_hack_jar(_n):  # type: ignore
-                                    return False
-                            if not _is_hack_jar(_jar_name_lp):
-                                _lp_ok, _lp_conf = self.legitimate_patterns.is_legitimate(
-                                    file_path=str(_jar_path),
-                                    file_name=_jar_name_lp,
-                                    file_hash=item.get('file_hash'),
-                                    context={'file_path': str(_jar_path)},
-                                )
-                                if _lp_ok and _lp_conf >= 0.5:
-                                    print(
-                                        f"✅ [LegitPattern] Mod/ruta legítima: "
-                                        f"{os.path.basename(str(_jar_path))} (conf={_lp_conf:.2f})"
-                                    )
-                                    _legit_mod_count += 1
-                                    _legit_pattern_count += 1
-                                    continue
-                        except Exception:
-                            pass
-
-            # P2 #1+8 — VirusTotal + MalwareBazaar para .exe/.jar sospechosos
-            _vt_path = item.get('archivo') or item.get('ruta') or ''
-            _alerta  = item.get('alerta', 'NORMAL')
-            if (_alerta in ('SOSPECHOSO', 'CRITICAL') and _vt_path and
-                    os.path.isfile(str(_vt_path)) and
-                    any(str(_vt_path).lower().endswith(e) for e in ('.exe', '.jar', '.dll'))):
-                try:
-                    _sha256_vt = self._cached_sha256(str(_vt_path))
-                    if not _sha256_vt:
-                        continue
-                    # MalwareBazaar (gratis, sin API key)
-                    if _sha256_vt not in ArgusApp._mbaz_cache:
-                        ArgusApp._mbaz_cache[_sha256_vt] = self._mbaz_check_hash(_sha256_vt)
-                    if ArgusApp._mbaz_cache.get(_sha256_vt):
-                        print(f"🚨 [MalwareBazaar] Hash en BD de malware: {os.path.basename(str(_vt_path))}")
-                        item['alerta'] = 'CRITICAL'
-                        item['confidence'] = min(0.99, float(item.get('confidence', 0.5)) + 0.35)
-                        item['detected_patterns'] = list(item.get('detected_patterns', [])) + ['malwarebazaar']
-                    # VirusTotal (requiere VIRUSTOTAL_API_KEY)
-                    if _sha256_vt not in ArgusApp._vt_cache:
-                        ArgusApp._vt_cache[_sha256_vt] = self._vt_check_hash(_sha256_vt)
-                    _vt_result = ArgusApp._vt_cache.get(_sha256_vt)
-                    if _vt_result is not None:
-                        _pos, _tot = _vt_result
-                        if _pos == 0 and _tot > 10:
-                            print(f"✅ [VT] 0/{_tot} detecciones — posible FP: {os.path.basename(str(_vt_path))}")
-                            item['alerta'] = 'POCO_SOSPECHOSO'
-                            item['confidence'] = max(0.2, float(item.get('confidence', 0.5)) * 0.4)
-                            item['detected_patterns'] = list(item.get('detected_patterns', [])) + ['vt_clean']
-                        elif _pos >= 5:
-                            print(f"🚨 [VT] {_pos}/{_tot} detecciones: {os.path.basename(str(_vt_path))}")
-                            item['alerta'] = 'CRITICAL'
-                            item['confidence'] = min(0.99, float(item.get('confidence', 0.5)) + 0.25)
-                            item['detected_patterns'] = list(item.get('detected_patterns', [])) + [f'vt_{_pos}']
-                except Exception:
-                    pass
-
-            # F23 — Boost confidence si el mismo hash está confirmado en ≥3 scans en la BD cloud
-            try:
-                _f23_path = item.get('archivo') or item.get('ruta') or ''
-                if _f23_path and os.path.isfile(str(_f23_path)):
-                    _sha256_f23 = self._cached_sha256(str(_f23_path), max_bytes=8 * 1024 * 1024)
-                    if not _sha256_f23:
-                        raise OSError('hash failed')
-                    _freq = self._cloud_hash_frequency.get(_sha256_f23.lower(), 0)
-                    if _freq >= 3:
-                        _boost = min(0.30, _freq * 0.05)
-                        item['confidence'] = min(0.99, float(item.get('confidence', 0.5)) + _boost)
-                        item.setdefault('detected_patterns', []).append(f'cloud_freq_{_freq}')
-                        if _freq >= 5 and item.get('alerta') not in ('CRITICAL', 'MUY_SOSPECHOSO'):
-                            item['alerta'] = 'SOSPECHOSO'
-                        print(f"📊 [F23] Hash visto {_freq}x en BD cloud → boost confianza: {os.path.basename(str(_f23_path))}")
-            except Exception:
-                pass
-
-            # Tipos de scanners especializados — confiar en ellos sin filtrar
-            if tipo in TRUSTED_TYPES:
-                filtered.append(item)
-                continue
-
-            # 1. EXCLUIR SOLO FALSOS POSITIVOS MUY OBVIOS
-            is_false_positive = False
-            
-            # Verificar con sistema de patrones legítimos aprendidos
-            if self.legitimate_patterns:
-                try:
-                    file_hash = item.get('file_hash', '')
-                    is_legitimate, legit_confidence = self.legitimate_patterns.is_legitimate(
-                        file_path=ruta or archivo,
-                        file_name=archivo or nombre,
-                        file_hash=file_hash,
-                        context={'file_path': ruta or archivo}
-                    )
-                    
-                    if is_legitimate and legit_confidence >= 0.5:
-                        is_false_positive = True
-                        _legit_pattern_count += 1
-                        print(f"✅ Filtrado como legítimo aprendido: {archivo or nombre} (confianza: {legit_confidence:.2f})")
-                except Exception as e:
-                    pass
-            
-            # Verificar patrones de exclusión tradicionales
-            if not is_false_positive:
-                for pattern in exclude_patterns:
-                    if pattern in ruta or pattern in archivo or pattern in nombre:
-                        is_false_positive = True
-                        break
-            
-            # Verificar falsos positivos específicos adicionales
-            if not is_false_positive:
-                for false_positive in ['zomboid', 'shaders\\', '\\textures\\', 'system32', '\\program files\\', '\\windows\\system', 'microsoft\\', 'adobe\\']:
-                    if false_positive in ruta or false_positive in archivo or false_positive in nombre:
-                        is_false_positive = True
-                        break
-            
-            if is_false_positive:
-                continue
-
-            # P2 #26 / F22 — Antigüedad de archivo → bajar severidad progresivamente
-            _fp_age = item.get('archivo') or item.get('ruta') or ''
-            if _fp_age and os.path.isfile(str(_fp_age)):
-                try:
-                    import time as _time_age
-                    _age_days = (_time_age.time() - os.path.getmtime(str(_fp_age))) / 86400
-                    _tipo_age = item.get('tipo', '')
-                    _is_confirmed = 'cloud_hash_match' in _tipo_age or 'malwarebazaar' in str(item.get('detected_patterns', []))
-                    if not _is_confirmed:
-                        if _age_days > 365:
-                            # Más de 1 año — muy probablemente inactivo
-                            if item.get('alerta') in ('SOSPECHOSO', 'CRITICAL'):
-                                item['alerta'] = 'POCO_SOSPECHOSO'
-                            item['confidence'] = max(0.15, float(item.get('confidence', 0.5)) * 0.55)
-                            item.setdefault('detected_patterns', []).append(f'file_age_{int(_age_days)}d')
-                        elif _age_days > 90:
-                            # F22: Entre 90 y 365 días — reducción moderada
-                            item['confidence'] = max(0.25, float(item.get('confidence', 0.5)) * 0.80)
-                            item.setdefault('detected_patterns', []).append(f'file_age_{int(_age_days)}d')
-                        # F24 — Archivo sin modificar en >30 días → indicador de uso crónico normal (no hack activo)
-                        # Aplicar solo si no está confirmado por cloud hash (en cuyo caso la antigüedad no importa)
-                        elif _age_days > 30:
-                            _is_confirmed_f24 = any(
-                                p in str(item.get('detected_patterns', []))
-                                for p in ('cloud_hash_match', 'malwarebazaar', 'vt_')
-                            )
-                            if not _is_confirmed_f24 and item.get('alerta') not in ('CRITICAL',):
-                                item['confidence'] = max(0.25, float(item.get('confidence', 0.5)) * 0.90)
-                                item.setdefault('detected_patterns', []).append(f'file_age_{int(_age_days)}d_unchanged')
-                except Exception:
-                    pass
-
-            # 2. ANÁLISIS AVANZADO DE CONTENIDO (si es un archivo)
-            content_confidence = 0
-            if tipo in ['file', 'jar_file', 'minecraft_file'] and 'archivo' in item:
-                try:
-                    file_path = item.get('archivo') or item.get('ruta')
-                    if file_path and os.path.exists(str(file_path)):
-                        content_analysis = self.analyze_file_content(str(file_path))
-                        content_confidence = content_analysis.get('confidence', 0)
-                        if content_analysis.get('is_hack') and content_confidence >= 70:
-                            item['confidence'] = content_confidence
-                            item['detected_patterns'] = content_analysis.get('detected_patterns', [])
-                            item['obfuscation'] = content_analysis.get('obfuscation_detected', False)
-                            item['file_hash'] = content_analysis.get('file_hash')
-                            # ── Mejora 7+10: logs y .txt tienen cap de alerta ────
-                            # Un log nunca es CRITICAL solo por contenido — es evidencia indirecta
-                            if content_analysis.get('is_log_file'):
-                                if item.get('alerta') == 'CRITICAL':
-                                    item['alerta'] = 'SOSPECHOSO'
-                                # ── Mejora 9: explicación específica para logs ───
-                                log_exp = content_analysis.get('log_explanation', '')
-                                if log_exp:
-                                    item['explicacion'] = log_exp
-                                    item['tipo'] = 'log_registra_hack'
-                            elif os.path.splitext(str(file_path))[1].lower() in ('.txt', '.cfg', '.properties'):
-                                # .txt sin patrones múltiples: máximo SOSPECHOSO
-                                if item.get('alerta') == 'CRITICAL' and content_confidence < 80:
-                                    item['alerta'] = 'SOSPECHOSO'
-                except:
-                    pass
-            
-            # 3. ACEPTAR SI CONTIENE PATRONES DE HACKS (nombre, archivo o ruta completa)
-            is_potential_hack = False
-            _hack_path_combo = f"{nombre}|{ruta}|{archivo}"
-            for pattern in real_hack_patterns:
-                if pattern in archivo or pattern in nombre or pattern in _hack_path_combo:
-                    is_potential_hack = True
-                    break
-            if not is_potential_hack:
-                try:
-                    from config.hack_signatures import combined_path_indicates_hack
-                    is_potential_hack = combined_path_indicates_hack(nombre, ruta, archivo)
-                except ImportError:
-                    pass
-            
-            # 4. TAMBIÉN ACEPTAR SI ESTÁ EN CARPETAS ESPECÍFICAMENTE SOSPECHOSAS
-            # Regla: el path debe ser un segmento de directorio completo, no substring.
-            # Eliminado: 'mc', 'temp', 'tmp' (demasiado genéricos → falsos positivos masivos)
-            # 'mc' matchea C:\Program Files (x86)\Microsoft\..., 'temp' matchea qualquier temp.
-            suspicious_paths = [
-                '\\.minecraft\\', '\\minecraft\\',
-                '\\hack\\', '\\hacks\\',
-                '\\cheat\\', '\\cheats\\',
-                '\\ghostclient\\', '\\ghost_client\\',
-                '\\weaveloader\\', '\\.weave\\',
-                '\\killaura\\', '\\aimbot\\',
-            ]
-            is_in_suspicious_folder = any(path in ruta for path in suspicious_paths)
-            
-            # 5. SCORING MULTI-FACTOR — la IA decide la severidad basándose en evidencias
-            # Acumular puntos de confianza de múltiples fuentes independientes:
-            ai_score = 0
-
-            # Factor A: Nombre del archivo/hallazgo contiene patrón definitivo
-            if is_potential_hack:
-                matched_definite = next(
-                    (p for p in real_hack_patterns if p in archivo or p in nombre),
-                    None
-                )
-                if matched_definite and matched_definite in _DEFINITE_HACK_NAMES:
-                    ai_score += 55  # Nombre exclusivo = evidencia fuerte
-                else:
-                    ai_score += 35  # Módulo/herramienta = evidencia media
-
-            # Factor B: Análisis de contenido del archivo
-            if content_confidence >= 85:
-                ai_score += 45
-            elif content_confidence >= 70:
-                ai_score += 30
-            elif content_confidence >= 55:
-                ai_score += 15
-
-            # Factor C: Ubicación en ruta sospechosa específica
-            if is_in_suspicious_folder:
-                ai_score += 20
-
-            # Factor D: Confidence original del scanner especializado
-            # F26: ignorar confidence=0.5 exacto (valor por defecto de muchos scanners — no es evidencia real)
-            orig_conf = item.get('confidence', 0)
-            if isinstance(orig_conf, float) and orig_conf <= 1.0:
-                orig_conf *= 100
-            _is_default_conf = abs(orig_conf - 50.0) < 1.0  # exactamente 50%
-            if not _is_default_conf:
-                if orig_conf >= 90:
-                    ai_score += 30
-                elif orig_conf >= 75:
-                    ai_score += 20
-                elif orig_conf >= 60:
-                    ai_score += 10
-
-            # F3 — Penalizar JARs en \versions\ o \libraries\ que pasaron los filtros anteriores
-            # (pueden llegar aquí si son tipo TRUSTED — no borrarlos, solo bajar score)
-            _combined_vanilla = ruta + '|' + archivo
-            if any(vp in _combined_vanilla for vp in _VANILLA_MC_PATHS):
-                ai_score = max(0, ai_score - 25)
-                item.setdefault('detected_patterns', []).append('vanilla_path_penalty')
-
-            # Solo mostrar si hay evidencia real (ai_score mínimo)
-            if ai_score < 25 and not is_potential_hack and not is_in_suspicious_folder:
-                _discard('LOW_SCORE', nombre, ruta)
-                continue
-
-            # F5 — Si el JAR está en \mods\ pero Minecraft NO está corriendo → bajar CRITICAL
-            if not _mc_running and item.get('alerta') == 'CRITICAL':
-                _in_mods = '\\mods\\' in ruta or '/mods/' in ruta
-                _is_jar_type = tipo in ('blacklisted_mod', 'jar_file', 'minecraft_file') or archivo.endswith('.jar')
-                if _in_mods and _is_jar_type:
-                    item['alerta'] = 'SOSPECHOSO'
-                    item.setdefault('detected_patterns', []).append('mc_not_running_at_scan')
-                    ai_score = min(ai_score, 65)
-
-            # Clasificar por score acumulado
-            if not item.get('categoria'):
-                item['categoria'] = 'HACKS'
-            item['ai_score'] = ai_score
-
-            if ai_score >= 75 or content_confidence >= 80:
-                item['alerta'] = 'CRITICAL'
-                hacks_critical.append(item)
-            elif ai_score >= 50 or content_confidence >= 60:
-                item['alerta'] = 'SOSPECHOSO'
-                hacks_sospechoso.append(item)
-            elif ai_score >= 30:
-                item['alerta'] = 'POCO_SOSPECHOSO'
-                hacks_poco_sospechoso.append(item)
-            else:
-                item['alerta'] = 'NORMAL'
-                hacks_normal.append(item)
-
-            filtered.append(item)
-        
-        # Correlación de evidencias: escalar si hay 2+ indicadores del mismo tipo
-        JAVA_INJECTION_TYPES = {
-            'jdwp_debug_port', 'javaagent_injection', 'bootclasspath_modification',
-            'dll_injection_java', 'hack_string_in_loaded_jar', 'injector_process',
-        }
-        AUTOCLICK_TYPES = {
-            'ahk_autoclick', 'peripheral_macro', 'bloody_a4tech', 'arduino_hid_device',
-        }
-        GHOST_TYPES = {
-            'ghost_client_config', 'ghost_client_registry', 'blacklisted_mod', 'modified_minecraft_jar',
-        }
-        for group in (JAVA_INJECTION_TYPES, AUTOCLICK_TYPES, GHOST_TYPES):
-            matching = [i for i in filtered if i.get('tipo', '') in group]
-            if len(matching) >= 2:
-                for item in matching:
-                    if item.get('alerta') not in ('CRITICAL',):
-                        item['alerta'] = 'CRITICAL'
-                        item['confidence'] = max(item.get('confidence', 0.8), 0.92)
-                        item['detected_patterns'] = list(set(item.get('detected_patterns', []) + ['multi_evidence_correlation']))
-                print(f"🔗 Correlación de evidencias: {len(matching)} hallazgos → CRITICAL")
-
-        # F34 — Estadísticas de filtrado por motivo
-        print(f"\n📊 ESTADÍSTICAS DE FILTRADO MEJORADO:")
-        print(f"🔴 HACKS CRÍTICOS: {len(hacks_critical)}")
-        print(f"🟠 SOSPECHOSOS: {len(hacks_sospechoso)}")
-        print(f"🟡 POCO SOSPECHOSOS: {len(hacks_poco_sospechoso)}")
-        print(f"🟢 NORMALES: {len(hacks_normal)}")
-        print(f"📋 TOTAL FILTRADO: {len(filtered)}")
-        print(f"🗑️ ELEMENTOS DESCARTADOS: {len(issues) - len(filtered)}")
-        if _legit_mod_count:
-            print(f"✅ MODS/RUTAS LEGÍTIMAS (manifest/modrinth/patrones): {_legit_mod_count}")
-        if _legit_pattern_count:
-            print(f"✅ FILTRADOS POR LegitPattern: {_legit_pattern_count}")
-        if _filter_stats:
-            print(f"📂 MOTIVOS DE DESCARTE:")
-            for reason, count in sorted(_filter_stats.items(), key=lambda x: -x[1]):
-                print(f"   {reason}: {count}")
-
-        # F35 — Debug filter mode: show all discarded items in UI
-        if _debug_filter and _discarded_items:
-            print(f"\n🔬 [DEBUG-FILTER] {len(_discarded_items)} hallazgos descartados:")
-            for di in _discarded_items:
-                print(f"   [{di['reason']}] {di['nombre'][:70]} @ {di['ruta'][:50]}")
-            # Inject discarded items as low-priority notes so they appear in UI
-            for di in _discarded_items[:30]:
-                filtered.append({
-                    'nombre': f"[FILTRADO:{di['reason']}] {di['nombre']}",
-                    'ruta': di['ruta'],
-                    'tipo': 'debug_filter_discarded',
-                    'categoria': 'DEBUG',
-                    'alerta': 'NORMAL',
-                    'confidence': 0.0,
-                    'detected_patterns': [f'filter_reason:{di["reason"]}'],
-                    'explicacion': f'Hallazgo descartado por filtro ({di["reason"]}). Visible solo en modo --debug-filter.',
-                })
-
-        if hacks_critical:
-            print(f"\n🔴 HACKS CRÍTICOS ENCONTRADOS:")
-            for item in hacks_critical[:5]:
-                print(f"  - {item.get('archivo', 'N/A')} en {item.get('ruta', 'N/A')}")
-
-        if hacks_sospechoso:
-            print(f"\n🟠 HACKS SOSPECHOSOS ENCONTRADOS:")
-            for item in hacks_sospechoso[:5]:
-                print(f"  - {item.get('archivo', 'N/A')} en {item.get('ruta', 'N/A')}")
-
-        if hacks_poco_sospechoso:
-            print(f"\n🟡 HACKS POCO SOSPECHOSOS ENCONTRADOS:")
-            for item in hacks_poco_sospechoso[:5]:
-                print(f"  - {item.get('archivo', 'N/A')} en {item.get('ruta', 'N/A')}")
-
-        # F25 — Si el jugador tiene ≥15 mods legítimos verificados → perfil de modder
-        # → bajar confianza de hallazgos no confirmados para reducir FP en modders
-        if _legit_mod_count >= 15:
-            print(f"🎮 [F25] Perfil de modder detectado: {_legit_mod_count} mods legítimos → umbral reducido")
-            _modder_unconfirmed_types = {
-                'blacklisted_mod', 'jar_file', 'mixin_hack', 'dll_nonstandard', 'hack_string_in_loaded_jar'
-            }
-            for _item in filtered:
-                if _item.get('tipo') in _modder_unconfirmed_types:
-                    if 'cloud_hash_match' not in str(_item.get('detected_patterns', [])) and \
-                       'malwarebazaar' not in str(_item.get('detected_patterns', [])):
-                        _item['confidence'] = max(0.15, float(_item.get('confidence', 0.5)) * 0.75)
-                        _item.setdefault('detected_patterns', []).append(f'modder_profile_{_legit_mod_count}mods')
-
-        # P2 #8 — Descartar JARs demasiado pequeños (< 3KB)
-        filtered = self._filter_by_file_size(filtered)
-
-        # P2 #28 — Reducir score de archivos en rutas de sync cloud
-        filtered = self._filter_backup_sync(filtered)
-
-        # P2 #22 — Decay de score por antigüedad de evidencia
-        filtered = self._apply_score_decay(filtered)
-
-        # P2 #30 — Umbrales dinámicos ajustados por feedback loop
-        filtered = self._apply_feedback_thresholds(filtered)
-
-        # P2 #23 — Agregar explicaciones en español a todos los hallazgos
-        filtered = self._apply_human_explanations(filtered)
-
-        # Dedupe exacto (mismo tipo + ruta + nombre)
-        try:
-            from scanner_dedupe import dedupe_issues
-            filtered = dedupe_issues(filtered)
-        except ImportError:
-            pass
-
-        # P2 #24 — Agrupar resultados repetidos del mismo tipo
-        filtered = self._group_related_results(filtered)
-
-        # P2 #13 — Descartar procesos conocidos y seguros
-        filtered = self._apply_process_whitelist(filtered)
-
-        # P3 #2 + #16 — Ajuste dinámico de confidence por rareza y patrones de bans
-        filtered = self._apply_cloud_rarity_and_ban_patterns(filtered)
-
-        # P2 #4 — Indicador aislado: cap a SOSPECHOSO si no hay 2+ evidencias independientes
-        filtered = self._apply_single_indicator_cap(filtered)
-
-        # P2 #21 — Escalar a CRITICAL por combinaciones de evidencias
-        filtered = self._apply_combination_penalties(filtered)
-
-        # v1.5 — Boost/desescalar por contexto global del scan
-        filtered = self._ai_contextual_boost(filtered)
-
-        print(f"📋 TOTAL FINAL (tras decay + agrupación): {len(filtered)}")
-        return filtered
+            from fp_filter import filter_false_positives as _ffp
+            return _ffp(self, issues)
+        except Exception as e:
+            print(f"[fp_filter] fallback inline skip: {e}")
+            return issues or []
         
     @staticmethod
     def _apply_profile_env(config):
@@ -4802,30 +4190,34 @@ class ArgusApp:
 
                                         # Leer config existente en AppData si existe, o usar el actual
                                         persistent_config = config.copy()
+                                        _zip_api = (persistent_config.get('api_url') or '').strip()
+                                        _zip_web = (persistent_config.get('web_url') or '').strip()
                                         if os.path.exists(persistent_config_path):
                                             try:
                                                 with open(persistent_config_path, 'r', encoding='utf-8') as f:
                                                     existing_config = json.load(f)
                                                     # Preservar otros valores del config persistente
                                                     persistent_config.update(existing_config)
-                                            except:
+                                            except Exception:
                                                 pass
 
                                         # Asegurar que el token esté presente
                                         persistent_config['scan_token'] = token_value
 
                                         # ── Sanear URLs ANTES de guardar y retornar ──────────────
-                                        _correct_url = 'https://asperss.onrender.com'
-                                        _bad_prefixes = (
-                                            'http://localhost', 'https://localhost',
-                                            'http://127.0.0.1', 'https://127.0.0.1',
-                                            'https://ssapi-cfni.onrender.com',
-                                        )
-                                        for _key in ('api_url', 'web_url'):
-                                            _val = persistent_config.get(_key, '')
-                                            if not _val or any(_val.startswith(p) for p in _bad_prefixes):
-                                                print(f"⚠️ URL obsoleta en persistent_config ({_key}: {_val!r}) → {_correct_url}")
-                                                persistent_config[_key] = _correct_url
+                                        # AppData viejo con onrender NO debe pisar Railway del ZIP
+                                        _correct_url = ARGUS_DEFAULT_API_URL
+                                        for _key, _zip_val in (('api_url', _zip_api), ('web_url', _zip_web)):
+                                            _val = (persistent_config.get(_key) or '').strip()
+                                            _obsolete = (not _val) or any(
+                                                _val.startswith(p) for p in _ARGUS_OBSOLETE_API_PREFIXES
+                                            )
+                                            if _obsolete:
+                                                _new = _zip_val if _zip_val and not any(
+                                                    _zip_val.startswith(p) for p in _ARGUS_OBSOLETE_API_PREFIXES
+                                                ) else _correct_url
+                                                print(f"⚠️ URL obsoleta en persistent_config ({_key}: {_val!r}) → {_new}")
+                                                persistent_config[_key] = _new
 
                                         # Guardar config con el token y URLs saneadas
                                         with open(persistent_config_path, 'w', encoding='utf-8') as f:
@@ -4841,17 +4233,12 @@ class ArgusApp:
                                     import traceback
                                     traceback.print_exc()
                             
-                            # Sanear URLs viejas (localhost / dominios obsoletos)
-                            _correct_url = 'https://asperss.onrender.com'
-                            _bad_prefixes = (
-                                'http://localhost', 'https://localhost',
-                                'http://127.0.0.1', 'https://127.0.0.1',
-                                'https://ssapi-cfni.onrender.com',
-                            )
+                            # Sanear URLs viejas (localhost / Render / dominios obsoletos)
+                            _correct_url = ARGUS_DEFAULT_API_URL
                             _url_dirty = False
                             for _key in ('api_url', 'web_url'):
                                 _val = config.get(_key, '')
-                                if not _val or any(_val.startswith(p) for p in _bad_prefixes):
+                                if not _val or any(_val.startswith(p) for p in _ARGUS_OBSOLETE_API_PREFIXES):
                                     print(f"⚠️ URL obsoleta en config ({_key}: {_val!r}) → corrigiendo a {_correct_url}")
                                     config[_key] = _correct_url
                                     _url_dirty = True
@@ -4884,9 +4271,9 @@ class ArgusApp:
                 "discord_webhook": "",
                 "auth_token": "",
                 "scan_timeout": 300,
-                "api_url": "https://asperss.onrender.com",
+                "api_url": ARGUS_DEFAULT_API_URL,
                 "scan_token": "",
-                "web_url": "https://asperss.onrender.com",
+                "web_url": ARGUS_DEFAULT_API_URL,
                 "enable_db_integration": False,
                 "enable_ai_analysis": False,
                 "enable_discord_report": False,
@@ -4929,7 +4316,7 @@ class ArgusApp:
     def _save_current_profile(self, name=None):
         """Persist current token+api_url as a named profile."""
         token   = self.config.get('scan_token', '')
-        api_url = self.config.get('api_url', 'https://asperss.onrender.com')
+        api_url = self.config.get('api_url', ARGUS_DEFAULT_API_URL)
         if not token:
             return
         if not name:
@@ -4985,7 +4372,7 @@ class ArgusApp:
             chosen = list(profiles.keys())[idx[0]]
             prof = profiles[chosen]
             self.config['scan_token']  = prof.get('token', '')
-            self.config['api_url']     = prof.get('api_url', 'https://asperss.onrender.com')
+            self.config['api_url']     = prof.get('api_url', ARGUS_DEFAULT_API_URL)
             data['active'] = chosen
             self._save_scanner_profiles(data)
             win.destroy()
@@ -5393,13 +4780,98 @@ class ArgusApp:
         )
         self.resources_label.pack(side=tk.RIGHT)
         
+        # Modos Fast / Standard / Paranoid (v1.8)
+        mode_frame = tk.Frame(main_panel, bg="#0a0e27")
+        mode_frame.pack(fill=tk.X, pady=(10, 0), padx=25)
+        tk.Label(
+            mode_frame,
+            text="MODO DE SCAN",
+            font=("Segoe UI", 9, "bold"),
+            bg="#0a0e27",
+            fg="#8b949e",
+        ).pack(anchor=tk.W, padx=20, pady=(0, 6))
+        modes_row = tk.Frame(mode_frame, bg="#0a0e27")
+        modes_row.pack(fill=tk.X, padx=20)
+        self._scan_mode_var = tk.StringVar(
+            value=getattr(self, "scan_mode", None)
+            or (self.config or {}).get("scan_mode")
+            or "standard"
+        )
+        self._mode_eta_label = tk.Label(
+            mode_frame,
+            text="",
+            font=("Segoe UI", 9),
+            bg="#0a0e27",
+            fg="#58a6ff",
+        )
+        self._mode_eta_label.pack(anchor=tk.W, padx=20, pady=(6, 0))
+        self._mode_buttons = {}
+
+        def _select_mode(mode: str):
+            self.set_scan_mode(mode)
+            self._scan_mode_var.set(self.scan_mode)
+            try:
+                from scan_pipeline import eta_for_mode
+                mins = max(1, int(round(eta_for_mode(self.scan_mode) / 60)))
+                labels = {
+                    "fast": f"Fast SS · ETA ~{mins} min (procesos, JARs, Prefetch, remote/VAC, integridad)",
+                    "standard": f"Standard · ETA ~{mins} min (+ persistencia, USN, browser, memory)",
+                    "paranoid": f"Paranoid · ETA ~{mins} min (+ YARA, Sysmon/4688, mouse)",
+                }
+                self._mode_eta_label.config(text=labels.get(self.scan_mode, f"ETA ~{mins} min"))
+            except Exception:
+                self._mode_eta_label.config(text=f"Modo: {self.scan_mode}")
+            for m, btn in self._mode_buttons.items():
+                if m == self.scan_mode:
+                    btn.config(bg="#238636", fg="#ffffff")
+                else:
+                    btn.config(bg="#21262d", fg="#c9d1d9")
+
+        for mid, label in (
+            ("fast", "⚡ Fast SS"),
+            ("standard", "◎ Standard"),
+            ("paranoid", "◆ Paranoid"),
+        ):
+            b = tk.Button(
+                modes_row,
+                text=label,
+                command=lambda m=mid: _select_mode(m),
+                bg="#21262d",
+                fg="#c9d1d9",
+                font=("Segoe UI", 10, "bold"),
+                padx=14,
+                pady=8,
+                relief=tk.FLAT,
+                cursor="hand2",
+                activebackground="#30363d",
+            )
+            b.pack(side=tk.LEFT, padx=(0, 8))
+            self._mode_buttons[mid] = b
+        _select_mode(self._scan_mode_var.get())
+
         # Botones
         button_frame = tk.Frame(main_panel, bg="#0a0e27")
         button_frame.pack(fill=tk.X, pady=20, padx=25)
+
+        pin_row = tk.Frame(button_frame, bg="#0a0e27")
+        pin_row.pack(fill=tk.X, padx=20, pady=(0, 10))
+        tk.Button(
+            pin_row,
+            text="PIN SS (6 dígitos)",
+            command=self._ui_generate_ss_pin,
+            bg="#21262d",
+            fg="#c9d1d9",
+            font=("Segoe UI", 9, "bold"),
+            padx=12,
+            pady=6,
+            relief=tk.FLAT,
+            cursor="hand2",
+            activebackground="#30363d",
+        ).pack(side=tk.LEFT)
         
         self.scan_button = tk.Button(
             button_frame,
-            text="🚀 INICIAR ESCANEO COMPLETO",
+            text="🚀 INICIAR ESCANEO",
             command=self.full_scan_with_discord,
             bg="#238636",
             fg="#ffffff",
@@ -5682,7 +5154,11 @@ class ArgusApp:
             minutes, seconds = divmod(remainder, 60)
             time_str = f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
             fg = ModernUI.COLORS['accent_light'] if UI_STYLE_AVAILABLE else "#46e6ff"
-            self.timer_label.config(text=time_str, fg=fg)
+            try:
+                if getattr(self, 'timer_label', None) is not None:
+                    self.timer_label.config(text=time_str, fg=fg)
+            except Exception:
+                pass
             print(f"🕐 ESCANEO COMPLETADO EN: {time_str}")
     
     def _timer_loop(self):
@@ -6065,6 +5541,106 @@ class ArgusApp:
         except Exception as ex:
             print(f"⚠️ Pre-scan predict falló (no crítico): {ex}")
 
+    def _execute_pipeline_scan(self):
+        """v1.8 — ScanPipeline con modos Fast/Standard/Paranoid + VerdictCard."""
+        import psutil
+        from scan_pipeline import ScanPipeline, normalize_mode, eta_for_mode
+
+        mode = (
+            getattr(self, 'scan_mode', None)
+            or (self.config or {}).get('scan_mode')
+            or os.environ.get('ARGUS_SCAN_MODE')
+            or 'standard'
+        )
+        if is_lite():
+            mode = 'fast'
+        self.scan_mode = normalize_mode(mode)
+        eta = eta_for_mode(self.scan_mode)
+        print("=" * 60)
+        print(f"ARGUS SCANNER v1.8 — PIPELINE mode={self.scan_mode} ETA~{eta}s")
+        print("=" * 60)
+
+        def _prog(label, frac):
+            pct = min(94, int(5 + (frac or 0) * 90))
+            self._update_progress_safe(pct, label, f"Modo {self.scan_mode}")
+
+        try:
+            result = ScanPipeline(self, self.scan_mode, progress_cb=_prog).run()
+            self._last_pipeline_result = result
+        except Exception as e:
+            print(f"[pipeline] error: {e}")
+            raise
+
+        # Contadores + VerdictCard
+        if UI_STYLE_AVAILABLE:
+            counts = {'critical': 0, 'suspicious': 0, 'low': 0, 'clean': 0}
+            for iss in self.issues_found:
+                lvl = (iss.get('alerta') or '').upper()
+                if lvl == 'CRITICAL':
+                    counts['critical'] += 1
+                elif lvl == 'SOSPECHOSO':
+                    counts['suspicious'] += 1
+                elif lvl == 'POCO_SOSPECHOSO':
+                    counts['low'] += 1
+                else:
+                    counts['clean'] += 1
+            counts['total'] = len(self.issues_found)
+            self._last_scan_counts = counts
+            for k, v in counts.items():
+                if k != 'total':
+                    ModernUI.update_counter(k, v)
+            _sv = getattr(self, 'ss_verdict', None) or {}
+            _rs = int(_sv.get('risk_score') or 0)
+            ModernUI.update_risk_meter(_rs, counts.get('critical', 0))
+            try:
+                ModernUI.show_verdict_card(self.root, _sv)
+            except Exception as _vc:
+                print(f"[verdict_card] {_vc}")
+            if _sv.get('verdict') and hasattr(self, '_completion_widgets'):
+                ModernUI.set_top_finding(
+                    self._completion_widgets,
+                    f"VEREDICTO {_sv.get('verdict')} ({_rs}/100)",
+                )
+
+        self._update_progress_safe(
+            95, "Preparando resultados",
+            f"{len(self.issues_found)} hallazgos · {self.scan_mode}",
+        )
+        if hasattr(self, 'scan_start_time'):
+            total_time = time.time() - self.scan_start_time
+            print(f"PIPELINE OK — {len(self.issues_found)} issues en {total_time:.1f}s "
+                  f"(mode={self.scan_mode}, cpu={psutil.cpu_count()})")
+        print("ESCANEO COMPLETADO (pipeline)")
+        self._stop_usb_monitor()
+        self.stop_scan_timer()
+        self.cleanup_argus_temp_artifacts()
+        self._close_console_progress_feedback()
+        self.scanning = False
+        self._restore_window_title()
+        if UI_STYLE_AVAILABLE:
+            ModernUI.set_scanning_active(False)
+            ModernUI.set_status_badge("LISTO", ModernUI.COLORS['green'])
+            try:
+                ModernUI.set_scan_ui_mode(
+                    getattr(self, '_progress_widgets', None),
+                    getattr(self, '_completion_widgets', None),
+                    scanning=False,
+                )
+            except Exception:
+                pass
+            if hasattr(self, '_completion_widgets'):
+                try:
+                    _counts = getattr(self, '_last_scan_counts', None)
+                    self.root.after(0, lambda c=_counts: ModernUI.set_completion_state(
+                        self._completion_widgets,
+                        success=True,
+                        message=f"Escaneo {self.scan_mode} completado",
+                        sub="Veredicto listo · enviado al staff",
+                        counts=c,
+                    ))
+                except Exception:
+                    pass
+
     def execute_full_scan_silent(self):
         """Ejecuta escaneo ULTRA RÁPIDO sin limitaciones de recursos"""
         if self.scanning:
@@ -6131,6 +5707,17 @@ class ArgusApp:
 
         # Iniciar cronómetro
         self.start_scan_timer()
+
+        # v1.8 — ScanPipeline (Fast/Standard/Paranoid). Legacy: ARGUS_LEGACY_SCAN=1
+        _legacy = str(os.environ.get('ARGUS_LEGACY_SCAN', '')).strip().lower() in ('1', 'true', 'yes')
+        if not _legacy:
+            try:
+                self._execute_pipeline_scan()
+                return
+            except Exception as _pipe_err:
+                print(f"[pipeline] fallback a scan legacy: {_pipe_err}")
+                import traceback
+                traceback.print_exc()
 
         try:
             # Configurar para uso MÁXIMO de recursos
@@ -6678,6 +6265,17 @@ class ArgusApp:
             self._set_scan_phase("🎭 Detección de evasión activa...")
             _run_safe(self.scan_evasion_indicators)
 
+            # Pack integridad SS (Ocean/Echo killer: Prefetch wipe, cleaners, eventlog, PS bypass)
+            self._set_scan_phase("🛡️ Integridad SS (anti-bypass)...")
+            try:
+                from ss_integrity import scan_integrity
+                _integ = scan_integrity(self) or []
+                if _integ:
+                    self.issues_found.extend(_integ)
+                    print(f"[INTEGRITY] {len(_integ)} señal(es) anti-forensics/bypass")
+            except Exception as _integ_err:
+                print(f"[INTEGRITY] skip: {_integ_err}")
+
             # Fase 9: Filtrado y clasificación (100%)
             self._update_progress_safe(100, "🔍 Filtrando resultados", "Aplicando filtros ultra estrictos...")
             # Hallazgos forenses (SS checklist) deben entrar al mismo pipeline que el panel/API
@@ -6707,6 +6305,12 @@ class ArgusApp:
 
             # Correlación temporal: prefetch + userassist + browser → CRITICAL confirmado
             self.issues_found = self._apply_temporal_correlation(self.issues_found)
+            self.issues_found = self._apply_forensic_kill_chain(self.issues_found)
+            try:
+                from issue_enrichment import enrich_issues
+                self.issues_found = enrich_issues(self.issues_found, app=self)
+            except Exception as _enr:
+                print(f"[enrich] {_enr}")
             
             # Segunda pasada de análisis sobre archivos sospechosos
             self._update_progress_safe(96, "🔬 Segunda pasada", "Analizando archivos sospechosos en profundidad...")
@@ -6735,24 +6339,36 @@ class ArgusApp:
             # ── Boost multi-cliente (#25) ────────────────────────────────
             # Si hay 2+ ghost clients distintos detectados → todos suben a CRITICAL.
             _ghost_clients_detected = set()
+            # nombres INEQUÍVOCOS (sin palabras comunes: nada de 'ghost'/'rise'/
+            # 'impact'/'future'/'vertex' sueltos — daban FP con "Ghost Recon" etc.)
             _GHOST_CLIENT_NAMES = {
-                'vape', 'vapelite', 'sigma', 'sigma6', 'liquidbounce', 'wurst', 'rise',
-                'flux', 'future', 'astolfo', 'novoline', 'drip', 'entropy', 'whiteout',
-                'exhibition', 'meteor', 'rusherhack', 'aristois', 'tenacity', 'vertex',
-                'inertia', 'salhack', 'jello', 'remix', 'pandora', 'azura', 'kamiblue',
-                'konas', 'weepcraft', 'nyx', 'lucid', 'impact', 'ghostclient',
-                'weaveloader', 'labymod-hacks', 'breezeclient', 'datura',
+                'vape', 'vapelite', 'liquidbounce', 'wurstclient', 'sigmaclient',
+                'sigma5', 'fluxclient', 'futureclient', 'astolfo', 'novoline',
+                'dripclient', 'entropyclient', 'whiteoutclient', 'rusherhack',
+                'aristois', 'salhack', 'jelloclient', 'remixclient', 'pandoraclient',
+                'kamiblue', 'konasclient', 'weepcraft', 'nyxclient', 'lucidclient',
+                'ghostclient', 'weaveloader', 'breezeclient', 'daturamc', 'meteorclient',
+                'riseclient', 'impactclient', 'exhibitionclient', 'slinkyclient',
             }
+            try:
+                from config.hack_signatures import stem_in_filename as _sif2
+            except Exception:
+                _sif2 = lambda s, n: bool(s) and s in (n or '')
             for _iss in self.issues_found:
-                _combined = (_iss.get('nombre', '') + _iss.get('ruta', '') + _iss.get('archivo', '')).lower()
+                # solo hallazgos que ya son sospechosos y tienen evidencia de nombre/hash
+                if _iss.get('alerta') not in ('SOSPECHOSO', 'CRITICAL', 'MUY_SOSPECHOSO'):
+                    continue
+                _pats = ' '.join(str(p) for p in (_iss.get('detected_patterns') or [])).lower()
+                _combined = (_iss.get('nombre', '') + '|' + _iss.get('ruta', '') + '|' + _iss.get('archivo', '')).lower()
                 for _gc in _GHOST_CLIENT_NAMES:
-                    if _gc in _combined:
+                    if _sif2(_gc, _combined) or _gc in _pats:
                         _ghost_clients_detected.add(_gc)
                         break
             if len(_ghost_clients_detected) >= 2:
-                print(f"⚡ MULTI-CLIENTE detectado ({len(_ghost_clients_detected)} clientes): {_ghost_clients_detected} → todos suben a CRITICAL")
+                print(f"⚡ MULTI-CLIENTE detectado ({len(_ghost_clients_detected)} clientes): {_ghost_clients_detected} → sube a CRITICAL lo ya sospechoso")
                 for _iss in self.issues_found:
-                    _iss['alerta'] = 'CRITICAL'
+                    if _iss.get('alerta') in ('SOSPECHOSO', 'MUY_SOSPECHOSO'):
+                        _iss['alerta'] = 'CRITICAL'
                 self.issues_found.append({
                     'nombre': f'Multi-cliente: {len(_ghost_clients_detected)} hack clients distintos detectados',
                     'ruta': '',
@@ -6775,6 +6391,27 @@ class ArgusApp:
             if _ctr:
                 self.issues_found.append(_ctr)
                 print(f"🖱️ Click test: {_ctr['alerta']} — {_ctr['nombre']}")
+
+            # ── Veredicto SS (kill-chain) — supera risk score plano de Echo/Ocean ──
+            self._set_scan_phase("⚖️ Calculando veredicto SS...")
+            try:
+                from ss_verdict import build_verdict, verdict_issue
+                self.ss_verdict = build_verdict(
+                    self.issues_found,
+                    getattr(self, 'mouse_findings', None),
+                )
+                _vi = verdict_issue(self.ss_verdict)
+                self.issues_found.insert(0, _vi)
+                print(
+                    f"[VERDICT] {self.ss_verdict.get('verdict')} "
+                    f"risk={self.ss_verdict.get('risk_score')}/100 — "
+                    f"{self.ss_verdict.get('summary_es', '')}"
+                )
+                for _r in (self.ss_verdict.get('reasons') or [])[:5]:
+                    print(f"   · {_r}")
+            except Exception as _verdict_err:
+                self.ss_verdict = None
+                print(f"[VERDICT] skip: {_verdict_err}")
 
             # ── Flag de scan demasiado rápido (#26) ──────────────────────
             if hasattr(self, 'scan_start_time'):
@@ -6828,16 +6465,25 @@ class ArgusApp:
                         1,
                     )
                     for i in self.issues_found
+                    if (i.get('tipo') or '') != 'ss_verdict'
                 )))
+                _sv = getattr(self, 'ss_verdict', None) or {}
+                if isinstance(_sv.get('risk_score'), int):
+                    _rs = max(_rs, int(_sv['risk_score']))
                 ModernUI.update_risk_meter(_rs, counts.get('critical', 0))
                 try:
                     ModernUI.set_files_scanned(getattr(self, 'total_files_scanned', 0))
                 except Exception:
                     pass
-                _top_crit = next(
-                    (i.get('nombre', '') for i in self.issues_found if i.get('alerta') == 'CRITICAL'),
-                    '',
-                )
+                _top_crit = ''
+                if _sv.get('verdict'):
+                    _top_crit = f"VEREDICTO {_sv.get('verdict')} ({_sv.get('risk_score', _rs)}/100)"
+                if not _top_crit:
+                    _top_crit = next(
+                        (i.get('nombre', '') for i in self.issues_found
+                         if i.get('alerta') == 'CRITICAL' and (i.get('tipo') or '') != 'ss_verdict'),
+                        '',
+                    )
                 if _top_crit and hasattr(self, '_completion_widgets'):
                     ModernUI.set_top_finding(
                         self._completion_widgets,
@@ -7189,6 +6835,7 @@ class ArgusApp:
                 b'weepcraft',
                 b'zeroday',
                 b'nyxclient',
+                b'slinkyclient', b'slinky client', b'slinky.gg',
                 b'killaura', b'kill-aura',
                 b'aimbot', b'aim-bot',
                 b'triggerbot',
@@ -7212,12 +6859,15 @@ class ArgusApp:
                 b'astolfoclient', b'entropyclient', b'liquidbounce', b'wurstclient',
                 b'futureclient', b'fluxclient', b'sigmaclient', b'vapelite',
                 b'pandoraclient', b'azuraclient', b'nyxclient', b'remixclient',
-                b'meteor-client',
+                b'meteor-client', b'slinkyclient',
             }
 
             try:
+                # #7 — leer también .exe/.dll: patrones de strings de cheats dentro
+                # del binario (killaura, dev/liquidbounce, discord webhook, etc.).
                 if file_ext in ('.jar', '.class', '.java', '.txt', '.lua', '.js', '.py', '.log',
-                                '.cfg', '.config', '.properties', '.json', '.yml', '.yaml'):
+                                '.cfg', '.config', '.properties', '.json', '.yml', '.yaml',
+                                '.exe', '.dll'):
                     with open(file_path, 'rb') as f:
                         content = f.read(1024 * 1024)
 
@@ -8145,23 +7795,26 @@ class ArgusApp:
                 'impact', 'impact client', 'impactclient', 'impact.exe',
                 
                 # Otros clientes conocidos
-                'sigma', 'sigma client', 'sigmaclient', 'sigma5.0',
-                'future', 'future client', 'futureclient',
+                'sigma client', 'sigmaclient', 'sigma5.0',
+                'future client', 'futureclient',
                 'astolfo', 'astolfo client', 'astolfoclient',
                 'exhibition', 'exhibition client', 'exhibitionclient',
                 'novoline', 'novoline client', 'novolineclient',
-                'rise', 'rise client', 'riseclient',
-                'moon', 'moon client', 'moonclient',
-                'drip', 'drip client', 'dripclient',
-                'ghost', 'ghost client', 'ghostclient',
-                'phobos', 'komat', 'wasp', 'konas', 'seppuku', 'sloth',
-                'lucid', 'tenacity', 'nyx', 'vanish', 'ploow', 'cloudclient', 'cloud-client',
+                'rise client', 'riseclient',
+                'moon client', 'moonclient',
+                'drip client', 'dripclient',
+                'ghost client', 'ghostclient',
+                'phobos', 'komat', 'konas', 'seppuku',
+                'lucidclient', 'tenacity', 'ploow', 'cloudclient', 'cloud-client',
                 'nextgen', 'tegernako', 'zeroday',
-
-                # Silent-scanner y variantes
-                'silent', 'silent-scanner', 'silentscanner', 'silent client',
-                'silent.exe', 'silent.jar'
+                'silent-scanner', 'silentscanner', 'silent client',
             ]
+            # Palabras comunes en inglés / nombres de juegos: solo si el nombre de
+            # carpeta ES exactamente el término o empieza por "<término> " (no
+            # substring — 'future' NO debe matchear 'concurrent/futures').
+            _AMBIG_EXACT = {'flux', 'vape', 'sigma', 'future', 'rise', 'moon', 'drip',
+                            'ghost', 'wasp', 'sloth', 'nyx', 'vanish', 'lucid', 'silent',
+                            'cloud', 'impact', 'entropy', 'whiteout'}
             
             # Ubicaciones donde buscar
             search_locations = [
@@ -8186,8 +7839,27 @@ class ArgusApp:
                                 continue
                             for dir_name in dirs:
                                 dir_lower = dir_name.lower().strip()
+                                _hit = None
                                 for hack_name in exact_hack_names:
-                                    if hack_name.lower() == dir_lower or hack_name.lower() in dir_lower:
+                                    hn = hack_name.lower()
+                                    if hn == dir_lower or dir_lower.startswith(hn + ' ') or dir_lower.startswith(hn + '-') or dir_lower.startswith(hn + '_'):
+                                        _hit = hack_name; break
+                                if not _hit:
+                                    # Términos ambiguos (sigma/rise/ghost/future…): SOLO en
+                                    # contexto Minecraft/cheat — si no, "Sigma" (carpeta de
+                                    # Sony), "Ghost Recon" (juego) etc. dan falso positivo.
+                                    _mc_ctx = any(m in _root_l for m in (
+                                        '\\.minecraft', '\\mods', '\\downloads', '\\desktop',
+                                        'lunarclient', 'badlion', '\\.weave', 'prismlauncher',
+                                        'multimc', '\\.lunarclient'))
+                                    if _mc_ctx:
+                                        for amb in _AMBIG_EXACT:
+                                            if dir_lower == amb or (
+                                                dir_lower.startswith(amb + ' ')
+                                                and any(k in dir_lower for k in ('client', 'b1', '1.8', 'hack', 'cheat', 'inject'))
+                                            ):
+                                                _hit = amb; break
+                                if _hit:
                                         print(f"🚨 HACK EXACTO ENCONTRADO: {dir_name} en {root}")
                                         self.issues_found.append({
                                             'nombre': dir_name,
@@ -8195,25 +7867,34 @@ class ArgusApp:
                                             'archivo': os.path.join(root, dir_name),
                                             'tipo': 'exact_hack_folder',
                                             'categoria': 'HACKS',
-                                            'alerta': 'CRITICAL'
+                                            'alerta': 'CRITICAL',
+                                            'detected_patterns': [f'exact_folder:{_hit}'],
                                         })
-                                        
-                                        # Escanear contenido de la carpeta
+
+                                        # Solo flaggear archivos hijos que TAMBIÉN parezcan de hack
+                                        try:
+                                            from config.hack_signatures import filename_is_definite_hack as _fdh
+                                        except Exception:
+                                            _fdh = lambda _n: False
                                         try:
                                             folder_path = os.path.join(root, dir_name)
                                             for file in os.listdir(folder_path):
                                                 file_path = os.path.join(folder_path, file)
-                                                if os.path.isfile(file_path):
+                                                _fl = file.lower()
+                                                if os.path.isfile(file_path) and (
+                                                    _fdh(_fl) or _fl.endswith(('.jar', '.exe', '.dll'))
+                                                ):
                                                     self.issues_found.append({
                                                         'nombre': file,
                                                         'ruta': folder_path,
                                                         'archivo': file_path,
                                                         'tipo': 'hack_file',
                                                         'categoria': 'HACKS',
-                                                        'alerta': 'CRITICAL'
+                                                        'alerta': 'CRITICAL' if _fdh(_fl) else 'SOSPECHOSO',
+                                                        'detected_patterns': [f'in_exact_folder:{_hit}'],
                                                     })
-                                                    print(f"🚨 ARCHIVO DE HACK: {file}")
-                                        except:
+                                                    print(f"🚨 ARCHIVO EN CARPETA DE HACK: {file}")
+                                        except Exception:
                                             pass
                     except Exception as e:
                         print(f"Error buscando nombres exactos en {location}: {str(e)}")
@@ -8222,110 +7903,13 @@ class ArgusApp:
             print(f"Error buscando nombres exactos de hacks: {str(e)}")
     
     def secondary_filter(self, issues):
-        """Segundo filtro más inteligente para detectar hacks reales"""
+        """Delegado a fp_filter (v1.8)."""
         try:
-            print("🔍 APLICANDO SEGUNDO FILTRO INTELIGENTE...")
-            
-            # Patrones de hacks reales conocidos
-            real_hack_patterns = [
-                'fluxclient', 'flux 1.8', 'flux1.8', 'flux 1.8.8', 'flux1.8.8',
-                'vape', 'vape v4', 'vapev4', 'vape lite', 'vapelite',
-                'entropy', 'entropy client', 'entropyclient',
-                'whiteout', 'whiteout client', 'whiteoutclient',
-                'liquidbounce', 'liquid bounce', 'liquidbounce client',
-                'wurst', 'wurst client', 'wurstclient',
-                'impact client', 'impactclient',
-                'sigma client', 'sigmaclient',
-                'future client', 'futureclient',
-                'astolfo', 'astolfo client', 'astolfoclient',
-                'exhibition', 'exhibition client', 'exhibitionclient',
-                'novoline', 'novoline client', 'novolineclient',
-                'riseclient', 'rise client',
-                'moonclient', 'moon client',
-                'dripclient', 'drip client',
-                'ghostclient', 'ghost client',
-            ]
-            
-            # Patrones de archivos de hacks (solo extensiones realmente sospechosas fuera de minecraft)
-            hack_file_patterns = ['.jar', '.exe']
-
-            # Ubicaciones donde los hacks suelen estar (excluye appdata porque .minecraft vive ahí)
-            suspicious_locations = [
-                'documents', 'downloads', 'desktop'
-            ]
-            
-            filtered_issues = []
-            
-            for issue in issues:
-                nombre = issue.get('nombre', '').lower()
-                ruta = issue.get('ruta', '').lower()
-                archivo = issue.get('archivo', '').lower()
-                tipo = issue.get('tipo', '')
-
-                # Tipos de alta confianza — nunca eliminar en el segundo filtro
-                if tipo in _NEVER_FILTER_TYPES:
-                    filtered_issues.append(issue)
-                    continue
-                
-                # Verificar si es un hack real
-                is_real_hack = False
-                
-                # 1. Verificar patrones de hacks reales
-                for pattern in real_hack_patterns:
-                    if pattern in nombre or pattern in ruta or pattern in archivo:
-                        is_real_hack = True
-                        break
-                
-                # 2. Verificar si está en ubicación sospechosa con extensión de hack
-                if not is_real_hack:
-                    for location in suspicious_locations:
-                        if location in ruta:
-                            for ext in hack_file_patterns:
-                                if ext in archivo:
-                                    is_real_hack = True
-                                    break
-                            if is_real_hack:
-                                break
-                
-                # 3. Verificar si es archivo de hack en ubicación sospechosa
-                if not is_real_hack and tipo in ['hack_file', 'exact_hack_folder']:
-                    is_real_hack = True
-                
-                # 4. Verificar palabras clave específicas de hacks (NO usar 'mod'/'client' - demasiado genéricas)
-                hack_keywords = ['hack', 'cheat', 'cracked', 'killaura', 'aimbot', 'wallhack', 'triggerbot', 'inject']
-                if not is_real_hack:
-                    for keyword in hack_keywords:
-                        if keyword in nombre or keyword in archivo:
-                            is_real_hack = True
-                            break
-                if not is_real_hack and 'vape' in (ruta + archivo) and 'inject' in (nombre + archivo + ruta):
-                    is_real_hack = True
-
-                if is_real_hack:
-                    # Archivos fuera de instancia (Downloads/Desktop/Documents sin .minecraft)
-                    # → SOSPECHOSO, no CRITICAL. El ensemble gate ya maneja la sancionabilidad.
-                    _in_instance = any(f in ruta for f in ['.minecraft', 'minecraft\\mods', 'lunarclient', 'badlion', 'prismlauncher', 'multimc'])
-                    _out_of_inst_location = any(loc in ruta for loc in ['downloads', 'desktop', 'documents', '\\temp\\', '/temp/'])
-                    if _out_of_inst_location and not _in_instance:
-                        issue['alerta'] = 'SOSPECHOSO'
-                        issue['confidence'] = min(issue.get('confidence', 0.7), 0.65)
-                    else:
-                        issue['alerta'] = 'CRITICAL'
-                    if not issue.get('categoria'):
-                        issue['categoria'] = 'HACKS'
-                    filtered_issues.append(issue)
-                    print(f"🚨 HACK REAL DETECTADO: {nombre} en {ruta}")
-                else:
-                    # Mantener si es sospechoso o ya tiene categoría asignada
-                    if issue.get('alerta') in ['SOSPECHOSO', 'POCO_SOSPECHOSO'] or issue.get('categoria'):
-                        filtered_issues.append(issue)
-            
-            print(f"🔍 SEGUNDO FILTRO APLICADO: {len(filtered_issues)} elementos clasificados")
-            return filtered_issues
-            
+            from fp_filter import secondary_filter as _sf
+            return _sf(self, issues)
         except Exception as e:
-            print(f"Error aplicando segundo filtro: {e}")
-            return issues
+            print(f"[fp_filter] secondary fallback: {e}")
+            return issues or []
     
     def secondary_scan_parallel(self):
         """Segundo scan en paralelo para doble verificación"""
@@ -8600,7 +8184,10 @@ class ArgusApp:
 
                             # Connections
                             try:
-                                conns = proc.connections()
+                                try:
+                                    conns = proc.net_connections(kind='inet')
+                                except (AttributeError, TypeError):
+                                    conns = proc.connections()
                                 conn_strs = [f"{c.raddr.ip}:{c.raddr.port}" for c in conns
                                              if c.status == 'ESTABLISHED' and c.raddr]
                             except Exception:
@@ -8705,7 +8292,7 @@ class ArgusApp:
         try:
             if requests is None:
                 return
-            api_url = self.config.get('api_url', 'https://asperss.onrender.com').rstrip('/')
+            api_url = self.config.get('api_url', ARGUS_DEFAULT_API_URL).rstrip('/')
             resp = requests.get(f"{api_url}/api/scanner/version", timeout=8)
             if resp.status_code != 200:
                 return
@@ -8764,21 +8351,16 @@ class ArgusApp:
             self.root.after(0, lambda: messagebox.showerror("Error de actualización", str(e)))
 
     def _resolve_api_url(self):
-        """URL de API con failsafe (sin localhost / endpoints viejos)."""
-        _bad = (
-            'http://localhost', 'https://localhost',
-            'http://127.0.0.1', 'https://127.0.0.1',
-            'https://ssapi-cfni.onrender.com',
-        )
+        """URL de API con failsafe (sin localhost / Render / endpoints viejos)."""
         if not hasattr(self, 'config') or not self.config:
             self.config = self.load_config()
         api_url = (self.config.get('api_url') or '').strip()
-        if not api_url or any(api_url.startswith(p) for p in _bad):
-            api_url = 'https://asperss.onrender.com'
+        if not api_url or any(api_url.startswith(p) for p in _ARGUS_OBSOLETE_API_PREFIXES):
+            api_url = ARGUS_DEFAULT_API_URL
             self.config['api_url'] = api_url
         web_url = (self.config.get('web_url') or '').strip()
-        if not web_url or any(web_url.startswith(p) for p in _bad):
-            self.config['web_url'] = 'https://asperss.onrender.com'
+        if not web_url or any(web_url.startswith(p) for p in _ARGUS_OBSOLETE_API_PREFIXES):
+            self.config['web_url'] = ARGUS_DEFAULT_API_URL
         return api_url
 
     def _validate_token_http(self, token, timeout=8, max_retries=2):
@@ -8857,9 +8439,9 @@ class ArgusApp:
                     existing_config = json.load(f)
                 existing_config['scan_token'] = token
                 existing_config['api_url'] = self.config.get(
-                    'api_url', existing_config.get('api_url', 'https://asperss.onrender.com'))
+                    'api_url', existing_config.get('api_url', ARGUS_DEFAULT_API_URL))
                 existing_config['web_url'] = self.config.get(
-                    'web_url', existing_config.get('web_url', 'https://asperss.onrender.com'))
+                    'web_url', existing_config.get('web_url', ARGUS_DEFAULT_API_URL))
                 self.config = existing_config
             else:
                 self.config['scan_token'] = token
@@ -8870,8 +8452,58 @@ class ArgusApp:
         except Exception as save_error:
             print(f"⚠️ No se pudo guardar token en archivo: {save_error}")
 
+    def generate_ss_pin(self, staff_hint: str = ""):
+        """v1.8 — Genera PIN de 6 dígitos ligado al scan_token actual (para decirle al jugador)."""
+        try:
+            from ss_pin import generate_pin
+            token = (self.config or {}).get('scan_token') or (self.config or {}).get('license') or ''
+            if not token:
+                raise ValueError("No hay scan_token/license para ligar el PIN")
+            info = generate_pin(token, staff_hint=staff_hint)
+            print(f"[ss_pin] PIN={info['pin']} expira en {info['ttl_sec']}s")
+            return info
+        except Exception as e:
+            print(f"[ss_pin] error: {e}")
+            return None
+
+    def _ui_generate_ss_pin(self):
+        """Botón staff: muestra PIN de sesión para dictar al jugador."""
+        from tkinter import messagebox
+        info = self.generate_ss_pin()
+        if not info:
+            messagebox.showwarning(
+                "PIN SS",
+                "No hay token/licencia para ligar el PIN.\nAutenticá primero o usá el token embebido.",
+            )
+            return
+        mins = max(1, int(info.get("ttl_sec", 7200) // 60))
+        messagebox.showinfo(
+            "PIN de sesión SS",
+            f"Decile al jugador este PIN:\n\n{info['pin']}\n\n"
+            f"Válido ~{mins} min en esta PC (liga el scan_token).",
+        )
+
+    def set_scan_mode(self, mode: str):
+        """v1.8 — fast | standard | paranoid"""
+        try:
+            from scan_pipeline import normalize_mode
+            self.scan_mode = normalize_mode(mode)
+        except Exception:
+            self.scan_mode = (mode or 'standard').lower()
+        if isinstance(self.config, dict):
+            self.config['scan_mode'] = self.scan_mode
+        print(f"[scan_mode] {self.scan_mode}")
+        return self.scan_mode
+
     def check_authentication(self):
         """Sistema de autenticación usando Discord para generar tokens"""
+        # ARGUS_LOCAL_SCAN=1 — escaneo local de prueba (run_local_scan.py): sin
+        # token, sin API, sin subida. Solo para correr el scan en la propia PC.
+        if os.environ.get('ARGUS_LOCAL_SCAN') == '1':
+            self.scan_token = 'LOCAL-TEST'
+            self._local_scan_only = True
+            print("🧪 ARGUS_LOCAL_SCAN=1 — autenticación omitida (scan local, no sube nada)")
+            return True
         try:
             import tkinter as tk
             from tkinter import messagebox, simpledialog
@@ -8879,7 +8511,7 @@ class ArgusApp:
             import time
             import requests
             import json
-            
+
             # PRIMERO: Verificar si ya hay un token válido en el config
             scan_token = self.config.get('scan_token', '')
             if scan_token:
@@ -8893,6 +8525,12 @@ class ArgusApp:
                     print("⚠️ Token en config no es válido, solicitando nuevo token")
                 else:
                     print(f"⚠️ Error validando token existente: {data.get('error', '?')}")
+
+            # v1.8 — PIN de sesión SS (6 dígitos) generado por staff
+            try:
+                from ss_pin import validate_pin as _validate_ss_pin
+            except Exception:
+                _validate_ss_pin = None
             
             # Si no hay token válido, mostrar autenticación integrada en ventana principal
             auth_result = [False]
@@ -9001,7 +8639,7 @@ class ArgusApp:
             tk.Label(tk_center, text="CÓDIGO DE ACCESO",
                      font=('Segoe UI', 12, 'bold'),
                      bg=bg, fg=txt_p).pack(pady=(0, 4))
-            tk.Label(tk_center, text="Token de 6 caracteres \u00b7 proporcionado por staff",
+            tk.Label(tk_center, text="Token o PIN SS de 6 dígitos · proporcionado por staff",
                      font=('Segoe UI', 9), bg=bg, fg=txt_m).pack(pady=(0, 8))
             _lic_blob = (self.config.get('scan_token') or self.config.get('license') or '')
             if str(_lic_blob).startswith('argus_lic_'):
@@ -9042,6 +8680,15 @@ class ArgusApp:
                 if not token:
                     status_lbl.config(text="Ingresa un código.", fg=C.get('amber', '#FCD34D'))
                     return
+                # PIN SS local (6 dígitos) → resuelve a scan_token
+                if _validate_ss_pin and len(token) == 6 and token.isdigit():
+                    resolved = _validate_ss_pin(token)
+                    if resolved:
+                        token = resolved
+                        status_lbl.config(text="PIN válido — aplicando token…", fg=accent_l)
+                    else:
+                        status_lbl.config(text="PIN inválido o expirado", fg=C.get('red', '#f87171'))
+                        return
                 _auth_busy[0] = True
                 auth_btn.config(state='disabled')
                 token_entry.config(state='disabled')
@@ -9057,6 +8704,15 @@ class ArgusApp:
                             self.root.after(400, auth_frame.destroy)
                         self.root.after(0, _ok)
                     else:
+                        # Offline: si el PIN ya resolvió a token embebido/local, aceptar
+                        if token and (self.config.get('license') or '').startswith('argus_lic_'):
+                            def _offline_ok():
+                                self.config['scan_token'] = token
+                                auth_result[0] = True
+                                status_lbl.config(text="\u2713 Acceso offline (PIN/token)", fg=green)
+                                self.root.after(400, auth_frame.destroy)
+                            self.root.after(0, _offline_ok)
+                            return
                         err = (data.get('error') if ok else data.get('error')) or 'inválido'
                         def _fail():
                             _auth_busy[0] = False
@@ -9191,11 +8847,19 @@ class ArgusApp:
             print("🔍 ESCANEANDO CACHÉ DNS (ipconfig/displaydns)...")
             import subprocess
             HACK_DOMAINS = [
-                'vape.gg', 'liquidbounce', 'sigma.rip', 'riseclient',
+                'vape.gg', 'vape.lol', 'liquidbounce', 'sigma.rip', 'riseclient',
                 'meteorclient', 'wurst-client', 'lbest.pw',
                 'rusherhack', 'astolfoclient', 'fluxclient', 'futureclient',
                 'inertia.rip', 'salhack', 'azuraclient', 'vertexclient',
-                'daturamc', 'jelloclient', 'weavemcr',
+                'daturamc', 'jelloclient', 'weavemcr', 'weave.rip',
+                'drip-client', 'drazclient', 'thunderhack', 'doomsday',
+                'fdpclient', 'nightx', 'ravenb', 'exhibition',
+                'whiteout', 'konasclient', 'tenacity',
+                'myau.client', 'myau.xyz', 'aristois.net', 'wurstclient.net',
+                'unknowncheats.me', 'mpgh.net', 'gamesense.pub',
+                'impactclient.net', 'sigma-jello.com', 'raid0.net',
+                'venomhack', 'ghostclient.club', 'cheathappens',
+                'slothpixel', 'novoline.wtf', 'entropy.gg',
             ]
             result = subprocess.run(['ipconfig', '/displaydns'], capture_output=True, text=True,
                                     creationflags=0x08000000, timeout=10)
@@ -9205,14 +8869,18 @@ class ArgusApp:
                 if matched:
                     print(f"⚠️ DNS CACHE CON DOMINIO DE HACK: {matched}")
                     self.issues_found.append({
-                        'nombre': f'DNS cache con dominio de hack: {", ".join(matched)}',
+                        'nombre': f'DNS cache con dominio de hack: {", ".join(matched[:6])}',
                         'ruta': 'DNS Cache',
-                        'archivo': ', '.join(matched),
+                        'archivo': ', '.join(matched[:8]),
                         'tipo': 'dns_cache_hack',
                         'categoria': 'DNS_CACHE',
                         'alerta': 'SOSPECHOSO',
-                        'confidence': 80,
-                        'detected_patterns': [f'dns:{d}' for d in matched],
+                        'confidence': min(0.9, 0.65 + 0.05 * len(matched)),
+                        'detected_patterns': [f'dns:{d}' for d in matched[:12]],
+                        'explicacion': (
+                            'El cache DNS resolvió dominios de distribución de ghost clients. '
+                            'Indica visita/descarga reciente aunque el archivo se haya borrado.'
+                        ),
                     })
         except Exception as e:
             print(f"Error escaneando caché DNS: {str(e)}")
@@ -9280,52 +8948,7 @@ class ArgusApp:
     #   - scan_file_activity_log    → historial completo (deleted/created/modified/executed)
     #                                 incluye USN Journal cuando el scanner corre con admin
 
-    def scan_prefetch_jna(self):
-        """Escanea prefetch para JNA"""
-        try:
-            print("🔍 ESCANEANDO PREFETCH PARA JNA...")
-            import os
-            
-            prefetch_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Prefetch')
-            
-            if os.path.exists(prefetch_path):
-                for file in os.listdir(prefetch_path):
-                    if 'jna' in file.lower():
-                        print(f"⚠️ JNA ENCONTRADO EN PREFETCH: {file}")
-                        self.issues_found.append({
-                            'nombre': f"JNA en prefetch: {file}",
-                            'ruta': prefetch_path,
-                            'archivo': os.path.join(prefetch_path, file),
-                            'tipo': 'prefetch_jna',
-                            'categoria': 'JNA',
-                            'alerta': 'SOSPECHOSO'
-                        })
-        except Exception as e:
-            print(f"Error escaneando prefetch JNA: {str(e)}")
     
-    def scan_temp_jna(self):
-        """Escanea temp para JNA"""
-        try:
-            print("🔍 ESCANEANDO TEMP PARA JNA...")
-            import os
-            
-            temp_path = os.environ.get('TEMP', 'C:\\Windows\\Temp')
-            
-            if os.path.exists(temp_path):
-                for root, dirs, files in os.walk(temp_path):
-                    for file in files:
-                        if 'jna' in file.lower():
-                            print(f"⚠️ JNA ENCONTRADO EN TEMP: {file}")
-                            self.issues_found.append({
-                                'nombre': f"JNA en temp: {file}",
-                                'ruta': root,
-                                'archivo': os.path.join(root, file),
-                                'tipo': 'temp_jna',
-                                'categoria': 'JNA',
-                                'alerta': 'SOSPECHOSO'
-                            })
-        except Exception as e:
-            print(f"Error escaneando temp JNA: {str(e)}")
     
     def scan_registry_suspicious(self):
         """Escanea registro de Windows para entradas sospechosas de hacks."""
@@ -9774,12 +9397,20 @@ class ArgusApp:
         suspicious_names = {
             'winmm.dll', 'version.dll', 'dwmapi.dll', 'dbghelp.dll', 'msvcrt.dll',
             'cryptbase.dll', 'uxtheme.dll', 'comdlg32.dll', 'ws2_32.dll',
+            'msimg32.dll', 'profapi.dll', 'textshaping.dll', 'napinsp.dll',
         }
+        appdata = os.environ.get('APPDATA', '')
+        local = os.environ.get('LOCALAPPDATA', '')
+        home = os.environ.get('USERPROFILE', '')
         roots = [
             r'C:\Program Files',
             r'C:\Program Files (x86)',
-            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Programs'),
-            os.environ.get('APPDATA', ''),
+            os.path.join(local, 'Programs'),
+            appdata,
+            os.path.join(appdata, '.minecraft'),
+            os.path.join(home, 'Desktop'),
+            os.path.join(home, 'Downloads'),
+            os.path.join(home, '.lunarclient'),
         ]
         for root in roots:
             if not os.path.isdir(root):
@@ -9867,13 +9498,8 @@ class ArgusApp:
             print(f"⚠️ Prefetch parser: {suspicious_runs} entradas sospechosas")
 
     def scan_amcache_unique_sha1(self):
-        """#P3-amcache-unique — Marca hashes SHA1 fuera de baseline local."""
-        print("🔍 Escaneando Amcache por SHA1 únicos...")
-        GOOD_SHA1_PREFIXES = {
-            '0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999',
-            'aaaa', 'bbbb', 'cccc', 'dddd', 'eeee', 'ffff', '1a2b', '2b3c', '3c4d', '4d5e',
-            '5e6f', '6f70', '7a8b', '8b9c', '9cad', 'abcd', 'bcde', 'cdef', 'def0', 'f012',
-        }
+        """#P3-amcache-unique — Amcache InventoryApplicationFile con stem de hack + SHA1."""
+        print("🔍 Escaneando Amcache por entradas con stem de hack...")
         hive_src = r'C:\Windows\AppCompat\Programs\Amcache.hve'
         if not os.path.isfile(hive_src):
             return
@@ -9882,6 +9508,7 @@ class ArgusApp:
         reg_key = f'HKLM\\ArgusAmcacheSha1_{pid}'
         try:
             import shutil
+            from forensic_match import match_hack_stem
             shutil.copy2(hive_src, tmp_hive)
             subprocess.run(['reg', 'load', reg_key, tmp_hive], capture_output=True, timeout=8, creationflags=0x08000000)
             import winreg as _wr
@@ -9891,34 +9518,49 @@ class ArgusApp:
             except Exception:
                 return
             total = _wr.QueryInfoKey(root)[0]
+            found = 0
             for i in range(min(total, 2500)):
+                if found >= 12:
+                    break
                 try:
                     sub = _wr.EnumKey(root, i)
                     sk = _wr.OpenKey(root, sub, 0, _wr.KEY_READ | _wr.KEY_WOW64_64KEY)
                     sha1 = ''
-                    for vn in ('FileId', 'Sha1', 'SHA1'):
+                    name = sub
+                    for vn in ('FileId', 'Sha1', 'SHA1', 'Name', 'LowerCaseLongPath'):
                         try:
-                            sha1, _ = _wr.QueryValueEx(sk, vn)
-                            if sha1:
-                                break
+                            val, _ = _wr.QueryValueEx(sk, vn)
+                            if not val:
+                                continue
+                            if vn in ('FileId', 'Sha1', 'SHA1') and not sha1:
+                                sha1 = str(val)
+                            if vn in ('Name', 'LowerCaseLongPath'):
+                                name = str(val)
                         except Exception:
                             continue
                     _wr.CloseKey(sk)
+                    stem = match_hack_stem(sub) or match_hack_stem(name)
+                    if not stem:
+                        continue
                     sha1s = str(sha1).lower().replace('0x', '').strip()
-                    if len(sha1s) < 8:
-                        continue
-                    if sha1s[:4] in GOOD_SHA1_PREFIXES:
-                        continue
                     self.issues_found.append({
-                        'tipo': 'amcache_unique_sha1',
-                        'nombre': 'Amcache entry con SHA1 fuera de baseline',
+                        'tipo': 'amcache_hack_execution',
+                        'nombre': f'Amcache ejecución hack ({stem}): {os.path.basename(name)[:80]}',
                         'ruta': f'HKLM\\{base}\\{sub}'[:255],
-                        'archivo': sha1s[:64],
+                        'archivo': (sha1s[:64] if sha1s else name)[:255],
                         'categoria': 'FORENSE',
-                        'alerta': 'SOSPECHOSO',
-                        'confidence': 0.63,
-                        'detected_patterns': [f'amcache_sha1:{sha1s[:12]}'],
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.88,
+                        'detected_patterns': [f'amcache:{stem}'] + (
+                            [f'amcache_sha1:{sha1s[:12]}'] if sha1s else []
+                        ),
+                        'file_hash': sha1s[:64] if sha1s else '',
+                        'explicacion': (
+                            f'Amcache registra ejecución de "{name}" (stem={stem}). '
+                            'Evidencia forense aunque el binario ya no esté en disco.'
+                        ),
                     })
+                    found += 1
                 except Exception:
                     continue
             _wr.CloseKey(root)
@@ -9935,26 +9577,78 @@ class ArgusApp:
                 pass
     
     def scan_processes(self):
-        """Escanea procesos activos"""
+        """Escanea procesos activos (psutil + tasklist fallback UAC/protected)."""
+        seen = set()
         try:
             import psutil
             for proc in psutil.process_iter(['pid', 'name', 'exe']):
                 try:
                     proc_info = proc.info
-                    if proc_info['name'] and self.is_suspicious_process(proc_info['name']):
+                    name = proc_info.get('name') or ''
+                    if name and self.is_suspicious_process(name):
+                        key = name.lower()
+                        if key in seen:
+                            continue
+                        seen.add(key)
                         self.issues_found.append({
-                            'nombre': proc_info['name'],
+                            'nombre': name,
                             'ruta': proc_info.get('exe', 'N/A'),
-                            'archivo': proc_info['name'],
+                            'archivo': name,
                             'tipo': 'process',
                             'pid': proc_info['pid'],
                             'categoria': 'PROCESSES',
                             'alerta': 'CRITICAL'
                         })
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
+                    # P1 #125 — procesos con UAC virtualization / protected:
+                    # intentar nombre mínimo sin exe
+                    try:
+                        name = proc.name()
+                        if name and self.is_suspicious_process(name):
+                            key = name.lower()
+                            if key not in seen:
+                                seen.add(key)
+                                self.issues_found.append({
+                                    'nombre': name,
+                                    'ruta': 'UAC/protected',
+                                    'archivo': name,
+                                    'tipo': 'process',
+                                    'pid': proc.pid,
+                                    'categoria': 'PROCESSES',
+                                    'alerta': 'CRITICAL',
+                                    'detected_patterns': ['uac_virt_or_protected'],
+                                })
+                    except Exception:
+                        continue
         except Exception as e:
             print(f"Error escaneando procesos: {e}")
+        # Fallback tasklist (ve nombres aunque psutil falle por sesión)
+        try:
+            r = subprocess.run(
+                ['tasklist', '/FO', 'CSV', '/NH'],
+                capture_output=True, text=True, timeout=8, creationflags=0x08000000,
+            )
+            for line in (r.stdout or '').splitlines():
+                parts = line.strip().strip('"').split('","')
+                if not parts:
+                    continue
+                name = parts[0].strip('"')
+                if name and self.is_suspicious_process(name):
+                    key = name.lower()
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    self.issues_found.append({
+                        'nombre': name,
+                        'ruta': 'tasklist',
+                        'archivo': name,
+                        'tipo': 'process',
+                        'categoria': 'PROCESSES',
+                        'alerta': 'CRITICAL',
+                        'detected_patterns': ['tasklist_fallback'],
+                    })
+        except Exception:
+            pass
     
     def is_suspicious_process(self, process_name):
         """Verifica si un proceso es sospechoso - MEJORADO CON MÁS PATRONES"""
@@ -10291,6 +9985,9 @@ class ArgusApp:
                               '.lnk', '.iso', '.img', '.msi', '.reg'}
         CUTOFF_48H  = time.time() - 604800  # 7 días
         EPOCH_DIFF  = 116444736000000000
+        known_hashes_lc = {
+            str(h).lower() for h in (getattr(self, 'known_hack_hashes', None) or set()) if h
+        }
 
         import struct
         drives = []
@@ -10301,12 +9998,21 @@ class ArgusApp:
 
         for recycle_root in drives:
             try:
-                for user_sid in os.listdir(recycle_root):
+                try:
+                    sid_entries = os.listdir(recycle_root)
+                except PermissionError:
+                    print(f"⚠️ Recycle sin permiso de listado: {recycle_root}")
+                    continue
+                for user_sid in sid_entries:
                     sid_path = os.path.join(recycle_root, user_sid)
                     if not os.path.isdir(sid_path):
                         continue
                     try:
-                        for fname in os.listdir(sid_path):
+                        try:
+                            i_names = os.listdir(sid_path)
+                        except PermissionError:
+                            continue
+                        for fname in i_names:
                             if not fname.startswith('$I'):
                                 continue
                             i_path = os.path.join(sid_path, fname)
@@ -10325,7 +10031,7 @@ class ArgusApp:
                                     continue
 
                                 try:
-                                    orig_path = data[28:].decode('utf-16-le').rstrip('\x00').split('\x00')[0]
+                                    orig_path = data[28:].decode('utf-16-le', errors='replace').rstrip('\x00').split('\x00')[0]
                                 except Exception:
                                     orig_path = ''
                                 if not orig_path:
@@ -10422,23 +10128,50 @@ class ArgusApp:
                                     continue
 
                                 # Verificar si $R (el archivo real) sigue en la papelera
+                                # Bug P0 #121: $R sin permisos no debe tumbar el scan
                                 r_name  = fname.replace('$I', '$R', 1)
                                 r_path  = os.path.join(sid_path, r_name)
+                                still_in_bin = False
+                                r_inaccessible = False
                                 try:
                                     still_in_bin = os.path.exists(r_path)
+                                    if still_in_bin:
+                                        try:
+                                            with open(r_path, 'rb') as _rf:
+                                                _rf.read(1)
+                                        except PermissionError:
+                                            r_inaccessible = True
+                                        except OSError:
+                                            r_inaccessible = True
                                 except (PermissionError, OSError):
                                     still_in_bin = False
+                                    r_inaccessible = True
 
                                 # Filtro #2 lite: si el binario sigue presente
                                 # y está firmado por un publisher confiable
                                 # (Microsoft, NVIDIA, Discord, Mojang, etc.),
                                 # descartar la alerta. Evita FPs por nombres
                                 # desafortunados de software legítimo borrado.
-                                if still_in_bin and ext in {'.exe', '.dll', '.msi'}:
+                                if still_in_bin and not r_inaccessible and ext in {'.exe', '.dll', '.msi'}:
                                     try:
                                         if is_trusted_publisher(r_path):
                                             continue
                                     except (PermissionError, OSError):
+                                        pass
+
+                                # Hash offline: $R presente + SHA256 en catálogo → match fuerte
+                                # aunque el nombre esté ofuscado.
+                                hash_hit = False
+                                file_sha = ''
+                                if still_in_bin and not r_inaccessible and known_hashes_lc and ext in {'.exe', '.jar', '.dll'}:
+                                    try:
+                                        file_sha = self._cached_sha256(r_path) or ''
+                                        if file_sha and file_sha.lower() in known_hashes_lc:
+                                            hash_hit = True
+                                            is_hack = True
+                                    except (PermissionError, OSError):
+                                        r_inaccessible = True
+                                    except Exception:
                                         pass
 
                                 deleted_dt = datetime.fromtimestamp(unix_ts)
@@ -10452,7 +10185,7 @@ class ArgusApp:
 
                                 # Archivos borrados permanentemente (ya no están en la papelera) son más sospechosos
                                 is_archive = ext in ('.zip', '.rar', '.7z', '.tar')
-                                if is_hack:
+                                if hash_hit or is_hack:
                                     base_alerta = 'CRITICAL'
                                 elif not still_in_bin and is_exec and not is_archive:
                                     base_alerta = 'CRITICAL'   # ejecutable borrado permanentemente
@@ -10466,25 +10199,46 @@ class ArgusApp:
                                                 else f'{file_size_bytes // 1024} KB')
 
                                 perm = ' [BORRADO PERMANENTEMENTE]' if not still_in_bin else ''
-                                print(f"🗑️ ELIMINADO ({tiempo_rel}){perm}: {base} {size_str}")
+                                tag_hash = ' [HASH CATÁLOGO]' if hash_hit else ''
+                                print(f"🗑️ ELIMINADO ({tiempo_rel}){perm}{tag_hash}: {base} {size_str}")
                                 self.issues_found.append({
-                                    'tipo':     'deleted_recent',
-                                    'nombre':   f'Borrado{perm} {tiempo_rel}: {base}{(" " + size_str) if size_str else ""}',
+                                    'tipo':     'recycle_hash_match' if hash_hit else 'deleted_recent',
+                                    'nombre':   (
+                                        f'Papelera hash-match{perm} {tiempo_rel}: {base}'
+                                        if hash_hit else
+                                        f'Borrado{perm} {tiempo_rel}: {base}{(" " + size_str) if size_str else ""}'
+                                    ),
                                     'ruta':     orig_path[:255],
                                     'archivo':  base,
                                     'categoria':'DELETED_FILES',
                                     'alerta':   base_alerta,
-                                    'confidence': (0.88 if is_hack else 0.40 if is_archive else 0.55) + (0.10 if not still_in_bin else 0),
-                                    'detected_patterns': [f'deleted:{ext}',
-                                                          'permanently_deleted' if not still_in_bin else 'in_recycle_bin']
-                                                         + [t for t in hack_terms if t in base_l][:3],
+                                    'confidence': (
+                                        0.96 if hash_hit else
+                                        (0.88 if is_hack else 0.40 if is_archive else 0.55)
+                                        + (0.10 if not still_in_bin else 0)
+                                    ),
+                                    'file_hash': file_sha[:64] if file_sha else '',
+                                    'sha256': file_sha[:64] if file_sha else '',
+                                    'detected_patterns': (
+                                        ['recycle_hash_catalog', f'deleted:{ext}']
+                                        if hash_hit else
+                                        [f'deleted:{ext}',
+                                         'permanently_deleted' if not still_in_bin else 'in_recycle_bin']
+                                        + [t for t in hack_terms if t in base_l][:3]
+                                    ),
                                     'extra': {
                                         'deleted_at':    deleted_str,
                                         'deleted_ts':    unix_ts,
                                         'file_size':     file_size_bytes,
                                         'still_in_bin':  still_in_bin,
                                         'drive':         recycle_root[:2],
+                                        'hash_match':    hash_hit,
                                     },
+                                    'explicacion': (
+                                        'El archivo en Papelera coincide por SHA256 con el catálogo '
+                                        'offline de hacks conocidos (aunque el nombre esté ofuscado).'
+                                        if hash_hit else ''
+                                    ),
                                 })
                             except Exception:
                                 continue
@@ -11325,16 +11079,41 @@ class ArgusApp:
                 diff_mins  = int((now_dt - deleted_dt).total_seconds() / 60)
                 tiempo_rel = f'hace {diff_mins}min' if diff_mins < 60 else f'hace {diff_mins//60}h'
                 sample     = [os.path.basename(p) for _, p in cluster[:5]]
+                hack_hits = []
+                try:
+                    from forensic_match import match_hack_stem
+                    for _, p in cluster[:40]:
+                        st = match_hack_stem(os.path.basename(p) + ' ' + p)
+                        if st and st not in hack_hits:
+                            hack_hits.append(st)
+                except Exception:
+                    pass
                 print(f"🚨 BORRADO MASIVO ({tiempo_rel}): {len(cluster)} archivos en 2min")
                 self.issues_found.append({
-                    'tipo':     'mass_delete_event',
-                    'nombre':   f'Borrado masivo {tiempo_rel}: {len(cluster)} archivos en <2 min',
+                    'tipo':     'deleted_mass_event',
+                    'nombre':   (
+                        f'Borrado masivo con hacks {tiempo_rel}: {len(cluster)} archivos'
+                        if hack_hits else
+                        f'Borrado masivo {tiempo_rel}: {len(cluster)} archivos en <2 min'
+                    ),
                     'ruta':     '',
                     'archivo':  ', '.join(sample),
                     'categoria':'DELETED_FILES',
-                    'alerta':   'CRITICAL' if diff_mins < 30 else 'SOSPECHOSO',
-                    'confidence': 0.82 if diff_mins < 30 else 0.60,
-                    'detected_patterns': ['mass_delete', f'count:{len(cluster)}', f'window:2min'],
+                    'alerta':   'CRITICAL' if (diff_mins < 30 or hack_hits) else 'SOSPECHOSO',
+                    'confidence': (
+                        0.92 if hack_hits else
+                        (0.82 if diff_mins < 30 else 0.60)
+                    ),
+                    'detected_patterns': (
+                        ['mass_delete', f'count:{len(cluster)}', f'window:2min']
+                        + [f'mass_stem:{h}' for h in hack_hits[:6]]
+                    ),
+                    'extra': {'hack_stems': hack_hits[:8], 'count': len(cluster)},
+                    'explicacion': (
+                        'Ráfaga de borrados en Papelera'
+                        + (f' incluyendo stems {", ".join(hack_hits[:4])}' if hack_hits else '')
+                        + '. Limpieza pre-SS típica.'
+                    ),
                 })
                 # Saltar hasta el final del cluster para no re-detectar
                 i += len(cluster)
@@ -11346,16 +11125,21 @@ class ArgusApp:
         archivos sospechosos que fueron borrados del sistema en vivo."""
         print("🔍 Buscando artifacts en Shadow Copies (VSS)...")
         import subprocess
-        HACK_KW = ['hack', 'cheat', 'vape', 'sigma', 'rise', 'meteor', 'liquidbounce',
-                   'future', 'flux', 'ghost', 'inject', 'aimbot', 'killaura']
+        try:
+            from forensic_match import match_hack_stem
+        except Exception:
+            def match_hack_stem(text, extra_strong=()):  # type: ignore
+                return None
         try:
             result = subprocess.run(
                 ['vssadmin', 'list', 'shadows', '/for=C:'],
-                capture_output=True, timeout=10
+                capture_output=True, timeout=10, creationflags=0x08000000,
             )
-            output = (result.stdout or b'').decode('utf-8', errors='replace')
+            raw = result.stdout or b''
+            # P0 #122: nunca asumir UTF-8 estricto en salida de vssadmin
+            output = raw.decode('utf-8', errors='replace')
             if not output.strip():
-                output = (result.stdout or b'').decode('cp1252', errors='replace')
+                output = raw.decode('cp1252', errors='replace')
             if 'Shadow Copy Volume' not in output and 'Volumen de copia' not in output:
                 print("ℹ️ Sin Shadow Copies activos en C:")
                 return
@@ -11367,41 +11151,61 @@ class ArgusApp:
                 if 'Shadow Copy Volume' in line or ('\\\\?\\' in line and 'Volume{' in line):
                     parts = line.split(':')
                     if len(parts) >= 2:
-                        raw = parts[-1].strip()
-                        shadow_paths.append(raw)
+                        raw_p = parts[-1].strip()
+                        shadow_paths.append(raw_p)
 
             for shadow_root in shadow_paths[:3]:  # máx 3 snapshots
                 mc_shadow = os.path.join(shadow_root, 'Users')
-                if not os.path.exists(mc_shadow):
+                try:
+                    if not os.path.exists(mc_shadow):
+                        continue
+                except (OSError, UnicodeError):
                     continue
                 try:
                     for user_dir in os.listdir(mc_shadow):
-                        mc_path = os.path.join(mc_shadow, user_dir, 'AppData',
+                        try:
+                            user_dir_s = str(user_dir)
+                        except Exception:
+                            continue
+                        mc_path = os.path.join(mc_shadow, user_dir_s, 'AppData',
                                                'Roaming', '.minecraft', 'mods')
                         if not os.path.isdir(mc_path):
                             continue
                         live_path = os.path.join(
-                            'C:\\Users', user_dir, 'AppData', 'Roaming', '.minecraft', 'mods')
-                        for fname in os.listdir(mc_path):
-                            shadow_file = os.path.join(mc_path, fname)
-                            live_file   = os.path.join(live_path, fname)
-                            fname_l     = fname.lower()
-                            is_hack     = any(k in fname_l for k in HACK_KW)
-                            deleted_live = not os.path.exists(live_file)
+                            'C:\\Users', user_dir_s, 'AppData', 'Roaming', '.minecraft', 'mods')
+                        try:
+                            mod_names = os.listdir(mc_path)
+                        except (PermissionError, OSError):
+                            continue
+                        for fname in mod_names:
+                            try:
+                                fname_s = str(fname)
+                            except Exception:
+                                continue
+                            shadow_file = os.path.join(mc_path, fname_s)
+                            live_file   = os.path.join(live_path, fname_s)
+                            fname_l     = fname_s.lower()
+                            stem = match_hack_stem(fname_l)
+                            is_hack     = bool(stem)
+                            try:
+                                deleted_live = not os.path.exists(live_file)
+                            except OSError:
+                                deleted_live = True
                             if is_hack or (deleted_live and fname_l.endswith('.jar')):
                                 alerta = 'CRITICAL' if is_hack else 'SOSPECHOSO'
-                                print(f"🚨 SHADOW COPY: {fname} ({'borrado del sistema en vivo' if deleted_live else 'hack en snapshot'})")
+                                safe_name = fname_s.encode('ascii', 'replace').decode('ascii')
+                                print(f"🚨 SHADOW COPY: {safe_name} ({'borrado del sistema en vivo' if deleted_live else 'hack en snapshot'})")
                                 self.issues_found.append({
                                     'tipo':     'shadow_copy_artifact',
-                                    'nombre':   f'Archivo en Shadow Copy{"(borrado en vivo)" if deleted_live else ""}: {fname}',
-                                    'ruta':     shadow_file,
-                                    'archivo':  fname,
+                                    'nombre':   f'Archivo en Shadow Copy{"(borrado en vivo)" if deleted_live else ""}: {fname_s[:120]}',
+                                    'ruta':     shadow_file[:255],
+                                    'archivo':  fname_s[:255],
                                     'categoria':'DELETED_FILES',
                                     'alerta':   alerta,
                                     'confidence': 0.85 if is_hack else 0.65,
                                     'detected_patterns': ['vss_artifact']
                                                          + (['deleted_from_live'] if deleted_live else [])
-                                                         + ([k for k in HACK_KW if k in fname_l]),
+                                                         + ([f'vss:{stem}'] if stem else []),
                                 })
                 except Exception:
                     continue
@@ -11496,6 +11300,26 @@ class ArgusApp:
                     except Exception:
                         pass
 
+                ts = ''
+                sample_files = []
+                try:
+                    if os.path.isfile(config_path):
+                        from datetime import datetime as _dt
+                        ts = _dt.fromtimestamp(os.path.getmtime(config_path)).strftime(
+                            '%Y-%m-%dT%H:%M:%S'
+                        )
+                    elif os.path.isdir(config_path):
+                        from datetime import datetime as _dt
+                        ts = _dt.fromtimestamp(os.path.getmtime(config_path)).strftime(
+                            '%Y-%m-%dT%H:%M:%S'
+                        )
+                        try:
+                            for n in sorted(os.listdir(config_path))[:5]:
+                                sample_files.append(n)
+                        except OSError:
+                            pass
+                except Exception:
+                    pass
                 self.issues_found.append({
                     'nombre': f'Config de ghost client detectada: {client_name}',
                     'ruta': config_path,
@@ -11504,11 +11328,14 @@ class ArgusApp:
                     'categoria': 'GHOST_CLIENT',
                     'alerta': 'CRITICAL',
                     'confidence': confidence,
+                    'timestamp': ts,
                     'detected_patterns': extra_patterns,
                     'explicacion': (
                         f'Se encontró la carpeta/archivo de configuración de {client_name} en {config_path}. '
                         f'Esta ruta solo existe si el jugador ha ejecutado {client_name} en este PC.'
+                        + (f' Archivos: {", ".join(sample_files)}.' if sample_files else '')
                     ),
+                    'extra': {'sample_files': sample_files, 'mtime': ts},
                 })
         except Exception as e:
             print(f"Error en scan_ghost_client_configs: {e}")
@@ -11579,6 +11406,18 @@ class ArgusApp:
                             continue
                         fpath = os.path.join(root, fname)
                         fpath_lower = fpath.lower()
+                        # Excluir data de apps/editores/IDEs: sus configs y logs
+                        # mencionan "hack/cheat/inject/bypass" sin ser cheats
+                        # (sesiones de Claude/Copilot, historiales de VS Code, etc.).
+                        if any(x in fpath_lower for x in (
+                            '\\claude\\', '\\claude code\\', 'claude-code-sessions',
+                            '\\code\\user\\', '\\.vscode\\', '\\cursor\\', '\\.cursor\\',
+                            '\\github copilot\\', '\\jetbrains\\', '\\.idea\\',
+                            '\\microsoft\\vscode', '\\programs\\python', '\\node_modules\\',
+                            '\\.git\\', 'chrome\\user data', '\\logs\\', 'crash-reports',
+                            '\\discord\\', '\\obs-studio\\', '\\spotify\\',
+                        )):
+                            continue
                         # Excluir archivos de idioma de Minecraft (xx_xx.json)
                         import re as _re2
                         if _re2.match(r'^[a-z]{2}_[a-z]{2}\.json$', fname.lower()):
@@ -11612,8 +11451,10 @@ class ArgusApp:
                                     'archivo': fname,
                                     'tipo': 'config_tfidf_match',
                                     'categoria': 'GHOST_CLIENT',
-                                    'alerta': 'CRITICAL' if score >= 10.0 else 'SOSPECHOSO',
-                                    'confidence': min(0.92, 0.50 + score / 25),
+                                    # un config con palabras de cheat NO es CRITICAL solo —
+                                    # es indicio; el staff lo cruza en el SS.
+                                    'alerta': 'SOSPECHOSO' if score >= 12.0 else 'POCO_SOSPECHOSO',
+                                    'confidence': min(0.70, 0.35 + score / 30),
                                     'detected_patterns': [f'field:{f}' for f in matched[:8]],
                                     'explicacion': (
                                         f'El archivo {fname} contiene {len(matched)} campos '
@@ -11627,8 +11468,9 @@ class ArgusApp:
             print(f"Error en scan_config_tfidf: {e}")
 
     def scan_jdwp_port(self):
-        """Detecta puerto de debug JDWP activo en procesos Java (permite inyección en runtime)."""
+        """Detecta puerto de debug JDWP activo en procesos Java (cmdline + LISTEN)."""
         print("🔍 Escaneando JDWP en procesos Java...")
+        seen_pids = set()
         try:
             for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                 try:
@@ -11636,53 +11478,129 @@ class ArgusApp:
                     if 'java' not in name:
                         continue
                     cmdline = ' '.join(proc.info.get('cmdline') or [])
-                    if 'jdwp' in cmdline.lower() or 'agentlib:jdwp' in cmdline.lower():
-                        print(f"🚨 JDWP PORT ACTIVO en PID {proc.pid}")
-                        self.issues_found.append({
-                            'nombre': f'Puerto debug JDWP activo en Java (PID {proc.pid}) — permite inyección de bytecode',
-                            'ruta': cmdline[:255],
-                            'archivo': proc.info.get('name', 'javaw.exe'),
-                            'tipo': 'jdwp_debug_port',
-                            'categoria': 'JAVA_INJECTION',
-                            'alerta': 'CRITICAL',
-                            'confidence': 0.95,
-                            'detected_patterns': ['jdwp_active'],
-                        })
+                    cmdline_l = cmdline.lower()
+                    jdwp_cmd = 'jdwp' in cmdline_l or 'agentlib:jdwp' in cmdline_l
+                    # Puerto declarado en address=HOST:PORT
+                    import re as _re_jdwp
+                    declared = {
+                        int(m.group(1))
+                        for m in _re_jdwp.finditer(r'address=(?:\d+\.\d+\.\d+\.\d+:)?(\d+)', cmdline_l)
+                        if 1 <= int(m.group(1)) <= 65535
+                    }
+                    listen_ports = []
+                    try:
+                        try:
+                            _conns = proc.net_connections(kind='inet')
+                        except (AttributeError, TypeError):
+                            _conns = proc.connections(kind='inet')
+                        for c in _conns or []:
+                            if c.status != psutil.CONN_LISTEN or not c.laddr:
+                                continue
+                            port = int(getattr(c.laddr, 'port', 0) or 0)
+                            if port == 5005 or port in declared:
+                                listen_ports.append(port)
+                                jdwp_cmd = True
+                    except (psutil.AccessDenied, psutil.NoSuchProcess):
+                        pass
+                    if declared and not listen_ports:
+                        listen_ports.extend(sorted(declared))
+                    if not jdwp_cmd and not listen_ports:
+                        continue
+                    if proc.pid in seen_pids:
+                        continue
+                    seen_pids.add(proc.pid)
+                    ports_s = ','.join(str(p) for p in sorted(set(listen_ports))) or '?'
+                    print(f"🚨 JDWP PORT ACTIVO en PID {proc.pid} ports={ports_s}")
+                    self.issues_found.append({
+                        'nombre': (
+                            f'Puerto debug JDWP activo en Java (PID {proc.pid}'
+                            f'{", :" + ports_s if ports_s != "?" else ""}) — inyección bytecode'
+                        ),
+                        'ruta': cmdline[:255],
+                        'archivo': proc.info.get('name', 'javaw.exe'),
+                        'tipo': 'jdwp_debug_port',
+                        'categoria': 'JAVA_INJECTION',
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.96 if listen_ports else 0.94,
+                        'detected_patterns': ['jdwp_active'] + (
+                            [f'listen:{p}' for p in sorted(set(listen_ports))]
+                        ),
+                        'explicacion': (
+                            'JDWP permite adjuntar un debugger e inyectar bytecode en runtime. '
+                            'Nadie legítimo juega Minecraft con esto activo.'
+                        ),
+                        'extra': {'pid': proc.pid, 'listen_ports': sorted(set(listen_ports))},
+                    })
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
         except Exception as e:
             print(f"Error en scan_jdwp_port: {e}")
 
     def scan_vpn_adapters(self):
-        """Detecta adaptadores VPN activos durante el scan (posible intento de evasión)."""
+        """Detecta adaptadores VPN/TUN/TAP activos durante el scan."""
         print("🔍 Escaneando adaptadores VPN...")
         VPN_KEYWORDS = [
             'vpn', 'mullvad', 'nordvpn', 'expressvpn', 'protonvpn', 'surfshark',
             'private internet', 'ipvanish', 'cyberghost', 'windscribe', 'tunnelbear',
             'wireguard', 'openvpn', 'tap-windows', 'tap0901', 'psiphon',
             'hotspot shield', 'hide.me', 'pia vpn', 'privatevpn',
+            'wintun', 'tun', 'tap', 'zerotier', 'hamachi', 'radmin vpn',
+            'cloudflare warp', 'warp', 'tailscale',
         ]
+        seen = set()
         try:
-            for iface_name, stat in psutil.net_if_stats().items():
+            stats = psutil.net_if_stats()
+            addrs = {}
+            try:
+                addrs = psutil.net_if_addrs() or {}
+            except Exception:
+                pass
+            # Pseudo-interfaces built-in de Windows — NUNCA son VPN (siempre están).
+            _WIN_PSEUDO = ('teredo', 'isatap', '6to4', 'pseudo-interface',
+                           'kernel debug', 'wan miniport', 'loopback',
+                           'bluetooth', 'wi-fi direct', 'microsoft wi-fi')
+            for iface_name, stat in stats.items():
                 if not stat.isup:
                     continue
-                if any(kw in iface_name.lower() for kw in VPN_KEYWORDS):
-                    print(f"ℹ️ VPN ACTIVA: {iface_name}")
-                    self.issues_found.append({
-                        'nombre': f'VPN activa durante el scan: {iface_name}',
-                        'ruta': 'Adaptadores de red del sistema',
-                        'archivo': iface_name,
-                        'tipo': 'vpn_active',
-                        'categoria': 'VPN',
-                        'alerta': 'POCO_SOSPECHOSO',
-                        'confidence': 0.30,
-                        'detected_patterns': ['vpn_active_during_scan'],
-                    })
+                low = iface_name.lower()
+                if any(p in low for p in _WIN_PSEUDO):
+                    continue
+                hit = any(kw in low for kw in VPN_KEYWORDS)
+                # Heurística TUN/TAP: solo palabra completa (no "teredo tunneling").
+                if not hit and (' tun ' in f' {low} ' or low.endswith(' tun')
+                                or 'tap-windows' in low or low.startswith('wg')):
+                    hit = True
+                if not hit:
+                    continue
+                if low in seen:
+                    continue
+                seen.add(low)
+                print(f"ℹ️ VPN ACTIVA: {iface_name}")
+                self.issues_found.append({
+                    'nombre': f'VPN activa durante el scan: {iface_name}',
+                    'ruta': 'Adaptadores de red del sistema',
+                    'archivo': iface_name,
+                    'tipo': 'vpn_active',
+                    'categoria': 'VPN',
+                    'alerta': 'POCO_SOSPECHOSO',
+                    'confidence': 0.35,
+                    'detected_patterns': ['vpn_active_during_scan', f'iface:{iface_name[:40]}'],
+                    'explicacion': (
+                        'VPN/TUN/TAP up durante el SS. No prueba cheat por sí sola; '
+                        'staff la cruza con IP/sesión.'
+                    ),
+                    'extra': {
+                        'iface': iface_name,
+                        'addrs': [
+                            getattr(a, 'address', '') for a in (addrs.get(iface_name) or [])[:4]
+                        ],
+                    },
+                })
         except Exception as e:
             print(f"Error en scan_vpn_adapters: {e}")
 
     def scan_hosts_file(self):
-        """Detecta modificaciones en el hosts de Windows (redirección de dominios de Minecraft)."""
+        """Detecta hosts modificado: Mojang/AC redirect o sinkhole de anticheat."""
         print("🔍 Escaneando archivo hosts...")
         hosts_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'),
                                   'System32', 'drivers', 'etc', 'hosts')
@@ -11692,6 +11610,19 @@ class ArgusApp:
             'session.minecraft.net', 'authserver.mojang.com', 'account.mojang.com',
             'api.mojang.com', 'mojang.com', 'minecraft.net', 'multiplayer.minecraft',
             'hypixel.net', 'mineplex.com', 'cubecraft.net',
+            'sessionserver.mojang.com', 'textures.minecraft.net',
+        ]
+        # Dominios de AC / telemetría que a veces sinkholean cheaters
+        AC_DOMAINS = [
+            'anticheat', 'vulcan', 'matrix', 'spartan', 'nocheat', 'grim.ac',
+            'aspers', 'argus', 'sentry.io', 'lunarclientprod.com',
+            'badlion.net', 'minemen.club', 'mineman', 'intave', 'karhu',
+            'verus', 'ncp.', 'aac.', 'horizon.gg',
+        ]
+        HACK_DISTRO = [
+            'vape.gg', 'unknowncheats', 'mpgh.net', 'cheatbreaker',
+            'liquidbounce.net', 'wurstclient.net', 'meteorclient.com',
+            'aristois.net', 'impactclient.net', 'sigma.sale',
         ]
         try:
             with open(hosts_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -11701,10 +11632,14 @@ class ArgusApp:
                 stripped = line.strip()
                 if not stripped or stripped.startswith('#'):
                     continue
-                if stripped in ('127.0.0.1 localhost', '::1 localhost', '127.0.0.1 localhost.localdomain'):
+                if stripped.lower() in (
+                    '127.0.0.1 localhost', '::1 localhost',
+                    '127.0.0.1 localhost.localdomain',
+                ):
                     continue
                 custom.append(stripped)
-                if any(d in stripped.lower() for d in MINECRAFT_DOMAINS):
+                low = stripped.lower()
+                if any(d in low for d in MINECRAFT_DOMAINS):
                     print(f"🚨 HOSTS REDIRIGE DOMINIO DE MINECRAFT: {stripped}")
                     self.issues_found.append({
                         'nombre': f'Hosts redirige dominio de Minecraft/Mojang: {stripped[:120]}',
@@ -11715,19 +11650,67 @@ class ArgusApp:
                         'alerta': 'CRITICAL',
                         'confidence': 0.92,
                         'detected_patterns': ['hosts_mojang_redirect'],
+                        'explicacion': (
+                            'Entrada hosts que redirige auth/session Mojang o servidores. '
+                            'Clásico bypass/session spoof.'
+                        ),
                     })
-            if custom:
-                print(f"⚠️ HOSTS FILE CON {len(custom)} ENTRADA(S) NO ESTÁNDAR")
-                self.issues_found.append({
-                    'nombre': f'Hosts file modificado: {len(custom)} entrada(s) no estándar',
-                    'ruta': hosts_path,
-                    'archivo': '; '.join(custom[:5])[:255],
-                    'tipo': 'hosts_file_custom',
-                    'categoria': 'EVASION',
-                    'alerta': 'SOSPECHOSO',
-                    'confidence': 0.55,
-                    'detected_patterns': ['hosts_custom_entries'],
-                })
+                elif any(d in low for d in AC_DOMAINS) and (
+                    low.startswith('127.') or low.startswith('0.0.0.0') or low.startswith('::1')
+                ):
+                    print(f"⚠️ HOSTS SINKHOLE AC: {stripped}")
+                    self.issues_found.append({
+                        'nombre': f'Hosts sinkhole anticheat/telemetría: {stripped[:120]}',
+                        'ruta': hosts_path,
+                        'archivo': 'hosts',
+                        'tipo': 'hosts_minecraft_redirect',
+                        'categoria': 'EVASION',
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.88,
+                        'detected_patterns': ['hosts_ac_sinkhole'],
+                        'explicacion': 'Hosts apunta AC/telemetría a localhost — evasión típica.',
+                    })
+                elif any(d in low for d in HACK_DISTRO):
+                    print(f"⚠️ HOSTS MENCIONA DISTRO HACK: {stripped}")
+                    self.issues_found.append({
+                        'nombre': f'Hosts referencia sitio de cheats: {stripped[:120]}',
+                        'ruta': hosts_path,
+                        'archivo': 'hosts',
+                        'tipo': 'hosts_hack_distro',
+                        'categoria': 'EVASION',
+                        'alerta': 'SOSPECHOSO',
+                        'confidence': 0.72,
+                        'detected_patterns': ['hosts_hack_site'],
+                        'explicacion': (
+                            'Entrada hosts con dominio de distribución de cheats. '
+                            'Puede ser redirect o residual de setup.'
+                        ),
+                    })
+            # Solo reportar "custom genérico" si NO hubo hits MC/AC/hack
+            # (adblock hosts es ruido habitual).
+            typed = {i.get('tipo') for i in self.issues_found
+                     if i.get('tipo', '').startswith('hosts_')}
+            if custom and not typed & {
+                'hosts_minecraft_redirect', 'hosts_hack_distro',
+            }:
+                # adblock / telemetry blocklists → informativo
+                print(f"ℹ️ HOSTS con {len(custom)} entrada(s) custom (sin sinkhole MC/AC)")
+                if len(custom) >= 40:
+                    self.issues_found.append({
+                        'nombre': f'Hosts file muy modificado: {len(custom)} entrada(s)',
+                        'ruta': hosts_path,
+                        'archivo': '; '.join(custom[:5])[:255],
+                        'tipo': 'hosts_file_custom',
+                        'categoria': 'EVASION',
+                        'alerta': 'POCO_SOSPECHOSO',
+                        'confidence': 0.35,
+                        'detected_patterns': ['hosts_custom_entries'],
+                        'extra': {'entries_sample': custom[:8], 'count': len(custom)},
+                        'explicacion': (
+                            'Hosts con muchas entradas custom (típico adblock). '
+                            'Sin redirect Mojang/AC no es evidencia de cheat.'
+                        ),
+                    })
         except Exception as e:
             print(f"Error en scan_hosts_file: {e}")
 
@@ -11806,28 +11789,52 @@ class ArgusApp:
                 except (FileNotFoundError, PermissionError):
                     pass
 
+            try:
+                from forensic_match import match_hack_stem, iso_from_bam_ts
+            except Exception:
+                def match_hack_stem(text, extra_strong=()):  # type: ignore
+                    return next((t for t in hack_terms if len(t) >= 5 and t in (text or '').lower()), None)
+
+                def iso_from_bam_ts(ts_str):  # type: ignore
+                    s = (ts_str or '').strip()
+                    return s.replace(' ', 'T') if s and not s.lower().startswith('desconoc') else ''
+
             suspicious = []
             for item in executed:
                 name_lower = item['name'].lower()
                 # Ignorar apps del sistema Windows
                 if any(sys_app in name_lower for sys_app in _UA_SYSTEM_WHITELIST):
                     continue
-                for term in hack_terms:
-                    if term in name_lower:
-                        suspicious.append(item)
-                        self.issues_found.append({
-                            'tipo': 'userassist_suspicious',
-                            'nombre': f'Ejecutado sospechoso (UserAssist): {os.path.basename(item["name"])}',
-                            'ruta': item['name'][:255],
-                            'archivo': item['name'][:255],
-                            'categoria': 'EXECUTED_FILES',
-                            'alerta': 'CRITICAL',
-                            'confidence': min(0.95, 0.75 + min(item.get('run_count', 0), 20) * 0.01),
-                            'detected_patterns': [term],
-                            'extra': {'last_run': item['last_run'], 'run_count': item.get('run_count', 0)},
-                        })
-                        print(f"🚨 USERASSIST SOSPECHOSO: {item['name'][:80]} @ {item['last_run']} (runs={item.get('run_count', 0)})")
-                        break
+                term = match_hack_stem(name_lower) or match_hack_stem(
+                    os.path.basename(name_lower)
+                )
+                if not term:
+                    continue
+                suspicious.append(item)
+                _lr = item['last_run']
+                _ts = iso_from_bam_ts(_lr)
+                self.issues_found.append({
+                    'tipo': 'userassist_suspicious',
+                    'nombre': f'Ejecutado sospechoso (UserAssist): {os.path.basename(item["name"])}',
+                    'ruta': item['name'][:255],
+                    'archivo': item['name'][:255],
+                    'categoria': 'EXECUTED_FILES',
+                    'alerta': 'CRITICAL',
+                    'confidence': min(0.95, 0.75 + min(item.get('run_count', 0), 20) * 0.01),
+                    'timestamp': _ts,
+                    'last_executed': _ts,
+                    'detected_patterns': [f'userassist:{term}'],
+                    'explicacion': (
+                        f'UserAssist registra ejecución de {os.path.basename(item["name"])} '
+                        f'(última: {_lr}, runs={item.get("run_count", 0)}). Stem: {term}.'
+                    ),
+                    'extra': {
+                        'last_run': item['last_run'],
+                        'run_count': item.get('run_count', 0),
+                        'stem': term,
+                    },
+                })
+                print(f"🚨 USERASSIST SOSPECHOSO: {item['name'][:80]} @ {item['last_run']} (runs={item.get('run_count', 0)})")
 
             if executed:
                 summary = ' | '.join([f"{os.path.basename(e['name'])} @ {e['last_run']}"
@@ -11865,20 +11872,24 @@ class ArgusApp:
                             continue
                         cmd = data.rstrip('\x01').strip()
                         cmd_lower = cmd.lower()
-                        for term in hack_terms:
-                            if term in cmd_lower:
-                                self.issues_found.append({
-                                    'tipo': 'run_mru_suspicious',
-                                    'nombre': f'Win+R sospechoso: {cmd[:80]}',
-                                    'ruta': key_path,
-                                    'archivo': cmd[:255],
-                                    'categoria': 'CMD_HISTORY',
-                                    'alerta': 'CRITICAL',
-                                    'confidence': 80,
-                                    'detected_patterns': [term],
-                                })
-                                print(f"🚨 RUN MRU: {cmd[:80]}")
-                                break
+                        stem = None
+                        try:
+                            from forensic_match import match_hack_stem
+                            stem = match_hack_stem(cmd_lower)
+                        except Exception:
+                            stem = next((t for t in hack_terms if t in cmd_lower), None)
+                        if stem:
+                            self.issues_found.append({
+                                'tipo': 'run_mru_suspicious',
+                                'nombre': f'Win+R sospechoso: {cmd[:80]}',
+                                'ruta': key_path,
+                                'archivo': cmd[:255],
+                                'categoria': 'CMD_HISTORY',
+                                'alerta': 'CRITICAL',
+                                'confidence': 0.80,
+                                'detected_patterns': [f'run_mru:{stem}'],
+                            })
+                            print(f"🚨 RUN MRU: {cmd[:80]}")
                     except OSError:
                         break
         except (FileNotFoundError, PermissionError):
@@ -11915,20 +11926,24 @@ class ArgusApp:
                         # F31: skip known launcher/safe paths
                         if any(sf in path_lower for sf in _typed_path_safe):
                             continue
-                        for term in hack_terms:
-                            if term in path_lower:
-                                self.issues_found.append({
-                                    'tipo': 'typed_path_suspicious',
-                                    'nombre': f'Ruta sospechosa en Explorer: {data[:80]}',
-                                    'ruta': key_path,
-                                    'archivo': data[:255],
-                                    'categoria': 'CMD_HISTORY',
-                                    'alerta': 'CRITICAL',
-                                    'confidence': 75,
-                                    'detected_patterns': [term],
-                                })
-                                print(f"🚨 TYPED PATH: {data[:80]}")
-                                break
+                        stem = None
+                        try:
+                            from forensic_match import match_hack_stem
+                            stem = match_hack_stem(path_lower)
+                        except Exception:
+                            stem = next((t for t in hack_terms if t in path_lower), None)
+                        if stem:
+                            self.issues_found.append({
+                                'tipo': 'typed_path_suspicious',
+                                'nombre': f'Ruta sospechosa en Explorer: {data[:80]}',
+                                'ruta': key_path,
+                                'archivo': data[:255],
+                                'categoria': 'CMD_HISTORY',
+                                'alerta': 'CRITICAL',
+                                'confidence': 0.75,
+                                'detected_patterns': [f'typed:{stem}'],
+                            })
+                            print(f"🚨 TYPED PATH: {data[:80]}")
                     except OSError:
                         break
         except (FileNotFoundError, PermissionError):
@@ -11961,19 +11976,37 @@ class ArgusApp:
                                     break
                     except OSError:
                         break
-            if devices:
-                summary = ' | '.join(devices[:20])
-                self.issues_found.append({
-                    'tipo': 'usb_history',
-                    'nombre': f'USB: {len(devices)} dispositivo(s) conectado(s) históricamente',
-                    'ruta': key_path,
-                    'archivo': summary[:400],
-                    'categoria': 'HARDWARE',
-                    'alerta': 'NORMAL',
-                    'confidence': 0,
-                    'detected_patterns': devices[:20],
-                })
-                print(f"✅ USBSTOR: {len(devices)} dispositivos en historial")
+            if not devices:
+                return
+            # Solo reportar si algún USB tiene stem de hack (pendrive de cheats).
+            hack_usbs = []
+            try:
+                from forensic_match import match_hack_stem
+                for d in devices:
+                    st = match_hack_stem(d)
+                    if st:
+                        hack_usbs.append((d, st))
+            except Exception:
+                hack_usbs = []
+            if hack_usbs:
+                for d, st in hack_usbs[:8]:
+                    self.issues_found.append({
+                        'tipo': 'usb_hack_device',
+                        'nombre': f'USB con stem de hack: {d[:80]}',
+                        'ruta': key_path,
+                        'archivo': d[:120],
+                        'categoria': 'HARDWARE',
+                        'alerta': 'SOSPECHOSO',
+                        'confidence': 0.62,
+                        'detected_patterns': [f'usb_stem:{st}'],
+                        'explicacion': (
+                            f'Dispositivo USBSTOR "{d}" coincide con stem "{st}". '
+                            'Puede ser pendrive usado para traer cheats.'
+                        ),
+                    })
+                print(f"⚠️ USBSTOR: {len(hack_usbs)} dispositivo(s) con stem de hack")
+            else:
+                print(f"✓ USBSTOR: {len(devices)} dispositivos (sin stems de hack)")
         except (FileNotFoundError, PermissionError):
             pass
         except Exception as e:
@@ -12320,8 +12353,23 @@ class ArgusApp:
                             'alerta':   'SOSPECHOSO',
                             'confidence': 0.72,
                             'detected_patterns': ['java_from_shell', f'parent_{par_name}'],
+                            'explicacion': (
+                                f'Java lanzado desde {par_name} en vez de un launcher MC. '
+                                f'Cmdline: {cmdline[:120]}'
+                            ),
+                            'extra': {'parent_name': par_name, 'pid': proc.pid},
                         })
                         print(f"[java_parent] {pname} (PID {proc.pid}) lanzado desde {par_name}")
+                    elif any(m in par_name for m in (
+                        'steam', 'epic', 'minecraft', 'prism', 'lunar', 'badlion',
+                    )):
+                        # Parent legítimo — anotar para demote FP en filtro
+                        try:
+                            if not hasattr(self, '_legit_java_parents'):
+                                self._legit_java_parents = set()
+                            self._legit_java_parents.add(par_name)
+                        except Exception:
+                            pass
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
         except ImportError:
@@ -12588,17 +12636,16 @@ class ArgusApp:
                 print(f"Error en scan_installed_programs ({path}): {e}")
 
     def scan_bam_registry(self):
-        """Lee BAM/DAM para detectar ejecutables con timestamps precisos."""
+        """Lee BAM/DAM para detectar ejecutables con timestamps precisos (boundary match)."""
         print("🔍 Escaneando BAM/DAM registry...")
         import struct
-        hack_terms = [
-            'vape', 'vapelite', 'entropy', 'entropyclient',
-            'wurst', 'wurstclient', 'liquidbounce',
-            'killaura', 'aimbot', 'cheatengine',
-            'xray', 'triggerbot', 'dllinjector', 'bspoof',
-            'phobos', 'astolfo', 'novoline',
-            'ghostclient', 'silentclient', 'fluxclient',
-        ]
+        try:
+            from forensic_match import match_hack_stem, iso_from_bam_ts
+        except Exception:
+            def match_hack_stem(text, extra_strong=()):  # type: ignore
+                return None
+            def iso_from_bam_ts(ts_str):  # type: ignore
+                return (ts_str or "").replace(" ", "T")
         EPOCH_DIFF = 116444736000000000
 
         def parse_bam_ts(data):
@@ -12642,22 +12689,27 @@ class ArgusApp:
                                                 exe_name = name.split('\\')[-1]
                                                 all_entries.append({'name': name, 'exe': exe_name, 'ts': ts})
                                                 scanned_any = True
-                                                name_lower = name.lower()
-                                                for term in hack_terms:
-                                                    if term in name_lower:
-                                                        self.issues_found.append({
-                                                            'tipo': 'bam_suspicious',
-                                                            'nombre': f'{source_name}: ejecutable sospechoso detectado — {exe_name}',
-                                                            'ruta': name[:255],
-                                                            'archivo': name[:255],
-                                                            'categoria': 'EXECUTED_FILES',
-                                                            'alerta': 'CRITICAL',
-                                                            'confidence': 85,
-                                                            'detected_patterns': [term, source_name.lower()],
-                                                            'extra': {'last_run': ts, 'fuente': source_name},
-                                                        })
-                                                        print(f"🚨 {source_name} SOSPECHOSO: {exe_name} @ {ts}")
-                                                        break
+                                                term = match_hack_stem(name) or match_hack_stem(exe_name)
+                                                if term:
+                                                    ts_iso = iso_from_bam_ts(ts)
+                                                    self.issues_found.append({
+                                                        'tipo': 'bam_suspicious',
+                                                        'nombre': f'{source_name}: ejecutable sospechoso detectado — {exe_name}',
+                                                        'ruta': name[:255],
+                                                        'archivo': name[:255],
+                                                        'categoria': 'EXECUTED_FILES',
+                                                        'alerta': 'CRITICAL',
+                                                        'confidence': 0.85,
+                                                        'timestamp': ts_iso,
+                                                        'last_executed': ts_iso,
+                                                        'detected_patterns': [f'bam:{term}', source_name.lower()],
+                                                        'explicacion': (
+                                                            f'{source_name} registra ejecución de {exe_name} '
+                                                            f'(última: {ts}). Stem: {term}.'
+                                                        ),
+                                                        'extra': {'last_run': ts, 'fuente': source_name, 'stem': term},
+                                                    })
+                                                    print(f"🚨 {source_name} SOSPECHOSO: {exe_name} @ {ts}")
                                             except OSError:
                                                 break
                                         if all_entries:
@@ -12681,14 +12733,21 @@ class ArgusApp:
             print("SRUM no disponible en este host")
             return
         try:
+            from forensic_match import match_hack_stem
+        except Exception:
+            def match_hack_stem(text, extra_strong=()):  # type: ignore
+                return None
+        try:
             mtime = os.path.getmtime(srum_db)
             age_days = int((time.time() - mtime) / 86400)
             with open(srum_db, 'rb') as f:
-                blob = f.read(4 * 1024 * 1024)
+                blob = f.read(6 * 1024 * 1024)
             text = blob.decode('utf-16-le', errors='ignore').lower()
             if len(text) < 20:
                 text = blob.decode('latin-1', errors='ignore').lower()
-            term = next((t for t in _DEFINITE_HACK_NAMES if t in text), None)
+            term = match_hack_stem(text) or next(
+                (t for t in _DEFINITE_HACK_NAMES if len(t) >= 4 and t in text), None
+            )
             if term:
                 self.issues_found.append({
                     'tipo': 'srum_suspicious_activity',
@@ -12697,9 +12756,13 @@ class ArgusApp:
                     'archivo': 'SRUDB.dat',
                     'categoria': 'FORENSE',
                     'alerta': 'SOSPECHOSO',
-                    'confidence': 0.58,
+                    'confidence': 0.62,
                     'detected_patterns': [f'srum:{term}', f'age_days:{age_days}'],
                     'extra': {'db_age_days': age_days},
+                    'explicacion': (
+                        f'SRUM registra uso de red/CPU de un proceso con stem "{term}". '
+                        'Persiste aunque el ejecutable se haya borrado.'
+                    ),
                 })
                 print(f"⚠️ SRUM sospechoso: término '{term}'")
             else:
@@ -12710,7 +12773,7 @@ class ArgusApp:
             print(f"Error en scan_srum_artifacts: {e}")
 
     def scan_recent_lnk(self):
-        """Escanea archivos .lnk recientes en %APPDATA%\\Microsoft\\Windows\\Recent."""
+        """Escanea .lnk recientes + XAML/UWP hijack en el target del shortcut."""
         print("🔍 Escaneando archivos .lnk recientes...")
         hack_terms = [
             'vape', 'vapelite', 'entropy', 'entropyclient',
@@ -12720,24 +12783,47 @@ class ArgusApp:
             'phobos', 'astolfo', 'novoline',
             'ghostclient', 'silentclient', 'fluxclient',
         ]
-        recent_dir = os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Windows', 'Recent')
-        if not os.path.exists(recent_dir):
-            return
+        XAML_MARKERS = (
+            'windows.ui.xaml.hosting', 'ms-appx://', 'ms-appx-web://',
+            'presentationframework', 'windows.applicationmodel.activation',
+            'appxmanifest.xml', 'microsoft.windows.shell.immersiveapplication',
+            'xamlisland', 'windows.ui.xaml.dll',
+        )
+        HIJACK_CMDS = (
+            'powershell -enc', 'powershell -e ', 'frombase64string',
+            'iex(', 'invoke-expression', 'cmd /c start mshta',
+            'mshta http', 'wscript.shell', 'regsvr32 /s /n /u /i:',
+        )
+        recent_dirs = [
+            os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Windows', 'Recent'),
+            os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Internet Explorer', 'Quick Launch', 'User Pinned', 'TaskBar'),
+        ]
         try:
             lnk_files = []
-            for fname in os.listdir(recent_dir):
-                if not fname.lower().endswith('.lnk'):
+            seen = set()
+            for recent_dir in recent_dirs:
+                if not os.path.isdir(recent_dir):
                     continue
-                fpath = os.path.join(recent_dir, fname)
-                try:
-                    mtime = os.path.getmtime(fpath)
-                    ts = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
-                    base = fname[:-4]  # strip .lnk
-                    lnk_files.append({'name': base, 'ts': ts})
-                    # Check for hack terms
-                    name_lower = base.lower()
-                    for term in hack_terms:
-                        if term in name_lower:
+                for fname in os.listdir(recent_dir):
+                    if not fname.lower().endswith('.lnk'):
+                        continue
+                    fpath = os.path.join(recent_dir, fname)
+                    if fpath in seen:
+                        continue
+                    seen.add(fpath)
+                    try:
+                        mtime = os.path.getmtime(fpath)
+                        ts = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+                        base = fname[:-4]  # strip .lnk
+                        lnk_files.append({'name': base, 'ts': ts})
+                        name_lower = base.lower()
+                        stem = None
+                        try:
+                            from forensic_match import match_hack_stem
+                            stem = match_hack_stem(name_lower)
+                        except Exception:
+                            stem = next((t for t in hack_terms if t in name_lower), None)
+                        if stem:
                             self.issues_found.append({
                                 'tipo': 'recent_lnk_suspicious',
                                 'nombre': f'Archivo reciente sospechoso: {base}',
@@ -12745,14 +12831,48 @@ class ArgusApp:
                                 'archivo': fpath[:255],
                                 'categoria': 'EXECUTED_FILES',
                                 'alerta': 'SOSPECHOSO',
-                                'confidence': 65,
-                                'detected_patterns': [term],
+                                'confidence': 0.70,
+                                'detected_patterns': [f'recent_lnk:{stem}'],
                                 'extra': {'last_access': ts, 'fuente': 'Recent LNK'},
                             })
                             print(f"⚠️ LNK SOSPECHOSO: {base} @ {ts}")
-                            break
-                except Exception:
-                    pass
+                        # Parseo ligero del target (strings ASCII + UTF-16LE)
+                        try:
+                            with open(fpath, 'rb') as f:
+                                blob = f.read(8192)
+                        except Exception:
+                            continue
+                        if len(blob) < 20 or blob[:4] != b'L\x00\x00\x00':
+                            continue
+                        text_a = blob.decode('latin-1', errors='ignore').lower()
+                        text_u = blob.decode('utf-16-le', errors='ignore').lower()
+                        blob_l = text_a + '\n' + text_u
+                        xaml_hit = next((m for m in XAML_MARKERS if m in blob_l), None)
+                        cmd_hit = next((m for m in HIJACK_CMDS if m in blob_l), None)
+                        if xaml_hit or cmd_hit:
+                            marker = xaml_hit or cmd_hit
+                            self.issues_found.append({
+                                'tipo': 'lnk_xaml_hijack',
+                                'nombre': f'LNK con hijack/XAML sospechoso: {base}',
+                                'ruta': fpath[:255],
+                                'archivo': fname,
+                                'categoria': 'PERSISTENCE',
+                                'alerta': 'CRITICAL' if cmd_hit else 'SOSPECHOSO',
+                                'confidence': 0.84 if cmd_hit else 0.72,
+                                'timestamp': datetime.fromtimestamp(mtime).strftime('%Y-%m-%dT%H:%M:%S'),
+                                'detected_patterns': [
+                                    f'lnk_hijack:{marker[:40]}',
+                                    *(['lnk_xaml'] if xaml_hit else []),
+                                    *(['lnk_lolbin_cmd'] if cmd_hit else []),
+                                ],
+                                'explicacion': (
+                                    f'El acceso directo "{base}" apunta a un target con marcador '
+                                    f'"{marker}". Técnica usada para hijack XAML/UWP o ejecución oculta.'
+                                ),
+                            })
+                            print(f"🚨 LNK HIJACK: {base} ({marker})")
+                    except Exception:
+                        pass
 
             if lnk_files:
                 print(f"✅ LNK recientes: {len(lnk_files)} archivos encontrados")
@@ -12788,8 +12908,19 @@ class ArgusApp:
                     if len(text) < 10:
                         text = blob.decode('latin-1', errors='ignore').lower()
                     ext_hit = any(ext in text for ext in interesting_exts)
-                    term_hit = next((t for t in hack_terms if t in text), None)
+                    try:
+                        from forensic_match import match_hack_stem, iso_from_epoch
+                        term_hit = match_hack_stem(text) or next(
+                            (t for t in hack_terms if len(t) >= 5 and t in text), None
+                        )
+                    except Exception:
+                        term_hit = next((t for t in hack_terms if t in text), None)
+                        iso_from_epoch = lambda ts: ''  # type: ignore
                     if term_hit and ext_hit:
+                        try:
+                            ts = iso_from_epoch(os.path.getmtime(fpath))
+                        except Exception:
+                            ts = ''
                         self.issues_found.append({
                             'tipo': 'jump_list_suspicious',
                             'nombre': f'Jump List sospechosa: {fname[:80]}',
@@ -12797,9 +12928,13 @@ class ArgusApp:
                             'archivo': fname[:255],
                             'categoria': 'EXECUTED_FILES',
                             'alerta': 'SOSPECHOSO',
-                            'confidence': 0.68,
+                            'confidence': 0.72,
+                            'timestamp': ts,
                             'detected_patterns': [f'jump_list:{term_hit}'],
-                            'extra': {'source': 'jump_lists'},
+                            'explicacion': (
+                                f'Jump List referencia ejecutable/script con stem "{term_hit}".'
+                            ),
+                            'extra': {'source': 'jump_lists', 'stem': term_hit},
                         })
                         found += 1
                         print(f"⚠️ JUMP LIST SOSPECHOSA: {fname} [{term_hit}]")
@@ -12872,6 +13007,12 @@ class ArgusApp:
                 '\\versions\\', '/versions/', '\\libraries\\', '/libraries/',
                 '\\assets\\', '/assets/', '\\natives\\', '/natives/',
             )
+            try:
+                from forensic_match import match_hack_stem
+            except Exception:
+                def match_hack_stem(text, extra_strong=()):  # type: ignore
+                    return next((t for t in hack_terms if len(t) >= 5 and t in (text or '').lower()), None)
+
             suspicious = []
             seen_entries = set()
             for path in entries:
@@ -12883,21 +13024,28 @@ class ArgusApp:
                 # F32: skip vanilla MC paths in shimcache
                 if any(vp in path_lower for vp in _shim_vanilla_skip):
                     continue
-                for term in hack_terms:
-                    if term in path_lower:
-                        suspicious.append(path)
-                        self.issues_found.append({
-                            'tipo': 'shimcache_suspicious',
-                            'nombre': f'ShimCache: ejecutable sospechoso — {os.path.basename(path)}',
-                            'ruta': path[:255],
-                            'archivo': path[:255],
-                            'categoria': 'EXECUTED_FILES',
-                            'alerta': 'CRITICAL',
-                            'confidence': 82,
-                            'detected_patterns': [term],
-                        })
-                        print(f"🚨 SHIMCACHE SOSPECHOSO: {path[:80]}")
-                        break
+                term = match_hack_stem(path_lower) or match_hack_stem(
+                    os.path.basename(path_lower)
+                )
+                if not term:
+                    continue
+                suspicious.append(path)
+                self.issues_found.append({
+                    'tipo': 'shimcache_suspicious',
+                    'nombre': f'ShimCache: ejecutable sospechoso — {os.path.basename(path)}',
+                    'ruta': path[:255],
+                    'archivo': path[:255],
+                    'categoria': 'EXECUTED_FILES',
+                    'alerta': 'CRITICAL',
+                    'confidence': 0.85,
+                    'detected_patterns': [f'shimcache:{term}'],
+                    'explicacion': (
+                        f'ShimCache registra ejecución histórica de {os.path.basename(path)} '
+                        f'(stem: {term}).'
+                    ),
+                    'extra': {'stem': term},
+                })
+                print(f"🚨 SHIMCACHE SOSPECHOSO: {path[:80]}")
 
             if entries:
                 print(f"✅ ShimCache: {len(entries)} entradas válidas")
@@ -13005,24 +13153,28 @@ class ArgusApp:
             suspicious = []
             for path in entries:
                 path_lower = path.lower()
-                for term in hack_terms:
-                    if term in path_lower:
-                        suspicious.append(path)
-                        self.issues_found.append({
-                            'tipo': 'muicache_suspicious',
-                            'nombre': f'MUICache: ejecutable sospechoso — {os.path.basename(path)}',
-                            'ruta': path[:255],
-                            'archivo': path[:255],
-                            'categoria': 'EXECUTED_FILES',
-                            'alerta': 'CRITICAL',
-                            'confidence': 80,
-                            'detected_patterns': [term],
-                        })
-                        print(f"🚨 MUICACHE SOSPECHOSO: {path[:80]}")
-                        break
+                stem = None
+                try:
+                    from forensic_match import match_hack_stem
+                    stem = match_hack_stem(path_lower)
+                except Exception:
+                    stem = next((t for t in hack_terms if t in path_lower), None)
+                if stem:
+                    suspicious.append(path)
+                    self.issues_found.append({
+                        'tipo': 'muicache_suspicious',
+                        'nombre': f'MUICache: ejecutable sospechoso — {os.path.basename(path)}',
+                        'ruta': path[:255],
+                        'archivo': path[:255],
+                        'categoria': 'EXECUTED_FILES',
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.80,
+                        'detected_patterns': [f'muicache:{stem}'],
+                    })
+                    print(f"🚨 MUICACHE SOSPECHOSO: {path[:80]}")
 
             if entries:
-                print(f"✅ MUICache: {len(entries)} entradas válidas")
+                print(f"✅ MUICache: {len(entries)} entradas válidas ({len(suspicious)} sospechosas)")
         except (FileNotFoundError, PermissionError) as e:
             print(f"MUICache no disponible: {e}")
         except Exception as e:
@@ -13057,9 +13209,9 @@ class ArgusApp:
                                     'nombre': f'Tarea programada sospechosa: {fname}',
                                     'ruta': fpath[:255],
                                     'archivo': fpath[:255],
-                                    'categoria': 'CMD_HISTORY',
+                                    'categoria': 'PERSISTENCIA',
                                     'alerta': 'CRITICAL',
-                                    'confidence': 85,
+                                    'confidence': 0.85,
                                     'detected_patterns': [term],
                                 })
                                 print(f"🚨 TAREA SOSPECHOSA: {fname} (contiene '{term}')")
@@ -13265,6 +13417,60 @@ class ArgusApp:
                 print(f"📌 {found} tareas programadas recientes con binario fuera de Program Files")
         except Exception as e:
             print(f"Error en scan_recent_install_tasks: {e}")
+
+    def scan_av_interference(self):
+        """P1 #127 — Detecta si Defender/AV bloquea lecturas forenses clave."""
+        print("🔍 Probando interferencia AV en artefactos forenses...")
+        probes = [
+            (r'C:\Windows\Prefetch', 'dir'),
+            (r'C:\Windows\AppCompat\Programs\Amcache.hve', 'file'),
+            (r'C:\Windows\System32\sru\SRUDB.dat', 'file'),
+            (os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Windows', 'Recent'), 'dir'),
+            (r'C:\$Recycle.Bin', 'dir'),
+        ]
+        blocked = []
+        ok = 0
+        for path, kind in probes:
+            try:
+                if kind == 'dir':
+                    if not os.path.isdir(path):
+                        continue
+                    os.listdir(path)
+                else:
+                    if not os.path.isfile(path):
+                        continue
+                    with open(path, 'rb') as f:
+                        f.read(64)
+                ok += 1
+            except PermissionError:
+                blocked.append(path)
+            except OSError as e:
+                # WinError 32 sharing / 5 access
+                if getattr(e, 'winerror', None) in (5, 32, 33):
+                    blocked.append(path)
+                continue
+            except Exception:
+                continue
+        if len(blocked) >= 2:
+            print(f"⚠️ AV interference: {len(blocked)} paths bloqueados")
+            self.issues_found.append({
+                'tipo': 'av_interference',
+                'nombre': f'AV bloqueando lecturas forenses ({len(blocked)} paths)',
+                'ruta': blocked[0][:255],
+                'archivo': ', '.join(os.path.basename(p) or p for p in blocked[:5]),
+                'categoria': 'EVASION',
+                'alerta': 'SOSPECHOSO',
+                'confidence': min(0.85, 0.45 + 0.12 * len(blocked)),
+                'detected_patterns': [f'av_block:{os.path.basename(p) or p}' for p in blocked[:6]],
+                'explicacion': (
+                    f'{len(blocked)} artefactos forenses no se pudieron leer '
+                    f'(Prefetch/Amcache/SRUM/Recent/Recycle). '
+                    'Defender u otro AV puede estar bloqueando el SS — o el usuario endureció permisos.'
+                ),
+                'extra': {'blocked': blocked[:8], 'ok_probes': ok},
+            })
+        else:
+            print(f"✅ Probes forenses OK ({ok}), bloqueados={len(blocked)}")
 
     def scan_defender_exclusions(self):
         """Lee las exclusiones configuradas en Microsoft Defender desde el
@@ -14316,8 +14522,13 @@ class ArgusApp:
                     continue
                 if 'is_microsoft_defender' in globals() and is_microsoft_defender(fname_l):
                     continue
-                # Hack-name match
-                hack = smart_hack_match(fname_l) if 'smart_hack_match' in globals() else None
+                # Hack-name match (boundary / co-token)
+                hack = None
+                try:
+                    from forensic_match import match_hack_stem
+                    hack = match_hack_stem(fname_l)
+                except Exception:
+                    hack = smart_hack_match(fname_l) if 'smart_hack_match' in globals() else None
                 if not hack:
                     continue
                 suspicious_count += 1
@@ -14328,13 +14539,17 @@ class ArgusApp:
                     'archivo':    fname[:240],
                     'categoria':  'EJECUCION_SHELL',
                     'alerta':     'CRITICAL',
-                    'confidence': 0.78,
-                    'detected_patterns': ['recent_docs', 'hack_name', f'ext{ext}'],
+                    'confidence': 0.82,
+                    'detected_patterns': ['recent_docs', f'recent_docs:{hack}', f'ext{ext}'],
                     'extra': {
                         'extension':       ext,
                         'filename':        fname,
                         'hack_term_match': str(hack),
                     },
+                    'explicacion': (
+                        f'RecentDocs registra que se abrió "{fname}" desde Explorer '
+                        f'(stem={hack}). Persiste aunque el archivo se haya borrado.'
+                    ),
                 })
             print(f"  · {len(collected)} entries en RecentDocs, {suspicious_count} sospechosos")
         except FileNotFoundError:
@@ -14368,7 +14583,11 @@ class ArgusApp:
                             v = str(value).lower()
                             if not any(ext in v for ext in suspicious_exts):
                                 continue
-                            hit = next((h for h in _DEFINITE_HACK_NAMES if h in v), None)
+                            try:
+                                from forensic_match import match_hack_stem
+                                hit = match_hack_stem(v)
+                            except Exception:
+                                hit = next((h for h in _DEFINITE_HACK_NAMES if h in v), None)
                             if not hit:
                                 continue
                             self.issues_found.append({
@@ -14457,17 +14676,11 @@ class ArgusApp:
                 except Exception:
                     last_str = ''
 
-            # Severidad:
-            #   - Si NADA reciente (>72h): NORMAL (informativo)
-            #   - Si 1-3 detecciones recientes: SOSPECHOSO
-            #   - Si >=4 detecciones recientes: CRITICAL (cliente persistente)
+            # Solo reportar actividad reciente (histórico sin 72h = ruido).
             if recent_total == 0:
-                alerta = 'NORMAL'
-                conf   = 0.20
-                tag    = 'historico'
-                resumen = (f'Defender Quarantine: {grand_total} entradas históricas '
-                           f'(última: {last_str}) — sin actividad reciente')
-            elif recent_total < 4:
+                print(f"✓ Quarantine histórico ({grand_total}) sin actividad 72h — omitido")
+                return
+            if recent_total < 4:
                 alerta = 'SOSPECHOSO'
                 conf   = 0.55
                 tag    = 'reciente'
@@ -14556,28 +14769,29 @@ class ArgusApp:
                 fname_l = fname.lower()
                 is_benign  = any(b in fname_l for b in BENIGN_HINTS)
                 is_suspect = any(s in fname_l for s in SUSPECT_HINTS)
-                # Skip benign sin sospecha (no aporta)
-                if is_benign and not is_suspect:
+                # Solo dumps Java/Minecraft aportan a SS; el resto es ruido.
+                if is_benign or not is_suspect:
                     continue
                 rel_age_h = int((time.time() - mtime) / 3600)
                 size_mb = max(0.01, round(size / 1048576, 2))
-                alert = 'CRITICAL' if is_suspect else 'SOSPECHOSO'
-                conf  = 0.78 if is_suspect else 0.40
                 self.issues_found.append({
                     'tipo':     'crash_dump',
-                    'nombre':   f'Crash dump reciente ({size_mb} MB, hace {rel_age_h}h): {fname}',
+                    'nombre':   f'Crash dump Java/MC ({size_mb} MB, hace {rel_age_h}h): {fname}',
                     'ruta':     full[:255],
                     'archivo':  fname[:120],
                     'categoria': 'EVASION',
-                    'alerta':   alert,
-                    'confidence': conf,
-                    'detected_patterns': ['crash_dump'] +
-                                         (['target_java_minecraft'] if is_suspect else []),
+                    'alerta':   'CRITICAL',
+                    'confidence': 0.78,
+                    'detected_patterns': ['crash_dump', 'target_java_minecraft'],
                     'extra': {
                         'dump_path':  full,
                         'size_mb':    size_mb,
                         'age_hours':  rel_age_h,
                     },
+                    'explicacion': (
+                        'Minidump de Java/Minecraft en la sesión actual. '
+                        'Cheats inestables suelen dejar dumps que delatan el módulo.'
+                    ),
                 })
                 total += 1
                 print(f"  · DMP: {fname} ({size_mb} MB, hace {rel_age_h}h)")
@@ -14596,7 +14810,7 @@ class ArgusApp:
             'parsec.exe':       ('Parsec',       0.55),
             'parsecd.exe':      ('Parsec',       0.55),
             'chrome_remote_desktop_host.exe': ('Chrome Remote Desktop', 0.55),
-            'mstsc.exe':        ('RDP Client',   0.40),
+            'mstsc.exe':        ('RDP Client',   0.28),  # outbound común; inbound va aparte
             'mremoteng.exe':    ('mRemoteNG',    0.55),
             'rustdesk.exe':     ('RustDesk',     0.55),
             'splashtop.exe':    ('Splashtop',    0.50),
@@ -14618,6 +14832,13 @@ class ArgusApp:
                     label, conf = TOOLS[pname]
                     seen_running.append((label, pname, proc.info.get('pid'),
                                          proc.info.get('exe') or ''))
+            # mstsc solo (cliente RDP saliente) es ruido habitual → omitir si no hay
+            # otro remote tool. Sesiones RDP entrantes se reportan abajo con quser.
+            strong_remote = [x for x in seen_running if x[1] != 'mstsc.exe']
+            if not strong_remote:
+                seen_running = []
+            else:
+                seen_running = strong_remote + [x for x in seen_running if x[1] == 'mstsc.exe']
             for label, pname, pid, exe in seen_running:
                 self.issues_found.append({
                     'tipo':     'remote_access_active',
@@ -14721,21 +14942,46 @@ class ArgusApp:
                     'common files\\', 'windows\\syswow64\\',
                 )):
                     continue
+                # AppData de apps legítimas frecuentes (Discord, Steam, Spotify…)
+                if any(s in p_lower for s in (
+                    '\\discord\\', '\\spotify\\', '\\steam\\', '\\telegram desktop\\',
+                    '\\obs-studio\\', '\\nvidia\\', '\\microsoft\\edge\\',
+                    '\\google\\chrome\\', '\\mozilla\\firefox\\', '\\epic games\\',
+                    '\\curseforge\\', '\\overwolf\\', '\\lunarclient\\',
+                    '\\badlion client\\', '\\prismlauncher\\',
+                )):
+                    continue
                 is_user_dir = any(s in p_lower for s in SUSPICIOUS_TARGETS)
+                hack_stem = ''
+                try:
+                    from forensic_match import match_hack_stem
+                    hack_stem = match_hack_stem(p_lower) or match_hack_stem(name.lower()) or ''
+                except Exception:
+                    hack_stem = ''
+                if not is_user_dir and not hack_stem:
+                    continue  # Program Files genérico sin stem → no ruido
+                alerta = 'CRITICAL' if (is_user_dir or hack_stem) else 'SOSPECHOSO'
+                conf = 0.90 if hack_stem else (0.78 if is_user_dir else 0.45)
                 self.issues_found.append({
-                    'tipo':     'firewall_rule_custom',
-                    'nombre':   f'Regla firewall custom ({direction}): {name[:120]}',
+                    'tipo':     'firewall_rule_hack' if hack_stem else 'firewall_rule_custom',
+                    'nombre':   (
+                        f'Regla firewall hack ({hack_stem}): {name[:100]}'
+                        if hack_stem else
+                        f'Regla firewall custom ({direction}): {name[:120]}'
+                    ),
                     'ruta':     program[:255],
                     'archivo':  os.path.basename(program)[:120],
                     'categoria': 'EVASION',
-                    'alerta':   'CRITICAL' if is_user_dir else 'SOSPECHOSO',
-                    'confidence': 0.78 if is_user_dir else 0.45,
+                    'alerta':   alerta,
+                    'confidence': conf,
                     'detected_patterns': ['firewall_user_rule', f'dir:{direction.lower()}'] +
-                                         (['target_in_user_dir'] if is_user_dir else []),
+                                         (['target_in_user_dir'] if is_user_dir else []) +
+                                         ([f'firewall_stem:{hack_stem}'] if hack_stem else []),
                     'extra': {
                         'rule_name': name,
                         'direction': direction,
                         'target':    program,
+                        'hack_stem': hack_stem,
                     },
                 })
                 count_susp += 1
@@ -14750,44 +14996,50 @@ class ArgusApp:
     def scan_texture_packs(self):
         """Escanea resource packs de Minecraft, incluyendo análisis de XRay."""
         print("🔍 Escaneando resource packs de Minecraft...")
-        xray_terms = ['xray', 'x-ray', 'xview', 'ore', 'highlight', 'transparent', 'wallhack', 'see_through']
+        # Evitar stems ambiguos (ore/transparent/highlight → FPs en packs legítimos)
+        xray_terms = ['xray', 'x-ray', 'x_ray', 'xview', 'wallhack', 'see_through', 'fullbright_xray']
         mc_path = os.path.join(os.environ.get('APPDATA', ''), '.minecraft', 'resourcepacks')
         if not os.path.exists(mc_path):
             return
         try:
-            packs = []
             for entry in os.listdir(mc_path):
                 entry_path = os.path.join(mc_path, entry)
                 name_lower = entry.lower()
                 mtime = os.path.getmtime(entry_path)
                 added_at = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
                 is_xray = any(t in name_lower for t in xray_terms)
-                alerta = 'CRITICAL' if is_xray else 'NORMAL'
-                confidence = 85 if is_xray else 0
 
-                packs.append({'name': entry, 'added_at': added_at, 'is_xray': is_xray})
-                self.issues_found.append({
-                    'tipo': 'texture_pack',
-                    'nombre': f'Resource Pack: {entry}' + (' [POSIBLE XRAY]' if is_xray else ''),
-                    'ruta': entry_path,
-                    'archivo': entry,
-                    'categoria': 'TEXTURE_PACKS',
-                    'alerta': alerta,
-                    'confidence': confidence,
-                    'detected_patterns': [t for t in xray_terms if t in name_lower],
-                    'extra': {'added_at': added_at, 'is_xray': is_xray},
-                })
                 if is_xray:
+                    self.issues_found.append({
+                        'tipo': 'texture_pack',
+                        'nombre': f'Resource Pack posible XRAY: {entry}',
+                        'ruta': entry_path,
+                        'archivo': entry,
+                        'categoria': 'TEXTURE_PACKS',
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.85,
+                        'detected_patterns': [t for t in xray_terms if t in name_lower],
+                        'extra': {'added_at': added_at, 'is_xray': True},
+                        'explicacion': (
+                            f'El nombre del resource pack "{entry}" coincide con patrones '
+                            'típicos de X-Ray / wallhack.'
+                        ),
+                    })
                     print(f"🚨 POSIBLE XRAY PACK: {entry}")
-                else:
-                    print(f"ℹ️ Resource Pack: {entry}")
 
-                # Try xray_texture_analyzer if available
+                # Try xray_texture_analyzer if available (solo packs sospechosos o zip recientes)
                 try:
                     from xray_texture_analyzer import XRayTextureAnalyzer
                     analyzer = XRayTextureAnalyzer()
                     result = analyzer.analyze_pack(entry_path)
                     if result and result.get('is_xray'):
+                        conf = result.get('confidence', 0.9)
+                        try:
+                            conf = float(conf)
+                            if conf > 1:
+                                conf = conf / 100.0
+                        except (TypeError, ValueError):
+                            conf = 0.9
                         self.issues_found.append({
                             'tipo': 'texture_pack_xray',
                             'nombre': f'XRAY confirmado por análisis: {entry}',
@@ -14795,7 +15047,7 @@ class ArgusApp:
                             'archivo': entry,
                             'categoria': 'TEXTURE_PACKS',
                             'alerta': 'CRITICAL',
-                            'confidence': result.get('confidence', 90),
+                            'confidence': conf,
                             'detected_patterns': result.get('patterns', []),
                         })
                         print(f"🚨 XRAY CONFIRMADO por análisis: {entry}")
@@ -14820,11 +15072,15 @@ class ArgusApp:
             # Exploits
             ('metasploit', 'EXPLOIT', 'CRITICAL'), ('cobalt', 'EXPLOIT', 'CRITICAL'),
             ('msfvenom', 'EXPLOIT', 'CRITICAL'), ('shellcode', 'EXPLOIT', 'SOSPECHOSO'),
-            # Packet tools
-            ('wireshark', 'PACKET_SNIFF', 'SOSPECHOSO'), ('cheatengine', 'CHEAT', 'CRITICAL'),
-            ('x64dbg', 'DEBUGGER', 'SOSPECHOSO'), ('ollydbg', 'DEBUGGER', 'SOSPECHOSO'),
-            ('processhacker', 'PROC_HACK', 'SOSPECHOSO'),
+            # Packet / debug (ruido staff/dev → informativo; no ban solo)
+            ('wireshark', 'PACKET_SNIFF', 'POCO_SOSPECHOSO'),
+            ('cheatengine', 'CHEAT', 'CRITICAL'),
+            ('x64dbg', 'DEBUGGER', 'POCO_SOSPECHOSO'),
+            ('ollydbg', 'DEBUGGER', 'POCO_SOSPECHOSO'),
+            ('processhacker', 'PROC_HACK', 'POCO_SOSPECHOSO'),
+            ('systeminformer', 'PROC_HACK', 'POCO_SOSPECHOSO'),
         ]
+        soft_tools = {'wireshark', 'x64dbg', 'ollydbg', 'processhacker', 'systeminformer'}
 
         search_paths = [
             os.path.expanduser('~\\Desktop'),
@@ -14845,15 +15101,26 @@ class ArgusApp:
                             key = sig + pname
                             if key not in found_names:
                                 found_names.add(key)
+                                conf = 0.35 if sig in soft_tools else 0.90
                                 self.issues_found.append({
                                     'tipo': 'exploit_process',
-                                    'nombre': f'Proceso de exploit activo: {proc.info.get("name", sig)}',
+                                    'nombre': (
+                                        f'Herramienta de análisis activa: {proc.info.get("name", sig)}'
+                                        if sig in soft_tools else
+                                        f'Proceso de exploit activo: {proc.info.get("name", sig)}'
+                                    ),
                                     'ruta': proc.info.get('exe') or 'N/A',
                                     'archivo': proc.info.get('name', sig),
                                     'categoria': cat,
                                     'alerta': level,
-                                    'confidence': 90,
+                                    'confidence': conf,
                                     'detected_patterns': [sig],
+                                    'explicacion': (
+                                        'Herramienta legítima de análisis/debug. Solo relevante '
+                                        'si hay otras señales de cheat o inyección.'
+                                        if sig in soft_tools else
+                                        'Proceso típico de RAT/exploit/cheat engine.'
+                                    ),
                                 })
                                 print(f"🚨 EXPLOIT PROCESS: {proc.info.get('name')} [{level}]")
                             break
@@ -14875,14 +15142,19 @@ class ArgusApp:
                                     key = sig + fpath
                                     if key not in found_names:
                                         found_names.add(key)
+                                        conf = 0.32 if sig in soft_tools else 0.80
                                         self.issues_found.append({
                                             'tipo': 'exploit_file',
-                                            'nombre': f'Herramienta de exploit: {fname}',
+                                            'nombre': (
+                                                f'Herramienta de análisis: {fname}'
+                                                if sig in soft_tools else
+                                                f'Herramienta de exploit: {fname}'
+                                            ),
                                             'ruta': fpath,
                                             'archivo': fname,
                                             'categoria': cat,
                                             'alerta': level,
-                                            'confidence': 80,
+                                            'confidence': conf,
                                             'detected_patterns': [sig],
                                         })
                                         print(f"🚨 EXPLOIT FILE: {fpath} [{level}]")
@@ -15080,8 +15352,17 @@ class ArgusApp:
             return False
 
     def scan_ghost_client_registry(self):
-        """Detecta claves de registro dejadas por ghost clients instalados."""
+        """Detecta claves de registro dejadas por ghost clients (catálogo + lista base)."""
         print("🔍 Escaneando registro por instalaciones de ghost clients...")
+        try:
+            from scan_modules.high_value_checks import scan_ghost_registry_extended
+            extra = scan_ghost_registry_extended(self) or []
+            if extra:
+                self.issues_found.extend(extra)
+                print(f"[ghost_registry] +{len(extra)} clave(s) vía catálogo")
+                return
+        except Exception as e:
+            print(f"[ghost_registry] catálogo fallback: {e}")
         GHOST_REGISTRY_KEYS = [
             (winreg.HKEY_CURRENT_USER, r'Software\Rise Client'),
             (winreg.HKEY_CURRENT_USER, r'Software\Sigma'),
@@ -15094,6 +15375,11 @@ class ArgusApp:
             (winreg.HKEY_CURRENT_USER, r'Software\Flux Client'),
             (winreg.HKEY_CURRENT_USER, r'Software\RusherHack'),
             (winreg.HKEY_CURRENT_USER, r'Software\Astolfo'),
+            (winreg.HKEY_CURRENT_USER, r'Software\Entropy'),
+            (winreg.HKEY_CURRENT_USER, r'Software\Whiteout'),
+            (winreg.HKEY_CURRENT_USER, r'Software\Aristois'),
+            (winreg.HKEY_CURRENT_USER, r'Software\Tenacity'),
+            (winreg.HKEY_CURRENT_USER, r'Software\Konas'),
             (winreg.HKEY_LOCAL_MACHINE, r'Software\Rise Client'),
             (winreg.HKEY_LOCAL_MACHINE, r'Software\Sigma'),
             (winreg.HKEY_LOCAL_MACHINE, r'Software\Vape'),
@@ -15114,6 +15400,10 @@ class ArgusApp:
                             'alerta': 'CRITICAL',
                             'confidence': 0.93,
                             'detected_patterns': [f'registry:{key_name.lower().replace(" ", "_")}'],
+                            'explicacion': (
+                                f'Registro {hive_name}\\{subkey} típico de instalación/ejecución '
+                                f'de ghost client ({key_name}).'
+                            ),
                         })
                 except FileNotFoundError:
                     continue
@@ -15614,6 +15904,182 @@ class ArgusApp:
                 ),
             })
 
+    def scan_injected_threads(self):
+        """P1 #94 — Threads con start address fuera de módulos cargados (inyección)."""
+        print("🔍 Buscando threads inyectados en Java/Minecraft...")
+        try:
+            import ctypes
+        except Exception:
+            return
+        kernel32 = ctypes.windll.kernel32
+        ntdll = ctypes.windll.ntdll
+        THREAD_QUERY_INFORMATION = 0x0040
+
+        def _thread_start(tid: int):
+            h = kernel32.OpenThread(THREAD_QUERY_INFORMATION, False, int(tid))
+            if not h:
+                return None
+            try:
+                addr = ctypes.c_void_p()
+                status = ntdll.NtQueryInformationThread(
+                    h, 9, ctypes.byref(addr), ctypes.sizeof(addr), None
+                )
+                if status != 0:
+                    return None
+                return int(addr.value or 0)
+            finally:
+                kernel32.CloseHandle(h)
+
+        found = 0
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                if found >= 8:
+                    break
+                try:
+                    pname = (proc.info.get('name') or '').lower()
+                    if 'java' not in pname:
+                        continue
+                    cmdline = ' '.join(proc.info.get('cmdline') or []).lower()
+                    if 'minecraft' not in cmdline and 'net.minecraft' not in cmdline:
+                        continue
+                    ranges = []
+                    try:
+                        for mmap in proc.memory_maps():
+                            path = (mmap.path or '')
+                            if not path or path.startswith('['):
+                                continue
+                            addr = getattr(mmap, 'addr', None) or ''
+                            if isinstance(addr, str) and '-' in addr:
+                                a, b = addr.split('-', 1)
+                                try:
+                                    ranges.append((int(a, 16), int(b, 16)))
+                                except ValueError:
+                                    continue
+                    except (psutil.AccessDenied, psutil.NoSuchProcess, AttributeError):
+                        continue
+                    if not ranges:
+                        continue
+                    try:
+                        threads = proc.threads()
+                    except (psutil.AccessDenied, psutil.NoSuchProcess):
+                        continue
+                    for th in threads[:80]:
+                        start = _thread_start(th.id)
+                        if not start:
+                            continue
+                        if any(lo <= start < hi for lo, hi in ranges):
+                            continue
+                        found += 1
+                        print(f"🚨 THREAD INYECTADO: PID {proc.pid} TID {th.id} @ 0x{start:x}")
+                        self.issues_found.append({
+                            'tipo': 'injected_thread',
+                            'nombre': f'Thread inyectado en Minecraft (PID {proc.pid})',
+                            'ruta': f'PID:{proc.pid}/TID:{th.id}',
+                            'archivo': f'0x{start:x}',
+                            'categoria': 'JAVA_INJECTION',
+                            'alerta': 'CRITICAL',
+                            'confidence': 0.82,
+                            'detected_patterns': [
+                                'create_remote_thread_evidence',
+                                f'thread_start:0x{start:x}',
+                            ],
+                            'explicacion': (
+                                f'Thread en Java/Minecraft (PID {proc.pid}) con start '
+                                f'0x{start:x} fuera de módulos cargados — típico de inyección.'
+                            ),
+                        })
+                        if found >= 8:
+                            break
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            print(f"Error en scan_injected_threads: {e}")
+
+    def scan_minecraft_accounts(self):
+        """P1 #106 — Historial de cuentas Microsoft/Mojang usadas en launchers."""
+        print("🔍 Revisando historial de cuentas Minecraft...")
+        appdata = os.environ.get('APPDATA', '')
+        local = os.environ.get('LOCALAPPDATA', '')
+        home = os.environ.get('USERPROFILE', os.path.expanduser('~'))
+        account_files = [
+            os.path.join(appdata, '.minecraft', 'launcher_accounts.json'),
+            os.path.join(appdata, '.minecraft', 'launcher_accounts_microsoft_store.json'),
+            os.path.join(appdata, '.minecraft', 'usercache.json'),
+            os.path.join(appdata, 'PrismLauncher', 'accounts.json'),
+            os.path.join(appdata, '.prismlauncher', 'accounts.json'),
+            os.path.join(appdata, 'MultiMC', 'accounts.json'),
+            os.path.join(home, '.lunarclient', 'settings', 'game', 'accounts.json'),
+            os.path.join(appdata, '.lunarclient', 'settings', 'game', 'accounts.json'),
+        ]
+        names = []
+        sources = []
+        try:
+            for fpath in account_files:
+                if not os.path.isfile(fpath):
+                    continue
+                try:
+                    with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                        raw = f.read(512 * 1024)
+                except Exception:
+                    continue
+                try:
+                    data = json.loads(raw)
+                except Exception:
+                    continue
+                sources.append(fpath)
+                if isinstance(data, dict):
+                    accounts = data.get('accounts') or data.get('profiles') or {}
+                    if isinstance(accounts, dict):
+                        for _k, acc in accounts.items():
+                            if not isinstance(acc, dict):
+                                continue
+                            for key in ('minecraftProfile', 'profile', 'minecraft'):
+                                prof = acc.get(key) or {}
+                                if isinstance(prof, dict):
+                                    n = prof.get('name') or prof.get('username')
+                                    if n:
+                                        names.append(str(n))
+                            n = acc.get('username') or acc.get('name') or acc.get('localUsername')
+                            if n:
+                                names.append(str(n))
+                    if isinstance(accounts, list):
+                        for acc in accounts:
+                            if not isinstance(acc, dict):
+                                continue
+                            prof = acc.get('profile') if isinstance(acc.get('profile'), dict) else {}
+                            n = (prof or {}).get('name') or acc.get('username') or acc.get('name')
+                            if n:
+                                names.append(str(n))
+                if isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict):
+                            n = item.get('name') or item.get('username')
+                            if n:
+                                names.append(str(n))
+            uniq = list(dict.fromkeys([n for n in names if n and len(str(n)) >= 3]))
+            if len(uniq) >= 4:
+                print(f"⚠️ Múltiples cuentas MC: {len(uniq)} → {uniq[:6]}")
+                self.issues_found.append({
+                    'tipo': 'minecraft_multi_account',
+                    'nombre': f'Historial con {len(uniq)} cuentas Minecraft',
+                    'ruta': sources[0] if sources else 'launcher_accounts',
+                    'archivo': ', '.join(uniq[:8]),
+                    'categoria': 'ACCOUNT',
+                    'alerta': 'POCO_SOSPECHOSO' if len(uniq) < 7 else 'SOSPECHOSO',
+                    'confidence': min(0.75, 0.35 + 0.06 * len(uniq)),
+                    'detected_patterns': [f'accounts:{len(uniq)}'] + [f'nick:{n}' for n in uniq[:6]],
+                    'explicacion': (
+                        f'{len(uniq)} cuentas distintas en launchers '
+                        f'({", ".join(uniq[:5])}{"…" if len(uniq) > 5 else ""}). '
+                        'Puede indicar sharing o evasión de bans.'
+                    ),
+                    'extra': {'accounts': uniq[:20], 'sources': [s[:120] for s in sources[:6]]},
+                })
+            elif uniq:
+                print(f"✅ Cuentas MC vistas: {len(uniq)}")
+        except Exception as e:
+            print(f"Error en scan_minecraft_accounts: {e}")
+
     def scan_self_deletion_hacks(self):
         """P2 #50 — Detecta JARs en la línea de comandos de Java que ya no existen en disco.
         Técnica común de hacks: cargar el JAR vía classloader y luego borrarlo para ocultar evidencia.
@@ -15685,7 +16151,11 @@ class ArgusApp:
                     cmdline_str = ' '.join(proc.info.get('cmdline') or []).lower()
                     if 'minecraft' not in cmdline_str and 'net.minecraft' not in cmdline_str:
                         continue
-                    for conn in proc.connections('tcp4'):
+                    try:
+                        _c4 = proc.net_connections(kind='tcp4')
+                    except (AttributeError, TypeError):
+                        _c4 = proc.connections('tcp4')
+                    for conn in _c4:
                         if conn.status != psutil.CONN_ESTABLISHED:
                             continue
                         rip   = conn.raddr.ip   if conn.raddr else ''
@@ -15906,15 +16376,14 @@ class ArgusApp:
                 'tipo': 'jdk_installed',
                 'categoria': 'FORENSE',
                 'alerta': 'POCO_SOSPECHOSO',
-                'confidence': 0.45,
+                'confidence': 0.32,
                 'detected_patterns': ['jdk_with_compiler'],
                 'explicacion': (
-                    f'Se encontró un JDK completo ({jdk_path}). Un jugador normal solo '
-                    f'necesita el JRE para ejecutar Minecraft. El JDK incluye javac (compilador) '
-                    f'y puede usarse para desarrollar o compilar hack clients personalizados.'
+                    f'Se encontró un JDK completo ({jdk_path}). Informativo: muchos '
+                    f'devs/modders lo tienen. Solo relevante junto a scripts/injectors.'
                 ),
             })
-            print(f"⚠️ JDK instalado: {jdk_path}")
+            print(f"ℹ️ JDK instalado (informativo): {jdk_path}")
 
     def scan_python_hack_scripts(self):
         """P5 #5 — Detecta scripts Python en Desktop/Downloads con patrones de bots/macros."""
@@ -16124,10 +16593,7 @@ class ArgusApp:
             os.path.expanduser('~\\Desktop'),
             os.path.expanduser('~\\Documents'),
         ]
-        HACK_REPO_KW = list(_DEFINITE_HACK_NAMES) + [
-            'hack', 'cheat', 'inject', 'macro', 'autoclicker', 'aimbot',
-            'triggerbot', 'killaura', 'xray', 'esp', 'wallhack',
-        ]
+        from forensic_match import match_hack_stem
         found = 0
         for base_dir in SEARCH_DIRS:
             if not os.path.isdir(base_dir):
@@ -16139,15 +16605,20 @@ class ArgusApp:
                     if not os.path.isdir(git_dir):
                         continue
                     dname_lower = dname.lower()
-                    # Nombre del repo coincide con hack
-                    matched = [kw for kw in HACK_REPO_KW if kw in dname_lower]
+                    stem = match_hack_stem(dname_lower)
+                    matched = [f'stem:{stem}'] if stem else []
                     if not matched:
                         # Revisar remote origin URL en config
                         git_config = os.path.join(git_dir, 'config')
                         try:
                             with open(git_config, 'r', encoding='utf-8', errors='ignore') as f:
                                 cfg_content = f.read(2048).lower()
-                            matched = [kw for kw in HACK_REPO_KW if kw in cfg_content]
+                            stem = match_hack_stem(cfg_content)
+                            if stem:
+                                matched = [f'remote:{stem}']
+                            for distro in ('vape.gg', 'liquidbounce', 'wurstclient', 'unknowncheats'):
+                                if distro in cfg_content:
+                                    matched.append(f'url:{distro}')
                         except (IOError, OSError):
                             pass
                     if matched:
@@ -16157,12 +16628,12 @@ class ArgusApp:
                             'archivo': git_dir,
                             'tipo': 'git_repo_hack',
                             'categoria': 'FORENSE',
-                            'alerta': 'SOSPECHOSO',
-                            'confidence': 0.60,
-                            'detected_patterns': [f'git_repo:{m}' for m in matched[:3]],
+                            'alerta': 'CRITICAL' if stem else 'SOSPECHOSO',
+                            'confidence': 0.82 if stem else 0.65,
+                            'detected_patterns': matched[:5],
                             'explicacion': (
                                 f'Repositorio Git "{dname}" en {base_dir} coincide con '
-                                f'nombres de hack clients o herramientas de cheat: {matched[:3]}.'
+                                f'hack clients / remotes: {matched[:3]}.'
                             ),
                         })
                         found += 1
@@ -16188,15 +16659,14 @@ class ArgusApp:
                             'tipo': 'ip_forwarding_enabled',
                             'categoria': 'RED',
                             'alerta': 'POCO_SOSPECHOSO',
-                            'confidence': 0.48,
+                            'confidence': 0.28,
                             'detected_patterns': ['ip_forwarding'],
                             'explicacion': (
-                                'El IP forwarding está habilitado en Windows. En un PC de gaming '
-                                'normal esto es inusual. Puede indicar un proxy MITM configurado '
-                                'para interceptar o redirigir tráfico de red de Minecraft.'
+                                'IP forwarding habilitado. Informativo solo; relevante si hay '
+                                'VPN/sniffer/hosts sinkhole juntos.'
                             ),
                         })
-                        print("⚠️ IP Forwarding HABILITADO")
+                        print("ℹ️ IP Forwarding habilitado (informativo)")
                     else:
                         print("✅ IP Forwarding deshabilitado (normal)")
                 except FileNotFoundError:
@@ -16742,19 +17212,27 @@ class ArgusApp:
             print(f"Error en scan_ahk_scripts: {e}")
 
     def scan_bloody_a4tech(self):
-        """Detecta software Bloody/A4Tech instalado (autoclick por hardware)."""
+        """Detecta software Bloody/A4Tech + perfiles con macros de click rápido."""
         print("🔍 Escaneando software Bloody/A4Tech...")
+        import re as _re
         pf  = os.environ.get('PROGRAMFILES', 'C:\\Program Files')
         pf86 = os.environ.get('PROGRAMFILES(X86)', 'C:\\Program Files (x86)')
         appdata = os.environ.get('APPDATA', '')
+        localapp = os.environ.get('LOCALAPPDATA', '')
         PATHS = [
             os.path.join(pf,   'Bloody'), os.path.join(pf86, 'Bloody'),
             os.path.join(pf,   'A4Tech'), os.path.join(pf86, 'A4Tech'),
             os.path.join(appdata, 'Bloody'),
+            os.path.join(localapp, 'Bloody'),
+            os.path.join(appdata, 'A4Tech'),
         ]
         try:
+            found_install = False
             for path in PATHS:
-                if os.path.isdir(path):
+                if not os.path.isdir(path):
+                    continue
+                if not found_install:
+                    found_install = True
                     print(f"⚠️ SOFTWARE BLOODY/A4TECH: {path}")
                     self.issues_found.append({
                         'nombre': f'Software Bloody/A4Tech instalado: {os.path.basename(path)}',
@@ -16765,8 +17243,58 @@ class ArgusApp:
                         'alerta': 'SOSPECHOSO',
                         'confidence': 0.72,
                         'detected_patterns': ['bloody_mouse_software'],
+                        'explicacion': (
+                            'Bloody/A4Tech suelen incluir autoclick/macros a nivel driver. '
+                            'Presencia del software eleva sospecha en SS de mouse.'
+                        ),
                     })
-                    break
+                # Parse perfiles xml/json/cfg buscando click + delay bajo
+                try:
+                    for root, dirs, files in os.walk(path):
+                        depth = root[len(path):].count(os.sep)
+                        if depth > 3:
+                            dirs[:] = []
+                            continue
+                        dirs[:] = dirs[:8]
+                        for fname in files:
+                            low = fname.lower()
+                            if not low.endswith(('.xml', '.json', '.cfg', '.ini', '.bloody')):
+                                continue
+                            fpath = os.path.join(root, fname)
+                            try:
+                                with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                                    content = f.read(24576).lower()
+                            except OSError:
+                                continue
+                            has_click = bool(_re.search(
+                                r'(click|lbutton|mousebutton|actiontype.*click|macro)', content
+                            ))
+                            has_fast = bool(_re.search(
+                                r'delay["\s:=]*\d{1,2}|interval["\s:=]*\d{1,2}|ms["\s:=]*1\d\b',
+                                content,
+                            ))
+                            has_jitter = 'jitter' in content or 'aim assist' in content or 'aimassist' in content
+                            if (has_click and has_fast) or has_jitter:
+                                print(f"⚠️ BLOODY MACRO: {fpath}")
+                                self.issues_found.append({
+                                    'nombre': f'Macro/perfil Bloody sospechoso: {fname}',
+                                    'ruta': fpath,
+                                    'archivo': fname,
+                                    'tipo': 'peripheral_macro',
+                                    'categoria': 'AUTOCLICK',
+                                    'alerta': 'CRITICAL' if has_jitter or has_fast else 'SOSPECHOSO',
+                                    'confidence': 0.86 if has_jitter else 0.8,
+                                    'detected_patterns': (
+                                        ['bloody_rapid_click']
+                                        + (['jitter_or_aimassist'] if has_jitter else [])
+                                    ),
+                                    'explicacion': (
+                                        f'Perfil Bloody/A4Tech con click rápido'
+                                        f'{" / jitter-aimassist" if has_jitter else ""}.'
+                                    ),
+                                })
+                except OSError:
+                    continue
         except Exception as e:
             print(f"Error en scan_bloody_a4tech: {e}")
 
@@ -16798,7 +17326,13 @@ class ArgusApp:
                                 content = f.read(16384).lower()
                             has_click = bool(_re.search(r'(click|actiontype.*click|mouse.*loop)', content))
                             has_fast  = bool(_re.search(r'delay["\s:,]*\d{1,2}["\s,}]|ms["\s:,]*1\d["\s,}]', content))
-                            if has_click and has_fast:
+                            has_jitter = any(
+                                k in content for k in (
+                                    'jitter', 'aim assist', 'aimassist', 'butterfly click',
+                                    'drag click', 'click pattern',
+                                )
+                            )
+                            if (has_click and has_fast) or has_jitter:
                                 print(f"⚠️ MACRO CLICK RAPIDO en {os.path.basename(base)}: {fpath}")
                                 self.issues_found.append({
                                     'nombre': f'Macro click rápido en {os.path.basename(base)}: {fname}',
@@ -16806,9 +17340,16 @@ class ArgusApp:
                                     'archivo': fname,
                                     'tipo': 'peripheral_macro',
                                     'categoria': 'AUTOCLICK',
-                                    'alerta': 'SOSPECHOSO',
-                                    'confidence': 0.75,
-                                    'detected_patterns': ['rapid_click_macro'],
+                                    'alerta': 'CRITICAL' if has_jitter else 'SOSPECHOSO',
+                                    'confidence': 0.84 if has_jitter else 0.75,
+                                    'detected_patterns': (
+                                        ['rapid_click_macro']
+                                        + (['jitter_or_aimassist'] if has_jitter else [])
+                                    ),
+                                    'explicacion': (
+                                        f'Perfil {os.path.basename(base)} con '
+                                        f'{"jitter/aim-assist" if has_jitter else "click rápido"}.'
+                                    ),
                                 })
                         except Exception:
                             continue
@@ -16816,36 +17357,82 @@ class ArgusApp:
             print(f"Error en scan_steelseries_corsair: {e}")
 
     def scan_arduino_hid(self):
-        """Detecta dispositivos HID Arduino/CH340/STM32 conectados (autoclick hardware)."""
+        """Detecta dispositivos HID Arduino/CH340/STM32 (VID sospechoso + nombre)."""
         print("🔍 Escaneando dispositivos HID Arduino/programables...")
         SUSPICIOUS_VIDS = {'2341', '1a86', '0483', '04d8', '16c0'}
+        NAME_KW = (
+            'arduino', 'ch340', 'stm32', 'usbasp', 'pro micro', 'digispark',
+            'leonardo', 'teensy', 'rp2040', 'pico',
+        )
+        import re as _re
+        import subprocess as _sp
+
+        def _emit(line: str, vid: str, strong: bool):
+            print(f"⚠️ ARDUINO/HID DEVICE: {line.strip()[:120]}")
+            self.issues_found.append({
+                'nombre': f'Dispositivo HID Arduino/programable: {line.strip()[:80]}',
+                'ruta': 'Dispositivos USB del sistema',
+                'archivo': line.strip()[:80],
+                'tipo': 'arduino_hid_device',
+                'categoria': 'AUTOCLICK',
+                'alerta': 'CRITICAL' if strong else 'SOSPECHOSO',
+                'confidence': 0.82 if strong else 0.7,
+                'detected_patterns': [f'hid_vid:{vid}'] + (
+                    ['arduino_hid_named'] if strong else ['arduino_hid_vid_only']
+                ),
+                'explicacion': (
+                    f'HIDClass con VID {vid} típico de MCU programable '
+                    f'({"nombre confirmado" if strong else "solo VID — revisar si es mouse/teclado spoofed"}).'
+                ),
+            })
+
+        lines = []
         try:
-            import subprocess as _sp
-            result = _sp.run(
-                ['wmic', 'path', 'Win32_PnPEntity', 'where',
-                 'PNPClass="HIDClass"', 'get', 'Name,DeviceID', '/FORMAT:CSV'],
-                capture_output=True, text=True, timeout=15
+            # Preferir Get-PnpDevice (wmic deprecado en Win11)
+            ps = _sp.run(
+                [
+                    'powershell', '-NoProfile', '-Command',
+                    "Get-PnpDevice -Class HIDClass -Status OK -ErrorAction SilentlyContinue | "
+                    "Select-Object -ExpandProperty InstanceId",
+                ],
+                capture_output=True, text=True, timeout=20,
             )
-            if result.returncode != 0:
+            if ps.returncode == 0 and ps.stdout.strip():
+                lines = ps.stdout.splitlines()
+        except Exception:
+            pass
+        if not lines:
+            try:
+                result = _sp.run(
+                    ['wmic', 'path', 'Win32_PnPEntity', 'where',
+                     'PNPClass="HIDClass"', 'get', 'Name,DeviceID', '/FORMAT:CSV'],
+                    capture_output=True, text=True, timeout=15,
+                )
+                if result.returncode == 0:
+                    lines = result.stdout.splitlines()
+            except Exception as e:
+                print(f"Error en scan_arduino_hid: {e}")
                 return
-            import re as _re
-            for line in result.stdout.splitlines():
-                ll = line.lower()
-                vid_m = _re.search(r'vid_([0-9a-f]{4})', ll)
-                if not vid_m or vid_m.group(1) not in SUSPICIOUS_VIDS:
+
+        seen = set()
+        try:
+            for line in lines:
+                ll = line.lower().strip()
+                if not ll:
                     continue
-                if any(kw in ll for kw in ['arduino', 'ch340', 'stm32', 'usbasp', 'pro micro', 'digispark']):
-                    print(f"⚠️ ARDUINO/HID DEVICE: {line.strip()[:120]}")
-                    self.issues_found.append({
-                        'nombre': f'Dispositivo HID Arduino/programable: {line.strip()[:80]}',
-                        'ruta': 'Dispositivos USB del sistema',
-                        'archivo': line.strip()[:80],
-                        'tipo': 'arduino_hid_device',
-                        'categoria': 'AUTOCLICK',
-                        'alerta': 'SOSPECHOSO',
-                        'confidence': 0.75,
-                        'detected_patterns': ['arduino_hid'],
-                    })
+                vid_m = _re.search(r'vid_([0-9a-f]{4})', ll)
+                if not vid_m:
+                    continue
+                vid = vid_m.group(1)
+                if vid not in SUSPICIOUS_VIDS:
+                    continue
+                key = f"{vid}:{ll[:80]}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                strong = any(kw in ll for kw in NAME_KW)
+                # VID solo: reportar (MCU como HID mouse/keyboard a menudo sin "arduino" en nombre)
+                _emit(line, vid, strong=strong)
         except Exception as e:
             print(f"Error en scan_arduino_hid: {e}")
 
@@ -16873,6 +17460,11 @@ class ArgusApp:
                             'alerta': 'CRITICAL',
                             'confidence': 0.93,
                             'detected_patterns': ['active_injector', sig],
+                            'explicacion': (
+                                f'Inyector `{raw_name or sig}` corriendo durante el SS. '
+                                'Combinado con Java/Minecraft activo es evidencia fuerte.'
+                            ),
+                            'extra': {'pid': proc.info.get('pid'), 'signature': sig},
                         })
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
@@ -17148,6 +17740,7 @@ class ArgusApp:
             b'NoFall', b'AntiKnockback', b'AutoClicker', b'AutoSprint', b'FastBow',
             b'Criticals', b'LiquidBounce', b'WurstClient', b'VapeClient',
             b'SigmaClient', b'FutureClient', b'MeteorClient', b'AstolfoClient',
+            b'SlinkyClient', b'slinky.gg',
             b'com/rise/', b'com/sigma/', b'net/vapor/', b'dev/liquidbounce',
             b'me/sigma/', b'me/astolfo/', b'net/rusherhack/', b'com/moonrise/',
         ]
@@ -17382,7 +17975,36 @@ class ArgusApp:
                     continue  # versión desconocida, no podemos verificar
 
                 if actual_hash.lower() != expected.lower():
+                    # La tabla KNOWN_HASHES puede estar vieja. Re-verificar contra
+                    # Mojang en vivo antes de gritar CRITICAL.
+                    _live = None
+                    try:
+                        _live = _fetch_mojang_hash(ver_name)
+                    except Exception:
+                        _live = None
+                    if _live and actual_hash.lower() == _live.lower():
+                        print(f"✅ minecraft.jar {ver_name} — hash OK (tabla local desactualizada)")
+                        continue
+                    _table_stale = _live is None  # no pudimos confirmar → no asumir cheat
                     print(f"🚨 MINECRAFT.JAR MODIFICADO: {ver_name} — esperado {expected[:12]}... obtenido {actual_hash[:12]}...")
+                    if _table_stale and not _has_lunar:
+                        self.issues_found.append({
+                            'nombre': f'minecraft.jar {ver_name}: hash distinto al de la tabla local (sin poder confirmar con Mojang)',
+                            'ruta': jar_path,
+                            'archivo': f'{ver_name}.jar',
+                            'tipo': 'modified_minecraft_jar',
+                            'categoria': 'GHOST_CLIENT',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.45,
+                            'detected_patterns': ['hash_mismatch_unverified', f'ver:{ver_name}'],
+                            'explicacion': (
+                                f'El {ver_name}.jar no coincide con el hash guardado localmente, '
+                                'pero no se pudo verificar contra Mojang (sin red). Puede ser un jar '
+                                'parcheado por un launcher o un hash desactualizado. Revisar en el SS.'
+                            ),
+                            'extra': {'expected': expected, 'actual': actual_hash, 'unverified': True},
+                        })
+                        continue
                     if _has_lunar:
                         # Lunar Client parchea JARs vanilla — bajar severidad
                         self.issues_found.append({
@@ -17477,20 +18099,40 @@ class ArgusApp:
                     # #15 — Tiempo de vida del proceso
                     if ctime > 0:
                         uptime_secs = (now - _dt.datetime.fromtimestamp(ctime)).total_seconds()
-                        if uptime_secs < 60 and in_temp and not in_safe:
-                            print(f"⚠️ PROCESO RECIENTE EN TEMP (<60s): {pname}")
+                        in_downloads = '\\downloads\\' in exe or '/downloads/' in exe
+                        try:
+                            from forensic_match import match_hack_stem
+                            hackish = bool(match_hack_stem(pname) or match_hack_stem(exe))
+                        except Exception:
+                            hackish = any(
+                                t in pname or t in exe
+                                for t in ('inject', 'vape', 'cheat', 'hack', 'xenos')
+                            )
+                        if uptime_secs < 60 and not in_safe and (in_temp or in_downloads or hackish):
+                            print(f"⚠️ PROCESO RECIENTE (<60s): {pname} uptime={int(uptime_secs)}s")
                             self.issues_found.append({
-                                'nombre': f'Proceso muy reciente en carpeta temporal: {pname} ({int(uptime_secs)}s)',
+                                'nombre': (
+                                    f'Proceso muy reciente'
+                                    f'{" en temp/downloads" if (in_temp or in_downloads) else ""}'
+                                    f': {pname} ({int(uptime_secs)}s)'
+                                ),
                                 'ruta': exe,
                                 'archivo': pname,
                                 'tipo': 'short_lived_process',
                                 'categoria': 'PROCESO',
-                                'alerta': 'SOSPECHOSO',
-                                'confidence': 0.70,
-                                'detected_patterns': ['short_lived_temp_process'],
-                                'explicacion': f'{pname} lleva solo {int(uptime_secs)} segundos corriendo y está '
-                                               f'en una carpeta temporal. Puede haber sido lanzado justo antes del SS '
-                                               f'para inyectar código y luego cerrarse.',
+                                'alerta': 'CRITICAL' if hackish and (in_temp or in_downloads) else 'SOSPECHOSO',
+                                'confidence': 0.82 if hackish else 0.70,
+                                'detected_patterns': (
+                                    ['short_lived_process']
+                                    + (['short_lived_temp_process'] if in_temp else [])
+                                    + (['short_lived_hack_name'] if hackish else [])
+                                ),
+                                'explicacion': (
+                                    f'{pname} lleva solo {int(uptime_secs)}s corriendo'
+                                    f'{" desde temp/downloads" if (in_temp or in_downloads) else ""}. '
+                                    'Puede haberse lanzado justo antes del SS.'
+                                ),
+                                'extra': {'uptime_secs': int(uptime_secs)},
                             })
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
@@ -17600,12 +18242,25 @@ class ArgusApp:
         """#18/#19/#20 — .exe sospechosos: sin metadata PE, alta entropy, packed con UPX/MPRESS."""
         print("🔍 Analizando metadata PE, entropy y packing de ejecutables sospechosos...")
         import math as _math
+        _APP = os.environ.get('APPDATA', '')
+        _LAP = os.environ.get('LOCALAPPDATA', '')
+        _TMP = os.environ.get('TEMP', '') or os.environ.get('TMP', '')
         HACK_DIRS = [
             os.path.expanduser('~\\Desktop'),
             os.path.expanduser('~\\Downloads'),
-            os.path.join(os.environ.get('APPDATA', ''), '.minecraft'),
-            os.path.join(os.environ.get('APPDATA', ''), '.weave'),
+            os.path.expanduser('~\\Documents'),
+            os.path.join(_APP, '.minecraft'),
+            os.path.join(_APP, '.weave'),
+            # #3 — carpetas de camuflaje: cheats renombrados a "Spotify.exe" etc.
+            _APP, _LAP, _TMP,
+            os.path.join(_APP, 'Spotify'), os.path.join(_LAP, 'Spotify'),
+            os.path.join(_LAP, 'Discord'), os.path.join(_APP, 'discord'),
+            os.path.join(_LAP, 'Programs'),
+            os.path.join(os.environ.get('PUBLIC', 'C:\\Users\\Public'), 'Downloads'),
         ]
+        # dedupe preservando orden, descartar vacíos
+        _seen_hd = set()
+        HACK_DIRS = [d for d in HACK_DIRS if d and not (d.lower() in _seen_hd or _seen_hd.add(d.lower()))]
         SAFE_PUBLISHERS = [b'Microsoft', b'NVIDIA', b'Adobe', b'Google', b'Intel']
 
         def _shannon_entropy(data: bytes) -> float:
@@ -17636,9 +18291,20 @@ class ArgusApp:
                             continue
                         with open(fpath, 'rb') as f:
                             header = f.read(min(65536, fsize))
+                            # La VersionInfo/.rsrc y la firma Authenticode viven al FINAL
+                            # del PE, no en la cabecera. Sin leer la cola dábamos FP a
+                            # cualquier instalador sin firmar (Claude Setup.exe, CurseForge...).
+                            tail = b''
+                            if fsize > 65536:
+                                try:
+                                    f.seek(max(0, fsize - 262144))
+                                    tail = f.read(262144)
+                                except Exception:
+                                    tail = b''
+                        scan_buf = header + tail
 
                         # Skip executables signed by known publishers
-                        if any(pub in header for pub in SAFE_PUBLISHERS):
+                        if any(pub in scan_buf for pub in SAFE_PUBLISHERS):
                             continue
 
                         entropy = _shannon_entropy(header)
@@ -17647,10 +18313,14 @@ class ArgusApp:
                         # P2 #18 — PE VersionInfo metadata check
                         # Legítimos tienen CompanyName/FileDescription; hacks raramente los tienen
                         has_version_info = (
-                            b'CompanyName' in header or
-                            b'FileDescription' in header or
-                            b'ProductName' in header or
-                            b'LegalCopyright' in header
+                            b'CompanyName' in scan_buf or
+                            b'FileDescription' in scan_buf or
+                            b'ProductName' in scan_buf or
+                            b'LegalCopyright' in scan_buf or
+                            b'OriginalFilename' in scan_buf or
+                            # instaladores comunes (NSIS/Inno/Squirrel/WiX) — legítimos aunque sin firma
+                            b'Nullsoft' in scan_buf or b'Inno Setup' in scan_buf or
+                            b'Squirrel' in scan_buf or b'WixToolset' in scan_buf
                         )
 
                         if upx:
@@ -17724,9 +18394,12 @@ class ArgusApp:
                         arg_l = arg.lower()
                         if '-javaagent' in arg_l:
                             jar_name = arg.split('=')[-1].split('\\')[-1].split('/')[-1]
-                            # Ignorar agentes de launchers oficiales conocidos
-                            safe_agents = ['authlib', 'oshi', 'legacylauncher', 'lunarclient', 'badlion']
-                            if any(s in arg_l for s in safe_agents):
+                            # Ignorar agentes de launchers oficiales + APM/profilers legítimos
+                            safe_agents = [
+                                'authlib', 'oshi', 'legacylauncher', 'lunarclient',
+                                'badlion', 'feather', 'labymod',
+                            ]
+                            if any(s in arg_l for s in safe_agents) or is_legit_java_agent(arg_l):
                                 continue
                             print(f"🚨 JAVAAGENT: {arg}")
                             self.issues_found.append({
@@ -17749,6 +18422,8 @@ class ArgusApp:
                                 fname   = arg_val.split('\\')[-1].split('/')[-1]
                                 safe_agentlibs = ('jdwp', 'hprof', 'instrument')
                                 if any(s in arg_l for s in safe_agentlibs) and boot_arg == '-agentlib:':
+                                    continue
+                                if is_legit_java_agent(arg_l) or is_legit_java_agent(fname):
                                     continue
                                 self.issues_found.append({
                                     'nombre': f'Arg JVM de inyección detectado: {arg[:80]}',
@@ -18044,7 +18719,7 @@ class ArgusApp:
             'key_key.use':    {'button4', 'button5', 'button6', 'button7', 'button8'},
         }
         try:
-            # Escanear options.txt del .minecraft raíz y de perfiles de versiones
+            # Escanear options.txt: vanilla + Lunar/Badlion/Feather + perfiles
             options_files = []
             root_opts = os.path.join(mc_dir, 'options.txt')
             if os.path.isfile(root_opts):
@@ -18055,6 +18730,15 @@ class ArgusApp:
                     ver_opts = os.path.join(profiles_dir, ver, 'options.txt')
                     if os.path.isfile(ver_opts):
                         options_files.append(ver_opts)
+            for extra in (
+                os.path.join(appdata, '.lunarclient', 'settings', 'game', 'options.txt'),
+                os.path.join(appdata, '.lunarclient', 'offline', 'multiver', 'options.txt'),
+                os.path.join(appdata, '.minecraft', 'lunar', 'options.txt'),
+                os.path.join(appdata, '.feather', 'options.txt'),
+                os.path.join(appdata, '.blclient', 'minecraft', 'options.txt'),
+            ):
+                if os.path.isfile(extra) and extra not in options_files:
+                    options_files.append(extra)
 
             for opts_path in options_files:
                 try:
@@ -18089,193 +18773,490 @@ class ArgusApp:
             print(f"Error en scan_options_txt_keybinds: {e}")
 
     def scan_hack_properties_configs(self):
-        """#10 — Detecta archivos .properties de hack clients con módulos activados."""
-        print("🔍 Buscando .properties de hack clients con módulos activos...")
+        """#10 — Detecta .properties/.json de hack clients con módulos activados."""
+        print("🔍 Buscando configs de hack clients con módulos activos...")
         appdata = os.environ.get('APPDATA', '')
-        mc_dir = os.path.join(appdata, '.minecraft')
-        config_dir = os.path.join(mc_dir, 'config')
+        local = os.environ.get('LOCALAPPDATA', '')
+        userprofile = os.environ.get('USERPROFILE', os.path.expanduser('~'))
         HACK_MODULE_KEYS = [
             'killaura', 'aimbot', 'reach', 'velocity', 'nofall', 'scaffold',
             'speed', 'fly', 'bhop', 'bunnyhop', 'triggerbot', 'antikb',
             'antiknockback', 'timer', 'esp', 'xray', 'fullbright', 'criticals',
             'fastplace', 'autoeat', 'autototem', 'baritone', 'aura',
+            'toworkaround', 'autoclicker', 'nuker', 'jesus', 'phase',
+        ]
+        SKIP_DIRS = {
+            'optifine', 'forge', 'fml', 'journeymap', 'rei', 'jei', 'emi',
+            'sodium', 'iris', 'lithium', 'fabric', 'assets', 'libraries',
+        }
+        scan_roots = [
+            os.path.join(appdata, '.minecraft', 'config'),
+            os.path.join(appdata, '.minecraft', 'meteor-client'),
+            os.path.join(appdata, '.minecraft', 'liquidbounce'),
+            os.path.join(appdata, '.minecraft', 'rusherhack'),
+            os.path.join(userprofile, '.lunarclient', 'settings'),
+            os.path.join(appdata, '.lunarclient', 'settings'),
+            os.path.join(appdata, 'lunarclient', 'settings'),
+            os.path.join(local, 'lunarclient', 'settings'),
+            os.path.join(appdata, '.badlion', 'minecraft', 'config'),
         ]
         try:
-            if not os.path.isdir(config_dir):
-                return
-            for root, dirs, files in os.walk(config_dir):
-                dirs[:] = [d for d in dirs if d.lower() not in {'optifine', 'forge', 'fml', 'journeymap', 'rei'}]
-                for fname in files:
-                    if not fname.lower().endswith('.properties'):
+            seen = set()
+            for config_dir in scan_roots:
+                if not os.path.isdir(config_dir):
+                    continue
+                for root, dirs, files in os.walk(config_dir):
+                    dirs[:] = [d for d in dirs if d.lower() not in SKIP_DIRS]
+                    depth = root[len(config_dir):].count(os.sep)
+                    if depth > 4:
+                        dirs.clear()
                         continue
-                    fpath = os.path.join(root, fname)
-                    try:
-                        with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
-                            content = f.read(8192).lower()
-                    except Exception:
-                        continue
-                    enabled_modules = []
-                    for line in content.splitlines():
-                        line = line.strip()
-                        if '=' not in line or line.startswith('#'):
+                    for fname in files:
+                        fl = fname.lower()
+                        if not (fl.endswith('.properties') or fl.endswith('.json')
+                                or fl.endswith('.toml') or fl.endswith('.cfg')):
                             continue
-                        key, _, val = line.partition('=')
-                        key = key.strip()
-                        val = val.strip()
-                        if val not in ('true', '1', 'on', 'enabled', 'yes'):
+                        fpath = os.path.join(root, fname)
+                        if fpath in seen:
                             continue
-                        for mod in HACK_MODULE_KEYS:
-                            if mod in key:
-                                enabled_modules.append(f'{mod}=true')
-                                break
-                    if len(enabled_modules) >= 2:
-                        print(f"🚨 HACK .PROPERTIES: {fpath} ({len(enabled_modules)} módulos activos)")
-                        self.issues_found.append({
-                            'nombre': f'Config de hack con módulos activos: {fname}',
-                            'ruta': fpath,
-                            'archivo': fname,
-                            'tipo': 'ghost_client_config',
-                            'categoria': 'CONFIG_HACK',
-                            'alerta': 'CRITICAL',
-                            'confidence': 0.87,
-                            'detected_patterns': [f'prop_module:{m}' for m in enabled_modules[:6]],
-                            'explicacion': (
-                                f'{fname} contiene {len(enabled_modules)} módulos de hack activos '
-                                f'({", ".join(enabled_modules[:4])}{"..." if len(enabled_modules)>4 else ""}). '
-                                'Los archivos .properties son el formato de configuración usado por varios '
-                                'ghost clients para persistir qué módulos están habilitados entre sesiones.'
-                            ),
-                        })
+                        seen.add(fpath)
+                        try:
+                            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read(12288).lower()
+                        except Exception:
+                            continue
+                        enabled_modules = []
+                        for line in content.replace(',', '\n').splitlines():
+                            line = line.strip().strip(',').strip('"').strip("'")
+                            if not line or line.startswith('#') or line.startswith('//'):
+                                continue
+                            key, sep, val = line.partition('=')
+                            if not sep:
+                                key, sep, val = line.partition(':')
+                            if not sep:
+                                # JSON style "killaura": true
+                                for mod in HACK_MODULE_KEYS:
+                                    if f'"{mod}"' in line and ('true' in line or ': 1' in line):
+                                        enabled_modules.append(f'{mod}=true')
+                                        break
+                                continue
+                            key = key.strip().strip('"').strip("'")
+                            val = val.strip().rstrip(',').strip('"').strip("'")
+                            if val not in ('true', '1', 'on', 'enabled', 'yes'):
+                                continue
+                            for mod in HACK_MODULE_KEYS:
+                                if mod in key:
+                                    enabled_modules.append(f'{mod}=true')
+                                    break
+                        # dedupe preservando orden
+                        enabled_modules = list(dict.fromkeys(enabled_modules))
+                        if len(enabled_modules) >= 2:
+                            print(f"🚨 HACK CONFIG: {fpath} ({len(enabled_modules)} módulos activos)")
+                            self.issues_found.append({
+                                'nombre': f'Config de hack con módulos activos: {fname}',
+                                'ruta': fpath,
+                                'archivo': fname,
+                                'tipo': 'ghost_client_config',
+                                'categoria': 'CONFIG_HACK',
+                                'alerta': 'CRITICAL',
+                                'confidence': 0.87,
+                                'detected_patterns': [f'prop_module:{m}' for m in enabled_modules[:6]],
+                                'explicacion': (
+                                    f'{fname} contiene {len(enabled_modules)} módulos de hack activos '
+                                    f'({", ".join(enabled_modules[:4])}{"..." if len(enabled_modules)>4 else ""}). '
+                                    'Config persistente de ghost client (properties/json/toml).'
+                                ),
+                            })
         except Exception as e:
             print(f"Error en scan_hack_properties_configs: {e}")
 
     def scan_prefetch_hacks(self):
-        """#21 — Detecta archivos Prefetch de hacks ejecutados (aunque el exe esté borrado)."""
+        """#21 — Detecta Prefetch de hacks (boundary match; stems ambiguos requieren co-token)."""
         print("🔍 Escaneando Prefetch por hacks ejecutados...")
         prefetch_dir = r'C:\Windows\Prefetch'
+        try:
+            from config.hack_signatures import stem_in_filename
+        except Exception:
+            def stem_in_filename(stem, name):  # type: ignore
+                return stem in (name or '')
+
+        # Stems fuertes (boundary)
         HACK_NAMES = [
-            # Clientes clásicos
-            'sigma', 'vape', 'vapelite', 'liquidbounce', 'wurst', 'rise',
-            'flux', 'future', 'astolfo', 'novoline', 'drip', 'entropy',
-            'whiteout', 'exhibition', 'impact',
-            # Clientes modernos (2022-2025)
-            'meteor', 'meteorclient',
-            'rusherhack', 'rusher',
-            'aristois',
-            'tenacity',
-            'vertex', 'vertexclient',
-            'inertia', 'inertiaclient',
-            'salhack',
-            'jello', 'jelloclient',
-            'datura', 'daturamc',
-            'remix', 'remixclient',
-            'pandora', 'pandoraclient',
-            'azura',
-            'kamiblue',
-            'konas',
-            'weepcraft',
-            'zeroday',
-            'nyx', 'nyxclient',
-            'lucid', 'lucidclient',
-            'nextgen', 'tegernako',
-            # Loaders e injectors
-            'weaveloader', 'weave-loader',
-            'extremeinjector', 'xenos',
-            'cheatengine', 'processhacker',
-            'injector',
-            # Nombres genéricos de ghost clients
-            'ghostclient', 'ghost-client',
-            'hackclient',
-            'aimbot', 'killaura',
-            'scaffold', 'baritone',
+            'vape', 'vapelite', 'liquidbounce', 'wurst', 'wurstclient',
+            'astolfo', 'novoline', 'entropy', 'whiteout', 'exhibition',
+            'meteorclient', 'rusherhack', 'aristois', 'tenacity',
+            'vertexclient', 'inertiaclient', 'salhack', 'jelloclient',
+            'daturamc', 'remixclient', 'pandoraclient', 'azura',
+            'kamiblue', 'konas', 'weepcraft', 'zeroday', 'nyxclient',
+            'lucidclient', 'weaveloader', 'extremeinjector', 'xenos',
+            'ghostclient', 'hackclient', 'aimbot', 'killaura', 'baritone',
+            'sigmaclient', 'fluxclient', 'futureclient', 'riseclient',
+            'impactclient', 'dripclient',
         ]
+        # Ambiguos: solo si boundary + co-token client/hack/inject/vape…
+        AMBIGUOUS = {
+            'sigma', 'flux', 'rise', 'impact', 'future', 'meteor', 'rusher',
+            'remix', 'lucid', 'nyx', 'injector', 'scaffold', 'drip', 'vertex',
+            'inertia', 'jello', 'pandora', 'datura',
+        }
+        CO_TOKENS = (
+            'client', 'hack', 'inject', 'vape', 'cheat', 'loader', 'bypass',
+            'ghost', 'mc', 'minecraft',
+        )
         if not os.path.isdir(prefetch_dir):
             return
         try:
+            import datetime as _dt
             for fname in os.listdir(prefetch_dir):
                 if not fname.lower().endswith('.pf'):
                     continue
                 fname_lower = fname.lower()
+                matched = None
                 for hack in HACK_NAMES:
-                    if hack in fname_lower:
-                        exe_name = fname.split('-')[0]
-                        full_path = os.path.join(prefetch_dir, fname)
-                        mtime = os.path.getmtime(full_path)
-                        import datetime as _dt
-                        last_run = _dt.datetime.fromtimestamp(mtime).strftime('%d/%m/%Y %H:%M')
-                        print(f"🚨 PREFETCH HACK: {fname} (última ejecución: {last_run})")
-                        self.issues_found.append({
-                            'nombre': f'Prefetch de hack encontrado: {exe_name}',
-                            'ruta': full_path,
-                            'archivo': fname,
-                            'tipo': 'prefetch_hack',
-                            'categoria': 'FORENSE',
-                            'alerta': 'CRITICAL',
-                            'confidence': 0.90,
-                            'detected_patterns': [f'prefetch:{hack}'],
-                            'explicacion': f'Se encontró un archivo Prefetch de {exe_name} (última ejecución: {last_run}). '
-                                           f'El Prefetch confirma que este programa fue ejecutado en este PC aunque '
-                                           f'el archivo original haya sido borrado.',
-                        })
+                    if stem_in_filename(hack, fname_lower):
+                        matched = hack
                         break
+                if not matched:
+                    for hack in AMBIGUOUS:
+                        if not stem_in_filename(hack, fname_lower):
+                            continue
+                        if any(stem_in_filename(t, fname_lower) or t in fname_lower for t in CO_TOKENS):
+                            matched = hack
+                            break
+                if not matched:
+                    continue
+                exe_name = fname.split('-')[0]
+                full_path = os.path.join(prefetch_dir, fname)
+                mtime = os.path.getmtime(full_path)
+                last_run = _dt.datetime.fromtimestamp(mtime).strftime('%d/%m/%Y %H:%M')
+                ts_iso = _dt.datetime.fromtimestamp(mtime).strftime('%Y-%m-%dT%H:%M:%S')
+                print(f"🚨 PREFETCH HACK: {fname} (última ejecución: {last_run})")
+                self.issues_found.append({
+                    'nombre': f'Prefetch de hack encontrado: {exe_name}',
+                    'ruta': full_path,
+                    'archivo': fname,
+                    'tipo': 'prefetch_hack',
+                    'categoria': 'FORENSE',
+                    'alerta': 'CRITICAL',
+                    'confidence': 0.90,
+                    'timestamp': ts_iso,
+                    'last_executed': ts_iso,
+                    'mtime': mtime,
+                    'detected_patterns': [f'prefetch:{matched}'],
+                    'explicacion': (
+                        f'Se encontró un archivo Prefetch de {exe_name} '
+                        f'(última ejecución: {last_run}). '
+                        f'El Prefetch confirma ejecución aunque el exe se haya borrado.'
+                    ),
+                })
         except Exception as e:
             print(f"Error en scan_prefetch_hacks: {e}")
 
-    def scan_usn_minecraft_jars(self):
-        """#22/#23 — Detecta JARs y carpetas de ghost clients eliminados via USN Journal."""
-        print("🔍 Buscando JARs/.minecraft borrados en USN Journal (últimas 72h)...")
-        HACK_PATTERNS = [
-            # Clientes clásicos
-            'sigma', 'vape', 'vapelite', 'liquidbounce', 'wurst', 'rise',
-            'flux', 'future', 'astolfo', 'novoline', 'drip', 'entropy',
-            'whiteout', 'exhibition',
-            # Clientes modernos (2022-2025)
-            'meteor', 'rusherhack', 'aristois', 'tenacity', 'vertex',
-            'inertia', 'salhack', 'jello', 'datura', 'remix', 'pandora',
-            'azura', 'kamiblue', 'konas', 'weepcraft', 'zeroday',
-            'nyx', 'lucid', 'nextgen', 'impact',
-            # Fingerprints de directorio
-            '.weave', '.rise', '.sigma', '.meteor', '.liquidbounce',
-            # Misc
-            'ghostclient', 'ghost_client', 'baritone', 'schematica',
-            'hackclient', 'hackmod', 'weaveloader',
+    def scan_prefetch_referenced_files(self):
+        """Prefetch: extrae DLLs/JARs referenciados dentro del .pf (no solo el .exe)."""
+        print("🔍 Prefetch: analizando archivos referenciados (DLL/JAR)...")
+        prefetch_dir = os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'Prefetch')
+        if not os.path.isdir(prefetch_dir):
+            return
+        try:
+            from forensic_match import match_hack_stem
+        except Exception:
+            def match_hack_stem(text, extra_strong=()):  # type: ignore
+                return None
+        import re as _re
+        # Paths UTF-16LE típicos en Prefetch v23+
+        path_re = _re.compile(
+            rb'(?:[A-Z]:\\|\\\?)(?:[^\x00]{1,180}?)(?:\.dll|\.jar|\.exe)\x00',
+            _re.I,
+        )
+        found = 0
+        try:
+            for fname in os.listdir(prefetch_dir):
+                if found >= 15:
+                    break
+                if not fname.lower().endswith('.pf'):
+                    continue
+                fpath = os.path.join(prefetch_dir, fname)
+                try:
+                    with open(fpath, 'rb') as f:
+                        data = f.read(262144)  # 256KB cap
+                except Exception:
+                    continue
+                if len(data) < 84 or data[4:8] != b'SCCA':
+                    continue
+                hits = []
+                for m in path_re.finditer(data):
+                    raw = m.group(0).rstrip(b'\x00')
+                    try:
+                        # Prefer UTF-16LE decode of even-aligned window
+                        start = m.start()
+                        # Alinear a word boundary cercano
+                        align = start - (start % 2)
+                        chunk = data[align:align + min(400, len(data) - align)]
+                        try:
+                            text = chunk.decode('utf-16-le', errors='ignore').split('\x00')[0]
+                        except Exception:
+                            text = raw.decode('ascii', errors='ignore')
+                    except Exception:
+                        continue
+                    text_l = (text or '').lower().replace('/', '\\')
+                    if not text_l.endswith(('.dll', '.jar', '.exe')):
+                        continue
+                    stem = match_hack_stem(text_l) or match_hack_stem(os.path.basename(text_l))
+                    if not stem:
+                        continue
+                    if any(x in text_l for x in (
+                        'windows\\system32', 'windows\\syswow64', 'microsoft\\',
+                        'program files\\java', 'program files\\eclipse',
+                    )):
+                        continue
+                    key = (stem, os.path.basename(text_l))
+                    if key in hits:
+                        continue
+                    hits.append(key)
+                    found += 1
+                    mtime = os.path.getmtime(fpath)
+                    ts_iso = datetime.fromtimestamp(mtime).strftime('%Y-%m-%dT%H:%M:%S')
+                    print(f"🚨 PREFETCH REF: {os.path.basename(text_l)} stem={stem} via {fname}")
+                    self.issues_found.append({
+                        'nombre': f'Prefetch referencia hack: {os.path.basename(text_l)}',
+                        'ruta': fpath,
+                        'archivo': os.path.basename(text_l),
+                        'tipo': 'prefetch_referenced_hack',
+                        'categoria': 'FORENSE',
+                        'alerta': 'CRITICAL',
+                        'confidence': 0.86,
+                        'timestamp': ts_iso,
+                        'detected_patterns': [
+                            f'prefetch_ref:{stem}',
+                            f'pf_host:{fname.split("-")[0][:40]}',
+                        ],
+                        'explicacion': (
+                            f'El Prefetch "{fname}" referencia "{text_l}". '
+                            f'Stem de hack={stem}. Evidencia de carga aunque el binario se borró.'
+                        ),
+                        'extra': {'referenced_path': text_l[:240], 'stem': stem},
+                    })
+                    if found >= 15:
+                        break
+        except Exception as e:
+            print(f"Error en scan_prefetch_referenced_files: {e}")
+
+    def scan_browser_hack_cookies(self):
+        """Cookies Chrome/Edge/WinINET con hosts de sitios de cheats."""
+        print("🔍 Escaneando cookies de sitios de cheats...")
+        HACK_HOSTS = (
+            'vape.gg', 'vape.lol', 'liquidbounce.net', 'wurstclient.net',
+            'meteorclient.com', 'impactclient.net', 'aristois.net',
+            'sigma-jello.com', 'raid0.net', 'venomhack', 'rusherhack.org',
+            'ghostclient', 'myau.xyz', 'drip.gg', 'raven.b4',
+        )
+        local = os.environ.get('LOCALAPPDATA', '')
+        appdata = os.environ.get('APPDATA', '')
+        cookie_dbs = [
+            os.path.join(local, 'Google', 'Chrome', 'User Data', 'Default', 'Network', 'Cookies'),
+            os.path.join(local, 'Google', 'Chrome', 'User Data', 'Default', 'Cookies'),
+            os.path.join(local, 'Microsoft', 'Edge', 'User Data', 'Default', 'Network', 'Cookies'),
+            os.path.join(local, 'Microsoft', 'Edge', 'User Data', 'Default', 'Cookies'),
+            os.path.join(local, 'BraveSoftware', 'Brave-Browser', 'User Data', 'Default', 'Network', 'Cookies'),
         ]
+        # WinINET / IE cookie files (nombre de archivo suele incluir host)
+        wininet_dirs = [
+            os.path.join(appdata, 'Microsoft', 'Windows', 'Cookies'),
+            os.path.join(local, 'Microsoft', 'Windows', 'INetCookies'),
+            os.path.join(appdata, 'Microsoft', 'Windows', 'INetCookies'),
+        ]
+        found = 0
+        import shutil
+        import sqlite3
+        import tempfile
+        for db_path in cookie_dbs:
+            if found >= 12:
+                break
+            if not os.path.isfile(db_path):
+                continue
+            tmp = None
+            try:
+                fd, tmp = tempfile.mkstemp(suffix='.db')
+                os.close(fd)
+                shutil.copy2(db_path, tmp)
+                con = sqlite3.connect(f'file:{tmp}?mode=ro', uri=True, timeout=2)
+                try:
+                    cur = con.execute(
+                        'SELECT host_key, name, last_access_utc FROM cookies '
+                        'ORDER BY last_access_utc DESC LIMIT 4000'
+                    )
+                    rows = cur.fetchall()
+                finally:
+                    con.close()
+                for host, cname, last_utc in rows:
+                    if found >= 12:
+                        break
+                    host_l = (host or '').lower().lstrip('.')
+                    hit = next((h for h in HACK_HOSTS if h in host_l), None)
+                    if not hit:
+                        continue
+                    # Chrome epoch → approx ISO (1601-based; rough)
+                    ts = ''
+                    try:
+                        if last_utc:
+                            epoch = (int(last_utc) / 1_000_000) - 11644473600
+                            if epoch > 0:
+                                ts = datetime.fromtimestamp(epoch).strftime('%Y-%m-%dT%H:%M:%S')
+                    except Exception:
+                        pass
+                    found += 1
+                    print(f"🚨 COOKIE HACK SITE: {host_l} ({cname})")
+                    self.issues_found.append({
+                        'nombre': f'Cookie de sitio de cheats: {host_l}',
+                        'ruta': db_path,
+                        'archivo': cname or host_l,
+                        'tipo': 'browser_hack_cookie',
+                        'categoria': 'BROWSER',
+                        'alerta': 'SOSPECHOSO',
+                        'confidence': 0.78,
+                        'timestamp': ts,
+                        'detected_patterns': [f'cookie_host:{hit}', f'browser_cookie:{host_l[:60]}'],
+                        'explicacion': (
+                            f'Cookie en navegador para host "{host_l}" (sitio asociado a cheats). '
+                            'Indica visita/login aunque el historial se haya limpiado.'
+                        ),
+                    })
+            except Exception:
+                continue
+            finally:
+                if tmp:
+                    try:
+                        os.remove(tmp)
+                    except Exception:
+                        pass
+        # WinINET: match por nombre de archivo
+        host_tokens = tuple({h.split('.')[0] for h in HACK_HOSTS if len(h.split('.')[0]) >= 4})
+        for d in wininet_dirs:
+            if found >= 12 or not os.path.isdir(d):
+                continue
+            try:
+                for root, _dirs, files in os.walk(d):
+                    for fname in files[:800]:
+                        if found >= 12:
+                            break
+                        fl = fname.lower()
+                        hit = next((h for h in HACK_HOSTS if h in fl), None)
+                        if not hit:
+                            hit = next((t for t in host_tokens if t in fl), None)
+                        if not hit:
+                            continue
+                        fpath = os.path.join(root, fname)
+                        found += 1
+                        print(f"🚨 WININET COOKIE: {fname}")
+                        self.issues_found.append({
+                            'nombre': f'Cookie WinINET sitio cheat: {fname[:80]}',
+                            'ruta': fpath,
+                            'archivo': fname,
+                            'tipo': 'wininet_hack_cookie',
+                            'categoria': 'BROWSER',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.72,
+                            'detected_patterns': [f'wininet_cookie:{hit}'],
+                            'explicacion': (
+                                f'Archivo de cookie WinINET/IE relacionado con "{hit}".'
+                            ),
+                        })
+            except Exception:
+                continue
+
+    def scan_usn_minecraft_jars(self):
+        """#22/#23 — JARs + carpetas ghost borradas via USN (boundary match)."""
+        print("🔍 Buscando JARs/carpetas ghost borrados en USN Journal (últimas 72h)...")
+        try:
+            from forensic_match import match_hack_stem
+        except Exception:
+            def match_hack_stem(text, extra_strong=()):  # type: ignore
+                return None
+        # #23 — carpetas residuales de ghost clients (DELETE/RENAME en USN)
+        DIR_FP = (
+            '.weave', '.rise', '.sigma', '.meteor', '.liquidbounce',
+            '.vape', 'vape.encrypted', '.rusherhack', '.novoline', '.astolfo',
+            '.entropy', '.whiteout', '.exhibition', '.doomsday', '.thunderhack',
+            '.fdpclient', '.nightx', '.konas', '.tenacity', '.aristois',
+            '.salhack', '.inertia', '.phobos', '.azura', '.datura',
+            '.drip', '.vertex', '.future', '.flux', '.wurst', '.kamiblue',
+            'weaveloader', '.ghostclient', '.baritone',
+        )
         try:
             lines = self._read_usn_journal(max_lines=150_000, max_seconds=12)
             if not lines:
                 return
-            # Filtrar eliminaciones (0x80000200) de .jar y carpetas de ghost clients
+            seen = set()
             for line in lines:
                 line_l = line.lower()
                 is_delete = '0x80000200' in line or '0x80000020' in line
                 is_rename = '0x00001000' in line or '0x00002000' in line
                 if not (is_delete or is_rename):
                     continue
-                has_hack = any(p in line_l for p in HACK_PATTERNS)
-                has_mc   = '.minecraft' in line_l
-                is_jar   = '.jar' in line_l
-                if not (has_hack or (has_mc and is_jar)):
-                    continue
-                # Extraer nombre de archivo del CSV (columna 1 = Filename en fsutil)
                 parts = line.split(',')
-                # fsutil readjournal CSV: Usn, Filename, Timestamp, Reason, ...
                 fname_raw = (parts[1].strip('"') if len(parts) > 2 else
                              parts[3].strip('"') if len(parts) > 3 else line[:80])
                 fname = fname_raw.strip() or line[:80]
+                stem = match_hack_stem(fname) or match_hack_stem(line_l)
+                dir_tag = next((d for d in DIR_FP if d in line_l), None)
+                dir_hit = bool(dir_tag)
+                has_hack = bool(stem) or dir_hit
+                has_mc = '.minecraft' in line_l
+                is_jar = '.jar' in line_l
+                if not (has_hack or (has_mc and is_jar)):
+                    continue
+                dedupe_key = (fname.lower(), 'd' if is_delete else 'r', stem or dir_tag or '')
+                if dedupe_key in seen:
+                    continue
+                seen.add(dedupe_key)
+                # Timestamp USN si viene en CSV
+                ts_iso = ''
+                try:
+                    raw_ts = parts[2].strip().strip('"') if len(parts) > 2 else ''
+                    if raw_ts and any(c.isdigit() for c in raw_ts):
+                        ts_iso = raw_ts.replace(' ', 'T')[:32]
+                except Exception:
+                    pass
                 action = 'borrado' if is_delete else 'renombrado'
-                alerta = 'CRITICAL' if has_hack else 'SOSPECHOSO'
-                conf   = 0.85 if has_hack else 0.70
-                print(f"🚨 USN JAR {action.upper()}: {fname}")
+                tag = stem or dir_tag or 'usn'
+                is_folder = dir_hit and not is_jar and not fname.lower().endswith(
+                    ('.exe', '.dll', '.jar', '.zip', '.bat', '.ps1')
+                )
+                if is_folder:
+                    tipo = 'usn_ghost_folder'
+                    alerta = 'CRITICAL'
+                    conf = 0.9
+                    nombre = f'Carpeta ghost {action} (USN): {fname}'
+                    expl = (
+                        f'USN Journal: carpeta/residual de ghost client {action} '
+                        f'("{fname}", tag={tag}). Limpieza pre-SS típica.'
+                    )
+                else:
+                    tipo = 'usn_deleted_hack'
+                    alerta = 'CRITICAL' if has_hack else 'SOSPECHOSO'
+                    conf = 0.85 if has_hack else 0.70
+                    nombre = f'JAR/archivo {action} (USN Journal): {fname}'
+                    expl = (
+                        f'USN Journal: archivo {action} "{fname}" '
+                        f'(stem={tag}). Persiste aunque el jar ya no exista.'
+                    )
+                print(f"🚨 USN {action.upper()}: {fname} [{tag}]")
                 self.issues_found.append({
-                    'nombre':   f'JAR {action} (USN Journal): {fname}',
-                    'ruta':     fname,
-                    'archivo':  fname,
-                    'tipo':     'usn_deleted_hack',
-                    'categoria':'FORENSE',
-                    'alerta':   alerta,
+                    'nombre': nombre,
+                    'ruta': fname,
+                    'archivo': fname,
+                    'tipo': tipo,
+                    'categoria': 'FORENSE',
+                    'alerta': alerta,
                     'confidence': conf,
-                    'detected_patterns': [f'usn_{action}', f'file:{fname}']
-                                         + [p for p in HACK_PATTERNS if p in fname.lower()],
+                    'timestamp': ts_iso,
+                    'last_executed': ts_iso,
+                    'detected_patterns': [
+                        f'usn_{action}', f'usn:{tag}', f'file:{fname}',
+                    ] + (['usn_ghost_dir'] if is_folder else []),
+                    'explicacion': expl,
+                    'extra': {'stem': tag, 'action': action, 'folder': is_folder},
                 })
         except Exception as e:
             print(f"Error en scan_usn_minecraft_jars: {e}")
@@ -18293,6 +19274,12 @@ class ArgusApp:
             os.path.join(appdata, '.weave'),
             os.path.join(appdata, 'WeaveLoader'),
             os.path.join(local,   'WeaveLoader'),
+            os.path.join(appdata, '.meteor'),
+            os.path.join(appdata, '.liquidbounce'),
+            os.path.join(appdata, '.rise'),
+            os.path.join(appdata, '.rusherhack'),
+            os.path.join(appdata, '.thunderhack'),
+            os.path.join(appdata, '.sigma'),
             os.path.join(home,    'Desktop'),
             os.path.join(home,    'Downloads'),
             os.path.join(home,    'Documents'),
@@ -18414,6 +19401,111 @@ class ArgusApp:
                         continue
         except Exception as e:
             print(f"Error en scan_discord_local_settings: {e}")
+
+    def scan_discord_cache(self):
+        """Discord Cache / attachments: nombres o strings de cheats en cache reciente."""
+        print("🔍 Escaneando cache de Discord por evidencia de cheats...")
+        try:
+            from forensic_match import match_hack_stem
+        except Exception:
+            def match_hack_stem(text, extra_strong=()):  # type: ignore
+                return None
+        appdata = os.environ.get('APPDATA', '')
+        bases = [
+            os.path.join(appdata, 'discord'),
+            os.path.join(appdata, 'discordcanary'),
+            os.path.join(appdata, 'discordptb'),
+        ]
+        INTERESTING = {'.exe', '.jar', '.dll', '.zip', '.rar', '.7z', '.ahk', '.bat', '.ps1'}
+        found = 0
+        cutoff = time.time() - 14 * 86400
+        for base in bases:
+            if found >= 12 or not os.path.isdir(base):
+                continue
+            for sub in ('Cache', 'Code Cache', 'GPUCache', 'CachedData',
+                        'Local Storage', 'Session Storage', 'blob_storage'):
+                root = os.path.join(base, sub)
+                if not os.path.isdir(root):
+                    continue
+                try:
+                    for dirpath, _dirs, files in os.walk(root):
+                        # Limitar profundidad
+                        if dirpath[len(root):].count(os.sep) > 3:
+                            _dirs.clear()
+                            continue
+                        for fname in files[:400]:
+                            if found >= 12:
+                                break
+                            fpath = os.path.join(dirpath, fname)
+                            try:
+                                mtime = os.path.getmtime(fpath)
+                                if mtime < cutoff:
+                                    continue
+                                size = os.path.getsize(fpath)
+                            except OSError:
+                                continue
+                            fl = fname.lower()
+                            stem = match_hack_stem(fl)
+                            ext = os.path.splitext(fl)[1]
+                            # Nombre de archivo con stem + extensión interesante
+                            if stem and (ext in INTERESTING or not ext):
+                                found += 1
+                                ts = datetime.fromtimestamp(mtime).strftime('%Y-%m-%dT%H:%M:%S')
+                                print(f"🚨 DISCORD CACHE FILE: {fname} stem={stem}")
+                                self.issues_found.append({
+                                    'nombre': f'Discord cache: archivo cheat ({stem}): {fname[:80]}',
+                                    'ruta': fpath[:255],
+                                    'archivo': fname[:255],
+                                    'tipo': 'discord_cache_hack',
+                                    'categoria': 'MESSAGING',
+                                    'alerta': 'SOSPECHOSO',
+                                    'confidence': 0.74,
+                                    'timestamp': ts,
+                                    'detected_patterns': [f'discord_cache:{stem}'],
+                                    'explicacion': (
+                                        f'En cache de Discord aparece "{fname}" con stem de hack "{stem}". '
+                                        'Indica archivo compartido/descargado por Discord.'
+                                    ),
+                                })
+                                continue
+                            # Strings en blobs pequeños (<256KB)
+                            if size and size < 262144 and size > 32:
+                                try:
+                                    with open(fpath, 'rb') as f:
+                                        blob = f.read(65536)
+                                    text = blob.decode('utf-8', errors='ignore').lower()
+                                    if len(text) < 20:
+                                        text = blob.decode('latin-1', errors='ignore').lower()
+                                    stem2 = match_hack_stem(text)
+                                    if not stem2:
+                                        continue
+                                    # Exigir co-señal de archivo/distribución
+                                    if not any(x in text for x in (
+                                        '.jar', '.exe', 'download', 'inject', 'client',
+                                        'liquidbounce', 'vape', 'meteor',
+                                    )):
+                                        continue
+                                    found += 1
+                                    ts = datetime.fromtimestamp(mtime).strftime('%Y-%m-%dT%H:%M:%S')
+                                    print(f"🚨 DISCORD CACHE STR: {stem2} in {fname}")
+                                    self.issues_found.append({
+                                        'nombre': f'Discord cache: string cheat ({stem2})',
+                                        'ruta': fpath[:255],
+                                        'archivo': fname[:255],
+                                        'tipo': 'discord_cache_hack',
+                                        'categoria': 'MESSAGING',
+                                        'alerta': 'SOSPECHOSO',
+                                        'confidence': 0.68,
+                                        'timestamp': ts,
+                                        'detected_patterns': [f'discord_cache_str:{stem2}'],
+                                        'explicacion': (
+                                            f'Blob de cache Discord contiene referencia a "{stem2}".'
+                                        ),
+                                    })
+                                except (PermissionError, OSError):
+                                    continue
+                except Exception:
+                    continue
 
     def scan_minecraft_lock_files(self):
         """#35 — Detecta archivos .lck/.lock en .minecraft de procesos ya terminados."""
@@ -19431,114 +20523,77 @@ class ArgusApp:
         })
         print(f"⚠️ Bug F3+T: {total_hits} ocurrencia(s) en {len(hit_details)} archivo(s) — alerta: {alerta}")
 
-    def scan_defender_exclusions(self):
-        """Detecta exclusiones sospechosas en Windows Defender (técnica de evasión)."""
-        HACK_MARKERS = [
-            'vape', 'meteor', 'wurst', 'impact', 'liquidbounce', 'aristois', 'killaura',
-            'autoclicker', 'autoclick', 'macro', 'inject', 'cheat', 'hack', 'xray',
-            'freelook', 'aimbot', 'esp', 'blatant', 'ghost', 'rise', 'sigma',
-            'novoline', 'wolfram', 'astolfo', 'reflex', 'drip', 'flux', 'crit',
-            'forge\\mods', 'fabric\\mods', '\\mods\\', 'liteloader',
-        ]
-        try:
-            import winreg
-            base = r'SOFTWARE\Microsoft\Windows Defender\Exclusions'
-            subtypes = ['Paths', 'Processes', 'Extensions']
-            for sub in subtypes:
-                try:
-                    key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, f'{base}\\{sub}', 0,
-                                         winreg.KEY_READ | winreg.KEY_WOW64_64KEY)
-                    idx = 0
-                    while True:
-                        try:
-                            name, _, _ = winreg.EnumValue(key, idx)
-                            idx += 1
-                            name_l = name.lower().replace('/', '\\')
-                            if any(m in name_l for m in HACK_MARKERS):
-                                self.issues_found.append({
-                                    'nombre': f'Exclusión sospechosa en Defender ({sub}): {os.path.basename(name)}',
-                                    'ruta': os.path.dirname(name) if sub == 'Paths' else name,
-                                    'archivo': name,
-                                    'tipo': 'defender_exclusion_hack',
-                                    'categoria': 'EVASION',
-                                    'alerta': 'CRITICAL',
-                                    'confidence': 0.95,
-                                    'detected_patterns': ['defender_exclusion', sub.lower()],
-                                    'explicacion': (
-                                        f'Windows Defender tiene una exclusión de tipo {sub} para '
-                                        f'"{name}", que coincide con marcadores de hacks conocidos. '
-                                        f'Esta exclusión impide que el antivirus detecte el hack.'
-                                    ),
-                                })
-                        except OSError:
-                            break
-                    winreg.CloseKey(key)
-                except (FileNotFoundError, PermissionError, OSError):
-                    continue
-        except Exception as e:
-            print(f"Error en scan_defender_exclusions: {e}")
 
     def scan_powershell_history(self):
         """Detecta comandos sospechosos en el historial de PowerShell (PSReadLine)."""
-        HACK_KEYWORDS = [
-            'invoke-webrequest', 'invoke-expression', 'iex ', 'downloadstring', 'downloadfile',
-            'bypass', 'unrestricted', 'hidden', 'encodedcommand', 'frombase64string',
-            'vape', 'meteor', 'inject', 'cheat', 'hack', 'autoclicker', 'macro',
+        # Patrones fuertes (LOLBin / evasión) — no bastan "hack"/"cheat" sueltos
+        STRONG_KW = [
+            'invoke-expression', 'iex ', 'downloadstring', 'downloadfile',
+            '-encodedcommand', 'frombase64string', ' -enc ',
             'set-mppreference', 'add-mppreference', 'disablerealtimemonitoring',
-            'net.webclient', 'webclient', 'start-bitstransfer', 'certutil',
-            'reg add', 'reg delete', 'schtasks', 'sc create', 'sc start',
+            'net.webclient', 'start-bitstransfer', 'certutil -decode',
+            'certutil -urlcache', 'bitsadmin /transfer',
+            'bypass -scope', 'executionpolicy bypass', '-windowstyle hidden',
+            'fsutil usn deletejournal', 'wevtutil cl', 'clear-eventlog',
         ]
-        SAFE_SKIP = ['update', 'upgrade', 'install', 'winget', 'choco', 'pip install']
+        SAFE_SKIP = [
+            'update', 'upgrade', 'install', 'winget', 'choco', 'pip install',
+            'npm install', 'git clone', 'docker',
+        ]
         hist_path = os.path.expandvars(
             r'%APPDATA%\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt'
         )
         if not os.path.exists(hist_path):
             return
         try:
+            from forensic_match import match_hack_stem
             with open(hist_path, 'r', encoding='utf-8', errors='ignore') as f:
                 lines = f.readlines()
+            # Solo últimas ~400 líneas (historial fresco)
+            lines = lines[-400:]
             seen = set()
             for idx, line in enumerate(lines, start=1):
                 line_l = line.strip().lower()
-                if not line_l:
+                if not line_l or len(line_l) < 8:
                     continue
-                if any(s in line_l for s in SAFE_SKIP):
+                if any(s in line_l for s in SAFE_SKIP) and not any(k in line_l for k in STRONG_KW):
                     continue
-                matched = [kw for kw in HACK_KEYWORDS if kw in line_l]
-                if matched:
-                    sig = (line_l[:120], tuple(matched[:3]))
-                    if sig in seen:
-                        continue
-                    seen.add(sig)
-                    self.issues_found.append({
-                        'nombre': f'Comando sospechoso en historial PowerShell: {line.strip()[:80]}',
-                        'ruta': os.path.dirname(hist_path),
-                        'archivo': hist_path,
-                        'tipo': 'powershell_history_hack',
-                        'categoria': 'EVASION',
-                        'alerta': 'SOSPECHOSO',
-                        'confidence': min(0.9, 0.72 + min(len(matched), 4) * 0.04),
-                        'detected_patterns': matched[:5],
-                        'extra': {'line': idx},
-                        'explicacion': (
-                            f'El historial de PowerShell contiene el comando: "{line.strip()[:120]}", '
-                            f'que coincide con patrones sospechosos: {matched[:3]}.'
-                        ),
-                    })
+                strong = [kw for kw in STRONG_KW if kw in line_l]
+                stem = match_hack_stem(line_l)
+                if not strong and not stem:
+                    continue
+                matched = strong[:4] + ([f'stem:{stem}'] if stem else [])
+                sig = (line_l[:120], tuple(matched[:3]))
+                if sig in seen:
+                    continue
+                seen.add(sig)
+                alerta = 'CRITICAL' if (stem and strong) or len(strong) >= 2 else 'SOSPECHOSO'
+                self.issues_found.append({
+                    'nombre': f'Comando sospechoso en historial PowerShell: {line.strip()[:80]}',
+                    'ruta': os.path.dirname(hist_path),
+                    'archivo': hist_path,
+                    'tipo': 'powershell_history_hack',
+                    'categoria': 'EVASION',
+                    'alerta': alerta,
+                    'confidence': min(0.92, 0.70 + 0.05 * len(strong) + (0.1 if stem else 0)),
+                    'detected_patterns': matched[:6],
+                    'extra': {'line': idx},
+                    'explicacion': (
+                        f'PSReadLine: "{line.strip()[:120]}". '
+                        f'Patrones: {matched[:3]}.'
+                    ),
+                })
         except Exception as e:
             print(f"Error en scan_powershell_history: {e}")
 
     def scan_minecraft_crash_reports(self):
         """Analiza crash reports de Minecraft en busca de hacks que causaron crashes."""
-        HACK_PATTERNS = [
-            'vape', 'meteor', 'wurst', 'impact', 'liquidbounce', 'aristois',
-            'killaura', 'autoclicker', 'autoclick', 'macro', 'inject', 'cheat',
-            'hack', 'xray', 'aimbot', 'esp', 'ghost', 'rise', 'sigma', 'novoline',
-            'wolfram', 'astolfo', 'reflex', 'drip', 'flux', 'freelook',
-            'mixin conflict', 'coremods', 'optifine conflict', 'forge conflict',
-            'weave', 'javaagent', 'injection', 'mixin.hack',
-            'net.minecraft.client.gui.hud', 'esp.render', 'fly.module',
-        ]
+        # Evitar tokens ambiguos (hack/cheat/esp/ghost/rise/sigma) → FP en mods
+        STRONG_CRASH = (
+            'killaura', 'aimbot', 'autoclicker', 'javaagent', 'weaveloader',
+            'esp.render', 'fly.module', 'mixin.hack', 'injection',
+            'liquidbounce', 'meteorclient', 'wurstclient', 'rusherhack',
+        )
         now = datetime.now()
         cutoff = now - timedelta(days=30)
 
@@ -19561,6 +20616,7 @@ class ArgusApp:
                 except OSError:
                     pass
 
+        from forensic_match import match_hack_stem
         for crash_dir in crash_dirs:
             try:
                 for fname in os.listdir(crash_dir):
@@ -19574,7 +20630,11 @@ class ArgusApp:
                         with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
                             content = f.read(20480)
                         content_l = content.lower()
-                        matched = [p for p in HACK_PATTERNS if p in content_l]
+                        strong = [p for p in STRONG_CRASH if p in content_l]
+                        stem = match_hack_stem(content_l[:4000]) or match_hack_stem(fname)
+                        if not strong and not stem:
+                            continue
+                        matched = strong[:4] + ([f'stem:{stem}'] if stem else [])
                         if matched:
                             self.issues_found.append({
                                 'nombre': f'Crash report con indicios de hack: {fname}',
@@ -19582,8 +20642,8 @@ class ArgusApp:
                                 'archivo': fpath,
                                 'tipo': 'crash_report_hack',
                                 'categoria': 'FORENSE',
-                                'alerta': 'SOSPECHOSO',
-                                'confidence': 0.72,
+                                'alerta': 'CRITICAL' if stem and strong else 'SOSPECHOSO',
+                                'confidence': min(0.92, 0.70 + 0.05 * len(strong) + (0.1 if stem else 0)),
                                 'detected_patterns': matched[:5],
                                 'explicacion': (
                                     f'El crash report "{fname}" (modificado: {mtime.strftime("%d/%m/%Y")}) '
@@ -19597,13 +20657,12 @@ class ArgusApp:
                 continue
 
     def scan_amcache(self):
-        """Detecta ejecución histórica de hacks vía Amcache.hve."""
-        HACK_MARKERS = [
-            'vape', 'meteor', 'wurst', 'impact', 'liquidbounce', 'aristois',
-            'autoclicker', 'autoclick', 'macro', 'inject', 'cheat', 'hack',
-            'xray', 'aimbot', 'ghost', 'rise', 'sigma', 'wolfram', 'astolfo',
-            'reflex', 'drip', 'flux', 'freelook', 'killaura', 'novoline',
-        ]
+        """Detecta ejecución histórica de hacks vía Amcache.hve (boundary match)."""
+        try:
+            from forensic_match import match_hack_stem
+        except Exception:
+            def match_hack_stem(text, extra_strong=()):  # type: ignore
+                return None
         hive_src = r'C:\Windows\AppCompat\Programs\Amcache.hve'
         if not os.path.exists(hive_src):
             return
@@ -19623,6 +20682,8 @@ class ArgusApp:
                 f'ArgusAmcache_{pid}\\Root\\InventoryApplicationFile',
                 f'ArgusAmcache_{pid}\\Root\\InventoryApplication',
                 f'ArgusAmcache_{pid}\\Root\\InventoryApplicationShortcut',  # Win11 25H2
+                f'ArgusAmcache_{pid}\\Root\\InventoryDriverBinary',         # drivers firmados/hack
+                f'ArgusAmcache_{pid}\\Root\\InventoryDeviceContainer',
                 f'ArgusAmcache_{pid}\\Root\\File',                           # formato legado
             ]
             for base in candidate_bases:
@@ -19652,8 +20713,8 @@ class ArgusApp:
                             finally:
                                 winreg.CloseKey(sub_key)
                             path_l = str(path_val).lower()
-                            matched = [m for m in HACK_MARKERS if m in path_l]
-                            if matched:
+                            stem = match_hack_stem(path_l) or match_hack_stem(os.path.basename(path_l))
+                            if stem:
                                 self.issues_found.append({
                                     'nombre': f'Ejecución histórica de hack detectada: {os.path.basename(str(path_val))}',
                                     'ruta': os.path.dirname(str(path_val)),
@@ -19662,12 +20723,12 @@ class ArgusApp:
                                     'categoria': 'FORENSE',
                                     'alerta': 'CRITICAL',
                                     'confidence': 0.88,
-                                    'detected_patterns': matched[:5],
+                                    'detected_patterns': [f'amcache:{stem}'],
                                     'explicacion': (
-                                        f'Amcache registra que este programa fue ejecutado: "{path_val}". '
-                                        f'Coincide con marcadores de hacks conocidos: {matched[:3]}. '
-                                        f'Este registro persiste aunque el archivo haya sido borrado.'
+                                        f'Amcache registra ejecución: "{path_val}". '
+                                        f'Stem: {stem}. Persiste aunque el archivo se haya borrado.'
                                     ),
+                                    'extra': {'stem': stem},
                                 })
                         except OSError:
                             continue
@@ -19767,15 +20828,14 @@ class ArgusApp:
 
     def scan_windows_search_history(self):
         """Detecta búsquedas sospechosas en el historial de Windows Explorer."""
-        HACK_TERMS = [
-            'vape', 'meteor', 'wurst', 'impact', 'liquidbounce', 'aristois',
-            'autoclicker', 'autoclick', 'macro', 'cheat', 'hack', 'xray',
-            'ghost client', 'rise client', 'sigma', 'wolfram', 'astolfo',
-            'reflex', 'drip', 'killaura', 'aimbot', 'esp hack', 'freelook',
-            'cracked minecraft', 'tlauncher crack', 'free hack', 'descarga hack',
+        PHRASE_TERMS = [
+            'ghost client', 'rise client', 'esp hack', 'free hack',
+            'descarga hack', 'cracked minecraft', 'tlauncher crack',
+            'how to hack minecraft', 'minecraft cheat download',
         ]
         try:
             import winreg
+            from forensic_match import match_hack_stem
             # WordWheelQuery — historial de búsqueda del Explorador
             try:
                 key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
@@ -19790,19 +20850,21 @@ class ArgusApp:
                             continue
                         term = data.decode('utf-16-le', errors='ignore').rstrip('\x00').lower() \
                             if isinstance(data, bytes) else str(data).lower()
-                        matched = [t for t in HACK_TERMS if t in term]
-                        if matched:
+                        stem = match_hack_stem(term)
+                        phrases = [t for t in PHRASE_TERMS if t in term]
+                        if stem or phrases:
+                            matched = ([f'stem:{stem}'] if stem else []) + phrases[:3]
                             self.issues_found.append({
-                                'nombre': f'Búsqueda sospechosa en Explorador: "{term}"',
+                                'nombre': f'Búsqueda sospechosa en Explorador: "{term[:80]}"',
                                 'ruta': 'HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\WordWheelQuery',
-                                'archivo': term,
+                                'archivo': term[:120],
                                 'tipo': 'windows_search_hack',
                                 'categoria': 'FORENSE',
                                 'alerta': 'SOSPECHOSO',
-                                'confidence': 0.70,
+                                'confidence': 0.78 if stem else 0.70,
                                 'detected_patterns': matched[:5],
                                 'explicacion': (
-                                    f'Windows registra que el usuario buscó "{term}" en el Explorador. '
+                                    f'Windows registra que el usuario buscó "{term[:80]}" en el Explorador. '
                                     f'Coincide con: {matched[:3]}.'
                                 ),
                             })
@@ -19823,20 +20885,31 @@ class ArgusApp:
                         name, data, _ = winreg.EnumValue(key, idx)
                         idx += 1
                         url = str(data).lower()
-                        matched = [t for t in HACK_TERMS if t in url]
-                        if matched:
+                        stem = match_hack_stem(url)
+                        phrases = [t for t in PHRASE_TERMS if t in url]
+                        distro = [
+                            d for d in (
+                                'vape.gg', 'liquidbounce.net', 'wurstclient.net',
+                                'meteorclient.com', 'unknowncheats', 'mpgh.net',
+                            ) if d in url
+                        ]
+                        if stem or phrases or distro:
+                            matched = (
+                                ([f'stem:{stem}'] if stem else [])
+                                + phrases[:2] + distro[:2]
+                            )
                             self.issues_found.append({
-                                'nombre': f'URL tipeada manualmente sospechosa: {data}',
+                                'nombre': f'URL tipeada sospechosa: {str(data)[:80]}',
                                 'ruta': 'HKCU\\SOFTWARE\\Microsoft\\Internet Explorer\\TypedURLs',
-                                'archivo': str(data),
+                                'archivo': str(data)[:255],
                                 'tipo': 'typed_url_hack',
                                 'categoria': 'FORENSE',
                                 'alerta': 'SOSPECHOSO',
-                                'confidence': 0.68,
+                                'confidence': 0.72 if (stem or distro) else 0.65,
                                 'detected_patterns': matched[:5],
                                 'explicacion': (
-                                    f'Windows registra que el usuario tipeó directamente "{data}" '
-                                    f'en el navegador. Coincide con: {matched[:3]}.'
+                                    f'URL tipeada en el navegador: "{str(data)[:80]}". '
+                                    f'Coincide con: {matched[:3]}.'
                                 ),
                             })
                     except OSError:
@@ -19849,13 +20922,8 @@ class ArgusApp:
 
     def scan_recent_files_lnk(self):
         """Detecta accesos recientes a hacks vía archivos .lnk de Windows."""
-        HACK_MARKERS = [
-            'vape', 'meteor', 'wurst', 'impact', 'liquidbounce', 'aristois',
-            'autoclicker', 'autoclick', 'macro', 'inject', 'cheat', 'hack',
-            'xray', 'aimbot', 'ghost', 'rise', 'sigma', 'novoline', 'wolfram',
-            'astolfo', 'reflex', 'drip', 'flux', 'freelook', 'killaura',
-        ]
         import re as _re
+        from forensic_match import match_hack_stem
         WIN_PATH_RE = _re.compile(
             r'[A-Za-z]:\\[^\x00-\x1f"*<>?|][^\x00-\x1f"*<>?|]{2,180}',
             _re.IGNORECASE
@@ -19874,6 +20942,8 @@ class ArgusApp:
                     mtime = datetime.fromtimestamp(os.path.getmtime(fpath))
                     if mtime < cutoff:
                         continue
+                    # Nombre del .lnk también cuenta
+                    stem_lnk = match_hack_stem(fname)
                     with open(fpath, 'rb') as f:
                         raw = f.read(8192)
                     paths_found = set()
@@ -19884,30 +20954,31 @@ class ArgusApp:
                                 paths_found.add(m.strip())
                         except Exception:
                             pass
+                    hit_path, hit_stem = '', stem_lnk or ''
                     for target_path in paths_found:
                         target_l = target_path.lower()
-                        # Ignorar guías del staff de screenshare (SS_Manual_*, SS_Guide_*, etc.)
                         _bn_l = os.path.basename(target_l)
                         if _bn_l.startswith(('ss_manual', 'ss_guide', 'ss_tutorial', 'ss_doc', 'argus_')):
                             continue
-                        matched = [mk for mk in HACK_MARKERS if mk in target_l]
-                        if matched:
-                            self.issues_found.append({
-                                'nombre': f'Acceso reciente a hack: {os.path.basename(target_path)}',
-                                'ruta': os.path.dirname(target_path),
-                                'archivo': target_path,
-                                'tipo': 'recent_lnk_hack',
-                                'categoria': 'FORENSE',
-                                'alerta': 'SOSPECHOSO',
-                                'confidence': 0.80,
-                                'detected_patterns': matched[:5],
-                                'explicacion': (
-                                    f'Windows registra un acceso reciente '
-                                    f'({mtime.strftime("%d/%m/%Y")}) al archivo "{target_path}". '
-                                    f'Coincide con marcadores de hacks: {matched[:3]}.'
-                                ),
-                            })
-                            break  # un reporte por .lnk es suficiente
+                        st = match_hack_stem(target_l) or match_hack_stem(_bn_l)
+                        if st:
+                            hit_path, hit_stem = target_path, st
+                            break
+                    if hit_stem:
+                        self.issues_found.append({
+                            'nombre': f'Acceso reciente a hack: {os.path.basename(hit_path or fname)}',
+                            'ruta': os.path.dirname(hit_path) if hit_path else recent_dir,
+                            'archivo': hit_path or fpath,
+                            'tipo': 'recent_lnk_hack',
+                            'categoria': 'FORENSE',
+                            'alerta': 'SOSPECHOSO',
+                            'confidence': 0.80,
+                            'detected_patterns': [f'lnk:{hit_stem}'],
+                            'explicacion': (
+                                f'Windows registra un acceso reciente '
+                                f'({mtime.strftime("%d/%m/%Y")}) con stem "{hit_stem}".'
+                            ),
+                        })
                 except OSError:
                     continue
         except Exception as e:
@@ -19992,6 +21063,37 @@ class ArgusApp:
             'SalHack': [
                 os.path.join(appdata, '.salhack'),
                 os.path.join(appdata, 'SalHack'),
+            ],
+            'ThunderHack': [
+                os.path.join(appdata, '.thunderhack'),
+            ],
+            'Doomsday': [
+                os.path.join(appdata, '.doomsday'),
+            ],
+            'Myau': [
+                os.path.join(appdata, '.myau'),
+            ],
+            'Drip': [
+                os.path.join(appdata, '.drip'),
+            ],
+            'Weave': [
+                os.path.join(appdata, '.weave'),
+                os.path.join(local, 'WeaveLoader'),
+            ],
+            'Tenacity': [
+                os.path.join(appdata, '.tenacity'),
+            ],
+            'Konas': [
+                os.path.join(appdata, '.konas'),
+            ],
+            'Whiteout': [
+                os.path.join(appdata, '.whiteout'),
+            ],
+            'Entropy': [
+                os.path.join(appdata, '.entropy'),
+            ],
+            'FDP': [
+                os.path.join(appdata, '.fdpclient'),
             ],
         }
 
@@ -20143,6 +21245,13 @@ class ArgusApp:
                 combined = (iss.get('nombre', '') + iss.get('ruta', '')).lower()
                 if hack in combined:
                     iss['alerta'] = 'CRITICAL'
+            related_paths = []
+            for iss in issues:
+                combined = (iss.get('nombre', '') + iss.get('ruta', '')).lower()
+                if hack in combined:
+                    p = iss.get('archivo') or iss.get('ruta') or ''
+                    if p and p not in related_paths:
+                        related_paths.append(p)
             issues.append({
                 'nombre': f'Correlación temporal confirmada: {hack} (prefetch + userassist + historial)',
                 'ruta': '',
@@ -20152,6 +21261,12 @@ class ArgusApp:
                 'alerta': 'CRITICAL',
                 'confidence': 0.97,
                 'detected_patterns': [f'temporal_correlation:{hack}', f'sources:{",".join(sorted(srcs))}'],
+                'extra': {
+                    'related_stem': hack,
+                    'related_paths': related_paths[:12],
+                    'related_tipos': sorted(srcs),
+                    'related_count': len(srcs),
+                },
                 'explicacion': (
                     f'El hack "{hack}" aparece en {len(srcs)} fuentes independientes: '
                     f'{", ".join(sorted(srcs))} con fecha {date_str}. '
@@ -20161,23 +21276,163 @@ class ArgusApp:
             })
         return issues
 
+    def _apply_forensic_kill_chain(self, issues: list) -> list:
+        """P1 — Prefetch + BAM + USN (2-of-3 mismo stem) → kill_chain CRITICAL."""
+        TYPE_BUCKET = {
+            'prefetch_hack': 'prefetch',
+            'bam_suspicious': 'bam',
+            'bam_execution': 'bam',
+            'bam_hack': 'bam',
+            'usn_deleted_hack': 'usn',
+            'usn_ghost_folder': 'usn',
+            'amcache_hack_execution': 'amcache',
+            'userassist_suspicious': 'userassist',
+            'recycle_hack': 'recycle',
+            'recycle_hash_match': 'recycle',
+            'ghost_client_registry': 'registry',
+            'ghost_client_config': 'config',
+            'hack_string_in_loaded_jar': 'memory',
+            'scheduled_task_suspicious': 'persist',
+            'firewall_rule_hack': 'firewall',
+        }
+        by_stem: dict = {}
+        for iss in issues:
+            tipo = iss.get('tipo') or ''
+            bucket = TYPE_BUCKET.get(tipo)
+            if not bucket:
+                continue
+            stem = ''
+            for p in iss.get('detected_patterns') or []:
+                s = str(p)
+                for pref in ('prefetch:', 'bam:', 'usn:', 'amcache:'):
+                    if s.startswith(pref):
+                        stem = s.split(':', 1)[1].split(',')[0].strip().lower()
+                        break
+                if stem:
+                    break
+            if not stem:
+                try:
+                    from forensic_match import match_hack_stem
+                    stem = match_hack_stem(
+                        (iss.get('nombre') or '') + ' ' + (iss.get('archivo') or '')
+                    ) or ''
+                except Exception:
+                    stem = ''
+            if not stem:
+                continue
+            by_stem.setdefault(stem, {'buckets': set(), 'issues': [], 'paths': []})
+            by_stem[stem]['buckets'].add(bucket)
+            by_stem[stem]['issues'].append(iss)
+            p = iss.get('archivo') or iss.get('ruta') or ''
+            if p and p not in by_stem[stem]['paths']:
+                by_stem[stem]['paths'].append(p)
+
+        for stem, data in by_stem.items():
+            buckets = data['buckets']
+            # 2-of-3 core (prefetch/bam/usn) o prefetch+amcache+usn/bam
+            core = buckets & {'prefetch', 'bam', 'usn'}
+            if len(core) < 2 and not (
+                'prefetch' in buckets and 'amcache' in buckets and len(buckets) >= 2
+            ):
+                continue
+            if len(buckets) < 2:
+                continue
+            # Evitar duplicar kill_chain del mismo stem
+            already = any(
+                (i.get('tipo') == 'kill_chain')
+                and f'forensic_kill_chain:{stem}' in str(i.get('detected_patterns') or [])
+                for i in issues
+            )
+            if already:
+                continue
+            for iss in data['issues']:
+                iss['alerta'] = 'CRITICAL'
+                iss['combination_penalty'] = f'forensic_kill_chain:{stem}'
+            print(f"[kill_chain] stem={stem} sources={sorted(buckets)}")
+            issues.append({
+                'nombre': f'Kill-chain forense: {stem} ({"+".join(sorted(buckets))})',
+                'ruta': '',
+                'archivo': '',
+                'tipo': 'kill_chain',
+                'categoria': 'CORRELACION',
+                'alerta': 'CRITICAL',
+                'confidence': 0.96,
+                'detected_patterns': [
+                    f'forensic_kill_chain:{stem}',
+                    f'sources:{",".join(sorted(buckets))}',
+                ],
+                'extra': {
+                    'related_stem': stem,
+                    'related_paths': data['paths'][:12],
+                    'related_tipos': sorted(buckets),
+                    'related_count': len(data['issues']),
+                },
+                'explicacion': (
+                    f'El stem "{stem}" aparece en {len(buckets)} fuentes forenses '
+                    f'({", ".join(sorted(buckets))}). '
+                    'Prefetch/BAM/USN coincidentes confirman ejecución + borrado/ocultamiento.'
+                ),
+            })
+        return issues
+
     def _filter_by_file_size(self, issues):
-        """P2 #8 — Descarta JARs demasiado pequeños para ser un hack real (< 3KB)."""
+        """P2 #8 — JARs tiny (<3KB) se descartan; <50KB bajan confianza (salvo definite)."""
+        SIZE_TYPES = {
+            'file', 'jar_file', 'minecraft_file', 'temp_jar_recent',
+            'blacklisted_mod', 'hack_file', 'exe_file',
+        }
         result = []
+        dropped = 0
+        soft = 0
         for issue in issues:
             tipo = issue.get('tipo', '')
-            if tipo not in ('file', 'jar_file', 'minecraft_file'):
+            if tipo in _NEVER_FILTER_TYPES or tipo not in SIZE_TYPES:
                 result.append(issue)
                 continue
             ruta = issue.get('ruta') or issue.get('archivo', '')
-            if ruta and os.path.isfile(str(ruta)):
+            path = str(ruta)
+            if not path or not os.path.isfile(path):
+                # temp_jar a veces guarda path en archivo
+                alt = str(issue.get('archivo') or '')
+                path = alt if alt and os.path.isfile(alt) else path
+            if path and os.path.isfile(path):
                 try:
-                    size = os.path.getsize(str(ruta))
-                    if size < 3072:  # < 3KB — imposible que sea un hack funcional
-                        continue
-                except Exception:
+                    size = os.path.getsize(path)
+                    issue.setdefault('extra', {})
+                    if isinstance(issue.get('extra'), dict):
+                        issue['extra']['file_size'] = size
+                    base = os.path.basename(path).lower()
+                    definite = False
+                    try:
+                        from config.hack_signatures import filename_is_definite_hack
+                        definite = filename_is_definite_hack(base)
+                    except Exception:
+                        definite = any(n in base for n in _DEFINITE_HACK_NAMES)
+                    if size < 3072 and not definite:
+                        dropped += 1
+                        continue  # < 3KB — imposible hack funcional
+                    if size < 50_000 and not definite and tipo in (
+                        'file', 'jar_file', 'minecraft_file', 'temp_jar_recent',
+                    ):
+                        # Soft demote: demasiado chico para client completo
+                        try:
+                            c = float(issue.get('confidence') or 0.5)
+                            if c > 1:
+                                c = c / 100.0
+                            issue['confidence'] = max(0.2, c * 0.55)
+                        except (TypeError, ValueError):
+                            issue['confidence'] = 0.35
+                        if issue.get('alerta') == 'CRITICAL':
+                            issue['alerta'] = 'SOSPECHOSO'
+                        issue['detected_patterns'] = list(
+                            issue.get('detected_patterns') or []
+                        ) + ['size_soft_demote_<50kb']
+                        soft += 1
+                except OSError:
                     pass
             result.append(issue)
+        if dropped or soft:
+            print(f"[filter] P2#8 size: drop={dropped} soft_demote={soft}")
         return result
 
     def _filter_backup_sync(self, issues):
@@ -20228,6 +21483,12 @@ class ArgusApp:
                                        'Indica que el jar del juego fue modificado, típico de ghost clients clásicos.',
             'prefetch_hack':           'El Prefetch de Windows confirma que un hack fue ejecutado en este PC. '
                                        'Aunque el archivo esté borrado, la ejecución queda registrada.',
+            'prefetch_referenced_hack': 'El Prefetch referencia un DLL/JAR de hack cargado por otro proceso. '
+                                       'Evidencia de inyección aunque el ejecutable principal tenga nombre limpio.',
+            'browser_hack_cookie':     'Hay cookies de un sitio de distribución/cheat en el navegador. '
+                                       'Indica visita o login aunque el historial se haya borrado.',
+            'wininet_hack_cookie':     'Cookie WinINET/IE asociada a un sitio de cheats. '
+                                       'Rastro de navegación legacy que sobrevive a limpieza parcial.',
             'usn_deleted_hack':        'El USN Journal registra que un archivo de hack fue borrado recientemente. '
                                        'El jugador puede haber limpiado evidencia antes del SS.',
             'hack_string_in_loaded_jar':'Se encontraron nombres de módulos de hack en los JARs cargados por Java. '
@@ -20269,6 +21530,51 @@ class ArgusApp:
             'clipboard_hack_evidence': 'El portapapeles del sistema contiene texto relacionado con un hack client. '
                                        'Puede indicar que el jugador estaba copiando la configuración de un hack '
                                        'o la URL de descarga para instalarlo.',
+            'usn_ghost_folder':        'El USN Journal registra que se borró/renombró una carpeta típica de ghost client. '
+                                       'Limpieza pre-SS: el residual ya no está en disco pero el journal lo delata.',
+            'short_lived_process':     'Proceso con uptime <60s al iniciar el SS. Suele indicar lanzamiento '
+                                       'justo antes del scan (inyector/loader).',
+            'recycle_hack':            'Archivo con nombre de hack en la Papelera. Borrado reciente antes del SS.',
+            'hack_launcher_script':    'Script/atajo en Desktop/Downloads que lanza un stem de hack conocido.',
+            'startup_hack_launcher':   'Entrada de Startup o clave Run con nombre de hack — persistencia al boot.',
+            'jump_list_suspicious':    'Jump List de Windows referencia un ejecutable/script con stem de hack.',
+            'shimcache_suspicious':    'ShimCache registra ejecución histórica de un binario con stem de hack.',
+            'userassist_suspicious':   'UserAssist confirma ejecución desde el Explorador con timestamp.',
+            'dns_cache_hack':          'El cache DNS resolvió dominios de distribución de ghost clients.',
+            'peripheral_macro':        'Perfil de mouse/teclado con macro de click rápido o jitter.',
+            'bloody_a4tech':           'Software Bloody/A4Tech instalado (autoclick a nivel driver frecuente).',
+            'minecraft_safe_mode':     'Minecraft en --safeMode: oculta mods cargados durante el SS.',
+            'jar_self_deleted':        'Un JAR aparece en la cmdline de Java pero ya no está en disco. '
+                                       'Carga + borrado típico de ghost clients.',
+            'jar_repack_timestamp':    'El JAR tiene mtime antiguo pero .class con fecha ZIP reciente: re-empaquetado.',
+            'jar_missing_mod_metadata':'JAR en mods/ sin fabric.mod.json/mods.toml — no parece un mod legítimo.',
+            'temp_hack_binary':        'Ejecutable/JAR con nombre de hack en Temp/Downloads (últimas 48h).',
+            'remote_access_active':    'Herramienta de acceso remoto activa (AnyDesk/TeamViewer/Parsec). '
+                                       'Puede indicar ayuda externa durante el SS.',
+            'rdp_session_active':      'Hay una sesión RDP entrante activa. Alguien puede estar '
+                                       'controlando el PC de forma remota durante el SS.',
+            'scheduled_task_suspicious': 'Tarea programada con nombre/args de hack — persistencia al boot.',
+            'scheduled_task_args_suspicious': 'Tarea con args LOLBin (PowerShell -enc, mshta, Temp).',
+            'lolbins_extra_suspicious': 'Eventos 4688 con cadenas LOLBin (mshta/regsvr32/certutil…).',
+            'virtual_audio_cable':     'VB-Audio/VAC activo: puede ocultar voz de equipo durante el SS.',
+            'python_hack_script':      'Script Python con stems de hack en Desktop/Downloads/Temp.',
+            'exploit_process':         'Proceso de exploit/RAT/debugger conocido activo.',
+            'exploit_file':            'Archivo de exploit/RAT/debugger en Desktop/Downloads/Temp.',
+            'com_hijack_candidate':    'CLSID COM apunta a binario en AppData/Temp (posible hijack).',
+            'lunar_unofficial_module': 'Módulo no oficial en Lunar Client con nombre de ghost client.',
+            'recent_docs_registry':    'RecentDocs del registro: archivo abierto desde Explorer '
+                                       '(persiste aunque se haya borrado).',
+            'powershell_history_hack': 'Historial PSReadLine con LOLBin/evasión o stem de hack.',
+            'crash_report_hack':       'Crash report de Minecraft con indicios de ghost client/injector.',
+            'run_mru_suspicious':      'Comando Win+R con stem de hack.',
+            'windows_search_hack':     'Búsqueda en Explorer relacionada con cheats.',
+            'typed_url_hack':          'URL tipeada en el navegador hacia sitio de cheats.',
+            'recent_lnk_hack':         'Acceso reciente (.lnk) a ruta con stem de hack.',
+            'usb_hack_device':         'Dispositivo USBSTOR cuyo nombre coincide con stem de hack.',
+            'deleted_mass_event':      'Ráfaga de borrados en Papelera (limpieza pre-SS).',
+            'firewall_rule_hack':      'Regla de firewall apuntando a binario con stem de hack.',
+            'hosts_hack_distro':       'Hosts referencia dominio de distribución de cheats.',
+            'recycle_hash_match':      'Archivo en Papelera con SHA256 del catálogo offline de hacks.',
         }
         for issue in issues:
             if not issue.get('explicacion'):
@@ -20320,20 +21626,105 @@ class ArgusApp:
         import datetime as _dt
         now = _dt.datetime.now()
         for issue in issues:
-            ruta = issue.get('ruta', '') or issue.get('archivo', '')
-            if not ruta or not os.path.exists(str(ruta)):
+            if issue.get('tipo') in _NEVER_FILTER_TYPES or issue.get('combination_penalty'):
+                continue
+            # Prefer timestamp forense del issue si existe
+            age_days = None
+            ts = issue.get('timestamp') or issue.get('last_executed') or ''
+            if ts:
+                try:
+                    raw = str(ts).replace('T', ' ')[:19]
+                    age_days = (now - _dt.datetime.strptime(raw, '%Y-%m-%d %H:%M:%S')).days
+                except Exception:
+                    age_days = None
+            if age_days is None:
+                ruta = issue.get('ruta', '') or issue.get('archivo', '')
+                if not ruta or not os.path.exists(str(ruta)):
+                    continue
+                try:
+                    mtime = os.path.getmtime(str(ruta))
+                    age_days = (now - _dt.datetime.fromtimestamp(mtime)).days
+                except Exception:
+                    continue
+            if age_days is not None and age_days > 30:
+                decay = max(0.5, 1.0 - (age_days - 30) / 180)
+                try:
+                    old_conf = float(issue.get('confidence', 0.5) or 0.5)
+                except (TypeError, ValueError):
+                    old_conf = 0.5
+                scale_100 = old_conf > 1
+                if scale_100:
+                    old_conf = old_conf / 100.0
+                new_conf = old_conf * decay
+                issue['confidence'] = round(new_conf * 100, 1) if scale_100 else round(new_conf, 3)
+                issue['detected_patterns'] = list(
+                    issue.get('detected_patterns') or []
+                ) + [f'score_decay_{age_days}d']
+                if age_days > 60 and issue.get('alerta') == 'CRITICAL':
+                    issue['alerta'] = 'SOSPECHOSO'
+        return issues
+
+    def _apply_long_uptime_demote(self, issues):
+        """P2 #15 — Procesos con uptime >2h en hallazgos ambiguos → bajar alerta."""
+        for issue in issues:
+            if issue.get('tipo') in _NEVER_FILTER_TYPES or issue.get('combination_penalty'):
+                continue
+            extra = issue.get('extra') if isinstance(issue.get('extra'), dict) else {}
+            up = extra.get('uptime_secs')
+            if up is None:
                 continue
             try:
-                mtime = os.path.getmtime(str(ruta))
-                age_days = (now - _dt.datetime.fromtimestamp(mtime)).days
-                if age_days > 30:
-                    decay = max(0.5, 1.0 - (age_days - 30) / 180)
-                    old_conf = issue.get('confidence', 0.5)
-                    issue['confidence'] = round(old_conf * decay, 3)
-                    if age_days > 60 and issue.get('alerta') == 'CRITICAL':
-                        issue['alerta'] = 'SOSPECHOSO'
-            except Exception:
+                up = float(up)
+            except (TypeError, ValueError):
                 continue
+            if up < 7200:  # 2h
+                continue
+            if issue.get('alerta') in ('CRITICAL', 'SOSPECHOSO'):
+                issue['alerta'] = 'POCO_SOSPECHOSO'
+            try:
+                c = float(issue.get('confidence') or 0.5)
+                if c > 1:
+                    c = c / 100.0
+                issue['confidence'] = max(0.15, c * 0.5)
+            except (TypeError, ValueError):
+                pass
+            issue['detected_patterns'] = list(
+                issue.get('detected_patterns') or []
+            ) + ['long_uptime_demote']
+        return issues
+
+    def _apply_badlion_informational(self, issues):
+        """P2 #27 — Badlion/Lunar firmados → INFORMATIVO, no SOSPECHOSO."""
+        MARKERS = ('badlion', 'blclient', 'lunarclient', 'lunar client', 'moonsworth')
+        for issue in issues:
+            if issue.get('tipo') in _NEVER_FILTER_TYPES or issue.get('combination_penalty'):
+                continue
+            blob = (
+                (issue.get('ruta') or '') + '|' + (issue.get('archivo') or '')
+                + '|' + (issue.get('nombre') or '')
+            ).lower()
+            if not any(m in blob for m in MARKERS):
+                continue
+            # Si es ghost_client_config real de otro client, no tocar
+            if issue.get('tipo') in ('ghost_client_config', 'ghost_client_registry'):
+                if 'badlion' not in blob and 'lunar' not in blob:
+                    continue
+            issue['alerta'] = 'NORMAL'
+            issue['categoria'] = issue.get('categoria') or 'INFO'
+            try:
+                c = float(issue.get('confidence') or 0.4)
+                if c > 1:
+                    c = c / 100.0
+                issue['confidence'] = min(c, 0.25)
+            except (TypeError, ValueError):
+                issue['confidence'] = 0.25
+            issue['detected_patterns'] = list(
+                issue.get('detected_patterns') or []
+            ) + ['permitted_client_informational']
+            if not issue.get('explicacion'):
+                issue['explicacion'] = (
+                    'Cliente permitido (Badlion/Lunar). Informativo para staff, no es ghost client.'
+                )
         return issues
 
     def _fetch_cloud_thresholds(self):
@@ -20442,17 +21833,121 @@ class ArgusApp:
         return issues
 
     def _apply_single_indicator_cap(self, issues):
-        """P2 #4 — Un solo indicador aislado no debería ser CRITICAL.
-        Si un tipo de evidencia aparece solo UNA VEZ y no hay ningún otro CRITICAL,
-        lo baja a SOSPECHOSO (excepto tipos de altísima confianza)."""
+        """P2 #4 — Indicador aislado no debería ser CRITICAL (más estricto en Fast/Standard)."""
         ALWAYS_CRITICAL_TYPES = set(_NEVER_FILTER_TYPES)
+        mode = str(
+            getattr(self, 'scan_mode', None)
+            or (getattr(self, 'config', {}) or {}).get('scan_mode')
+            or 'standard'
+        ).lower()
+        paranoid = mode in ('paranoid', 'deep')
+
+        def _conf01(iss):
+            try:
+                c = float(iss.get('confidence', 1.0) or 1.0)
+            except (TypeError, ValueError):
+                c = 1.0
+            return c / 100.0 if c > 1.0 else c
+
+        def _is_downloads_orphan(iss):
+            blob = ((iss.get('ruta') or '') + '|' + (iss.get('archivo') or '')).lower()
+            if not any(x in blob for x in ('\\downloads\\', '/downloads/', '\\desktop\\', '/desktop/')):
+                return False
+            name = (iss.get('archivo') or iss.get('ruta') or '').lower()
+            if not (name.endswith('.jar') or name.endswith('.exe')):
+                return False
+            # Hermano forense / hash cloud → no orphan
+            pats = ' '.join(str(p) for p in (iss.get('detected_patterns') or []))
+            if any(k in pats for k in ('prefetch:', 'bam:', 'usn:', 'cloud_hash', 'amcache:')):
+                return False
+            tipos = {j.get('tipo') for j in issues}
+            if tipos & {'prefetch_hack', 'bam_suspicious', 'usn_deleted_hack', 'amcache_hack_execution', 'kill_chain'}:
+                # Si hay otras fuentes en el scan, no tratar como orphan aislado
+                stem_pats = [p for p in (iss.get('detected_patterns') or []) if ':' in str(p)]
+                if not stem_pats:
+                    return True
+            return True
+
         critical_items = [i for i in issues if i.get('alerta') == 'CRITICAL']
+        # Fast/Standard: Downloads jar/exe solo → máx SOSPECHOSO
+        if not paranoid:
+            for i in issues:
+                if i.get('alerta') != 'CRITICAL':
+                    continue
+                if i.get('tipo', '') in ALWAYS_CRITICAL_TYPES and i.get('tipo') not in (
+                    'usn_deleted_hack',  # USN genérico .minecraft jar puede ser ruido
+                ):
+                    if not _is_downloads_orphan(i):
+                        continue
+                if _is_downloads_orphan(i) and not i.get('combination_penalty'):
+                    i['alerta'] = 'SOSPECHOSO'
+                    i['capped_from_critical'] = True
+                    i['detected_patterns'] = list(i.get('detected_patterns') or []) + ['cap:downloads_orphan']
+
         if len(critical_items) <= 1:
             for i in issues:
                 if i.get('alerta') == 'CRITICAL' and i.get('tipo', '') not in ALWAYS_CRITICAL_TYPES:
-                    if not i.get('combination_penalty') and i.get('confidence', 1.0) < 0.90:
+                    thresh = 0.93 if paranoid else 0.90
+                    if not i.get('combination_penalty') and _conf01(i) < thresh:
                         i['alerta'] = 'SOSPECHOSO'
                         i['capped_from_critical'] = True
+        return issues
+
+    def _apply_stale_artifact_demote(self, issues):
+        """P2 #5 — .jar/.exe >180 días sin evidencia forense de ejecución → bajar alerta."""
+        forensic_names = set()
+        for i in issues:
+            if i.get('tipo') in (
+                'prefetch_hack', 'bam_suspicious', 'bam_execution', 'bam_hack',
+                'usn_deleted_hack', 'usn_ghost_folder', 'userassist_suspicious',
+                'amcache_hack_execution', 'shimcache_suspicious', 'kill_chain',
+            ):
+                for k in ('ruta', 'archivo', 'nombre'):
+                    v = (i.get(k) or '').lower()
+                    if v:
+                        forensic_names.add(os.path.basename(v))
+                        forensic_names.add(v[:120])
+        cutoff = time.time() - (180 * 86400)
+        demoted = 0
+        for i in issues:
+            tipo = i.get('tipo') or ''
+            if tipo in _NEVER_FILTER_TYPES or i.get('combination_penalty'):
+                continue
+            path = i.get('ruta') or i.get('archivo') or ''
+            low = path.lower()
+            if not (low.endswith('.jar') or low.endswith('.exe')):
+                continue
+            base = os.path.basename(low)
+            if base and any(base in f or f in base for f in forensic_names if f):
+                continue
+            try:
+                if not os.path.isfile(path):
+                    continue
+                # ctime (creación Windows) preferido; fallback mtime
+                created = os.path.getctime(path)
+                if created >= cutoff:
+                    continue
+            except OSError:
+                continue
+            if i.get('alerta') == 'CRITICAL':
+                i['alerta'] = 'SOSPECHOSO'
+                demoted += 1
+            try:
+                c = float(i.get('confidence') or 0.5)
+                if c > 1:
+                    c = c / 100.0
+                i['confidence'] = max(0.25, c * 0.7)
+            except (TypeError, ValueError):
+                pass
+            i['detected_patterns'] = list(i.get('detected_patterns') or []) + [
+                'stale_file_180d_demote'
+            ]
+            i['explicacion'] = (
+                (i.get('explicacion') or '')
+                + ' [Archivo >180 días sin prefetch/USN/BAM → alerta reducida.]'
+            ).strip()
+        if demoted:
+            print(f"[filter] P2#5 stale demote: {demoted} CRITICAL→SOSPECHOSO (>180d sin forense)")
         return issues
 
     def _apply_combination_penalties(self, issues):
@@ -20484,12 +21979,31 @@ class ArgusApp:
                     i['confidence'] = min(1.0, i.get('confidence', 0.8) * 1.2)
                     i['combination_penalty'] = 'config+prefetch'
 
-        # USN jar borrado + kill chain → confirma limpieza activa
-        if 'usn_deleted_hack' in tipos and 'kill_chain' in tipos:
+        # USN jar/carpeta borrada + kill chain → confirma limpieza activa
+        if tipos & {'usn_deleted_hack', 'usn_ghost_folder'} and 'kill_chain' in tipos:
             for i in issues:
-                if i.get('tipo') in ('usn_deleted_hack', 'kill_chain'):
+                if i.get('tipo') in ('usn_deleted_hack', 'usn_ghost_folder', 'kill_chain'):
                     i['alerta'] = 'CRITICAL'
                     i['combination_penalty'] = 'USN+kill_chain'
+
+        # Carpeta ghost USN + recycle / config residual
+        if 'usn_ghost_folder' in tipos and tipos & {
+            'recycle_hack', 'ghost_client_config', 'ghost_client_registry', 'prefetch_hack',
+        }:
+            for i in issues:
+                if i.get('tipo') in (
+                    'usn_ghost_folder', 'recycle_hack', 'ghost_client_config',
+                    'ghost_client_registry', 'prefetch_hack',
+                ):
+                    i['alerta'] = 'CRITICAL'
+                    try:
+                        c = float(i.get('confidence') or 0.85)
+                        if c > 1:
+                            c = c / 100.0
+                        i['confidence'] = min(0.99, c * 1.15)
+                    except (TypeError, ValueError):
+                        i['confidence'] = 0.9
+                    i['combination_penalty'] = 'usn_ghost+residual'
 
         # Discord webhook en config + ghost client config → C2 activo
         if 'discord_webhook_config' in tipos and (
@@ -20500,6 +22014,146 @@ class ArgusApp:
                     i['alerta'] = 'CRITICAL'
                     i['confidence'] = min(1.0, i.get('confidence', 0.85) * 1.2)
                     i['combination_penalty'] = 'C2_webhook+ghost_config'
+
+        # Safe mode + mods blacklist / ghost → evasión activa
+        if 'minecraft_safe_mode' in tipos and tipos & {
+            'blacklisted_mod', 'ghost_client_config', 'javaagent_injection', 'weave_loader',
+        }:
+            for i in issues:
+                if i.get('tipo') in (
+                    'minecraft_safe_mode', 'blacklisted_mod', 'ghost_client_config',
+                    'javaagent_injection', 'weave_loader',
+                ):
+                    i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'safe_mode+cheat_signal'
+
+        # JAR self-deleted + javaagent/weave → inyección limpia
+        if 'jar_self_deleted' in tipos and tipos & {
+            'javaagent_injection', 'weave_loader', 'hack_string_in_loaded_jar',
+        }:
+            for i in issues:
+                if i.get('tipo') in (
+                    'jar_self_deleted', 'javaagent_injection', 'weave_loader',
+                    'hack_string_in_loaded_jar',
+                ):
+                    i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'self_delete+inject'
+
+        # Acceso remoto + señal de cheat → SS comprometido / ayuda externa
+        if tipos & {'remote_access_active', 'rdp_session_active'} and tipos & {
+            'ghost_client_config', 'blacklisted_mod', 'javaagent_injection',
+            'weave_loader', 'prefetch_hack', 'jar_self_deleted', 'injector_process',
+        }:
+            for i in issues:
+                if i.get('tipo') in (
+                    'remote_access_active', 'rdp_session_active',
+                    'ghost_client_config', 'blacklisted_mod', 'javaagent_injection',
+                    'weave_loader', 'prefetch_hack', 'jar_self_deleted', 'injector_process',
+                ):
+                    if i.get('tipo') in ('remote_access_active', 'rdp_session_active'):
+                        i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'remote_help+cheat_signal'
+
+        # Tarea programada + prefetch/BAM → persistencia + ejecución
+        if tipos & {
+            'scheduled_task_suspicious', 'scheduled_task_args_suspicious', 'scheduled_task_recent',
+        } and tipos & {'prefetch_hack', 'bam_execution', 'bam_hack', 'amcache_hack_execution'}:
+            for i in issues:
+                if i.get('tipo') in (
+                    'scheduled_task_suspicious', 'scheduled_task_args_suspicious',
+                    'scheduled_task_recent', 'prefetch_hack', 'bam_execution',
+                    'bam_hack', 'amcache_hack_execution',
+                ):
+                    i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'sched_task+execution'
+
+        # Hash en papelera + evidencia de ejecución → cliente borrado post-run
+        if 'recycle_hash_match' in tipos and tipos & {
+            'prefetch_hack', 'bam_execution', 'bam_hack', 'amcache_hack_execution',
+            'userassist_suspicious', 'jump_list_suspicious',
+        }:
+            for i in issues:
+                if i.get('tipo') in (
+                    'recycle_hash_match', 'prefetch_hack', 'bam_execution', 'bam_hack',
+                    'amcache_hack_execution', 'userassist_suspicious', 'jump_list_suspicious',
+                ):
+                    i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'recycle_hash+execution'
+
+        # Hosts Mojang sinkhole + DNS hack → evasión + distro
+        if 'hosts_minecraft_redirect' in tipos and tipos & {
+            'dns_cache_hack', 'hosts_hack_distro', 'vpn_active',
+        }:
+            for i in issues:
+                if i.get('tipo') in (
+                    'hosts_minecraft_redirect', 'dns_cache_hack',
+                    'hosts_hack_distro', 'vpn_active',
+                ):
+                    i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'hosts_sinkhole+dns'
+
+        # Cookie sitio cheat + DNS/history → navegación confirmada a distro
+        if tipos & {'browser_hack_cookie', 'wininet_hack_cookie'} and tipos & {
+            'dns_cache_hack', 'browser_visited_hack', 'browser_download_hack',
+        }:
+            for i in issues:
+                if i.get('tipo') in (
+                    'browser_hack_cookie', 'wininet_hack_cookie',
+                    'dns_cache_hack', 'browser_visited_hack', 'browser_download_hack',
+                ):
+                    i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'cookie+distro_signal'
+
+        # Prefetch referencia DLL/JAR + ejecución forense → inyección
+        if 'prefetch_referenced_hack' in tipos and tipos & {
+            'prefetch_hack', 'bam_execution', 'bam_hack', 'amcache_hack_execution',
+            'dll_injection_java', 'injected_dll', 'javaagent_injection',
+        }:
+            for i in issues:
+                if i.get('tipo') in (
+                    'prefetch_referenced_hack', 'prefetch_hack', 'bam_execution',
+                    'bam_hack', 'amcache_hack_execution', 'dll_injection_java',
+                    'injected_dll', 'javaagent_injection',
+                ):
+                    i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'prefetch_ref+injection'
+
+        # Borrado masivo + prefetch/USN → limpieza activa confirmada
+        if 'deleted_mass_event' in tipos and tipos & {
+            'prefetch_hack', 'usn_deleted_hack', 'usn_ghost_folder', 'recycle_hash_match',
+        }:
+            for i in issues:
+                if i.get('tipo') in (
+                    'deleted_mass_event', 'prefetch_hack', 'usn_deleted_hack',
+                    'usn_ghost_folder', 'recycle_hash_match',
+                ):
+                    i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'mass_delete+forensic'
+
+        # PowerShell evasion + integridad / hosts → cleanup pre-SS
+        if 'powershell_history_hack' in tipos and tipos & {
+            'ss_integrity', 'hosts_minecraft_redirect', 'defender_exclusion_hack',
+            'deleted_mass_event',
+        }:
+            for i in issues:
+                if i.get('tipo') in (
+                    'powershell_history_hack', 'ss_integrity', 'hosts_minecraft_redirect',
+                    'defender_exclusion_hack', 'deleted_mass_event',
+                ):
+                    i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'ps_history+evasion'
+
+        # Crash report + ghost config / weave → cliente activo que crasheó
+        if 'crash_report_hack' in tipos and tipos & {
+            'ghost_client_config', 'weave_loader', 'javaagent_injection', 'blacklisted_mod',
+        }:
+            for i in issues:
+                if i.get('tipo') in (
+                    'crash_report_hack', 'ghost_client_config', 'weave_loader',
+                    'javaagent_injection', 'blacklisted_mod',
+                ):
+                    i['alerta'] = 'CRITICAL'
+                    i['combination_penalty'] = 'crash+ghost'
 
         # Registry Run + Prefetch del mismo hack → startup persistente confirmado
         if 'registry_run_hack' in tipos and 'prefetch_hack' in tipos:
@@ -20616,21 +22270,32 @@ class ArgusApp:
                     i['ai_boosted'] = 'multi_categoria'
             print(f"🧠 [AI] Boost multi-categoria ({len(categorias_criticas)} cats): SOSPECHOSO→CRITICAL")
 
-        # DECAY: si solo hay 1 CRITICAL y 0 forenses, bajar a SOSPECHOSO para ser conservador
-        elif n_critical == 1 and n_forense == 0 and n_sospechoso == 0:
-            for i in issues:
-                if i.get('alerta') == 'CRITICAL':
-                    tipo = i.get('tipo', '')
-                    # Tipos que son siempre CRITICAL aunque estén solos
-                    if tipo not in _NEVER_FILTER_TYPES:
+        # DECAY: pocos CRITICAL y 0 forenses → bajar a SOSPECHOSO (conservador).
+        # Antes solo con exactamente 1 CRITICAL y 0 SOSPECHOSO; ahora hasta 2
+        # CRITICAL mientras ninguno tenga hash/YARA/contenido confirmado.
+        elif n_critical <= 2 and n_forense == 0:
+            def _hard_evidence(it):
+                _p = ' '.join(str(x) for x in (it.get('detected_patterns') or [])).lower()
+                return ('cloud_hash' in _p or 'malwarebazaar' in _p or 'yara' in _p
+                        or 'vt_' in _p or (it.get('obfuscation') is True)
+                        or (float(it.get('confidence', 0) or 0) * (100 if float(it.get('confidence', 0) or 0) <= 1 else 1)) >= 90)
+            _hard = [i for i in issues if i.get('alerta') == 'CRITICAL' and _hard_evidence(i)]
+            if not _hard:
+                for i in issues:
+                    if i.get('alerta') == 'CRITICAL' and i.get('tipo', '') not in _NEVER_FILTER_TYPES:
                         i['alerta'] = 'SOSPECHOSO'
-                        i['ai_decayed'] = 'single_critical_no_forense'
-            print("🧠 [AI] Decay: único CRITICAL sin forense → SOSPECHOSO")
+                        i['ai_decayed'] = 'critical_sin_forense_ni_hash'
+                print("🧠 [AI] Decay: CRITICAL sin forense/hash → SOSPECHOSO")
 
-        # CONTEXTO LIMPIO: si hay 0 CRITICAL y 0 forenses, marcar como limpio
+        # CONTEXTO LIMPIO: 0 CRITICAL, 0 forenses → bajar ruido de bajo nivel.
         if n_critical == 0 and n_forense == 0 and n_sospechoso <= 1:
             for i in issues:
                 i['clean_context'] = True
+                if i.get('alerta') == 'POCO_SOSPECHOSO' and i.get('tipo', '') not in _NEVER_FILTER_TYPES:
+                    _c = float(i.get('confidence', 0) or 0)
+                    if _c * (100 if _c <= 1 else 1) < 55:
+                        i['alerta'] = 'NORMAL'
+                        i['ai_decayed'] = 'clean_context_low_conf'
 
         return issues
 
@@ -20820,7 +22485,6 @@ class ArgusApp:
         except Exception as e:
             print(f"Error en scan_process_tree: {e}")
 
-    @staticmethod
     def _read_usn_journal(self, max_lines=150_000, max_seconds=12):
         """Lee fsutil USN journal sin mostrar ventana negra al usuario.
         El resultado se cachea en self._usn_cache para que USN + kill_chain
@@ -20831,55 +22495,62 @@ class ArgusApp:
 
         import subprocess as _sp, time as _time, queue as _q, threading as _th
 
-        lines = []
-        proc = None
-        try:
-            _si = _sp.STARTUPINFO()
-            _si.dwFlags |= _sp.STARTF_USESHOWWINDOW
-            _si.wShowWindow = 0  # SW_HIDE
-            proc = _sp.Popen(
-                ['fsutil', 'usn', 'readjournal', 'C:', 'csv'],
-                stdout=_sp.PIPE, stderr=_sp.DEVNULL,
-                text=True, errors='ignore',
-                creationflags=0x08000000,  # CREATE_NO_WINDOW
-                startupinfo=_si,
-            )
-            buf = _q.Queue()
+        # Con el pipeline corriendo scanners en paralelo, varios pueden llamar acá
+        # antes de que el cache exista → todos lanzarían fsutil (~12s c/u). El lock
+        # de clase serializa: el segundo entra, ve el cache y sale.
+        with ArgusApp._usn_read_lock:
+            if getattr(self, '_usn_cache', None) is not None:
+                return self._usn_cache
 
-            def _reader():
-                try:
-                    for ln in proc.stdout:
-                        buf.put(ln)
-                except Exception:
-                    pass
-                finally:
-                    buf.put(None)
+            lines = []
+            proc = None
+            try:
+                _si = _sp.STARTUPINFO()
+                _si.dwFlags |= _sp.STARTF_USESHOWWINDOW
+                _si.wShowWindow = 0  # SW_HIDE
+                proc = _sp.Popen(
+                    ['fsutil', 'usn', 'readjournal', 'C:', 'csv'],
+                    stdout=_sp.PIPE, stderr=_sp.DEVNULL,
+                    text=True, errors='ignore',
+                    creationflags=0x08000000,  # CREATE_NO_WINDOW
+                    startupinfo=_si,
+                )
+                buf = _q.Queue()
 
-            _th.Thread(target=_reader, daemon=True).start()
-            t0 = _time.time()
-            while True:
-                elapsed = _time.time() - t0
-                if elapsed >= max_seconds or len(lines) >= max_lines:
-                    break
-                try:
-                    ln = buf.get(timeout=min(max_seconds - elapsed, 0.5))
-                except _q.Empty:
-                    break
-                if ln is None:
-                    break
-                lines.append(ln)
-        except Exception:
-            pass
-        finally:
-            if proc is not None:
-                try: proc.stdout.close()
-                except Exception: pass
-                try: proc.kill()
-                except Exception: pass
-                try: proc.wait(timeout=3)
-                except Exception: pass
-        self._usn_cache = lines
-        return lines
+                def _reader():
+                    try:
+                        for ln in proc.stdout:
+                            buf.put(ln)
+                    except Exception:
+                        pass
+                    finally:
+                        buf.put(None)
+
+                _th.Thread(target=_reader, daemon=True).start()
+                t0 = _time.time()
+                while True:
+                    elapsed = _time.time() - t0
+                    if elapsed >= max_seconds or len(lines) >= max_lines:
+                        break
+                    try:
+                        ln = buf.get(timeout=min(max_seconds - elapsed, 0.5))
+                    except _q.Empty:
+                        break
+                    if ln is None:
+                        break
+                    lines.append(ln)
+            except Exception:
+                pass
+            finally:
+                if proc is not None:
+                    try: proc.stdout.close()
+                    except Exception: pass
+                    try: proc.kill()
+                    except Exception: pass
+                    try: proc.wait(timeout=3)
+                    except Exception: pass
+            self._usn_cache = lines
+            return lines
 
     def scan_prescan_disk_activity(self):
         """P3 #17 — Anomalía de actividad de disco en los 10 minutos previos al inicio del scan.
@@ -21827,34 +23498,236 @@ class ArgusApp:
             'svchost.exe', 'lsass.exe', 'winlogon.exe', 'csrss.exe', 'smss.exe',
             'services.exe', 'wininit.exe', 'dwm.exe', 'taskhost.exe', 'taskhostw.exe',
             'conhost.exe', 'dllhost.exe', 'rundll32.exe', 'regsvr32.exe',
+            'runtimebroker.exe', 'searchhost.exe', 'startmenuexperiencehost.exe',
+            'sihost.exe', 'fontdrvhost.exe', 'ctfmon.exe',
             # Gamer / overlay
             'discord.exe', 'discordptb.exe', 'discordcanary.exe',
-            'steam.exe', 'steamwebhelper.exe', 'gameoverlayui.exe',
+            'steam.exe', 'steamwebhelper.exe', 'gameoverlayui.exe', 'steamservice.exe',
             'nvcontainer.exe', 'nvdisplay.container.exe', 'nvcplui.exe',
-            'nvtelemetrycontainer.exe', 'nvidia web helper.exe',
-            'xboxapp.exe', 'gamebar.exe', 'gamebarftserver.exe',
-            'obs64.exe', 'obs.exe', 'obs-browser-page.exe',
+            'nvtelemetrycontainer.exe', 'nvidia web helper.exe', 'nvsphelper64.exe',
+            'xboxapp.exe', 'gamebar.exe', 'gamebarftserver.exe', 'gamingservices.exe',
+            'obs64.exe', 'obs.exe', 'obs-browser-page.exe', 'streamlabs obs.exe',
             'spotify.exe', 'spoticrashhandler.exe',
-            'msedge.exe', 'chrome.exe', 'firefox.exe', 'opera.exe',
-            'epicgameslauncher.exe', 'easyanticheat.exe',
-            'geforceexperience.exe', 'geforcenow.exe',
+            'msedge.exe', 'chrome.exe', 'firefox.exe', 'opera.exe', 'brave.exe',
+            'epicgameslauncher.exe', 'easyanticheat.exe', 'beacone.exe',
+            'geforceexperience.exe', 'geforcenow.exe', 'nvidia share.exe',
+            'radeonsoftware.exe', 'amdow.exe', 'cyservice.exe',
+            'overwolf.exe', 'medal.exe', 'wallpaperengine.exe',
             # Minecraft legítimos
             'javaw.exe', 'java.exe', 'minecraft.exe', 'minecraftlauncher.exe',
-            'prismlauncher.exe', 'multimc.exe', 'ftblauncher.exe',
-            'curseforgeapp.exe', 'gdlauncher.exe', 'atlauncher.exe',
+            'prismlauncher.exe', 'multimc.exe', 'ftblauncher.exe', 'modrinth app.exe',
+            'curseforgeapp.exe', 'gdlauncher.exe', 'atlauncher.exe', 'lunar client.exe',
             # Windows utilities
             'explorer.exe', 'taskmgr.exe', 'notepad.exe', 'mspaint.exe',
             'cmd.exe', 'powershell.exe', 'windowsterminal.exe',
         }
+        # #4 — rutas legítimas por proceso: un `spotify.exe` real vive acá, no en
+        # Downloads/Temp/Escritorio. Si el nombre está en SAFE_PROCESSES pero la
+        # ruta NO es una de estas (o no está firmado) → NO se whitelistea (camuflaje).
+        _LEGIT_PROC_DIRS = (
+            'program files', 'program files (x86)', 'windows\\system32',
+            'windows\\syswow64', 'systemapps', 'windowsapps',
+            'appdata\\local\\spotify', 'appdata\\roaming\\spotify',
+            'appdata\\local\\discord', 'appdata\\local\\discordptb', 'appdata\\local\\discordcanary',
+            'appdata\\local\\microsoft', 'appdata\\local\\programs\\opera',
+            'appdata\\local\\slack', 'appdata\\roaming\\zoom', 'appdata\\local\\google\\chrome',
+            'appdata\\local\\overwolf', 'appdata\\roaming\\obs-studio', 'appdata\\local\\obs',
+        )
+        _SUSPECT_PROC_DIRS = ('\\downloads\\', '\\desktop\\', '\\temp\\', '\\tmp\\',
+                              'appdata\\local\\temp', '\\documents\\')
         result = []
         for issue in issues:
-            archivo = (issue.get('archivo') or '').lower().strip()
-            if issue.get('categoria') == 'PROCESO' and archivo in SAFE_PROCESSES:
-                # Solo descartar si la confianza es baja y no tiene combo penalty
-                if issue.get('confidence', 1.0) < 0.75 and not issue.get('combination_penalty'):
+            # Para chequeo de ruta preferimos el path completo (`ruta`); `archivo`
+            # suele ser solo el basename y rompía la detección de carpeta legítima.
+            _full = (issue.get('ruta') or issue.get('archivo') or '')
+            _full_l = str(_full).lower().replace('/', '\\')
+            archivo = os.path.basename(_full_l).strip()
+            cat = (issue.get('categoria') or '').upper()
+            tipo = issue.get('tipo') or ''
+            is_proc = cat in ('PROCESO', 'PROCESSES') or tipo in (
+                'running_hack_process', 'suspicious_process', 'short_lived_process',
+                'suspicious_process_location', 'unknown_parent_process',
+            )
+            if is_proc and archivo in SAFE_PROCESSES:
+                _path_ok = any(d in _full_l for d in _LEGIT_PROC_DIRS)
+                _path_bad = any(d in _full_l for d in _SUSPECT_PROC_DIRS)
+                _signed = False
+                try:
+                    if _full and os.path.isfile(str(_full)):
+                        _signed = is_trusted_publisher(str(_full))
+                except Exception:
+                    pass
+                # Camuflaje: nombre de app legítima pero ruta rara y sin firma →
+                # dejar pasar el hallazgo (que lo revise el staff en SS).
+                if (_path_bad or not _path_ok) and not _signed:
+                    issue.setdefault('detected_patterns', []).append('proc_name_path_mismatch')
+                    if issue.get('alerta') not in ('CRITICAL',):
+                        issue['alerta'] = 'SOSPECHOSO'
+                    result.append(issue)
+                    continue
+                try:
+                    conf = float(issue.get('confidence', 1.0) or 1.0)
+                    if conf > 1:
+                        conf = conf / 100.0
+                except (TypeError, ValueError):
+                    conf = 1.0
+                if (
+                    conf < 0.85
+                    and not issue.get('combination_penalty')
+                    and tipo not in _NEVER_FILTER_TYPES
+                ):
                     continue
             result.append(issue)
         return result
+
+    def _apply_process_path_correlation(self, issues):
+        """P2 #14 — Nombre genérico + ruta legítima → demote; + TEMP → boost leve."""
+        GENERIC = {
+            'update.exe', 'updater.exe', 'installer.exe', 'setup.exe',
+            'launcher.exe', 'helper.exe', 'service.exe', 'runtime.exe',
+            'host.exe', 'agent.exe', 'client.exe', 'app.exe',
+        }
+        LEGIT_PATH = (
+            '\\program files\\', '\\program files (x86)\\',
+            '\\windows\\', '\\steam\\', '\\epic games\\',
+            '\\nvidia', '\\discord\\', '\\microsoft\\',
+            '\\lunarclient\\', '\\badlion', '\\prismlauncher\\',
+        )
+        TEMP_PATH = ('\\temp\\', '\\appdata\\local\\temp', '\\downloads\\')
+        for issue in issues:
+            if issue.get('tipo') in _NEVER_FILTER_TYPES or issue.get('combination_penalty'):
+                continue
+            ruta = (issue.get('ruta') or issue.get('archivo') or '').lower()
+            base = os.path.basename(ruta)
+            if base not in GENERIC:
+                continue
+            if any(p in ruta for p in LEGIT_PATH):
+                if issue.get('alerta') in ('CRITICAL', 'SOSPECHOSO'):
+                    issue['alerta'] = 'POCO_SOSPECHOSO'
+                try:
+                    c = float(issue.get('confidence') or 0.5)
+                    if c > 1:
+                        c = c / 100.0
+                    issue['confidence'] = max(0.15, c * 0.4)
+                except (TypeError, ValueError):
+                    pass
+                issue['detected_patterns'] = list(
+                    issue.get('detected_patterns') or []
+                ) + ['path_name_legit_demote']
+            elif any(p in ruta for p in TEMP_PATH):
+                issue['detected_patterns'] = list(
+                    issue.get('detected_patterns') or []
+                ) + ['generic_name_in_temp']
+                try:
+                    c = float(issue.get('confidence') or 0.5)
+                    if c > 1:
+                        c = c / 100.0
+                    issue['confidence'] = min(0.95, c + 0.1)
+                except (TypeError, ValueError):
+                    pass
+        return issues
+
+    def _apply_legit_parent_demote(self, issues):
+        """P2 #6 — Hallazgos con parent launcher legítimo → bajar alerta."""
+        LEGIT_PARENT_MARKERS = (
+            'steam', 'epicgames', 'minecraftlauncher', 'minecraft launcher',
+            'prismlauncher', 'multimc', 'lunar client', 'badlion',
+            'curseforge', 'modrinth', 'gdlauncher', 'atlauncher',
+        )
+        BAD_PARENTS = ('cmd.exe', 'powershell', 'wscript', 'mshta', 'regsvr32')
+        for issue in issues:
+            if issue.get('tipo') in _NEVER_FILTER_TYPES or issue.get('combination_penalty'):
+                continue
+            nombre = (issue.get('nombre') or '').lower()
+            pats = ' '.join(str(p) for p in (issue.get('detected_patterns') or [])).lower()
+            extra = issue.get('extra') if isinstance(issue.get('extra'), dict) else {}
+            blob = f"{nombre} {pats} {extra.get('parent', '')} {extra.get('parent_name', '')}".lower()
+            if any(b in blob for b in BAD_PARENTS):
+                continue
+            if not any(m in blob for m in LEGIT_PARENT_MARKERS):
+                continue
+            if issue.get('alerta') == 'CRITICAL':
+                issue['alerta'] = 'SOSPECHOSO'
+            try:
+                c = float(issue.get('confidence') or 0.5)
+                if c > 1:
+                    c = c / 100.0
+                issue['confidence'] = max(0.2, c * 0.65)
+            except (TypeError, ValueError):
+                pass
+            issue['detected_patterns'] = list(
+                issue.get('detected_patterns') or []
+            ) + ['legit_parent_demote']
+        return issues
+
+    def _apply_authenticode_demote(self, issues):
+        """P2 #7 — .exe/.dll firmados por publisher trusted → descartar o demote."""
+        # Cap: PowerShell Authenticode es lento; priorizar CRITICAL
+        candidates = []
+        for i, issue in enumerate(issues):
+            tipo = issue.get('tipo') or ''
+            if tipo in _NEVER_FILTER_TYPES or issue.get('combination_penalty'):
+                continue
+            path = issue.get('ruta') or issue.get('archivo') or ''
+            low = str(path).lower()
+            if not (low.endswith('.exe') or low.endswith('.dll')):
+                continue
+            if not os.path.isfile(str(path)):
+                continue
+            # Rutas ya claramente de vendor → demote sin llamar PS
+            if any(f in low for f in (
+                '\\windows\\system32\\', '\\windows\\syswow64\\',
+                '\\program files\\windows', '\\program files\\microsoft',
+                '\\program files\\nvidia', '\\program files (x86)\\steam\\',
+            )):
+                issue['alerta'] = 'NORMAL'
+                issue['detected_patterns'] = list(
+                    issue.get('detected_patterns') or []
+                ) + ['vendor_path_demote']
+                try:
+                    issue['confidence'] = min(float(issue.get('confidence') or 0.3), 0.25)
+                except (TypeError, ValueError):
+                    issue['confidence'] = 0.25
+                continue
+            prio = 0 if (issue.get('alerta') or '').upper() == 'CRITICAL' else 1
+            candidates.append((prio, i, issue, str(path)))
+        candidates.sort(key=lambda x: x[0])
+        checked = 0
+        dropped = 0
+        demoted = 0
+        for _, idx, issue, path in candidates[:18]:
+            checked += 1
+            try:
+                if is_trusted_publisher(path):
+                    dropped += 1
+                    issue['_drop_trusted_sig'] = True
+                    continue
+                # Firmado (WinVerifyTrust) en Program Files → soft demote
+                if self.scan_digital_signature(path):
+                    low = path.lower()
+                    if any(p in low for p in (
+                        '\\program files\\', '\\program files (x86)\\',
+                    )):
+                        if issue.get('alerta') in ('CRITICAL', 'SOSPECHOSO'):
+                            issue['alerta'] = 'POCO_SOSPECHOSO'
+                            demoted += 1
+                        issue['detected_patterns'] = list(
+                            issue.get('detected_patterns') or []
+                        ) + ['authenticode_signed_demote']
+                        issue.setdefault('extra', {})
+                        if isinstance(issue.get('extra'), dict):
+                            issue['extra']['authenticode'] = 'valid'
+            except Exception:
+                continue
+        out = [i for i in issues if not i.get('_drop_trusted_sig')]
+        for i in out:
+            i.pop('_drop_trusted_sig', None)
+        if checked:
+            print(
+                f"[filter] P2#7 authenticode: checked={checked} "
+                f"drop_trusted={dropped} demote_signed={demoted}"
+            )
+        return out
 
     def second_pass_scanner(self):
         """Segunda pasada: analiza archivos SOSPECHOSO/CRITICAL con mayor profundidad."""
@@ -22543,7 +24416,7 @@ class ArgusApp:
         """Muestra ventana simple de finalización: scan enviado a la web."""
         import tkinter as tk
 
-        web_url  = self.config.get('web_url', 'https://asperss.onrender.com').rstrip('/')
+        web_url  = self.config.get('web_url', ARGUS_DEFAULT_API_URL).rstrip('/')
         staff    = self.config.get('staff_name', self.config.get('scan_token', ''))
 
         # Actualizar área de texto con estado mínimo
@@ -22588,7 +24461,7 @@ class ArgusApp:
     def _submit_ai_feedback(self, verdict, notes):
         """Envía feedback al servidor y actualiza patrones locales."""
         try:
-            api_url = self.config.get('api_url', 'https://asperss.onrender.com')
+            api_url = self.config.get('api_url', ARGUS_DEFAULT_API_URL)
             scan_id = None
             if self.db_integration and hasattr(self.db_integration, 'current_scan_id'):
                 scan_id = self.db_integration.current_scan_id
@@ -22633,21 +24506,81 @@ class ArgusApp:
         except Exception as ex:
             print(f"⚠️ Error en feedback IA: {ex}")
         
-        # Actualizar resultados
-        self.results_text.delete(1.0, tk.END)
-        self.results_text.insert(tk.END, f"✅ ESCANEO COMPLETADO\n\n", "success")
-        self.results_text.insert(tk.END, f"📊 Total de elementos encontrados: {len(self.issues_found)}\n\n", "info")
-        
-        if self.issues_found:
-            self.results_text.insert(tk.END, "🔍 ELEMENTOS ENCONTRADOS:\n\n", "warning")
-            for i, issue in enumerate(self.issues_found, 1):
-                self.results_text.insert(tk.END, f"{i}. {issue.get('nombre', 'N/A')}\n", "info")
-                self.results_text.insert(tk.END, f"   Tipo: {issue.get('tipo', 'N/A')}\n", "info")
-                self.results_text.insert(tk.END, f"   Ruta: {issue.get('ruta', 'N/A')}\n", "info")
-                self.results_text.insert(tk.END, f"   Alerta: {issue.get('alerta', 'N/A')}\n\n", "danger")
-        else:
-            self.results_text.insert(tk.END, "✅ No se encontraron elementos sospechosos\n", "success")
+        # Actualizar resultados — Top 5 + resto colapsado
+        self._results_show_all = False
+        self._render_staff_results()
     
+    def _render_staff_results(self):
+        """Top 5 priorizado + resto colapsado (toggle con Mostrar todos)."""
+        try:
+            from results_display import render_results_text
+        except Exception:
+            render_results_text = None
+        show_all = bool(getattr(self, "_results_show_all", False))
+        if render_results_text and hasattr(self, "results_text"):
+            try:
+                meta = render_results_text(
+                    self.results_text,
+                    self.issues_found or [],
+                    show_all=show_all,
+                    top_n=5,
+                )
+                self._results_meta = meta
+                self._ensure_expand_results_btn(meta.get("other_count", 0))
+                return
+            except Exception as e:
+                print(f"[results_display] {e}")
+        # Fallback legacy
+        self.results_text.delete(1.0, tk.END)
+        self.results_text.insert(tk.END, f"ESCANEO COMPLETADO\n\n", "success")
+        self.results_text.insert(
+            tk.END, f"Total: {len(self.issues_found)}\n\n", "info"
+        )
+        for i, issue in enumerate(self.issues_found or [], 1):
+            self.results_text.insert(
+                tk.END, f"{i}. {issue.get('nombre', 'N/A')} [{issue.get('alerta')}]\n", "info"
+            )
+
+    def _ensure_expand_results_btn(self, other_count: int):
+        """Botón Mostrar todos / Colapsar bajo el área de resultados."""
+        try:
+            import tkinter as tk
+            parent = getattr(self, "results_frame", None) or getattr(self, "results_text", None)
+            if parent is None:
+                return
+            # frame padre del text
+            if hasattr(self, "results_text"):
+                parent = self.results_text.master
+            btn = getattr(self, "_expand_results_btn", None)
+            if btn is None:
+                btn = tk.Button(
+                    parent,
+                    text="",
+                    command=self._toggle_results_expand,
+                    bg="#21262d",
+                    fg="#c9d1d9",
+                    font=("Segoe UI", 9, "bold"),
+                    relief=tk.FLAT,
+                    cursor="hand2",
+                )
+                btn.pack(fill=tk.X, padx=20, pady=(0, 12))
+                self._expand_results_btn = btn
+            if other_count <= 0 and not getattr(self, "_results_show_all", False):
+                btn.pack_forget()
+                return
+            if not btn.winfo_ismapped():
+                btn.pack(fill=tk.X, padx=20, pady=(0, 12))
+            if getattr(self, "_results_show_all", False):
+                btn.config(text="Colapsar — mostrar solo Top 5")
+            else:
+                btn.config(text=f"Mostrar todos (+{other_count} menores)")
+        except Exception as e:
+            print(f"[expand_btn] {e}")
+
+    def _toggle_results_expand(self):
+        self._results_show_all = not bool(getattr(self, "_results_show_all", False))
+        self._render_staff_results()
+
     def log(self, message, level="info"):
         """Registra un mensaje en el área de resultados"""
         self.results_text.insert(tk.END, f"{message}\n", level)
@@ -22850,6 +24783,27 @@ def _run_headless(token: str, api_url: str | None, output_json: str | None):
         print(_json.dumps(result, ensure_ascii=False, indent=2))
 
 
+def _acquire_single_instance_mutex():
+    """P0 #126 — Evita 2 instancias del scanner (race en hive Amcache / UI).
+    Retorna handle del mutex o None si ya hay otra instancia.
+    """
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        # Nombre global por usuario+máquina
+        name = f"Local\\ArgusScannerSingleton_{os.environ.get('USERNAME', 'user')}"
+        handle = kernel32.CreateMutexW(None, False, name)
+        last = kernel32.GetLastError()
+        # ERROR_ALREADY_EXISTS = 183
+        if last == 183:
+            if handle:
+                kernel32.CloseHandle(handle)
+            return None
+        return handle
+    except Exception:
+        return object()  # fail-open: no bloquear si API falla
+
+
 def main():
     """Función principal — soporta modo GUI y headless (--headless)."""
     import argparse
@@ -22861,7 +24815,28 @@ def main():
     parser.add_argument('--log', default='', help='Ruta de archivo de log (opcional)')
     parser.add_argument('--debug-filter', action='store_true', help='Mostrar hallazgos descartados en el filtro')
     parser.add_argument('--profile', default='', help='Nombre del perfil de servidor a usar (profiles.json)')
+    parser.add_argument('--allow-multi', action='store_true', help='Permitir varias instancias (debug)')
     args, _ = parser.parse_known_args()
+
+    # P0 #126 — single-instance (salvo --allow-multi / headless paralelo intencional)
+    _mutex_handle = None
+    if not args.allow_multi:
+        _mutex_handle = _acquire_single_instance_mutex()
+        if _mutex_handle is None:
+            msg = (
+                "Argus Scanner ya está en ejecución.\n"
+                "Cerrá la otra ventana antes de abrir otra instancia."
+            )
+            print(f"ERROR: {msg}")
+            try:
+                import tkinter as tk
+                import tkinter.messagebox as messagebox
+                _r = tk.Tk(); _r.withdraw()
+                messagebox.showwarning("Argus Scanner", msg)
+                _r.destroy()
+            except Exception:
+                pass
+            sys.exit(2)
 
     # P5 #34 — Enable structured logging if --log provided
     if args.log:

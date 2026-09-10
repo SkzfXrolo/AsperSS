@@ -1,0 +1,225 @@
+{
+  "cases": [
+    {
+      "id": "chrome_usn_drop",
+      "expect": "drop",
+      "issue": {
+        "nombre": "usn chrome temp",
+        "ruta": "c:\\users\\x\\appdata\\local\\google\\chrome\\user data\\default\\cache\\foo",
+        "archivo": "foo",
+        "tipo": "usn_deleted_hack",
+        "categoria": "FORENSE",
+        "alerta": "CRITICAL",
+        "confidence": 0.85
+      }
+    },
+    {
+      "id": "prefetch_vape_keep",
+      "expect": "keep",
+      "via": "secondary",
+      "issue": {
+        "nombre": "Prefetch de hack encontrado: VAPE",
+        "ruta": "C:\\Windows\\Prefetch\\VAPE.EXE-ABC123.pf",
+        "archivo": "VAPE.EXE-ABC123.pf",
+        "tipo": "prefetch_hack",
+        "categoria": "FORENSE",
+        "alerta": "CRITICAL",
+        "confidence": 0.9,
+        "detected_patterns": ["prefetch:vape"],
+        "explicacion": "Prefetch Vape"
+      }
+    },
+    {
+      "id": "downloads_jar_soft",
+      "expect": "soft_sospechoso",
+      "via": "secondary",
+      "issue": {
+        "nombre": "random tool",
+        "tipo": "file",
+        "alerta": "NORMAL",
+        "confidence": 0.5,
+        "ruta": "c:\\users\\x\\downloads",
+        "archivo": "c:\\users\\x\\downloads\\coolmod.jar"
+      }
+    },
+    {
+      "id": "integrity_keep",
+      "expect": "keep",
+      "via": "secondary",
+      "issue": {
+        "nombre": "Prefetch wipe",
+        "tipo": "ss_integrity",
+        "categoria": "INTEGRITY",
+        "alerta": "CRITICAL",
+        "confidence": 0.9,
+        "ruta": "C:\\Windows\\Prefetch",
+        "archivo": ""
+      }
+    },
+    {
+      "id": "lunar_path_segment",
+      "expect": "drop",
+      "issue": {
+        "nombre": "noise in lunar",
+        "ruta": "c:\\users\\x\\appdata\\roaming\\lunarclient\\offline\\multimc\\mods\\sodium.jar",
+        "archivo": "sodium.jar",
+        "tipo": "jar_file",
+        "categoria": "HACKS",
+        "alerta": "SOSPECHOSO",
+        "confidence": 0.55
+      }
+    },
+    {
+      "id": "onyx_theme_not_nyx",
+      "expect": "drop",
+      "issue": {
+        "nombre": "Onyx GTK theme",
+        "ruta": "c:\\users\\x\\documents\\onyx-gtk-theme",
+        "archivo": "c:\\users\\x\\documents\\onyx-gtk-theme\\onyx.css",
+        "tipo": "file",
+        "categoria": "HACKS",
+        "alerta": "SOSPECHOSO",
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "vertex_shader_not_hack",
+      "expect": "drop",
+      "issue": {
+        "nombre": "shader source",
+        "ruta": "c:\\users\\x\\projects\\game\\assets\\shaders",
+        "archivo": "c:\\users\\x\\projects\\game\\assets\\shaders\\vertex_common.glsl",
+        "tipo": "file",
+        "categoria": "HACKS",
+        "alerta": "SOSPECHOSO",
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "liquidbounce_jar_still_flagged",
+      "expect": "keep",
+      "issue": {
+        "nombre": "mod sospechoso",
+        "ruta": "c:\\users\\x\\appdata\\roaming\\.minecraft\\mods",
+        "archivo": "c:\\users\\x\\appdata\\roaming\\.minecraft\\mods\\LiquidBounce-1.8.9.jar",
+        "tipo": "jar_file",
+        "categoria": "HACKS",
+        "alerta": "SOSPECHOSO",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "rise_client_in_mods_still_flagged",
+      "expect": "keep",
+      "issue": {
+        "nombre": "jar en mods",
+        "ruta": "c:\\users\\x\\appdata\\roaming\\.minecraft\\mods",
+        "archivo": "c:\\users\\x\\appdata\\roaming\\.minecraft\\mods\\rise.jar",
+        "tipo": "jar_file",
+        "categoria": "HACKS",
+        "alerta": "SOSPECHOSO",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "music_extended_remix_not_hack",
+      "expect": "drop",
+      "issue": {
+        "nombre": "cancion", "tipo": "file", "categoria": "HACKS",
+        "alerta": "SOSPECHOSO", "confidence": 0.5,
+        "ruta": "c:\\users\\x\\music\\edm",
+        "archivo": "c:\\users\\x\\music\\edm\\Artist - Track (Extended Remix).mp3"
+      }
+    },
+    {
+      "id": "warframe_inertia_mod_not_hack",
+      "expect": "drop",
+      "issue": {
+        "nombre": "warframe cache", "tipo": "file", "categoria": "HACKS",
+        "alerta": "SOSPECHOSO", "confidence": 0.5,
+        "ruta": "c:\\users\\x\\appdata\\local\\warframe\\downloaded\\public",
+        "archivo": "c:\\users\\x\\appdata\\local\\warframe\\downloaded\\public\\Mods.Inertia.bin"
+      }
+    },
+    {
+      "id": "flux_installer_not_hack",
+      "expect": "drop",
+      "issue": {
+        "nombre": "f.lux", "tipo": "file", "categoria": "HACKS",
+        "alerta": "SOSPECHOSO", "confidence": 0.5,
+        "ruta": "c:\\users\\x\\appdata\\local\\fluxsoftware\\flux",
+        "archivo": "c:\\users\\x\\appdata\\local\\fluxsoftware\\flux\\flux.exe"
+      }
+    },
+    {
+      "id": "nvidia_reflex_dll_not_hack",
+      "expect": "drop",
+      "issue": {
+        "nombre": "reflex dll", "tipo": "file", "categoria": "HACKS",
+        "alerta": "SOSPECHOSO", "confidence": 0.5,
+        "ruta": "c:\\program files\\nvidia corporation\\reflex",
+        "archivo": "c:\\program files\\nvidia corporation\\reflex\\nvreflex.dll"
+      }
+    },
+    {
+      "id": "vscode_inject_js_not_hack",
+      "expect": "drop",
+      "issue": {
+        "nombre": "vscode ext", "tipo": "file", "categoria": "HACKS",
+        "alerta": "SOSPECHOSO", "confidence": 0.5,
+        "ruta": "c:\\users\\x\\.vscode\\extensions\\some.ext-1.0\\out",
+        "archivo": "c:\\users\\x\\.vscode\\extensions\\some.ext-1.0\\out\\inject.js"
+      }
+    },
+    {
+      "id": "usn_discord_cache_not_hack",
+      "expect": "drop",
+      "issue": {
+        "nombre": "usn discord", "tipo": "usn_deleted_hack", "categoria": "FORENSE",
+        "alerta": "CRITICAL", "confidence": 0.82,
+        "ruta": "c:\\users\\x\\appdata\\local\\discord\\cache",
+        "archivo": "c:\\users\\x\\appdata\\local\\discord\\cache\\f_00a1b2"
+      }
+    },
+    {
+      "id": "vape_inject_camouflaged_in_spotify_flagged",
+      "expect": "keep",
+      "issue": {
+        "nombre": "spotify?", "tipo": "file", "categoria": "HACKS",
+        "alerta": "SOSPECHOSO", "confidence": 0.7,
+        "ruta": "c:\\users\\x\\appdata\\roaming\\spotify",
+        "archivo": "c:\\users\\x\\appdata\\roaming\\spotify\\vape_inject.exe"
+      }
+    },
+    {
+      "id": "killaura_camouflaged_in_discord_flagged",
+      "expect": "keep",
+      "issue": {
+        "nombre": "discord?", "tipo": "file", "categoria": "HACKS",
+        "alerta": "SOSPECHOSO", "confidence": 0.6,
+        "ruta": "c:\\users\\x\\appdata\\local\\discord\\app-1.0",
+        "archivo": "c:\\users\\x\\appdata\\local\\discord\\app-1.0\\KillAura.dll"
+      }
+    },
+    {
+      "id": "xray_resourcepack_flagged",
+      "expect": "keep",
+      "issue": {
+        "nombre": "xray pack", "tipo": "minecraft_file", "categoria": "HACKS",
+        "alerta": "SOSPECHOSO", "confidence": 0.6,
+        "ruta": "c:\\users\\x\\appdata\\roaming\\.minecraft\\resourcepacks",
+        "archivo": "c:\\users\\x\\appdata\\roaming\\.minecraft\\resourcepacks\\XRay-Ultimate.zip"
+      }
+    },
+    {
+      "id": "slinky_dll_flagged",
+      "expect": "keep",
+      "issue": {
+        "nombre": "slinky", "tipo": "file", "categoria": "HACKS",
+        "alerta": "CRITICAL", "confidence": 0.85,
+        "ruta": "c:\\users\\x\\downloads",
+        "archivo": "c:\\users\\x\\downloads\\slinky.dll"
+      }
+    }
+  ]
+}
