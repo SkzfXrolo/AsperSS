@@ -1027,10 +1027,9 @@ def discord_interactions():
 
 
 @app.route('/health', methods=['GET'])
-@app.route('/healthz', methods=['GET'])
 @app.route('/ping', methods=['GET'])
 def health_check():
-    """Health check endpoint para Render - Optimizado para ser ultra-rÃ¡pido"""
+    """Health check ultra-rápido (texto plano). /healthz da el JSON con uptime."""
     # Respuesta mÃ­nima y rÃ¡pida para evitar spinning down
     # Este endpoint se puede llamar periÃ³dicamente para mantener el servicio activo
     response = make_response('OK', 200)
