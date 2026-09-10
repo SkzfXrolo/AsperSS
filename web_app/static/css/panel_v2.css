@@ -325,6 +325,31 @@ table.tbl tbody tr[data-scan]:focus-visible { outline: 2px solid var(--accent); 
 .panel-card .body { padding: 4px 0; }
 .panel-card .body.pad { padding: 18px; }
 
+/* ---- Ranking / mini bar-chart ------------------------------------ */
+ol.rank { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+ol.rank li {
+  display: grid; grid-template-columns: 22px 1fr 120px 44px; align-items: center;
+  gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--border-soft);
+}
+ol.rank li:last-child { border-bottom: 0; }
+.rank-n {
+  font-family: var(--mono); font-size: 11px; color: var(--text-mute);
+  text-align: right; font-weight: 600;
+}
+.rank-name { font-size: 13.5px; color: var(--text-dim); }
+.rank-bar { height: 5px; border-radius: 3px; background: var(--bg-3); overflow: hidden; }
+.rank-bar i {
+  display: block; height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent-dim), var(--accent-2));
+  box-shadow: 0 0 10px -2px var(--accent-glow);
+}
+.rank-c { text-align: right; font-size: 13px; color: var(--text); }
+ol.rank li:first-child .rank-name { color: var(--text); font-weight: 500; }
+@media (max-width: 560px) {
+  ol.rank li { grid-template-columns: 20px 1fr 40px; }
+  .rank-bar { display: none; }
+}
+
 /* ---- Tables (denso, datos en mono) -------------------------------- */
 .table-wrap { overflow-x: auto; }
 table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
@@ -362,6 +387,28 @@ table.tbl tbody tr[data-scan]:hover td:first-child { box-shadow: inset 2px 0 0 v
 .badge.pend  { background: var(--bg-3);        color: var(--text-mute); border-color: var(--border); }
 .badge.plain { border-radius: 999px; }
 .badge.plain::before { display: none; }
+
+/* ---- Verdicto: readout de riesgo + control segmentado ----------- */
+.risk-readout { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; }
+.risk-readout .muted { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; }
+.risk-readout b { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; }
+.risk-track { height: 6px; border-radius: 4px; background: var(--bg-3); overflow: hidden; }
+.risk-track i { display: block; height: 100%; border-radius: 4px; transition: width .4s var(--ease-out); }
+.risk-track i.lo  { background: var(--accent); box-shadow: 0 0 10px -2px var(--accent-glow); }
+.risk-track i.mid { background: var(--amber); }
+.risk-track i.hi  { background: var(--red); box-shadow: 0 0 10px -2px rgba(242,102,95,.5); }
+
+.vd-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.vd-seg .vd {
+  border: 1px solid var(--border); background: var(--bg-inset);
+  color: var(--text-dim); border-radius: var(--radius-sm);
+  padding: 9px 6px; font-family: var(--display); font-weight: 500; font-size: 13px;
+  transition: border-color .14s var(--ease), background .14s var(--ease), color .14s var(--ease);
+}
+.vd-seg .vd:hover { border-color: var(--border-bright); color: var(--text); }
+.vd-seg .vd.on.vd-hack    { border-color: var(--red);    background: var(--red-soft);    color: #ff8f89; }
+.vd-seg .vd.on.vd-clean   { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.vd-seg .vd.on.vd-pending { border-color: var(--border-bright); background: var(--bg-3); color: var(--text); }
 
 /* ---- Controls --------------------------------------------------- */
 .toolbar { display: flex; gap: 9px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }

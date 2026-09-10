@@ -119,11 +119,12 @@
           (k[3] ? '<div class="k-sub">' + k[3] + '</div>' : '') + '</div>';
       }).join('') + '</div>' +
       (Array.isArray(ext.top_issues) && ext.top_issues.length ?
-        '<div class="panel-card"><header>Hacks más vistos</header><div class="body pad">' +
-        ext.top_issues.map(function (t) {
-          return '<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-soft)">' +
-            '<span>' + esc(t.name) + '</span><span class="mono muted">' + num(t.count) + '</span></div>';
-        }).join('') + '</div></div>' : '') +
+        '<div class="panel-card"><header>Hacks más vistos <span class="grow"></span><span class="muted">30 días</span></header><div class="body pad"><ol class="rank">' +
+        ext.top_issues.map(function (t, i) {
+          return '<li><span class="rank-n">' + (i + 1) + '</span><span class="rank-name">' + esc(t.name) + '</span>' +
+            '<span class="rank-bar"><i style="width:' + Math.max(6, Math.round(100 * (t.count / (ext.top_issues[0].count || 1)))) + '%"></i></span>' +
+            '<span class="rank-c mono">' + num(t.count) + '</span></li>';
+        }).join('') + '</ol></div></div>' : '') +
       '<div class="panel-card"><header>Escaneos recientes <span class="grow"></span>' +
         '<a class="btn sm" href="#/revision">Ver todos →</a></header>' +
         '<div class="body" id="recent">' + skel() + '</div></div>';
@@ -205,15 +206,20 @@
         '<div class="panel-card"><header>Veredicto' +
           (s.verdict ? ' <span class="grow"></span>' + verdictBadge(s.verdict, s.risk_score) : '') +
           '</header><div class="body pad">' +
-          '<div class="stack" style="gap:10px">' +
-            '<textarea class="input" id="vd-reason" rows="2" placeholder="Motivo (opcional)">' + esc(s.verdict_reason || '') + '</textarea>' +
-            '<div class="row" style="gap:8px;flex-wrap:wrap">' +
+          '<div class="stack" style="gap:12px">' +
+            '<div class="risk-readout"><span class="muted">RIESGO</span>' +
+              '<span class="risk-track"><i style="width:' + Math.min(100, Math.max(0, s.risk_score || 0)) + '%" class="' +
+                ((s.risk_score || 0) >= 70 ? 'hi' : (s.risk_score || 0) >= 30 ? 'mid' : 'lo') + '"></i></span>' +
+              '<b class="mono">' + (s.risk_score != null ? s.risk_score : '–') + '</b></div>' +
+            '<div class="vd-seg">' +
               ['hack', 'clean', 'pending'].map(function (vv) {
-                return '<button class="btn sm vd" data-v="' + vv + '">' +
-                  ({ hack: '⛔ Hack', clean: '✔ Limpio', pending: '↺ Pendiente' })[vv] + '</button>';
+                var cur = String(s.verdict || '').toLowerCase() === vv;
+                return '<button class="vd vd-' + vv + (cur ? ' on' : '') + '" data-v="' + vv + '">' +
+                  ({ hack: 'Hack', clean: 'Limpio', pending: 'Pendiente' })[vv] + '</button>';
               }).join('') +
             '</div>' +
-            '<div id="vd-status" class="muted" style="font-size:13px"></div>' +
+            '<textarea class="input" id="vd-reason" rows="2" placeholder="Motivo (opcional)">' + esc(s.verdict_reason || '') + '</textarea>' +
+            '<div id="vd-status" class="muted" style="font-size:12.5px;font-family:var(--mono)"></div>' +
           '</div>' +
         '</div></div>' +
       '</div>' +
@@ -244,7 +250,8 @@
             body: JSON.stringify({ verdict: vv, reason: reason })
           });
           toast('Veredicto guardado: ' + vv);
-          $('#vd-status').innerHTML = 'Guardado ' + verdictBadge(vv) + ' · ' + esc(reason);
+          $('#vd-status').innerHTML = 'Guardado ' + verdictBadge(vv) + (reason ? ' · ' + esc(reason) : '');
+          view.querySelectorAll('.vd').forEach(function (x) { x.classList.toggle('on', x === b); });
           var hdr = view.querySelector('.grid-2 .panel-card header');
           if (hdr && !hdr.querySelector('.badge')) hdr.insertAdjacentHTML('beforeend', '<span class="grow"></span>' + verdictBadge(vv));
         } catch (e) { $('#vd-status').textContent = 'Error: ' + e.message; toast('No se pudo guardar', true); }
