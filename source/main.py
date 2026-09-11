@@ -8569,8 +8569,10 @@ class ArgusApp:
             red = C.get('red_deep', '#DC2626')
             border_c = C.get('border', '#1f1f23')
 
+            # Tarjeta centrada (no toda la ventana) para que el fondo cósmico
+            # animado se vea alrededor en vez de quedar tapado por completo.
             auth_frame = tk.Frame(self.root, bg=bg)
-            auth_frame.place(x=0, y=40, relwidth=1.0, relheight=1.0)
+            auth_frame.place(relx=0.5, rely=0.52, anchor='center', width=520, height=420)
             auth_frame.lift()
 
             # ──────── STEP 0: TERMS & CONDITIONS ────────
