@@ -24,6 +24,7 @@ public final class VelocityCheck {
                                      ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("velocity")) return;
         if (plugin.getLagCompensator().shouldSuppress(player, "velocity")) return;
+        if (plugin.getWarmupGracePeriod().inGrace(player, "velocity")) return;
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("velocity");
         long windowMs    = sec != null ? sec.getLong("window_ms",            VELOCITY_WINDOW_MS)         : VELOCITY_WINDOW_MS;

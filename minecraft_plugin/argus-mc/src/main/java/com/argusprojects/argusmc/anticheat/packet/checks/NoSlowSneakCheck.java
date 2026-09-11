@@ -21,6 +21,7 @@ public final class NoSlowSneakCheck {
                                      double nx, double nz, long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("noslowsneak")) return;
         if (plugin.getLagCompensator().shouldSuppress(player, "noslowsneak")) return;
+        if (plugin.getWarmupGracePeriod().inGrace(player, "noslowsneak")) return;
         if (!s.sneakActive) {
             s.noSlowSneakConsec = 0;
             return;

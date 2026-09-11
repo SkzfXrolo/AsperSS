@@ -20,6 +20,7 @@ public final class AntiKnockbackCheck {
                                      double nx, double nz, long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("antikb")) return;
         if (plugin.getLagCompensator().shouldSuppress(player, "antikb")) return;
+        if (plugin.getWarmupGracePeriod().inGrace(player, "antikb")) return;
         if (s.lastKnockbackExpectedMs == 0L) return;
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("antikb");

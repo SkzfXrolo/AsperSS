@@ -23,6 +23,7 @@ public final class BoatFlyCheck {
                                      long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("boat_fly")) return;
         if (plugin.getLagCompensator().shouldSuppress(player, "boat_fly")) return;
+        if (plugin.getWarmupGracePeriod().inGrace(player, "boat_fly")) return;
         if (!player.isInsideVehicle()) return;
         if (!(player.getVehicle() instanceof Boat boat)) return;
 

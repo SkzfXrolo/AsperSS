@@ -24,6 +24,7 @@ public final class VClipCheck {
                                      ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("vclip")) return;
         if (plugin.getLagCompensator().shouldSuppress(player, "vclip")) return;
+        if (plugin.getWarmupGracePeriod().inGrace(player, "vclip")) return;
         if (s.teleporting) return;
         if (s.lastX == 0 && s.lastY == 0 && s.lastZ == 0) return;
 

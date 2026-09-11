@@ -20,6 +20,7 @@ public final class TimerJitterCheck {
                                      long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("timer_jitter")) return;
         if (plugin.getLagCompensator().shouldSuppress(player, "timer_jitter")) return;
+        if (plugin.getWarmupGracePeriod().inGrace(player, "timer_jitter")) return;
 
         if (safePing(player) >= 0 && safePing(player) <= 15) return;
 

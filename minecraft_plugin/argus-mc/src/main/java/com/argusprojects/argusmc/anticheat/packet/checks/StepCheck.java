@@ -25,6 +25,7 @@ public final class StepCheck {
                                      ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("step")) return;
         if (plugin.getLagCompensator().shouldSuppress(player, "step")) return;
+        if (plugin.getWarmupGracePeriod().inGrace(player, "step")) return;
         if (s.teleporting) return;
         if (s.lastX == 0 && s.lastY == 0 && s.lastZ == 0) return;
 

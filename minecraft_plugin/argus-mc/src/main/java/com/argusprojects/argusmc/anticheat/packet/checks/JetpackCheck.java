@@ -22,6 +22,7 @@ public final class JetpackCheck {
                                      long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("jetpack")) return;
         if (plugin.getLagCompensator().shouldSuppress(player, "jetpack")) return;
+        if (plugin.getWarmupGracePeriod().inGrace(player, "jetpack")) return;
 
         MovementContext ctx = MovementContext.snapshotAt(player, nx, ny, nz);
         if (ctx.isLegitFlightLike()) {

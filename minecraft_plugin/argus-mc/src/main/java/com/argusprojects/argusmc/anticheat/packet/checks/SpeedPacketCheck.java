@@ -29,6 +29,7 @@ public final class SpeedPacketCheck {
                                      ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("speed_packet")) return;
         if (plugin.getLagCompensator().shouldSuppress(player, "speed_packet")) return;
+        if (plugin.getWarmupGracePeriod().inGrace(player, "speed_packet")) return;
         if (s.teleporting) return;
         if (s.lastX == 0 && s.lastY == 0 && s.lastZ == 0) return;
 

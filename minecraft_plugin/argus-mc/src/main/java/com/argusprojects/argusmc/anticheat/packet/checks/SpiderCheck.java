@@ -26,6 +26,7 @@ public final class SpiderCheck {
                                      ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("spider")) return;
         if (plugin.getLagCompensator().shouldSuppress(player, "spider")) return;
+        if (plugin.getWarmupGracePeriod().inGrace(player, "spider")) return;
         GameMode gm = player.getGameMode();
         if (gm == GameMode.CREATIVE || gm == GameMode.SPECTATOR) return;
         if (player.isGliding() || player.isFlying() || player.isInsideVehicle()) return;
