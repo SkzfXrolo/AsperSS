@@ -6777,6 +6777,30 @@ class ArgusApp:
                 self.file_analysis_cache[file_path] = result
                 return result
 
+            # ── Mejora 1b: artefactos internos del launcher oficial / webview ────
+            # Estos archivos NUNCA son el hack en sí — son estructura interna de
+            # Mojang Launcher / Chromium (CEF) que cualquier .minecraft legítimo
+            # tiene (launcher_profiles.json, launcher_logN.txt, los LevelDB de
+            # webcache*\...\Extension Rules|Scripts|State). Si su hash coincide
+            # con el catálogo de hashes conocidos es casi seguro una colisión del
+            # catálogo — probablemente se construyó hasheando TODO el .minecraft
+            # de un cheater real sin excluir estos archivos estándar que
+            # cualquier instalación (ese cheater incluido) tiene por igual. No
+            # es evidencia de que el archivo mismo sea un hack.
+            _is_launcher_profile = filename_lower in (
+                'launcher_profiles.json', 'launcher_profiles.json.backup',
+                'launcher_accounts.json', 'launcher_settings.json',
+                'launcher_msa_credentials.bin',
+            )
+            _is_launcher_log = filename_lower.startswith('launcher_log') and filename_lower.endswith('.txt')
+            _path_norm = file_path.lower().replace('/', '\\')
+            _is_webview_leveldb = 'webcache' in _path_norm and any(
+                seg in _path_norm for seg in
+                ('\\extension rules\\', '\\extension scripts\\', '\\extension state\\'))
+            if _is_launcher_profile or _is_launcher_log or _is_webview_leveldb:
+                self.file_analysis_cache[file_path] = result
+                return result
+
             # ── Mejora 2: Detección de archivos de log ───────────────────────────
             # Logs registran actividad, no son el hack en sí mismo
             LOG_NAME_PATTERNS = (
@@ -14288,7 +14312,7 @@ class ArgusApp:
                 # Heurísticas de sospecha
                 hits = []
                 # 1) hack-name en nombre o en path
-                if smart_hack_match(low):
+                if smart_hack_match(low, _smart_hack_regex_cached(tuple(_DEFINITE_HACK_NAMES))):
                     hits.append('hack_name_match')
                 # 2) Path en TEMP o LocalTemp
                 if r'\temp\\' in low or r'\\appdata\\local\\temp\\' in low or 'localtemp' in low:
@@ -17505,6 +17529,17 @@ class ArgusApp:
                 best_sim, best_name = sim, hack
         return best_sim, best_name
 
+    # Jars que herramientas legítimas crean en %TEMP% de rutina — ninguno es
+    # "un hack descargado a temp", son artefactos normales de tooling Java o
+    # de mods de Minecraft muy populares que extraen nativos ahí.
+    _BENIGN_TEMP_JAR_PREFIXES = (
+        'mockitoboot',       # Mockito (mock-maker inline) — agente JVM de tests
+        'surefirebooter',    # Maven Surefire
+        'gradle-worker',     # Gradle
+        'essential-',        # mod "Essential" (Discord RPC / LWJGL natives)
+        'lwjgl',              # extracción de nativos LWJGL de otros mods/launchers
+    )
+
     def scan_temp_jars(self):
         """Detecta archivos .jar creados en las últimas 24h en carpetas temporales."""
         print("🔍 Buscando JARs recientes en carpetas temporales...")
@@ -17523,6 +17558,9 @@ class ArgusApp:
                     dirs[:] = dirs[:10]
                     for fname in files:
                         if not fname.lower().endswith('.jar'):
+                            continue
+                        fname_l = fname.lower()
+                        if any(fname_l.startswith(p) for p in self._BENIGN_TEMP_JAR_PREFIXES):
                             continue
                         fpath = os.path.join(root, fname)
                         if fpath in seen:
@@ -18302,9 +18340,19 @@ class ArgusApp:
                                 except Exception:
                                     tail = b''
                         scan_buf = header + tail
+                        # El recurso VERSIONINFO de un PE es UTF-16LE (así lo escribe
+                        # el linker y así lo lee el diálogo de Propiedades de Windows),
+                        # no ASCII. Buscar solo b'CompanyName' fallaba SIEMPRE en
+                        # instaladores reales (Claude Setup.exe, CurseForge...) — el
+                        # string está ahí pero como b'C\x00o\x00m\x00p\x00a\x00n\x00y...'.
+                        scan_buf_l = scan_buf.lower()
+
+                        def _has_marker(name: str) -> bool:
+                            nb = name.lower().encode('ascii', 'ignore')
+                            return nb in scan_buf_l or nb.decode().encode('utf-16-le') in scan_buf
 
                         # Skip executables signed by known publishers
-                        if any(pub in scan_buf for pub in SAFE_PUBLISHERS):
+                        if any(_has_marker(p.decode()) for p in SAFE_PUBLISHERS):
                             continue
 
                         entropy = _shannon_entropy(header)
@@ -18313,14 +18361,14 @@ class ArgusApp:
                         # P2 #18 — PE VersionInfo metadata check
                         # Legítimos tienen CompanyName/FileDescription; hacks raramente los tienen
                         has_version_info = (
-                            b'CompanyName' in scan_buf or
-                            b'FileDescription' in scan_buf or
-                            b'ProductName' in scan_buf or
-                            b'LegalCopyright' in scan_buf or
-                            b'OriginalFilename' in scan_buf or
+                            _has_marker('CompanyName') or
+                            _has_marker('FileDescription') or
+                            _has_marker('ProductName') or
+                            _has_marker('LegalCopyright') or
+                            _has_marker('OriginalFilename') or
                             # instaladores comunes (NSIS/Inno/Squirrel/WiX) — legítimos aunque sin firma
-                            b'Nullsoft' in scan_buf or b'Inno Setup' in scan_buf or
-                            b'Squirrel' in scan_buf or b'WixToolset' in scan_buf
+                            _has_marker('Nullsoft') or _has_marker('Inno Setup') or
+                            _has_marker('Squirrel') or _has_marker('WixToolset')
                         )
 
                         if upx:
@@ -22243,7 +22291,15 @@ class ArgusApp:
             'kill_chain', 'modified_minecraft_jar',
             'browser_download_hack',  # historial de descargas del navegador
             'browser_visited_hack',   # visitas a sitios de hack/DDoS
-            'ghost_client_config',    # carpeta .vape/.meteor/.rise confirmada
+            # 'ghost_client_config' — SACADO a propósito. El tipo lo comparten
+            # ~6 scanners de confianza muy distinta: desde "carpeta .vape/
+            # .meteor confirmada" (scan_ghost_client_configs, YA pone CRITICAL
+            # por su cuenta, no necesita este boost) hasta señales débiles
+            # como "exe sin metadata PE" o "9 versiones de MC instaladas"
+            # (SOSPECHOSO ~55%). Con 2 hallazgos débiles del mismo tipo
+            # genérico ya se contaban como "2 fuentes forenses independientes"
+            # y escalaban TODO el scan a CRITICAL 100% — autoconfirmación
+            # circular, no evidencia real. Ver memoria/sesión 2026-09-11.
             'ddos_application',       # herramienta DDoS encontrada o activa
             'f3t_resourcepack_exploit',  # bug F3+T en logs del cliente
             'defender_exclusion_hack',   # exclusión sospechosa en Windows Defender

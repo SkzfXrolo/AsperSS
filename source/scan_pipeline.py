@@ -248,8 +248,15 @@ class ScanPipeline:
                 return float(env)
         except Exception:
             pass
-        return {MODE_FAST: 12.0, MODE_STANDARD: 15.0, MODE_PARANOID: 40.0}.get(
-            self.mode, 15.0
+        # Standard subió de 15s a 25s (2026-09-11, scan real): varios scanners
+        # tienen su propio presupuesto interno declarado de hasta 25s
+        # (scan_common_hack_locations) o rondan los 11-15s por diseño
+        # (walk_bounded) — con el techo en 15s el pipeline los cortaba antes
+        # de que llegaran a su propio corte, y como el timeout NO cancela el
+        # hilo (solo descarta el resultado), esos hallazgos se perdían en
+        # silencio sin ganar nada en velocidad real.
+        return {MODE_FAST: 12.0, MODE_STANDARD: 25.0, MODE_PARANOID: 40.0}.get(
+            self.mode, 25.0
         )
 
     def _call(self, method_name: str) -> None:

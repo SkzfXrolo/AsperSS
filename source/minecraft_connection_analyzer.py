@@ -38,12 +38,15 @@ class MinecraftConnectionAnalyzer:
             minecraft_pids = []
             for proc in psutil.process_iter(['pid', 'name', 'exe', 'cmdline', 'ppid']):
                 try:
-                    name = proc.info['name'].lower()
+                    # proc.info puede traer None (no solo faltar la key) para
+                    # procesos protegidos — .lower() directo tiraba
+                    # AttributeError sin capturar y cortaba el for entero.
+                    name = (proc.info.get('name') or '').lower()
                     if name in ['javaw.exe', 'java.exe', 'minecraft.exe']:
                         minecraft_pids.append(proc.info['pid'])
-                        
+
                         # Verificar cmdline para detectar hacks
-                        cmdline = ' '.join(proc.info.get('cmdline', [])).lower()
+                        cmdline = ' '.join(proc.info.get('cmdline') or []).lower()
                         if any(hack in cmdline for hack in ['-javaagent:', 'vape', 'entropy', 'inject']):
                             issues.append({
                                 'tipo': 'java_injection',
@@ -134,10 +137,11 @@ class MinecraftConnectionAnalyzer:
             
             for proc in psutil.process_iter(['pid', 'name', 'exe', 'cmdline']):
                 try:
-                    name = proc.info['name'].lower()
-                    exe = proc.info.get('exe', '').lower()
-                    cmdline = ' '.join(proc.info.get('cmdline', [])).lower()
-                    
+                    # ver comentario más arriba: proc.info[...] puede ser None
+                    name = (proc.info.get('name') or '').lower()
+                    exe = (proc.info.get('exe') or '').lower()
+                    cmdline = ' '.join(proc.info.get('cmdline') or []).lower()
+
                     # Verificar si un proceso del sistema tiene comportamiento sospechoso
                     if name in hidden_patterns:
                         # Verificar si tiene conexiones de red sospechosas
@@ -181,7 +185,7 @@ class MinecraftConnectionAnalyzer:
             # Buscar procesos de Minecraft con conexiones activas
             for proc in psutil.process_iter(['pid', 'name']):
                 try:
-                    name = proc.info['name'].lower()
+                    name = (proc.info.get('name') or '').lower()
                     if name not in ['javaw.exe', 'java.exe', 'minecraft.exe']:
                         continue
 
@@ -245,10 +249,10 @@ class MinecraftConnectionAnalyzer:
             
             for proc in psutil.process_iter(['pid', 'name', 'exe', 'cmdline']):
                 try:
-                    name = proc.info['name'].lower()
-                    exe = proc.info.get('exe', '').lower()
-                    cmdline = ' '.join(proc.info.get('cmdline', [])).lower()
-                    
+                    name = (proc.info.get('name') or '').lower()
+                    exe = (proc.info.get('exe') or '').lower()
+                    cmdline = ' '.join(proc.info.get('cmdline') or []).lower()
+
                     # Verificar si es un autoclicker
                     if any(keyword in name or keyword in exe or keyword in cmdline for keyword in autoclicker_keywords):
                         # Verificar si tiene conexiones o está relacionado con Minecraft
