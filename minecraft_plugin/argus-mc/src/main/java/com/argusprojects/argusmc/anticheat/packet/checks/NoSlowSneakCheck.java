@@ -8,18 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round 3 — NoSlowSneakCheck.
- *
- * <p>Cuando un jugador hace sneak (Shift), Mojang aplica un slow
- * factor de 0.3 (movimiento ~30% del walk normal). Sneak cheats
- * cancelan el slow para moverse a velocidad full pero "lucir" sneakeado
- * (no aparecer en nametag, no caerse de borde).
- *
- * <p>Detección: si {@code sneakActive} es true y el bps observado
- * &gt; {@code max_sneak_bps}, contar consec. El bridge sneak actualiza
- * State.sneakActive desde {@code PlayerToggleSneakEvent}.
- */
 public final class NoSlowSneakCheck {
 
     private final ArgusPlugin plugin;
@@ -32,6 +20,7 @@ public final class NoSlowSneakCheck {
     public void handlePositionPacket(Player player, PacketDataStore.State s,
                                      double nx, double nz, long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("noslowsneak")) return;
+        if (plugin.getLagCompensator().shouldSuppress(player, "noslowsneak")) return;
         if (!s.sneakActive) {
             s.noSlowSneakConsec = 0;
             return;

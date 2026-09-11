@@ -9,17 +9,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round2 — JetpackCheck.
- *
- * <p>Jetpack es un cheat que mantiene deltaY positivo constante (subiendo
- * suave) sin elytra, jump-boost ni climable. El nombre viene de Vape/Wurst.
- *
- * <p>Heuristica: si dyConsec contadores indican N packets con dy &gt; threshold
- * SOSTENIDO, y el jugador no es creative/spectator, no esta volando legitimo
- * (allow_flight + flying), no usa elytra (gliding), no tiene jump boost
- * relevante, no esta nadando en agua/lava, no esta en climbable — flag.
- */
 public final class JetpackCheck {
 
     private final ArgusPlugin plugin;
@@ -32,10 +21,8 @@ public final class JetpackCheck {
                                      double nx, double ny, double nz,
                                      long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("jetpack")) return;
+        if (plugin.getLagCompensator().shouldSuppress(player, "jetpack")) return;
 
-        // Pack 48 round 2 — MovementContext centraliza todos los modifiers
-        // (water/lava/climbable/jump-boost/slime/honey/levitation/elytra/etc.).
-        // Si cualquier flight-like legitimo aplica, reset y no flagear.
         MovementContext ctx = MovementContext.snapshotAt(player, nx, ny, nz);
         if (ctx.isLegitFlightLike()) {
             s.jetpackConsec = 0;

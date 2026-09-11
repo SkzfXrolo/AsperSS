@@ -10,21 +10,6 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round2 — BoatFlyAdvancedCheck.
- *
- * <p>Variante refinada de {@link BoatFlyCheck} que considera "current state"
- * del boat: velocity asignada por el server, presencia de agua/lava-source
- * a 2 bloques del centro del boat, y movimiento neto. Detecta los cheats
- * "AirJump" / "BoatFlyBypass" que usan rubber-banding controlado.
- *
- * <p>Diferencias clave:
- * <ul>
- *   <li>Tolera 200ms iniciales de aire (jump from water → splash).</li>
- *   <li>Si el boat tiene velocity assignada en los ultimos 500ms, no flagea.</li>
- *   <li>Detecta tambien BoatFly horizontal (XZ sin propulsion legitima).</li>
- * </ul>
- */
 public final class BoatFlyAdvancedCheck {
 
     private final ArgusPlugin plugin;
@@ -37,6 +22,7 @@ public final class BoatFlyAdvancedCheck {
                                      double nx, double ny, double nz,
                                      long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("boat_fly_advanced")) return;
+        if (plugin.getLagCompensator().shouldSuppress(player, "boat_fly_advanced")) return;
         if (!player.isInsideVehicle()) return;
         if (!(player.getVehicle() instanceof Boat boat)) return;
 
@@ -66,7 +52,6 @@ public final class BoatFlyAdvancedCheck {
         long elapsed = now - s.boatAirSinceMs;
         if (elapsed < graceMs) return;
 
-        // Velocidad horizontal del boat actual (con servidor velocity).
         org.bukkit.util.Vector v = boat.getVelocity();
         double horizontalBps = Math.sqrt(v.getX() * v.getX() + v.getZ() * v.getZ()) * 20.0;
 

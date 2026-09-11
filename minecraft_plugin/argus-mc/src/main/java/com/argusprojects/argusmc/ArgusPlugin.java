@@ -3,6 +3,7 @@ package com.argusprojects.argusmc;
 import com.argusprojects.argusmc.anticheat.AnticheatConfig;
 import com.argusprojects.argusmc.anticheat.AnticheatListener;
 import com.argusprojects.argusmc.anticheat.ViolationManager;
+import com.argusprojects.argusmc.anticheat.autoclick.AutoClickEngine;
 import com.argusprojects.argusmc.anticheat.packet.PacketEventsBootstrap;
 import com.argusprojects.argusmc.api.ArgusApiClient;
 import com.argusprojects.argusmc.commands.ArgusCommand;
@@ -38,8 +39,10 @@ public final class ArgusPlugin extends JavaPlugin {
     private com.argusprojects.argusmc.api.ViolationBuffer violationBuffer;
     private Messages         messages;
     private ViolationManager violationManager;
+    private AutoClickEngine autoClickEngine;
     private AnticheatListener anticheatListener;
     private PacketEventsBootstrap packetEventsBootstrap;
+    private com.argusprojects.argusmc.tuning.LagCompensator lagCompensator;
     private com.argusprojects.argusmc.web.WebDashboardServer webServer;
 
     @Override
@@ -66,6 +69,8 @@ public final class ArgusPlugin extends JavaPlugin {
             this.violationBuffer = new com.argusprojects.argusmc.api.ViolationBuffer(this, this.apiClient);
         }
         this.violationManager = new ViolationManager(this);
+        this.lagCompensator = new com.argusprojects.argusmc.tuning.LagCompensator(this);
+        this.autoClickEngine = new AutoClickEngine(this);
         if (anticheatConfig.isEnabled()) {
             this.anticheatListener = new AnticheatListener(this, violationManager);
             getServer().getPluginManager().registerEvents(this.anticheatListener, this);
@@ -209,7 +214,9 @@ public final class ArgusPlugin extends JavaPlugin {
     public ArgusApiClient getApiClient()          { return apiClient; }
     public Messages getMessages()                 { return messages; }
     public ViolationManager getViolationManager() { return violationManager; }
+    public AutoClickEngine getAutoClickEngine()   { return autoClickEngine; }
     public PacketEventsBootstrap getPacketEventsBootstrap() { return packetEventsBootstrap; }
+    public com.argusprojects.argusmc.tuning.LagCompensator getLagCompensator() { return lagCompensator; }
 
     private void registerCommand(String name, org.bukkit.command.CommandExecutor exec) {
         PluginCommand cmd = getCommand(name);

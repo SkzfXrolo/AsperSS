@@ -8,22 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 47 — VelocityCheck (anti-knockback / anti-velocity).
- *
- * <p>Cuando el server asigna velocity al cliente (knockback de un golpe,
- * explosion, etc.), el {@code PacketAnticheatBukkitBridge} lo guarda en el
- * {@link PacketDataStore.State}. El cliente DEBE aplicar al menos un % de
- * esa velocity en los siguientes packets de movimiento. Si el cliente ignora
- * la velocity (anti-kb), el delta horizontal en los proximos ~3 ticks sera
- * &lt;&lt; del esperado.
- *
- * <p>Tolerancia: 30% (cliente puede mitigar hasta esa cota con shields/blocks
- * legitimos). &lt;= 30% del esperado = anti-knockback claro.
- *
- * <p>Solo se ejecuta cuando hay una velocity asignada en los ultimos 250ms y
- * no consumida aun.
- */
 public final class VelocityCheck {
 
     private static final long VELOCITY_WINDOW_MS = 250L;
@@ -39,6 +23,7 @@ public final class VelocityCheck {
                                      double nx, double ny, double nz,
                                      ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("velocity")) return;
+        if (plugin.getLagCompensator().shouldSuppress(player, "velocity")) return;
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("velocity");
         long windowMs    = sec != null ? sec.getLong("window_ms",            VELOCITY_WINDOW_MS)         : VELOCITY_WINDOW_MS;

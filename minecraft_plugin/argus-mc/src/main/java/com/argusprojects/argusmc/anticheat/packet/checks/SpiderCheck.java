@@ -13,21 +13,6 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round2 — SpiderCheck (climb paredes sin scaffolding).
- *
- * <p>"Spider" hack: el jugador sube por paredes verticales solidas sin
- * estar en ladder/vine/scaffolding. Detectamos:
- * <ul>
- *   <li>Player NOT on climbable block (ladder/vine/scaffolding).</li>
- *   <li>Player NOT in water/elytra/creative.</li>
- *   <li>dy positivo sostenido (subiendo).</li>
- *   <li>Al menos un bloque solido a 1 bloque de distancia horizontal en alguna direccion (pared al lado).</li>
- * </ul>
- *
- * <p>Si todas estas condiciones se cumplen por consec_high packets seguidos,
- * el jugador esta literalmente trepando una pared.
- */
 public final class SpiderCheck {
 
     private final ArgusPlugin plugin;
@@ -40,6 +25,7 @@ public final class SpiderCheck {
                                      double nx, double ny, double nz,
                                      ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("spider")) return;
+        if (plugin.getLagCompensator().shouldSuppress(player, "spider")) return;
         GameMode gm = player.getGameMode();
         if (gm == GameMode.CREATIVE || gm == GameMode.SPECTATOR) return;
         if (player.isGliding() || player.isFlying() || player.isInsideVehicle()) return;

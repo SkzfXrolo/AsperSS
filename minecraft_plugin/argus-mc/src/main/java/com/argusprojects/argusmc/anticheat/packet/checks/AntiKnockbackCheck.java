@@ -8,19 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round 3 — AntiKnockbackCheck.
- *
- * <p>Cuando el server le asigna una velocidad de knockback al cliente
- * (al recibir daño), el cliente vanilla debe mostrarla en su movimiento
- * en los próximos packets. Si el delta horizontal observado es mucho
- * menor que el KB asignado, es anti-knockback.
- *
- * <p>El bridge setea {@link PacketDataStore.State#lastKnockbackExpectedMs}
- * y {@code lastKnockbackExpectedMag} al observar
- * {@code EntityDamageEvent}. Este check compara el movimiento en los N
- * packets siguientes vs ese KB esperado.
- */
 public final class AntiKnockbackCheck {
 
     private final ArgusPlugin plugin;
@@ -32,6 +19,7 @@ public final class AntiKnockbackCheck {
     public void handlePositionPacket(Player player, PacketDataStore.State s,
                                      double nx, double nz, long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("antikb")) return;
+        if (plugin.getLagCompensator().shouldSuppress(player, "antikb")) return;
         if (s.lastKnockbackExpectedMs == 0L) return;
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("antikb");
@@ -42,7 +30,7 @@ public final class AntiKnockbackCheck {
 
         long since = now - s.lastKnockbackExpectedMs;
         if (since > windowMs) {
-            // ventana expirada — reset.
+
             s.lastKnockbackExpectedMs = 0L;
             s.antiKbConsec = 0;
             return;

@@ -8,23 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round 3 — TimerJitterCheck.
- *
- * <p>Variante "fina" de {@link TimerCheck}. Mientras que TimerCheck
- * flagea cuando la tasa de movement packets supera un cap absoluto,
- * éste detecta el patrón "timer alternado" — packets cada 40-60ms para
- * que el promedio quede dentro del cap, pero la variance sea anormal.
- *
- * <p>Heurística:
- * <ul>
- *   <li>Calcula stddev de intervalos en una ventana de
- *       {@code window_size} packets.</li>
- *   <li>Si stddev &lt; {@code min_stddev_ms} (timer ON, intervalos
- *       constantes pero más bajos que el tick rate) flag.</li>
- *   <li>Si stddev &gt; {@code max_stddev_ms} (timer ALTERNADO) flag.</li>
- * </ul>
- */
 public final class TimerJitterCheck {
 
     private final ArgusPlugin plugin;
@@ -36,6 +19,9 @@ public final class TimerJitterCheck {
     public void handlePositionPacket(Player player, PacketDataStore.State s,
                                      long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("timer_jitter")) return;
+        if (plugin.getLagCompensator().shouldSuppress(player, "timer_jitter")) return;
+
+        if (safePing(player) >= 0 && safePing(player) <= 15) return;
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("timer_jitter");
         int    windowSize = sec != null ? sec.getInt("window_size", 20) : 20;
@@ -70,8 +56,16 @@ public final class TimerJitterCheck {
                 String.format("timer ON avg=%.1fms stddev=%.1fms (n=%d)", mean, stddev, n)));
         } else if (stddev > maxStdMs && mean < 60) {
             sink.flag(new Violation(player, "timer_jitter_packet",
-                ViolationLevel.MID,
+                ViolationLevel.LOW,
                 String.format("timer JITTER avg=%.1fms stddev=%.1fms", mean, stddev)));
+        }
+    }
+
+    private static int safePing(Player player) {
+        try {
+            return player.getPing();
+        } catch (Throwable t) {
+            return -1;
         }
     }
 }
