@@ -18352,6 +18352,25 @@ class ArgusApp:
             import re as _re2
             vanilla = [v for v in versions if _re2.match(VANILLA_RE, v)]
             non_vanilla = [v for v in versions if not _re2.match(VANILLA_RE, v)]
+            # Tener muchas versiones es normal con launchers de modpacks —
+            # cada instancia/módulo agrega su propia carpeta de versión.
+            # No es indicio de "probar hacks en varias versiones" si alguno
+            # de estos está instalado.
+            _legit_launcher_roots = [
+                os.path.join(appdata, '.lunarclient'),
+                os.path.join(appdata, 'CurseForge'),
+                os.path.join(appdata, 'com.modrinth.theseus'),
+                os.path.join(appdata, '.multimc'),
+                os.path.join(appdata, '.prismlauncher'),
+                os.path.join(appdata, '.gdlauncher'),
+                os.path.join(appdata, '.badlion'),
+                os.path.join(appdata, '.tlauncher'),
+                os.path.join(appdata, '.ftba'),
+            ]
+            has_legit_launcher = any(os.path.isdir(p) for p in _legit_launcher_roots)
+            if has_legit_launcher:
+                print(f"ℹ️ {len(versions)} versiones de MC pero hay un launcher de modpacks instalado — no se marca")
+                return
             if len(versions) >= 8:
                 level = 'SOSPECHOSO' if len(versions) < 12 else 'CRITICAL'
                 conf = 0.55 if len(versions) < 12 else 0.70
