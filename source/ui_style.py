@@ -327,14 +327,63 @@ class ModernUI:
             canvas.create_oval(x0, y0, x1, y1, fill=col, outline='', tags=tag)
 
     @classmethod
+    def _floating_bg_reduced_motion(cls) -> bool:
+        # A diferencia de _scan_bg_reduced_motion(), esto NO mira CALM: el
+        # fondo de menú animado es lo que pidió el usuario explícitamente,
+        # así que solo se apaga por la preferencia de accesibilidad.
+        try:
+            return bool(getattr(cls, '_ui_prefs', {}).get('ui_reduced_motion'))
+        except Exception:
+            return False
+
+    @classmethod
+    def _stop_floating_bg_anim(cls):
+        if cls._bg_anim_id and cls._root_ref:
+            try:
+                cls._root_ref.after_cancel(cls._bg_anim_id)
+            except Exception:
+                pass
+        cls._bg_anim_id = None
+
+    @classmethod
+    def _tick_floating_bg(cls, canvas, image_id, frames, idx):
+        try:
+            if not canvas.winfo_exists():
+                return
+            canvas.itemconfig(image_id, image=frames[idx % len(frames)])
+            canvas.tag_lower('menu_bg')
+            cls._bg_anim_id = canvas.after(
+                85, lambda: cls._tick_floating_bg(canvas, image_id, frames, idx + 1))
+        except Exception:
+            pass
+
+    @classmethod
     def _create_floating_bg(cls, parent):
-        """Fondo cósmico en la ventana raíz."""
+        """Fondo cósmico en la ventana raíz: GIF animado (mismo asset que la
+        pantalla de escaneo) con fallback a la nebulosa estática si falta PIL
+        o el archivo, o si el usuario pidió movimiento reducido."""
         C = cls.COLORS
         canvas = tk.Canvas(parent, bg=C['bg_primary'], highlightthickness=0, bd=0)
         canvas.place(x=0, y=0, relwidth=1.0, relheight=1.0)
         cls._bg_canvas = canvas
         cls._shield_images = []
         cls._shield_items = []
+
+        frames = cls._load_scan_bg_frames()
+        if frames:
+            def _place_img(_e=None):
+                canvas.delete('menu_bg')
+                cw = max(canvas.winfo_width(), 620)
+                ch = max(canvas.winfo_height(), 480)
+                image_id = canvas.create_image(cw // 2, ch // 2, image=frames[0], tags='menu_bg')
+                canvas.tag_lower('menu_bg')
+                cls._stop_floating_bg_anim()
+                if len(frames) > 1 and not cls._floating_bg_reduced_motion():
+                    cls._tick_floating_bg(canvas, image_id, frames, 1)
+
+            canvas.bind('<Configure>', _place_img)
+            canvas.after(80, _place_img)
+            return canvas
 
         def _paint(_e=None):
             cls._paint_nebula_on_canvas(canvas)
