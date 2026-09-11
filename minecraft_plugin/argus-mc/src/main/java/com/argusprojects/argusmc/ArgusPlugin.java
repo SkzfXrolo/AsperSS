@@ -44,6 +44,7 @@ public final class ArgusPlugin extends JavaPlugin {
     private PacketEventsBootstrap packetEventsBootstrap;
     private com.argusprojects.argusmc.tuning.LagCompensator lagCompensator;
     private com.argusprojects.argusmc.tuning.WarmupGracePeriod warmupGracePeriod;
+    private com.argusprojects.argusmc.tuning.FalsePositiveLogger falsePositiveLogger;
     private com.argusprojects.argusmc.web.WebDashboardServer webServer;
 
     @Override
@@ -72,6 +73,7 @@ public final class ArgusPlugin extends JavaPlugin {
         this.violationManager = new ViolationManager(this);
         this.lagCompensator = new com.argusprojects.argusmc.tuning.LagCompensator(this);
         this.warmupGracePeriod = new com.argusprojects.argusmc.tuning.WarmupGracePeriod(this);
+        this.falsePositiveLogger = new com.argusprojects.argusmc.tuning.FalsePositiveLogger(this);
         this.autoClickEngine = new AutoClickEngine(this);
         if (anticheatConfig.isEnabled()) {
             this.anticheatListener = new AnticheatListener(this, violationManager);
@@ -220,6 +222,7 @@ public final class ArgusPlugin extends JavaPlugin {
     public PacketEventsBootstrap getPacketEventsBootstrap() { return packetEventsBootstrap; }
     public com.argusprojects.argusmc.tuning.LagCompensator getLagCompensator() { return lagCompensator; }
     public com.argusprojects.argusmc.tuning.WarmupGracePeriod getWarmupGracePeriod() { return warmupGracePeriod; }
+    public com.argusprojects.argusmc.tuning.FalsePositiveLogger getFalsePositiveLogger() { return falsePositiveLogger; }
 
     private void registerCommand(String name, org.bukkit.command.CommandExecutor exec) {
         PluginCommand cmd = getCommand(name);
