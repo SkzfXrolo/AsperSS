@@ -8569,39 +8569,134 @@ class ArgusApp:
             red = C.get('red_deep', '#DC2626')
             border_c = C.get('border', '#1f1f23')
 
-            # Sin panel opaco: cada widget lleva SOLO su propio fondo ajustado
-            # a su contenido (no un frame grande tapando la ventana), así el
-            # fondo cósmico animado se ve en los huecos entre elementos.
-            # auth_frame nunca se .place() — es solo sentinela para
-            # destroy()/wait_window().
+            # Cero opacidad: el texto se dibuja directo sobre el canvas del
+            # fondo cósmico (canvas.create_text no tiene rectángulo de fondo
+            # — a diferencia de tk.Label, que siempre pinta uno), con una
+            # sombra oscura duplicada 1-2px atrás para que se lea igual con
+            # cualquier estrella/nebulosa detrás. Fallback a Label con fondo
+            # si por algún motivo no hay canvas cósmico disponible (p.ej.
+            # ui_style no cargó). auth_frame nunca se .place() — es solo
+            # sentinela para destroy()/wait_window().
             auth_frame = tk.Frame(self.root)
             _step_widgets = {}
+            canvas = getattr(ModernUI, '_bg_canvas', None) if UI_STYLE_AVAILABLE else None
+            CX = 310  # centro horizontal de la ventana (ancho fijo 620px)
 
-            def _placed(step, widget, **kw):
+            class _CanvasTextShim:
+                def __init__(self, canvas, item_id, shadow_ids):
+                    self.canvas, self.item_id, self.shadow_ids = canvas, item_id, shadow_ids
+
+                def config(self, text=None, fg=None, **_kw):
+                    if text is not None:
+                        self.canvas.itemconfigure(self.item_id, text=text)
+                        for sid in self.shadow_ids:
+                            self.canvas.itemconfigure(sid, text=text)
+                    if fg is not None:
+                        self.canvas.itemconfigure(self.item_id, fill=fg)
+
+            class _CanvasButtonShim:
+                def __init__(self, canvas, item_id, normal_fill, hover_fill, disabled_fill, command):
+                    self.canvas, self.item_id = canvas, item_id
+                    self.normal_fill, self.hover_fill, self.disabled_fill = normal_fill, hover_fill, disabled_fill
+                    self.command, self.state = command, 'normal'
+                    canvas.tag_bind(item_id, '<Enter>', self._on_enter)
+                    canvas.tag_bind(item_id, '<Leave>', self._on_leave)
+                    canvas.tag_bind(item_id, '<Button-1>', self._on_click)
+
+                def _on_enter(self, _e=None):
+                    if self.state != 'disabled':
+                        self.canvas.itemconfigure(self.item_id, fill=self.hover_fill)
+                        self.canvas.config(cursor='hand2')
+
+                def _on_leave(self, _e=None):
+                    if self.state != 'disabled':
+                        self.canvas.itemconfigure(self.item_id, fill=self.normal_fill)
+                        self.canvas.config(cursor='')
+
+                def _on_click(self, _e=None):
+                    if self.state != 'disabled' and self.command:
+                        self.command()
+
+                def config(self, state=None, **_kw):
+                    if state is not None:
+                        self.state = state
+                        self.canvas.itemconfigure(
+                            self.item_id,
+                            fill=self.disabled_fill if state == 'disabled' else self.normal_fill)
+
+            def _reg_widget(step, widget, **kw):
                 widget.place(**kw)
                 widget._auth_place_kw = kw
-                _step_widgets.setdefault(step, []).append(widget)
+                _step_widgets.setdefault(step, []).append(('widget', widget, None))
                 return widget
 
+            def _reg_canvas(step, item_id):
+                _step_widgets.setdefault(step, []).append(('canvas', canvas, item_id))
+                return item_id
+
             def _hide_step(step):
-                for w in _step_widgets.get(step, []):
-                    w.place_forget()
+                for kind, obj, extra in _step_widgets.get(step, []):
+                    if kind == 'widget':
+                        obj.place_forget()
+                    else:
+                        obj.itemconfigure(extra, state='hidden')
 
             def _show_step(step):
-                for w in _step_widgets.get(step, []):
-                    w.place(**w._auth_place_kw)
+                for kind, obj, extra in _step_widgets.get(step, []):
+                    if kind == 'widget':
+                        obj.place(**obj._auth_place_kw)
+                    else:
+                        obj.itemconfigure(extra, state='normal')
 
             def _destroy_auth_ui():
                 for lst in _step_widgets.values():
-                    for w in lst:
+                    for kind, obj, extra in lst:
                         try:
-                            w.destroy()
+                            (obj.destroy() if kind == 'widget' else obj.delete(extra))
                         except Exception:
                             pass
                 try:
                     auth_frame.destroy()
                 except Exception:
                     pass
+
+            def _text(step, x, y, text, font, fill, anchor='n', width=None, justify='center'):
+                if canvas is not None:
+                    shadow_ids = []
+                    for dx, dy in ((1, 1), (2, 2)):
+                        sid = canvas.create_text(x + dx, y + dy, text=text, font=font, fill='#000000',
+                                                  anchor=anchor, width=width, justify=justify)
+                        _reg_canvas(step, sid)
+                        shadow_ids.append(sid)
+                    tid = canvas.create_text(x, y, text=text, font=font, fill=fill,
+                                              anchor=anchor, width=width, justify=justify)
+                    _reg_canvas(step, tid)
+                    return _CanvasTextShim(canvas, tid, shadow_ids)
+                lbl = tk.Label(self.root, text=text, font=font, bg=bg, fg=fill,
+                               wraplength=width, justify=justify)
+                _reg_widget(step, lbl, x=x, y=y, anchor=anchor)
+                return lbl
+
+            def _button(step, x, y, text, font, normal_fill, hover_fill, disabled_fill, command, anchor='n'):
+                if canvas is not None:
+                    shadow_ids = []
+                    for dx, dy in ((1, 1), (2, 2)):
+                        sid = canvas.create_text(x + dx, y + dy, text=text, font=font,
+                                                  fill='#000000', anchor=anchor)
+                        _reg_canvas(step, sid)
+                        shadow_ids.append(sid)
+                    tid = canvas.create_text(x, y, text=text, font=font, fill=normal_fill, anchor=anchor)
+                    _reg_canvas(step, tid)
+                    return _CanvasButtonShim(canvas, tid, normal_fill, hover_fill, disabled_fill, command)
+                btn = tk.Button(self.root, text=text, font=font,
+                                bg=bg, fg=normal_fill, relief=tk.FLAT, bd=0,
+                                cursor='hand2', padx=20, pady=8,
+                                activebackground=bg, activeforeground=hover_fill,
+                                command=command)
+                btn.bind('<Enter>', lambda _e: btn.config(fg=hover_fill))
+                btn.bind('<Leave>', lambda _e: btn.config(fg=normal_fill))
+                _reg_widget(step, btn, x=x, y=y, anchor=anchor)
+                return btn
 
             # ──────── STEP 0: TERMS & CONDITIONS ────────
             if UI_STYLE_AVAILABLE:
@@ -8610,16 +8705,17 @@ class ArgusApp:
             else:
                 _tos_wm = tk.Label(self.root, text="ARGUS",
                                    font=('Segoe UI', 18, 'bold'), bg=bg, fg=accent_l)
-            _placed('tos', _tos_wm, relx=0.5, y=95, anchor='n')
+            _reg_widget('tos', _tos_wm, x=CX, y=95, anchor='n')
 
-            _placed('tos', tk.Label(self.root, text="Aviso Legal",
-                     font=('Segoe UI', 14, 'bold'), bg=bg, fg=txt_p),
-                    relx=0.5, y=161, anchor='n')
+            _text('tos', CX, 161, "Aviso Legal", ('Segoe UI', 14, 'bold'), txt_p)
 
-            sep_c = tk.Canvas(self.root, width=36, height=2,
-                              bg=bg, highlightthickness=0, bd=0)
-            sep_c.create_line(0, 1, 36, 1, fill=accent, width=1)
-            _placed('tos', sep_c, relx=0.5, y=193, anchor='n')
+            if canvas is not None:
+                sep_id = canvas.create_line(CX - 18, 193, CX + 18, 193, fill=accent, width=1)
+                _reg_canvas('tos', sep_id)
+            else:
+                sep_c = tk.Canvas(self.root, width=36, height=2, bg=bg, highlightthickness=0, bd=0)
+                sep_c.create_line(0, 1, 36, 1, fill=accent, width=1)
+                _reg_widget('tos', sep_c, x=CX, y=193, anchor='n')
 
             tos_content = (
                 "Al ejecutar Argus Scanner aceptas que el software realiza un "
@@ -8629,11 +8725,7 @@ class ArgusApp:
                 "del escaneo. Este programa se ofrece \"tal cual\", sin garantías "
                 "de ningún tipo."
             )
-
-            _placed('tos', tk.Label(self.root, text=tos_content,
-                     font=('Segoe UI', 10), bg=bg, fg='#71717a',
-                     wraplength=400, justify='center'),
-                    relx=0.5, y=221, anchor='n')
+            _text('tos', CX, 221, tos_content, ('Segoe UI', 10), '#b8b8c2', width=400)
 
             def _accept_tos():
                 _hide_step('tos')
@@ -8642,31 +8734,16 @@ class ArgusApp:
 
             def _decline_tos():
                 auth_result[0] = False
-                _destroy_auth_ui()
+                # Diferido: destruir el árbol de widgets DENTRO del propio
+                # callback de click (canvas.tag_bind) puede tirar "can't
+                # delete Tcl command" — Tcl no lo banca en plena ejecución
+                # del binding que lo disparó.
+                self.root.after(0, _destroy_auth_ui)
 
-            accept_btn = tk.Button(self.root, text="Acepto y continúo",
-                                   font=('Segoe UI', 10, 'bold'),
-                                   bg=bg, fg=accent_l, relief=tk.FLAT, bd=0,
-                                   cursor='hand2', padx=24, pady=10,
-                                   activebackground=bg,
-                                   activeforeground='#FFFFFF',
-                                   highlightthickness=1,
-                                   highlightbackground=C.get('accent_deep', '#6B3A1D'),
-                                   command=_accept_tos)
-            _placed('tos', accept_btn, relx=0.5, x=-4, y=351, anchor='ne')
-            accept_btn.bind('<Enter>', lambda _: accept_btn.config(fg='#FFFFFF', highlightbackground=accent))
-            accept_btn.bind('<Leave>', lambda _: accept_btn.config(fg=accent_l, highlightbackground=C.get('accent_deep', '#6B3A1D')))
-
-            decline_btn = tk.Button(self.root, text="Salir",
-                                    font=('Segoe UI', 10),
-                                    bg=bg, fg='#52525b', relief=tk.FLAT, bd=0,
-                                    cursor='hand2', padx=18, pady=10,
-                                    highlightthickness=1,
-                                    highlightbackground='#27272a',
-                                    command=_decline_tos)
-            _placed('tos', decline_btn, relx=0.5, x=4, y=351, anchor='nw')
-            decline_btn.bind('<Enter>', lambda _: decline_btn.config(fg=txt_s, highlightbackground='#3f3f46'))
-            decline_btn.bind('<Leave>', lambda _: decline_btn.config(fg='#52525b', highlightbackground='#27272a'))
+            _button('tos', CX - 16, 351, "Acepto y continúo", ('Segoe UI', 10, 'bold'),
+                    accent_l, '#FFFFFF', accent_l, _accept_tos, anchor='ne')
+            _button('tos', CX + 16, 351, "Salir", ('Segoe UI', 10),
+                    '#8a8a96', txt_s, '#8a8a96', _decline_tos, anchor='nw')
 
             # ──────── STEP 1: TOKEN INPUT ────────
             _auth_busy = [False]
@@ -8676,24 +8753,19 @@ class ArgusApp:
             else:
                 _tok_wm = tk.Label(self.root, text="ARGUS",
                                    font=('Segoe UI', 18, 'bold'), bg=bg, fg=accent_l)
-            _placed('token', _tok_wm, relx=0.5, y=88, anchor='n')
+            _reg_widget('token', _tok_wm, x=CX, y=88, anchor='n')
 
-            _placed('token', tk.Label(self.root, text="CÓDIGO DE ACCESO",
-                     font=('Segoe UI', 12, 'bold'), bg=bg, fg=txt_p),
-                    relx=0.5, y=150, anchor='n')
-            _placed('token', tk.Label(self.root, text="Token o PIN SS de 6 dígitos · proporcionado por staff",
-                     font=('Segoe UI', 9), bg=bg, fg=txt_m),
-                    relx=0.5, y=178, anchor='n')
+            _text('token', CX, 150, "CÓDIGO DE ACCESO", ('Segoe UI', 12, 'bold'), txt_p)
+            _text('token', CX, 178, "Token o PIN SS de 6 dígitos · proporcionado por staff",
+                  ('Segoe UI', 9), '#c4c4cc')
 
             _y = 202
             _lic_blob = (self.config.get('scan_token') or self.config.get('license') or '')
             if str(_lic_blob).startswith('argus_lic_'):
-                _placed('token', tk.Label(self.root,
-                         text="La licencia embebida expiró o la suscripción no está activa.\n"
-                              "Descargá de nuevo desde el panel (Descargar para SS).",
-                         font=('Segoe UI', 9), bg=bg, fg=C.get('amber', '#F59E0B'),
-                         wraplength=360, justify='center'),
-                        relx=0.5, y=_y, anchor='n')
+                _text('token', CX, _y,
+                      "La licencia embebida expiró o la suscripción no está activa.\n"
+                      "Descargá de nuevo desde el panel (Descargar para SS).",
+                      ('Segoe UI', 9), C.get('amber', '#F59E0B'), width=360)
                 _y += 46
 
             code_var = tk.StringVar()
@@ -8712,12 +8784,10 @@ class ArgusApp:
                                    highlightbackground=border_c,
                                    highlightcolor=accent,
                                    justify='center')
-            _placed('token', token_entry, relx=0.5, y=_y, anchor='n')
+            _reg_widget('token', token_entry, x=CX, y=_y, anchor='n')
             _y += 58
 
-            status_lbl = tk.Label(self.root, text="", font=('Segoe UI', 8),
-                                  bg=bg, fg=txt_m)
-            _placed('token', status_lbl, relx=0.5, y=_y, anchor='n')
+            status_lbl = _text('token', CX, _y, "", ('Segoe UI', 8), txt_m)
             _y += 26
 
             def on_authenticate():
@@ -8781,29 +8851,13 @@ class ArgusApp:
 
             def on_cancel():
                 auth_result[0] = False
-                _destroy_auth_ui()
+                self.root.after(0, _destroy_auth_ui)
 
-            auth_btn = tk.Button(self.root, text="Autenticar",
-                                 font=('Segoe UI', 10, 'bold'),
-                                 bg=bg, fg=accent_l, relief=tk.FLAT, bd=0,
-                                 cursor='hand2', padx=24, pady=10,
-                                 activebackground=bg, activeforeground='#FFFFFF',
-                                 highlightthickness=1,
-                                 highlightbackground=C.get('accent_deep', '#6B3A1D'),
-                                 command=on_authenticate)
-            _placed('token', auth_btn, relx=0.5, y=_y, anchor='n')
+            auth_btn = _button('token', CX, _y, "Autenticar", ('Segoe UI', 10, 'bold'),
+                               accent_l, '#FFFFFF', txt_m, on_authenticate)
             _y += 46
-            auth_btn.bind('<Enter>', lambda _: auth_btn.config(fg='#FFFFFF', highlightbackground=accent))
-            auth_btn.bind('<Leave>', lambda _: auth_btn.config(fg=accent_l, highlightbackground=C.get('accent_deep', '#6B3A1D')))
-
-            cancel_btn = tk.Button(self.root, text="Cancelar",
-                                   font=('Segoe UI', 9),
-                                   bg=bg, fg=txt_m, relief=tk.FLAT, bd=0,
-                                   cursor='hand2', padx=16, pady=6,
-                                   command=on_cancel)
-            _placed('token', cancel_btn, relx=0.5, y=_y, anchor='n')
-            cancel_btn.bind('<Enter>', lambda _: cancel_btn.config(fg=txt_s))
-            cancel_btn.bind('<Leave>', lambda _: cancel_btn.config(fg=txt_m))
+            cancel_btn = _button('token', CX, _y, "Cancelar", ('Segoe UI', 9),
+                                 '#9a9aa4', txt_s, '#9a9aa4', on_cancel)
 
             token_entry.bind('<Return>', lambda _e: on_authenticate())
 
