@@ -8698,14 +8698,40 @@ class ArgusApp:
                 _reg_widget(step, btn, x=x, y=y, anchor=anchor)
                 return btn
 
-            # ──────── STEP 0: TERMS & CONDITIONS ────────
-            if UI_STYLE_AVAILABLE:
-                from ui_style import create_wordmark_label
-                _tos_wm = create_wordmark_label(self.root, height=52, pack_opts=False)
-            else:
-                _tos_wm = tk.Label(self.root, text="ARGUS",
+            _canvas_image_refs = []  # evita que el GC se lleve los PhotoImage del canvas
+
+            def _wordmark(step, x, y, height=52, anchor='n'):
+                # canvas.create_image compone el alpha real del PNG contra lo
+                # que ya está dibujado abajo (la nebulosa) — a diferencia de
+                # tk.Label, que siempre pinta su bg (flat) detrás del logo.
+                if canvas is not None:
+                    try:
+                        from PIL import Image, ImageTk
+                        path = os.path.join(ModernUI._base_path(), 'assets', 'argus-wordmark.png')
+                        if os.path.isfile(path):
+                            img = Image.open(path).convert('RGBA')
+                            iw, ih = img.size
+                            nh = max(16, int(height))
+                            nw = max(40, int(iw * nh / max(ih, 1)))
+                            img = img.resize((nw, nh), Image.LANCZOS)
+                            photo = ImageTk.PhotoImage(img)
+                            _canvas_image_refs.append(photo)
+                            item_id = canvas.create_image(x, y, image=photo, anchor=anchor)
+                            _reg_canvas(step, item_id)
+                            return item_id
+                    except Exception:
+                        pass
+                if UI_STYLE_AVAILABLE:
+                    from ui_style import create_wordmark_label
+                    lbl = create_wordmark_label(self.root, height=height, pack_opts=False)
+                else:
+                    lbl = tk.Label(self.root, text="ARGUS",
                                    font=('Segoe UI', 18, 'bold'), bg=bg, fg=accent_l)
-            _reg_widget('tos', _tos_wm, x=CX, y=95, anchor='n')
+                _reg_widget(step, lbl, x=x, y=y, anchor=anchor)
+                return lbl
+
+            # ──────── STEP 0: TERMS & CONDITIONS ────────
+            _wordmark('tos', CX, 95, height=52, anchor='n')
 
             _text('tos', CX, 161, "Aviso Legal", ('Segoe UI', 14, 'bold'), txt_p)
 
@@ -8748,12 +8774,7 @@ class ArgusApp:
             # ──────── STEP 1: TOKEN INPUT ────────
             _auth_busy = [False]
 
-            if UI_STYLE_AVAILABLE:
-                _tok_wm = create_wordmark_label(self.root, height=48, pack_opts=False)
-            else:
-                _tok_wm = tk.Label(self.root, text="ARGUS",
-                                   font=('Segoe UI', 18, 'bold'), bg=bg, fg=accent_l)
-            _reg_widget('token', _tok_wm, x=CX, y=88, anchor='n')
+            _wordmark('token', CX, 88, height=48, anchor='n')
 
             _text('token', CX, 150, "CÓDIGO DE ACCESO", ('Segoe UI', 12, 'bold'), txt_p)
             _text('token', CX, 178, "Token o PIN SS de 6 dígitos · proporcionado por staff",
