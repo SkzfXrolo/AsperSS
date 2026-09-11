@@ -50,6 +50,12 @@ _INJECT_TYPES = {
     "java_cmdline", "injector", "injector_process", "manual_map",
     "javaagent_injection", "jdwp_debug_port", "hack_string_in_loaded_jar",
     "jar_self_deleted", "process_memory_keyword",
+    # Señales de PROCESO EN VIVO (minecraft_connection_analyzer.py,
+    # scan_process_hashes_cloud) — a diferencia de todo lo demás en este
+    # archivo, estas SÍ prueban que algo está corriendo ahora mismo, no solo
+    # que se ejecutó alguna vez.
+    "java_injection", "subprocess_injection", "hidden_process",
+    "cloud_hash_match",
 }
 
 _CLIENT_TYPES = {
@@ -110,8 +116,10 @@ def build_verdict(issues: list[dict], mouse_findings: list | None = None) -> dic
         if integ_crit:
             reasons.append(f"{integ_crit} bypass CRITICAL de integridad")
 
-    # Inyección / memoria
+    # Inyección / memoria / proceso en vivo — la ÚNICA evidencia de este
+    # veredicto que prueba actividad AHORA MISMO, no solo en algún momento.
     inj = buckets["injection"]
+    has_live_evidence = bool(inj)
     if inj:
         score += min(25, 12 + 4 * len(inj))
         reasons.append(f"Inyección/memoria ({len(inj)})")
@@ -176,6 +184,14 @@ def build_verdict(issues: list[dict], mouse_findings: list | None = None) -> dic
     score = max(0, min(100, int(score)))
     verdict = _score_to_verdict(score, high_conf_crit, ghosts, phases, integ)
 
+    # Aviso para staff: si el veredicto se arma solo con rastro histórico
+    # (Prefetch/BAM/UserAssist/AppCompat/etc. — "se ejecutó alguna vez") y
+    # nada de _INJECT_TYPES ("está corriendo/inyectado ahora"), el hallazgo
+    # NO prueba uso activo. Para decidir sanción, uso activo importa más que
+    # historial de ejecución — separarlo evita que se confundan.
+    if exec_hits and not has_live_evidence and verdict in (VERDICT_LIKELY, VERDICT_CONFIRMED):
+        reasons.append("⚠ Solo evidencia histórica — sin proceso/inyección en vivo detectado en este scan")
+
     timeline = _build_timeline(issues)
 
     return {
@@ -184,6 +200,7 @@ def build_verdict(issues: list[dict], mouse_findings: list | None = None) -> dic
         "reasons": reasons[:8],
         "kill_chain": kill_chain[:8],
         "timeline": timeline[:25],
+        "live_evidence": has_live_evidence,
         "counts": {
             "critical": len(crit),
             "suspicious": len(susp),
@@ -192,8 +209,8 @@ def build_verdict(issues: list[dict], mouse_findings: list | None = None) -> dic
             "integrity": len(integ),
             "execution": len(exec_hits),
         },
-        "summary_es": _summary_es(verdict, score, reasons),
-        "staff_action": _staff_action(verdict),
+        "summary_es": _summary_es(verdict, score, reasons, has_live_evidence),
+        "staff_action": _staff_action(verdict, has_live_evidence),
     }
 
 
@@ -328,17 +345,24 @@ def _build_timeline(issues: list[dict]) -> list[dict]:
     return events
 
 
-def _summary_es(verdict: str, score: int, reasons: list[str]) -> str:
+def _summary_es(verdict: str, score: int, reasons: list[str], live_evidence: bool = False) -> str:
     base = {
         VERDICT_CLEAN: "Sin evidencia suficiente de cheat. Revisar manual solo si hay reportes externos.",
         VERDICT_SUSPICIOUS: "Hay señales de riesgo. Requiere revisión manual antes de sancionar.",
         VERDICT_LIKELY: "Patrón coherente con uso de cheats. Alta probabilidad — verificar top hallazgos.",
         VERDICT_CONFIRMED: "Kill-chain consistente con cheater. Evidencia múltiple correlacionada.",
     }.get(verdict, "")
+    if verdict in (VERDICT_LIKELY, VERDICT_CONFIRMED) and not live_evidence:
+        base += (" La evidencia es histórica (el hack se ejecutó/instaló en algún momento) — "
+                 "no hay proceso ni inyección en vivo detectados en este scan puntual.")
     return f"{base} Risk {score}/100."
 
 
-def _staff_action(verdict: str) -> str:
+def _staff_action(verdict: str, live_evidence: bool = False) -> str:
+    if verdict in (VERDICT_LIKELY, VERDICT_CONFIRMED) and not live_evidence:
+        return ("Evidencia histórica, no de uso activo — solo es sancionable si el hack "
+                "estaba en uso (no solo instalado/ejecutado antes). Confirmar con reportes "
+                "de partida, VOD, o pescarlo en un scan durante uso activo antes de banear.")
     return {
         VERDICT_CLEAN: "Liberar / no ban por scanner solo",
         VERDICT_SUSPICIOUS: "Manual review + preguntar por programas listados",
