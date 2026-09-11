@@ -8569,34 +8569,57 @@ class ArgusApp:
             red = C.get('red_deep', '#DC2626')
             border_c = C.get('border', '#1f1f23')
 
-            # Tarjeta centrada (no toda la ventana) para que el fondo cósmico
-            # animado se vea alrededor en vez de quedar tapado por completo.
-            auth_frame = tk.Frame(self.root, bg=bg)
-            auth_frame.place(relx=0.5, rely=0.52, anchor='center', width=520, height=420)
-            auth_frame.lift()
+            # Sin panel opaco: cada widget lleva SOLO su propio fondo ajustado
+            # a su contenido (no un frame grande tapando la ventana), así el
+            # fondo cósmico animado se ve en los huecos entre elementos.
+            # auth_frame nunca se .place() — es solo sentinela para
+            # destroy()/wait_window().
+            auth_frame = tk.Frame(self.root)
+            _step_widgets = {}
+
+            def _placed(step, widget, **kw):
+                widget.place(**kw)
+                widget._auth_place_kw = kw
+                _step_widgets.setdefault(step, []).append(widget)
+                return widget
+
+            def _hide_step(step):
+                for w in _step_widgets.get(step, []):
+                    w.place_forget()
+
+            def _show_step(step):
+                for w in _step_widgets.get(step, []):
+                    w.place(**w._auth_place_kw)
+
+            def _destroy_auth_ui():
+                for lst in _step_widgets.values():
+                    for w in lst:
+                        try:
+                            w.destroy()
+                        except Exception:
+                            pass
+                try:
+                    auth_frame.destroy()
+                except Exception:
+                    pass
 
             # ──────── STEP 0: TERMS & CONDITIONS ────────
-            tos_frame = tk.Frame(auth_frame, bg=bg)
-            tos_frame.place(x=0, y=0, relwidth=1.0, relheight=1.0)
-
-            tos_center = tk.Frame(tos_frame, bg=bg)
-            tos_center.place(relx=0.5, rely=0.48, anchor='center')
-
             if UI_STYLE_AVAILABLE:
                 from ui_style import create_wordmark_label
-                create_wordmark_label(tos_center, height=52, pady=(0, 12))
+                _tos_wm = create_wordmark_label(self.root, height=52, pack_opts=False)
             else:
-                tk.Label(tos_center, text="ARGUS",
-                         font=('Segoe UI', 18, 'bold'), bg=bg, fg=accent_l).pack(pady=(0, 12))
+                _tos_wm = tk.Label(self.root, text="ARGUS",
+                                   font=('Segoe UI', 18, 'bold'), bg=bg, fg=accent_l)
+            _placed('tos', _tos_wm, relx=0.5, y=95, anchor='n')
 
-            tk.Label(tos_center, text="Aviso Legal",
-                     font=('Segoe UI', 14, 'bold'),
-                     bg=bg, fg=txt_p).pack()
+            _placed('tos', tk.Label(self.root, text="Aviso Legal",
+                     font=('Segoe UI', 14, 'bold'), bg=bg, fg=txt_p),
+                    relx=0.5, y=161, anchor='n')
 
-            sep_c = tk.Canvas(tos_center, width=36, height=2,
+            sep_c = tk.Canvas(self.root, width=36, height=2,
                               bg=bg, highlightthickness=0, bd=0)
-            sep_c.pack(pady=(6, 14))
             sep_c.create_line(0, 1, 36, 1, fill=accent, width=1)
+            _placed('tos', sep_c, relx=0.5, y=193, anchor='n')
 
             tos_content = (
                 "Al ejecutar Argus Scanner aceptas que el software realiza un "
@@ -8607,23 +8630,21 @@ class ArgusApp:
                 "de ningún tipo."
             )
 
-            tk.Label(tos_center, text=tos_content,
+            _placed('tos', tk.Label(self.root, text=tos_content,
                      font=('Segoe UI', 10), bg=bg, fg='#71717a',
-                     wraplength=400, justify='center').pack(pady=(0, 28))
-
-            tos_btn_frame = tk.Frame(tos_center, bg=bg)
-            tos_btn_frame.pack()
+                     wraplength=400, justify='center'),
+                    relx=0.5, y=221, anchor='n')
 
             def _accept_tos():
-                tos_frame.place_forget()
-                token_frame.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+                _hide_step('tos')
+                _show_step('token')
                 token_entry.focus_set()
 
             def _decline_tos():
                 auth_result[0] = False
-                auth_frame.destroy()
+                _destroy_auth_ui()
 
-            accept_btn = tk.Button(tos_btn_frame, text="Acepto y continúo",
+            accept_btn = tk.Button(self.root, text="Acepto y continúo",
                                    font=('Segoe UI', 10, 'bold'),
                                    bg=bg, fg=accent_l, relief=tk.FLAT, bd=0,
                                    cursor='hand2', padx=24, pady=10,
@@ -8632,50 +8653,48 @@ class ArgusApp:
                                    highlightthickness=1,
                                    highlightbackground=C.get('accent_deep', '#6B3A1D'),
                                    command=_accept_tos)
-            accept_btn.pack(side=tk.LEFT, padx=(0, 8))
+            _placed('tos', accept_btn, relx=0.5, x=-4, y=351, anchor='ne')
             accept_btn.bind('<Enter>', lambda _: accept_btn.config(fg='#FFFFFF', highlightbackground=accent))
             accept_btn.bind('<Leave>', lambda _: accept_btn.config(fg=accent_l, highlightbackground=C.get('accent_deep', '#6B3A1D')))
 
-            decline_btn = tk.Button(tos_btn_frame, text="Salir",
+            decline_btn = tk.Button(self.root, text="Salir",
                                     font=('Segoe UI', 10),
                                     bg=bg, fg='#52525b', relief=tk.FLAT, bd=0,
                                     cursor='hand2', padx=18, pady=10,
                                     highlightthickness=1,
                                     highlightbackground='#27272a',
                                     command=_decline_tos)
-            decline_btn.pack(side=tk.LEFT)
+            _placed('tos', decline_btn, relx=0.5, x=4, y=351, anchor='nw')
             decline_btn.bind('<Enter>', lambda _: decline_btn.config(fg=txt_s, highlightbackground='#3f3f46'))
             decline_btn.bind('<Leave>', lambda _: decline_btn.config(fg='#52525b', highlightbackground='#27272a'))
 
             # ──────── STEP 1: TOKEN INPUT ────────
-            token_frame = tk.Frame(auth_frame, bg=bg)
             _auth_busy = [False]
 
-            # Token input UI
-            tk_center = tk.Frame(token_frame, bg=bg)
-            tk_center.place(relx=0.5, rely=0.48, anchor='center')
-
             if UI_STYLE_AVAILABLE:
-                from ui_style import create_wordmark_label
-                create_wordmark_label(tk_center, height=48, pady=(0, 12))
+                _tok_wm = create_wordmark_label(self.root, height=48, pack_opts=False)
             else:
-                tk.Label(tk_center, text="ARGUS",
-                         font=('Segoe UI', 18, 'bold'), bg=bg, fg=accent_l).pack(pady=(0, 12))
+                _tok_wm = tk.Label(self.root, text="ARGUS",
+                                   font=('Segoe UI', 18, 'bold'), bg=bg, fg=accent_l)
+            _placed('token', _tok_wm, relx=0.5, y=88, anchor='n')
 
-            tk.Label(tk_center, text="CÓDIGO DE ACCESO",
-                     font=('Segoe UI', 12, 'bold'),
-                     bg=bg, fg=txt_p).pack(pady=(0, 4))
-            tk.Label(tk_center, text="Token o PIN SS de 6 dígitos · proporcionado por staff",
-                     font=('Segoe UI', 9), bg=bg, fg=txt_m).pack(pady=(0, 8))
+            _placed('token', tk.Label(self.root, text="CÓDIGO DE ACCESO",
+                     font=('Segoe UI', 12, 'bold'), bg=bg, fg=txt_p),
+                    relx=0.5, y=150, anchor='n')
+            _placed('token', tk.Label(self.root, text="Token o PIN SS de 6 dígitos · proporcionado por staff",
+                     font=('Segoe UI', 9), bg=bg, fg=txt_m),
+                    relx=0.5, y=178, anchor='n')
+
+            _y = 202
             _lic_blob = (self.config.get('scan_token') or self.config.get('license') or '')
             if str(_lic_blob).startswith('argus_lic_'):
-                tk.Label(tk_center,
+                _placed('token', tk.Label(self.root,
                          text="La licencia embebida expiró o la suscripción no está activa.\n"
                               "Descargá de nuevo desde el panel (Descargar para SS).",
                          font=('Segoe UI', 9), bg=bg, fg=C.get('amber', '#F59E0B'),
-                         wraplength=360, justify='center').pack(pady=(0, 14))
-            else:
-                tk.Frame(tk_center, height=6, bg=bg).pack()
+                         wraplength=360, justify='center'),
+                        relx=0.5, y=_y, anchor='n')
+                _y += 46
 
             code_var = tk.StringVar()
             def _on_code_change(*_):
@@ -8685,7 +8704,7 @@ class ArgusApp:
                 code_var.set(val)
             code_var.trace_add('write', _on_code_change)
 
-            token_entry = tk.Entry(tk_center, textvariable=code_var,
+            token_entry = tk.Entry(self.root, textvariable=code_var,
                                    font=('Consolas', 22), width=10,
                                    bg=bg, fg=txt_p,
                                    insertbackground=accent_l, relief=tk.FLAT, bd=0,
@@ -8693,11 +8712,13 @@ class ArgusApp:
                                    highlightbackground=border_c,
                                    highlightcolor=accent,
                                    justify='center')
-            token_entry.pack(ipady=12, pady=(0, 6))
+            _placed('token', token_entry, relx=0.5, y=_y, anchor='n')
+            _y += 58
 
-            status_lbl = tk.Label(tk_center, text="", font=('Segoe UI', 8),
+            status_lbl = tk.Label(self.root, text="", font=('Segoe UI', 8),
                                   bg=bg, fg=txt_m)
-            status_lbl.pack(pady=(0, 18))
+            _placed('token', status_lbl, relx=0.5, y=_y, anchor='n')
+            _y += 26
 
             def on_authenticate():
                 if _auth_busy[0]:
@@ -8727,7 +8748,7 @@ class ArgusApp:
                         def _ok():
                             auth_result[0] = True
                             status_lbl.config(text="\u2713 Acceso autorizado", fg=green)
-                            self.root.after(400, auth_frame.destroy)
+                            self.root.after(400, _destroy_auth_ui)
                         self.root.after(0, _ok)
                     else:
                         # Offline: si el PIN ya resolvió a token embebido/local, aceptar
@@ -8736,7 +8757,7 @@ class ArgusApp:
                                 self.config['scan_token'] = token
                                 auth_result[0] = True
                                 status_lbl.config(text="\u2713 Acceso offline (PIN/token)", fg=green)
-                                self.root.after(400, auth_frame.destroy)
+                                self.root.after(400, _destroy_auth_ui)
                             self.root.after(0, _offline_ok)
                             return
                         err = (data.get('error') if ok else data.get('error')) or 'inválido'
@@ -8760,9 +8781,9 @@ class ArgusApp:
 
             def on_cancel():
                 auth_result[0] = False
-                auth_frame.destroy()
+                _destroy_auth_ui()
 
-            auth_btn = tk.Button(tk_center, text="Autenticar",
+            auth_btn = tk.Button(self.root, text="Autenticar",
                                  font=('Segoe UI', 10, 'bold'),
                                  bg=bg, fg=accent_l, relief=tk.FLAT, bd=0,
                                  cursor='hand2', padx=24, pady=10,
@@ -8770,22 +8791,23 @@ class ArgusApp:
                                  highlightthickness=1,
                                  highlightbackground=C.get('accent_deep', '#6B3A1D'),
                                  command=on_authenticate)
-            auth_btn.pack(pady=(0, 8))
+            _placed('token', auth_btn, relx=0.5, y=_y, anchor='n')
+            _y += 46
             auth_btn.bind('<Enter>', lambda _: auth_btn.config(fg='#FFFFFF', highlightbackground=accent))
             auth_btn.bind('<Leave>', lambda _: auth_btn.config(fg=accent_l, highlightbackground=C.get('accent_deep', '#6B3A1D')))
 
-            cancel_btn = tk.Button(tk_center, text="Cancelar",
+            cancel_btn = tk.Button(self.root, text="Cancelar",
                                    font=('Segoe UI', 9),
                                    bg=bg, fg=txt_m, relief=tk.FLAT, bd=0,
                                    cursor='hand2', padx=16, pady=6,
                                    command=on_cancel)
-            cancel_btn.pack()
+            _placed('token', cancel_btn, relx=0.5, y=_y, anchor='n')
             cancel_btn.bind('<Enter>', lambda _: cancel_btn.config(fg=txt_s))
             cancel_btn.bind('<Leave>', lambda _: cancel_btn.config(fg=txt_m))
 
             token_entry.bind('<Return>', lambda _e: on_authenticate())
 
-            auth_frame.focus_set()
+            _hide_step('token')
             token_entry.focus_set()
             auth_frame.wait_window()
 
