@@ -2,12 +2,14 @@ databases:
   - name: aspers-db
     databaseName: aspers
     user: aspers
+    plan: free
 
 services:
   - type: web
     name: aspers-app
     runtime: python
     rootDir: web_app
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn --config gunicorn_config.py app:app
     autoDeploy: true
