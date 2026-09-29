@@ -4341,20 +4341,30 @@ class ArgusApp:
                 pass
             return
 
+        C = ModernUI.COLORS if UI_STYLE_AVAILABLE else {}
+        bg = C.get('bg_primary', '#0c0e12')
+        bg_card = C.get('bg_elevated', '#12122a')
+        txt_p = C.get('text_primary', '#f5f5f5')
+        txt_s = C.get('text_secondary', '#a1a1aa')
+        txt_m = C.get('text_muted', '#3f3f46')
+        accent = C.get('accent', '#3ddc84')
+        red = C.get('red_deep', '#DC2626')
+
         win = tk.Toplevel(self.root)
         win.title("Cambiar servidor")
         win.geometry("340x280")
-        win.configure(bg="#0d1117")
+        win.configure(bg=bg)
         win.grab_set()
         win.resizable(False, False)
 
         tk.Label(win, text="Seleccionar servidor", font=("Segoe UI", 12, "bold"),
-                 bg="#0d1117", fg="#e2e8f0").pack(pady=(16, 4))
+                 bg=bg, fg=txt_p).pack(pady=(16, 4))
         tk.Label(win, text="Elige el perfil de servidor a usar:", font=("Segoe UI", 9),
-                 bg="#0d1117", fg="#8b9ab0").pack()
+                 bg=bg, fg=txt_s).pack()
 
-        listbox = tk.Listbox(win, font=("Segoe UI", 10), bg="#161b22", fg="#e2e8f0",
-                             selectbackground="#5865f2", relief=tk.FLAT, bd=0,
+        listbox = tk.Listbox(win, font=("Segoe UI", 10), bg=bg_card, fg=txt_p,
+                             selectbackground=accent, selectforeground=bg,
+                             relief=tk.FLAT, bd=0,
                              highlightthickness=0, activestyle='none', height=6)
         listbox.pack(fill=tk.BOTH, expand=True, padx=16, pady=10)
 
@@ -4401,16 +4411,16 @@ class ArgusApp:
             win.destroy()
             self.show_profile_selector()
 
-        btn_frame = tk.Frame(win, bg="#0d1117")
+        btn_frame = tk.Frame(win, bg=bg)
         btn_frame.pack(fill=tk.X, padx=16, pady=(0, 14))
         tk.Button(btn_frame, text="Usar este perfil", command=_on_select,
-                  bg="#5865f2", fg="white", font=("Segoe UI", 9, "bold"),
+                  bg=accent, fg=bg, font=("Segoe UI", 9, "bold"),
                   relief=tk.FLAT, padx=14, pady=7, cursor="hand2").pack(side=tk.LEFT, padx=(0, 6))
         tk.Button(btn_frame, text="Eliminar", command=_on_delete,
-                  bg="#2d1b1b", fg="#ef4444", font=("Segoe UI", 9),
+                  bg=bg_card, fg=red, font=("Segoe UI", 9),
                   relief=tk.FLAT, padx=10, pady=7, cursor="hand2").pack(side=tk.LEFT)
         tk.Button(btn_frame, text="Cancelar", command=win.destroy,
-                  bg="#161b22", fg="#8b9ab0", font=("Segoe UI", 9),
+                  bg=bg_card, fg=txt_s, font=("Segoe UI", 9),
                   relief=tk.FLAT, padx=10, pady=7, cursor="hand2").pack(side=tk.RIGHT)
 
     # ── Click-speed test (P3 #26 — hardware autoclicker button detection) ────
