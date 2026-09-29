@@ -54,16 +54,19 @@ class PacketDataStoreTest {
     }
 
     @Test
-    void attackBufferIsBoundedAt20() {
+    void attackBufferIsBounded() {
         PacketDataStore.State s = new PacketDataStore.State();
-        for (int i = 0; i < 100; i++) s.pushAttack(i);
+        // empuja más del cap para forzar el trim (antes bombardeaba con solo
+        // 100, que ya no alcanza desde que ATTACK_BUFFER_SIZE subió a 64)
+        for (int i = 0; i < PacketDataStore.ATTACK_BUFFER_SIZE + 50; i++) s.pushAttack(i);
         assertEquals(PacketDataStore.ATTACK_BUFFER_SIZE, s.attackTimestamps.size());
     }
 
     @Test
-    void swingBufferIsBoundedAt20() {
+    void swingBufferIsBounded() {
         PacketDataStore.State s = new PacketDataStore.State();
-        for (int i = 0; i < 100; i++) s.pushSwing(i);
+        // idem: SWING_BUFFER_SIZE subió a 128, 100 empujes ya no lo llenaba
+        for (int i = 0; i < PacketDataStore.SWING_BUFFER_SIZE + 50; i++) s.pushSwing(i);
         assertEquals(PacketDataStore.SWING_BUFFER_SIZE, s.swingTimestamps.size());
     }
 

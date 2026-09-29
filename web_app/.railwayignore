@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+!.env.local.example
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.db
+*.sqlite
+*.sqlite3
+_railway_set_vars.py
+DEPLOY_RAILWAY.txt
+.git/
+*.md
+tests/

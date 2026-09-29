@@ -55,8 +55,22 @@ public final class WarmupGracePeriod {
         if (s == null) return false;
 
         long now = System.currentTimeMillis();
-        if (now - s.joinMs < joinGraceMs) return true;
-        if (s.teleporting && now < s.teleportUntilMs + tpGraceMs) return true;
+        if (now - s.joinMs < joinGraceMs) {
+            logSuppressed(p, checkName, "warmup_join:" + (now - s.joinMs) + "ms");
+            return true;
+        }
+        if (s.teleporting && now < s.teleportUntilMs + tpGraceMs) {
+            logSuppressed(p, checkName, "warmup_teleport");
+            return true;
+        }
         return false;
+    }
+
+    private void logSuppressed(Player p, String checkName, String cause) {
+        if (checkName == null) return; // inGrace(p) sin checkName: caller no-op, no es una supresión real
+        try {
+            var fp = plugin.getFalsePositiveLogger();
+            if (fp != null) fp.record(p, checkName, cause);
+        } catch (Throwable ignored) {}
     }
 }

@@ -333,6 +333,16 @@ class DatabaseIntegration:
                             if isinstance(v, str) and len(v) > 500:
                                 v = v[:500]
                             clean_extra[k] = v
+                # Staff: explicacion + timestamps + related (v1.8+)
+                expl = issue.get('explicacion') or ''
+                if isinstance(expl, str) and len(expl) > 1200:
+                    expl = expl[:1200]
+                ts = issue.get('timestamp') or issue.get('last_executed') or ''
+                if issue.get('related_paths') and 'related_paths' not in clean_extra:
+                    clean_extra['related_paths'] = issue.get('related_paths')
+                if issue.get('sha256') and not issue.get('file_hash'):
+                    issue = dict(issue)
+                    issue['file_hash'] = issue.get('sha256')
                 results.append({
                     'tipo': issue.get('tipo', ''),
                     'nombre': issue.get('nombre', ''),
@@ -343,9 +353,12 @@ class DatabaseIntegration:
                     'confidence': issue.get('confidence', 0),
                     'detected_patterns': issue.get('detected_patterns', []),
                     'obfuscation': issue.get('obfuscation', False),
-                    'file_hash': issue.get('file_hash', ''),
+                    'file_hash': issue.get('file_hash', '') or issue.get('sha256', ''),
                     'ai_analysis': issue.get('ai_analysis', ''),
                     'ai_confidence': issue.get('ai_confidence', 0),
+                    'explicacion': expl,
+                    'timestamp': ts,
+                    'last_executed': issue.get('last_executed') or ts,
                     'extra': clean_extra,
                 })
 

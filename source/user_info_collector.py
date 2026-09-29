@@ -85,18 +85,21 @@ class UserInfoCollector:
             
             # Buscar procesos de Minecraft/Java activos
             minecraft_processes = []
-            for proc in psutil.process_iter(['pid', 'name', 'connections']):
+            for proc in psutil.process_iter(['pid', 'name']):
                 try:
                     name = proc.info['name'].lower()
                     if name in ['javaw.exe', 'java.exe', 'minecraft.exe']:
                         minecraft_processes.append(proc)
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
-            
+
             # Buscar conexiones de red activas relacionadas con Minecraft
             for proc in minecraft_processes:
                 try:
-                    connections = proc.info.get('connections', [])
+                    try:
+                        connections = proc.net_connections(kind='inet')
+                    except (AttributeError, TypeError):
+                        connections = proc.connections(kind='inet')
                     for conn in connections:
                         if conn.status == 'ESTABLISHED' and conn.raddr:
                             # Intentar obtener información de la conexión

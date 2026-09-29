@@ -71,7 +71,7 @@ WHITELIST_PATH_FRAGMENTS = (
     r'\microsoft\edge',
     r'\nvidia',
     r'\amd\ccc',
-    r'\intel\',
+    '\\intel\\',
 )
 
 # DNS públicos conocidos — usarlos es completamente normal
@@ -278,8 +278,8 @@ class SSForensics:
             # Ignorar rutas de Steam (actualizaciones de juegos) y del sistema
             fname_lower = fname.lower()
             if any(skip in fname_lower for skip in (
-                r'\steamapps\\', r'\steam\steam', r'\epicgames\\',
-                r'\windows\', r'\program files\', r'\nvidia\', r'\microsoft\',
+                '\\steamapps\\', '\\steam\\steam', '\\epicgames\\',
+                '\\windows\\', '\\program files\\', '\\nvidia\\', '\\microsoft\\',
             )):
                 continue
 

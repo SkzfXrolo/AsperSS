@@ -53,6 +53,27 @@ public class LagCompensatorTest {
         assertFalse(lc.shouldSuppress(mockPlayer(99999), "killaura_aim"));
     }
 
+    @Test
+    void highPingSuppressesAndLogsToFalsePositiveLogger() {
+        ArgusPlugin plugin = mock(ArgusPlugin.class);
+        FileConfiguration cfg = mock(FileConfiguration.class);
+        ConfigurationSection sec = mock(ConfigurationSection.class);
+        when(plugin.getConfig()).thenReturn(cfg);
+        when(cfg.getConfigurationSection("tuning.lag_compensation")).thenReturn(sec);
+        when(sec.getBoolean("enabled", true)).thenReturn(true);
+        when(sec.getStringList("checks")).thenReturn(java.util.Collections.emptyList());
+        when(sec.getDouble("min_tps", 18.5)).thenReturn(18.5);
+        when(sec.getLong("max_ping_ms", 250L)).thenReturn(250L);
+
+        FalsePositiveLogger fp = mock(FalsePositiveLogger.class);
+        when(plugin.getFalsePositiveLogger()).thenReturn(fp);
+
+        LagCompensator lc = new LagCompensator(plugin);
+        Player p = mockPlayer(999);
+        assertTrue(lc.shouldSuppress(p, "speed_packet"));
+        verify(fp).record(eq(p), eq("speed_packet"), contains("lag_ping"));
+    }
+
     private static Player mockPlayer(long ping) {
         Player p = mock(Player.class);
         when(p.getUniqueId()).thenReturn(UUID.randomUUID());

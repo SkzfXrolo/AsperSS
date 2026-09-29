@@ -4009,9 +4009,44 @@ function renderIssuePage(container, scanId) {
                 <span class="sd-conf-pct">${conf}%</span>
             </div>` : '';
         const fmtPath = _formatPath(path);
-        const hashMatch = path.match(/\b([a-f0-9]{64})\b/i);
-        const copyBtn = hashMatch ? `<button type="button" class="sd-btn-copy" onclick="event.stopPropagation();_copyWithFeedback('${hashMatch[1]}',this)" title="Copiar hash">📋</button>` : '';
+        const fh = (result.file_hash || (result.extra && result.extra.sha256) || '').toString();
+        const hashMatch = fh.match(/^[a-f0-9]{32,64}$/i) || path.match(/\b([a-f0-9]{64})\b/i);
+        const hashVal = fh || (hashMatch ? hashMatch[1] || hashMatch[0] : '');
+        const copyBtn = hashVal ? `<button type="button" class="sd-btn-copy" onclick="event.stopPropagation();_copyWithFeedback('${hashVal}',this)" title="Copiar hash">📋 hash</button>` : '';
         const escPath = path.replace(/"/g, '&quot;');
+        const expl = (result.explicacion || (result.extra && result.extra.explicacion) || '').toString().slice(0, 280);
+        const when = (result.timestamp || result.last_executed || (result.extra && (result.extra.timestamp || result.extra.last_executed)) || '').toString().slice(0, 32);
+        const relPaths = result.related_paths || (result.extra && result.extra.related_paths) || [];
+        const relTipos = result.related_tipos || (result.extra && result.extra.related_tipos) || [];
+        const relCount = (result.extra && result.extra.related_count) || (Array.isArray(relPaths) ? relPaths.length : 0);
+        const combo = (result.combination_penalty || (result.extra && result.extra.combination_penalty) || '').toString();
+        const whyBlock = expl ? `<div class="sd-finding-why" style="margin-top:6px;font-size:12px;color:var(--text-d);line-height:1.35;"><strong style="color:var(--text-h)">Por qué:</strong> ${String(expl).replace(/</g,'&lt;')}</div>` : '';
+        const whenBlock = when ? `<div class="sd-finding-when" style="margin-top:4px;font-size:11px;color:var(--text-d);">Cuándo: ${String(when).replace(/</g,'&lt;')}</div>` : '';
+        const relBlock = (relCount > 1 || (relTipos && relTipos.length))
+            ? `<div class="sd-finding-rel" style="margin-top:4px;font-size:11px;color:var(--text-d);">Relacionados: ${(relTipos||[]).slice(0,6).join(', ') || (relCount+' paths')}</div>`
+            : '';
+        const comboBlock = combo
+            ? `<div class="sd-finding-combo" style="margin-top:4px;font-size:11px;color:#f0b429;">Combo: ${String(combo).replace(/</g,'&lt;')}</div>`
+            : '';
+        const isIntegrity = (cat || '').toUpperCase() === 'INTEGRITY' || (result.issue_type || '') === 'ss_integrity' || (result.issue_type || '') === 'ss_verdict';
+        const integBadge = isIntegrity ? '<span class="sd-badge" style="background:rgba(139,92,246,0.2);color:#c4b5fd;">INTEGRITY</span>' : '';
+        const comboBadge = combo ? '<span class="sd-badge" style="background:rgba(240,180,41,0.2);color:#f0b429;">COMBO</span>' : '';
+        const issueType = (result.issue_type || result.tipo || '').toString();
+        const hashBadge = (issueType === 'recycle_hash_match' || (result.extra && result.extra.hash_match))
+            ? '<span class="sd-badge" style="background:rgba(239,68,68,0.2);color:#f87171;">HASH</span>'
+            : '';
+        const remoteBadge = (issueType === 'remote_access_active' || issueType === 'rdp_session_active')
+            ? '<span class="sd-badge" style="background:rgba(251,146,60,0.2);color:#fb923c;">REMOTE</span>'
+            : '';
+        const cookieBadge = (issueType === 'browser_hack_cookie' || issueType === 'wininet_hack_cookie')
+            ? '<span class="sd-badge" style="background:rgba(56,189,248,0.2);color:#38bdf8;">COOKIE</span>'
+            : '';
+        const prefRefBadge = (issueType === 'prefetch_referenced_hack')
+            ? '<span class="sd-badge" style="background:rgba(244,114,182,0.2);color:#f472b6;">PREF_REF</span>'
+            : '';
+        const lnkHijackBadge = (issueType === 'lnk_xaml_hijack')
+            ? '<span class="sd-badge" style="background:rgba(248,113,113,0.2);color:#f87171;">LNK</span>'
+            : '';
 
         const mainRow = `<article data-result-id="${result.id}" class="sd-finding issue-row-stagger ${sevCls} ${glowCls}" style="animation-delay:${rowIdx * 40}ms" onclick="_selectIssue(this)" role="button" tabindex="0">
             <span class="sd-finding-icon" aria-hidden="true">${catIcon}</span>
@@ -4022,11 +4057,19 @@ function renderIssuePage(container, scanId) {
                     ${variantBadge}
                     ${metaChip}
                     ${seenBadge}
+                    ${integBadge}
+                    ${comboBadge}
+                    ${hashBadge}
+                    ${remoteBadge}
+                    ${cookieBadge}
+                    ${prefRefBadge}
+                    ${lnkHijackBadge}
                     ${instBadge}
                     ${cat ? `<span class="sd-badge sd-badge--cat">${_getCategoryLabel(cat)}</span>` : ''}
                     <button type="button" class="sd-btn-ai" onclick="event.stopPropagation();aiExplainFinding('${safeName}','${safeLevel}',this)" title="Explicar con IA">🤖 IA</button>
                 </div>
-                ${truncPath ? `<div class="sd-finding-path" title="${escPath}">${fmtPath}${copyBtn}</div>` : ''}
+                ${truncPath ? `<div class="sd-finding-path" title="${escPath}">${fmtPath}${copyBtn}</div>` : (copyBtn ? `<div class="sd-finding-path">${copyBtn}</div>` : '')}
+                ${whyBlock}${whenBlock}${relBlock}${comboBlock}
                 ${confBar}
             </div>
         </article>`;
@@ -4756,6 +4799,41 @@ async function viewScanDetails(scanId) {
             _renderRiskGauge('risk-gauge-container', riskScore);
         }
 
+        // Flags staff: REMOTE / HASH / COMBO (derivados de issue_type)
+        try {
+            const tipos = new Set((_results || []).map(r => (r.issue_type || '').toString()));
+            const hasCombo = (_results || []).some(r =>
+                (r.combination_penalty || (r.extra && r.extra.combination_penalty) || '')
+            );
+            const flagBits = [];
+            if (tipos.has('remote_access_active') || tipos.has('rdp_session_active')) flagBits.push('REMOTE');
+            if (tipos.has('recycle_hash_match')) flagBits.push('HASH_PAPELERA');
+            if (hasCombo) flagBits.push('COMBO');
+            let flagsEl = document.getElementById('detail-scan-flags');
+            if (!flagsEl) {
+                const host = document.getElementById('detail-risk-score-badge')
+                    || document.getElementById('risk-gauge-container');
+                if (host && host.parentElement) {
+                    flagsEl = document.createElement('div');
+                    flagsEl.id = 'detail-scan-flags';
+                    flagsEl.style.cssText = 'margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;';
+                    host.parentElement.appendChild(flagsEl);
+                }
+            }
+            if (flagsEl) {
+                if (flagBits.length) {
+                    flagsEl.innerHTML = flagBits.map(f => {
+                        const color = f === 'REMOTE' ? '#fb923c' : f === 'COMBO' ? '#f0b429' : '#f87171';
+                        return `<span class="sd-badge" style="background:${color}22;color:${color};font-size:11px;">${f}</span>`;
+                    }).join('');
+                    flagsEl.style.display = 'flex';
+                } else {
+                    flagsEl.innerHTML = '';
+                    flagsEl.style.display = 'none';
+                }
+            }
+        } catch (_) { /* flags opcionales */ }
+
         // 6-system ensemble verdict card
         _renderEnsembleVerdict(data);
 
@@ -4848,9 +4926,20 @@ async function viewScanDetails(scanId) {
 
         // Páginas web van a su propia sección — fuera de la lista principal
         const _webResults = _allNonClean.filter(r => r.alert_level === 'PAGINA_SOSPECHOSA');
+        const _priorityRank = (r) => {
+            const t = (r.issue_type || '').toLowerCase();
+            const c = (r.issue_category || '').toUpperCase();
+            if (t === 'ss_verdict') return 0;
+            if (t === 'ss_integrity' || c === 'INTEGRITY') return 1;
+            if (t === 'kill_chain' || c === 'CORRELACION') return 2;
+            return 3;
+        };
         currentIssuesList = _allNonClean
             .filter(r => r.alert_level !== 'PAGINA_SOSPECHOSA')
             .sort((a, b) => {
+                const pa = _priorityRank(a);
+                const pb = _priorityRank(b);
+                if (pa !== pb) return pa - pb;
                 const ai = _isInMinecraftInstance(a.issue_path) ? 0 : 1;
                 const bi = _isInMinecraftInstance(b.issue_path) ? 0 : 1;
                 if (ai !== bi) return ai - bi;

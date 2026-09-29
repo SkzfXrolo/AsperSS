@@ -514,8 +514,6 @@ def _wrap_set_completion(cls):
 
 
 def _wrap_confetti(cls):
-    orig = cls._trigger_confetti
-
     @classmethod
     def confetti(cls_inner, canvas):
         if not _motion_ok(cls_inner):

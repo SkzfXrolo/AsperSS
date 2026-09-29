@@ -50,15 +50,24 @@ public final class LagCompensator {
         long ping = pingMs(player);
         if (ping > maxPing) {
             countCancelled(player.getUniqueId());
+            logSuppressed(player, checkName, "lag_ping:" + ping + "ms");
             return true;
         }
 
         double tps = currentTps();
         if (tps < minTps) {
             countCancelled(player.getUniqueId());
+            logSuppressed(player, checkName, String.format("lag_tps:%.1f", tps));
             return true;
         }
         return false;
+    }
+
+    private void logSuppressed(Player player, String checkName, String cause) {
+        try {
+            var fp = plugin.getFalsePositiveLogger();
+            if (fp != null) fp.record(player, checkName, cause);
+        } catch (Throwable ignored) {}
     }
 
     public double currentTps() {

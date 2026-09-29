@@ -156,46 +156,55 @@ class ModernUI:
     UI_CHROMA = '#010102'
     SCAN_BG_ASSET = 'cosmic-scan-bg.gif'
 
+    # Rediseño 2026 — "consola forense": slate casi-negro neutro, un solo acento
+    # verde (marca / "clear"), sin morado cósmico ni glow. Mismas claves que antes
+    # (main.py referencia muchas) — solo cambian los valores. Revertible con
+    # `git checkout -- source/ui_style.py`.
     COLORS = {
-        'bg_primary':     '#04030e',
-        'bg_secondary':   '#0a0a1f',
-        'bg_card':        '#12122a',
-        'bg_hover':       '#1a1a3a',
-        'bg_inset':       '#0d0d20',
-        'text_primary':   '#ECEDFF',
-        'text_secondary': '#A6A8D0',
-        'text_muted':     '#7E81AD',
-        'accent':         '#8b7bff',
-        'accent_light':   '#46e6ff',
-        'accent_hover':   '#a89bff',
-        'accent_deep':    '#3d3580',
-        'accent_glow':    '#46e6ff',
-        'accent_muted':   '#1a1835',
-        'accent_soft':    '#12122a',
-        'success_soft':   '#0d2e28',
-        'green':          '#34d399',
-        'green_glow':     '#6ee7b7',
-        'amber':          '#fbbf24',
-        'red':            '#f4506e',
-        'red_deep':       '#DC2626',
-        'blue':           '#46e6ff',
-        'gold':           '#c4b5fd',
-        'border':         '#252340',
-        'border_bright':  '#3d3580',
-        'separator':      '#18182e',
+        'bg_primary':     '#0c0e12',
+        'bg_secondary':   '#12151b',
+        'bg_card':        '#161a22',
+        'bg_hover':       '#1e232d',
+        'bg_inset':       '#0e1116',
+        'text_primary':   '#e8eaed',
+        'text_secondary': '#a8b0bd',
+        'text_muted':     '#6b7280',
+        'accent':         '#3ddc84',
+        'accent_light':   '#5ee8a0',
+        'accent_hover':   '#2fc574',
+        'accent_deep':    '#1a5c3a',
+        'accent_glow':    '#3ddc84',
+        'accent_muted':   '#13241c',
+        'accent_soft':    '#141a17',
+        'success_soft':   '#13241c',
+        'green':          '#3ddc84',
+        'green_glow':     '#5ee8a0',
+        'amber':          '#f5b942',
+        'red':            '#ef5350',
+        'red_deep':       '#c62828',
+        'blue':           '#5b9bff',
+        'gold':           '#e6c86e',
+        'border':         '#232833',
+        'border_bright':  '#333a48',
+        'separator':      '#1a1e26',
     }
 
     FONTS = {
-        'title':    ('Segoe UI', 11, 'bold'),
-        'subtitle': ('Segoe UI', 8),
+        'title':    ('Segoe UI Semibold', 12),
+        'subtitle': ('Segoe UI', 9),
         'body':     ('Segoe UI', 10),
-        'small':    ('Segoe UI', 8),
-        'mono':     ('Consolas', 8),
-        'label_sm': ('Segoe UI', 7, 'bold'),
+        'small':    ('Segoe UI', 9),
+        'mono':     ('Consolas', 9),
+        'label_sm': ('Segoe UI', 8, 'bold'),
         'phase':    ('Segoe UI', 10),
-        'done':     ('Segoe UI', 13, 'bold'),
-        'big_pct':  ('Segoe UI', 52, 'bold'),
+        'done':     ('Segoe UI Semibold', 14),
+        'big_pct':  ('Segoe UI', 52),
     }
+
+    # Modo calmo: desactiva sistema solar / partículas / shimmer / nebulosa
+    # animada. El escaneo muestra una barra limpia. True por defecto en el
+    # rediseño; ponelo en False para volver a las animaciones cósmicas.
+    CALM = True
 
     _style_applied = False
     _status_badge = None
@@ -304,32 +313,77 @@ class ModernUI:
     # ══════════════════════════════════════════════════════════════════════
     @classmethod
     def _paint_nebula_on_canvas(cls, canvas, tag='nebula'):
-        """Gradiente cósmico en un canvas (reutilizable en root y sección de escaneo)."""
+        """Fondo de sección. En modo calmo: plano. Si no: gradiente sutil."""
         canvas.delete(tag)
+        if getattr(cls, 'CALM', False):
+            return
         w = max(canvas.winfo_width(), 400)
         h = max(canvas.winfo_height(), 320)
-        canvas.create_oval(
-            -w * 0.2, -h * 0.15, w * 0.55, h * 0.45,
-            fill='#15122a', outline='', tags=tag)
-        canvas.create_oval(
-            w * 0.35, -h * 0.1, w * 1.1, h * 0.42,
-            fill='#1a1038', outline='', tags=tag)
-        canvas.create_oval(
-            w * 0.1, h * 0.45, w * 0.9, h * 1.05,
-            fill='#0c1428', outline='', tags=tag)
-        canvas.create_oval(
-            w * 0.25, h * 0.2, w * 0.75, h * 0.55,
-            fill='#121830', outline='', tags=tag)
+        for (x0, y0, x1, y1, col) in (
+            (-w * 0.2, -h * 0.15, w * 0.55, h * 0.45, '#12151b'),
+            (w * 0.35, -h * 0.1, w * 1.1, h * 0.42, '#12161d'),
+            (w * 0.1, h * 0.45, w * 0.9, h * 1.05, '#0f1319'),
+        ):
+            canvas.create_oval(x0, y0, x1, y1, fill=col, outline='', tags=tag)
+
+    @classmethod
+    def _floating_bg_reduced_motion(cls) -> bool:
+        # A diferencia de _scan_bg_reduced_motion(), esto NO mira CALM: el
+        # fondo de menú animado es lo que pidió el usuario explícitamente,
+        # así que solo se apaga por la preferencia de accesibilidad.
+        try:
+            return bool(getattr(cls, '_ui_prefs', {}).get('ui_reduced_motion'))
+        except Exception:
+            return False
+
+    @classmethod
+    def _stop_floating_bg_anim(cls):
+        if cls._bg_anim_id and cls._root_ref:
+            try:
+                cls._root_ref.after_cancel(cls._bg_anim_id)
+            except Exception:
+                pass
+        cls._bg_anim_id = None
+
+    @classmethod
+    def _tick_floating_bg(cls, canvas, image_id, frames, idx):
+        try:
+            if not canvas.winfo_exists():
+                return
+            canvas.itemconfig(image_id, image=frames[idx % len(frames)])
+            canvas.tag_lower('menu_bg')
+            cls._bg_anim_id = canvas.after(
+                85, lambda: cls._tick_floating_bg(canvas, image_id, frames, idx + 1))
+        except Exception:
+            pass
 
     @classmethod
     def _create_floating_bg(cls, parent):
-        """Fondo cósmico en la ventana raíz."""
+        """Fondo cósmico en la ventana raíz: GIF animado (mismo asset que la
+        pantalla de escaneo) con fallback a la nebulosa estática si falta PIL
+        o el archivo, o si el usuario pidió movimiento reducido."""
         C = cls.COLORS
         canvas = tk.Canvas(parent, bg=C['bg_primary'], highlightthickness=0, bd=0)
         canvas.place(x=0, y=0, relwidth=1.0, relheight=1.0)
         cls._bg_canvas = canvas
         cls._shield_images = []
         cls._shield_items = []
+
+        frames = cls._load_scan_bg_frames()
+        if frames:
+            def _place_img(_e=None):
+                canvas.delete('menu_bg')
+                cw = max(canvas.winfo_width(), 620)
+                ch = max(canvas.winfo_height(), 480)
+                image_id = canvas.create_image(cw // 2, ch // 2, image=frames[0], tags='menu_bg')
+                canvas.tag_lower('menu_bg')
+                cls._stop_floating_bg_anim()
+                if len(frames) > 1 and not cls._floating_bg_reduced_motion():
+                    cls._tick_floating_bg(canvas, image_id, frames, 1)
+
+            canvas.bind('<Configure>', _place_img)
+            canvas.after(80, _place_img)
+            return canvas
 
         def _paint(_e=None):
             cls._paint_nebula_on_canvas(canvas)
@@ -340,6 +394,8 @@ class ModernUI:
 
     @classmethod
     def _scan_bg_reduced_motion(cls) -> bool:
+        if getattr(cls, 'CALM', False):
+            return True
         try:
             return bool(getattr(cls, '_ui_prefs', {}).get('ui_reduced_motion'))
         except Exception:
@@ -528,7 +584,7 @@ class ModernUI:
             except Exception:
                 pass
             try:
-                border_colorref = ctypes.c_int(0x00FF7B8B)  # BGR #8b7bff
+                border_colorref = ctypes.c_int(0x0084DC3D)  # BGR de #3ddc84
                 ctypes.windll.dwmapi.DwmSetWindowAttribute(
                     hwnd, 34, ctypes.byref(border_colorref), ctypes.sizeof(border_colorref))
             except Exception:
@@ -1179,6 +1235,115 @@ class ModernUI:
             return
         try:
             lbl.config(text=text[:120] if text else '')
+        except Exception:
+            pass
+
+    @classmethod
+    def show_verdict_card(cls, parent, verdict_data):
+        """Tarjeta de veredicto SS (v1.8) — encima del dump de hallazgos."""
+        if not parent or not verdict_data:
+            return
+        try:
+            import tkinter as tk
+            from tkinter import Toplevel
+        except Exception:
+            return
+
+        C = cls.COLORS
+        bg = C.get('bg_primary', '#09090b')
+        panel = C.get('bg_secondary', '#121214')
+        txt = C.get('text_primary', '#f5f5f5')
+        muted = C.get('text_secondary', '#a1a1aa')
+        accent = C.get('accent', '#B87333')
+        green = C.get('green', '#22c55e')
+        red = C.get('red_deep', '#DC2626')
+        amber = C.get('amber', '#F59E0B')
+
+        v = str(verdict_data.get('verdict') or '—')
+        risk = verdict_data.get('risk_score', 0)
+        color = green
+        if v in ('LIKELY_CHEATER', 'SUSPICIOUS'):
+            color = amber
+        if v == 'CONFIRMED_CHEATER':
+            color = red
+
+        win = Toplevel(parent)
+        win.title(f"Argus Veredicto — {v}")
+        win.configure(bg=bg)
+        win.geometry("520x420")
+        win.attributes('-topmost', True)
+
+        tk.Label(win, text="VEREDICTO ARGUS", font=('Segoe UI', 10, 'bold'),
+                 bg=bg, fg=accent).pack(pady=(16, 4))
+        tk.Label(win, text=v, font=('Segoe UI', 22, 'bold'),
+                 bg=bg, fg=color).pack()
+        tk.Label(win, text=f"Risk score: {risk}/100",
+                 font=('Segoe UI', 12), bg=bg, fg=txt).pack(pady=(4, 8))
+
+        action = verdict_data.get('staff_action') or ''
+        if action:
+            tk.Label(win, text=f"Acción: {action}", font=('Segoe UI', 10),
+                     bg=bg, fg=muted, wraplength=460).pack(pady=(0, 10))
+
+        box = tk.Frame(win, bg=panel, padx=12, pady=10)
+        box.pack(fill='both', expand=True, padx=16, pady=8)
+        tk.Label(box, text="Razones / kill-chain", font=('Segoe UI', 9, 'bold'),
+                 bg=panel, fg=accent).pack(anchor='w')
+        for r in (verdict_data.get('reasons') or [])[:6]:
+            tk.Label(box, text=f"· {r}", font=('Segoe UI', 9),
+                     bg=panel, fg=txt, wraplength=440, justify='left').pack(anchor='w')
+        for step in (verdict_data.get('kill_chain') or [])[:5]:
+            tk.Label(
+                box,
+                text=f"[{step.get('phase', '?')}] {step.get('detail', '')}",
+                font=('Segoe UI', 8), bg=panel, fg=muted, wraplength=440, justify='left',
+            ).pack(anchor='w')
+
+        tl = verdict_data.get('timeline') or []
+        if tl:
+            tk.Label(box, text="Timeline (top)", font=('Segoe UI', 9, 'bold'),
+                     bg=panel, fg=accent).pack(anchor='w', pady=(8, 2))
+            for ev in tl[:5]:
+                ts = ev.get('timestamp') or '—'
+                tk.Label(
+                    box,
+                    text=f"{ts} · {ev.get('detail', '')}",
+                    font=('Segoe UI', 8), bg=panel, fg=muted, wraplength=440, justify='left',
+                ).pack(anchor='w')
+
+        topf = verdict_data.get('top_findings') or []
+        if topf:
+            tk.Label(box, text="Top 5 hallazgos", font=('Segoe UI', 9, 'bold'),
+                     bg=panel, fg=accent).pack(anchor='w', pady=(8, 2))
+            for i, f in enumerate(topf[:5], 1):
+                name = (f.get('nombre') or '?')[:48]
+                al = f.get('alerta') or ''
+                ts = (f.get('timestamp') or '')[:16]
+                h = (f.get('file_hash') or '')[:10]
+                rel = f.get('related_count') or (f.get('extra') or {}).get('related_count') or 0
+                combo = f.get('combination_penalty') or (f.get('extra') or {}).get('combination_penalty') or ''
+                extra = f" [{al}]"
+                if ts:
+                    extra += f" {ts}"
+                if h:
+                    extra += f" #{h}"
+                if rel:
+                    extra += f" +{rel}rel"
+                if combo:
+                    extra += f" combo={combo}"
+                tk.Label(
+                    box,
+                    text=f"{i}. {name}{extra}",
+                    font=('Segoe UI', 8), bg=panel, fg=txt, wraplength=440, justify='left',
+                ).pack(anchor='w')
+
+        tk.Button(
+            win, text="Entendido", command=win.destroy,
+            bg=accent, fg='#111', font=('Segoe UI', 10, 'bold'),
+            relief='flat', padx=16, pady=6,
+        ).pack(pady=12)
+        try:
+            win.focus_force()
         except Exception:
             pass
 

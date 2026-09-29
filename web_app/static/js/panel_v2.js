@@ -1,0 +1,648 @@
+/* Argus Panel v2 — router + secciones.
+ * Consume las APIs existentes del panel. El backend no cambia. */
+(function () {
+  'use strict';
+
+  var view = document.getElementById('view');
+  var titleEl = document.getElementById('view-title');
+  var subEl = document.getElementById('view-sub');
+  var CFG = window.ARGUS_V2 || {};
+
+  /* ---- helpers -------------------------------------------------------- */
+  function $(s, r) { return (r || document).querySelector(s); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function num(n) { return n == null || n === '' ? '–' : Number(n).toLocaleString('es'); }
+  function fmtDate(s) {
+    if (!s) return '–';
+    var d = new Date(String(s).replace(' ', 'T'));
+    return isNaN(d) ? esc(s) : d.toLocaleString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+  function ago(s) {
+    if (!s) return '';
+    var d = new Date(String(s).replace(' ', 'T')); if (isNaN(d)) return '';
+    var m = Math.floor((Date.now() - d) / 60000);
+    if (m < 1) return 'ahora'; if (m < 60) return 'hace ' + m + ' min';
+    var h = Math.floor(m / 60); if (h < 24) return 'hace ' + h + ' h';
+    return 'hace ' + Math.floor(h / 24) + ' d';
+  }
+  function skel() { return '<div class="skeleton"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>'; }
+  function emptyBox(txt, icon) { return '<div class="empty"><div class="big">' + (icon || '∅') + '</div>' + esc(txt || 'Sin datos.') + '</div>'; }
+  function toast(msg, isErr) {
+    var t = document.createElement('div');
+    t.className = 'toast' + (isErr ? ' err' : '');
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function () { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; }, 2600);
+    setTimeout(function () { t.remove(); }, 3000);
+  }
+
+  var CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+  async function api(path, opts) {
+    opts = opts || {};
+    var headers = Object.assign({ 'Accept': 'application/json', 'Content-Type': 'application/json' }, opts.headers || {});
+    if (CSRF && opts.method && /^(POST|PUT|PATCH|DELETE)$/i.test(opts.method)) headers['X-CSRFToken'] = CSRF;
+    var r = await fetch(path, Object.assign({ credentials: 'same-origin' }, opts, { headers: headers }));
+    if (r.status === 401 || r.redirected && /\/login/.test(r.url)) { location.href = '/login'; throw new Error('401'); }
+    var ct = r.headers.get('content-type') || '';
+    var data = ct.indexOf('json') >= 0 ? await r.json() : await r.text();
+    if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+    return data;
+  }
+
+  function verdictBadge(v, risk) {
+    v = String(v || '').toLowerCase();
+    if (v === 'hack' || v === 'ban') return '<span class="badge crit">HACK</span>';
+    if (v === 'suspicious' || v === 'sospechoso') return '<span class="badge susp">SOSPECHOSO</span>';
+    if (v === 'clean' || v === 'limpio' || v === 'legit') return '<span class="badge clean">LIMPIO</span>';
+    if (risk != null && risk !== '') {
+      if (risk >= 70) return '<span class="badge crit">RIESGO ' + risk + '</span>';
+      if (risk >= 30) return '<span class="badge susp">RIESGO ' + risk + '</span>';
+      return '<span class="badge clean">RIESGO ' + risk + '</span>';
+    }
+    return '<span class="badge pend">PENDIENTE</span>';
+  }
+  function alertBadge(lvl) {
+    lvl = String(lvl || '').toUpperCase();
+    if (lvl === 'CRITICAL') return '<span class="badge crit">CRÍTICO</span>';
+    if (lvl === 'SUSPICIOUS' || lvl === 'SOSPECHOSO' || lvl === 'HACKS') return '<span class="badge susp">SOSPECHOSO</span>';
+    if (lvl === 'POCO_SOSPECHOSO' || lvl === 'LOW') return '<span class="badge plain pend">BAJO</span>';
+    return '<span class="badge plain pend">' + esc(lvl || 'INFO') + '</span>';
+  }
+
+  function scanTable(rows, opts) {
+    opts = opts || {};
+    if (!rows || !rows.length) return emptyBox('Sin escaneos.', '≣');
+    return '<div class="table-wrap"><table class="tbl tbl-scans"><thead><tr>' +
+      '<th>Máquina</th><th>Usuario MC</th><th>Veredicto</th><th class="num">Hallazgos</th>' +
+      (opts.dur ? '<th class="num">Duración</th>' : '') + '<th class="num">Fecha</th></tr></thead><tbody>' +
+      rows.map(function (s) {
+        var risk = s.risk_score;
+        var sev = (String(s.verdict || '').toLowerCase() === 'hack' || risk >= 70) ? 'hi'
+                : (String(s.verdict || '').toLowerCase() === 'suspicious' || risk >= 30) ? 'mid' : 'lo';
+        var n = s.issues_found || 0;
+        return '<tr data-scan="' + esc(s.id) + '" data-sev="' + sev + '" tabindex="0">' +
+          '<td class="strong">' + esc(s.machine_name || s.machine_id || '–') + '</td>' +
+          '<td class="muted">' + esc(s.minecraft_username || s.mc_username || '–') + '</td>' +
+          '<td>' + verdictBadge(s.verdict, risk) + '</td>' +
+          '<td class="num mono' + (n ? '' : ' muted') + '">' + num(n) + '</td>' +
+          (opts.dur ? '<td class="num mono muted">' + (s.scan_duration ? Math.round(s.scan_duration) + 's' : '–') + '</td>' : '') +
+          '<td class="num muted" title="' + esc(fmtDate(s.started_at || s.created_at)) + '">' + esc(ago(s.started_at || s.created_at) || fmtDate(s.started_at)) + '</td>' +
+        '</tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+
+  /* ================================================================== *
+   *  INICIO
+   * ================================================================== */
+  async function renderInicio() {
+    titleEl.textContent = 'Inicio'; subEl.textContent = 'resumen operativo';
+    view.innerHTML = '<div class="kpi-grid">' + Array(6).fill('<div class="kpi">' + skel() + '</div>').join('') + '</div>';
+    // Los 3 fetch son independientes → en paralelo, no en serie.
+    var pStats = api('/api/statistics').catch(function () { return {}; });
+    var pExt = api('/api/dashboard/extended').catch(function () { return {}; });
+    var pRecent = api('/api/scans?limit=8').catch(function () { return null; });
+    var st = await pStats, ext = await pExt;
+
+    var v = ext.verdicts || {};
+    var kpis = [
+      ['Escaneos totales', num(st.total_scans), 'good', ''],
+      ['En curso ahora', num(st.active_scans), '', ''],
+      ['Detecciones críticas', num(st.severe_detections), 'alert', ''],
+      ['Máquinas únicas', num(st.unique_machines), '', ''],
+      ['Veredictos hack', num(v.hack), 'alert', num(v.pending) + ' sin revisar'],
+      ['Baneos registrados', num(st.total_bans), '', ext.avg_duration ? 'scan ~' + Math.round(ext.avg_duration) + 's' : '']
+    ];
+    view.innerHTML =
+      '<div class="kpi-grid">' + kpis.map(function (k) {
+        return '<div class="kpi ' + k[2] + '"><div class="k-label">' + k[0] + '</div>' +
+          '<div class="k-value">' + k[1] + '</div>' +
+          (k[3] ? '<div class="k-sub">' + k[3] + '</div>' : '') + '</div>';
+      }).join('') + '</div>' +
+      (Array.isArray(ext.top_issues) && ext.top_issues.length ?
+        '<div class="panel-card"><header>Hacks más vistos <span class="grow"></span><span class="muted">30 días</span></header><div class="body pad"><ol class="rank">' +
+        ext.top_issues.map(function (t, i) {
+          return '<li><span class="rank-n">' + (i + 1) + '</span><span class="rank-name">' + esc(t.name) + '</span>' +
+            '<span class="rank-bar"><i style="width:' + Math.max(6, Math.round(100 * (t.count / (ext.top_issues[0].count || 1)))) + '%"></i></span>' +
+            '<span class="rank-c mono">' + num(t.count) + '</span></li>';
+        }).join('') + '</ol></div></div>' : '') +
+      '<div class="panel-card"><header>Escaneos recientes <span class="grow"></span>' +
+        '<a class="btn sm" href="#/revision">Ver todos →</a></header>' +
+        '<div class="body" id="recent">' + skel() + '</div></div>';
+
+    var d = await pRecent;
+    $('#recent').innerHTML = d ? scanTable(d.scans || d.results || d || []) : emptyBox('No se pudo cargar.', '⚠');
+  }
+
+  /* ================================================================== *
+   *  REVISIÓN — lista + detalle
+   * ================================================================== */
+  var rev = { search: '', verdict: '', limit: 40, offset: 0 };
+
+  async function renderRevision() {
+    titleEl.textContent = 'Revisión'; subEl.textContent = 'escaneos y veredictos';
+    view.innerHTML =
+      '<div class="toolbar">' +
+        '<input class="input" id="rv-q" placeholder="Buscar máquina, usuario o IP…" value="' + esc(rev.search) + '" style="min-width:280px">' +
+        '<select class="select" id="rv-v">' +
+          ['', 'hack', 'suspicious', 'clean', 'pending'].map(function (o) {
+            return '<option value="' + o + '"' + (o === rev.verdict ? ' selected' : '') + '>' +
+              ({ '': 'Todos los veredictos', hack: 'Hack', suspicious: 'Sospechoso', clean: 'Limpio', pending: 'Pendiente' })[o] + '</option>';
+          }).join('') +
+        '</select>' +
+        '<button class="btn primary" id="rv-go">Filtrar</button>' +
+        '<span class="grow"></span>' +
+        '<span class="rv-range mono muted" id="rv-range"></span>' +
+        '<button class="btn sm ico-btn" id="rv-prev" aria-label="Anteriores">←</button>' +
+        '<button class="btn sm ico-btn" id="rv-next" aria-label="Siguientes">→</button>' +
+      '</div>' +
+      '<div class="panel-card"><div class="body" id="rv-body">' + skel() + '</div></div>';
+    var apply = function () {
+      rev.search = $('#rv-q').value.trim(); rev.verdict = $('#rv-v').value; rev.offset = 0; loadRevision();
+    };
+    $('#rv-go').onclick = apply;
+    $('#rv-v').onchange = apply;
+    $('#rv-q').addEventListener('keydown', function (e) { if (e.key === 'Enter') apply(); });
+    $('#rv-prev').onclick = function () { if (rev.offset > 0) { rev.offset = Math.max(0, rev.offset - rev.limit); loadRevision(); } };
+    $('#rv-next').onclick = function () { if (!rev._end) { rev.offset += rev.limit; loadRevision(); } };
+    loadRevision();
+  }
+  async function loadRevision() {
+    var q = new URLSearchParams({ limit: rev.limit, offset: rev.offset });
+    if (rev.search) q.set('search', rev.search);
+    if (rev.verdict) q.set('verdict', rev.verdict);
+    $('#rv-body').innerHTML = skel();
+    $('#rv-prev').disabled = true; $('#rv-next').disabled = true;
+    try {
+      var d = await api('/api/scans?' + q);
+      var list = d.scans || d.results || d || [];
+      rev._end = list.length < rev.limit;
+      $('#rv-body').innerHTML = scanTable(list, { dur: true });
+      var from = list.length ? rev.offset + 1 : 0;
+      $('#rv-range').textContent = from + '–' + (rev.offset + list.length);
+      $('#rv-prev').disabled = rev.offset === 0;
+      $('#rv-next').disabled = rev._end;
+    } catch (e) {
+      $('#rv-body').innerHTML = emptyBox('Error: ' + e.message, '⚠');
+      $('#rv-range').textContent = '';
+    }
+  }
+
+  async function renderScan(id) {
+    titleEl.textContent = 'Scan #' + id; subEl.textContent = '';
+    view.innerHTML = '<a class="btn sm ghost" href="#/revision">← volver</a><div class="panel-card" style="margin-top:14px"><div class="body pad">' + skel() + '</div></div>';
+    // scan + notas en paralelo (notas es independiente del detalle)
+    var pNotes = api('/api/scans/' + id + '/notes').catch(function () { return null; });
+    var s;
+    try { s = await api('/api/scans/' + id); }
+    catch (e) { view.innerHTML = emptyBox('No se pudo cargar el scan: ' + e.message, '⚠'); return; }
+
+    var results = s.results || s.issues || [];
+    var meta = [
+      ['Usuario MC', s.minecraft_username], ['Máquina', s.machine_name],
+      ['IP', s.ip_address], ['País', s.country], ['SO', s.os_name || s.os],
+      ['Archivos escaneados', num(s.total_files_scanned)],
+      ['Duración', s.scan_duration ? Math.round(s.scan_duration) + 's' : '–'],
+      ['Inicio', fmtDate(s.started_at)]
+    ];
+    view.innerHTML =
+      '<a class="btn sm ghost" href="#/revision">← volver a Revisión</a>' +
+      '<div class="row" style="margin:16px 0 20px;gap:14px">' +
+        '<h1 style="font-size:24px">' + esc(s.machine_name || ('Scan #' + id)) + '</h1>' +
+        verdictBadge(s.verdict, s.risk_score) +
+      '</div>' +
+      '<div class="grid-2">' +
+        '<div class="panel-card"><header>Detalle</header><div class="body pad"><div class="stack">' +
+          meta.map(function (m) {
+            return '<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border-soft)">' +
+              '<span class="muted">' + m[0] + '</span><span>' + esc(m[1] == null || m[1] === '' ? '–' : m[1]) + '</span></div>';
+          }).join('') +
+        '</div></div></div>' +
+        '<div class="panel-card"><header>Veredicto' +
+          (s.verdict ? ' <span class="grow"></span>' + verdictBadge(s.verdict, s.risk_score) : '') +
+          '</header><div class="body pad">' +
+          '<div class="stack" style="gap:12px">' +
+            '<div class="risk-readout"><span class="muted">RIESGO</span>' +
+              '<span class="risk-track"><i style="width:' + Math.min(100, Math.max(0, s.risk_score || 0)) + '%" class="' +
+                ((s.risk_score || 0) >= 70 ? 'hi' : (s.risk_score || 0) >= 30 ? 'mid' : 'lo') + '"></i></span>' +
+              '<b class="mono">' + (s.risk_score != null ? s.risk_score : '–') + '</b></div>' +
+            '<div class="vd-seg">' +
+              ['hack', 'clean', 'pending'].map(function (vv) {
+                var cur = String(s.verdict || '').toLowerCase() === vv;
+                return '<button class="vd vd-' + vv + (cur ? ' on' : '') + '" data-v="' + vv + '">' +
+                  ({ hack: 'Hack', clean: 'Limpio', pending: 'Pendiente' })[vv] + '</button>';
+              }).join('') +
+            '</div>' +
+            '<textarea class="input" id="vd-reason" rows="2" placeholder="Motivo (opcional)">' + esc(s.verdict_reason || '') + '</textarea>' +
+            '<div id="vd-status" class="muted" style="font-size:12.5px;font-family:var(--mono)"></div>' +
+          '</div>' +
+        '</div></div>' +
+      '</div>' +
+      '<div class="panel-card"><header>Hallazgos <span class="grow"></span><span class="muted mono">' + results.length + '</span></header>' +
+        '<div class="body">' + (results.length ?
+          '<div class="table-wrap"><table class="tbl tbl-find"><thead><tr><th>Nivel</th><th>Hallazgo</th><th>Ruta</th><th class="num">Conf.</th><th>Patrones</th></tr></thead><tbody>' +
+          results.map(function (r) {
+            var conf = r.confidence != null ? Math.round(r.confidence * (r.confidence <= 1 ? 100 : 1)) : null;
+            var pats = (r.detected_patterns || []).join(', ');
+            return '<tr>' +
+              '<td>' + alertBadge(r.alert_level) + '</td>' +
+              '<td class="strong" title="' + esc(r.issue_name || '') + '">' + esc(r.issue_name || r.name || '–') + '</td>' +
+              '<td class="muted mono ellip" title="' + esc(r.issue_path || '') + '">' + esc(r.issue_path || '–') + '</td>' +
+              '<td class="num mono' + (conf != null && conf >= 70 ? ' hot' : '') + '">' + (conf != null ? conf + '%' : '–') + '</td>' +
+              '<td class="muted mono ellip" title="' + esc(pats) + '">' + esc(pats || '–') + '</td>' +
+            '</tr>';
+          }).join('') + '</tbody></table></div>' : emptyBox('Sin hallazgos — scan limpio.', '✔')) +
+        '</div></div>' +
+      '<div class="panel-card"><header>Notas del staff</header><div class="body pad" id="notes">' + skel() + '</div></div>';
+
+    // veredicto
+    view.querySelectorAll('.vd').forEach(function (b) {
+      b.onclick = async function () {
+        var vv = b.dataset.v;
+        var reason = $('#vd-reason').value.trim();
+        $('#vd-status').textContent = 'Guardando…';
+        try {
+          await api('/api/scans/' + id + '/verdict', {
+            method: 'POST',
+            body: JSON.stringify({ verdict: vv, reason: reason })
+          });
+          toast('Veredicto guardado: ' + vv);
+          $('#vd-status').innerHTML = 'Guardado ' + verdictBadge(vv) + (reason ? ' · ' + esc(reason) : '');
+          view.querySelectorAll('.vd').forEach(function (x) { x.classList.toggle('on', x === b); });
+          var hdr = view.querySelector('.grid-2 .panel-card header');
+          if (hdr && !hdr.querySelector('.badge')) hdr.insertAdjacentHTML('beforeend', '<span class="grow"></span>' + verdictBadge(vv));
+        } catch (e) { $('#vd-status').textContent = 'Error: ' + e.message; toast('No se pudo guardar', true); }
+      };
+    });
+    // notas
+    try {
+      var nd = await pNotes;
+      if (!nd) throw new Error('sin datos');
+      var notes = nd.notes || [];
+      $('#notes').innerHTML = (notes.length ? notes.map(function (n) {
+        return '<div style="padding:8px 0;border-bottom:1px solid var(--border-soft)">' +
+          '<div class="muted" style="font-size:12.5px">' + esc(n.author || '?') + ' · ' + fmtDate(n.created_at) + '</div>' +
+          '<div>' + esc(n.body) + '</div></div>';
+      }).join('') : '<div class="muted" style="font-size:13px;margin-bottom:10px">Sin notas.</div>') +
+        '<div class="row" style="margin-top:12px"><input class="input" id="note-in" placeholder="Agregar nota…" style="flex:1">' +
+        '<button class="btn primary sm" id="note-add">Agregar</button></div>';
+      var add = $('#note-add');
+      if (add) add.onclick = async function () {
+        var body = $('#note-in').value.trim(); if (!body) return;
+        try {
+          await api('/api/scans/' + id + '/notes', { method: 'POST', body: JSON.stringify({ body: body }) });
+          renderScan(id);
+        } catch (e) { toast('No se pudo agregar la nota', true); }
+      };
+    } catch (e) { $('#notes').innerHTML = emptyBox('Notas no disponibles.'); }
+  }
+
+  /* ================================================================== *
+   *  SERVIDORES — tokens de escaneo (SS) + versión del scanner
+   * ================================================================== */
+  async function renderServidores() {
+    titleEl.textContent = 'Servidores'; subEl.textContent = 'tokens de Screen Share';
+    view.innerHTML =
+      '<div class="toolbar">' +
+        '<button class="btn primary" id="sv-new">+ Generar token SS</button>' +
+        '<span class="grow"></span>' +
+        '<span class="pill" id="sv-ver">SCANNER …</span>' +
+      '</div>' +
+      '<div id="sv-fresh"></div>' +
+      '<div class="panel-card"><header>Tokens activos <span class="grow"></span>' +
+        '<button class="btn sm ico-btn" id="sv-reload" aria-label="Recargar">↻</button></header>' +
+        '<div class="body" id="sv-body">' + skel() + '</div></div>';
+    $('#sv-reload').onclick = loadServidores;
+    $('#sv-new').onclick = async function () {
+      $('#sv-new').disabled = true; $('#sv-new').textContent = 'Generando…';
+      try {
+        var r = await api('/api/tokens', { method: 'POST' });
+        var code = r.short_code || '——';
+        $('#sv-fresh').innerHTML =
+          '<div class="handoff">' +
+            '<div class="handoff-head"><span class="hud">TOKEN NUEVO</span>' +
+              '<span class="muted">expira en 30 min</span></div>' +
+            '<div class="handoff-code">' + esc(code).split('').map(function (ch) {
+              return '<span>' + esc(ch) + '</span>';
+            }).join('') + '</div>' +
+            '<div class="handoff-foot"><code class="mono">' + esc(r.token || '') + '</code>' +
+              '<button class="btn sm" id="sv-copy">Copiar</button></div>' +
+          '</div>';
+        var cp = $('#sv-copy');
+        if (cp) cp.onclick = function () {
+          try { navigator.clipboard.writeText(r.token || code); toast('Copiado'); }
+          catch (e) { toast('No se pudo copiar', true); }
+        };
+        toast('Token generado: ' + code);
+        loadServidores();
+      } catch (e) { toast('No se pudo generar: ' + e.message, true); }
+      $('#sv-new').disabled = false; $('#sv-new').textContent = '+ Generar token SS';
+    };
+    // la versión no bloquea la carga de tokens: se actualiza sola al llegar.
+    api('/api/scanner/version')
+      .then(function (v) { $('#sv-ver').textContent = 'scanner ' + (v.version || v.latest || CFG.scannerVersion || '?'); })
+      .catch(function () { $('#sv-ver').textContent = 'scanner ' + (CFG.scannerVersion || '?'); });
+    loadServidores();
+  }
+  async function loadServidores() {
+    $('#sv-body').innerHTML = skel();
+    try {
+      var d = await api('/api/tokens');
+      var rows = (d.tokens || []).filter(function (t) { return t.is_active; });
+      if (!rows.length) { $('#sv-body').innerHTML = emptyBox('Sin tokens activos. Generá uno arriba.', '⬡'); return; }
+      $('#sv-body').innerHTML = '<div class="table-wrap"><table class="tbl"><thead><tr>' +
+        '<th>Código</th><th>Token</th><th>Usos</th><th>Creado por</th><th>Expira</th><th></th></tr></thead><tbody>' +
+        rows.map(function (t) {
+          return '<tr style="cursor:default">' +
+            '<td class="strong mono">' + esc(t.short_code || '—') + '</td>' +
+            '<td class="muted mono" style="max-width:220px;overflow:hidden;text-overflow:ellipsis">' + esc(t.token) + '</td>' +
+            '<td>' + esc(t.used_count || 0) + '/' + (t.max_uses === -1 ? '∞' : esc(t.max_uses)) + '</td>' +
+            '<td class="muted">' + esc(t.created_by || '—') + '</td>' +
+            '<td class="muted nowrap">' + esc(fmtDate(t.expires_at)) + '</td>' +
+            '<td><button class="btn sm danger" data-deltoken="' + esc(t.id) + '">borrar</button></td>' +
+          '</tr>';
+        }).join('') + '</tbody></table></div>';
+      $('#sv-body').querySelectorAll('[data-deltoken]').forEach(function (b) {
+        b.onclick = async function () {
+          try { await api('/api/tokens/' + b.dataset.deltoken, { method: 'DELETE' }); toast('Token borrado'); loadServidores(); }
+          catch (e) { toast('No se pudo borrar: ' + e.message, true); }
+        };
+      });
+    } catch (e) { $('#sv-body').innerHTML = emptyBox('Error: ' + e.message, '⚠'); }
+  }
+
+  /* ================================================================== *
+   *  EQUIPO — staff + invitaciones
+   * ================================================================== */
+  async function renderEquipo() {
+    titleEl.textContent = 'Equipo'; subEl.textContent = 'staff y accesos';
+    view.innerHTML =
+      '<div class="panel-card"><header>Staff <span class="grow"></span>' +
+        '<button class="btn sm" id="eq-ureload">↻</button></header>' +
+        '<div class="body" id="eq-users">' + skel() + '</div></div>' +
+      '<div class="panel-card"><header>Invitaciones (tokens de registro) <span class="grow"></span>' +
+        '<button class="btn primary sm" id="eq-invite">+ Nueva invitación</button></header>' +
+        '<div class="body pad" id="eq-inv-form" hidden>' +
+          '<div class="row" style="gap:9px;flex-wrap:wrap">' +
+            '<input class="input" id="eq-desc" placeholder="Para quién / nota" style="flex:1;min-width:200px">' +
+            '<select class="select" id="eq-hours"><option value="24">24 h</option><option value="72">3 días</option><option value="168">7 días</option></select>' +
+            '<label class="row muted" style="font-size:13px;gap:6px"><input type="checkbox" id="eq-admin"> admin</label>' +
+            '<button class="btn primary" id="eq-inv-go">Crear</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="body" id="eq-inv">' + skel() + '</div></div>';
+    $('#eq-ureload').onclick = loadEquipoUsers;
+    $('#eq-invite').onclick = function () { $('#eq-inv-form').hidden = !$('#eq-inv-form').hidden; };
+    $('#eq-inv-go').onclick = async function () {
+      try {
+        var r = await api('/api/company/registration-tokens', {
+          method: 'POST',
+          body: JSON.stringify({
+            description: $('#eq-desc').value.trim(),
+            expires_hours: parseInt($('#eq-hours').value, 10),
+            is_admin_token: $('#eq-admin').checked
+          })
+        });
+        toast('Invitación creada');
+        $('#eq-desc').value = ''; $('#eq-inv-form').hidden = true;
+        loadEquipoInv();
+      } catch (e) { toast('No se pudo crear: ' + e.message, true); }
+    };
+    loadEquipoUsers();
+    loadEquipoInv();
+  }
+  async function loadEquipoUsers() {
+    $('#eq-users').innerHTML = skel();
+    try {
+      var d = await api('/api/company/users');
+      var rows = d.users || [];
+      if (!rows.length) { $('#eq-users').innerHTML = emptyBox('Sin usuarios.', '◔'); return; }
+      $('#eq-users').innerHTML = '<div class="table-wrap"><table class="tbl"><thead><tr>' +
+        '<th>Usuario</th><th>Roles</th><th>Estado</th><th>Último acceso</th><th></th></tr></thead><tbody>' +
+        rows.map(function (u) {
+          var roles = Array.isArray(u.roles) ? u.roles.join(', ') : esc(u.roles || u.role || '');
+          var active = u.is_active !== false && u.is_active !== 0;
+          return '<tr style="cursor:default">' +
+            '<td class="strong">' + esc(u.username) + '</td>' +
+            '<td class="muted">' + esc(roles) + '</td>' +
+            '<td>' + (active ? '<span class="badge clean plain">activo</span>' : '<span class="badge pend plain">inactivo</span>') + '</td>' +
+            '<td class="muted nowrap">' + esc(fmtDate(u.last_login)) + '</td>' +
+            '<td class="row" style="gap:6px">' +
+              (active
+                ? '<button class="btn sm" data-deact="' + esc(u.id) + '">desactivar</button>'
+                : '<button class="btn sm" data-act="' + esc(u.id) + '">activar</button>') +
+              '<button class="btn sm danger" data-deluser="' + esc(u.id) + '">×</button>' +
+            '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+      var wire = function (sel, path, method, msg) {
+        $('#eq-users').querySelectorAll(sel).forEach(function (b) {
+          b.onclick = async function () {
+            var id = b.getAttribute(sel.replace(/[[\]]/g, ''));
+            if (sel.indexOf('deluser') >= 0 && !confirm('¿Eliminar este usuario?')) return;
+            try { await api(path.replace('{id}', id), { method: method }); toast(msg); loadEquipoUsers(); }
+            catch (e) { toast('Error: ' + e.message, true); }
+          };
+        });
+      };
+      wire('[data-deact]', '/api/company/users/{id}/deactivate', 'POST', 'Usuario desactivado');
+      wire('[data-act]', '/api/company/users/{id}/activate', 'POST', 'Usuario activado');
+      wire('[data-deluser]', '/api/company/users/{id}/delete', 'DELETE', 'Usuario eliminado');
+    } catch (e) { $('#eq-users').innerHTML = emptyBox('Error: ' + e.message, '⚠'); }
+  }
+  async function loadEquipoInv() {
+    $('#eq-inv').innerHTML = skel();
+    try {
+      var d = await api('/api/company/registration-tokens');
+      var rows = d.tokens || d.registration_tokens || [];
+      if (!rows.length) { $('#eq-inv').innerHTML = emptyBox('Sin invitaciones pendientes.'); return; }
+      $('#eq-inv').innerHTML = '<div class="table-wrap"><table class="tbl"><thead><tr>' +
+        '<th>Token</th><th>Nota</th><th>Admin</th><th>Expira</th><th>Estado</th></tr></thead><tbody>' +
+        rows.map(function (t) {
+          return '<tr style="cursor:default">' +
+            '<td class="mono" style="max-width:200px;overflow:hidden;text-overflow:ellipsis">' + esc(t.token) + '</td>' +
+            '<td>' + esc(t.description || '—') + '</td>' +
+            '<td>' + (t.is_admin_token ? 'sí' : '—') + '</td>' +
+            '<td class="muted nowrap">' + esc(fmtDate(t.expires_at)) + '</td>' +
+            '<td>' + (t.is_used || t.used_at ? '<span class="badge pend plain">usado</span>' : '<span class="badge clean plain">pendiente</span>') + '</td>' +
+          '</tr>';
+        }).join('') + '</tbody></table></div>';
+    } catch (e) { $('#eq-inv').innerHTML = emptyBox('Error: ' + e.message, '⚠'); }
+  }
+
+  /* ================================================================== *
+   *  ANTICHEAT — violaciones del plugin
+   * ================================================================== */
+  async function renderAnticheat() {
+    titleEl.textContent = 'Anticheat'; subEl.textContent = 'violaciones del plugin (24 h)';
+    view.innerHTML = '<div class="kpi-grid" id="ac-lvls">' + Array(4).fill('<div class="kpi">' + skel() + '</div>').join('') + '</div>' +
+      '<div class="grid-2">' +
+        '<div class="panel-card"><header>Checks más disparados</header><div class="body" id="ac-checks">' + skel() + '</div></div>' +
+        '<div class="panel-card"><header>Jugadores con más flags</header><div class="body" id="ac-players">' + skel() + '</div></div>' +
+      '</div>';
+    try {
+      var d = await api('/api/plugin/violations/stats');
+      var bl = d.by_level || {};
+      var order = [['CRITICAL', 'alert'], ['HIGH', 'alert'], ['MID', ''], ['LOW', '']];
+      $('#ac-lvls').innerHTML = order.map(function (o) {
+        return '<div class="kpi ' + o[1] + '"><div class="k-label">' + o[0] + '</div><div class="k-value">' + num(bl[o[0]] || 0) + '</div></div>';
+      }).join('');
+      var listBox = function (rows, key) {
+        if (!rows || !rows.length) return emptyBox('Sin violaciones en 24 h.', '◈');
+        var top = rows[0].c || 1;
+        return '<div class="body pad"><ol class="rank">' + rows.map(function (r, i) {
+          return '<li><span class="rank-n">' + (i + 1) + '</span>' +
+            '<span class="rank-name">' + esc(r[key]) + '</span>' +
+            '<span class="rank-bar"><i style="width:' + Math.max(6, Math.round(100 * (r.c / top))) + '%"></i></span>' +
+            '<span class="rank-c mono">' + num(r.c) + '</span></li>';
+        }).join('') + '</ol></div>';
+      };
+      $('#ac-checks').innerHTML = listBox(d.top_checks, 'check_name');
+      $('#ac-players').innerHTML = listBox(d.top_players, 'player_name');
+    } catch (e) {
+      view.innerHTML = '<div class="wip-note">No se pudo cargar estadísticas de violaciones: ' + esc(e.message) +
+        '. (El plugin sube violaciones vía <span class="mono">/api/plugin/violations</span> — si no hay servidor conectado, está vacío.)</div>';
+    }
+  }
+
+  /* ================================================================== *
+   *  ARGUS AI — scores de jugadores + acuerdo con el staff
+   * ================================================================== */
+  async function renderIA() {
+    titleEl.textContent = 'Argus AI'; subEl.textContent = 'oráculo y acuerdo con el staff';
+    view.innerHTML = '<div class="kpi-grid" id="ia-kpi">' + Array(3).fill('<div class="kpi">' + skel() + '</div>').join('') + '</div>' +
+      '<div class="panel-card"><header>Jugadores evaluados por la IA</header><div class="body" id="ia-players">' + skel() + '</div></div>';
+    var pAgree = api('/api/ai/agreement-rate').catch(function () { return {}; });
+    var pScores = api('/api/ai/scores').catch(function () { return null; });
+    try {
+      var ar = await pAgree;
+      $('#ia-kpi').innerHTML =
+        '<div class="kpi good"><div class="k-label">Acuerdo IA ↔ staff</div><div class="k-value">' + (ar.agreement_rate != null ? Math.round(ar.agreement_rate) + '%' : '–') + '</div>' +
+          '<div class="k-sub">' + num(ar.sample_size) + ' veredictos</div></div>' +
+        '<div class="kpi"><div class="k-label">IA correcta (confirmada)</div><div class="k-value">' + num(ar.confirmed_correct) + '</div></div>' +
+        '<div class="kpi alert"><div class="k-label">IA equivocada</div><div class="k-value">' + num(ar.confirmed_wrong) + '</div></div>';
+    } catch (e) { $('#ia-kpi').innerHTML = ''; }
+    try {
+      var d = await pScores;
+      if (!d) throw new Error('sin datos');
+      var rows = d.scores || [];
+      $('#ia-players').innerHTML = rows.length ? '<div class="table-wrap"><table class="tbl"><thead><tr>' +
+        '<th>Jugador</th><th>Score</th><th>Confianza</th><th>Acción sugerida</th><th>Evaluaciones</th><th>Última</th></tr></thead><tbody>' +
+        rows.map(function (r) {
+          var s = Math.round(r.score || 0);
+          var col = s >= 70 ? 'crit' : s >= 40 ? 'susp' : 'clean';
+          return '<tr style="cursor:default">' +
+            '<td class="strong">' + esc(r.player_name || r.player_uuid) + '</td>' +
+            '<td><span class="badge ' + col + ' plain">' + s + '</span></td>' +
+            '<td class="muted">' + (r.confidence != null ? Math.round(r.confidence * 100) + '%' : '–') + '</td>' +
+            '<td class="muted">' + esc(r.last_action || 'none') + '</td>' +
+            '<td class="muted">' + num(r.evaluations_count) + '</td>' +
+            '<td class="muted nowrap">' + esc(fmtDate(r.last_evaluated_at)) + '</td>' +
+          '</tr>';
+        }).join('') + '</tbody></table></div>' : emptyBox('La IA todavía no evaluó jugadores.', '✦');
+    } catch (e) { $('#ia-players').innerHTML = emptyBox('Error: ' + e.message, '⚠'); }
+  }
+
+  /* ================================================================== *
+   *  ADMINISTRACIÓN — empresas + métricas globales
+   * ================================================================== */
+  async function renderAdmin() {
+    titleEl.textContent = 'Administración'; subEl.textContent = 'empresas y plataforma';
+    view.innerHTML = '<div class="kpi-grid" id="ad-kpi">' + Array(4).fill('<div class="kpi">' + skel() + '</div>').join('') + '</div>' +
+      '<div class="panel-card"><header>Empresas</header><div class="body" id="ad-comp">' + skel() + '</div></div>';
+    var pStats = api('/api/statistics').catch(function () { return null; });
+    var pComp = api('/api/admin/companies').catch(function (e) { return { __err: e }; });
+    try {
+      var st = await pStats;
+      if (!st) throw new Error('sin datos');
+      $('#ad-kpi').innerHTML = [
+        ['Escaneos', num(st.total_scans)], ['Máquinas', num(st.unique_machines)],
+        ['Detecciones críticas', num(st.severe_detections)], ['Baneos', num(st.total_bans)]
+      ].map(function (k) { return '<div class="kpi"><div class="k-label">' + k[0] + '</div><div class="k-value">' + k[1] + '</div></div>'; }).join('');
+    } catch (e) { $('#ad-kpi').innerHTML = ''; }
+    try {
+      var d = await pComp;
+      if (d && d.__err) throw d.__err;
+      var rows = (d && d.companies) || [];
+      $('#ad-comp').innerHTML = rows.length ? '<div class="table-wrap"><table class="tbl"><thead><tr>' +
+        '<th>Empresa</th><th>Usuarios</th><th>Admins</th><th>Plan</th><th>Estado</th><th>Vence</th></tr></thead><tbody>' +
+        rows.map(function (co) {
+          return '<tr style="cursor:default">' +
+            '<td class="strong">' + esc(co.name) + '</td>' +
+            '<td>' + num(co.current_users) + '/' + num(co.max_users) + '</td>' +
+            '<td>' + num(co.current_admins) + '/' + num(co.max_admins) + '</td>' +
+            '<td class="muted">' + esc(co.subscription_type || '—') + '</td>' +
+            '<td>' + (co.is_active ? '<span class="badge clean plain">activa</span>' : '<span class="badge pend plain">inactiva</span>') + '</td>' +
+            '<td class="muted nowrap">' + esc(fmtDate(co.subscription_end_date)) + '</td>' +
+          '</tr>';
+        }).join('') + '</tbody></table></div>' : emptyBox('Sin empresas.', '⚙');
+    } catch (e) {
+      $('#ad-comp').innerHTML = '<div class="wip-note">Requiere rol de administrador de plataforma. ' + esc(e.message) + '</div>';
+    }
+  }
+
+  /* ================================================================== *
+   *  Router
+   * ================================================================== */
+  var routes = {
+    '/inicio': renderInicio,
+    '/revision': renderRevision,
+    '/anticheat': renderAnticheat,
+    '/ia': renderIA,
+    '/servidores': renderServidores,
+    '/equipo': renderEquipo,
+    '/admin': renderAdmin
+  };
+
+  function route() {
+    var h = location.hash.replace(/^#/, '') || '/inicio';
+    var mScan = h.match(/^\/scan\/(\d+)$/) || h.match(/^scan-(\d+)$/);
+    document.querySelectorAll('.nav-item').forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + (mScan ? '/revision' : h));
+    });
+    window.scrollTo(0, 0);
+    closeSidebar();
+    if (mScan) return renderScan(mScan[1]);
+    (routes[h] || renderInicio)();
+  }
+
+  /* sidebar móvil */
+  var sidebar = document.getElementById('sidebar');
+  var scrim = document.getElementById('scrim');
+  function closeSidebar() { if (sidebar) sidebar.classList.remove('open'); if (scrim) scrim.classList.remove('on'); }
+  function toggleSidebar() {
+    if (!sidebar) return;
+    var open = sidebar.classList.toggle('open');
+    if (scrim) scrim.classList.toggle('on', open);
+  }
+  var menuBtn = document.getElementById('menu-btn');
+  if (menuBtn) menuBtn.onclick = toggleSidebar;
+  if (scrim) scrim.onclick = closeSidebar;
+
+  view.addEventListener('click', function (e) {
+    var tr = e.target.closest('tr[data-scan]');
+    if (tr) location.hash = '/scan/' + tr.dataset.scan;
+  });
+  view.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    var tr = e.target.closest && e.target.closest('tr[data-scan]');
+    if (tr) location.hash = '/scan/' + tr.dataset.scan;
+  });
+
+  // sidebar: mostrar items admin según rol
+  (function () {
+    var role = String(CFG.staffRole || '').toLowerCase();
+    var isAdmin = CFG.isOwner || /owner|admin|superadmin/.test(role);
+    if (isAdmin) document.querySelectorAll('[data-admin]').forEach(function (el) { el.hidden = false; });
+    var u = CFG.user || {};
+    var name = u.username || u.name || 'staff';
+    $('#foot-user').textContent = name;
+    $('#foot-role').textContent = role || 'staff';
+    $('#foot-avatar').textContent = (name[0] || '?').toUpperCase();
+  })();
+
+  window.addEventListener('hashchange', route);
+  route();
+})();
