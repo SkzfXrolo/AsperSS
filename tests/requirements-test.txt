@@ -14,6 +14,8 @@ faker
 requests
 flask
 flask-wtf
+flask-cors
+cryptography
 axe-playwright-python
 python-afl
 pact-python

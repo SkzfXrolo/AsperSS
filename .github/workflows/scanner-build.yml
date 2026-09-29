@@ -38,7 +38,7 @@ jobs:
       - name: Build scanner (onefile)
         run: |
           set -euo pipefail
-          pyinstaller --clean --noconfirm --onefile ArgusScanner.spec
+          pyinstaller --clean --noconfirm ArgusScanner.spec
 
       - name: Upload scanner artifact
         uses: actions/upload-artifact@v4
