@@ -17,7 +17,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r tests/requirements-test.txt
       - name: Run perf regression
-        run: python -m pytest --no-cov tests/perf/test_regression.py -q
+        run: python -m pytest --no-cov -m perf tests/perf/test_regression.py -q
       - name: Lighthouse placeholder
         run: echo "Integrar Lighthouse CI cuando exista target estable"
       - name: Upload perf artifacts
