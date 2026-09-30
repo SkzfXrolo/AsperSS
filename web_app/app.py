@@ -21431,7 +21431,8 @@ def api_public_platform_flags():
 # ensemble_data, plugin_keys schema) mÃ¡s la notificaciÃ³n a Discord.
 # Esto se ejecuta cuando gunicorn importa el mÃ³dulo (no requiere __main__).
 # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-threading.Thread(target=init_db_async, daemon=True).start()
+if 'PYTEST_VERSION' not in os.environ:
+    threading.Thread(target=init_db_async, daemon=True).start()
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -21512,7 +21513,8 @@ def _ml_background_loop():
             _t.sleep(60)
 
 
-threading.Thread(target=_ml_background_loop, daemon=True).start()
+if 'PYTEST_VERSION' not in os.environ:
+    threading.Thread(target=_ml_background_loop, daemon=True).start()
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -21570,7 +21572,8 @@ def _daily_brief_loop():
         _t.sleep(60 * 60 * 24)  # 24h
 
 
-threading.Thread(target=_daily_brief_loop, daemon=True).start()
+if 'PYTEST_VERSION' not in os.environ:
+    threading.Thread(target=_daily_brief_loop, daemon=True).start()
 
 try:
     from argus_admin_api import register_argus_admin_routes as _register_argus_admin
