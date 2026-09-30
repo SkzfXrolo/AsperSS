@@ -22,21 +22,6 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.PlayerVelocityEvent;
 import org.bukkit.inventory.ItemStack;
 
-/**
- * Pack 47 — Bridge entre eventos Bukkit y el {@link PacketDataStore}.
- *
- * <p>Algunos datos viven naturalmente en eventos Bukkit y no en packets:
- * <ul>
- *   <li>{@link PlayerVelocityEvent}: el server ASIGNA velocity al cliente (knockback).
- *       Lo guardamos para que {@code VelocityCheck} compare contra el movimiento
- *       que el cliente envia en los proximos ticks.</li>
- *   <li>{@link PlayerTeleportEvent}: marca al jugador como "teleporting" durante
- *       1 segundo para que los checks de movement ignoren ese intervalo.</li>
- *   <li>{@link InventoryOpenEvent}/{@link InventoryCloseEvent}: estado de
- *       inventario abierto, usado por {@code InvMovePacketCheck}.</li>
- *   <li>{@link PlayerJoinEvent}/{@link PlayerQuitEvent}: lifecycle del state.</li>
- * </ul>
- */
 public final class PacketAnticheatBukkitBridge implements Listener {
 
     private final ArgusPlugin plugin;
@@ -63,11 +48,21 @@ public final class PacketAnticheatBukkitBridge implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent e) {
         store.remove(e.getPlayer().getUniqueId());
+        plugin.getAutoClickEngine().remove(e.getPlayer().getUniqueId());
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onTeleport(PlayerTeleportEvent e) {
         PacketDataStore.State s = store.get(e.getPlayer().getUniqueId());
+        s.teleporting = true;
+        s.teleportUntilMs = System.currentTimeMillis() + 1_500L;
+    }
+
+    /** Al bajarse, el server reubica al jugador junto al vehiculo: equivale a un teleport. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onVehicleExit(org.bukkit.event.vehicle.VehicleExitEvent e) {
+        if (!(e.getExited() instanceof org.bukkit.entity.Player p)) return;
+        PacketDataStore.State s = store.get(p.getUniqueId());
         s.teleporting = true;
         s.teleportUntilMs = System.currentTimeMillis() + 1_500L;
     }
@@ -80,7 +75,7 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         s.serverVelZ = e.getVelocity().getZ();
         s.serverVelAssignedAtMs = System.currentTimeMillis();
         s.serverVelConsumed = false;
-        // Round 3 — para AntiKnockbackCheck (magnitud horizontal del KB asignado).
+
         double mag = Math.sqrt(s.serverVelX * s.serverVelX + s.serverVelZ * s.serverVelZ);
         if (mag > 0.05) {
             s.lastKnockbackExpectedMs  = s.serverVelAssignedAtMs;
@@ -103,17 +98,13 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         s.inventoryOpen = false;
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    //  Pack 48 #488 — AutoTotem: tracking de damage + inventory swap.
-    // ──────────────────────────────────────────────────────────────────────
-
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onDamage(EntityDamageEvent e) {
         if (!(e.getEntity() instanceof org.bukkit.entity.Player p)) return;
         if (p.hasPermission("argus.ac.bypass")) return;
         PacketDataStore.State s = store.get(p.getUniqueId());
         s.lastDamageTakenMs = System.currentTimeMillis();
-        // health DESPUES del damage (puede ser negativa si totem ya activo).
+
         s.lastDamageHealthAfter = Math.max(0.0, p.getHealth() - e.getFinalDamage());
     }
 
@@ -122,16 +113,12 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         org.bukkit.entity.Player p = e.getPlayer();
         if (p.hasPermission("argus.ac.bypass")) return;
         PacketDataStore.State s = store.get(p.getUniqueId());
-        // El offhand resultante despues del swap es el item que estaba en main.
+
         ItemStack offhandAfter = e.getOffHandItem();
         Bukkit.getScheduler().runTaskLater(plugin, () ->
             listener.getAutoTotemCheck().handleOffhandUpdate(
                 p, s, System.currentTimeMillis(), offhandAfter, listener.getSink()), 1L);
     }
-
-    // ──────────────────────────────────────────────────────────────────────
-    //  Round 2 — Crit / ProjectileAim / BowAim via eventos Bukkit.
-    // ──────────────────────────────────────────────────────────────────────
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onCombatDamage(EntityDamageByEntityEvent e) {
@@ -145,7 +132,7 @@ public final class PacketAnticheatBukkitBridge implements Listener {
     public void onProjectileHit(ProjectileHitEvent e) {
         if (!(e.getEntity().getShooter() instanceof org.bukkit.entity.Player p)) return;
         if (p.hasPermission("argus.ac.bypass")) return;
-        if (!(e.getHitEntity() instanceof org.bukkit.entity.Player)) return; // solo si hit a otro player
+        if (!(e.getHitEntity() instanceof org.bukkit.entity.Player)) return;
         PacketDataStore.State s = store.get(p.getUniqueId());
         listener.getProjectileAimCheck().handleHit(p, e.getEntity(), s, listener.getSink());
     }
@@ -157,27 +144,26 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         PacketDataStore.State s = store.get(p.getUniqueId());
         long now = System.currentTimeMillis();
         listener.getBowAimCheck().handleShoot(p, s, now, listener.getSink());
-        // Round 3 — FastBow: chargeMs = now - useItemStartMs (set en onInteract).
+
         long chargeMs = s.useItemStartMs == 0L ? 0L : (now - s.useItemStartMs);
         listener.getFastBowCheck().handleBowShoot(p, s, chargeMs, e.getForce(), listener.getSink());
         s.useItemStartMs = 0L;
         s.useItemMaterial = null;
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    //  Round 3 — eat/use-item / sneak / armor / regen / brand
-    // ──────────────────────────────────────────────────────────────────────
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    // Sin ignoreCancelled: Bukkit marca RIGHT_CLICK_AIR como cancelado (no hay bloque que usar)
+    // aunque el item SI se use. Lo que importa es useItemInHand.
+    @EventHandler(priority = EventPriority.MONITOR)
     public void onInteract(org.bukkit.event.player.PlayerInteractEvent e) {
         org.bukkit.entity.Player p = e.getPlayer();
+        if (e.useItemInHand() == org.bukkit.event.Event.Result.DENY) return;
         if (p.hasPermission("argus.ac.bypass")) return;
         if (e.getAction() != org.bukkit.event.block.Action.RIGHT_CLICK_AIR
             && e.getAction() != org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) return;
         ItemStack item = e.getItem();
         if (item == null) return;
         org.bukkit.Material m = item.getType();
-        // Solo trackeamos items con use-time (food, bow, shield, pot).
+
         boolean tracked = m.isEdible()
             || m == org.bukkit.Material.BOW
             || m == org.bukkit.Material.CROSSBOW
@@ -219,7 +205,7 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         if (!(e.getWhoClicked() instanceof org.bukkit.entity.Player p)) return;
         if (p.hasPermission("argus.ac.bypass")) return;
         int slot = e.getSlot();
-        // Armor slots en PlayerInventory: 36-39 (boots..helmet) o slotType ARMOR.
+
         if (e.getSlotType() != org.bukkit.event.inventory.InventoryType.SlotType.ARMOR
             && (slot < 36 || slot > 39)) return;
         PacketDataStore.State s = store.get(p.getUniqueId());
@@ -231,17 +217,20 @@ public final class PacketAnticheatBukkitBridge implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onRegen(org.bukkit.event.entity.EntityRegainHealthEvent e) {
         if (!(e.getEntity() instanceof org.bukkit.entity.Player p)) return;
+        // Pociones, manzanas, beacons y plugins curan legitimamente a cualquier ritmo;
+        // solo la regen natural por saciedad tiene un techo vanilla medible (1hp/10 ticks).
+        if (e.getRegainReason() != org.bukkit.event.entity.EntityRegainHealthEvent.RegainReason.SATIATED) return;
         if (p.hasPermission("argus.ac.bypass")) return;
         PacketDataStore.State s = store.get(p.getUniqueId());
         long now = System.currentTimeMillis();
+        // Solo la cantidad de esta cura: entre dos regens naturales puede haber curas de pociones.
+        s.lastHealth = p.getHealth();
         listener.getRegenCheck().handleHealthChange(p, s, p.getHealth() + e.getAmount(), now, listener.getSink());
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onResourcePackStatus(org.bukkit.event.player.PlayerResourcePackStatusEvent e) {
-        // Best-effort: leemos el brand del Channel "minecraft:brand" via Paper API si esta.
-        // Aca solo marcamos timestamp; el brand real lo capturamos via PluginMessage listener
-        // (Paper-only) — fallback: dejar null y que LegitClientWhitelist devuelva 1.0.
+
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -276,8 +265,7 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         if (!(e.getWhoClicked() instanceof org.bukkit.entity.Player p)) return;
         if (p.hasPermission("argus.ac.bypass")) return;
         PacketDataStore.State s = store.get(p.getUniqueId());
-        // El offhand del inventario del player es slot 40 (PlayerInventory).
-        // Verificamos en el siguiente tick (post-update) si quedo un totem ahi.
+
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             try {
                 ItemStack offhand = p.getInventory().getItemInOffHand();

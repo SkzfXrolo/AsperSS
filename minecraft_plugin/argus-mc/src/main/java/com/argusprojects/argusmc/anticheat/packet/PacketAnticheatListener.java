@@ -25,6 +25,7 @@ import com.argusprojects.argusmc.anticheat.packet.checks.ScaffoldRotationCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.ScaffoldTowerCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.TimerJitterCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.TracersCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.NoFallPacketCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.AutoTotemCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.BackstabCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.BlockGlitchCheck;
@@ -79,19 +80,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Pack 47 — Listener principal de packets (PacketEvents 2.x).
- *
- * <p>Recibe packets crudos del cliente y server, mantiene actualizado el
- * {@link PacketDataStore}, y ejecuta cada uno de los 10 checks packet-based
- * en cada packet relevante. Si un check produce una {@link Violation}, la
- * pasa al {@link com.argusprojects.argusmc.anticheat.ViolationManager}
- * existente (mismo flujo que los checks Bukkit-based).
- *
- * <p>IMPORTANTE: los handlers corren en el thread de Netty. NO tocar
- * APIs de Bukkit que requieran main thread aca; cualquier accion de
- * consecuencia (kick/ban) la hace ViolationManager con runTask al main.
- */
 public final class PacketAnticheatListener extends SimplePacketListenerAbstract {
 
     private final ArgusPlugin plugin;
@@ -135,7 +123,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final ChatMacroCheck            chatMacroCheck;
     private final NamedItemSpamCheck        namedItemSpamCheck;
     private final AutoClickerAdvancedCheck  autoClickerAdvancedCheck;
-    // Round 3
+
     private final KillauraRotationCheck  killauraRotationCheck;
     private final KillauraNoSwingCheck   killauraNoSwingCheck;
     private final KillauraThruWallCheck  killauraThruWallCheck;
@@ -156,26 +144,15 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final AutoArmorCheck         autoArmorCheck;
     private final AutoPotionCheck        autoPotionCheck;
     private final TracersCheck           tracersCheck;
+    private final NoFallPacketCheck      noFallPacketCheck;
 
-    /**
-     * #512 — Cache entityId -> Entity para evitar el linear scan de
-     * world.getEntities() en cada InteractEntity packet.
-     * Capacity-bounded: limpiamos mas viejas que el TTL al hacer lookup miss.
-     */
-    private final Map<Integer, CachedEntity> entityCache = new HashMap<>();
-    private static final long ENTITY_CACHE_TTL_MS = 2_000L;
-    private static final int  ENTITY_CACHE_MAX    = 256;
+    private final EntitySnapshot entities;
 
-    private static final class CachedEntity {
-        final WeakReference<Entity> ref;
-        final long resolvedAtMs;
-        CachedEntity(Entity e) { this.ref = new WeakReference<>(e); this.resolvedAtMs = System.currentTimeMillis(); }
-    }
-
-    public PacketAnticheatListener(ArgusPlugin plugin, PacketDataStore store) {
+    public PacketAnticheatListener(ArgusPlugin plugin, PacketDataStore store, EntitySnapshot entities) {
         super(PacketListenerPriority.NORMAL);
         this.plugin = plugin;
         this.store  = store;
+        this.entities = entities;
 
         this.timerCheck           = new TimerCheck(plugin);
         this.phaseCheck           = new PhaseCheck(plugin);
@@ -215,7 +192,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.chatMacroCheck       = new ChatMacroCheck(plugin);
         this.namedItemSpamCheck   = new NamedItemSpamCheck(plugin);
         this.autoClickerAdvancedCheck = new AutoClickerAdvancedCheck(plugin);
-        // Round 3
+
         this.killauraRotationCheck = new KillauraRotationCheck(plugin);
         this.killauraNoSwingCheck  = new KillauraNoSwingCheck(plugin);
         this.killauraThruWallCheck = new KillauraThruWallCheck(plugin);
@@ -236,6 +213,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.autoArmorCheck        = new AutoArmorCheck(plugin);
         this.autoPotionCheck       = new AutoPotionCheck(plugin);
         this.tracersCheck          = new TracersCheck(plugin);
+        this.noFallPacketCheck     = new NoFallPacketCheck(plugin);
     }
 
     public FastEatCheck   getFastEatCheck()   { return fastEatCheck; }
@@ -253,19 +231,13 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     public NamedItemSpamCheck getNamedItemSpamCheck() { return namedItemSpamCheck; }
     public PacketDataStore getStore() { return store; }
 
-    /** Acceso al sink para checks que disparan desde el bridge Bukkit. */
     public ViolationSink getSink() { return sink(); }
     public AutoTotemCheck getAutoTotemCheck() { return autoTotemCheck; }
 
-    // ──────────────────────────────────────────────────────────────────────
-    //  Packets recibidos del CLIENTE
-    // ──────────────────────────────────────────────────────────────────────
     @Override
     public void onPacketPlayReceive(PacketPlayReceiveEvent event) {
         try {
-            // #511: short-circuit global. Si el AC esta off (config) no tocamos
-            // nada de packets — ahorra MUCHO CPU en servers grandes (cada
-            // packet de movimiento es ~20 invocaciones/segundo/jugador).
+
             var ac = plugin.getAnticheatConfig();
             if (ac == null || !ac.isEnabled()) return;
 
@@ -280,6 +252,10 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
 
             var type = event.getPacketType();
 
+            if (s.pendingSwingTarget != null && type != PacketType.Play.Client.ANIMATION) {
+                resolvePendingSwing(player, s);
+            }
+
             if (type == PacketType.Play.Client.PLAYER_POSITION
                 || type == PacketType.Play.Client.PLAYER_POSITION_AND_ROTATION
                 || type == PacketType.Play.Client.PLAYER_ROTATION
@@ -287,9 +263,6 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
 
                 long now = System.currentTimeMillis();
 
-                // PlayerFlying es un packet "no movement" (solo onGround flag),
-                // pero los demas tambien llevan onGround. Lo usamos para checks
-                // que dependen de "venir del suelo".
                 WrapperPlayClientPlayerFlying wrap = new WrapperPlayClientPlayerFlying(event);
                 boolean nowOnGround;
                 try {
@@ -303,60 +276,68 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         double nx = wrap.getLocation().getX();
                         double ny = wrap.getLocation().getY();
                         double nz = wrap.getLocation().getZ();
-                        // Timer (tick rate) check ANTES de actualizar last position
+
                         s.pushMove(now);
                         timerCheck.handlePositionPacket(player, s, now, sink());
-                        // Phase / NoClip — verifica que el delta no atraviese paredes.
+
                         phaseCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
-                        // Velocity check — el cliente debe respetar la velocity asignada.
+
                         velocityCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
-                        // VClip — delta Y impossible en un packet (Pack 48 #482).
+
                         vclipCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
-                        // Step — subir bloque sin curva de salto (Pack 48 #483).
+
                         stepCheck.handlePositionPacket(player, s, nx, ny, nz, nowOnGround, sink());
-                        // Speed real horizontal (Pack 48 #484).
-                        speedPacketCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
-                        // Round 2: BoatFly / Jetpack / Spider / MultiVelocity / BoatFlyAdv.
+
+                        speedPacketCheck.handlePositionPacket(player, s, nx, ny, nz, now, nowOnGround, sink());
+
                         boatFlyCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
                         jetpackCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
                         spiderCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
                         multiVelocityCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
                         boatFlyAdvancedCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
-                        // Round 2: InventoryTeleport / LiquidWalk.
+
                         inventoryTeleportCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
                         liquidWalkCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
-                        // Round 3: TimerJitter / NoSlowDown / AntiKB / NoSlowSneak / LiquidJesus / PhaseClip.
+
                         timerJitterCheck.handlePositionPacket(player, s, now, sink());
                         noSlowDownCheck.handlePositionPacket(player, s, nx, nz, now, sink());
                         antiKnockbackCheck.handlePositionPacket(player, s, nx, nz, now, sink());
                         noSlowSneakCheck.handlePositionPacket(player, s, nx, nz, now, sink());
                         liquidJesusCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
                         phaseClipCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
+                        noFallPacketCheck.handlePositionPacket(player, s, nx, ny, nz, nowOnGround, sink());
 
                         s.lastDeltaY = ny - s.lastY;
+                        s.lastHorizMove = Math.hypot(nx - s.lastX, nz - s.lastZ);
                         s.lastX = nx;
                         s.lastY = ny;
                         s.lastZ = nz;
                         s.lastMoveMs = now;
                     }
-                    if (wrap.hasRotationChanged()) {
+                    if (wrap.hasRotationChanged() && s.rotationResyncPending) {
+                        // Primer paquete tras confirmar un teleport: la rotacion la impuso el server.
+                        s.rotationResyncPending = false;
+                        s.lastYaw   = wrap.getLocation().getYaw();
+                        s.lastPitch = wrap.getLocation().getPitch();
+                    } else if (wrap.hasRotationChanged()) {
                         float ny  = wrap.getLocation().getYaw();
                         float npi = wrap.getLocation().getPitch();
-                        // Invalid pitch: |pitch| > 90 es imposible para cliente vanilla.
+
                         invalidRotationCheck.handleRotation(player, s, ny, npi, sink());
-                        // Aim snap: delta yaw entre packets vs delta esperado.
+
                         aimSnapCheck.handleRotation(player, s, ny, npi, sink());
-                        // Round 2: buffer de rotaciones para KillauraAim / BowAim.
+
                         s.pushRotation(ny, npi, now);
+                        s.prevYaw   = s.lastYaw;
+                        s.prevPitch = s.lastPitch;
                         s.lastYaw   = ny;
                         s.lastPitch = npi;
-                        // Round 3: KillauraRotation snap detection + Tracers.
+
                         killauraRotationCheck.handleRotation(player, s, ny, npi, now, sink());
-                        tracersCheck.handleRotation(player, s, now, sink());
+                        tracersCheck.handleRotation(player, s, entities.invisiblePlayers(), sink());
                     }
                 }
 
-                // Tracking de onGround para checks de step/fly/jump.
                 if (nowOnGround) {
                     s.lastOnGroundMs = now;
                 }
@@ -368,28 +349,30 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                     long now = System.currentTimeMillis();
                     s.lastAttackMs = now;
                     s.pushAttack(now);
-                    // Resolver entidad por id
-                    Entity target = resolveEntity(player.getWorld(), wrap.getEntityId());
-                    // Reach packet-based (posicion EXACTA en el tick del hit).
-                    if (target != null) {
-                        reachCheck.handleAttack(player, target, s, sink());
-                        swingCheck.handleAttack(player, target, s, now, sink());
-                        // Round 2: KillauraAim / KillauraBlocking / Hitbox / Backstab / MeleeFly.
+
+                    Entity target = entities.byId(wrap.getEntityId());
+
+                    if (target != null && target.isValid()) {
+                        double lagComp = entities.lagAllowance(target, s.pingMs);
+                        reachCheck.handleAttack(player, target, s, lagComp, sink());
+                        // 1.9+ manda el swing DESPUES del ataque: se evalua con el paquete siguiente.
+                        s.pendingSwingTarget = target;
+                        s.pendingAttackMs = now;
+
                         killauraAimCheck.handleAttack(player, target, s, now, sink());
                         killauraBlockingCheck.handleAttack(player, target, s, now, sink());
                         hitboxExpansionCheck.handleAttack(player, target, s, sink());
                         backstabCheck.handleAttack(player, target, s, sink());
                         meleeFlyCheck.handleAttack(player, target, s, now, sink());
-                        // Round 3: KillauraNoSwing / ThruWall / Aimbot / Reach3D.
-                        killauraNoSwingCheck.handleAttack(player, target, s, now, sink());
+
                         killauraThruWallCheck.handleAttack(player, target, s, sink());
-                        aimbotCheck.handleAttack(player, target, s, sink());
-                        reach3DCheck.handleAttack(player, target, s, sink());
+                        aimbotCheck.handleAttack(player, target, entities.all(), s, sink());
+                        reach3DCheck.handleAttack(player, target, s, lagComp, sink());
                     }
-                    // CPS verdadero a nivel packet.
-                    cpsCheck.handleAttack(player, s, now, sink());
-                    // CPS avanzado con varianza (round 2).
-                    autoClickerAdvancedCheck.handleAttack(player, s, now, sink());
+
+                    plugin.getAutoClickEngine().onAttack(player, now, v ->
+                        Bukkit.getScheduler().runTask(plugin, () ->
+                            plugin.getViolationManager().flag(v)));
                 }
 
             } else if (type == PacketType.Play.Client.ANIMATION) {
@@ -397,6 +380,13 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                 s.lastSwingMs = now;
                 s.pushSwing(now);
                 swingCheck.handleSwing(player, s, now, sink());
+                if (s.pendingSwingTarget != null) resolvePendingSwing(player, s);
+                plugin.getAutoClickEngine().onSwing(player, now, v ->
+                    Bukkit.getScheduler().runTask(plugin, () ->
+                        plugin.getViolationManager().flag(v)));
+
+            } else if (type == PacketType.Play.Client.TELEPORT_CONFIRM) {
+                s.rotationResyncPending = true;
 
             } else if (type == PacketType.Play.Client.KEEP_ALIVE) {
                 long now = System.currentTimeMillis();
@@ -415,7 +405,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
             } else if (type == PacketType.Play.Client.PLAYER_BLOCK_PLACEMENT) {
                 long now = System.currentTimeMillis();
                 fastPlaceCheck.handleBlockPlacement(player, s, now, sink());
-                // BlockReach + BlockGlitch (round 2) — distancia y LoS al bloque target.
+
                 try {
                     var wrapP = new com.github.retrooper.packetevents.wrapper.play.client
                         .WrapperPlayClientPlayerBlockPlacement(event);
@@ -423,8 +413,13 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                     if (pos != null) {
                         blockReachCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), sink());
                         blockGlitchCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), sink());
-                        // Round 3: Scaffold patterns.
+
                         scaffoldRotationCheck.handleBlockPlacement(player, s, pos.getX(), pos.getY(), pos.getZ(), now, sink());
+                        var cur = wrapP.getCursorPosition();
+                        if (cur != null) {
+                            scaffoldRotationCheck.handlePlacementAim(player, s, pos.getX() + cur.getX(),
+                                pos.getY() + cur.getY(), pos.getZ() + cur.getZ(), sink());
+                        }
                         scaffoldTowerCheck.handleBlockPlacement(player, s, pos.getX(), pos.getY(), pos.getZ(), now, sink());
                     }
                 } catch (Throwable ignored) {}
@@ -451,15 +446,12 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                 }
             }
         } catch (Throwable t) {
-            // #514: defensivo + lazy log (no construye string si fine() esta off).
+
             plugin.getLogger().fine(() -> "[Argus/Packet] receive err: "
                 + t.getClass().getSimpleName() + " " + t.getMessage());
         }
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    //  Packets enviados desde el SERVIDOR
-    // ──────────────────────────────────────────────────────────────────────
     @Override
     public void onPacketPlaySend(PacketPlaySendEvent event) {
         try {
@@ -476,39 +468,17 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         }
     }
 
-    private Entity resolveEntity(org.bukkit.World w, int entityId) {
-        if (w == null) return null;
-        long now = System.currentTimeMillis();
-        synchronized (entityCache) {
-            CachedEntity cached = entityCache.get(entityId);
-            if (cached != null) {
-                Entity hit = cached.ref.get();
-                if (hit != null && hit.isValid() && (now - cached.resolvedAtMs) < ENTITY_CACHE_TTL_MS) {
-                    return hit;
-                }
-                entityCache.remove(entityId);
-            }
-            // Cap: limpia viejas si excede.
-            if (entityCache.size() > ENTITY_CACHE_MAX) {
-                entityCache.entrySet().removeIf(e -> (now - e.getValue().resolvedAtMs) > ENTITY_CACHE_TTL_MS);
-                if (entityCache.size() > ENTITY_CACHE_MAX) {
-                    entityCache.clear(); // last resort
-                }
-            }
-        }
-        // Cache miss: scan + cache hit
-        for (Entity ent : w.getEntities()) {
-            if (ent.getEntityId() == entityId) {
-                synchronized (entityCache) {
-                    entityCache.put(entityId, new CachedEntity(ent));
-                }
-                return ent;
-            }
-        }
-        return null;
+    /** Si hubo swing antes (1.8) o justo despues (1.9+) del ataque, lastSwingMs queda cerca de pendingAttackMs. */
+    private void resolvePendingSwing(Player player, PacketDataStore.State s) {
+        Entity target = s.pendingSwingTarget;
+        long at = s.pendingAttackMs;
+        s.pendingSwingTarget = null;
+        if (target == null) return;
+        long effectiveNow = s.lastSwingMs >= at ? s.lastSwingMs : at;
+        swingCheck.handleAttack(player, target, s, effectiveNow, sink());
+        killauraNoSwingCheck.handleAttack(player, target, s, effectiveNow, sink());
     }
 
-    /** Devuelve el Material del bloque target del PlayerDigging packet (best-effort). */
     private org.bukkit.Material resolveBlock(Player player, WrapperPlayClientPlayerDigging wrap) {
         try {
             var pos = wrap.getBlockPosition();
@@ -520,11 +490,10 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         }
     }
 
-    /** Sink centralizado: cualquier check llama a sink().flag(v) para reportar. */
     private ViolationSink sink() {
         return v -> {
             if (v == null) return;
-            // Bukkit operations deben volver al main thread.
+
             Bukkit.getScheduler().runTask(plugin, () ->
                 plugin.getViolationManager().flag(v));
         };

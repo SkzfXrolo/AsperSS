@@ -8,20 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round 3 — FastEatCheck.
- *
- * <p>En vanilla comer un item tarda exactamente 1.61s (32 ticks).
- * Algunos cheats acortan esto a &lt;500ms para curarse rápido en combate.
- *
- * <p>Detección: comparar {@code lastEatFinishMs - useItemStartMs} con
- * {@code min_eat_ms} (default 1500ms — 100ms tolerancia bajo el valor
- * vanilla para no flagear con lag).
- *
- * <p>El bridge Bukkit setea {@code useItemStartMs} en
- * {@code PlayerInteractEvent} (right-click con comida) y
- * {@code lastEatFinishMs} en {@code PlayerItemConsumeEvent}.
- */
 public final class FastEatCheck {
 
     private final ArgusPlugin plugin;

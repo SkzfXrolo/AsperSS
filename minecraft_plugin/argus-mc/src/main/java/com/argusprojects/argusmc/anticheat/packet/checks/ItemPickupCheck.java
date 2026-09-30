@@ -9,15 +9,6 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round2 — ItemPickupCheck.
- *
- * <p>Vanilla solo permite pickup de items a ~1.5 bloques (incluyendo el
- * radio del player). Cheats "LongPickup" extienden esto a 5-10 bloques.
- *
- * <p>Se invoca desde {@link org.bukkit.event.entity.EntityPickupItemEvent}
- * en el bridge Bukkit.
- */
 public final class ItemPickupCheck {
 
     private final ArgusPlugin plugin;

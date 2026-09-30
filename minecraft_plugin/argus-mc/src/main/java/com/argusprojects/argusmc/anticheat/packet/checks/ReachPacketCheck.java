@@ -9,27 +9,7 @@ import org.bukkit.GameMode;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import org.bukkit.util.Vector;
 
-/**
- * Pack 47 — Reach packet-based.
- *
- * <p>El check de reach Bukkit-based usa la posicion del attacker en el momento
- * de {@code EntityDamageByEntityEvent}, que ya pasó por compensaciones del
- * server. Aca usamos la posicion EXACTA del attacker en el tick del packet
- * de ataque (s.lastX/Y/Z, actualizado por el listener antes que llegue el
- * InteractEntity).
- *
- * <p>Limites vanilla:
- * <ul>
- *   <li>Survival 1.8: 3.0 bloques de reach (caja de hitbox + tolerancia)</li>
- *   <li>Survival 1.9+: 3.0 bloques tambien</li>
- *   <li>Creative: 5.0 bloques</li>
- * </ul>
- *
- * <p>Toleramos 3.4 / 5.4 para cubrir lag + hitbox interpolation. &gt; 3.6 sostenido
- * en survival = HIGH; &gt; 4.5 = CRITICAL.
- */
 public final class ReachPacketCheck {
 
     private final ArgusPlugin plugin;
@@ -39,7 +19,7 @@ public final class ReachPacketCheck {
     }
 
     public void handleAttack(Player player, Entity target,
-                             PacketDataStore.State s,
+                             PacketDataStore.State s, double lagAllowance,
                              ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("reach_packet")) return;
         if (target == null) return;
@@ -47,21 +27,21 @@ public final class ReachPacketCheck {
 
         GameMode gm = player.getGameMode();
         if (gm == GameMode.CREATIVE) {
-            return; // 5.0 vanilla — no nos preocupa
+            return;
         }
         if (gm == GameMode.SPECTATOR) return;
 
-        // Posicion del attacker en el tick del packet — desde el datastore.
-        // Eye location: y + 1.62 (1.8) / y + 1.5 (sneaking). Asumimos 1.62.
         double ax = s.lastX;
         double ay = s.lastY + 1.62;
         double az = s.lastZ;
-        Vector eye = new Vector(ax, ay, az);
-
-        // Posicion del target — la hitbox del target ya esta corregida por el server.
-        Vector tHead = target.getLocation().toVector().add(new Vector(0, target.getHeight() * 0.5, 0));
-
-        double dist = eye.distance(tHead);
+        // Vanilla mide 3.0 desde el ojo hasta el punto mas cercano de la hitbox, no hasta el centro.
+        org.bukkit.util.BoundingBox bb;
+        try { bb = target.getBoundingBox(); } catch (Throwable ignored) { return; }
+        double cx = Math.max(bb.getMinX(), Math.min(bb.getMaxX(), ax));
+        double cy = Math.max(bb.getMinY(), Math.min(bb.getMaxY(), ay));
+        double cz = Math.max(bb.getMinZ(), Math.min(bb.getMaxZ(), az));
+        double rawDist = Math.sqrt((ax - cx) * (ax - cx) + (ay - cy) * (ay - cy) + (az - cz) * (az - cz));
+        double dist = rawDist - lagAllowance;
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("reach_packet");
         double midThr      = sec != null ? sec.getDouble("dist_mid",      3.3) : 3.3;
@@ -71,15 +51,15 @@ public final class ReachPacketCheck {
         if (dist > criticalThr) {
             sink.flag(new Violation(player, "reach_packet",
                 ViolationLevel.CRITICAL,
-                String.format("dist=%.2f target=%s", dist, target.getType().name().toLowerCase())));
+                String.format("dist=%.2f (hitbox %.2f - lag %.2f) target=%s", dist, rawDist, lagAllowance, target.getType().name().toLowerCase())));
         } else if (dist > highThr) {
             sink.flag(new Violation(player, "reach_packet",
                 ViolationLevel.HIGH,
-                String.format("dist=%.2f target=%s", dist, target.getType().name().toLowerCase())));
+                String.format("dist=%.2f (hitbox %.2f - lag %.2f) target=%s", dist, rawDist, lagAllowance, target.getType().name().toLowerCase())));
         } else if (dist > midThr) {
             sink.flag(new Violation(player, "reach_packet",
                 ViolationLevel.MID,
-                String.format("dist=%.2f target=%s", dist, target.getType().name().toLowerCase())));
+                String.format("dist=%.2f (hitbox %.2f - lag %.2f) target=%s", dist, rawDist, lagAllowance, target.getType().name().toLowerCase())));
         }
     }
 }

@@ -126,8 +126,8 @@ public final class ArgusPlugin extends JavaPlugin {
             try {
                 java.io.File pgConf = new java.io.File("config/paper-global.yml");
                 if (pgConf.exists()) {
-                    String content = java.nio.file.Files.readString(pgConf.toPath());
-                    velocity = content.contains("velocity:") && content.contains("enabled: true");
+                    velocity = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(pgConf)
+                        .getBoolean("proxies.velocity.enabled", false);
                 }
             } catch (Throwable ignored) {}
             getLogger().info("[Argus] Proxy detection: BungeeCord=" + bungee + " | Velocity=" + velocity);

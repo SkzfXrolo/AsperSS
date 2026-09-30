@@ -13,15 +13,6 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
-/**
- * Pack 48 round2 — LiquidWalkCheck.
- *
- * <p>Detecta cuando un jugador esta on-ground encima de agua/lava sin que
- * abajo haya frostwalker, sin slime/honey blocks, sin estar nadando. El
- * cheat "Jesus" / "WaterWalk" hace que el agua actue como solido.
- *
- * <p>Whitelist: frost walker boots, depth strider en agua, dolphin grace.
- */
 public final class LiquidWalkCheck {
 
     private final ArgusPlugin plugin;
@@ -45,13 +36,11 @@ public final class LiquidWalkCheck {
         int consecMid  = sec != null ? sec.getInt("consec_mid", 6) : 6;
         int consecHigh = sec != null ? sec.getInt("consec_high", 12) : 12;
 
-        // Player on-ground.
         if (!s.lastOnGround) {
             s.liquidWalkConsec = 0;
             return;
         }
 
-        // Bloque exactamente debajo de los pies.
         Location loc = new Location(player.getWorld(), nx, ny - 0.05, nz);
         Material below = loc.getBlock().getType();
         boolean liquid = below == Material.WATER || below == Material.LAVA;
@@ -60,7 +49,6 @@ public final class LiquidWalkCheck {
             return;
         }
 
-        // Frost walker boots → agua queda solida abajo legit.
         if (hasFrostWalker(player) && below == Material.WATER) {
             s.liquidWalkConsec = 0;
             return;
@@ -85,7 +73,7 @@ public final class LiquidWalkCheck {
             if (boots == null) return false;
             return boots.containsEnchantment(Enchantment.FROST_WALKER);
         } catch (Throwable t) {
-            // Fallback para versiones nuevas que renombren la enchant.
+
             try {
                 ItemStack boots = p.getInventory().getBoots();
                 if (boots == null || boots.getEnchantments().isEmpty()) return false;

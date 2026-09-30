@@ -6,68 +6,49 @@ import com.argusprojects.argusmc.service.SsService;
 import com.argusprojects.argusmc.util.Messages;
 import org.bukkit.BanList;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 
-/**
- * Cerebro del anti-cheat.
- *
- * <p>Recibe {@link Violation}s de los checks individuales (que viven como
- * Listener separados), las acumula en una sliding window por jugador, y
- * decide la accion segun su {@link ViolationLevel}:
- *
- * <ul>
- *   <li>LOW       → alerta in-game al staff con permiso 'argus.alerts'.</li>
- *   <li>MID       → kick + alerta + Discord.</li>
- *   <li>HIGH      → kick + auto-emision de SS al reconectar + Discord.</li>
- *   <li>CRITICAL  → ban temporal + alerta urgente + Discord.</li>
- * </ul>
- *
- * <p>Si <code>anticheat.enforcement = false</code> en config, NUNCA kickea
- * ni banea — solo loguea y alerta. Util para los primeros dias en un
- * server nuevo (modo observador).
- *
- * <p>Es thread-safe (usa {@link ConcurrentHashMap}) porque varios listeners
- * pueden flagear simultaneamente.
- */
 public final class ViolationManager {
 
     private final ArgusPlugin plugin;
     private final SsService ssService;
 
-    /** Cola de violations recientes por jugador (sliding window). */
     private final Map<UUID, Deque<Violation>> recent = new ConcurrentHashMap<>();
 
-    /** Ring buffer global de las ultimas N violations (Pack 48 round 2 — Web Dashboard). */
     private static final int GLOBAL_RING_SIZE = 200;
     private final Deque<Violation> globalRecent = new ArrayDeque<>();
 
-    /** Counters acumulados para /metrics Prometheus. */
-    private final Map<String, java.util.concurrent.atomic.AtomicLong> totalByCheck = new ConcurrentHashMap<>();
-    private final Map<String, java.util.concurrent.atomic.AtomicLong> totalByLevel = new ConcurrentHashMap<>();
+    private final Map<String, AtomicLong> totalByCheck = new ConcurrentHashMap<>();
+    private final Map<String, AtomicLong> totalByLevel = new ConcurrentHashMap<>();
 
-    /** Jugadores que tienen un SS forzado pendiente al reconectar. */
     private final Set<UUID> pendingForcedSs = ConcurrentHashMap.newKeySet();
+
+    private final Map<UUID, Map<String, Long>> lastStaffAlertMs = new ConcurrentHashMap<>();
+    private static final long STAFF_ALERT_COOLDOWN_MS = 3_000L;
 
     public ViolationManager(ArgusPlugin plugin) {
         this.plugin = plugin;
         this.ssService = new SsService(plugin);
     }
 
-    /** Snapshot del ring buffer global (Pack 48 round 2 — Web Dashboard). */
-    public java.util.List<Violation> snapshotGlobalRecent(int limit) {
+    public List<Violation> snapshotGlobalRecent(int limit) {
         synchronized (globalRecent) {
-            java.util.List<Violation> out = new java.util.ArrayList<>(globalRecent);
+            List<Violation> out = new ArrayList<>(globalRecent);
             if (limit > 0 && out.size() > limit) {
                 return out.subList(out.size() - limit, out.size());
             }
@@ -75,16 +56,10 @@ public final class ViolationManager {
         }
     }
 
-    /** Counters por check name (para Prometheus). */
-    public Map<String, java.util.concurrent.atomic.AtomicLong> totalByCheck() { return totalByCheck; }
+    public Map<String, AtomicLong> totalByCheck() { return totalByCheck; }
 
-    /** Counters por level (para Prometheus). */
-    public Map<String, java.util.concurrent.atomic.AtomicLong> totalByLevel() { return totalByLevel; }
+    public Map<String, AtomicLong> totalByLevel() { return totalByLevel; }
 
-    /**
-     * Reporta una violation. La unica entrada publica del sistema.
-     * Puede llamarse desde cualquier thread (es thread-safe).
-     */
     public void flag(Violation v) {
         if (v == null) return;
         AnticheatConfig cfg = plugin.getAnticheatConfig();
@@ -94,20 +69,17 @@ public final class ViolationManager {
         if (player == null) return;
         if (player.hasPermission("argus.ac.bypass")) return;
 
-        // Pack 48 #525 — Per-check level override.
         v = applyLevelOverride(v, cfg);
 
-        // Round 2 — feed ring buffer global + counters Prometheus.
         synchronized (globalRecent) {
             globalRecent.addLast(v);
             while (globalRecent.size() > GLOBAL_RING_SIZE) globalRecent.pollFirst();
         }
-        totalByCheck.computeIfAbsent(v.checkName, k -> new java.util.concurrent.atomic.AtomicLong())
+        totalByCheck.computeIfAbsent(v.checkName, k -> new AtomicLong())
             .incrementAndGet();
-        totalByLevel.computeIfAbsent(v.level.name(), k -> new java.util.concurrent.atomic.AtomicLong())
+        totalByLevel.computeIfAbsent(v.level.name(), k -> new AtomicLong())
             .incrementAndGet();
 
-        // 1) Acumular en la cola y limpiar las viejas
         Deque<Violation> queue = recent.computeIfAbsent(v.playerUuid, k -> new ArrayDeque<>());
         synchronized (queue) {
             long cutoff = System.currentTimeMillis() - (cfg.getViolationWindowSeconds() * 1000L);
@@ -117,7 +89,6 @@ public final class ViolationManager {
             queue.addLast(v);
         }
 
-        // 2) Contar por nivel en la ventana actual
         int low = 0, mid = 0, high = 0, critical = 0;
         synchronized (queue) {
             for (Violation past : queue) {
@@ -130,7 +101,6 @@ public final class ViolationManager {
             }
         }
 
-        // 3) Decidir accion (de mayor a menor severidad)
         if (critical >= cfg.getCriticalBanAt()) {
             handleCritical(player, v, cfg);
         } else if (high >= cfg.getHighForceSs()) {
@@ -141,7 +111,6 @@ public final class ViolationManager {
             handleLow(player, v, cfg);
         }
 
-        // 4) Reportar al backend y Discord. Pack 48 #522/#523: respeta flags per-check.
         if (cfg.isReportToBackendForCheck(v.checkName)) {
             reportToBackendAsync(v);
         }
@@ -149,9 +118,6 @@ public final class ViolationManager {
             sendDiscordWebhookAsync(v, cfg.getDiscordWebhookUrl());
         }
 
-        // 5) Pack 44 + Pack 48 #524: AI Oracle si globalmente habilitado Y el
-        // check no tiene ai_oracle: false explicito. Si el plugin local ya
-        // kickeo/baneo, esto solo escala (nunca menos).
         if (cfg.isAiOracleForCheck(v.checkName)) {
             final Violation finalV = v;
             String localAction = decideLocalAction(low, mid, high, critical, cfg);
@@ -164,7 +130,6 @@ public final class ViolationManager {
         }
     }
 
-    /** Pack 48 #525 — applies the per-check level override (if any). */
     private Violation applyLevelOverride(Violation v, AnticheatConfig cfg) {
         ViolationLevel forced = cfg.levelOverrideForCheck(v.checkName);
         if (forced == null) return v;
@@ -179,13 +144,6 @@ public final class ViolationManager {
         return "none";
     }
 
-    /**
-     * El Oracle devolvio un veredicto. Si pide una accion MAS SEVERA que la
-     * que el plugin local tomo, la aplicamos y avisamos al staff con el
-     * reasoning humanizado del Oracle (es lo mas potente del feature: el
-     * staff recibe un mensaje tipo "Cheater confirmado, ban temporal" en
-     * vez de "[AC] HIGH player_name -> killaura_no_swing").
-     */
     private void handleAiVerdict(Player player, Violation v, AiVerdict verdict, String localAction) {
         if (player == null || !player.isOnline()) return;
         AnticheatConfig cfg = plugin.getAnticheatConfig();
@@ -193,8 +151,6 @@ public final class ViolationManager {
         String aiAction     = verdict.mergedAction != null ? verdict.mergedAction : verdict.action;
         if (aiAction == null) aiAction = "none";
 
-        // Broadcast del reasoning humanizado a staff con argus.alerts.
-        // Esto es lo que hace que la "voz" del Oracle se sienta.
         String prefix = "&8[&b&lArgus AI&8] &7";
         String header = String.format("%s%s &8(score &f%.2f&8 conf &f%.2f&8) &b%s &8>",
             prefix, player.getName(), verdict.score, verdict.confidence, aiAction.toUpperCase());
@@ -202,21 +158,19 @@ public final class ViolationManager {
 
         for (Player op : Bukkit.getOnlinePlayers()) {
             if (op.hasPermission("argus.alerts")) {
-                op.sendMessage(org.bukkit.ChatColor.translateAlternateColorCodes('&', header));
-                op.sendMessage(org.bukkit.ChatColor.translateAlternateColorCodes('&', header2));
+                op.sendMessage(ChatColor.translateAlternateColorCodes('&', header));
+                op.sendMessage(ChatColor.translateAlternateColorCodes('&', header2));
             }
         }
         Bukkit.getConsoleSender().sendMessage(
-            org.bukkit.ChatColor.translateAlternateColorCodes('&',
+            ChatColor.translateAlternateColorCodes('&',
                 "[ArgusAI] " + player.getName() + " score=" + verdict.score
                     + " action=" + aiAction + " | " + verdict.reasoning));
 
-        // Solo aplicamos si la accion de la AI es MAS severa que la local.
-        // El plugin ya hizo la accion local; la AI solo escala.
         int rankLocal = actionRank(localAction);
         int rankAi    = actionRank(aiAction);
         if (rankAi <= rankLocal) return;
-        // Pack 48 #521 + #526 — respeta per-check enforce y action cap.
+
         if (!canEnforce(cfg, v, aiAction)) return;
 
         switch (aiAction) {
@@ -237,7 +191,7 @@ public final class ViolationManager {
                     SsService.Source.ANTICHEAT_AUTO);
                 break;
             case "watch":
-                // Solo log + alerta. Nada que hacer en el cliente.
+
                 break;
         }
     }
@@ -252,10 +206,6 @@ public final class ViolationManager {
             default:      return 0;
         }
     }
-
-    // ──────────────────────────────────────────────────────────────────────
-    //  Manejadores por nivel
-    // ──────────────────────────────────────────────────────────────────────
 
     private void handleLow(Player player, Violation v, AnticheatConfig cfg) {
         broadcastStaffAlert("ac_alert_low", v);
@@ -287,15 +237,6 @@ public final class ViolationManager {
         clearViolations(player.getUniqueId());
     }
 
-    /**
-     * Pack 48 #521 + #526 — Verifica si una accion concreta puede ejecutarse.
-     * Combina dos overrides:
-     * <ul>
-     *   <li>#521 per-check enforce flag (si false, ningun enforcement).</li>
-     *   <li>#526 per-check max_action cap (si la accion solicitada supera
-     *       el cap, no se ejecuta).</li>
-     * </ul>
-     */
     private boolean canEnforce(AnticheatConfig cfg, Violation v, String desiredAction) {
         if (!cfg.isEnforcementForCheck(v.checkName)) return false;
         String cap = cfg.actionCapForCheck(v.checkName);
@@ -303,27 +244,18 @@ public final class ViolationManager {
         return actionRank(desiredAction) <= actionRank(cap);
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    //  Acciones primitivas
-    // ──────────────────────────────────────────────────────────────────────
-
     private void broadcastStaffAlert(String msgKey, Violation v) {
-        Messages msg = plugin.getMessages();
-        Map<String, String> ph = Messages.ph(
-            "player",  v.playerName,
-            "check",   v.checkName,
-            "details", v.details,
-            "level",   v.level.name()
-        );
-        String text = msg.get(msgKey, ph);
+        if (!shouldStaffAlert(v.playerUuid, v.checkName)) return;
+
+        String line = ViolationFormatter.staffLine(v);
+        String colored = Messages.color(line);
         for (Player online : Bukkit.getOnlinePlayers()) {
             if (online.hasPermission("argus.alerts")) {
-                online.sendMessage(text);
+                online.sendMessage(colored);
             }
         }
-        Bukkit.getConsoleSender().sendMessage(text);
+        Bukkit.getConsoleSender().sendMessage(colored);
 
-        // /argus admin watch — feed VERBOSO al admin que esta observando.
         try {
             var bootstrap = plugin.getPacketEventsBootstrap();
             if (bootstrap != null && bootstrap.getDataStore() != null) {
@@ -331,12 +263,22 @@ public final class ViolationManager {
                 if (s != null && s.watchedBy != null) {
                     Player watcher = Bukkit.getPlayer(s.watchedBy);
                     if (watcher != null && watcher.isOnline()) {
-                        watcher.sendMessage("§8[§b§lWATCH§8] §f" + v.playerName
-                            + " §7" + v.checkName + " §8(§7" + v.level.name() + "§8) §8" + v.details);
+                        watcher.sendMessage(Messages.color("&8[&b&lWATCH&8] &f" + v.playerName
+                            + " &7| &f" + ViolationFormatter.checkLabel(v.checkName)
+                            + "&7: " + ViolationFormatter.formatSummary(v.checkName, v.details)));
                     }
                 }
             }
         } catch (Throwable ignored) {}
+    }
+
+    private boolean shouldStaffAlert(UUID playerUuid, String checkName) {
+        long now = System.currentTimeMillis();
+        Map<String, Long> perCheck = lastStaffAlertMs.computeIfAbsent(playerUuid, k -> new ConcurrentHashMap<>());
+        Long last = perCheck.get(checkName);
+        if (last != null && now - last < STAFF_ALERT_COOLDOWN_MS) return false;
+        perCheck.put(checkName, now);
+        return true;
     }
 
     private void kickPlayer(Player player, Violation v, String msgKey) {
@@ -376,8 +318,7 @@ public final class ViolationManager {
         ArgusApiClient client = plugin.getApiClient();
         if (client == null) return;
         if (plugin.getArgusConfig().isMisconfigured()) return;
-        // Pack 48 round 2: si hay ViolationBuffer activo, enviamos por ahi
-        // (batched + back-pressure). Si no, fallback directo.
+
         var buf = plugin.getViolationBuffer();
         if (buf != null) {
             buf.offer(v);
@@ -392,18 +333,13 @@ public final class ViolationManager {
         client.sendDiscordWebhookAsync(webhookUrl, v);
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    //  Auto-SS forzado al reconectar
-    // ──────────────────────────────────────────────────────────────────────
-
-    /** Llamado por AnticheatListener#onJoin. */
     public boolean hasPendingForcedSs(UUID uuid) {
         return pendingForcedSs.contains(uuid);
     }
 
     public void consumePendingForcedSs(Player player) {
         if (pendingForcedSs.remove(player.getUniqueId())) {
-            // Pequeña espera para que termine de cargar el chunk
+
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 if (player.isOnline()) {
                     ssService.issueScreenShare(
@@ -413,7 +349,7 @@ public final class ViolationManager {
                         SsService.Source.ANTICHEAT_AUTO
                     );
                 }
-            }, 60L); // 3 segundos
+            }, 60L);
         }
     }
 
@@ -422,18 +358,14 @@ public final class ViolationManager {
     }
 
     public void onPlayerQuit(UUID uuid) {
-        // No limpiamos la cola: si reconecta dentro de la window, sus violations cuentan.
-        // Solo limpiamos al hacer kick/ban (efecto deliberado).
-        // Si quieres limpiar al quit, descomentar:
-        // recent.remove(uuid);
+
     }
 
-    /** Util para debug / status. */
     public int countRecent(UUID uuid) {
         Deque<Violation> q = recent.get(uuid);
         if (q == null) return 0;
         synchronized (q) {
-            // Filtrar por window al vuelo
+
             long cutoff = System.currentTimeMillis() - (plugin.getAnticheatConfig().getViolationWindowSeconds() * 1000L);
             int count = 0;
             for (Iterator<Violation> it = q.iterator(); it.hasNext(); ) {

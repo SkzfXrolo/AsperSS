@@ -9,19 +9,8 @@ import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
+import org.bukkit.util.NumberConversions;
 
-/**
- * Pack 48 round 3 — LiquidJesusCheck.
- *
- * <p>Variante más estricta de {@code LiquidWalkCheck}. Mientras
- * LiquidWalk solo flagea cuando el player tiene {@code onGround=true}
- * sobre agua, este check considera además:
- * <ul>
- *   <li>Player camina con deltaY ≈ 0 sostenido sobre water/lava.</li>
- *   <li>No tiene Frost Walker, no está nadando, no está en boat.</li>
- *   <li>Bloque actual = AIR pero bloque -1 = LIQUID (definitely walking on liquid).</li>
- * </ul>
- */
 public final class LiquidJesusCheck {
 
     private final ArgusPlugin plugin;
@@ -43,8 +32,8 @@ public final class LiquidJesusCheck {
         int consecHigh = sec != null ? sec.getInt("consec_high", 8) : 8;
         double maxAbsDy = sec != null ? sec.getDouble("max_abs_dy", 0.05) : 0.05;
 
-        Material at = player.getWorld().getBlockAt((int)nx, (int)ny, (int)nz).getType();
-        Material below = player.getWorld().getBlockAt((int)nx, (int)(ny - 0.1), (int)nz).getType();
+        Material at = player.getWorld().getBlockAt(NumberConversions.floor(nx), NumberConversions.floor(ny), NumberConversions.floor(nz)).getType();
+        Material below = player.getWorld().getBlockAt(NumberConversions.floor(nx), NumberConversions.floor(ny - 0.1), NumberConversions.floor(nz)).getType();
         boolean overLiquid = (below == Material.WATER || below == Material.LAVA);
         if (at != Material.AIR || !overLiquid) {
             s.liquidJesusConsec = 0;

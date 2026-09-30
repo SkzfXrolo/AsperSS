@@ -3,7 +3,7 @@
 Lista completa de checks anti-cheat con su nivel de severidad por defecto
 y descripción corta. Para tuning fino, ver `TUNING_GUIDE.md`.
 
-Total: **48 checks activos** (5 base Pack 47 + 12 packet base + 17 Round 2 + 20 Round 3 — algunos solapan funcionalmente con variantes "advanced").
+Total: **50 checks activos** (5 base Pack 47 + 12 packet base + 17 Round 2 + 20 Round 3 — algunos solapan funcionalmente con variantes "advanced").
 
 ## Movement
 
@@ -12,7 +12,8 @@ Total: **48 checks activos** (5 base Pack 47 + 12 packet base + 17 Round 2 + 20 
 | `timer_packet`        | HIGH  | Tasa de movement packets > cap                                   |
 | `timer_jitter`        | HIGH  | Stddev de intervalos anómalo (timer alternado)                   |
 | `phase_packet`        | HIGH  | Delta de posición atraviesa bloque sólido                        |
-| `phaseclip_packet`    | CRIT  | Player permanece dentro de bloque sólido                         |
+| `phaseclip_packet`    | CRIT  | Se mueve dentro de bloque sólido (arena/grava que cae no cuenta)  |
+| `nofall_packet`       | HIGH  | onGround=true bajando sin bloque bajo los pies (suelo falso)      |
 | `vclip_packet`        | HIGH  | Delta Y impossible en un packet                                  |
 | `step_packet`         | MID   | Subida sin curva de salto                                         |
 | `speed_packet`        | HIGH  | Velocidad horizontal > cap del modo                              |
@@ -72,6 +73,7 @@ Total: **48 checks activos** (5 base Pack 47 + 12 packet base + 17 Round 2 + 20 
 | `block_glitch_packet`       | HIGH  | Place/break a través de muros (raycast)         |
 | `scaffold_rotation_packet`  | HIGH  | Pitch > 80° con placement bajo player           |
 | `scaffold_tower_packet`     | HIGH  | Columna vertical perfecta                       |
+| `scaffold_aim_packet`       | HIGH  | Coloca en un punto que no tiene en la mira      |
 
 ## Anti-bot / world
 

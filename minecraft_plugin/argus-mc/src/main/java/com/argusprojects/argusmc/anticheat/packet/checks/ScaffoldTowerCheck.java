@@ -8,22 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round 3 — ScaffoldTowerCheck.
- *
- * <p>Detecta torres verticales perfectas: bloques colocados uno arriba
- * del otro en pocos ms, con el jugador saltando exactamente sobre el
- * bloque recién colocado. Las "tower scaffold" cheats lo hacen en
- * ráfaga.
- *
- * <p>Pattern:
- * <ul>
- *   <li>Misma columna X/Z que el placement anterior.</li>
- *   <li>Y incremento = +1 exacto del previo.</li>
- *   <li>Intervalo &lt; {@code max_interval_ms} (default 250ms).</li>
- *   <li>Repeticiones &gt;= {@code consec_high} (default 5).</li>
- * </ul>
- */
 public final class ScaffoldTowerCheck {
 
     private final ArgusPlugin plugin;

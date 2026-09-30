@@ -8,21 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 47 — InvMove (inventory + movement simultaneo).
- *
- * <p>Cliente vanilla NO envia movement packets mientras tiene el inventario
- * abierto (la GUI bloquea el input WASD). Algunos hacks ("InvMove") permiten
- * mover/saltar mientras manejas el inventario, lo cual es ventaja PvP.
- *
- * <p>Heuristica: si el cliente abrio inventario hace &gt;=300ms y desde entonces
- * ha enviado packets de movimiento (lastMoveMs &gt;= inventoryOpenSinceMs + 300),
- * o hace clicks en window mientras camina, es invmove.
- *
- * <p>NOTA: el horse/villager UI permite movimiento (no flagea). Solo chequeamos
- * cuando se abre un inv "fijo" — esto lo regula el bridge bukkit que marca
- * inventoryOpen=true SOLO en InventoryOpenEvent legitimo (no en horse).
- */
 public final class InvMovePacketCheck {
 
     private final ArgusPlugin plugin;

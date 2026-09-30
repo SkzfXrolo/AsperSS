@@ -11,18 +11,6 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 
-/**
- * Pack 48 round2 — BackstabCheck.
- *
- * <p>Killaura "BackTrack" / "Backstab" hace que el atacante hitee a entidades
- * que estan detras suyo (FOV > 100 grados) sin girarse legitimamente. Tambien
- * detecta el "TargetSwap" donde el cheat va rotando entre multiples objetivos
- * 360° en cada tick.
- *
- * <p>Heuristica: si el angulo entre la mirada del atacante y el vector
- * atacante→target es &gt; max_fov_deg al momento exacto del attack, el hit
- * es ilegitimo (vanilla cap esta cerca de 90).
- */
 public final class BackstabCheck {
 
     private final ArgusPlugin plugin;

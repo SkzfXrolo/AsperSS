@@ -9,21 +9,6 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round 3 — KillauraNoSwingCheck.
- *
- * <p>Cuando un cliente vanilla golpea a una entidad envía siempre un
- * packet ANIMATION (swing main hand) en el mismo tick, o el tick
- * inmediatamente anterior. Cierto cheats matan en silencio: mandan el
- * INTERACT_ENTITY ATTACK sin la animación.
- *
- * <p>Heurística: si no hubo swing dentro de
- * {@code max_swing_lag_ms} (default 100ms) antes del attack, flag.
- *
- * <p>Hay un edge case: el cliente vanilla mismo a veces "saltea" un
- * swing si está spammeando attacks. Por eso el flag empieza en LOW y
- * sube a HIGH si pasa varias veces en {@code window_ms}.
- */
 public final class KillauraNoSwingCheck {
 
     private final ArgusPlugin plugin;

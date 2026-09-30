@@ -38,9 +38,16 @@ public final class VClipCheck {
         if (hasEffect(player, "SLOW_FALLING")) return;
 
         double dy = ny - s.lastY;
-        s.lastDeltaY = dy;
 
         if (dy <= 0.6) return;
+
+        // Rebote legitimo: venia parado sobre slime/cama, o la subida decae con la gravedad vanilla.
+        org.bukkit.Material under = player.getWorld().getBlockAt(
+            org.bukkit.util.NumberConversions.floor(s.lastX),
+            org.bukkit.util.NumberConversions.floor(s.lastY - 0.2),
+            org.bukkit.util.NumberConversions.floor(s.lastZ)).getType();
+        if (under == org.bukkit.Material.SLIME_BLOCK || under.name().endsWith("_BED")) return;
+        if (s.lastDeltaY > 0 && dy <= (s.lastDeltaY - 0.08) * 0.98 + 0.05) return;
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("vclip");
         double midThreshold      = sec != null ? sec.getDouble("dy_mid",  0.65) : 0.65;

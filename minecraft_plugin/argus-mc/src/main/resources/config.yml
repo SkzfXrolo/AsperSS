@@ -152,11 +152,25 @@ anticheat:
                              # (stairs, slabs, fences, glass, doors, leaves, etc.)
     autoclicker:
       enabled: true
-      max_cps: 22            # 20 era ajustado para butterfly clickers humanos
-      variance_min_cps: 12   # solo medir varianza si CPS alto (humano regular puede
-                             # sostener 8-10 cps)
-      min_stddev_ms: 25.0    # 25ms — humanos tipicos miden 30-80ms stddev
-      min_samples: 12        # mas muestras para ser estadisticamente significativo
+      # Motor unificado: CPS + varianza + burst + score acumulativo (decay).
+      cps_sustained_low: 20
+      cps_sustained_mid: 24
+      cps_sustained_high: 28
+      burst_250_low: 7
+      burst_250_high: 9
+      variance_min_cps: 12
+      min_stddev_ms: 25.0
+      min_samples: 12
+      cv_suspicious: 0.14
+      cv_extreme: 0.08
+      outlier_ratio_max: 0.10
+      gcd_ratio_suspicious: 0.45
+      human_pause_ms: 180
+      air_click_min_cps: 14
+      suspicion_flag: 14
+      suspicion_decay_per_sec: 2.0
+      flag_cooldown_ms: 2000
+      max_cps: 22            # legacy (cps_packet); motor usa cps_sustained_*
     fly:
       enabled: true
       # HOVER REAL = Y casi constante (|dy| < 0.15 b/s). Saltos, parkour y
@@ -204,14 +218,17 @@ anticheat:
     # ArgusMC sigue con los checks Bukkit-based de arriba.
     # Pack 48 #491-#500: todos los thresholds expuestos a config.
     timer:
-      enabled: true          # detecta TimerHack midiendo el intervalo real
-                             # entre PlayerPosition packets (50ms vanilla).
+      enabled: true
       window_ms: 1500
       ideal_interval_ms: 50
-      tolerance_ms: 150      # subido de 100 a 150 (Pack 48 #491) — menos FP
-      high_balance_ms: 300   # balance < -300ms = HIGH (era hardcoded)
-      min_packets: 10
+      tolerance_ms: 280
+      high_balance_ms: 550
+      min_packets: 12
       warmup_ms: 2000
+      bucket_ms: 25
+      flag_cooldown_ms: 3000
+      lan_ping_cutoff_ms: 20
+      min_ratio: 1.30
     phase:
       enabled: true          # NoClip por raycast entre packets de movimiento.
                              # Whitelist conservadora de bloques solidos.
@@ -244,10 +261,12 @@ anticheat:
       extreme_delta_deg: 130.0
       snap_to_attack_ms: 200
     ping_spoof:
-      enabled: true          # RTT <3ms (imposible) o >5000ms sostenido.
+      enabled: true
       warmup_ms: 5000
       min_rtt_ms: 3
       extreme_rtt_ms: 5000
+      low_rtt_streak: 4
+      lan_ping_cutoff_ms: 12
     cps_packet:
       enabled: true          # CPS real (>22 LOW, >30 MID, >45 HIGH).
       window_ms: 1000
@@ -277,13 +296,12 @@ anticheat:
       max_dy: 1.10
       from_ground_window_ms: 120
     speed_packet:
-      enabled: true          # bps real medido entre packets. Compensa speed
-                             # potion (+20%/nivel), ice (+40%), soul speed (+40%).
-                             # Skip elytra, vehicle, swim, climb, creative-fly.
-                             # Flagea solo tras 3 packets consecutivos arriba del
-                             # cap para tolerar lag spikes puntuales.
-      max_bps: 6.5
-      consecutive_to_flag: 3
+      enabled: true
+      max_bps: 7.8
+      consecutive_to_flag: 5
+      min_dt_ms: 45
+      flag_cooldown_ms: 2000
+      overflow_ratio: 1.08
     fast_place:
       enabled: true          # BlockPlacement packets/segundo. Vanilla cap real
                              # es ~5/s (un placement por tick); LOW a 9/s, MID
@@ -332,9 +350,11 @@ anticheat:
       sustained_ms: 1500
       min_dy_total: 1.0
     jetpack:
-      enabled: true          # dy > min_dy sostenido por N packets sin elytra,
-                             # jump boost relevante, fly, water o climbable.
-      min_dy: 0.18
+      enabled: true          # sube en el aire sin que la gravedad vanilla
+                             # (vy'=(vy-0.08)*0.98) lo frene. Jump boost, slime,
+                             # cama y knockback decaen normal y no cuentan.
+      min_dy: 0.05
+      gravity_tolerance: 0.03
       consec_mid: 4
       consec_high: 7
     spider:
@@ -448,6 +468,16 @@ anticheat:
       min_pitch_deg: 80.0
       consec_mid: 4
       consec_high: 7
+    scaffold_aim:
+      enabled: true          # coloca un bloque en un punto que no tiene en la mira
+                             # (angulo mirada vs cursor del paquete). Vanilla ~0.
+      max_angle_deg: 75.0
+      consec_mid: 2
+      consec_high: 4
+    nofall_packet:
+      enabled: true          # onGround=true bajando sin bloque bajo los pies (suelo falso).
+      consec_mid: 3
+      consec_high: 8
     scaffold_tower:
       enabled: true
       max_interval_ms: 250
@@ -479,8 +509,9 @@ anticheat:
       min_pattern_hits: 4
     regen:
       enabled: true
-      max_hp_per_sec: 0.5
-      min_interval_ms: 1500
+      # Solo regen natural (saciedad). Vanilla: 1hp cada 10 ticks = 2hp/s, 500ms.
+      max_hp_per_sec: 2.2
+      min_interval_ms: 450
       consec_high: 3
     antikb:
       enabled: true
@@ -489,9 +520,10 @@ anticheat:
       consec_mid: 2
       consec_high: 4
     aimbot:
-      enabled: true
-      min_skip_distance: 3.5
-      min_skipped_targets: 2
+      enabled: true          # golpea a traves de otra entidad (el rayo de la mira la
+                             # corta antes que al objetivo). Vanilla no puede.
+      min_skip_distance: 2.0
+      min_skipped_targets: 1
       consec_high: 3
     reach3d:
       enabled: true

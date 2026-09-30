@@ -46,8 +46,11 @@ public final class SpiderCheck {
             return;
         }
 
+        // Saltar pegado a una pared es vanilla: la subida decae con la gravedad
+        // (vy' = (vy - 0.08) * 0.98). Trepar sin que decaiga no.
         double dy = ny - s.lastY;
-        if (dy < minDy) {
+        double expected = (s.lastDeltaY - 0.08) * 0.98;
+        if (dy < minDy || s.lastOnGround || dy <= expected + 0.03) {
             s.spiderConsec = 0;
             return;
         }

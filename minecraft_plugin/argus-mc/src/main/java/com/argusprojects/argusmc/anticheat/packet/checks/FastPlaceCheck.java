@@ -9,20 +9,6 @@ import org.bukkit.GameMode;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 #485 — FastPlaceCheck (Scaffold / FastPlace).
- *
- * <p>Mide BlockPlacement packets dentro de una ventana corta. Vanilla cap
- * teorico al hacer right-click sostenido es ~5 placements/segundo (un placement
- * por tick). Scaffold hacks subiendo verticalmente generan 10-20+ placements/s.
- *
- * <p>Como PLAYER_BLOCK_PLACEMENT tambien dispara para clicks con item (no solo
- * bloques — bow, comer, etc.), este check tiene un threshold conservador para
- * no falsear con jugadores que estan derecho-clickeando legitimamente con bow
- * o food. Solo flagea por encima del cap real de placements vanilla.
- *
- * <p>Skip en creative (placement instantaneo legitimo).
- */
 public final class FastPlaceCheck {
 
     private final ArgusPlugin plugin;
@@ -31,7 +17,6 @@ public final class FastPlaceCheck {
         this.plugin = plugin;
     }
 
-    /** Llamado por el listener cada vez que llega un PLAYER_BLOCK_PLACEMENT. */
     public void handleBlockPlacement(Player player, PacketDataStore.State s, long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("fast_place")) return;
         if (player.getGameMode() == GameMode.CREATIVE) return;

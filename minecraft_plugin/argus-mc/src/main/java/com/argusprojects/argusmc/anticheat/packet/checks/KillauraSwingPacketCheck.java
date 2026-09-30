@@ -9,23 +9,6 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 47 — Killaura por timing de swing vs interact.
- *
- * <p>Un cliente vanilla envia SIEMPRE un packet Animation (swing) ANTES de
- * un InteractEntity(ATTACK). Killauras simples disparan el InteractEntity
- * sin animation, o con &gt;100ms de delay. Detecciones:
- *
- * <ul>
- *   <li>Attack sin swing previo en los ultimos 250ms → killaura_no_swing</li>
- *   <li>Swing repetido sin attack y sin click derecho/lanzar → suspicious
- *       autoclicker (lo cubre CPS check)</li>
- * </ul>
- *
- * <p>Tambien validamos que el atacante NO esté completamente fuera del FOV
- * del target a nivel rotation (yaw delta &gt; 90° = hit imposible de hacer
- * naturalmente sin aim assist).
- */
 public final class KillauraSwingPacketCheck {
 
     private static final long DEFAULT_SWING_WINDOW_MS = 250L;

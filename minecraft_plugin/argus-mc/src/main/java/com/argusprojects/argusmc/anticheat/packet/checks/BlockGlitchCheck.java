@@ -13,17 +13,6 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 
-/**
- * Pack 48 round2 — BlockGlitchCheck.
- *
- * <p>Detecta place/break a un bloque cuyo LineOfSight desde los ojos del
- * jugador esta bloqueado por otro bloque solido. Es el clasico "Scaffold
- * thru walls" / "BreakThruWall".
- *
- * <p>Algoritmo: hacemos un raycast manual eyes → blockCenter en pasos de
- * 0.25; si en algun paso intermedio hay otro bloque solido (y no es el
- * mismo bloque target), flag.
- */
 public final class BlockGlitchCheck {
 
     private final ArgusPlugin plugin;
@@ -42,31 +31,49 @@ public final class BlockGlitchCheck {
         double maxRange  = sec != null ? sec.getDouble("max_range", 6.0) : 6.0;
 
         Location eye = player.getEyeLocation();
-        Vector dir = new Vector(bx + 0.5 - eye.getX(),
-                                by + 0.5 - eye.getY(),
-                                bz + 0.5 - eye.getZ());
-        double dist = dir.length();
-        if (dist <= 0.1 || dist > maxRange) return;
-        dir = dir.normalize();
-
         World w = player.getWorld();
+        // Se puede clickear cualquier cara visible: solo es glitch si las 6 estan tapadas.
+        Material firstBlocker = null;
+        int[] firstAt = null;
+        for (double[] f : FACE_OFFSETS) {
+            double tx = bx + 0.5 + f[0], ty = by + 0.5 + f[1], tz = bz + 0.5 + f[2];
+            int[] blocker = firstObstruction(w, eye, tx, ty, tz, bx, by, bz, step, maxRange);
+            if (blocker == null) return;
+            if (blocker.length == 0) return; // fuera de rango: no se evalua
+            if (firstAt == null) {
+                firstAt = blocker;
+                firstBlocker = w.getBlockAt(blocker[0], blocker[1], blocker[2]).getType();
+            }
+        }
+        sink.flag(new Violation(player, "block_glitch_packet",
+            ViolationLevel.HIGH,
+            String.format("interact thru %s at (%d,%d,%d)", firstBlocker.name(), firstAt[0], firstAt[1], firstAt[2])));
+    }
+
+    /** Centro de cada cara, apenas adentro del bloque para que el rayo termine en la cara. */
+    private static final double[][] FACE_OFFSETS = {
+        { 0.49, 0, 0}, {-0.49, 0, 0}, {0, 0.49, 0}, {0, -0.49, 0}, {0, 0, 0.49}, {0, 0, -0.49}
+    };
+
+    /** null = rayo libre; int[0] = fuera de rango; int[3] = bloque que tapa. */
+    private static int[] firstObstruction(World w, Location eye, double tx, double ty, double tz,
+                                          int bx, int by, int bz, double step, double maxRange) {
+        Vector dir = new Vector(tx - eye.getX(), ty - eye.getY(), tz - eye.getZ());
+        double dist = dir.length();
+        if (dist <= 0.1 || dist > maxRange) return new int[0];
+        dir = dir.normalize();
         double traveled = 0.0;
         while (traveled + step < dist) {
             traveled += step;
-            double px = eye.getX() + dir.getX() * traveled;
-            double py = eye.getY() + dir.getY() * traveled;
-            double pz = eye.getZ() + dir.getZ() * traveled;
-            int ix = (int) Math.floor(px);
-            int iy = (int) Math.floor(py);
-            int iz = (int) Math.floor(pz);
-            if (ix == bx && iy == by && iz == bz) continue; // ya en el target
+            int ix = (int) Math.floor(eye.getX() + dir.getX() * traveled);
+            int iy = (int) Math.floor(eye.getY() + dir.getY() * traveled);
+            int iz = (int) Math.floor(eye.getZ() + dir.getZ() * traveled);
+            if (ix == bx && iy == by && iz == bz) continue;
             Material m = w.getBlockAt(ix, iy, iz).getType();
             if (m.isSolid() && m != Material.AIR && m != Material.WATER && m != Material.LAVA) {
-                sink.flag(new Violation(player, "block_glitch_packet",
-                    ViolationLevel.HIGH,
-                    String.format("interact thru %s at (%d,%d,%d)", m.name(), ix, iy, iz)));
-                return;
+                return new int[]{ix, iy, iz};
             }
         }
+        return null;
     }
 }

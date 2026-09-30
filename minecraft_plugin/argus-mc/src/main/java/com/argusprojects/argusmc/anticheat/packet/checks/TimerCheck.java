@@ -8,30 +8,14 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 47 — TimerHack.
- *
- * <p>Un cliente vanilla envia ~20 PlayerPosition packets por segundo (cada 50ms).
- * Los hacks de tipo "Timer" alteran el tick rate para enviar mas packets y
- * procesar mas movimiento, ataques o clicks por segundo. Esta diferencia
- * acumulada (medida en una ventana de 1.5s) se llama "balance":
- *
- * <p>balance = (suma_intervalos_reales - n_packets * 50ms)
- *
- * <p>Un valor &lt; -150ms en 1.5s significa que el cliente envio mas packets de los
- * esperados — TimerHack a 1.05x o superior. Toleramos 100ms para compensar
- * jitter de red. NO se ejecuta en el primer segundo tras el join (warmup) ni
- * durante teleports.
- *
- * <p>Es un check de nivel MID — los TimerHack publicos siempre disparan esto.
- */
 public final class TimerCheck {
 
     private static final long DEFAULT_WINDOW_MS = 1_500L;
     private static final long DEFAULT_IDEAL_INTERVAL_MS = 50L;
-    private static final long DEFAULT_TOLERANCE_MS = 150L;
-    private static final long DEFAULT_HIGH_THRESHOLD_MS = 300L;
-    private static final int  DEFAULT_MIN_PACKETS = 10;
+    private static final long DEFAULT_TOLERANCE_MS = 280L;
+    private static final long DEFAULT_HIGH_THRESHOLD_MS = 550L;
+    private static final int  DEFAULT_MIN_PACKETS = 12;
+    private static final double DEFAULT_MIN_RATIO = 1.30;
 
     private final ArgusPlugin plugin;
 
@@ -49,6 +33,10 @@ public final class TimerCheck {
         long highBalanceMs  = sec != null ? sec.getLong("high_balance_ms",  DEFAULT_HIGH_THRESHOLD_MS): DEFAULT_HIGH_THRESHOLD_MS;
         int  minPackets     = sec != null ? sec.getInt("min_packets",       DEFAULT_MIN_PACKETS)      : DEFAULT_MIN_PACKETS;
         long warmupMs       = sec != null ? sec.getLong("warmup_ms",        2_000L)                   : 2_000L;
+        long bucketMs       = sec != null ? sec.getLong("bucket_ms",        25L)                      : 25L;
+        long flagCooldownMs = sec != null ? sec.getLong("flag_cooldown_ms", 3_000L)                   : 3_000L;
+        int  lanPingCutoff  = sec != null ? sec.getInt("lan_ping_cutoff_ms", 20)                     : 20;
+        double minRatio     = sec != null ? sec.getDouble("min_ratio", DEFAULT_MIN_RATIO)              : DEFAULT_MIN_RATIO;
 
         if (now - s.joinMs < warmupMs) return;
         if (s.teleporting && now < s.teleportUntilMs) return;
@@ -56,32 +44,59 @@ public final class TimerCheck {
             s.teleporting = false;
         }
 
-        long cutoff;
+        int ping = safePing(player);
+        if (ping >= 0 && ping <= lanPingCutoff) return;
+
         int count;
         long oldest;
         synchronized (s) {
-            cutoff = now - windowMs;
+            long cutoff = now - windowMs;
             count = 0;
             oldest = now;
+            long prevBucket = -1L;
             for (Long t : s.moveTimestamps) {
-                if (t >= cutoff) {
+                if (t < cutoff) continue;
+                if (t < oldest) oldest = t;
+                long bucket = t / bucketMs;
+                if (bucket != prevBucket) {
                     count++;
-                    if (t < oldest) oldest = t;
+                    prevBucket = bucket;
                 }
             }
         }
         if (count < minPackets) return;
 
         long expectedMs = count * idealMs;
-        long actualMs   = now - oldest;
-        long balance    = actualMs - expectedMs; // negativo = cliente envio MAS rapido
+        long actualMs   = Math.max(1L, now - oldest);
+        long balance    = actualMs - expectedMs;
 
-        if (balance < -toleranceMs) {
-            double ratio = expectedMs > 0 ? (double) expectedMs / actualMs : 1.0;
-            ViolationLevel lvl = (balance < -highBalanceMs) ? ViolationLevel.HIGH : ViolationLevel.MID;
-            sink.flag(new Violation(player, "timer_packet",
-                lvl,
-                String.format("packets=%d balance=%dms ratio=%.2fx", count, balance, ratio)));
+        if (balance >= -toleranceMs) return;
+
+        double ratio = expectedMs > 0 ? (double) expectedMs / actualMs : 1.0;
+        if (ratio < minRatio) return;
+
+        if (now - s.lastTimerFlagMs < flagCooldownMs) return;
+
+        ViolationLevel lvl;
+        if (balance < -highBalanceMs && ratio >= minRatio + 0.35) {
+            lvl = ViolationLevel.HIGH;
+        } else if (ratio >= minRatio + 0.15) {
+            lvl = ViolationLevel.MID;
+        } else {
+            lvl = ViolationLevel.LOW;
+        }
+
+        sink.flag(new Violation(player, "timer_packet",
+            lvl,
+            String.format("packets=%d balance=%dms ratio=%.2fx", count, balance, ratio)));
+        s.lastTimerFlagMs = now;
+    }
+
+    private static int safePing(Player player) {
+        try {
+            return player.getPing();
+        } catch (Throwable t) {
+            return -1;
         }
     }
 }
