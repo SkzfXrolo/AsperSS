@@ -87,7 +87,7 @@
         /* ── Project cards ── */
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
         .card {
-            position: relative; display: flex; flex-direction: column; padding: 24px;
+            position: relative; display: flex; flex-direction: column; padding: 24px; min-width: 0;
             background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
             transition: transform .22s, border-color .22s, box-shadow .22s; overflow: hidden;
         }
