@@ -1588,6 +1588,31 @@ def panel():
             user['roles'] = json.loads(user['roles'])
         except:
             user['roles'] = [user.get('roles', 'user')]
+    if user is not None:
+        user = dict(user)
+        user.setdefault('username', session.get('username', 'staff'))
+    staff_role = get_staff_role(user) if user else 'helper'
+    is_panel_owner = _is_panel_owner(user)
+    return render_template(
+        'panel_v2.html',
+        user=user,
+        staff_role=staff_role,
+        scanner_version=_ARGUS_VERSION,
+        is_panel_owner=is_panel_owner,
+    )
+
+
+@app.route('/panel/legacy')
+@login_required
+def panel_legacy():
+    """Panel del staff - version anterior al rediseño (referencia/rollback)."""
+    user = get_user_by_id(session.get('user_id'))
+    if user and isinstance(user.get('roles'), str):
+        import json
+        try:
+            user['roles'] = json.loads(user['roles'])
+        except:
+            user['roles'] = [user.get('roles', 'user')]
     staff_role = get_staff_role(user) if user else 'helper'
     is_panel_owner = _is_panel_owner(user)
     return render_template(
@@ -1602,24 +1627,8 @@ def panel():
 @app.route('/panel/v2')
 @login_required
 def panel_v2():
-    """Rediseño del panel de staff (WIP). Misma auth que /panel, mismas APIs.
-    No reemplaza a /panel — es una cara nueva para revisar antes del switch."""
-    user = get_user_by_id(session.get('user_id'))
-    if user and isinstance(user.get('roles'), str):
-        try:
-            user['roles'] = json.loads(user['roles'])
-        except Exception:
-            user['roles'] = [user.get('roles', 'user')]
-    if user is not None:
-        user = dict(user)
-        user.setdefault('username', session.get('username', 'staff'))
-    return render_template(
-        'panel_v2.html',
-        user=user,
-        staff_role=get_staff_role(user) if user else 'helper',
-        scanner_version=_ARGUS_VERSION,
-        is_panel_owner=_is_panel_owner(user),
-    )
+    """Alias de /panel (ahora que el rediseño es el panel por defecto)."""
+    return panel()
 
 
 # ============================================================================
