@@ -37,9 +37,8 @@ public final class InventoryMacroCheck {
         String why = null;
         if (times.length > n && isRoboticRhythm(times, n)) {
             why = String.format("%d clicks de inventario a ritmo fijo (macro)", n);
-        } else if (isBurst(times, 4, 50L)) {
-            why = "4+ clicks de inventario en un tick";
         }
+        // Sin senal de "4 clicks en un tick": arrastrar items (drag) y el shift/doble click de 1.8 via ViaRewind lo hacen legit.
         if (s.invFirstClickPending) {
             s.invFirstClickPending = false;
             long dt = now - s.inventoryOpenSinceMs;
@@ -70,7 +69,7 @@ public final class InventoryMacroCheck {
         return t;
     }
 
-    /** Ultimos n intervalos: media < 150ms y desvio < 12ms. */
+    /** Ultimos n intervalos: media <= 60ms (1 por tick sostenido, la mano no llega) y desvio < 12ms. */
     static boolean isRoboticRhythm(long[] times, int n) {
         if (times.length < n + 1) return false;
         double sum = 0, sum2 = 0;
@@ -81,11 +80,7 @@ public final class InventoryMacroCheck {
         }
         double mean = sum / n;
         double std = Math.sqrt(Math.max(0, sum2 / n - mean * mean));
-        return mean < 150 && std < 12;
-    }
-
-    /** k clicks (los ultimos) dentro de windowMs. */
-    static boolean isBurst(long[] times, int k, long windowMs) {
-        return times.length >= k && times[times.length - 1] - times[times.length - k] <= windowMs;
+        // 1.8 agrupa clicks por tick: un humano rapido da 100ms clavados, por eso el tope es 60.
+        return mean <= 60 && std < 12;
     }
 }

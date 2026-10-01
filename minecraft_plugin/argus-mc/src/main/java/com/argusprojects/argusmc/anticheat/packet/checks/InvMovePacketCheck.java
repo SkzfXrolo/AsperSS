@@ -21,17 +21,17 @@ public final class InvMovePacketCheck {
         if (!s.inventoryOpen) return;
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("inv_move_packet");
-        long graceMs       = sec != null ? sec.getLong("grace_ms",         300L) : 300L;
+        long graceMs       = sec != null ? sec.getLong("grace_ms",         500L) : 500L;
         long staleMoveMs   = sec != null ? sec.getLong("stale_move_ms",  1_000L) : 1_000L;
 
         if (now - s.inventoryOpenSinceMs < graceMs) return;
 
-        if (s.lastRealMoveMs > s.inventoryOpenSinceMs + graceMs
-            && now - s.lastRealMoveMs < staleMoveMs) {
+        if (s.lastGroundMoveMs > s.inventoryOpenSinceMs + graceMs
+            && now - s.lastGroundMoveMs < staleMoveMs) {
             sink.flag(new Violation(player, "inv_move_packet",
                 ViolationLevel.MID,
                 String.format("clickWindow during movement (lastMove %dms ago, invOpen %dms)",
-                    now - s.lastRealMoveMs, now - s.inventoryOpenSinceMs)));
+                    now - s.lastGroundMoveMs, now - s.inventoryOpenSinceMs)));
         }
     }
 }

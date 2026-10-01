@@ -276,7 +276,7 @@ anticheat:
       cps_high: 45
     inv_move_packet:
       enabled: true          # ClickWindow durante movimiento legitimo.
-      grace_ms: 300
+      grace_ms: 500
       stale_move_ms: 1000
 
     # ── Pack 48: nuevos checks PACKET-BASED (Bloque 2 — movement/blocks) ─────

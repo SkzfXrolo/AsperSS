@@ -18,18 +18,22 @@ class NightChecksTest {
 
     @Test
     void chestStealerFixedDelayIsMacro() {
-        assertTrue(InventoryMacroCheck.isRoboticRhythm(seq(100, 101, 99, 100, 102, 100, 98, 100), 8));
+        assertTrue(InventoryMacroCheck.isRoboticRhythm(seq(50, 51, 49, 50, 52, 50, 48, 50), 8));
+    }
+
+    @Test
+    void fast18ShiftClicksTwoTicksApartAreNotMacro() {
+        assertFalse(InventoryMacroCheck.isRoboticRhythm(seq(100, 101, 99, 100, 102, 100, 98, 100), 8));
     }
 
     @Test
     void humanShiftClickingIsNotMacro() {
         assertFalse(InventoryMacroCheck.isRoboticRhythm(seq(140, 210, 160, 300, 180, 150, 240, 190), 8));
-        assertFalse(InventoryMacroCheck.isBurst(seq(140, 210, 160), 4, 50));
     }
 
     @Test
-    void zeroDelayStealerIsBurst() {
-        assertTrue(InventoryMacroCheck.isBurst(seq(2, 1, 3, 1, 2), 4, 50));
+    void zeroDelayStealerIsMacro() {
+        assertTrue(InventoryMacroCheck.isRoboticRhythm(seq(2, 1, 3, 1, 2, 0, 1, 2), 8));
     }
 
     @Test

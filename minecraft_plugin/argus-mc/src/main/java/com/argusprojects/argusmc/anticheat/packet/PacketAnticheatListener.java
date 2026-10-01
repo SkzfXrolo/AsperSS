@@ -363,6 +363,8 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         s.lastHorizMove = Math.hypot(nx - s.lastX, nz - s.lastZ);
                         // Todo cliente reenvia su posicion cada 20 ticks aunque este quieto: eso no es moverse.
                         if (s.lastHorizMove > 0.03) s.lastRealMoveMs = now;
+                        // Caminar de verdad (en el piso, a paso de caminar): la inercia de un salto no cuenta.
+                        if (s.lastHorizMove > 0.1 && nowOnGround && s.lastOnGround) s.lastGroundMoveMs = now;
                         s.lastX = nx;
                         s.lastY = ny;
                         s.lastZ = nz;
@@ -455,12 +457,16 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                 s.pushSwing(now);
                 swingCheck.handleSwing(player, s, now, sink());
                 if (plugin.getReplayRecorder() != null) plugin.getReplayRecorder().swing(player);
-                autoClickTickCheck.handleSwing(player, s, now, sink());
                 triggerBotCheck.handleSwing(s);
                 if (s.pendingSwingTarget != null) resolvePendingSwing(player, s);
-                plugin.getAutoClickEngine().onSwing(player, now, v ->
-                    Bukkit.getScheduler().runTask(plugin, () ->
-                        plugin.getViolationManager().flag(v)));
+                // Comiendo/bloqueando con click derecho apretado sobre un bloque, el cliente 1.8 (ViaRewind)
+                // manda un swing por tick: no son clicks.
+                if (!player.isHandRaised()) {
+                    autoClickTickCheck.handleSwing(player, s, now, sink());
+                    plugin.getAutoClickEngine().onSwing(player, now, v ->
+                        Bukkit.getScheduler().runTask(plugin, () ->
+                            plugin.getViolationManager().flag(v)));
+                }
 
             } else if (type == PacketType.Play.Client.TELEPORT_CONFIRM) {
                 s.rotationResyncPending = true;

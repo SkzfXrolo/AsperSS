@@ -45,7 +45,7 @@ public final class PacketDataStore {
         public volatile int    groundSpoofConsec;
         public volatile int    noSlowDownConsec;
         public volatile long   noSlowDownLastMs, noSlowSneakLastMs;
-        public volatile long   noSlowSneakWinStartMs;
+        public volatile long   noSlowSneakWinStartMs, lastGroundMoveMs;
         public volatile double noSlowSneakWinDist;
         public volatile boolean packetSneaking;
         public volatile long   sneakToggleMs;
