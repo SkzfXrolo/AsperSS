@@ -58,6 +58,21 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         s.teleportUntilMs = System.currentTimeMillis() + 1_500L;
     }
 
+    /** Reaparecer y cambiar de mundo mueven al jugador sin PlayerTeleportEvent: mismo grace que un teleport. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onRespawn(org.bukkit.event.player.PlayerRespawnEvent e) {
+        PacketDataStore.State s = store.get(e.getPlayer().getUniqueId());
+        s.teleporting = true;
+        s.teleportUntilMs = System.currentTimeMillis() + 1_500L;
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onWorldChange(org.bukkit.event.player.PlayerChangedWorldEvent e) {
+        PacketDataStore.State s = store.get(e.getPlayer().getUniqueId());
+        s.teleporting = true;
+        s.teleportUntilMs = System.currentTimeMillis() + 1_500L;
+    }
+
     /** Al bajarse, el server reubica al jugador junto al vehiculo: equivale a un teleport. */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onVehicleExit(org.bukkit.event.vehicle.VehicleExitEvent e) {
@@ -77,6 +92,13 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         s.serverVelConsumed = false;
 
         double mag = Math.sqrt(s.serverVelX * s.serverVelX + s.serverVelZ * s.serverVelZ);
+        s.kbX = s.serverVelX;
+        s.kbY = s.serverVelY;
+        s.kbZ = s.serverVelZ;
+        s.kbAtMs = s.serverVelAssignedAtMs;
+        s.kbBestAlong = Double.NEGATIVE_INFINITY;
+        s.kbBestDy = Double.NEGATIVE_INFINITY;
+        s.kbPending = mag >= 0.2 || s.serverVelY >= 0.25;
         if (mag > 0.05) {
             s.lastKnockbackExpectedMs  = s.serverVelAssignedAtMs;
             s.lastKnockbackExpectedMag = mag;
@@ -144,6 +166,7 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         PacketDataStore.State s = store.get(p.getUniqueId());
         long now = System.currentTimeMillis();
         listener.getBowAimCheck().handleShoot(p, s, now, listener.getSink());
+        listener.getBowAimbotCheck().onShoot(p, listener.getSink());
 
         long chargeMs = s.useItemStartMs == 0L ? 0L : (now - s.useItemStartMs);
         listener.getFastBowCheck().handleBowShoot(p, s, chargeMs, e.getForce(), listener.getSink());
@@ -176,8 +199,11 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         if (!tracked) return;
         PacketDataStore.State s = store.get(p.getUniqueId());
         long now = System.currentTimeMillis();
+        // Click repetido mientras ya usa el item (1.8): no reinicia el tiempo de uso.
+        if (p.isHandRaised() && s.useItemStartMs != 0L && m.name().equals(s.useItemMaterial)) return;
         s.useItemStartMs  = now;
         s.useItemMaterial = m.name();
+        if (m == org.bukkit.Material.BOW) listener.getBowAimbotCheck().startDraw(p);
         listener.getAutoPotionCheck().handleUseStart(p, s, m.name(), now, listener.getSink());
     }
 

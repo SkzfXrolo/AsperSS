@@ -13,6 +13,7 @@ import org.bukkit.inventory.ItemStack;
 
 public final class NoSlowSneakCheck {
 
+    private static final long SNEAK_SETTLE_MS = 400L;
     private static final long DAMAGE_GRACE_MS = 1000L;
 
     private final ArgusPlugin plugin;
@@ -26,7 +27,10 @@ public final class NoSlowSneakCheck {
         if (!plugin.getAnticheatConfig().isCheckEnabled("noslowsneak")) return;
         if (plugin.getLagCompensator().shouldSuppress(player, "noslowsneak")) return;
         if (plugin.getWarmupGracePeriod().inGrace(player, "noslowsneak")) return;
-        if (!s.sneakActive || now - s.lastDamageTakenMs < DAMAGE_GRACE_MS) {
+        // En el aire se conserva la inercia (sprint-jump + shift es legit) y al agacharse la
+        // velocidad tarda unos ticks en caer: solo se evalua en piso con sneak sostenido.
+        if (!s.sneakActive || !s.lastOnGround || now - s.sneakStartMs < SNEAK_SETTLE_MS
+            || now - s.lastDamageTakenMs < DAMAGE_GRACE_MS) {
             s.noSlowSneakConsec = 0;
             s.noSlowSneakLastMs = now;
             return;

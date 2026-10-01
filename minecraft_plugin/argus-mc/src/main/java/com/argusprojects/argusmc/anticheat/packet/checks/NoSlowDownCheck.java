@@ -24,7 +24,9 @@ public final class NoSlowDownCheck {
                                      double nx, double nz, long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("noslowdown")) return;
         // Estado real del server: true solo mientras el item se esta usando (comer, arco, escudo...).
-        if (!player.isHandRaised() || now - s.lastDamageTakenMs < DAMAGE_GRACE_MS) {
+        // Block-hit / empezar a comer corriendo: el impulso del sprint tarda unos ticks en caer.
+        if (!player.isHandRaised() || now - s.lastDamageTakenMs < DAMAGE_GRACE_MS
+            || now - s.useItemStartMs < 300L) {
             s.noSlowDownConsec = 0;
             s.noSlowDownLastMs = now;
             return;

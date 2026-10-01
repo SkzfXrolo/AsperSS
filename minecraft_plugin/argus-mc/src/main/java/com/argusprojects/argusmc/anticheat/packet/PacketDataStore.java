@@ -45,6 +45,13 @@ public final class PacketDataStore {
         public volatile int    groundSpoofConsec;
         public volatile int    noSlowDownConsec;
         public volatile long   noSlowDownLastMs, noSlowSneakLastMs;
+        public volatile boolean packetSneaking;
+        public volatile long   sneakToggleMs;
+        public volatile double safeWalkDirX, safeWalkDirZ;
+        public volatile long   safeWalkPeakMs, safeWalkWindowStartMs;
+        public volatile int    safeWalkStops;
+        public volatile long   scaffoldSnapMs, scaffoldBelowPlaceMs, scaffoldSnapLastHitMs, scaffoldSnapWindowStartMs;
+        public volatile int    scaffoldSnapHits;
         public volatile long   lastMoveMs;
         public volatile long   joinMs;
 
@@ -74,6 +81,9 @@ public final class PacketDataStore {
 
         public volatile int    speedOverflowCounter;
         public volatile long   lastSpeedFlagMs;
+        /** Ventana de 1s de desplazamiento horizontal: {tiempoMs, distancia}. Solo lo toca el hilo netty del jugador. */
+        public final java.util.ArrayDeque<double[]> speedWindow = new java.util.ArrayDeque<>();
+        public volatile long   speedWindowStartMs, speedExemptMs, lastSpeedAvgFlagMs;
         public volatile long   lastTimerFlagMs;
         public volatile long   lastCpsFlagMs;
         public volatile long   lastAutoclickFlagMs;
@@ -102,6 +112,35 @@ public final class PacketDataStore {
         public volatile int    jetpackConsec;
 
         public volatile int    spiderConsec;
+        /** Paquetes de movimiento recibidos = ticks del cliente (1.8 manda uno por tick siempre). */
+        public volatile long   clientTicks;
+        public volatile long   lastPlaceMs;
+        public volatile long   nukerFovWindowStartMs;
+        public volatile int    nukerFovHits;
+        /** Golpe pendiente de evaluar FOV hasta la rotacion siguiente. */
+        public volatile org.bukkit.entity.Entity fovTarget;
+        public volatile float  fovYaw0, fovPitch0;
+        public volatile long   fovAtMs;
+        public volatile double fovLag;
+        public volatile long   airPlaceWindowStartMs, afkLastFlagMs;
+        public volatile int    airPlaceHits, afkRotConsec, afkJumpCount;
+        public volatile double afkLastDYaw, afkLastDPitch;
+        public final long[]    afkJumps = new long[6];
+        public final long[]    swingTicks = new long[com.argusprojects.argusmc.anticheat.packet.checks.AutoClickTickCheck.RING];
+        public final long[]    swingTimes = new long[com.argusprojects.argusmc.anticheat.packet.checks.AutoClickTickCheck.RING];
+        public volatile int    swingTickCount;
+        public volatile long   lastSwingTickMs, lastDigMs, lastAutoClickTickFlagMs;
+        public final java.util.ArrayDeque<Long> bowShots = new java.util.ArrayDeque<>();
+        public volatile boolean kbPending;
+        public volatile double kbX, kbY, kbZ, kbBestAlong, kbBestDy;
+        public volatile long   kbAtMs, antiKbWindowStartMs;
+        public volatile long   critHopMs, critWindowStartMs;
+        public volatile int    critHits;
+        public volatile long   lastFastPlaceRhythmFlagMs;
+        public volatile double strafePrevDx, strafePrevDz;
+        public volatile int    strafeAirTicks, strafeHits;
+        public volatile long   strafeWindowStartMs;
+        public volatile long   spiderWindowStartMs;
 
         public volatile int    velocityIgnoredConsec;
 

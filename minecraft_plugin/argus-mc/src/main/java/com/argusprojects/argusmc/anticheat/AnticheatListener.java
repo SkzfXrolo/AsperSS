@@ -687,6 +687,8 @@ public final class AnticheatListener implements Listener {
         Material mat = e.getItem().getType();
         if (!isEdible(mat)) return;
 
+        // Click derecho repetido mientras ya come (comun en 1.8) no reinicia el tiempo de comida.
+        if (e.getPlayer().isHandRaised() && state(e.getPlayer()).eatStartedMs > 0) return;
         state(e.getPlayer()).eatStartedMs = System.currentTimeMillis();
     }
 

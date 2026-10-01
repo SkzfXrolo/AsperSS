@@ -3,7 +3,7 @@
 Lista completa de checks anti-cheat con su nivel de severidad por defecto
 y descripción corta. Para tuning fino, ver `TUNING_GUIDE.md`.
 
-Total: **50 checks activos** (5 base Pack 47 + 12 packet base + 17 Round 2 + 20 Round 3 — algunos solapan funcionalmente con variantes "advanced").
+Total: **62 checks activos** (5 base Pack 47 + 12 packet base + 17 Round 2 + 20 Round 3 + 12 Round 4 — algunos solapan funcionalmente con variantes "advanced").
 
 ## Movement
 
@@ -99,6 +99,33 @@ Total: **50 checks activos** (5 base Pack 47 + 12 packet base + 17 Round 2 + 20 
 | `ping_spoof`       | MID   | KeepAlive RTT inflado artificialmente                 |
 | `multi_velocity`   | HIGH  | Cliente ignora N velocities consecutivos              |
 | `aim_snap_packet`  | MID   | Delta rotation entre packets > cap                    |
+
+## Round 4 — módulos de clientes de hacks (probados contra bots que imitan Flux)
+
+| Check                    | Nivel     | Notas                                                                 |
+|--------------------------|-----------|-----------------------------------------------------------------------|
+| `criticals_packet`       | MID/HIGH  | Mini-salto falso (<0.40) pegado a un ataque, 3/6 en 10s                |
+| `strafe_packet`          | MID/HIGH  | Gira en el aire sin perder velocidad (v·0.91 + 0.026 máx)              |
+| `safewalk_packet`        | MID/HIGH  | Frena justo en el borde sin agacharse, 3/6 en 15s                      |
+| `scaffold_snap_packet`   | MID/HIGH  | Giro >90° en un tick pegado a colocar bajo los pies                    |
+| `autoclicker_ticks_packet` | MID/HIGH | Macro externa: 40 clicks ≥9 CPS siempre en 2 intervalos de tick       |
+| `airplace_packet`        | MID/HIGH  | Coloca contra un bloque que en el server es aire                       |
+| `antiafk_packet`         | LOW/MID   | Rotación idéntica 40 ticks / saltos a intervalo fijo                   |
+| `nuker_fov_packet`       | MID/HIGH  | Rompe bloques fuera de la mira (>50°), sin mirar velocidad (prisiones) |
+| `antikb_packet`          | MID/HIGH  | Reescrito: desplazamiento EN la dirección del knockback durante ping+400ms |
+| `speed_packet` (promedio) | MID/HIGH | Promedio de 1s > 9.3 bps (el pico por tick legit llega a ~12)          |
+| `fast_place_packet` (ritmo) | MID/HIGH | 10 colocaciones a intervalo fijo más rápido que vanilla (200ms)      |
+| `fastbow_packet` (cadencia) | MID/HIGH | ≥6 flechas/s (Paper cuenta la carga en ticks reales)                 |
+
+## Pruebas (replay)
+
+Cada alerta MID+ guarda `plugins/ArgusMC/evidence/<jugador>/<fecha>_<hack>.html`:
+replay 3D autocontenido de 15s antes a 5s después (posiciones, giros, golpes con
+distancia real, bloques de alrededor) con cámara cine/POV/libre y botón para
+descargar video 1280×720 con el HUD. `#t=<seg>` en la URL abre ese instante.
+Con `enforcement: true`, ningún kick/ban se aplica hasta que la prueba esté en
+disco, y el ban exige 2 hacks distintos en HIGH+ (o 2 CRITICAL); el motivo del
+ban incluye la ruta de la prueba.
 
 ---
 

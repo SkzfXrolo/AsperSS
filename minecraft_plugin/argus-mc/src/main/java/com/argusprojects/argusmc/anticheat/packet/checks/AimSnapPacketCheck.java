@@ -40,10 +40,7 @@ public final class AimSnapPacketCheck {
                 sink.flag(new Violation(player, "aim_snap_packet",
                     ViolationLevel.HIGH,
                     String.format("delta=%.1f° dyaw=%.1f° dpitch=%.1f° sinceAttack=%dms", delta, dyaw, dpitch, sinceAttack)));
-            } else if (delta >= extremeSnap) {
-                sink.flag(new Violation(player, "aim_snap_packet",
-                    ViolationLevel.LOW,
-                    String.format("delta=%.1f° (no recent attack)", delta)));
+            // Girar rapido sin pegar es normal (darse vuelta en PvP 1.8): no se alerta.
             }
         }
     }

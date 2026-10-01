@@ -24,9 +24,14 @@ public final class KillauraNoSwingCheck {
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("killaura_noswing");
         long maxSwingLag = sec != null ? sec.getLong("max_swing_lag_ms", 100L) : 100L;
-        int  consecMid   = sec != null ? sec.getInt("consec_mid", 3) : 3;
-        int  consecHigh  = sec != null ? sec.getInt("consec_high", 5) : 5;
+        int  consecMid   = sec != null ? sec.getInt("consec_mid", 6) : 6;
+        int  consecHigh  = sec != null ? sec.getInt("consec_high", 10) : 10;
 
+        // Block-hit 1.8 (ViaRewind emula el bloqueo con escudo): los swings se pierden mientras bloquea.
+        if (player.isBlocking() || player.isHandRaised() || now - s.useItemStartMs < 500L) {
+            s.noSwingConsec = 0;
+            return;
+        }
         long sinceSwing = s.lastSwingMs == 0 ? Long.MAX_VALUE : (now - s.lastSwingMs);
         if (sinceSwing <= maxSwingLag) {
             s.noSwingConsec = 0;

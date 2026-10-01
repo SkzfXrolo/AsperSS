@@ -39,6 +39,7 @@ public final class ArgusPlugin extends JavaPlugin {
     private com.argusprojects.argusmc.api.ViolationBuffer violationBuffer;
     private Messages         messages;
     private ViolationManager violationManager;
+    private com.argusprojects.argusmc.anticheat.replay.ReplayRecorder replayRecorder;
     private AutoClickEngine autoClickEngine;
     private AnticheatListener anticheatListener;
     private PacketEventsBootstrap packetEventsBootstrap;
@@ -71,6 +72,8 @@ public final class ArgusPlugin extends JavaPlugin {
             this.violationBuffer = new com.argusprojects.argusmc.api.ViolationBuffer(this, this.apiClient);
         }
         this.violationManager = new ViolationManager(this);
+        this.replayRecorder = new com.argusprojects.argusmc.anticheat.replay.ReplayRecorder(this);
+        getServer().getScheduler().runTaskTimer(this, this.replayRecorder, 1L, 1L);
         this.lagCompensator = new com.argusprojects.argusmc.tuning.LagCompensator(this);
         this.warmupGracePeriod = new com.argusprojects.argusmc.tuning.WarmupGracePeriod(this);
         this.falsePositiveLogger = new com.argusprojects.argusmc.tuning.FalsePositiveLogger(this);
@@ -218,6 +221,7 @@ public final class ArgusPlugin extends JavaPlugin {
     public ArgusApiClient getApiClient()          { return apiClient; }
     public Messages getMessages()                 { return messages; }
     public ViolationManager getViolationManager() { return violationManager; }
+    public com.argusprojects.argusmc.anticheat.replay.ReplayRecorder getReplayRecorder() { return replayRecorder; }
     public AutoClickEngine getAutoClickEngine()   { return autoClickEngine; }
     public PacketEventsBootstrap getPacketEventsBootstrap() { return packetEventsBootstrap; }
     public com.argusprojects.argusmc.tuning.LagCompensator getLagCompensator() { return lagCompensator; }

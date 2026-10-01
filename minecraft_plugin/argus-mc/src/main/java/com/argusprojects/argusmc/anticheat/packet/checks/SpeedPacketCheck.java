@@ -42,9 +42,13 @@ public final class SpeedPacketCheck {
         if (player.isInWater()) return;
         if (player.isClimbing()) return;
 
+        ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("speed_packet");
+        // Antes de la exencion de combate y del filtro de dt: pegar no da velocidad (el knockback
+        // recibido ya exime via lastDamageTakenMs) y descartar paquetes subestimaria el promedio.
+        checkSustained(player, s, Math.hypot(nx - s.lastX, nz - s.lastZ), now, sec, sink);
+
         if (isInCombat(s, now)) return;
 
-        ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("speed_packet");
         double baseCap = sec != null ? sec.getDouble("max_bps", 7.8) : 7.8;
         int consecutiveToFlag = sec != null ? sec.getInt("consecutive_to_flag", 5) : 5;
         long minDtMs = sec != null ? sec.getLong("min_dt_ms", 45L) : 45L;
@@ -60,6 +64,7 @@ public final class SpeedPacketCheck {
         if (dh < 0.05) return;
 
         double bps = dh * 1000.0 / dt;
+
 
         double allowance = 1.0;
         if (player.isSprinting()) allowance *= 1.12;
@@ -98,6 +103,41 @@ public final class SpeedPacketCheck {
 
         s.speedOverflowCounter = 0;
         s.lastSpeedFlagMs = now;
+    }
+
+    /**
+     * Promedio sostenido en 1s: el pico por tick de un sprint-jump legit llega a ~12 bps (por eso el
+     * check por tick es tolerante), pero el promedio vanilla no pasa de ~7.3 bps (headhitter ~8.5).
+     */
+    private void checkSustained(Player player, PacketDataStore.State s, double dh, long now,
+                                ConfigurationSection sec, ViolationSink sink) {
+        if (isOnIce(player) || isOnSoulSpeed(player) || now - s.lastDamageTakenMs < 2_000L) s.speedExemptMs = now;
+        java.util.ArrayDeque<double[]> win = s.speedWindow;
+        double[] last = win.peekLast();
+        if (last != null && now - (long) last[0] > 250L) {
+            win.clear();
+            s.speedWindowStartMs = 0L;
+        }
+        win.addLast(new double[]{now, dh});
+        while (!win.isEmpty() && now - (long) win.peekFirst()[0] > 1_000L) {
+            s.speedWindowStartMs = (long) win.pollFirst()[0];
+        }
+        if (s.speedWindowStartMs == 0L || now - s.speedExemptMs < 2_000L) return;
+
+        double sum = 0;
+        for (double[] e : win) sum += e[1];
+        double avgBps = sum * 1000.0 / (now - s.speedWindowStartMs);
+
+        double cap = sec != null ? sec.getDouble("avg_max_bps", 9.3) : 9.3;
+        PotionEffect speed = getEffect(player, "SPEED");
+        if (speed != null) cap *= 1.0 + 0.20 * (speed.getAmplifier() + 1);
+        if (avgBps <= cap) return;
+        long cooldown = sec != null ? sec.getLong("flag_cooldown_ms", 2_000L) : 2_000L;
+        if (now - s.lastSpeedAvgFlagMs < cooldown) return;
+        s.lastSpeedAvgFlagMs = now;
+        ViolationLevel lvl = avgBps > cap * 1.3 ? ViolationLevel.HIGH : ViolationLevel.MID;
+        sink.flag(new Violation(player, "speed_packet", lvl,
+            String.format("promedio 1s=%.2f bps (max %.2f)", avgBps, cap)));
     }
 
     private static boolean isInCombat(PacketDataStore.State s, long now) {

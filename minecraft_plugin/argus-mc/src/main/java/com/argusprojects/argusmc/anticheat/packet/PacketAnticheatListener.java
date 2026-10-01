@@ -22,6 +22,15 @@ import com.argusprojects.argusmc.anticheat.packet.checks.PhaseClipCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.Reach3DCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.RegenCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.ScaffoldRotationCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.ScaffoldSnapCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.SafeWalkCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.StrafeCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.CriticalsCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.AutoClickTickCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.AirPlaceCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.NukerFovCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.AntiAfkCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.BowAimbotCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.ScaffoldTowerCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.TimerJitterCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.TracersCheck;
@@ -128,6 +137,15 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final KillauraNoSwingCheck   killauraNoSwingCheck;
     private final KillauraThruWallCheck  killauraThruWallCheck;
     private final ScaffoldRotationCheck  scaffoldRotationCheck;
+    private final ScaffoldSnapCheck      scaffoldSnapCheck;
+    private final SafeWalkCheck          safeWalkCheck;
+    private final StrafeCheck            strafeCheck;
+    private final CriticalsCheck         criticalsCheck;
+    private final AutoClickTickCheck     autoClickTickCheck;
+    private final AirPlaceCheck          airPlaceCheck;
+    private final NukerFovCheck          nukerFovCheck;
+    private final AntiAfkCheck           antiAfkCheck;
+    private final BowAimbotCheck         bowAimbotCheck;
     private final ScaffoldTowerCheck     scaffoldTowerCheck;
     private final TimerJitterCheck       timerJitterCheck;
     private final NoSlowDownCheck        noSlowDownCheck;
@@ -197,6 +215,15 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.killauraNoSwingCheck  = new KillauraNoSwingCheck(plugin);
         this.killauraThruWallCheck = new KillauraThruWallCheck(plugin);
         this.scaffoldRotationCheck = new ScaffoldRotationCheck(plugin);
+        this.scaffoldSnapCheck     = new ScaffoldSnapCheck(plugin);
+        this.safeWalkCheck         = new SafeWalkCheck(plugin);
+        this.strafeCheck           = new StrafeCheck(plugin);
+        this.criticalsCheck        = new CriticalsCheck(plugin);
+        this.autoClickTickCheck    = new AutoClickTickCheck(plugin);
+        this.airPlaceCheck         = new AirPlaceCheck(plugin);
+        this.nukerFovCheck         = new NukerFovCheck(plugin);
+        this.antiAfkCheck          = new AntiAfkCheck(plugin);
+        this.bowAimbotCheck        = new BowAimbotCheck(plugin);
         this.scaffoldTowerCheck    = new ScaffoldTowerCheck(plugin);
         this.timerJitterCheck      = new TimerJitterCheck(plugin);
         this.noSlowDownCheck       = new NoSlowDownCheck(plugin);
@@ -226,6 +253,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     public CritCheck getCritCheck() { return critCheck; }
     public ProjectileAimCheck getProjectileAimCheck() { return projectileAimCheck; }
     public BowAimCheck getBowAimCheck() { return bowAimCheck; }
+    public BowAimbotCheck getBowAimbotCheck() { return bowAimbotCheck; }
     public ItemPickupCheck getItemPickupCheck() { return itemPickupCheck; }
     public ChatMacroCheck getChatMacroCheck() { return chatMacroCheck; }
     public NamedItemSpamCheck getNamedItemSpamCheck() { return namedItemSpamCheck; }
@@ -255,6 +283,9 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
             if (s.pendingSwingTarget != null && type != PacketType.Play.Client.ANIMATION) {
                 resolvePendingSwing(player, s);
             }
+            if (s.fovTarget != null && System.currentTimeMillis() - s.fovAtMs > 150L) {
+                resolvePendingFov(player, s, s.fovYaw0, s.fovPitch0);
+            }
 
             if (type == PacketType.Play.Client.PLAYER_POSITION
                 || type == PacketType.Play.Client.PLAYER_POSITION_AND_ROTATION
@@ -262,6 +293,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                 || type == PacketType.Play.Client.PLAYER_FLYING) {
 
                 long now = System.currentTimeMillis();
+                s.clientTicks++;
 
                 WrapperPlayClientPlayerFlying wrap = new WrapperPlayClientPlayerFlying(event);
                 boolean nowOnGround;
@@ -301,8 +333,12 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
 
                         timerJitterCheck.handlePositionPacket(player, s, now, sink());
                         noSlowDownCheck.handlePositionPacket(player, s, nx, nz, now, sink());
-                        antiKnockbackCheck.handlePositionPacket(player, s, nx, nz, now, sink());
+                        antiKnockbackCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
                         noSlowSneakCheck.handlePositionPacket(player, s, nx, nz, now, sink());
+                        safeWalkCheck.handlePositionPacket(player, s, nx, ny, nz, nowOnGround, now, sink());
+                        strafeCheck.handlePositionPacket(player, s, nx, nz, nowOnGround, now, sink());
+                        criticalsCheck.handlePositionPacket(player, s, nx, ny, nz, nowOnGround, now);
+                        antiAfkCheck.handlePositionPacket(player, s, nx, ny, nz, nowOnGround, now, sink());
                         liquidJesusCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
                         phaseClipCheck.handlePositionPacket(player, s, nx, ny, nz, now, sink());
                         noFallPacketCheck.handlePositionPacket(player, s, nx, ny, nz, nowOnGround, sink());
@@ -326,12 +362,15 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         invalidRotationCheck.handleRotation(player, s, ny, npi, sink());
 
                         aimSnapCheck.handleRotation(player, s, ny, npi, sink());
+                        scaffoldSnapCheck.handleRotation(player, s, s.lastYaw, s.lastPitch, ny, npi, now, sink());
+                        antiAfkCheck.handleRotation(player, s, s.lastYaw, s.lastPitch, ny, npi, now, sink());
 
                         s.pushRotation(ny, npi, now);
                         s.prevYaw   = s.lastYaw;
                         s.prevPitch = s.lastPitch;
                         s.lastYaw   = ny;
                         s.lastPitch = npi;
+                        if (s.fovTarget != null) resolvePendingFov(player, s, ny, npi);
 
                         killauraRotationCheck.handleRotation(player, s, ny, npi, now, sink());
                         tracersCheck.handleRotation(player, s, entities.invisiblePlayers(), sink());
@@ -353,16 +392,28 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                     Entity target = entities.byId(wrap.getEntityId());
 
                     if (target != null && target.isValid()) {
-                        double lagComp = entities.lagAllowance(target, s.pingMs);
+                        // + lo que el atacante se movio en su ultimo tick: el cliente pega ANTES de mandar
+                        // el movimiento de ese tick, asi que el server lo mide un tick atrasado.
+                        double lagComp = entities.lagAllowance(target, s.pingMs) + Math.min(0.4, s.lastHorizMove) + PICK_BORDER;
                         reachCheck.handleAttack(player, target, s, lagComp, sink());
+                        var rec = plugin.getReplayRecorder();
+                        if (rec != null) rec.attack(player, target, hitboxDistance(player, s, target));
                         // 1.9+ manda el swing DESPUES del ataque: se evalua con el paquete siguiente.
                         s.pendingSwingTarget = target;
                         s.pendingAttackMs = now;
 
                         killauraAimCheck.handleAttack(player, target, s, now, sink());
                         killauraBlockingCheck.handleAttack(player, target, s, now, sink());
-                        hitboxExpansionCheck.handleAttack(player, target, s, sink());
-                        backstabCheck.handleAttack(player, target, s, sink());
+                        hitboxExpansionCheck.handleAttack(player, target, s, lagComp, sink());
+                        criticalsCheck.handleAttack(player, s, now, sink());
+                        // FOV: el cliente pega con la rotacion del frame y la manda al final del tick:
+                        // se evalua con la mejor entre la rotacion previa y la siguiente.
+                        if (s.fovTarget != null) resolvePendingFov(player, s, s.lastYaw, s.lastPitch);
+                        s.fovTarget = target;
+                        s.fovYaw0 = s.lastYaw;
+                        s.fovPitch0 = s.lastPitch;
+                        s.fovAtMs = now;
+                        s.fovLag = lagComp;
                         meleeFlyCheck.handleAttack(player, target, s, now, sink());
 
                         killauraThruWallCheck.handleAttack(player, target, s, sink());
@@ -380,6 +431,8 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                 s.lastSwingMs = now;
                 s.pushSwing(now);
                 swingCheck.handleSwing(player, s, now, sink());
+                if (plugin.getReplayRecorder() != null) plugin.getReplayRecorder().swing(player);
+                autoClickTickCheck.handleSwing(player, s, now, sink());
                 if (s.pendingSwingTarget != null) resolvePendingSwing(player, s);
                 plugin.getAutoClickEngine().onSwing(player, now, v ->
                     Bukkit.getScheduler().runTask(plugin, () ->
@@ -397,6 +450,14 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                 }
                 s.lastKeepAliveRecvMs = now;
 
+            } else if (type == PacketType.Play.Client.ENTITY_ACTION) {
+                // Sneak desde el paquete (netty): el evento Bukkit llega un tick tarde para los checks de movimiento.
+                var act = new com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientEntityAction(event).getAction();
+                if (act == com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientEntityAction.Action.START_SNEAKING || act == com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientEntityAction.Action.STOP_SNEAKING) {
+                    s.packetSneaking = act == com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientEntityAction.Action.START_SNEAKING;
+                    s.sneakToggleMs = System.currentTimeMillis();
+                }
+
             } else if (type == PacketType.Play.Client.CLICK_WINDOW) {
                 long now = System.currentTimeMillis();
                 s.lastClickWindowMs = now;
@@ -404,6 +465,8 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
 
             } else if (type == PacketType.Play.Client.PLAYER_BLOCK_PLACEMENT) {
                 long now = System.currentTimeMillis();
+                s.lastPlaceMs = now;
+                plugin.getAutoClickEngine().onPlace(player.getUniqueId(), now);
                 fastPlaceCheck.handleBlockPlacement(player, s, now, sink());
 
                 try {
@@ -412,10 +475,15 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                     var pos = wrapP.getBlockPosition();
                     if (pos != null) {
                         blockReachCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), sink());
-                        blockGlitchCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), sink());
+                        var cur = wrapP.getCursorPosition();
+                        double[] clicked = cur == null ? null
+                            : new double[]{pos.getX() + cur.getX(), pos.getY() + cur.getY(), pos.getZ() + cur.getZ()};
+                        blockGlitchCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), clicked, sink());
 
                         scaffoldRotationCheck.handleBlockPlacement(player, s, pos.getX(), pos.getY(), pos.getZ(), now, sink());
-                        var cur = wrapP.getCursorPosition();
+                        scaffoldSnapCheck.handlePlacement(player, s, pos.getY(), now, sink());
+                        airPlaceCheck.handlePlacement(player, s, pos.getX(), pos.getY(), pos.getZ(), now, sink());
+                        if (plugin.getReplayRecorder() != null) plugin.getReplayRecorder().place(player, pos.getX(), pos.getY(), pos.getZ());
                         if (cur != null) {
                             scaffoldRotationCheck.handlePlacementAim(player, s, pos.getX() + cur.getX(),
                                 pos.getY() + cur.getY(), pos.getZ() + cur.getZ(), sink());
@@ -427,6 +495,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
             } else if (type == PacketType.Play.Client.PLAYER_DIGGING) {
                 WrapperPlayClientPlayerDigging wrap = new WrapperPlayClientPlayerDigging(event);
                 long now = System.currentTimeMillis();
+                s.lastDigMs = now;
                 DiggingAction action = wrap.getAction();
                 if (action == DiggingAction.START_DIGGING) {
                     org.bukkit.Material mat = resolveBlock(player, wrap);
@@ -435,6 +504,8 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                     if (pos != null) {
                         blockReachCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), sink());
                         blockGlitchCheck.handleBlockInteract(player, s, pos.getX(), pos.getY(), pos.getZ(), sink());
+                        nukerFovCheck.handleStartDigging(player, s, pos.getX(), pos.getY(), pos.getZ(), now, sink());
+                        if (plugin.getReplayRecorder() != null) plugin.getReplayRecorder().dig(player, pos.getX(), pos.getY(), pos.getZ());
                     }
                 } else if (action == DiggingAction.FINISHED_DIGGING) {
                     org.bukkit.Material mat = resolveBlock(player, wrap);
@@ -446,9 +517,14 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                 }
             }
         } catch (Throwable t) {
-
-            plugin.getLogger().fine(() -> "[Argus/Packet] receive err: "
-                + t.getClass().getSimpleName() + " " + t.getMessage());
+            // Un error aca corta todos los checks siguientes de ese paquete: que se vea (con limite).
+            long nowErr = System.currentTimeMillis();
+            if (nowErr - lastErrLogMs > 10_000L) {
+                lastErrLogMs = nowErr;
+                java.io.StringWriter sw = new java.io.StringWriter();
+                t.printStackTrace(new java.io.PrintWriter(sw));
+                plugin.getLogger().warning("[Argus/Packet] error procesando paquete: " + sw.toString().lines().limit(6).reduce((x, y) -> x + " | " + y).orElse(""));
+            }
         }
     }
 
@@ -475,8 +551,24 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         s.pendingSwingTarget = null;
         if (target == null) return;
         long effectiveNow = s.lastSwingMs >= at ? s.lastSwingMs : at;
-        swingCheck.handleAttack(player, target, s, effectiveNow, sink());
         killauraNoSwingCheck.handleAttack(player, target, s, effectiveNow, sink());
+    }
+
+    /** Distancia del ojo (posicion de paquetes) al punto mas cercano del hitbox: lo que mide vanilla. */
+    private static double hitboxDistance(Player player, PacketDataStore.State s, Entity target) {
+        org.bukkit.util.BoundingBox bb = target.getBoundingBox();
+        double ex = s.lastX, ey = s.lastY + (player.isSneaking() ? 1.27 : 1.62), ez = s.lastZ;
+        double dx = ex - Math.max(bb.getMinX(), Math.min(ex, bb.getMaxX()));
+        double dy = ey - Math.max(bb.getMinY(), Math.min(ey, bb.getMaxY()));
+        double dz = ez - Math.max(bb.getMinZ(), Math.min(ez, bb.getMaxZ()));
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    private void resolvePendingFov(Player player, PacketDataStore.State s, float yaw1, float pitch1) {
+        org.bukkit.entity.Entity target = s.fovTarget;
+        s.fovTarget = null;
+        if (target == null || !target.isValid()) return;
+        backstabCheck.evaluate(player, target, s, s.fovYaw0, s.fovPitch0, yaw1, pitch1, s.fovLag, sink());
     }
 
     private org.bukkit.Material resolveBlock(Player player, WrapperPlayClientPlayerDigging wrap) {
@@ -490,9 +582,18 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         }
     }
 
+    private static final long JOIN_GRACE_MS = 3_000L;
+    private volatile long lastErrLogMs;
+    /** El cliente agranda 0.1 el hitbox del objetivo al apuntar (1.8 y 1.9+). */
+    private static final double PICK_BORDER = 0.1;
+
     private ViolationSink sink() {
         return v -> {
             if (v == null) return;
+            // Recien entrado: la base (posicion/rotacion) todavia no existe o viene desincronizada
+            // (aparecer dentro de un bloque, primer golpe antes del primer movimiento).
+            PacketDataStore.State st = store.peek(v.playerUuid);
+            if (st != null && System.currentTimeMillis() - st.joinMs < JOIN_GRACE_MS) return;
 
             Bukkit.getScheduler().runTask(plugin, () ->
                 plugin.getViolationManager().flag(v));

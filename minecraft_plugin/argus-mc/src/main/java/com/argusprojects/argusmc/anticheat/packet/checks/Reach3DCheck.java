@@ -33,7 +33,9 @@ public final class Reach3DCheck {
 
         BoundingBox bb;
         try { bb = target.getBoundingBox(); } catch (Throwable ignored) { return; }
-        Vector eye = player.getEyeLocation().toVector();
+        // Posicion de los paquetes: la de Bukkit va atrasada respecto de lo que el cliente ya mando.
+        Vector eye = (s.lastX == 0 && s.lastY == 0 && s.lastZ == 0) ? player.getEyeLocation().toVector()
+            : new Vector(s.lastX, s.lastY + (player.isSneaking() ? 1.27 : 1.62), s.lastZ);
 
         double cx = clamp(eye.getX(), bb.getMinX(), bb.getMaxX());
         double cy = clamp(eye.getY(), bb.getMinY(), bb.getMaxY());

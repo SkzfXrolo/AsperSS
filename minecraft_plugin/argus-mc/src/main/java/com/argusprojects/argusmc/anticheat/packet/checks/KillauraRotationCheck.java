@@ -52,7 +52,8 @@ public final class KillauraRotationCheck {
     }
 
     private static double angleDelta(float a, float b) {
-        double d = ((a - b + 540.0) % 360.0) - 180.0;
+        // % de Java conserva el signo: con yaws sin normalizar (clientes 1.8) hay que envolver dos veces.
+        double d = (((a - b) % 360.0) + 540.0) % 360.0 - 180.0;
         return d;
     }
 }

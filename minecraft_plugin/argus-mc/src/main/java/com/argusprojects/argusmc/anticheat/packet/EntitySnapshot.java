@@ -22,8 +22,10 @@ public final class EntitySnapshot implements Runnable {
 
     static final double ATTACK_RADIUS = 8.0;
     /** Ticks que el cliente ve atrasadas a otras entidades por interpolacion, ademas del ping. */
-    static final int INTERPOLATION_TICKS = 2;
-    static final double MAX_LAG_ALLOWANCE = 1.2;
+    /** El cliente 1.8 interpola 3 ticks + el golpe sale al tick siguiente del que vio. */
+    static final double INTERPOLATION_TICKS = 4;
+    /** Tope alto: solo se usa si el objetivo realmente se movio tanto (speed, knockback, montura). */
+    static final double MAX_LAG_ALLOWANCE = 2.5;
 
     private volatile Map<Integer, Entity> byId = Map.of();
     private volatile Map<Integer, Double> movedPerTick = Map.of();
@@ -52,7 +54,10 @@ public final class EntitySnapshot implements Runnable {
             double[] prev = lastPos.get(en.getKey());
             if (prev != null) {
                 double dx = now[0] - prev[0], dy = now[1] - prev[1], dz = now[2] - prev[2];
-                moved.put(en.getKey(), Math.sqrt(dx * dx + dy * dy + dz * dz));
+                // Pico reciente que decae ~5 ticks: el cliente ve al objetivo interpolado 2-3 ticks
+                // atras, asi que si recien freno todavia hay que tolerar su movimiento anterior.
+                double m = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                moved.put(en.getKey(), Math.max(m, movedPerTick.getOrDefault(en.getKey(), 0.0) * 0.8));
             }
         }
         lastPos = pos;

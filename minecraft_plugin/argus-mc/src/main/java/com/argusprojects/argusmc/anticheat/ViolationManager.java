@@ -39,6 +39,7 @@ public final class ViolationManager {
     private final Set<UUID> pendingForcedSs = ConcurrentHashMap.newKeySet();
 
     private final Map<UUID, Map<String, Long>> lastStaffAlertMs = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<String, Integer>> alertCounts = new ConcurrentHashMap<>();
     private static final long STAFF_ALERT_COOLDOWN_MS = 3_000L;
 
     public ViolationManager(ArgusPlugin plugin) {
@@ -70,6 +71,8 @@ public final class ViolationManager {
         if (player.hasPermission("argus.ac.bypass")) return;
 
         v = applyLevelOverride(v, cfg);
+
+        if (plugin.getReplayRecorder() != null) plugin.getReplayRecorder().onViolation(v);
 
         synchronized (globalRecent) {
             globalRecent.addLast(v);
@@ -176,7 +179,7 @@ public final class ViolationManager {
         switch (aiAction) {
             case "ban":
                 plugin.getLogger().warning("[AI] Escalando a BAN: " + player.getName() + " — " + verdict.reasoning);
-                banPlayerTemporarily(player, v, cfg.getCriticalBanMinutes());
+                withEvidence(player, v, ev -> banPlayerTemporarily(player, v, cfg.getCriticalBanMinutes(), ev));
                 break;
             case "kick":
                 plugin.getLogger().info("[AI] Escalando a KICK: " + player.getName() + " — " + verdict.reasoning);
@@ -216,25 +219,75 @@ public final class ViolationManager {
         broadcastStaffAlert("ac_alert_mid", v);
         plugin.getLogger().info("[AC] MID kick: " + v);
         if (!canEnforce(cfg, v, "kick")) return;
-        kickPlayer(player, v, "ac_kick_message");
-        clearViolations(player.getUniqueId());
+        withEvidence(player, v, ev -> {
+            kickPlayer(player, v, "ac_kick_message");
+            clearViolations(player.getUniqueId());
+        });
     }
 
     private void handleHigh(Player player, Violation v, AnticheatConfig cfg) {
         broadcastStaffAlert("ac_alert_high", v);
         plugin.getLogger().warning("[AC] HIGH kick + force-SS: " + v);
         if (!canEnforce(cfg, v, "kick")) return;
-        pendingForcedSs.add(player.getUniqueId());
-        kickPlayer(player, v, "ac_kick_message");
-        clearViolations(player.getUniqueId());
+        withEvidence(player, v, ev -> {
+            pendingForcedSs.add(player.getUniqueId());
+            kickPlayer(player, v, "ac_kick_message");
+            clearViolations(player.getUniqueId());
+        });
     }
 
     private void handleCritical(Player player, Violation v, AnticheatConfig cfg) {
         broadcastStaffAlert("ac_alert_critical", v);
         plugin.getLogger().severe("[AC] CRITICAL ban: " + v);
         if (!canEnforce(cfg, v, "ban")) return;
-        banPlayerTemporarily(player, v, cfg.getCriticalBanMinutes());
-        clearViolations(player.getUniqueId());
+        if (!confirmedForBan(player.getUniqueId())) {
+            plugin.getLogger().info("[AC] ban de " + player.getName() + " en espera: falta un segundo hack HIGH+ que lo confirme");
+            return;
+        }
+        withEvidence(player, v, ev -> {
+            banPlayerTemporarily(player, v, cfg.getCriticalBanMinutes(), ev);
+            clearViolations(player.getUniqueId());
+        });
+    }
+
+    /** Ban solo si coinciden 2 hacks distintos en HIGH+ (o 2 CRITICAL) dentro de la ventana. */
+    private boolean confirmedForBan(UUID uuid) {
+        Deque<Violation> q = recent.get(uuid);
+        if (q == null) return false;
+        Set<String> hacks = new HashSet<>();
+        int critical = 0;
+        synchronized (q) {
+            for (Violation p : q) {
+                if (p.level.atLeast(ViolationLevel.HIGH)) hacks.add(ViolationFormatter.checkLabel(p.checkName));
+                if (p.level == ViolationLevel.CRITICAL) critical++;
+            }
+        }
+        return hacks.size() >= 2 || critical >= 2;
+    }
+
+    /**
+     * Ninguna sancion sin prueba: espera (hasta 12s) a que el replay de esta alerta este guardado
+     * en disco y recien ahi ejecuta la accion, pasandole la ruta para el motivo del ban.
+     */
+    private void withEvidence(Player player, Violation v, java.util.function.Consumer<String> action) {
+        var rec = plugin.getReplayRecorder();
+        if (rec == null) return;
+        UUID uuid = player.getUniqueId();
+        final int[] tries = {0};
+        Bukkit.getScheduler().runTaskTimer(plugin, task -> {
+            java.nio.file.Path ev = rec.lastEvidence(uuid);
+            boolean ready = ev != null && java.nio.file.Files.exists(ev)
+                && ev.toFile().lastModified() >= v.timestampMs - 20_000L;
+            if (ready) {
+                task.cancel();
+                String rel = plugin.getDataFolder().toPath().relativize(ev).toString().replace(java.io.File.separatorChar, '/');
+                plugin.getLogger().warning("[AC] sancion a " + player.getName() + " con prueba: " + rel);
+                action.accept(rel);
+            } else if (++tries[0] > 12) {
+                task.cancel();
+                plugin.getLogger().warning("[AC] sancion a " + player.getName() + " cancelada: no se pudo guardar la prueba");
+            }
+        }, 20L, 20L);
     }
 
     private boolean canEnforce(AnticheatConfig cfg, Violation v, String desiredAction) {
@@ -245,16 +298,26 @@ public final class ViolationManager {
     }
 
     private void broadcastStaffAlert(String msgKey, Violation v) {
-        if (!shouldStaffAlert(v.playerUuid, v.checkName)) return;
+        // Cooldown y conteo por HACK (no por check interno): un golpe con reach dispara 3 checks.
+        String hack = ViolationFormatter.checkLabel(v.checkName);
+        int count = alertCounts.computeIfAbsent(v.playerUuid, k -> new ConcurrentHashMap<>()).merge(hack, 1, Integer::sum);
+        if (!shouldStaffAlert(v.playerUuid, hack)) return;
 
-        String line = ViolationFormatter.staffLine(v);
-        String colored = Messages.color(line);
+        Player suspect = Bukkit.getPlayer(v.playerUuid);
+        int ping = suspect != null ? suspect.getPing() : -1;
+        net.md_5.bungee.api.chat.BaseComponent[] line = net.md_5.bungee.api.chat.TextComponent.fromLegacyText(
+            Messages.color(ViolationFormatter.chatLine(v, count)));
+        var hover = new net.md_5.bungee.api.chat.HoverEvent(net.md_5.bungee.api.chat.HoverEvent.Action.SHOW_TEXT,
+            new net.md_5.bungee.api.chat.hover.content.Text(net.md_5.bungee.api.chat.TextComponent.fromLegacyText(
+                Messages.color(ViolationFormatter.hoverText(v, count, ping)))));
+        var click = new net.md_5.bungee.api.chat.ClickEvent(net.md_5.bungee.api.chat.ClickEvent.Action.RUN_COMMAND,
+            "/tp " + v.playerName);
+        for (var c : line) { c.setHoverEvent(hover); c.setClickEvent(click); }
+
         for (Player online : Bukkit.getOnlinePlayers()) {
-            if (online.hasPermission("argus.alerts")) {
-                online.sendMessage(colored);
-            }
+            if (online.hasPermission("argus.alerts")) online.spigot().sendMessage(line);
         }
-        Bukkit.getConsoleSender().sendMessage(colored);
+        Bukkit.getConsoleSender().sendMessage(Messages.color(ViolationFormatter.consoleLine(v, count)));
 
         try {
             var bootstrap = plugin.getPacketEventsBootstrap();
@@ -262,11 +325,7 @@ public final class ViolationManager {
                 var s = bootstrap.getDataStore().peek(v.playerUuid);
                 if (s != null && s.watchedBy != null) {
                     Player watcher = Bukkit.getPlayer(s.watchedBy);
-                    if (watcher != null && watcher.isOnline()) {
-                        watcher.sendMessage(Messages.color("&8[&b&lWATCH&8] &f" + v.playerName
-                            + " &7| &f" + ViolationFormatter.checkLabel(v.checkName)
-                            + "&7: " + ViolationFormatter.formatSummary(v.checkName, v.details)));
-                    }
+                    if (watcher != null && watcher.isOnline()) watcher.spigot().sendMessage(line);
                 }
             }
         } catch (Throwable ignored) {}
@@ -296,11 +355,11 @@ public final class ViolationManager {
     }
 
     @SuppressWarnings("deprecation")
-    private void banPlayerTemporarily(Player player, Violation v, int minutes) {
+    private void banPlayerTemporarily(Player player, Violation v, int minutes, String evidence) {
         Bukkit.getScheduler().runTask(plugin, () -> {
             try {
                 Date expires = new Date(System.currentTimeMillis() + (minutes * 60_000L));
-                String reason = "[ArgusAC] " + v.checkName + " (" + v.details + ")";
+                String reason = "[ArgusAC] " + ViolationFormatter.checkLabel(v.checkName) + " — prueba: " + evidence;
                 Bukkit.getBanList(BanList.Type.NAME).addBan(player.getName(), reason, expires, "ArgusAC");
                 String kickMsg = plugin.getMessages().get("ac_ban_message", Messages.ph(
                     "check",   v.checkName,

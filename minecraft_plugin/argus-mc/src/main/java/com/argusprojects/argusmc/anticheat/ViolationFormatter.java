@@ -4,108 +4,134 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Texto de las alertas al staff. La linea del chat es corta (quien, que hack, cuantas veces,
+ * gravedad); el detalle tecnico va en el hover.
+ */
 public final class ViolationFormatter {
 
     private static final Pattern SCORE_PATTERN = Pattern.compile(
         "score=([\\d.]+).*cps=(\\d+).*burst=(\\d+).*cv=([\\d.]+).*stddev=([\\d.]+)ms");
-    private static final Pattern CPS_MAX_PATTERN = Pattern.compile("cps=(\\d+).*max=(\\d+)");
-    private static final Pattern CPS_PATTERN = Pattern.compile("cps=(\\d+)");
-    private static final Pattern BPS_PATTERN = Pattern.compile("bps=([\\d.]+).*cap=([\\d.]+)");
-    private static final Pattern STDEV_PATTERN = Pattern.compile("CPS=([\\d.]+).*stddev=([\\d.]+)ms");
-    private static final Pattern TIMER_PATTERN = Pattern.compile("packets=(\\d+).*ratio=([\\d.]+)x");
+    private static final Pattern BPS_PATTERN = Pattern.compile("bps=([\\d.,]+)");
+    private static final Pattern DIST_PATTERN = Pattern.compile("dist(?:_bb)?=([\\d.,]+)");
+    private static final Pattern REACH3D_PATTERN = Pattern.compile("reach=([\\d.,]+)");
 
     private ViolationFormatter() {}
 
+    /** Nombre del hack que el staff conoce (varios checks internos detectan el mismo hack). */
     public static String checkLabel(String checkName) {
         if (checkName == null) return "Desconocido";
-        return switch (checkName) {
-            case "cps_packet" -> "Clicks por segundo";
-            case "autoclicker", "autoclicker_packet" -> "AutoClicker";
-            case "autoclicker_advanced_packet" -> "AutoClicker robotico";
-            case "autoclicker_variance" -> "AutoClicker (ritmo fijo)";
-            case "speed_packet", "speed" -> "Velocidad";
-            case "timer_packet", "timer" -> "Timer";
-            case "timer_jitter_packet" -> "Timer irregular";
-            case "ping_spoof_packet" -> "Ping sospechoso";
-            case "reach", "reach_packet", "reach_3d_packet" -> "Reach";
-            case "killaura_no_swing", "killaura_no_swing_packet" -> "KillAura (sin swing)";
-            case "killaura_fov_packet" -> "KillAura (angulo)";
-            case "fly" -> "Fly";
-            case "jesus" -> "Jesus";
+        String c = checkName.endsWith("_packet") ? checkName.substring(0, checkName.length() - 7) : checkName;
+        return switch (c) {
+            case "reach", "reach3d", "reach_3d", "hitbox_expansion" -> "Reach";
+            case "block_reach" -> "Reach (bloques)";
+            case "killaura_no_swing", "killaura_noswing", "killaura_swing", "killaura_fov", "killaura_angle",
+                 "killaura_aim", "killaura_rotation", "killaura_blocking", "backstab", "aimbot" -> "KillAura";
+            case "hit_through_wall", "killaura_thruwall" -> "KillAura (pared)";
+            case "aim_snap" -> "Aim";
+            case "cps", "autoclicker", "autoclicker_variance", "autoclicker_advanced", "autoclicker_ticks" -> "AutoClicker";
+            case "criticals" -> "Criticals";
+            case "antikb", "velocity", "multi_velocity" -> "AntiKB";
+            case "speed" -> "Speed";
+            case "strafe" -> "Strafe";
+            case "fly", "jetpack", "melee_fly", "boat_fly", "boat_fly_advanced" -> "Fly";
+            case "vclip" -> "VClip";
+            case "step" -> "Step";
+            case "spider" -> "Spider";
             case "nofall" -> "NoFall";
-            case "scaffold" -> "Scaffold";
-            case "hit_through_wall" -> "Hit through wall";
-            case "admin_testpacket" -> "Prueba admin";
+            case "jesus", "liquidjesus", "liquid_walk" -> "Jesus";
+            case "phase", "phase_clip" -> "Phase";
+            case "timer", "timer_jitter" -> "Timer";
+            case "noslowdown", "noslowsneak" -> "NoSlow";
+            case "safewalk" -> "SafeWalk";
+            case "scaffold", "scaffold_snap", "scaffold_aim", "scaffold_rotation", "scaffold_tower" -> "Scaffold";
+            case "fast_place", "fastplace" -> "FastPlace";
+            case "airplace" -> "AirPlace";
+            case "fast_break", "fastbreak" -> "FastBreak";
+            case "nuker", "nuker_fov" -> "Nuker";
+            case "block_glitch" -> "GhostHand";
+            case "fasteat", "fast_eat" -> "FastEat";
+            case "fastbow", "bow_aim" -> "FastBow";
+            case "invalid_rotation" -> "Derp";
+            case "antiafk" -> "AntiAFK";
+            case "inv_move" -> "InvMove";
+            case "tracers" -> "Tracers";
+            case "chat_macro", "chat_spam" -> "Spam";
+            case "ping_spoof" -> "PingSpoof";
+            case "regen" -> "Regen";
+            case "admin_test" -> "Prueba";
             default -> {
-                String n = checkName.replace('_', ' ');
-                if (n.endsWith(" packet")) n = n.substring(0, n.length() - 7);
-                yield capitalize(n);
+                String n = c.replace('_', ' ');
+                yield n.isEmpty() ? n : Character.toUpperCase(n.charAt(0)) + n.substring(1);
             }
         };
     }
 
+    /** Resumen legible y corto del detalle tecnico (va en el hover y en consola). */
     public static String formatSummary(String checkName, String details) {
         if (details == null || details.isBlank()) return "comportamiento sospechoso";
         String d = details.trim();
-
         Matcher m = SCORE_PATTERN.matcher(d);
-        if (m.find()) {
-            return String.format(Locale.ROOT,
-                "%s CPS, burst %s, ritmo sospechoso (cv=%s, stddev=%sms)",
-                m.group(2), m.group(3), m.group(4), m.group(5));
+        if (m.find()) return m.group(2) + " CPS, ritmo " + (Double.parseDouble(m.group(4)) < 0.15 ? "robotico" : "sospechoso");
+        String label = checkLabel(checkName);
+        if (label.equals("Reach")) {
+            m = DIST_PATTERN.matcher(d);
+            if (!m.find()) m = REACH3D_PATTERN.matcher(d);
+            if (m.find(0)) return "pego a " + m.group(1).replace(',', '.') + " bloques";
         }
-        m = CPS_MAX_PATTERN.matcher(d);
-        if (m.find()) {
-            return String.format(Locale.ROOT, "%s clics/seg (limite %s)", m.group(1), m.group(2));
+        if (label.equals("Speed")) {
+            m = BPS_PATTERN.matcher(d);
+            if (m.find()) return m.group(1).replace(',', '.') + " bloques/seg";
+            if (d.startsWith("promedio")) return d;
         }
-        m = CPS_PATTERN.matcher(d);
-        if (m.find() && (checkName.contains("cps") || checkName.contains("autoclicker"))) {
-            return String.format(Locale.ROOT, "%s clics por segundo", m.group(1));
-        }
-        m = STDEV_PATTERN.matcher(d);
-        if (m.find()) {
-            return String.format(Locale.ROOT, "%s CPS con ritmo demasiado perfecto (%.1fms)", m.group(1), Double.parseDouble(m.group(2)));
-        }
-        m = BPS_PATTERN.matcher(d);
-        if (m.find()) {
-            return String.format(Locale.ROOT, "se movio a %.1f bloques/seg (limite %.1f)", Double.parseDouble(m.group(1)), Double.parseDouble(m.group(2)));
-        }
-        m = TIMER_PATTERN.matcher(d);
-        if (m.find()) {
-            return String.format(Locale.ROOT, "envio demasiados movimientos (x%s)", m.group(2));
-        }
-        if (d.contains("rtt=0ms") || d.contains("rtt=1ms")) {
-            return "ping local/imposible en red real";
-        }
-        if (d.startsWith("dist=")) {
-            return d.replace("dist=", "distancia ").replace("max=", "max ").replace("b", " bloques");
-        }
-        if (d.startsWith("swing fue hace")) {
-            return "golpeo sin animacion de brazo (" + d + ")";
-        }
-        if (d.contains("(aire)")) {
-            return d.replace("(aire)", " — clics al aire");
-        }
-        return d.length() > 72 ? d.substring(0, 69) + "..." : d;
+        if (d.startsWith("swing fue hace")) return "golpeo sin mover el brazo";
+        return d.length() > 60 ? d.substring(0, 57) + "..." : d;
     }
 
-    public static String staffLine(Violation v) {
-        String levelTag = switch (v.level) {
+    public static String levelColor(ViolationLevel l) {
+        return switch (l) {
             case LOW -> "&e";
-            case MID -> "&c";
-            case HIGH -> "&4&l";
-            case CRITICAL -> "&4&l";
+            case MID -> "&6";
+            case HIGH -> "&c";
+            case CRITICAL -> "&4";
         };
-        return String.format("&8[&6AC&8] %s%s &7| &f%s &7| &f%s&7: %s",
-            levelTag,
-            v.level.name(),
-            v.playerName,
-            checkLabel(v.checkName),
+    }
+
+    public static String levelName(ViolationLevel l) {
+        return switch (l) {
+            case LOW -> "Baja";
+            case MID -> "Media";
+            case HIGH -> "Alta";
+            case CRITICAL -> "Critica";
+        };
+    }
+
+    /** Barra de gravedad: 1 a 4 puntos encendidos. */
+    public static String levelBar(ViolationLevel l) {
+        int on = l.ordinal() + 1;
+        return levelColor(l) + "●".repeat(on) + "&8" + "●".repeat(4 - on);
+    }
+
+    /** Linea del chat: "▎ARGUS » Jugador  Hack  x3  ●●●○" */
+    public static String chatLine(Violation v, int count) {
+        return String.format("&8▎&b&lARGUS &8» &f%s  %s%s  &8x&7%d  %s",
+            v.playerName, levelColor(v.level), checkLabel(v.checkName), count, levelBar(v.level));
+    }
+
+    public static String hoverText(Violation v, int count, int pingMs) {
+        return String.format("&b&l%s &7(%s)%n&7Gravedad: %s%s%n&7Veces: &f%d%n&7Detalle: &f%s%n&7Ping: &f%dms%n%n&eClick para ir hacia &f%s",
+            checkLabel(v.checkName), v.checkName, levelColor(v.level), levelName(v.level), count,
+            formatSummary(v.checkName, v.details), pingMs, v.playerName);
+    }
+
+    public static String consoleLine(Violation v, int count) {
+        return String.format(Locale.ROOT, "&b[Argus] &f%s &8» %s%s &8x%d &7(%s) &8%s",
+            v.playerName, levelColor(v.level), checkLabel(v.checkName), count, levelName(v.level),
             formatSummary(v.checkName, v.details));
     }
 
-    private static String capitalize(String s) {
-        if (s.isEmpty()) return s;
-        return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    /** Compat: linea plana (logs viejos / tests). */
+    public static String staffLine(Violation v) {
+        return chatLine(v, 1);
     }
 }

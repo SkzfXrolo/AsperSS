@@ -17,6 +17,9 @@ public final class AutoClickEngine {
 
     private static final long DEDUPE_MS = 4L;
     private static final long ANALYZE_COOLDOWN_MS = 40L;
+    private static final long PLACE_SWING_MS = 80L;
+    /** Una rafaga en 250ms sin CPS sostenido es red agrupando paquetes (tunel, wifi), no un clicker. */
+    private static final int BURST_MIN_SUSTAINED_CPS = 15;
 
     private final ArgusPlugin plugin;
     private final Map<UUID, PlayerClickState> states = new ConcurrentHashMap<>();
@@ -37,12 +40,20 @@ public final class AutoClickEngine {
             return;
         }
         PlayerClickState s = state(player.getUniqueId());
+        // 1.8 manda swing al poner/usar un bloque: construir rapido no es clickear.
+        if (now - s.lastPlaceMs < PLACE_SWING_MS) {
+            return;
+        }
         if (now - s.lastSwingRecordedMs < DEDUPE_MS) {
             return;
         }
         s.lastSwingRecordedMs = now;
         s.swings.push(now);
         analyze(player, s, now, sink);
+    }
+
+    public void onPlace(UUID uuid, long now) {
+        state(uuid).lastPlaceMs = now;
     }
 
     public void onAttack(Player player, long now, Consumer<Violation> sink) {
@@ -94,7 +105,9 @@ public final class AutoClickEngine {
             score += 2;
         }
 
-        if (cps250 >= settings.burst250High) {
+        if (cps1000 < BURST_MIN_SUSTAINED_CPS) {
+            // sin senal de rafaga
+        } else if (cps250 >= settings.burst250High) {
             score += 8;
             topSignal = "burst_extremo";
         } else if (cps250 >= settings.burst250Low) {
@@ -102,7 +115,9 @@ public final class AutoClickEngine {
             topSignal = "burst_alto";
         }
 
-        if (stats.count >= settings.minSamplesStats) {
+        // A un click por tick o mas rapido (>~17 CPS) el cliente 1.8 procesa uno por tick: el ritmo
+        // sale "perfecto" para cualquier humano rapido. La varianza solo significa algo mas lento.
+        if (stats.count >= settings.minSamplesStats && stats.mean >= 65.0) {
             if (stats.stddev <= settings.stddevExtremeMs && cps1000 >= settings.minCpsForStats) {
                 score += 12;
                 topSignal = "ritmo_perfecto";
@@ -122,22 +137,12 @@ public final class AutoClickEngine {
             } else if (stats.cv <= settings.cvSuspicious && cps1000 >= settings.minCpsForStats) {
                 score += 6;
             }
-
-            if (stats.outlierRatio <= settings.outlierRatioMax
-                && cps1000 >= settings.minCpsForStats
-                && stats.count >= settings.minSamplesStats + 3) {
-                score += 6;
-                topSignal = "uniforme";
-            }
-
-            if (stats.gcdRatio >= settings.gcdRatioSuspicious && cps1000 >= settings.minCpsForStats) {
-                score += 5;
-                topSignal = "timer_redondo";
-            }
+            // Sin outliers ni dt multiplo de 50ms: los clientes procesan clicks por tick, es normal en humanos.
         }
 
         if (cps1000 >= settings.minCpsForStats
             && cps3000 >= settings.minCpsForStats * 2
+            && stats.cv <= settings.cvSuspicious
             && !s.swings.hasPauseLongerThan(4_000L, now, settings.humanPauseMs)) {
             score += 4;
             if (topSignal == null) {
@@ -145,7 +150,8 @@ public final class AutoClickEngine {
             }
         }
 
-        if (cps1000 >= settings.minCpsForStats && attacks1000 == 0 && cps1000 >= settings.airClickMinCps) {
+        if (cps1000 >= settings.minCpsForStats && attacks1000 == 0 && cps1000 >= settings.airClickMinCps
+            && stats.cv <= settings.cvSuspicious) {
             score += 3;
             if (topSignal == null) {
                 topSignal = "clics_aire";
@@ -293,6 +299,7 @@ public final class AutoClickEngine {
         final IntervalStats statsScratch = new IntervalStats();
 
         long lastSwingRecordedMs;
+        long lastPlaceMs;
         long lastAttackRecordedMs;
         long lastAnalyzeMs;
         long lastFlagMs;

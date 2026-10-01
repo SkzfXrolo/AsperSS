@@ -32,19 +32,27 @@ public final class LiquidJesusCheck {
         int consecHigh = sec != null ? sec.getInt("consec_high", 8) : 8;
         double maxAbsDy = sec != null ? sec.getDouble("max_abs_dy", 0.05) : 0.05;
 
-        Material at = player.getWorld().getBlockAt(NumberConversions.floor(nx), NumberConversions.floor(ny), NumberConversions.floor(nz)).getType();
-        Material below = player.getWorld().getBlockAt(NumberConversions.floor(nx), NumberConversions.floor(ny - 0.1), NumberConversions.floor(nz)).getType();
-        boolean overLiquid = (below == Material.WATER || below == Material.LAVA);
-        if (at != Material.AIR || !overLiquid) {
+        // Jesus en cualquier modo (solido o "rebote"): los pies se sostienen en/sobre la superficie
+        // mientras avanza. Nadando legit se flota con los pies ~0.6 por debajo de la superficie.
+        // Paquete repetido sin movimiento: no aporta ni corta la racha.
+        if (Math.abs(nx - s.lastX) < 1e-4 && Math.abs(nz - s.lastZ) < 1e-4 && Math.abs(ny - s.lastY) < 1e-4) return;
+        // Superficie real de la columna: el bloque de agua mas alto en los pies (o justo debajo).
+        // Nadando arriba en vanilla se flota con los pies ~0.4 bajo la superficie; con Jesus quedan encima.
+        org.bukkit.World w = player.getWorld();
+        int bx = NumberConversions.floor(nx), bz = NumberConversions.floor(nz), fy = NumberConversions.floor(ny);
+        int by = isLiquid(w.getBlockAt(bx, fy, bz).getType()) ? fy : fy - 1;
+        while (isLiquid(w.getBlockAt(bx, by + 1, bz).getType())) by++;
+        Material liquid = w.getBlockAt(bx, by, bz).getType();
+        Material at = w.getBlockAt(bx, fy, bz).getType();
+        boolean overLiquid = isLiquid(liquid);
+        boolean surface = ny >= by + 0.8 && ny <= by + 1.35;
+        boolean moving = Math.hypot(nx - s.lastX, nz - s.lastZ) > 0.08;
+        if (!overLiquid || !surface || !moving || (at != Material.AIR && at != Material.WATER && at != Material.LAVA)
+            || Math.abs(ny - s.lastY) > 0.25) {
             s.liquidJesusConsec = 0;
             return;
         }
-
-        double dy = ny - s.lastY;
-        if (Math.abs(dy) > maxAbsDy) {
-            s.liquidJesusConsec = 0;
-            return;
-        }
+        Material below = liquid;
 
         if (hasFrostWalker(player)) {
             s.liquidJesusConsec = 0;
@@ -62,6 +70,10 @@ public final class LiquidJesusCheck {
                 ViolationLevel.MID,
                 "sobre " + below.name() + " x" + s.liquidJesusConsec));
         }
+    }
+
+    private static boolean isLiquid(Material m) {
+        return m == Material.WATER || m == Material.LAVA;
     }
 
     private static boolean hasFrostWalker(Player p) {

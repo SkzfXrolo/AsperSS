@@ -20,7 +20,7 @@ public final class HitboxExpansionCheck {
     }
 
     public void handleAttack(Player attacker, Entity target, PacketDataStore.State s,
-                             ViolationSink sink) {
+                             double lagComp, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("hitbox_expansion")) return;
         if (target == null) return;
 
@@ -29,6 +29,9 @@ public final class HitboxExpansionCheck {
         double extremeMargin= sec != null ? sec.getDouble("extreme_margin", 0.50) : 0.50;
 
         Location eye = attacker.getEyeLocation();
+        if (!(s.lastX == 0 && s.lastY == 0 && s.lastZ == 0)) {
+            eye = new Location(eye.getWorld(), s.lastX, s.lastY + (attacker.isSneaking() ? 1.27 : 1.62), s.lastZ);
+        }
         BoundingBox bb;
         try {
             bb = target.getBoundingBox();
@@ -46,15 +49,16 @@ public final class HitboxExpansionCheck {
         double distToBox = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
         double reachMax = 3.0;
-        double overflow = distToBox - reachMax;
+        // Igual que reach_packet: el objetivo pudo moverse mientras viajaba el paquete (ping + interpolacion).
+        double overflow = distToBox - lagComp - reachMax;
         if (overflow >= extremeMargin) {
             sink.flag(new Violation(attacker, "hitbox_expansion_packet",
                 ViolationLevel.HIGH,
-                String.format("dist_bb=%.2f overflow=%.2f", distToBox, overflow)));
+                String.format("dist_bb=%.2f lag=%.2f overflow=%.2f", distToBox, lagComp, overflow)));
         } else if (overflow >= margin) {
             sink.flag(new Violation(attacker, "hitbox_expansion_packet",
                 ViolationLevel.MID,
-                String.format("dist_bb=%.2f overflow=%.2f", distToBox, overflow)));
+                String.format("dist_bb=%.2f lag=%.2f overflow=%.2f", distToBox, lagComp, overflow)));
         }
     }
 

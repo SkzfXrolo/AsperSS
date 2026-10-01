@@ -33,13 +33,16 @@ public final class SpiderCheck {
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("spider");
         double minDy = sec != null ? sec.getDouble("min_dy", 0.06) : 0.06;
-        int consecMid = sec != null ? sec.getInt("consec_mid", 5) : 5;
-        int consecHigh= sec != null ? sec.getInt("consec_high", 9) : 9;
+        // Ventana (no ticks seguidos): trepar 1 bloque a 0.3/tick son solo 2-3 ticks imposibles.
+        int hitsMid  = sec != null ? sec.getInt("hits_mid", 3) : 3;
+        int hitsHigh = sec != null ? sec.getInt("hits_high", 6) : 6;
+        long window  = sec != null ? sec.getLong("window_ms", 4000L) : 4000L;
+        long now = System.currentTimeMillis();
 
         Location loc = player.getLocation();
         Material at = loc.getBlock().getType();
         if (at == Material.LADDER || at == Material.VINE || at == Material.SCAFFOLDING
-            || at == Material.WATER || at == Material.LAVA
+            || at == Material.WATER || at == Material.LAVA || at == Material.POWDER_SNOW
             || at == Material.TWISTING_VINES || at == Material.WEEPING_VINES
             || at == Material.TWISTING_VINES_PLANT || at == Material.WEEPING_VINES_PLANT) {
             s.spiderConsec = 0;
@@ -50,23 +53,22 @@ public final class SpiderCheck {
         // (vy' = (vy - 0.08) * 0.98). Trepar sin que decaiga no.
         double dy = ny - s.lastY;
         double expected = (s.lastDeltaY - 0.08) * 0.98;
-        if (dy < minDy || s.lastOnGround || dy <= expected + 0.03) {
-            s.spiderConsec = 0;
+        if (dy < minDy || s.lastOnGround || dy <= expected + 0.03
+            || now - s.lastDamageTakenMs < 1_500L || !hasAdjacentWall(loc)) {
             return;
         }
 
-        if (!hasAdjacentWall(loc)) {
+        if (now - s.spiderWindowStartMs > window) {
+            s.spiderWindowStartMs = now;
             s.spiderConsec = 0;
-            return;
         }
-
         s.spiderConsec++;
-        if (s.spiderConsec >= consecHigh) {
+        if (s.spiderConsec >= hitsHigh) {
             sink.flag(new Violation(player, "spider_packet",
                 ViolationLevel.HIGH,
                 String.format("dy>=%.2f con pared adyacente x%d", minDy, s.spiderConsec)));
             s.spiderConsec = 0;
-        } else if (s.spiderConsec >= consecMid) {
+        } else if (s.spiderConsec >= hitsMid) {
             sink.flag(new Violation(player, "spider_packet",
                 ViolationLevel.MID,
                 String.format("dy>=%.2f con pared adyacente x%d", minDy, s.spiderConsec)));
