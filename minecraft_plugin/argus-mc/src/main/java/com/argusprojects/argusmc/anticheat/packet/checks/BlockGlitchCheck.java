@@ -88,7 +88,8 @@ public final class BlockGlitchCheck {
             double pz = eye.getZ() + dir.getZ() * traveled - iz;
             if (Math.min(Math.min(px, 1 - px), Math.min(Math.min(py, 1 - py), Math.min(pz, 1 - pz))) < EDGE_TOLERANCE) continue;
             Material m = w.getBlockAt(ix, iy, iz).getType();
-            if (m.isSolid() && m != Material.AIR && m != Material.WATER && m != Material.LAVA) {
+            // Solo tapa un cubo completo: puertas, trampillas, vallas y losas tienen huecos por donde se clickea.
+            if (m.isOccluding()) {
                 return new int[]{ix, iy, iz};
             }
         }

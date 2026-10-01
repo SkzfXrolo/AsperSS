@@ -28,8 +28,8 @@ public final class LiquidJesusCheck {
         if (player.isSwimming()) return;
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("liquidjesus");
-        int consecMid  = sec != null ? sec.getInt("consec_mid", 4) : 4;
-        int consecHigh = sec != null ? sec.getInt("consec_high", 8) : 8;
+        int consecMid  = sec != null ? sec.getInt("consec_mid", 8) : 8;
+        int consecHigh = sec != null ? sec.getInt("consec_high", 16) : 16;
         double maxAbsDy = sec != null ? sec.getDouble("max_abs_dy", 0.05) : 0.05;
 
         // Jesus en cualquier modo (solido o "rebote"): los pies se sostienen en/sobre la superficie
@@ -45,8 +45,9 @@ public final class LiquidJesusCheck {
         Material liquid = w.getBlockAt(bx, by, bz).getType();
         Material at = w.getBlockAt(bx, fy, bz).getType();
         boolean overLiquid = isLiquid(liquid);
-        boolean surface = ny >= by + 0.8 && ny <= by + 1.35;
-        boolean moving = Math.hypot(nx - s.lastX, nz - s.lastZ) > 0.08;
+        boolean surface = ny >= by + 0.85 && ny <= by + 1.35;
+        // Nadar (tambien flotando en la superficie con cliente 1.8) va a ~0.11/tick; Jesus camina/corre.
+        boolean moving = Math.hypot(nx - s.lastX, nz - s.lastZ) > 0.15;
         if (!overLiquid || !surface || !moving || (at != Material.AIR && at != Material.WATER && at != Material.LAVA)
             || Math.abs(ny - s.lastY) > 0.25) {
             s.liquidJesusConsec = 0;

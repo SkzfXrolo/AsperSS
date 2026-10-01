@@ -25,13 +25,13 @@ class BowAimbotCheckTest {
     void aimbotWithConstantLeadIsLockedOn() {
         BowAimbotCheck.Track t = track(2.5, 0.05, 1);
         assertTrue(t.motion() > 1.0);
-        assertTrue(BowAimbotCheck.isLockedOn(t, 0.8));
+        assertTrue(BowAimbotCheck.isLockedOn(t, 0.35));
     }
 
     @Test
     void humanTrackingCorrectsInJumps() {
         for (long seed = 1; seed <= 20; seed++) {
-            assertFalse(BowAimbotCheck.isLockedOn(track(2.5, 2.5, seed), 0.8), "seed " + seed);
+            assertFalse(BowAimbotCheck.isLockedOn(track(2.5, 2.5, seed), 0.35), "seed " + seed);
         }
     }
 }

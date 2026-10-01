@@ -198,7 +198,7 @@ anticheat:
                              # powder snow, kelp, slow falling, levitation,
                              # gliding, vehicle).
     jesus:
-      enabled: true          # whitelist: lily pad, frost walker enchant,
+      enabled: false         # reemplazado por liquidjesus (FP parado en el borde del agua). whitelist: lily pad, frost walker enchant,
                              # ice blocks, bubble columns, vehicles. Threshold
                              # subido a 8 ticks para evitar transitorios.
     fasteat:
@@ -389,8 +389,7 @@ anticheat:
       min_distance: 25.0
       max_angle_deg: 1.5
     bow_aim:
-      enabled: true          # snap de rotacion > snap_deg en los ultimos
-                             # window_ms antes del release del arco.
+      enabled: false         # un flick-shot (giro rapido antes de soltar) es legit; bow_aimbot cubre el hack.
       window_ms: 150
       snap_deg: 25.0
     boat_fly_advanced:
@@ -489,7 +488,7 @@ anticheat:
       enabled: true          # mira clavada en un objetivo que se mueve mientras carga el arco
       min_samples: 10        # ticks de carga (sin contar los 6 de enganche)
       min_target_deg_per_tick: 0.4
-      max_error_stddev_deg: 0.8
+      max_error_stddev_deg: 0.45
       debug: false           # true = loguea las metricas de cada tiro (para calibrar)
     inventory_macro:
       enabled: true          # ChestStealer/InvCleaner: clicks a ritmo fijo, 4+ en un tick, o click al abrir sin reaccion
@@ -544,7 +543,7 @@ anticheat:
       consec_high: 8
     scaffold_tower:
       enabled: true
-      max_interval_ms: 250
+      max_interval_ms: 300
       consec_mid: 3
       consec_high: 5
     timer_jitter:
@@ -604,17 +603,17 @@ anticheat:
       consec_high: 3
     liquidjesus:
       enabled: true
-      consec_mid: 4
-      consec_high: 8
+      consec_mid: 8
+      consec_high: 16
       max_abs_dy: 0.05
     phaseclip:
       enabled: true
       consec_high: 4
     noslowsneak:
-      enabled: true
-      max_sneak_bps: 1.5
-      consec_mid: 5
-      consec_high: 10
+      enabled: true          # promedio de 1s agachado en el piso; 1.8 conserva el sprint al agacharse (1.7 b/s)
+      max_sneak_bps: 1.95
+      consec_mid: 2          # segundos seguidos por encima
+      consec_high: 4
     autoarmor:
       enabled: true
       combat_window_ms: 3000

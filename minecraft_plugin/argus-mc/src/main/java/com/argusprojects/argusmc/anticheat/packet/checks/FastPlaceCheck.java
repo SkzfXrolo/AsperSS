@@ -33,9 +33,13 @@ public final class FastPlaceCheck {
             times = s.placeTimestamps.stream().mapToLong(Long::longValue).toArray();
         }
         int rhythmMin = sec != null ? sec.getInt("rhythm_samples", 10) : 10;
-        if (times.length > rhythmMin && isMachineRhythm(times, rhythmMin) && now - s.lastFastPlaceRhythmFlagMs > 2_000L) {
+        // Con cliente 1.8 las colocaciones van por tick: un jitter de ~10/s cae justo cada 2 ticks.
+        // Ritmo fijo solo cuenta a 1 por tick (10 seguidas) o, mas lento, 25 identicas seguidas.
+        boolean machine = (times.length > rhythmMin && isMachineRhythm(times, rhythmMin) && meanInterval(times, rhythmMin) <= 75)
+            || (times.length > 25 && isMachineRhythm(times, 25));
+        if (machine && now - s.lastFastPlaceRhythmFlagMs > 2_000L) {
             s.lastFastPlaceRhythmFlagMs = now;
-            boolean sustained = isMachineRhythm(times, rhythmMin * 2);
+            boolean sustained = times.length > rhythmMin * 2 && isMachineRhythm(times, rhythmMin * 2);
             sink.flag(new Violation(player, "fast_place_packet",
                 sustained ? ViolationLevel.HIGH : ViolationLevel.MID,
                 String.format("ritmo de maquina: %d colocaciones a intervalo fijo < vanilla", sustained ? rhythmMin * 2 : rhythmMin)));
@@ -62,6 +66,10 @@ public final class FastPlaceCheck {
      * click va cada 4 ticks (200ms); un humano spameando mezcla 50/100/150ms (clicks por tick).
      * Mira los ultimos n intervalos: media < 175ms y desvio < 18ms = no es una mano.
      */
+    static double meanInterval(long[] times, int n) {
+        return (times[times.length - 1] - times[times.length - 1 - n]) / (double) n;
+    }
+
     static boolean isMachineRhythm(long[] times, int n) {
         if (times.length < n + 1) return false;
         double sum = 0, sum2 = 0;

@@ -49,6 +49,17 @@ public final class LiquidWalkCheck {
             return;
         }
 
+        // Parado en el borde de un bloque (la caja mide 0.6: el centro puede quedar sobre el agua)
+        // o sobre un nenufar: alguna esquina pisa algo que no es liquido.
+        for (double[] c : CORNERS) {
+            Material m = new Location(player.getWorld(), nx + c[0], ny - 0.05, nz + c[1]).getBlock().getType();
+            Material at = new Location(player.getWorld(), nx + c[0], ny + 0.01, nz + c[1]).getBlock().getType();
+            if ((m != Material.WATER && m != Material.LAVA && !m.isAir()) || at == Material.LILY_PAD) {
+                s.liquidWalkConsec = 0;
+                return;
+            }
+        }
+
         if (hasFrostWalker(player) && below == Material.WATER) {
             s.liquidWalkConsec = 0;
             return;
@@ -66,6 +77,8 @@ public final class LiquidWalkCheck {
                 String.format("on-ground sobre %s x%d", below.name(), s.liquidWalkConsec)));
         }
     }
+
+    private static final double[][] CORNERS = {{0.3, 0.3}, {0.3, -0.3}, {-0.3, 0.3}, {-0.3, -0.3}};
 
     private boolean hasFrostWalker(Player p) {
         try {

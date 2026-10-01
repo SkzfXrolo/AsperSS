@@ -51,7 +51,8 @@ public final class ViolationFormatter {
             case "nuker", "nuker_fov" -> "Nuker";
             case "block_glitch" -> "GhostHand";
             case "fasteat", "fast_eat" -> "FastEat";
-            case "fastbow", "bow_aim" -> "FastBow";
+            case "fastbow" -> "FastBow";
+            case "bow_aim", "bow_aimbot" -> "BowAimbot";
             case "invalid_rotation" -> "Derp";
             case "antiafk" -> "AntiAFK";
             case "inv_move" -> "InvMove";

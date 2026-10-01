@@ -31,6 +31,7 @@ import java.util.UUID;
 public final class BowAimbotCheck {
 
     private static final int MAX_TICKS = 100;
+    // ponytail: umbral calibrado con 1 jugador real (0.74 legit) y bots; recalibrar con debug:true si hay quejas.
 
     private final ArgusPlugin plugin;
     private final Map<UUID, Session> sessions = new HashMap<>();
@@ -111,7 +112,7 @@ public final class BowAimbotCheck {
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("bow_aimbot");
         int minSamples = sec != null ? sec.getInt("min_samples", 10) : 10;
         double minMotion = sec != null ? sec.getDouble("min_target_deg_per_tick", 0.4) : 0.4;
-        double maxStd = sec != null ? sec.getDouble("max_error_stddev_deg", 0.8) : 0.8;
+        double maxStd = sec != null ? sec.getDouble("max_error_stddev_deg", 0.45) : 0.45;
 
         // Objetivo = al que apunta (menor error medio) entre los que estuvo mirando toda la carga.
         Track best = null;
@@ -140,11 +141,11 @@ public final class BowAimbotCheck {
     /**
      * El error de la mira contra un objetivo en movimiento casi no varia: eso no lo hace una mano.
      * Se mide relativo al movimiento: seguir algo rapido con desvio chico es lo imposible
-     * (aimbot ~1.2 de desvio por grado de movimiento; una mano 2.5+).
+     * Un humano bueno siguiendo algo lento llega a ~0.7 de desvio; un aimbot real queda < 0.3.
      */
     static boolean isLockedOn(Track t, double maxStd) {
         double std = t.stdErr(), motion = Math.max(0.05, t.motion());
-        return std < maxStd * 0.6 || (std < maxStd && std / motion < 1.6);
+        return std < maxStd && std / motion < 0.8;
     }
 
     static double wrap(double d) {

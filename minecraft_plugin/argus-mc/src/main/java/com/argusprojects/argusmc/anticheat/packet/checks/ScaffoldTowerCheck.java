@@ -11,7 +11,6 @@ import org.bukkit.entity.Player;
 public final class ScaffoldTowerCheck {
 
     private final ArgusPlugin plugin;
-    private int lastX, lastZ;
 
     public ScaffoldTowerCheck(ArgusPlugin plugin) {
         this.plugin = plugin;
@@ -23,30 +22,33 @@ public final class ScaffoldTowerCheck {
         if (!plugin.getAnticheatConfig().isCheckEnabled("scaffold_tower")) return;
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("scaffold_tower");
-        long maxInterval = sec != null ? sec.getLong("max_interval_ms", 250L) : 250L;
+        long maxInterval = sec != null ? sec.getLong("max_interval_ms", 300L) : 300L;
         int  consecMid   = sec != null ? sec.getInt("consec_mid", 3) : 3;
         int  consecHigh  = sec != null ? sec.getInt("consec_high", 5) : 5;
 
-        boolean sameCol = (placedX == lastX) && (placedZ == lastZ);
-        boolean yPlus1  = (placedY == s.lastScaffoldPlaceY + 1);
+        // Se mide el tiempo ENTRE NIVELES: clickear varias veces el mismo bloque (jitter) no cuenta.
+        // Pilarear legit sube un bloque por salto (~450ms); un tower hack, cada 100-250ms.
+        if (placedY == s.lastScaffoldPlaceY && placedX == s.lastTowerX && placedZ == s.lastTowerZ) return;
+        boolean sameCol = placedX == s.lastTowerX && placedZ == s.lastTowerZ;
+        boolean yPlus1  = placedY == s.lastScaffoldPlaceY + 1;
         long dt = now - s.lastScaffoldPlaceMs;
         if (sameCol && yPlus1 && dt <= maxInterval) {
             s.scaffoldTowerConsec++;
             if (s.scaffoldTowerConsec >= consecHigh) {
                 sink.flag(new Violation(player, "scaffold_tower_packet",
                     ViolationLevel.HIGH,
-                    "tower vertical x" + s.scaffoldTowerConsec + " dt=" + dt + "ms"));
+                    "torre a " + dt + "ms por bloque x" + s.scaffoldTowerConsec));
                 s.scaffoldTowerConsec = 0;
             } else if (s.scaffoldTowerConsec >= consecMid) {
                 sink.flag(new Violation(player, "scaffold_tower_packet",
                     ViolationLevel.MID,
-                    "tower x" + s.scaffoldTowerConsec));
+                    "torre a " + dt + "ms por bloque x" + s.scaffoldTowerConsec));
             }
         } else {
             s.scaffoldTowerConsec = 0;
         }
-        lastX = placedX;
-        lastZ = placedZ;
+        s.lastTowerX = placedX;
+        s.lastTowerZ = placedZ;
         s.lastScaffoldPlaceMs = now;
         s.lastScaffoldPlaceY  = placedY;
     }

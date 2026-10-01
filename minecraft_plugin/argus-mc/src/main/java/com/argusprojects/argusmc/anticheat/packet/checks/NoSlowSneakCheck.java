@@ -31,47 +31,53 @@ public final class NoSlowSneakCheck {
         // velocidad tarda unos ticks en caer: solo se evalua en piso con sneak sostenido.
         if (!s.sneakActive || !s.lastOnGround || now - s.sneakStartMs < SNEAK_SETTLE_MS
             || now - s.lastDamageTakenMs < DAMAGE_GRACE_MS) {
+            resetWindow(s, now);
             s.noSlowSneakConsec = 0;
-            s.noSlowSneakLastMs = now;
             return;
         }
         MovementContext ctx = MovementContext.snapshotAt(player, nx, s.lastY, nz);
         if (ctx.onIce || ctx.isLegitFlightLike()) {
+            resetWindow(s, now);
             s.noSlowSneakConsec = 0;
-            s.noSlowSneakLastMs = now;
             return;
         }
-        long dt = now - s.noSlowSneakLastMs;
-        s.noSlowSneakLastMs = now;
-        if (dt < 30L || dt > 500L) return;
+        // Promedio por ventanas de 1s: la velocidad de un solo paquete depende de cuando llega
+        // (con tunel/wifi dos paquetes juntos dan picos falsos).
+        if (s.noSlowSneakWinStartMs == 0L) resetWindow(s, now);
+        s.noSlowSneakWinDist += Math.hypot(nx - s.lastX, nz - s.lastZ);
+        long span = now - s.noSlowSneakWinStartMs;
+        if (span < 1_000L) return;
+        double bps = s.noSlowSneakWinDist * 1000.0 / span;
+        resetWindow(s, now);
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("noslowsneak");
-        // Vanilla agachado = 0.3 de la velocidad normal; Swift Sneak suma 0.15 por nivel.
+        // Agachado = 0.3 de caminar (1.31 bps); en 1.8 el sprint sigue activo al agacharse (x1.3 = 1.7).
+        // Swift Sneak suma 0.15 por nivel.
         double sneakFactor = (0.3 + 0.15 * swiftSneakLevel(player)) / 0.3;
-        double maxBps = (sec != null ? sec.getDouble("max_sneak_bps", 1.5) : 1.5)
+        double maxBps = (sec != null ? sec.getDouble("max_sneak_bps", 1.95) : 1.95)
             * sneakFactor * Math.max(1.0, ctx.horizontalSpeedMultiplier());
-        int consecMid = sec != null ? sec.getInt("consec_mid", 5) : 5;
-        int consecHigh= sec != null ? sec.getInt("consec_high", 10) : 10;
-
-        double dx = nx - s.lastX;
-        double dz = nz - s.lastZ;
-        double bps = Math.sqrt(dx*dx + dz*dz) * 1000.0 / dt;
+        int consecMid  = sec != null ? sec.getInt("consec_mid", 2) : 2;
+        int consecHigh = sec != null ? sec.getInt("consec_high", 4) : 4;
 
         if (bps > maxBps) {
             s.noSlowSneakConsec++;
             if (s.noSlowSneakConsec >= consecHigh) {
-                sink.flag(new Violation(player, "noslowsneak_packet",
-                    ViolationLevel.HIGH,
-                    String.format("sneak bps=%.2f > %.2f x%d", bps, maxBps, s.noSlowSneakConsec)));
+                sink.flag(new Violation(player, "noslowsneak_packet", ViolationLevel.HIGH,
+                    String.format("agachado a %.2f b/s (max %.2f) %ds seguidos", bps, maxBps, s.noSlowSneakConsec)));
                 s.noSlowSneakConsec = 0;
             } else if (s.noSlowSneakConsec >= consecMid) {
-                sink.flag(new Violation(player, "noslowsneak_packet",
-                    ViolationLevel.MID,
-                    String.format("sneak bps=%.2f x%d", bps, s.noSlowSneakConsec)));
+                sink.flag(new Violation(player, "noslowsneak_packet", ViolationLevel.MID,
+                    String.format("agachado a %.2f b/s (max %.2f) %ds seguidos", bps, maxBps, s.noSlowSneakConsec)));
             }
         } else {
             s.noSlowSneakConsec = 0;
         }
+    }
+
+    private static void resetWindow(PacketDataStore.State s, long now) {
+        s.noSlowSneakWinStartMs = now;
+        s.noSlowSneakWinDist = 0;
+        s.noSlowSneakLastMs = now;
     }
 
     private static int swiftSneakLevel(Player p) {

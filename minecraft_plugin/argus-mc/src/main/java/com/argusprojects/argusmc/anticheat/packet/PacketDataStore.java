@@ -45,6 +45,8 @@ public final class PacketDataStore {
         public volatile int    groundSpoofConsec;
         public volatile int    noSlowDownConsec;
         public volatile long   noSlowDownLastMs, noSlowSneakLastMs;
+        public volatile long   noSlowSneakWinStartMs;
+        public volatile double noSlowSneakWinDist;
         public volatile boolean packetSneaking;
         public volatile long   sneakToggleMs;
         public volatile double safeWalkDirX, safeWalkDirZ;
@@ -215,6 +217,7 @@ public final class PacketDataStore {
         public volatile int     thruWallConsec;
         public volatile int     scaffoldRotConsec;
         public volatile int     scaffoldTowerConsec;
+        public volatile int     lastTowerX, lastTowerZ;
         public volatile long    lastScaffoldPlaceMs;
         public volatile int     lastScaffoldPlaceY;
         public volatile int     phaseConsec;
