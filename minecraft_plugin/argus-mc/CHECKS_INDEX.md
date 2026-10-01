@@ -3,7 +3,7 @@
 Lista completa de checks anti-cheat con su nivel de severidad por defecto
 y descripción corta. Para tuning fino, ver `TUNING_GUIDE.md`.
 
-Total: **62 checks activos** (5 base Pack 47 + 12 packet base + 17 Round 2 + 20 Round 3 + 12 Round 4 — algunos solapan funcionalmente con variantes "advanced").
+Total: **63 checks activos** (5 base Pack 47 + 12 packet base + 17 Round 2 + 20 Round 3 + 13 Round 4 — algunos solapan funcionalmente con variantes "advanced").
 
 ## Movement
 
@@ -116,6 +116,7 @@ Total: **62 checks activos** (5 base Pack 47 + 12 packet base + 17 Round 2 + 20 
 | `speed_packet` (promedio) | MID/HIGH | Promedio de 1s > 9.3 bps (el pico por tick legit llega a ~12)          |
 | `fast_place_packet` (ritmo) | MID/HIGH | 10 colocaciones a intervalo fijo más rápido que vanilla (200ms)      |
 | `fastbow_packet` (cadencia) | MID/HIGH | ≥6 flechas/s (Paper cuenta la carga en ticks reales)                 |
+| `bow_aimbot_packet`      | MID/HIGH  | Cargando el arco, la mira sigue a un objetivo en movimiento con desvío <0.8° (humano 1–5°); HIGH con 3 tiros en 60s |
 
 ## Pruebas (replay)
 

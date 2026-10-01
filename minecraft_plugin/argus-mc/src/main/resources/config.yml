@@ -483,6 +483,12 @@ anticheat:
       window_ms: 5000
       hits_mid: 4
       hits_high: 8
+    bow_aimbot:
+      enabled: true          # mira clavada en un objetivo que se mueve mientras carga el arco
+      min_samples: 10        # ticks de carga (sin contar los 6 de enganche)
+      min_target_deg_per_tick: 0.4
+      max_error_stddev_deg: 0.8
+      debug: false           # true = loguea las metricas de cada tiro (para calibrar)
     strafe:
       enabled: true          # gira en el aire sin perder velocidad (v*0.91 + 0.026 max)
       window_ms: 2000
