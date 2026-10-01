@@ -38,6 +38,7 @@ public final class PacketAnticheatBukkitBridge implements Listener {
     public void onJoin(PlayerJoinEvent e) {
         PacketDataStore.State s = store.get(e.getPlayer().getUniqueId());
         s.joinMs = System.currentTimeMillis();
+        s.selectedSlot = e.getPlayer().getInventory().getHeldItemSlot();
         s.lastX = e.getPlayer().getLocation().getX();
         s.lastY = e.getPlayer().getLocation().getY();
         s.lastZ = e.getPlayer().getLocation().getZ();
@@ -111,6 +112,7 @@ public final class PacketAnticheatBukkitBridge implements Listener {
         PacketDataStore.State s = store.get(p.getUniqueId());
         s.inventoryOpen = true;
         s.inventoryOpenSinceMs = System.currentTimeMillis();
+        s.invFirstClickPending = true;
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

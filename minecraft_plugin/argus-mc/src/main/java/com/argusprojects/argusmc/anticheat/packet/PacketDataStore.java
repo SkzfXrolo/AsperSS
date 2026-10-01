@@ -112,6 +112,29 @@ public final class PacketDataStore {
         public volatile int    jetpackConsec;
 
         public volatile int    spiderConsec;
+        // inventory_macro
+        public final long[]    invClickTimes = new long[com.argusprojects.argusmc.anticheat.packet.checks.InventoryMacroCheck.RING];
+        public volatile int    invClickCount, invFastOpenHits, invMacroHits;
+        public volatile boolean invFirstClickPending;
+        public volatile long   invFastOpenWindowMs, lastInvMacroFlagMs, invMacroWindowMs;
+        // autosoup
+        public volatile long   lastSlotChangeMs, soupUseMs, soupWindowStartMs;
+        public volatile int    soupHits;
+        // omnisprint
+        public volatile boolean packetSprinting;
+        public volatile int    omniConsec;
+        // triggerbot
+        public volatile boolean trigOnTarget, trigArmed;
+        public volatile long   trigEnterTick, trigPendingAttackTick = -1, trigLastAttackMs;
+        public final int[]     trigReactions = new int[com.argusprojects.argusmc.anticheat.packet.checks.TriggerBotCheck.REACTIONS];
+        public volatile int    trigReactionCount, trigSwings, trigAttacks, trigFlags;
+        // aim_gcd
+        public volatile double gcdLastDelta;
+        public volatile int    gcdSamples, gcdNonMouse, gcdLearnCount;
+        public volatile double gcdSensEstimate;
+        public final java.util.ArrayDeque<Double> gcdCandidates = new java.util.ArrayDeque<>();
+        public volatile int    selectedSlot = -1;
+        public volatile long   lastRealMoveMs;
         /** Paquetes de movimiento recibidos = ticks del cliente (1.8 manda uno por tick siempre). */
         public volatile long   clientTicks;
         public volatile long   lastPlaceMs;

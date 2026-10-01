@@ -45,7 +45,7 @@ public final class SpeedPacketCheck {
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("speed_packet");
         // Antes de la exencion de combate y del filtro de dt: pegar no da velocidad (el knockback
         // recibido ya exime via lastDamageTakenMs) y descartar paquetes subestimaria el promedio.
-        checkSustained(player, s, Math.hypot(nx - s.lastX, nz - s.lastZ), now, sec, sink);
+        checkSustained(player, s, Math.hypot(nx - s.lastX, nz - s.lastZ), nx, ny, nz, onGround, now, sec, sink);
 
         if (isInCombat(s, now)) return;
 
@@ -109,26 +109,37 @@ public final class SpeedPacketCheck {
      * Promedio sostenido en 1s: el pico por tick de un sprint-jump legit llega a ~12 bps (por eso el
      * check por tick es tolerante), pero el promedio vanilla no pasa de ~7.3 bps (headhitter ~8.5).
      */
-    private void checkSustained(Player player, PacketDataStore.State s, double dh, long now,
+    private void checkSustained(Player player, PacketDataStore.State s, double dh,
+                                double x, double y, double z, boolean onGround, long now,
                                 ConfigurationSection sec, ViolationSink sink) {
-        if (isOnIce(player) || isOnSoulSpeed(player) || now - s.lastDamageTakenMs < 2_000L) s.speedExemptMs = now;
+        if (isOnIce(player) || isOnSoulSpeed(player) || now - s.lastDamageTakenMs < 2_000L
+            || now - s.serverVelAssignedAtMs < 2_000L) s.speedExemptMs = now;
         java.util.ArrayDeque<double[]> win = s.speedWindow;
         double[] last = win.peekLast();
         if (last != null && now - (long) last[0] > 250L) {
             win.clear();
             s.speedWindowStartMs = 0L;
         }
-        win.addLast(new double[]{now, dh});
+        win.addLast(new double[]{now, dh, onGround ? 0 : 1, hasCeiling(player.getWorld(), x, y, z) ? 1 : 0});
         while (!win.isEmpty() && now - (long) win.peekFirst()[0] > 1_000L) {
             s.speedWindowStartMs = (long) win.pollFirst()[0];
         }
         if (s.speedWindowStartMs == 0L || now - s.speedExemptMs < 2_000L) return;
 
         double sum = 0;
-        for (double[] e : win) sum += e[1];
+        boolean anyAir = false, anyCeiling = false;
+        for (double[] e : win) {
+            sum += e[1];
+            anyAir |= e[2] > 0;
+            anyCeiling |= e[3] > 0;
+        }
         double avgBps = sum * 1000.0 / (now - s.speedWindowStartMs);
 
-        double cap = sec != null ? sec.getDouble("avg_max_bps", 9.3) : 9.3;
+        // Vanilla en 1s: sprint en piso 5.6, sprint-jump abierto ~7.1, sprint-jump con techo bajo
+        // (headhitter) ~9. El techo bajo solo se permite si de verdad lo hubo en la ventana.
+        double cap = anyCeiling ? (sec != null ? sec.getDouble("avg_max_bps", 9.3) : 9.3)
+                   : anyAir     ? (sec != null ? sec.getDouble("avg_max_bps_open", 7.9) : 7.9)
+                   :              (sec != null ? sec.getDouble("avg_max_bps_ground", 6.3) : 6.3);
         PotionEffect speed = getEffect(player, "SPEED");
         if (speed != null) cap *= 1.0 + 0.20 * (speed.getAmplifier() + 1);
         if (avgBps <= cap) return;
@@ -137,7 +148,18 @@ public final class SpeedPacketCheck {
         s.lastSpeedAvgFlagMs = now;
         ViolationLevel lvl = avgBps > cap * 1.3 ? ViolationLevel.HIGH : ViolationLevel.MID;
         sink.flag(new Violation(player, "speed_packet", lvl,
-            String.format("promedio 1s=%.2f bps (max %.2f)", avgBps, cap)));
+            String.format("promedio 1s=%.2f bps (max %.2f, %s)", avgBps, cap,
+                anyCeiling ? "techo bajo" : anyAir ? "saltando" : "en el piso")));
+    }
+
+    /** Bloque solido justo encima de la cabeza (2 bloques sobre los pies) en cualquier esquina del hitbox. */
+    private static boolean hasCeiling(org.bukkit.World w, double x, double y, double z) {
+        int cy = org.bukkit.util.NumberConversions.floor(y + 2.05);
+        for (double ox : new double[]{-0.3, 0.3}) for (double oz : new double[]{-0.3, 0.3}) {
+            if (w.getBlockAt(org.bukkit.util.NumberConversions.floor(x + ox), cy,
+                             org.bukkit.util.NumberConversions.floor(z + oz)).getType().isSolid()) return true;
+        }
+        return false;
     }
 
     private static boolean isInCombat(PacketDataStore.State s, long now) {

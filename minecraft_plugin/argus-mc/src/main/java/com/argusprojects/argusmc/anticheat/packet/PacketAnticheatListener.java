@@ -25,6 +25,11 @@ import com.argusprojects.argusmc.anticheat.packet.checks.ScaffoldRotationCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.ScaffoldSnapCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.SafeWalkCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.StrafeCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.InventoryMacroCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.AutoSoupCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.OmniSprintCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.TriggerBotCheck;
+import com.argusprojects.argusmc.anticheat.packet.checks.AimGcdCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.CriticalsCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.AutoClickTickCheck;
 import com.argusprojects.argusmc.anticheat.packet.checks.AirPlaceCheck;
@@ -140,6 +145,11 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
     private final ScaffoldSnapCheck      scaffoldSnapCheck;
     private final SafeWalkCheck          safeWalkCheck;
     private final StrafeCheck            strafeCheck;
+    private final InventoryMacroCheck    inventoryMacroCheck;
+    private final AutoSoupCheck          autoSoupCheck;
+    private final OmniSprintCheck        omniSprintCheck;
+    private final TriggerBotCheck        triggerBotCheck;
+    private final AimGcdCheck            aimGcdCheck;
     private final CriticalsCheck         criticalsCheck;
     private final AutoClickTickCheck     autoClickTickCheck;
     private final AirPlaceCheck          airPlaceCheck;
@@ -218,6 +228,11 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
         this.scaffoldSnapCheck     = new ScaffoldSnapCheck(plugin);
         this.safeWalkCheck         = new SafeWalkCheck(plugin);
         this.strafeCheck           = new StrafeCheck(plugin);
+        this.inventoryMacroCheck   = new InventoryMacroCheck(plugin);
+        this.autoSoupCheck         = new AutoSoupCheck(plugin);
+        this.omniSprintCheck       = new OmniSprintCheck(plugin);
+        this.triggerBotCheck       = new TriggerBotCheck(plugin);
+        this.aimGcdCheck           = new AimGcdCheck(plugin);
         this.criticalsCheck        = new CriticalsCheck(plugin);
         this.autoClickTickCheck    = new AutoClickTickCheck(plugin);
         this.airPlaceCheck         = new AirPlaceCheck(plugin);
@@ -337,6 +352,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         noSlowSneakCheck.handlePositionPacket(player, s, nx, nz, now, sink());
                         safeWalkCheck.handlePositionPacket(player, s, nx, ny, nz, nowOnGround, now, sink());
                         strafeCheck.handlePositionPacket(player, s, nx, nz, nowOnGround, now, sink());
+                        omniSprintCheck.handlePositionPacket(player, s, nx, nz, nowOnGround, now, sink());
                         criticalsCheck.handlePositionPacket(player, s, nx, ny, nz, nowOnGround, now);
                         antiAfkCheck.handlePositionPacket(player, s, nx, ny, nz, nowOnGround, now, sink());
                         liquidJesusCheck.handlePositionPacket(player, s, nx, ny, nz, sink());
@@ -345,6 +361,8 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
 
                         s.lastDeltaY = ny - s.lastY;
                         s.lastHorizMove = Math.hypot(nx - s.lastX, nz - s.lastZ);
+                        // Todo cliente reenvia su posicion cada 20 ticks aunque este quieto: eso no es moverse.
+                        if (s.lastHorizMove > 0.03) s.lastRealMoveMs = now;
                         s.lastX = nx;
                         s.lastY = ny;
                         s.lastZ = nz;
@@ -366,6 +384,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         antiAfkCheck.handleRotation(player, s, s.lastYaw, s.lastPitch, ny, npi, now, sink());
 
                         s.pushRotation(ny, npi, now);
+                        aimGcdCheck.handleRotation(player, s, s.lastPitch, npi, now, sink());
                         s.prevYaw   = s.lastYaw;
                         s.prevPitch = s.lastPitch;
                         s.lastYaw   = ny;
@@ -374,6 +393,9 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
 
                         killauraRotationCheck.handleRotation(player, s, ny, npi, now, sink());
                         tracersCheck.handleRotation(player, s, entities.invisiblePlayers(), sink());
+                    }
+                    if (wrap.hasRotationChanged() || wrap.hasPositionChanged()) {
+                        triggerBotCheck.handleLook(player, s, entities.all(), sink());
                     }
                 }
 
@@ -406,6 +428,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                         killauraBlockingCheck.handleAttack(player, target, s, now, sink());
                         hitboxExpansionCheck.handleAttack(player, target, s, lagComp, sink());
                         criticalsCheck.handleAttack(player, s, now, sink());
+                        triggerBotCheck.handleAttack(player, s, now, sink());
                         // FOV: el cliente pega con la rotacion del frame y la manda al final del tick:
                         // se evalua con la mejor entre la rotacion previa y la siguiente.
                         if (s.fovTarget != null) resolvePendingFov(player, s, s.lastYaw, s.lastPitch);
@@ -433,6 +456,7 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                 swingCheck.handleSwing(player, s, now, sink());
                 if (plugin.getReplayRecorder() != null) plugin.getReplayRecorder().swing(player);
                 autoClickTickCheck.handleSwing(player, s, now, sink());
+                triggerBotCheck.handleSwing(s);
                 if (s.pendingSwingTarget != null) resolvePendingSwing(player, s);
                 plugin.getAutoClickEngine().onSwing(player, now, v ->
                     Bukkit.getScheduler().runTask(plugin, () ->
@@ -457,11 +481,22 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                     s.packetSneaking = act == com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientEntityAction.Action.START_SNEAKING;
                     s.sneakToggleMs = System.currentTimeMillis();
                 }
+                if (act == com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientEntityAction.Action.START_SPRINTING) s.packetSprinting = true;
+                if (act == com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientEntityAction.Action.STOP_SPRINTING) s.packetSprinting = false;
+
+            } else if (type == PacketType.Play.Client.HELD_ITEM_CHANGE) {
+                int slot = new com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientHeldItemChange(event).getSlot();
+                s.selectedSlot = slot;   // el server todavia no lo proceso: los checks de netty lo leen de aca
+                autoSoupCheck.handleSlotChange(player, s, slot, System.currentTimeMillis(), sink());
+
+            } else if (type == PacketType.Play.Client.USE_ITEM) {
+                autoSoupCheck.handleUseItem(player, s, System.currentTimeMillis());
 
             } else if (type == PacketType.Play.Client.CLICK_WINDOW) {
                 long now = System.currentTimeMillis();
                 s.lastClickWindowMs = now;
                 invMoveCheck.handleClickWindow(player, s, now, sink());
+                inventoryMacroCheck.handleClick(player, s, now, sink());
 
             } else if (type == PacketType.Play.Client.PLAYER_BLOCK_PLACEMENT) {
                 long now = System.currentTimeMillis();

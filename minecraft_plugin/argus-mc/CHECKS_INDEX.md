@@ -113,10 +113,20 @@ Total: **63 checks activos** (5 base Pack 47 + 12 packet base + 17 Round 2 + 20 
 | `antiafk_packet`         | LOW/MID   | Rotación idéntica 40 ticks / saltos a intervalo fijo                   |
 | `nuker_fov_packet`       | MID/HIGH  | Rompe bloques fuera de la mira (>50°), sin mirar velocidad (prisiones) |
 | `antikb_packet`          | MID/HIGH  | Reescrito: desplazamiento EN la dirección del knockback durante ping+400ms |
-| `speed_packet` (promedio) | MID/HIGH | Promedio de 1s > 9.3 bps (el pico por tick legit llega a ~12)          |
+| `speed_packet` (promedio) | MID/HIGH | Promedio de 1s según contexto: piso 6.3, saltando 7.9, con techo bajo 9.3 bps |
 | `fast_place_packet` (ritmo) | MID/HIGH | 10 colocaciones a intervalo fijo más rápido que vanilla (200ms)      |
 | `fastbow_packet` (cadencia) | MID/HIGH | ≥6 flechas/s (Paper cuenta la carga en ticks reales)                 |
 | `bow_aimbot_packet`      | MID/HIGH  | Cargando el arco, la mira sigue a un objetivo en movimiento con desvío <0.8° (humano 1–5°); HIGH con 3 tiros en 60s |
+
+## Round 5 — los que faltaban (probados con bots: hack detectado + versión legit limpia)
+
+| Check | Nivel | Señal |
+|-------|-------|-------|
+| `inventory_macro_packet` | MID/HIGH  | ChestStealer/InvCleaner: 8 clicks a ritmo fijo (desvío <12ms), 4+ clicks en un tick, o click antes de ping+50ms al abrir un cofre (3 en 60s) |
+| `autosoup_packet`        | MID/HIGH  | Cambiar al slot de sopa/poción, usarla y volver en <60ms, 3/6 en 10s     |
+| `omnisprint_packet`      | MID/HIGH  | Sprint en el piso hacia atrás/costado (>100°) 8/20 ticks                 |
+| `triggerbot_packet`      | MID/HIGH  | Reacción mediana ≤1 tick al entrar la mira + <10% de swings al aire (10 golpes) |
+| `aim_gcd_packet`         | MID/HIGH  | ≥60% de los giros de pitch en pelea no son pasos enteros del mouse (aprende la sensibilidad del jugador). Un aim assist que redondea a la sensibilidad lo evade. |
 
 ## Pruebas (replay)
 

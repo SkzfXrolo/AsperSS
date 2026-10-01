@@ -298,6 +298,8 @@ anticheat:
       from_ground_window_ms: 120
     speed_packet:
       enabled: true
+      avg_max_bps_ground: 6.3
+      avg_max_bps_open: 7.9
       max_bps: 7.8
       consecutive_to_flag: 5
       min_dt_ms: 45
@@ -489,6 +491,24 @@ anticheat:
       min_target_deg_per_tick: 0.4
       max_error_stddev_deg: 0.8
       debug: false           # true = loguea las metricas de cada tiro (para calibrar)
+    inventory_macro:
+      enabled: true          # ChestStealer/InvCleaner: clicks a ritmo fijo, 4+ en un tick, o click al abrir sin reaccion
+      rhythm_clicks: 8
+    autosoup:
+      enabled: true          # cambiar slot + usar sopa/pocion + volver en <60ms
+      hits_mid: 3
+      hits_high: 6
+    omnisprint:
+      enabled: true          # sprint hacia atras/costado en el piso
+      ticks_mid: 8
+      ticks_high: 20
+    triggerbot:
+      enabled: true          # reaccion 0-1 tick al entrar la mira + casi sin swings al aire
+      max_miss_ratio: 0.10
+    aim_gcd:
+      enabled: true          # giros en pelea que no son pasos enteros de mouse (aim assist)
+      samples: 40
+      ratio_mid: 0.6
     strafe:
       enabled: true          # gira en el aire sin perder velocidad (v*0.91 + 0.026 max)
       window_ms: 2000
