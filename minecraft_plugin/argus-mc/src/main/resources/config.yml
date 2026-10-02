@@ -308,9 +308,9 @@ anticheat:
     fast_place:
       enabled: true          # BlockPlacement packets/segundo. Vanilla cap real
                              # es ~5/s manteniendo click; spameando se llega a
-                             # ~10/s legit. LOW 12/s, MID 14/s, HIGH 22/s. Skip creative.
-      max_per_sec:  12
-      max_per_sec2: 14
+                             # ~12-13/s legit con jitter. LOW 14/s, MID 16/s, HIGH 22/s. Skip creative.
+      max_per_sec:  14
+      max_per_sec2: 16
       max_per_sec3: 22
     fast_break:
       enabled: true          # tiempo START_DIGGING -> FINISHED_DIGGING vs piso

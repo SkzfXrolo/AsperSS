@@ -44,6 +44,9 @@ public final class AutoClickEngine {
         if (now - s.lastPlaceMs < PLACE_SWING_MS) {
             return;
         }
+        if (isHoldSwing(player, now)) {
+            return;
+        }
         if (now - s.lastSwingRecordedMs < DEDUPE_MS) {
             return;
         }
@@ -54,6 +57,21 @@ public final class AutoClickEngine {
 
     public void onPlace(UUID uuid, long now) {
         state(uuid).lastPlaceMs = now;
+    }
+
+    /**
+     * El cliente 1.8 manda un swing por tick mientras mina (click izquierdo apretado) o come/bloquea
+     * con click derecho sobre un bloque: no son clicks. Tope de 10s por si se pierde el fin del minado.
+     */
+    public boolean isHoldSwing(Player player, long now) {
+        PlayerClickState s = state(player.getUniqueId());
+        return player.isHandRaised() || (s.digging && now - s.lastDigMs < 10_000L);
+    }
+
+    public void onDig(UUID uuid, long now, boolean digging) {
+        PlayerClickState s = state(uuid);
+        s.lastDigMs = now;
+        s.digging = digging;
     }
 
     public void onAttack(Player player, long now, Consumer<Violation> sink) {
@@ -299,7 +317,8 @@ public final class AutoClickEngine {
         final IntervalStats statsScratch = new IntervalStats();
 
         long lastSwingRecordedMs;
-        long lastPlaceMs;
+        long lastPlaceMs, lastDigMs;
+        boolean digging;
         long lastAttackRecordedMs;
         long lastAnalyzeMs;
         long lastFlagMs;

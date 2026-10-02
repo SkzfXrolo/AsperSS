@@ -459,14 +459,10 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                 if (plugin.getReplayRecorder() != null) plugin.getReplayRecorder().swing(player);
                 triggerBotCheck.handleSwing(s);
                 if (s.pendingSwingTarget != null) resolvePendingSwing(player, s);
-                // Comiendo/bloqueando con click derecho apretado sobre un bloque, el cliente 1.8 (ViaRewind)
-                // manda un swing por tick: no son clicks.
-                if (!player.isHandRaised()) {
-                    autoClickTickCheck.handleSwing(player, s, now, sink());
-                    plugin.getAutoClickEngine().onSwing(player, now, v ->
-                        Bukkit.getScheduler().runTask(plugin, () ->
-                            plugin.getViolationManager().flag(v)));
-                }
+                autoClickTickCheck.handleSwing(player, s, now, sink());
+                plugin.getAutoClickEngine().onSwing(player, now, v ->
+                    Bukkit.getScheduler().runTask(plugin, () ->
+                        plugin.getViolationManager().flag(v)));
 
             } else if (type == PacketType.Play.Client.TELEPORT_CONFIRM) {
                 s.rotationResyncPending = true;
@@ -538,6 +534,9 @@ public final class PacketAnticheatListener extends SimplePacketListenerAbstract 
                 long now = System.currentTimeMillis();
                 s.lastDigMs = now;
                 DiggingAction action = wrap.getAction();
+                if (action == DiggingAction.START_DIGGING) plugin.getAutoClickEngine().onDig(player.getUniqueId(), now, true);
+                else if (action == DiggingAction.FINISHED_DIGGING || action == DiggingAction.CANCELLED_DIGGING)
+                    plugin.getAutoClickEngine().onDig(player.getUniqueId(), now, false);
                 if (action == DiggingAction.START_DIGGING) {
                     org.bukkit.Material mat = resolveBlock(player, wrap);
                     fastBreakCheck.handleStartDigging(player, s, now, mat);

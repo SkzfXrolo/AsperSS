@@ -24,8 +24,8 @@ public final class FastPlaceCheck {
         s.pushPlace(now);
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("fast_place");
-        int maxPerSec  = sec != null ? sec.getInt("max_per_sec",  12) : 12;
-        int maxPerSec2 = sec != null ? sec.getInt("max_per_sec2", 14) : 14;
+        int maxPerSec  = sec != null ? sec.getInt("max_per_sec",  14) : 14;
+        int maxPerSec2 = sec != null ? sec.getInt("max_per_sec2", 16) : 16;
         int maxPerSec3 = sec != null ? sec.getInt("max_per_sec3", 22) : 22;
 
         long[] times;

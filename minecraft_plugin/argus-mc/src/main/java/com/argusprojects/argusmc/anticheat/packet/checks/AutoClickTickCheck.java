@@ -27,6 +27,7 @@ public final class AutoClickTickCheck {
     public void handleSwing(org.bukkit.entity.Player player, PacketDataStore.State s, long now, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("autoclicker_ticks")) return;
         if (now - s.lastPlaceMs < 80L) return;   // swing de colocar bloque (1.8), no un click
+        if (plugin.getAutoClickEngine().isHoldSwing(player, now)) return;
         // Pausa larga o picando bloques (1.8 manda swing cada tick manteniendo click): se reinicia.
         if (now - s.lastSwingTickMs > 1_000L || now - s.lastDigMs < 1_500L) s.swingTickCount = 0;
         s.lastSwingTickMs = now;
