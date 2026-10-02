@@ -8,18 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round 3 — ScaffoldRotationCheck.
- *
- * <p>Scaffold (downward) cheats colocan bloques bajo los pies del
- * jugador con el cursor apuntando muy abajo (pitch ≈ +90°). Detecta:
- * <ul>
- *   <li>Snap a pitch &gt; {@code min_pitch_deg} (default 80°) en el
- *       momento del block placement.</li>
- *   <li>Pattern: placement seguido (en {@code window_ms}) con pitch
- *       constantemente cerca de +90° y movimiento de yaw &lt; 5°.</li>
- * </ul>
- */
 public final class ScaffoldRotationCheck {
 
     private final ArgusPlugin plugin;
@@ -38,8 +26,14 @@ public final class ScaffoldRotationCheck {
         int  consecMid  = sec != null ? sec.getInt("consec_mid", 4) : 4;
         int  consecHigh = sec != null ? sec.getInt("consec_high", 7) : 7;
 
-        // El bloque colocado debe estar bajo el jugador (placedY <= playerY).
         if (placedY > player.getLocation().getBlockY()) {
+            s.scaffoldRotConsec = 0;
+            return;
+        }
+
+        // Pilarear (saltar y poner debajo mirando al piso) es vanilla: sin avance horizontal.
+        double minHoriz = sec != null ? sec.getDouble("min_horizontal_move", 0.05) : 0.05;
+        if (s.lastHorizMove < minHoriz) {
             s.scaffoldRotConsec = 0;
             return;
         }
@@ -60,5 +54,51 @@ public final class ScaffoldRotationCheck {
                 ViolationLevel.MID,
                 String.format("pitch=%.1f° x%d", s.lastPitch, s.scaffoldRotConsec)));
         }
+    }
+
+    /**
+     * Vanilla solo coloca en la cara que el jugador tiene en la mira: el punto clickeado
+     * (bloque + cursor del paquete) tiene que estar cerca de la direccion de la mirada.
+     * Se acepta la rotacion actual o la del tick anterior (la rotacion nueva viaja
+     * DESPUES del paquete de colocacion).
+     */
+    public void handlePlacementAim(Player player, PacketDataStore.State s,
+                                   double clickX, double clickY, double clickZ, ViolationSink sink) {
+        if (!plugin.getAnticheatConfig().isCheckEnabled("scaffold_aim")) return;
+        if (s.lastX == 0 && s.lastY == 0 && s.lastZ == 0) return;
+
+        ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("scaffold_aim");
+        double maxAngle = sec != null ? sec.getDouble("max_angle_deg", 75.0) : 75.0;
+        int consecMid   = sec != null ? sec.getInt("consec_mid", 2) : 2;
+        int consecHigh  = sec != null ? sec.getInt("consec_high", 4) : 4;
+
+        double eyeY = s.lastY + (player.isSneaking() ? 1.27 : 1.62);
+        double dx = clickX - s.lastX, dy = clickY - eyeY, dz = clickZ - s.lastZ;
+        double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.5) return;
+
+        double angle = Math.min(angleTo(s.lastYaw, s.lastPitch, dx / len, dy / len, dz / len),
+                                angleTo(s.prevYaw, s.prevPitch, dx / len, dy / len, dz / len));
+        if (angle <= maxAngle) {
+            s.scaffoldAimConsec = 0;
+            return;
+        }
+        s.scaffoldAimConsec++;
+        ViolationLevel lvl = s.scaffoldAimConsec >= consecHigh ? ViolationLevel.HIGH
+                           : s.scaffoldAimConsec >= consecMid ? ViolationLevel.MID : null;
+        if (lvl != null) {
+            sink.flag(new Violation(player, "scaffold_aim_packet", lvl,
+                String.format("coloca fuera de la mira: %.0f° x%d", angle, s.scaffoldAimConsec)));
+            if (lvl == ViolationLevel.HIGH) s.scaffoldAimConsec = 0;
+        }
+    }
+
+    private static double angleTo(float yawDeg, float pitchDeg, double tx, double ty, double tz) {
+        double yaw = Math.toRadians(yawDeg), pitch = Math.toRadians(pitchDeg);
+        double lx = -Math.sin(yaw) * Math.cos(pitch);
+        double ly = -Math.sin(pitch);
+        double lz =  Math.cos(yaw) * Math.cos(pitch);
+        double dot = Math.max(-1.0, Math.min(1.0, lx * tx + ly * ty + lz * tz));
+        return Math.toDegrees(Math.acos(dot));
     }
 }

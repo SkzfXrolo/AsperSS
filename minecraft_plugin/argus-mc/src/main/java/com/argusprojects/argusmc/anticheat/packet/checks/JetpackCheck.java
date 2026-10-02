@@ -29,31 +29,31 @@ public final class JetpackCheck {
             s.jetpackConsec = 0;
             return;
         }
-        if (ctx.jumpBoostAmp >= 3) {
-            s.jetpackConsec = 0;
-            return;
-        }
-
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("jetpack");
-        double minDy = sec != null ? sec.getDouble("min_dy", 0.18) : 0.18;
+        double minDy     = sec != null ? sec.getDouble("min_dy", 0.05) : 0.05;
+        double tolerance = sec != null ? sec.getDouble("gravity_tolerance", 0.03) : 0.03;
         int    consecMid = sec != null ? sec.getInt("consec_mid", 4) : 4;
         int    consecHigh= sec != null ? sec.getInt("consec_high", 7) : 7;
 
+        // En el aire vanilla aplica vy' = (vy - 0.08) * 0.98 cada tick: cualquier subida
+        // legitima (salto, jump boost, slime, cama, knockback) decae. Subir sin decaer no.
         double dy = ny - s.lastY;
-        if (dy >= minDy && !s.lastOnGround) {
+        double expected = (s.lastDeltaY - 0.08) * 0.98;
+        boolean defiesGravity = dy >= minDy && dy > expected + tolerance && !s.lastOnGround;
+        if (defiesGravity) {
             s.jetpackConsec++;
             if (s.jetpackConsec >= consecHigh) {
                 sink.flag(new Violation(player, "jetpack_packet",
                     ViolationLevel.HIGH,
-                    String.format("dy>%.2f x%d", minDy, s.jetpackConsec)));
+                    String.format("sube sin gravedad dy=%.3f esperado<=%.3f x%d", dy, expected, s.jetpackConsec)));
                 s.jetpackConsec = 0;
             } else if (s.jetpackConsec >= consecMid) {
                 sink.flag(new Violation(player, "jetpack_packet",
                     ViolationLevel.MID,
-                    String.format("dy>%.2f x%d", minDy, s.jetpackConsec)));
+                    String.format("sube sin gravedad dy=%.3f esperado<=%.3f x%d", dy, expected, s.jetpackConsec)));
             }
         } else {
-            if (dy <= 0) s.jetpackConsec = 0;
+            s.jetpackConsec = 0;
         }
     }
 }

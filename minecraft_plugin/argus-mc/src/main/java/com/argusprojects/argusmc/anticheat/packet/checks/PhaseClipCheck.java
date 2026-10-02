@@ -9,19 +9,8 @@ import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
+import org.bukkit.util.NumberConversions;
 
-/**
- * Pack 48 round 3 — PhaseClipCheck.
- *
- * <p>Variante más estricta del {@code PhaseCheck} existente. PhaseCheck
- * solo flagea cuando hay un delta atravesando un bloque entre dos
- * packets. Este detecta el caso donde el jugador SE QUEDA dentro de un
- * bloque sólido por más de {@code max_dwell_ms} (lo cual es imposible
- * en vanilla — el server lo "saca" del bloque al colisionar).
- *
- * <p>Útil para detectar Phase-Clip que renderiza al jugador ya
- * dentro del bloque.
- */
 public final class PhaseClipCheck {
 
     private final ArgusPlugin plugin;
@@ -41,9 +30,13 @@ public final class PhaseClipCheck {
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("phaseclip");
         int consecHigh = sec != null ? sec.getInt("consec_high", 4) : 4;
 
-        Material foot = player.getWorld().getBlockAt((int)nx, (int)ny, (int)nz).getType();
-        Material body = player.getWorld().getBlockAt((int)nx, (int)(ny + 1.0), (int)nz).getType();
-        boolean stuck = isSolidOccluding(foot) && isSolidOccluding(body);
+        Material foot = player.getWorld().getBlockAt(NumberConversions.floor(nx), NumberConversions.floor(ny), NumberConversions.floor(nz)).getType();
+        Material body = player.getWorld().getBlockAt(NumberConversions.floor(nx), NumberConversions.floor(ny + 1.0), NumberConversions.floor(nz)).getType();
+        // Arena/grava que cae encima entierra al jugador sin que haga nada; y quedar quieto
+        // adentro de un bloque no es atravesarlo.
+        boolean moving = Math.hypot(nx - s.lastX, nz - s.lastZ) > 0.03;
+        boolean stuck = moving && !foot.hasGravity() && !body.hasGravity()
+            && isSolidOccluding(foot) && isSolidOccluding(body);
 
         if (stuck) {
             s.phaseConsec++;

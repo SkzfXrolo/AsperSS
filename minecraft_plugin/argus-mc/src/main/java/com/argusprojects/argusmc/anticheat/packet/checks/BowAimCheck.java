@@ -8,18 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round2 — BowAimCheck.
- *
- * <p>Detecta cuando un jugador apunta y dispara el arco con un "snap"
- * inmediatamente antes del release: la rotacion cambia bruscamente
- * (snap >X grados) en los ultimos ~100ms antes de soltar el arco,
- * consistente con aim-assist clasico.
- *
- * <p>Se invoca desde {@link org.bukkit.event.entity.EntityShootBowEvent}
- * en el bridge Bukkit. Mira el buffer de rotaciones en
- * {@link PacketDataStore.State#recentRotations}.
- */
 public final class BowAimCheck {
 
     private final ArgusPlugin plugin;
@@ -46,7 +34,7 @@ public final class BowAimCheck {
         }
         if (first == null || last == null || first == last) return;
         float dy = last.yaw - first.yaw;
-        // normaliza a [-180, 180]
+
         while (dy > 180) dy -= 360;
         while (dy < -180) dy += 360;
         float dp = last.pitch - first.pitch;

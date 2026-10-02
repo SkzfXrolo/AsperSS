@@ -144,7 +144,8 @@ anticheat:
       max_delta_deg: 130     # subido a 130deg + check de mis-alignment (solo flag
       max_age_ms: 200        # si despues del snap NO esta mirando al target).
     killaura_no_swing:
-      enabled: true
+      enabled: false         # killaura_swing_packet cubre esto con el orden real de paquetes;
+                             # PlayerAnimationEvent se pierde swings (clientes 1.8 via ViaRewind).
       max_swing_age_ms: 600  # 600ms tolera ViaVersion lag. Skipea primer hit del
                              # jugador y sweep collateral.
     hit_through_wall:
@@ -152,11 +153,25 @@ anticheat:
                              # (stairs, slabs, fences, glass, doors, leaves, etc.)
     autoclicker:
       enabled: true
-      max_cps: 22            # 20 era ajustado para butterfly clickers humanos
-      variance_min_cps: 12   # solo medir varianza si CPS alto (humano regular puede
-                             # sostener 8-10 cps)
-      min_stddev_ms: 25.0    # 25ms — humanos tipicos miden 30-80ms stddev
-      min_samples: 12        # mas muestras para ser estadisticamente significativo
+      # Motor unificado: CPS + varianza + burst + score acumulativo (decay).
+      cps_sustained_low: 20
+      cps_sustained_mid: 24
+      cps_sustained_high: 28
+      burst_250_low: 7
+      burst_250_high: 9
+      variance_min_cps: 12
+      min_stddev_ms: 25.0
+      min_samples: 12
+      cv_suspicious: 0.14
+      cv_extreme: 0.08
+      outlier_ratio_max: 0.10
+      gcd_ratio_suspicious: 0.45
+      human_pause_ms: 180
+      air_click_min_cps: 14
+      suspicion_flag: 14
+      suspicion_decay_per_sec: 2.0
+      flag_cooldown_ms: 2000
+      max_cps: 22            # legacy (cps_packet); motor usa cps_sustained_*
     fly:
       enabled: true
       # HOVER REAL = Y casi constante (|dy| < 0.15 b/s). Saltos, parkour y
@@ -173,7 +188,7 @@ anticheat:
                                 # elytra (+30), vehicle (+20), ice variants
                                 # (+10/+15/+40), slime block (skip).
     scaffold:
-      enabled: true
+      enabled: false         # solo mira pitch: el bridging legit es identico. scaffold_aim cubre el hack.
       min_pitch_deg: 70      # solo flag si mira casi recto al suelo
       window_ms: 2000        # ventana de 2s
       min_hits: 6            # 6 placements en aire suspendido en 2s
@@ -183,7 +198,7 @@ anticheat:
                              # powder snow, kelp, slow falling, levitation,
                              # gliding, vehicle).
     jesus:
-      enabled: true          # whitelist: lily pad, frost walker enchant,
+      enabled: false         # reemplazado por liquidjesus (FP parado en el borde del agua). whitelist: lily pad, frost walker enchant,
                              # ice blocks, bubble columns, vehicles. Threshold
                              # subido a 8 ticks para evitar transitorios.
     fasteat:
@@ -204,22 +219,25 @@ anticheat:
     # ArgusMC sigue con los checks Bukkit-based de arriba.
     # Pack 48 #491-#500: todos los thresholds expuestos a config.
     timer:
-      enabled: true          # detecta TimerHack midiendo el intervalo real
-                             # entre PlayerPosition packets (50ms vanilla).
+      enabled: true
       window_ms: 1500
       ideal_interval_ms: 50
-      tolerance_ms: 150      # subido de 100 a 150 (Pack 48 #491) — menos FP
-      high_balance_ms: 300   # balance < -300ms = HIGH (era hardcoded)
-      min_packets: 10
+      tolerance_ms: 280
+      high_balance_ms: 550
+      min_packets: 12
       warmup_ms: 2000
+      bucket_ms: 25
+      flag_cooldown_ms: 3000
+      lan_ping_cutoff_ms: 20
+      min_ratio: 1.30
     phase:
       enabled: true          # NoClip por raycast entre packets de movimiento.
                              # Whitelist conservadora de bloques solidos.
       min_blocked_samples: 2
       samples_per_block: 2
     velocity:
-      enabled: true          # AntiKnockback: cliente debe respetar la velocity
-                             # asignada por el server (umbral 30%).
+      enabled: false         # reemplazado por antikb: evaluaba el primer paquete tras el golpe,
+                             # que con ping sale ANTES de que el cliente reciba el knockback (falso positivo).
       window_ms: 250
       fraction_mid_threshold: 0.30
       fraction_high_threshold: 0.10
@@ -244,10 +262,12 @@ anticheat:
       extreme_delta_deg: 130.0
       snap_to_attack_ms: 200
     ping_spoof:
-      enabled: true          # RTT <3ms (imposible) o >5000ms sostenido.
+      enabled: true
       warmup_ms: 5000
       min_rtt_ms: 3
       extreme_rtt_ms: 5000
+      low_rtt_streak: 4
+      lan_ping_cutoff_ms: 12
     cps_packet:
       enabled: true          # CPS real (>22 LOW, >30 MID, >45 HIGH).
       window_ms: 1000
@@ -256,7 +276,7 @@ anticheat:
       cps_high: 45
     inv_move_packet:
       enabled: true          # ClickWindow durante movimiento legitimo.
-      grace_ms: 300
+      grace_ms: 500
       stale_move_ms: 1000
 
     # ── Pack 48: nuevos checks PACKET-BASED (Bloque 2 — movement/blocks) ─────
@@ -277,19 +297,20 @@ anticheat:
       max_dy: 1.10
       from_ground_window_ms: 120
     speed_packet:
-      enabled: true          # bps real medido entre packets. Compensa speed
-                             # potion (+20%/nivel), ice (+40%), soul speed (+40%).
-                             # Skip elytra, vehicle, swim, climb, creative-fly.
-                             # Flagea solo tras 3 packets consecutivos arriba del
-                             # cap para tolerar lag spikes puntuales.
-      max_bps: 6.5
-      consecutive_to_flag: 3
+      enabled: true
+      avg_max_bps_ground: 6.3
+      avg_max_bps_open: 7.9
+      max_bps: 7.8
+      consecutive_to_flag: 5
+      min_dt_ms: 45
+      flag_cooldown_ms: 2000
+      overflow_ratio: 1.08
     fast_place:
       enabled: true          # BlockPlacement packets/segundo. Vanilla cap real
-                             # es ~5/s (un placement por tick); LOW a 9/s, MID
-                             # a 14/s, HIGH a 22/s. Skip creative.
-      max_per_sec:  9
-      max_per_sec2: 14
+                             # es ~5/s manteniendo click; spameando se llega a
+                             # ~12-13/s legit con jitter. LOW 14/s, MID 16/s, HIGH 22/s. Skip creative.
+      max_per_sec:  14
+      max_per_sec2: 16
       max_per_sec3: 22
     fast_break:
       enabled: true          # tiempo START_DIGGING -> FINISHED_DIGGING vs piso
@@ -332,17 +353,20 @@ anticheat:
       sustained_ms: 1500
       min_dy_total: 1.0
     jetpack:
-      enabled: true          # dy > min_dy sostenido por N packets sin elytra,
-                             # jump boost relevante, fly, water o climbable.
-      min_dy: 0.18
+      enabled: true          # sube en el aire sin que la gravedad vanilla
+                             # (vy'=(vy-0.08)*0.98) lo frene. Jump boost, slime,
+                             # cama y knockback decaen normal y no cuentan.
+      min_dy: 0.05
+      gravity_tolerance: 0.03
       consec_mid: 4
       consec_high: 7
     spider:
       enabled: true          # subiendo (dy>0) con pared adyacente solida y
-                             # SIN climbable activo. N packets seguidos.
+                             # SIN climbable, violando la gravedad. Cuenta en ventana.
       min_dy: 0.06
-      consec_mid: 5
-      consec_high: 9
+      window_ms: 4000
+      hits_mid: 3
+      hits_high: 6
     multi_velocity:
       enabled: true          # absorbed velocity N packets seguidos
                              # (NoKB / KnockbackResist). Complementa velocity.
@@ -365,8 +389,7 @@ anticheat:
       min_distance: 25.0
       max_angle_deg: 1.5
     bow_aim:
-      enabled: true          # snap de rotacion > snap_deg en los ultimos
-                             # window_ms antes del release del arco.
+      enabled: false         # un flick-shot (giro rapido antes de soltar) es legit; bow_aimbot cubre el hack.
       window_ms: 150
       snap_deg: 25.0
     boat_fly_advanced:
@@ -400,7 +423,7 @@ anticheat:
       step: 0.25
       max_range: 6.0
     item_pickup:
-      enabled: true          # pickup desde > 2.5 (MID) / > 5.0 (HIGH).
+      enabled: false         # recoger items lo decide el server: el cliente no puede forzarlo          # pickup desde > 2.5 (MID) / > 5.0 (HIGH).
       max_range: 2.5
       extreme_range: 5.0
     inventory_teleport:
@@ -436,21 +459,91 @@ anticheat:
     killaura_noswing:
       enabled: true
       max_swing_lag_ms: 100
-      consec_mid: 3
-      consec_high: 5
+      consec_mid: 6
+      consec_high: 10
     killaura_thruwall:
       enabled: true
       ray_step: 0.2
       allowed_solids: 0
       consec_high: 3
+    autoclicker_ticks:
+      enabled: true          # macro externa: 40 clicks >= 9 CPS siempre en 2 intervalos de tick vecinos
+      samples: 40
+      min_cps: 9.0
+    airplace:
+      enabled: true          # coloca contra un bloque que en el server es aire (3 en 10s = MID)
+      window_ms: 10000
+      hits_mid: 3
+      hits_high: 6
+    antiafk:
+      enabled: true          # rotacion identica tick a tick / saltos a intervalo fijo
+      constant_rotation_ticks: 40
+    nuker_fov:
+      enabled: true          # rompe bloques fuera de la mira (>50 grados): 4 en 5s = MID
+      max_angle_deg: 50.0
+      window_ms: 5000
+      hits_mid: 4
+      hits_high: 8
+    bow_aimbot:
+      enabled: true          # mira clavada en un objetivo que se mueve mientras carga el arco
+      min_samples: 10        # ticks de carga (sin contar los 6 de enganche)
+      min_target_deg_per_tick: 0.4
+      max_error_stddev_deg: 0.45
+      debug: false           # true = loguea las metricas de cada tiro (para calibrar)
+    inventory_macro:
+      enabled: true          # ChestStealer/InvCleaner: clicks a ritmo fijo, 4+ en un tick, o click al abrir sin reaccion
+      rhythm_clicks: 8
+    autosoup:
+      enabled: true          # cambiar slot + usar sopa/pocion + volver en <60ms
+      hits_mid: 3
+      hits_high: 6
+    omnisprint:
+      enabled: true          # sprint hacia atras/costado en el piso
+      ticks_mid: 8
+      ticks_high: 20
+    triggerbot:
+      enabled: true          # reaccion 0-1 tick al entrar la mira + casi sin swings al aire
+      max_miss_ratio: 0.10
+    aim_gcd:
+      enabled: true          # giros en pelea que no son pasos enteros de mouse (aim assist)
+      samples: 40
+      ratio_mid: 0.6
+    strafe:
+      enabled: true          # gira en el aire sin perder velocidad (v*0.91 + 0.026 max)
+      window_ms: 2000
+      hits_mid: 4
+      hits_high: 8
+    safewalk:
+      enabled: true          # frena justo en el borde sin shift (3 veces en 15s = MID, 6 = HIGH)
+      min_approach_speed: 0.15
+      window_ms: 15000
+      stops_mid: 3
+      stops_high: 6
+    scaffold_snap:
+      enabled: true          # giro >90 grados en un tick pegado a poner bloque bajo los pies
+      min_snap_deg: 90.0
+      pair_window_ms: 250
+      window_ms: 10000
+      hits_mid: 3
+      hits_high: 6
     scaffold_rotation:
-      enabled: true
+      enabled: false         # idem scaffold: pitch alto + avanzar = bridging legit.
       min_pitch_deg: 80.0
       consec_mid: 4
       consec_high: 7
+    scaffold_aim:
+      enabled: true          # coloca un bloque en un punto que no tiene en la mira
+                             # (angulo mirada vs cursor del paquete). Vanilla ~0.
+      max_angle_deg: 75.0
+      consec_mid: 2
+      consec_high: 4
+    nofall_packet:
+      enabled: true          # onGround=true bajando sin bloque bajo los pies (suelo falso).
+      consec_mid: 3
+      consec_high: 8
     scaffold_tower:
       enabled: true
-      max_interval_ms: 250
+      max_interval_ms: 300
       consec_mid: 3
       consec_high: 5
     timer_jitter:
@@ -473,25 +566,34 @@ anticheat:
       min_full_draw_ms: 900
       extreme_ms: 500
       min_force: 0.95
+      shots_per_sec_mid: 6
+      shots_per_sec_high: 9
     autoeat:
       enabled: true
       window_ms: 800
       min_pattern_hits: 4
     regen:
       enabled: true
-      max_hp_per_sec: 0.5
-      min_interval_ms: 1500
+      # Solo regen natural (saciedad). Vanilla: 1hp cada 10 ticks = 2hp/s, 500ms.
+      max_hp_per_sec: 2.2
+      min_interval_ms: 450
       consec_high: 3
     antikb:
-      enabled: true
-      window_ms: 500
-      max_ratio: 0.3
-      consec_mid: 2
-      consec_high: 4
+      enabled: true          # mide el desplazamiento EN la direccion del knockback durante ping+400ms
+      window_margin_ms: 400
+      window_ms: 10000
+      ignored_mid: 2
+      ignored_high: 4
+    criticals:
+      enabled: true          # mini-salto falso (sube <0.40 al despegar) pegado a un ataque
+      window_ms: 10000
+      hits_mid: 3
+      hits_high: 6
     aimbot:
-      enabled: true
-      min_skip_distance: 3.5
-      min_skipped_targets: 2
+      enabled: true          # golpea a traves de otra entidad (el rayo de la mira la
+                             # corta antes que al objetivo). Vanilla no puede.
+      min_skip_distance: 2.0
+      min_skipped_targets: 1
       consec_high: 3
     reach3d:
       enabled: true
@@ -501,17 +603,17 @@ anticheat:
       consec_high: 3
     liquidjesus:
       enabled: true
-      consec_mid: 4
-      consec_high: 8
+      consec_mid: 8
+      consec_high: 16
       max_abs_dy: 0.05
     phaseclip:
       enabled: true
       consec_high: 4
     noslowsneak:
-      enabled: true
-      max_sneak_bps: 1.5
-      consec_mid: 5
-      consec_high: 10
+      enabled: true          # promedio de 1s agachado en el piso; 1.8 conserva el sprint al agacharse (1.7 b/s)
+      max_sneak_bps: 1.95
+      consec_mid: 2          # segundos seguidos por encima
+      consec_high: 4
     autoarmor:
       enabled: true
       combat_window_ms: 3000

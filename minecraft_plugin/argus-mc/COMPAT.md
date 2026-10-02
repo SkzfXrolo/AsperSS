@@ -4,7 +4,10 @@
 
 ## Supported Minecraft versions
 
-El plugin se compila contra **paper-api 1.21.3** pero declara `api-version: '1.19'`
+El plugin se compila contra **paper-api 1.20.1** (la version mas vieja probada) y declara `api-version: '1.19'`.
+Compilar contra una API mas vieja es lo seguro: CraftBukkit reescribe al cargar los nombres
+viejos a los nuevos (ej. `DROPPED_ITEM` -> `ITEM`), pero NO al reves — compilado contra 1.21.3
+el plugin tiraba `NoSuchFieldError` en servers 1.20.x
 en `plugin.yml`. Solo usa APIs Bukkit estables desde 1.13, así que el .jar
 resultante corre en cualquier servidor compatible con la API Bukkit moderna.
 
@@ -19,8 +22,8 @@ resultante corre en cualquier servidor compatible con la API Bukkit moderna.
 | 1.17       | -                  | ✅ ok      | Java 16+ requerido en server. |
 | 1.18       | -                  | ✅ ok      | -     |
 | 1.19       | 1.19.4             | ✅ ok      | Limite "official" del plugin. |
-| 1.20.x     | 1.20.4             | ✅ ok      | Probado en Aternos con Spigot 1.20.1 y Paper 1.20.4. |
-| 1.21.x     | 1.21.3             | ✅ ok      | **Build target**. PacketEvents 2.6.0 soporta. |
+| 1.20.x     | 1.20.1             | ✅ ok      | **Build target**. Probado con bots en Paper 1.20.1 (dev-server). |
+| 1.21.x     | 1.21.3             | ✅ ok      | PacketEvents 2.6.0 soporta. |
 | 1.22+      | -                  | ❓ futuro  | Probar cuando salga; el plugin debería seguir funcionando si Bukkit API mantiene compat. |
 
 ## Soft dependencies (opcionales)

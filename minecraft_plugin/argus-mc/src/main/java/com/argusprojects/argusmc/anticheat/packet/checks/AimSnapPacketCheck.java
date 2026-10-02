@@ -8,24 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 47 — AimSnap (aim-assist / kill-aura aiming).
- *
- * <p>Mide el delta yaw entre packets de rotation consecutivos. Un humano
- * gira el mouse con curva (~10-25° por packet en giros bruscos). Killaura
- * y aimbot snap-rotan, produciendo deltas tipo &gt;60° en un solo tick. La
- * heuristica:
- *
- * <ul>
- *   <li>Delta &gt; 80° en un packet (50ms) → snap probable (MID)</li>
- *   <li>Delta &gt; 80° seguido inmediatamente por un attack (&lt; 100ms despues)
- *       → snap + hit, casi seguro killaura (HIGH)</li>
- * </ul>
- *
- * <p>Para evitar FPs por usuarios que giran rapido la camara, exigimos que
- * dentro de 200ms post-snap haya un attack a un target o el snap se ignora
- * (se computa pero no flagea).
- */
 public final class AimSnapPacketCheck {
 
     private static final double DEFAULT_SNAP_DELTA = 80.0;
@@ -58,10 +40,7 @@ public final class AimSnapPacketCheck {
                 sink.flag(new Violation(player, "aim_snap_packet",
                     ViolationLevel.HIGH,
                     String.format("delta=%.1f° dyaw=%.1f° dpitch=%.1f° sinceAttack=%dms", delta, dyaw, dpitch, sinceAttack)));
-            } else if (delta >= extremeSnap) {
-                sink.flag(new Violation(player, "aim_snap_packet",
-                    ViolationLevel.MID,
-                    String.format("delta=%.1f° (no recent attack)", delta)));
+            // Girar rapido sin pegar es normal (darse vuelta en PvP 1.8): no se alerta.
             }
         }
     }

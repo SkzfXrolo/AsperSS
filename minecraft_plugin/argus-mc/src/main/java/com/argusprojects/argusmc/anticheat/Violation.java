@@ -4,20 +4,13 @@ import org.bukkit.entity.Player;
 
 import java.util.UUID;
 
-/**
- * Una deteccion concreta producida por un Check del anti-cheat.
- *
- * <p>Es un record-like inmutable: lo crea el check, lo registra el
- * {@link ViolationManager}, y se serializa para enviarlo al backend
- * y/o al webhook de Discord.
- */
 public final class Violation {
 
     public final UUID            playerUuid;
     public final String          playerName;
-    public final String          checkName;     // "reach", "killaura_angle", ...
+    public final String          checkName;
     public final ViolationLevel  level;
-    public final String          details;       // texto humano legible
+    public final String          details;
     public final long            timestampMs;
 
     public Violation(Player player, String checkName, ViolationLevel level, String details) {
@@ -29,7 +22,6 @@ public final class Violation {
         this.timestampMs = System.currentTimeMillis();
     }
 
-    /** Copia con un nivel distinto (Pack 48 #525: per-check level override). */
     private Violation(UUID uuid, String name, String checkName, ViolationLevel level, String details, long ts) {
         this.playerUuid  = uuid;
         this.playerName  = name;

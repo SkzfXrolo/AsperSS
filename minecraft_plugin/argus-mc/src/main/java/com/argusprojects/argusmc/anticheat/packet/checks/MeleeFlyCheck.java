@@ -11,15 +11,6 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round2 — MeleeFlyCheck.
- *
- * <p>Killaura es muy detectable cuando el player ataca mientras esta hovering
- * en el aire sin onGround, sin elytra, sin fall. Detectamos N attacks seguidos
- * con dy ~0 (hovering) y sin on-ground.
- *
- * <p>Whitelist: creative, spectator, elytra, in-vehicle, in water, jump-boost.
- */
 public final class MeleeFlyCheck {
 
     private final ArgusPlugin plugin;

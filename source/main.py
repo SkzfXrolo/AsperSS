@@ -1319,95 +1319,115 @@ class DetallesVentana:
     """Ventana avanzada para mostrar detalles con gráfico y 4 niveles"""
     def __init__(self, parent, archivos_sospechosos):
         self.archivos = archivos_sospechosos
+        C = ModernUI.COLORS if UI_STYLE_AVAILABLE else {}
+        self.C = {
+            'bg': C.get('bg_primary', '#0c0e12'),
+            'bg_card': C.get('bg_card', '#161a22'),
+            'bg_inset': C.get('bg_inset', '#0e1116'),
+            'text_p': C.get('text_primary', '#e8eaed'),
+            'text_s': C.get('text_secondary', '#a8b0bd'),
+            'text_m': C.get('text_muted', '#6b7280'),
+            'accent': C.get('accent', '#3ddc84'),
+            'accent_light': C.get('accent_light', '#5ee8a0'),
+            'red': C.get('red', '#ef5350'),
+            'red_deep': C.get('red_deep', '#c62828'),
+            'amber': C.get('amber', '#f5b942'),
+            'gold': C.get('gold', '#e6c86e'),
+            'border': C.get('border', '#232833'),
+        }
+        c = self.C
+
         self.ventana = Toplevel(parent)
-        self.ventana.title("🔍 Análisis Detallado de Hallazgos")
+        self.ventana.title("Análisis Detallado de Hallazgos")
         self.ventana.geometry("1400x800")
-        self.ventana.configure(bg="#1e1e1e")
-        
+        self.ventana.configure(bg=c['bg'])
+
         # Clasificar en 4 niveles
         self.clasificar_niveles()
-        
+
         # Header
-        header = tk.Frame(self.ventana, bg="#1a1a2e", height=70)
+        header = tk.Frame(self.ventana, bg=c['bg_card'], height=70)
         header.pack(fill=tk.X)
         header.pack_propagate(False)
-        
+
         tk.Label(
             header,
-            text=f"🔍 ANÁLISIS DETALLADO - {len(archivos_sospechosos)} Hallazgos",
+            text=f"Análisis detallado — {len(archivos_sospechosos)} hallazgos",
             font=("Segoe UI", 18, "bold"),
-            bg="#1a1a2e",
-            fg="#00d9ff"
+            bg=c['bg_card'],
+            fg=c['text_p']
         ).pack(pady=10)
-        
+
         tk.Label(
             header,
-            text=f"🔴 Hacks: {self.stats['hacks']} | 🟠 Sospechoso: {self.stats['sospechoso']} | 🟡 Poco Sospechoso: {self.stats['poco_sospechoso']} | 🟢 Normal: {self.stats['normal']}",
+            text=f"Hacks: {self.stats['hacks']}   ·   Sospechoso: {self.stats['sospechoso']}   ·   Poco sospechoso: {self.stats['poco_sospechoso']}   ·   Normal: {self.stats['normal']}",
             font=("Segoe UI", 10),
-            bg="#1a1a2e",
-            fg="#b4b4b4"
+            bg=c['bg_card'],
+            fg=c['text_s']
         ).pack()
-        
+
         # Container principal horizontal
-        main_container = tk.Frame(self.ventana, bg="#1e1e1e")
+        main_container = tk.Frame(self.ventana, bg=c['bg'])
         main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
+
         # Panel izquierdo - Gráfico
-        left_panel = tk.Frame(main_container, bg="#16213e", width=450)
+        left_panel = tk.Frame(main_container, bg=c['bg_card'], width=450)
         left_panel.pack(side=tk.LEFT, fill=tk.BOTH, padx=(0, 10))
-        
+
         tk.Label(
             left_panel,
-            text="📊 DISTRIBUCIÓN POR NIVEL",
+            text="Distribución por nivel",
             font=("Segoe UI", 14, "bold"),
-            bg="#16213e",
-            fg="#00d9ff"
+            bg=c['bg_card'],
+            fg=c['text_p']
         ).pack(pady=15)
-        
+
         # Crear gráfico circular
         self.crear_grafico(left_panel)
-        
+
         # Panel derecho - Pestañas con detalles
-        right_panel = tk.Frame(main_container, bg="#16213e")
+        right_panel = tk.Frame(main_container, bg=c['bg_card'])
         right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        
+
         tk.Label(
             right_panel,
-            text="📋 DETALLES POR CATEGORÍA",
+            text="Detalles por categoría",
             font=("Segoe UI", 14, "bold"),
-            bg="#16213e",
-            fg="#00d9ff"
+            bg=c['bg_card'],
+            fg=c['text_p']
         ).pack(pady=15)
-        
+
         # Crear Notebook (pestañas)
         style = ttk.Style()
         style.theme_use('default')
-        style.configure('TNotebook', background='#16213e', borderwidth=0)
-        style.configure('TNotebook.Tab', background='#2c3e50', foreground='white', padding=[20, 10])
-        style.map('TNotebook.Tab', background=[('selected', '#00d9ff')], foreground=[('selected', 'black')])
-        
+        style.configure('TNotebook', background=c['bg_card'], borderwidth=0)
+        style.configure('TNotebook.Tab', background=c['bg_inset'], foreground=c['text_s'], padding=[20, 10])
+        style.map('TNotebook.Tab', background=[('selected', c['accent'])], foreground=[('selected', c['bg'])])
+
         self.notebook = ttk.Notebook(right_panel)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
-        
+
         # Crear pestañas para cada nivel
-        self.crear_pestana_nivel("🔴 HACKS", self.niveles['hacks'], "#5c1a1a")
-        self.crear_pestana_nivel("🟠 SOSPECHOSO", self.niveles['sospechoso'], "#5c4a1a")
-        self.crear_pestana_nivel("🟡 POCO SOSPECHOSO", self.niveles['poco_sospechoso'], "#4a4a1a")
-        self.crear_pestana_nivel("🟢 NORMAL", self.niveles['normal'], "#1a4a1a")
-        
+        self.crear_pestana_nivel("HACKS", self.niveles['hacks'])
+        self.crear_pestana_nivel("SOSPECHOSO", self.niveles['sospechoso'])
+        self.crear_pestana_nivel("POCO SOSPECHOSO", self.niveles['poco_sospechoso'])
+        self.crear_pestana_nivel("NORMAL", self.niveles['normal'])
+
         # Botones inferiores
-        btn_frame = tk.Frame(self.ventana, bg="#1e1e1e")
+        btn_frame = tk.Frame(self.ventana, bg=c['bg'])
         btn_frame.pack(fill=tk.X, padx=20, pady=10)
-        
+
         tk.Button(
             btn_frame,
-            text="❌ Cerrar",
+            text="Cerrar",
             command=self.ventana.destroy,
-            bg="#c73e1d",
-            fg="white",
+            bg=c['bg_card'],
+            fg=c['text_s'],
+            relief=tk.FLAT,
             font=("Segoe UI", 10, "bold"),
             padx=20,
-            pady=10
+            pady=10,
+            cursor="hand2"
         ).pack(side=tk.RIGHT, padx=5)
     
     def clasificar_niveles(self):
@@ -1432,9 +1452,11 @@ class DetallesVentana:
     
     def determinar_nivel(self, item):
         """Determina el nivel de peligrosidad"""
-        tipo = item.get('type', '').lower()
-        nombre = item.get('name', '').lower()
-        alerta_original = item.get('alerta', 'INFO')
+        # issues_found usa claves en español (tipo/nombre/alerta) — 'type'/
+        # 'name' eran de un formato viejo que ya no genera ningún scanner.
+        tipo = (item.get('tipo') or '').lower()
+        nombre = (item.get('nombre') or '').lower()
+        alerta_original = (item.get('alerta') or 'INFO').upper()
         
         # Si ya tiene alerta específica de string
         if alerta_original in ['HACKS', 'SOSPECHOSO', 'POCO_SOSPECHOSO', 'NORMAL']:
@@ -1498,59 +1520,60 @@ class DetallesVentana:
     
     def crear_grafico(self, parent):
         """Crea el gráfico circular"""
+        c = self.C
         if not MATPLOTLIB_AVAILABLE:
             # Sin matplotlib, mostrar estadísticas en texto
             tk.Label(
                 parent,
-                text="📊 Estadísticas",
+                text="Estadísticas",
                 font=("Segoe UI", 14, "bold"),
-                bg="#16213e",
-                fg="#00d9ff"
+                bg=c['bg_card'],
+                fg=c['text_p']
             ).pack(pady=15)
-            
-            stats_text = f"""
-🔴 Hacks: {self.stats['hacks']}
-🟠 Sospechoso: {self.stats['sospechoso']}
-🟡 Poco Sospechoso: {self.stats['poco_sospechoso']}
-🟢 Normal: {self.stats['normal']}
-            """
+
+            stats_text = (
+                f"Hacks: {self.stats['hacks']}\n"
+                f"Sospechoso: {self.stats['sospechoso']}\n"
+                f"Poco sospechoso: {self.stats['poco_sospechoso']}\n"
+                f"Normal: {self.stats['normal']}"
+            )
             tk.Label(
                 parent,
                 text=stats_text,
                 font=("Segoe UI", 10),
-                bg="#16213e",
-                fg="#ffffff",
+                bg=c['bg_card'],
+                fg=c['text_p'],
                 justify=tk.LEFT
             ).pack(pady=10)
             return
-        
-        fig = Figure(figsize=(5, 5), facecolor='#16213e')
+
+        fig = Figure(figsize=(5, 5), facecolor=c['bg_card'])
         ax = fig.add_subplot(111)
-        
+
         # Datos para el gráfico
-        labels = ['🔴 Hacks', '🟠 Sospechoso', '🟡 Poco Sospechoso', '🟢 Normal']
+        labels = ['Hacks', 'Sospechoso', 'Poco sospechoso', 'Normal']
         sizes = [
             self.stats['hacks'],
             self.stats['sospechoso'],
             self.stats['poco_sospechoso'],
             self.stats['normal']
         ]
-        colors = ['#ff4444', '#ffa500', '#ffeb3b', '#4caf50']
+        colors = [c['red'], c['amber'], c['gold'], c['accent']]
         explode = (0.1, 0.05, 0, 0)  # Destacar Hacks
-        
+
         # Filtrar categorías vacías
         filtered_labels = []
         filtered_sizes = []
         filtered_colors = []
         filtered_explode = []
-        
+
         for i, size in enumerate(sizes):
             if size > 0:
                 filtered_labels.append(labels[i])
                 filtered_sizes.append(size)
                 filtered_colors.append(colors[i])
                 filtered_explode.append(explode[i])
-        
+
         if filtered_sizes:
             wedges, texts, autotexts = ax.pie(
                 filtered_sizes,
@@ -1559,107 +1582,110 @@ class DetallesVentana:
                 autopct='%1.1f%%',
                 startangle=90,
                 explode=filtered_explode,
-                textprops={'color': 'white', 'fontsize': 11, 'weight': 'bold'}
+                textprops={'color': c['text_p'], 'fontsize': 11, 'weight': 'bold'}
             )
-            
+
             ax.axis('equal')
-            fig.patch.set_facecolor('#16213e')
-            ax.set_facecolor('#16213e')
+            fig.patch.set_facecolor(c['bg_card'])
+            ax.set_facecolor(c['bg_card'])
         else:
-            ax.text(0.5, 0.5, 'Sin datos', ha='center', va='center', 
-                   fontsize=16, color='white')
+            ax.text(0.5, 0.5, 'Sin datos', ha='center', va='center',
+                   fontsize=16, color=c['text_p'])
             ax.axis('off')
-        
+
         # Integrar en tkinter
         canvas = FigureCanvasTkAgg(fig, parent)
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-    
-    def crear_pestana_nivel(self, titulo, items, bg_color):
+
+    def crear_pestana_nivel(self, titulo, items):
         """Crea una pestaña para un nivel específico"""
-        frame = tk.Frame(self.notebook, bg="#0d0d0d")
+        c = self.C
+        frame = tk.Frame(self.notebook, bg=c['bg_inset'])
         self.notebook.add(frame, text=titulo)
-        
+
         if not items:
             tk.Label(
                 frame,
-                text=f"✓ No hay elementos en esta categoría",
+                text="No hay elementos en esta categoría",
                 font=("Segoe UI", 12),
-                bg="#0d0d0d",
-                fg="#4ec9b0"
+                bg=c['bg_inset'],
+                fg=c['accent_light']
             ).pack(pady=50)
             return
-        
+
         # ScrolledText para mostrar detalles
         text_area = scrolledtext.ScrolledText(
             frame,
             wrap=tk.WORD,
             font=("Consolas", 10),
-            bg="#0d0d0d",
-            fg="#e0e0e0",
+            bg=c['bg_inset'],
+            fg=c['text_p'],
+            insertbackground=c['text_p'],
             padx=15,
             pady=15
         )
         text_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Agregar cada item
+
+        # Agregar cada item — issues_found usa claves en español
         for i, item in enumerate(items, 1):
             text_area.insert(tk.END, f"{'=' * 80}\n", "separator")
-            text_area.insert(tk.END, f"#{i} - {item.get('name', 'N/A')}\n", "title")
+            text_area.insert(tk.END, f"#{i} - {item.get('nombre') or 'N/A'}\n", "title")
             text_area.insert(tk.END, f"{'=' * 80}\n\n", "separator")
-            
-            text_area.insert(tk.END, f"📌 Tipo: ", "label")
-            text_area.insert(tk.END, f"{item.get('type', 'N/A')}\n\n", "value")
-            
+
+            text_area.insert(tk.END, f"Tipo: ", "label")
+            text_area.insert(tk.END, f"{item.get('tipo') or 'N/A'}\n\n", "value")
+
             # Ruta o descripción
-            if 'path' in item and item['path'] != 'N/A':
-                text_area.insert(tk.END, f"📂 Ubicación:\n", "label")
-                text_area.insert(tk.END, f"   {item['path']}\n\n", "path")
+            ruta = item.get('ruta') or ''
+            if ruta and ruta != 'N/A':
+                text_area.insert(tk.END, f"Ubicación:\n", "label")
+                text_area.insert(tk.END, f"   {ruta}\n\n", "path")
             else:
-                text_area.insert(tk.END, f"⚠️  Descripción:\n", "label")
+                text_area.insert(tk.END, f"Descripción:\n", "label")
                 text_area.insert(tk.END, f"   {self.get_descripcion(item)}\n\n", "warning")
-            
+
             # Detalles adicionales
-            if 'pid' in item:
-                text_area.insert(tk.END, f"🔢 PID: ", "label")
+            if item.get('pid'):
+                text_area.insert(tk.END, f"PID: ", "label")
                 text_area.insert(tk.END, f"{item['pid']}\n", "value")
-            
-            if 'hash' in item and item['hash']:
-                text_area.insert(tk.END, f"🔐 SHA256:\n", "label")
-                text_area.insert(tk.END, f"   {item['hash']}\n", "hash")
-            
-            if 'keyword' in item:
-                text_area.insert(tk.END, f"🔍 Keyword Detectado: ", "label")
+
+            if item.get('file_hash'):
+                text_area.insert(tk.END, f"SHA256:\n", "label")
+                text_area.insert(tk.END, f"   {item['file_hash']}\n", "hash")
+
+            if item.get('keyword'):
+                text_area.insert(tk.END, f"Keyword detectado: ", "label")
                 text_area.insert(tk.END, f"{item['keyword']}\n", "danger")
-            
+
             # Fecha de modificación
-            path = item.get('path', '')
+            path = ruta
             if path and path != 'N/A' and os.path.exists(path) and os.path.isfile(path):
                 try:
                     timestamp = os.path.getmtime(path)
                     fecha = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
-                    text_area.insert(tk.END, f"📅 Última Modificación: ", "label")
+                    text_area.insert(tk.END, f"Última modificación: ", "label")
                     text_area.insert(tk.END, f"{fecha}\n", "value")
                 except:
                     pass
-            
+
             text_area.insert(tk.END, "\n")
-        
+
         # Configurar tags
-        text_area.tag_config("separator", foreground="#3e3e42")
-        text_area.tag_config("title", foreground="#00d9ff", font=("Consolas", 11, "bold"))
-        text_area.tag_config("label", foreground="#569cd6", font=("Consolas", 10, "bold"))
-        text_area.tag_config("value", foreground="#e0e0e0")
-        text_area.tag_config("path", foreground="#4ec9b0")
-        text_area.tag_config("hash", foreground="#d4d4d4", font=("Consolas", 8))
-        text_area.tag_config("danger", foreground="#ff4444", font=("Consolas", 10, "bold"))
-        text_area.tag_config("warning", foreground="#ffa500")
-        
+        text_area.tag_config("separator", foreground=c['border'])
+        text_area.tag_config("title", foreground=c['accent_light'], font=("Consolas", 11, "bold"))
+        text_area.tag_config("label", foreground=c['text_s'], font=("Consolas", 10, "bold"))
+        text_area.tag_config("value", foreground=c['text_p'])
+        text_area.tag_config("path", foreground=c['accent_light'])
+        text_area.tag_config("hash", foreground=c['text_m'], font=("Consolas", 8))
+        text_area.tag_config("danger", foreground=c['red'], font=("Consolas", 10, "bold"))
+        text_area.tag_config("warning", foreground=c['amber'])
+
         text_area.config(state=tk.DISABLED)
     
     def get_descripcion(self, item):
         """Obtiene descripción si no es un archivo"""
-        tipo = item.get('type', '')
+        tipo = item.get('tipo', '')
         tiempo = item.get('tiempo', '')
         
         if tipo == 'process':
@@ -1675,29 +1701,32 @@ class DetallesVentana:
         elif tipo == 'injected_dll':
             return f"DLL inyectada en proceso Java (PID: {item.get('pid', 'N/A')})"
         elif tipo == 'file_modified_during_ss':
-            return f"⚠️ ARCHIVO MODIFICADO DURANTE LA SS - {tiempo}"
+            return f"ARCHIVO MODIFICADO DURANTE LA SS - {tiempo}"
         elif tipo == 'file_modified_pre_ss':
             return f"Archivo modificado antes de la SS (0-5 min) - {tiempo}"
         elif tipo == 'file_deleted':
-            return f"🗑️ ARCHIVO ELIMINADO DESDE BOOT - {tiempo}"
+            return f"ARCHIVO ELIMINADO DESDE BOOT - {tiempo}"
         elif tipo == 'file_created':
-            return f"📁 ARCHIVO CREADO DESDE BOOT - {tiempo}"
+            return f"ARCHIVO CREADO DESDE BOOT - {tiempo}"
         elif tipo == 'file_renamed':
-            return f"✏️ ARCHIVO RENOMBRADO DESDE BOOT - {tiempo}"
+            return f"ARCHIVO RENOMBRADO DESDE BOOT - {tiempo}"
         elif tipo == 'usb_removed':
-            return f"⚠️ USB DESCONECTADO DURANTE LA SS - Intento de ocultar evidencia"
+            return f"USB DESCONECTADO DURANTE LA SS - Intento de ocultar evidencia"
         elif tipo == 'usb_added':
             return f"USB conectado durante la SS - {tiempo}"
+        elif item.get('explicacion'):
+            return item['explicacion']
         else:
-            return f"Elemento sospechoso detectado - Tipo: {tipo}"
+            return f"Elemento sospechoso detectado - Tipo: {tipo or 'desconocido'}"
     
     def copiar_rutas(self, archivos):
         rutas = []
         for f in archivos:
-            if 'path' in f and f['path'] != 'N/A':
-                rutas.append(f['path'])
+            ruta = f.get('ruta') or ''
+            if ruta and ruta != 'N/A':
+                rutas.append(ruta)
             else:
-                rutas.append(f"[{f.get('type')}] {f.get('name')} - {self.get_descripcion(f)}")
+                rutas.append(f"[{f.get('tipo')}] {f.get('nombre')} - {self.get_descripcion(f)}")
         
         texto = "\n".join(rutas)
         self.ventana.clipboard_clear()
@@ -4341,20 +4370,30 @@ class ArgusApp:
                 pass
             return
 
+        C = ModernUI.COLORS if UI_STYLE_AVAILABLE else {}
+        bg = C.get('bg_primary', '#0c0e12')
+        bg_card = C.get('bg_elevated', '#12122a')
+        txt_p = C.get('text_primary', '#f5f5f5')
+        txt_s = C.get('text_secondary', '#a1a1aa')
+        txt_m = C.get('text_muted', '#3f3f46')
+        accent = C.get('accent', '#3ddc84')
+        red = C.get('red_deep', '#DC2626')
+
         win = tk.Toplevel(self.root)
         win.title("Cambiar servidor")
         win.geometry("340x280")
-        win.configure(bg="#0d1117")
+        win.configure(bg=bg)
         win.grab_set()
         win.resizable(False, False)
 
         tk.Label(win, text="Seleccionar servidor", font=("Segoe UI", 12, "bold"),
-                 bg="#0d1117", fg="#e2e8f0").pack(pady=(16, 4))
+                 bg=bg, fg=txt_p).pack(pady=(16, 4))
         tk.Label(win, text="Elige el perfil de servidor a usar:", font=("Segoe UI", 9),
-                 bg="#0d1117", fg="#8b9ab0").pack()
+                 bg=bg, fg=txt_s).pack()
 
-        listbox = tk.Listbox(win, font=("Segoe UI", 10), bg="#161b22", fg="#e2e8f0",
-                             selectbackground="#5865f2", relief=tk.FLAT, bd=0,
+        listbox = tk.Listbox(win, font=("Segoe UI", 10), bg=bg_card, fg=txt_p,
+                             selectbackground=accent, selectforeground=bg,
+                             relief=tk.FLAT, bd=0,
                              highlightthickness=0, activestyle='none', height=6)
         listbox.pack(fill=tk.BOTH, expand=True, padx=16, pady=10)
 
@@ -4401,16 +4440,16 @@ class ArgusApp:
             win.destroy()
             self.show_profile_selector()
 
-        btn_frame = tk.Frame(win, bg="#0d1117")
+        btn_frame = tk.Frame(win, bg=bg)
         btn_frame.pack(fill=tk.X, padx=16, pady=(0, 14))
         tk.Button(btn_frame, text="Usar este perfil", command=_on_select,
-                  bg="#5865f2", fg="white", font=("Segoe UI", 9, "bold"),
+                  bg=accent, fg=bg, font=("Segoe UI", 9, "bold"),
                   relief=tk.FLAT, padx=14, pady=7, cursor="hand2").pack(side=tk.LEFT, padx=(0, 6))
         tk.Button(btn_frame, text="Eliminar", command=_on_delete,
-                  bg="#2d1b1b", fg="#ef4444", font=("Segoe UI", 9),
+                  bg=bg_card, fg=red, font=("Segoe UI", 9),
                   relief=tk.FLAT, padx=10, pady=7, cursor="hand2").pack(side=tk.LEFT)
         tk.Button(btn_frame, text="Cancelar", command=win.destroy,
-                  bg="#161b22", fg="#8b9ab0", font=("Segoe UI", 9),
+                  bg=bg_card, fg=txt_s, font=("Segoe UI", 9),
                   relief=tk.FLAT, padx=10, pady=7, cursor="hand2").pack(side=tk.RIGHT)
 
     # ── Click-speed test (P3 #26 — hardware autoclicker button detection) ────

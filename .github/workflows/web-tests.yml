@@ -32,7 +32,7 @@ jobs:
 
       - name: Run unit/property/security suite
         run: |
-          python -m pytest tests/ --ignore=tests/integration --ignore=tests/perf --cov=argus_ai_oracle --cov=argus_ai_features --cov=argus_ai_trainer --cov=argus_ai_labeler --cov=argus_ai_assistant --cov-report=xml --cov-report=term-missing
+          python -m pytest tests/ --ignore=tests/integration --ignore=tests/perf --ignore=tests/visual --cov=argus_ai_oracle --cov=argus_ai_features --cov=argus_ai_trainer --cov=argus_ai_labeler --cov=argus_ai_assistant --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -179,6 +179,10 @@ jobs:
       - name: Install Playwright browser
         run: |
           python -m playwright install chromium
+      - name: Start app server
+        run: |
+          python web_app/app.py &
+          npx --yes wait-on http://127.0.0.1:8080/healthz -t 30000
       - name: Run e2e tests
         run: |
           python -m pytest --no-cov -m e2e tests/e2e tests/a11y -q

@@ -7,32 +7,6 @@ import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffectType;
 
-/**
- * Pack 48 round 2 — contexto de movimiento tick-by-tick para checks Fly/Speed.
- *
- * <p>Centraliza la deteccion de modifiers que afectan velocidad / aceleracion
- * vertical legítimos:
- * <ul>
- *   <li>Water bounce / swimming</li>
- *   <li>Slime / honey / bed bounce</li>
- *   <li>Scaffolding climb / ladder / vine</li>
- *   <li>Soul sand slowdown</li>
- *   <li>Ice / blue_ice acceleration</li>
- *   <li>Speed potion / Slowness</li>
- *   <li>Jump boost / levitation / slow falling</li>
- *   <li>Elytra gliding</li>
- *   <li>Vehicle (boat, minecart, horse)</li>
- *   <li>Creative / spectator</li>
- * </ul>
- *
- * <p>Cada flag se evalua una sola vez por instancia. Es inmutable post-build.
- *
- * <p>USO TIPICO:
- * <pre>
- * MovementContext ctx = MovementContext.snapshot(player, ny);
- * if (ctx.onSlime || ctx.onSlimeJustNow) return; // bounce legitimo
- * </pre>
- */
 public final class MovementContext {
 
     public final Player  player;
@@ -52,13 +26,13 @@ public final class MovementContext {
     public final boolean onVine;
     public final boolean inVehicle;
     public final boolean inBubbleColumn;
-    /** Amplifier de Speed potion (-1 si ausente). */
+
     public final int     speedAmp;
-    /** Amplifier de Jump Boost (-1 si ausente). */
+
     public final int     jumpBoostAmp;
     public final boolean hasLevitation;
     public final boolean hasSlowFalling;
-    /** Soul Speed enchantment activa (boots + soul sand/soul soil). */
+
     public final boolean soulSpeedActive;
 
     private MovementContext(Player p, Location footLoc) {
@@ -90,54 +64,41 @@ public final class MovementContext {
 
         this.speedAmp = ampOf(p, "SPEED");
         int jb = ampOf(p, "JUMP_BOOST");
-        if (jb < 0) jb = ampOf(p, "JUMP"); // 1.20 vs 1.21 naming
+        if (jb < 0) jb = ampOf(p, "JUMP");
         this.jumpBoostAmp = jb;
         this.hasLevitation = hasEffect(p, "LEVITATION");
         this.hasSlowFalling = hasEffect(p, "SLOW_FALLING");
         this.soulSpeedActive = onSoulSand && hasSoulSpeedBoots(p);
     }
 
-    /** Snapshot del contexto en la posicion actual del jugador. */
     public static MovementContext snapshot(Player p) {
         return new MovementContext(p, p.getLocation());
     }
 
-    /** Snapshot del contexto en una posicion arbitraria (mas precisa con coords del packet). */
     public static MovementContext snapshotAt(Player p, double x, double y, double z) {
         return new MovementContext(p, new Location(p.getWorld(), x, y, z));
     }
 
-    /**
-     * Multiplier estimado de cap de speed horizontal teniendo en cuenta
-     * modifiers acumulables. Ej: speed II + ice = base * 1.4 * 1.4 = base * 1.96.
-     */
     public double horizontalSpeedMultiplier() {
         double m = 1.0;
         if (speedAmp >= 0)   m *= (1.0 + 0.20 * (speedAmp + 1));
         if (onIce)           m *= 1.4;
         if (soulSpeedActive) m *= 1.4;
-        if (onSoulSand && !soulSpeedActive) m *= 0.4;   // ralentiza
+        if (onSoulSand && !soulSpeedActive) m *= 0.4;
         if (onHoney)         m *= 0.5;
         if (inWater && !gliding) m *= 0.6;
         return m;
     }
 
-    /**
-     * Multiplier estimado para deltaY positivo (subiendo) que es legitimo.
-     */
     public double verticalRiseMultiplier() {
         double m = 1.0;
         if (jumpBoostAmp >= 0) m *= (1.0 + 0.10 * (jumpBoostAmp + 1));
-        if (onSlime)           m *= 4.0; // bounce
+        if (onSlime)           m *= 4.0;
         if (onBed)             m *= 1.5;
         if (hasLevitation)     m *= 5.0;
         return m;
     }
 
-    /**
-     * true si el contexto justifica permitir un check de fly/speed sin flagear.
-     * Util para los checks que prefieren "ante la duda, no flagear".
-     */
     public boolean isLegitFlightLike() {
         return creativeOrSpec
             || allowFlightAndFlying
@@ -150,8 +111,6 @@ public final class MovementContext {
             || inBubbleColumn
             || inVehicle;
     }
-
-    // ──────────────────────────────────────────────────────────────────────
 
     private static boolean isIce(Material m) {
         switch (m) {

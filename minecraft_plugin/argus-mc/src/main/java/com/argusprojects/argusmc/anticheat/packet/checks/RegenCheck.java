@@ -8,17 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round 3 — RegenCheck.
- *
- * <p>En vanilla la regeneración natural ocurre 1HP cada 4s (saturation
- * &gt;= 18), o cada 10s para hambre intermedia. Los cheats "Regen" piden
- * a Bukkit setear HP directo, lo cual produce un health-change-event con
- * delta &gt; 1 en un solo tick.
- *
- * <p>El bridge llama {@link #handleHealthChange} en
- * {@code EntityRegainHealthEvent}; un delta anormal flagea.
- */
 public final class RegenCheck {
 
     private final ArgusPlugin plugin;
@@ -32,8 +21,8 @@ public final class RegenCheck {
         if (!plugin.getAnticheatConfig().isCheckEnabled("regen")) return;
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("regen");
-        double maxRegenPerSec = sec != null ? sec.getDouble("max_hp_per_sec", 0.5) : 0.5;
-        long   minInterval    = sec != null ? sec.getLong("min_interval_ms", 1500L) : 1500L;
+        double maxRegenPerSec = sec != null ? sec.getDouble("max_hp_per_sec", 2.2) : 2.2;
+        long   minInterval    = sec != null ? sec.getLong("min_interval_ms", 450L) : 450L;
         int    consecHigh     = sec != null ? sec.getInt("consec_high", 3) : 3;
 
         double delta = newHealth - s.lastHealth;
@@ -42,7 +31,7 @@ public final class RegenCheck {
         s.lastHealth = newHealth;
         s.lastHealthChangeMs = now;
 
-        if (delta <= 0) return; // damage o no change.
+        if (delta <= 0) return;
         if (dt <= 0) return;
 
         double hpPerSec = delta * 1000.0 / dt;

@@ -233,9 +233,10 @@ def extract_features(evidence: dict[str, Any]) -> list[float]:
     fv["movement_jitter"]        = float(evidence.get("movement_jitter") or 0)
     fv["session_length_hours"]   = float(evidence.get("session_length_hours") or 0)
     fv["first_seen_now"]         = 1.0 if evidence.get("first_seen_now") else 0.0
+    _processes = evidence.get("processes")
     process_text = " ".join([
         str(evidence.get("process_tree") or ""),
-        " ".join([str(p) for p in (evidence.get("processes") or [])]),
+        " ".join([str(p) for p in _processes]) if isinstance(_processes, (list, tuple)) else str(_processes or ""),
     ]).lower()
     fv["legitimate_client_detected"] = 1.0 if any(p in process_text for p in _LEGIT_CLIENTS) else 0.0
 

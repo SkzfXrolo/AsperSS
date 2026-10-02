@@ -713,10 +713,13 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
     private void sendHelp(CommandSender sender) {
         Messages msg = plugin.getMessages();
         sender.sendMessage(msg.prefix() + Messages.color("&7Subcomandos disponibles:"));
+        boolean any = false;
         if (sender.hasPermission("argus.ss.use") || sender instanceof ConsoleCommandSender) {
+            any = true;
             sender.sendMessage(Messages.color("  &e/argus check <jugador> [razon] &7- emite token de Screen Share"));
         }
         if (sender.hasPermission("argus.admin")) {
+            any = true;
             sender.sendMessage(Messages.color("  &e/argus reload &7- recarga config.yml"));
             sender.sendMessage(Messages.color("  &e/argus info &7- muestra estado y quota"));
             sender.sendMessage(Messages.color("  &e/argus test &7- health check de la API"));
@@ -725,6 +728,10 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Messages.color("  &e/argus duda <jugador> &7- consulta al Argus AI Oracle"));
             sender.sendMessage(Messages.color("  &e/argus pregunta <texto> &7- chat con el Oracle (lenguaje natural)"));
             sender.sendMessage(Messages.color("  &e/argus admin &7- subcomandos admin (reload/debug/testpacket/clearviolations)"));
+        }
+        if (!any) {
+            sender.sendMessage(Messages.color("&cNo tienes permisos Argus (&fargus.ss.use &co &fargus.admin&c)."));
+            sender.sendMessage(Messages.color("&7Pide OP a un admin o ejecuta en consola: &fop " + sender.getName()));
         }
     }
 
@@ -771,10 +778,22 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
 
     private void handleInfo(CommandSender sender) {
         Messages msg = plugin.getMessages();
+
+        if (plugin.getArgusConfig().isMisconfigured()) {
+            sendInfoResult(sender, msg,
+                plugin.getDescription().getVersion(),
+                plugin.getArgusConfig().getBaseUrl() + "/api/plugin/health",
+                Messages.color("&emodo local &7(sin API key)"),
+                "—", "?", "?");
+            return;
+        }
+
         sender.sendMessage(msg.prefix() + Messages.color("&7Consultando estado..."));
 
         plugin.getApiClient().healthCheckAsync().whenComplete((resp, err) -> {
             Bukkit.getScheduler().runTask(plugin, () -> {
+                if (sender instanceof Player p && !p.isOnline()) return;
+
                 String status, company, used, quota;
                 String endpoint = plugin.getArgusConfig().getBaseUrl() + "/api/plugin/health";
 
@@ -795,16 +814,35 @@ public final class ArgusCommand implements CommandExecutor, TabCompleter {
                     quota = resp.dailyQuota != null ? String.valueOf(resp.dailyQuota) : "?";
                 }
 
-                msg.send(sender, "argus_info", Messages.ph(
-                    "version", plugin.getDescription().getVersion(),
-                    "endpoint", endpoint,
-                    "status", status,
-                    "company", company,
-                    "used", used,
-                    "quota", quota
-                ));
+                sendInfoResult(sender, msg,
+                    plugin.getDescription().getVersion(),
+                    endpoint, status, company, used, quota);
             });
         });
+    }
+
+    private void sendInfoResult(CommandSender sender, Messages msg, String version,
+                                String endpoint, String status, String company,
+                                String used, String quota) {
+        String templated = msg.get("argus_info", Messages.ph(
+            "version", version,
+            "endpoint", endpoint,
+            "status", status,
+            "company", company,
+            "used", used,
+            "quota", quota
+        ));
+        if (templated != null && !templated.isBlank()) {
+            for (String line : templated.split("\\n")) {
+                if (!line.isBlank()) sender.sendMessage(line);
+            }
+            return;
+        }
+        sender.sendMessage(Messages.color("&6&lArgus MC &fv" + version + " &8| &7conectado a:"));
+        sender.sendMessage(Messages.color("&7Endpoint: &f" + endpoint));
+        sender.sendMessage(Messages.color("&7Estado:   " + status));
+        sender.sendMessage(Messages.color("&7Empresa:  &f" + company));
+        sender.sendMessage(Messages.color("&7Quota:    &e" + used + "/" + quota + " &7emisiones hoy."));
     }
 
     private void handleTest(CommandSender sender) {

@@ -10,15 +10,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
-/**
- * Pack 48 round2 — NamedItemSpamCheck.
- *
- * <p>Detecta el "AutoNamer" / farm-bot que cambia el nombre del item en
- * mano con altisima frecuencia para evadir filtros o farmear logros.
- *
- * <p>Heuristica: si el nombre del item en main hand cambia &gt; N veces
- * en {@code window_ms}, flag.
- */
 public final class NamedItemSpamCheck {
 
     private final ArgusPlugin plugin;
@@ -48,10 +39,10 @@ public final class NamedItemSpamCheck {
                 currentName = meta.getDisplayName();
             }
         }
-        if (currentName == null) return; // no es item renombrado
+        if (currentName == null) return;
 
         if (s.lastMainHandItemName != null && !currentName.equals(s.lastMainHandItemName)) {
-            // Conteo de cambios: aprovechamos lastMainHandItemNameMs como inicio de ventana.
+
             long sinceWindowStart = now - s.lastMainHandItemNameMs;
             if (sinceWindowStart > windowMs) {
                 s.lastMainHandItemNameMs = now;
