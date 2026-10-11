@@ -4161,6 +4161,15 @@ class ArgusApp:
         return config
 
     def load_config(self):
+        config = self._load_config_from_disk()
+        # ARGUS_LOCAL_SCAN=1 promete "no sube nada": sin token ni licencia en memoria ningun camino
+        # puede subir ni autenticarse (tambien los que recargan el config a mitad del scan).
+        # El config.json en disco no se toca.
+        if os.environ.get('ARGUS_LOCAL_SCAN') == '1' and isinstance(config, dict):
+            config = dict(config, scan_token='', license='')
+        return config
+
+    def _load_config_from_disk(self):
         """Carga la configuración desde ubicación persistente"""
         try:
             import sys
@@ -8564,7 +8573,6 @@ class ArgusApp:
         # token, sin API, sin subida. Solo para correr el scan en la propia PC.
         if os.environ.get('ARGUS_LOCAL_SCAN') == '1':
             self.scan_token = 'LOCAL-TEST'
-            self._local_scan_only = True
             print("🧪 ARGUS_LOCAL_SCAN=1 — autenticación omitida (scan local, no sube nada)")
             return True
         try:
