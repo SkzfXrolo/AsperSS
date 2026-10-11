@@ -2,11 +2,11 @@
 
 
 a = Analysis(
-    ['source\\main.py'],
+    ['source/main.py'],
     pathex=[],
     binaries=[],
     datas=[
-        ('source\\assets', 'assets'),
+        ('source/assets', 'assets'),
     ],
     hiddenimports=['PIL', 'PIL.Image', 'PIL.ImageTk'],
     hookspath=[],
@@ -37,5 +37,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='source\\assets\\logo.ico',
+    icon='source/assets/logo.ico',
 )

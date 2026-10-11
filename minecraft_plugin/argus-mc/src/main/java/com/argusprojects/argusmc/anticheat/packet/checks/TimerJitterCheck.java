@@ -27,7 +27,6 @@ public final class TimerJitterCheck {
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("timer_jitter");
         int    windowSize = sec != null ? sec.getInt("window_size", 20) : 20;
         double minStdMs   = sec != null ? sec.getDouble("min_stddev_ms", 5.0) : 5.0;
-        double maxStdMs   = sec != null ? sec.getDouble("max_stddev_ms", 35.0) : 35.0;
         double minAvgMs   = sec != null ? sec.getDouble("min_avg_ms", 35.0) : 35.0;
 
         long[] arr;
@@ -55,11 +54,8 @@ public final class TimerJitterCheck {
             sink.flag(new Violation(player, "timer_jitter_packet",
                 ViolationLevel.HIGH,
                 String.format("timer ON avg=%.1fms stddev=%.1fms (n=%d)", mean, stddev, n)));
-        } else if (stddev > maxStdMs && mean < 60) {
-            sink.flag(new Violation(player, "timer_jitter_packet",
-                ViolationLevel.LOW,
-                String.format("timer JITTER avg=%.1fms stddev=%.1fms", mean, stddev)));
         }
+        // Jitter alto sin timer rapido es red (wifi, tunel, ViaVersion), no cheat: no se flaguea.
     }
 
     private static int safePing(Player player) {

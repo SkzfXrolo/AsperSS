@@ -8,17 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round2 — MultiVelocityCheck.
- *
- * <p>Generalizacion del {@link VelocityCheck} ya existente: en vez de
- * un solo packet ignorando velocity, cuenta cuantos packets seguidos
- * el cliente ignoro la velocity assignada por el server.
- *
- * <p>Un cheat moderno puede absorber 1 velocity (ej: jugadores cerca de
- * un knockback los kicks NetherTotem) pero seguir absorbiendo es
- * indicativo de KnockbackResist activo o NoKB module.
- */
 public final class MultiVelocityCheck {
 
     private final ArgusPlugin plugin;
@@ -32,7 +21,6 @@ public final class MultiVelocityCheck {
                                      ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("multi_velocity")) return;
 
-        // Si no hay velocity activa, reset.
         if (s.serverVelConsumed || s.serverVelAssignedAtMs == 0) {
             s.velocityIgnoredConsec = 0;
             return;
@@ -58,7 +46,7 @@ public final class MultiVelocityCheck {
             + s.serverVelY * s.serverVelY
             + s.serverVelZ * s.serverVelZ);
         double observedMag = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        // El cliente "ignora" si el movimiento observado es muy chico vs lo asignado.
+
         if (assignedMag > 0.10 && observedMag < assignedMag * fraction) {
             s.velocityIgnoredConsec++;
             if (s.velocityIgnoredConsec >= consecHigh) {

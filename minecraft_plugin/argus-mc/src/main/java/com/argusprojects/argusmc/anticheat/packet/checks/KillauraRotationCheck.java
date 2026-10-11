@@ -10,18 +10,6 @@ import org.bukkit.entity.Player;
 
 import java.util.Iterator;
 
-/**
- * Pack 48 round 3 — KillauraRotationCheck.
- *
- * <p>Detecta patrones de rotación inhumanos: cambio mayor a
- * {@code max_yaw_step_deg} (default 180°) en menos de
- * {@code min_step_interval_ms} (default 50ms) entre dos rotation
- * packets consecutivos.
- *
- * <p>Las killauras "snap-aim" mueven la cámara directo al target sin
- * pasar por estados intermedios. Un humano hace 180° en mínimo ~150ms
- * con varios packets intermedios.
- */
 public final class KillauraRotationCheck {
 
     private final ArgusPlugin plugin;
@@ -42,7 +30,7 @@ public final class KillauraRotationCheck {
 
         synchronized (s) {
             if (s.recentRotations.size() < 2) return;
-            // Tomar los dos ultimos samples y comparar.
+
             Iterator<PacketDataStore.RotationSample> it = s.recentRotations.descendingIterator();
             PacketDataStore.RotationSample last = it.next();
             if (!it.hasNext()) return;
@@ -64,7 +52,8 @@ public final class KillauraRotationCheck {
     }
 
     private static double angleDelta(float a, float b) {
-        double d = ((a - b + 540.0) % 360.0) - 180.0;
+        // % de Java conserva el signo: con yaws sin normalizar (clientes 1.8) hay que envolver dos veces.
+        double d = (((a - b) % 360.0) + 540.0) % 360.0 - 180.0;
         return d;
     }
 }

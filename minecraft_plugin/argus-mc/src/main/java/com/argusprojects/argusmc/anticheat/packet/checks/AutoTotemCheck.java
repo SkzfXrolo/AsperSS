@@ -10,25 +10,6 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
-/**
- * Pack 48 #488 — AutoTotemCheck (totem swap automatico tras hit fatal).
- *
- * <p>Un AutoTotem hack detecta cuando el jugador esta a punto de morir y
- * swap-ea un Totem of Undying al offhand antes de que el damage lo mate.
- * El patron caracteristico:
- * <ol>
- *   <li>El jugador recibe damage que lo dejaria en {@code health &lt; 1}.</li>
- *   <li>El cliente envia un InventoryClick (o swap-hands) en &lt;50ms.</li>
- *   <li>Despues de ese click, el offhand contiene un Totem.</li>
- * </ol>
- *
- * <p>Un humano legitimo no puede reaccionar mas rapido que ~150-200ms.
- * &lt;100ms es bot. Aplicamos thresholds escalonados.
- *
- * <p>NOTA: este check se llama DESPUES de que el inventory event ya tuvo
- * efecto (no podemos cancelarlo desde Bukkit MONITOR), pero el flag y la
- * accion del ViolationManager corren normalmente.
- */
 public final class AutoTotemCheck {
 
     private final ArgusPlugin plugin;
@@ -37,13 +18,6 @@ public final class AutoTotemCheck {
         this.plugin = plugin;
     }
 
-    /**
-     * Llamado desde el bridge Bukkit cuando un inventory event mueve algo
-     * al offhand del jugador. Verifica si fue un Totem y si el timing
-     * sospecha de AutoTotem.
-     *
-     * @param resultingOffhand item que termino en el offhand DESPUES del click.
-     */
     public void handleOffhandUpdate(Player player, PacketDataStore.State s, long now,
                                     ItemStack resultingOffhand, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("auto_totem")) return;
@@ -53,10 +27,7 @@ public final class AutoTotemCheck {
         if (s.lastDamageTakenMs == 0L) return;
         long sinceHit = now - s.lastDamageTakenMs;
         if (sinceHit < 0L || sinceHit > 600L) return;
-        // Solo flageamos si el damage fue casi-fatal — un swap defensivo en
-        // hits normales es solo gameplay legitimo.
-        // Threshold: post-damage health <= 4 (2 hearts). Bots de AutoTotem
-        // usan thresholds mas extremos (1-2 hearts).
+
         double healthAfterDmg = s.lastDamageHealthAfter;
         if (healthAfterDmg > 4.0) return;
 

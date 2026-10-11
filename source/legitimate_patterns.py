@@ -14,6 +14,8 @@ try:
 except ImportError:
     from hack_signatures import filename_is_definite_hack  # type: ignore
 
+from learning_db_schema import ensure_learning_tables
+
 class LegitimatePatterns:
     """Sistema que aprende patrones de archivos legítimos para reducir falsos positivos"""
 
@@ -121,8 +123,9 @@ class LegitimatePatterns:
                 return
             
             conn = sqlite3.connect(self.database_path)
+            ensure_learning_tables(conn)
             cursor = conn.cursor()
-            
+
             # Cargar hashes legítimos
             cursor.execute('''
                 SELECT file_hash FROM learned_hashes 
@@ -130,50 +133,58 @@ class LegitimatePatterns:
             ''')
             self.legitimate_patterns['file_hashes'] = {row[0] for row in cursor.fetchall()}
             
-            # Cargar patrones legítimos de feedback
-            cursor.execute('''
-                SELECT DISTINCT 
-                    sr.file_path, sr.file_name, sr.file_hash,
-                    COUNT(*) as feedback_count
-                FROM scan_results sr
-                JOIN staff_feedback sf ON sr.id = sf.result_id
-                WHERE sf.staff_verification = 'legitimate'
-                GROUP BY sr.file_path, sr.file_name, sr.file_hash
-                HAVING COUNT(*) >= 2
-            ''')
-            
-            for row in cursor.fetchall():
-                file_path, file_name, file_hash, count = row
-                
-                if file_name:
-                    self.legitimate_patterns['file_names'].add(file_name.lower())
-                if file_path:
-                    # Extraer patrones de ruta
-                    path_parts = file_path.lower().split(os.sep)
-                    for part in path_parts:
-                        if len(part) > 3:  # Ignorar partes muy cortas
-                            self.legitimate_patterns['folder_names'].add(part)
-                
-                if file_hash:
-                    self.legitimate_patterns['file_hashes'].add(file_hash)
-            
-            # Cargar extensiones legítimas comunes
-            cursor.execute('''
-                SELECT DISTINCT 
-                    SUBSTR(sr.file_name, LENGTH(sr.file_name) - INSTR(REVERSE(sr.file_name), '.') + 1) as ext
-                FROM scan_results sr
-                JOIN staff_feedback sf ON sr.id = sf.result_id
-                WHERE sf.staff_verification = 'legitimate'
-                AND sr.file_name LIKE '%.%'
-                GROUP BY ext
-                HAVING COUNT(*) >= 3
-            ''')
-            
-            for row in cursor.fetchall():
-                ext = row[0].lower()
-                if ext and len(ext) <= 10:  # Extensiones razonables
-                    self.legitimate_patterns['file_extensions'].add(ext)
-            
+            # scan_results/staff_feedback son tablas del panel hosteado (staff
+            # feedback real) — en un scan standalone nunca existen, y eso es
+            # normal (no hay staff feedback local que aprender). Se separan
+            # en su propio try para no tirar la carga de learned_hashes de
+            # arriba si faltan.
+            try:
+                # Cargar patrones legítimos de feedback
+                cursor.execute('''
+                    SELECT DISTINCT
+                        sr.file_path, sr.file_name, sr.file_hash,
+                        COUNT(*) as feedback_count
+                    FROM scan_results sr
+                    JOIN staff_feedback sf ON sr.id = sf.result_id
+                    WHERE sf.staff_verification = 'legitimate'
+                    GROUP BY sr.file_path, sr.file_name, sr.file_hash
+                    HAVING COUNT(*) >= 2
+                ''')
+
+                for row in cursor.fetchall():
+                    file_path, file_name, file_hash, count = row
+
+                    if file_name:
+                        self.legitimate_patterns['file_names'].add(file_name.lower())
+                    if file_path:
+                        # Extraer patrones de ruta
+                        path_parts = file_path.lower().split(os.sep)
+                        for part in path_parts:
+                            if len(part) > 3:  # Ignorar partes muy cortas
+                                self.legitimate_patterns['folder_names'].add(part)
+
+                    if file_hash:
+                        self.legitimate_patterns['file_hashes'].add(file_hash)
+
+                # Cargar extensiones legítimas comunes
+                cursor.execute('''
+                    SELECT DISTINCT
+                        SUBSTR(sr.file_name, LENGTH(sr.file_name) - INSTR(REVERSE(sr.file_name), '.') + 1) as ext
+                    FROM scan_results sr
+                    JOIN staff_feedback sf ON sr.id = sf.result_id
+                    WHERE sf.staff_verification = 'legitimate'
+                    AND sr.file_name LIKE '%.%'
+                    GROUP BY ext
+                    HAVING COUNT(*) >= 3
+                ''')
+
+                for row in cursor.fetchall():
+                    ext = row[0].lower()
+                    if ext and len(ext) <= 10:  # Extensiones razonables
+                        self.legitimate_patterns['file_extensions'].add(ext)
+            except sqlite3.OperationalError:
+                pass  # sin scan_results/staff_feedback locales — esperado standalone
+
             conn.close()
             
             print(f"✅ Patrones legítimos cargados:")
@@ -308,8 +319,9 @@ class LegitimatePatterns:
                 return
             
             conn = sqlite3.connect(self.database_path)
+            ensure_learning_tables(conn)
             cursor = conn.cursor()
-            
+
             if is_legitimate:
                 # Aprender como legítimo
                 file_name_lower = file_name.lower() if file_name else ''

@@ -9,19 +9,8 @@ import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
+import org.bukkit.util.NumberConversions;
 
-/**
- * Pack 48 round 3 — LiquidJesusCheck.
- *
- * <p>Variante más estricta de {@code LiquidWalkCheck}. Mientras
- * LiquidWalk solo flagea cuando el player tiene {@code onGround=true}
- * sobre agua, este check considera además:
- * <ul>
- *   <li>Player camina con deltaY ≈ 0 sostenido sobre water/lava.</li>
- *   <li>No tiene Frost Walker, no está nadando, no está en boat.</li>
- *   <li>Bloque actual = AIR pero bloque -1 = LIQUID (definitely walking on liquid).</li>
- * </ul>
- */
 public final class LiquidJesusCheck {
 
     private final ArgusPlugin plugin;
@@ -39,23 +28,32 @@ public final class LiquidJesusCheck {
         if (player.isSwimming()) return;
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("liquidjesus");
-        int consecMid  = sec != null ? sec.getInt("consec_mid", 4) : 4;
-        int consecHigh = sec != null ? sec.getInt("consec_high", 8) : 8;
+        int consecMid  = sec != null ? sec.getInt("consec_mid", 8) : 8;
+        int consecHigh = sec != null ? sec.getInt("consec_high", 16) : 16;
         double maxAbsDy = sec != null ? sec.getDouble("max_abs_dy", 0.05) : 0.05;
 
-        Material at = player.getWorld().getBlockAt((int)nx, (int)ny, (int)nz).getType();
-        Material below = player.getWorld().getBlockAt((int)nx, (int)(ny - 0.1), (int)nz).getType();
-        boolean overLiquid = (below == Material.WATER || below == Material.LAVA);
-        if (at != Material.AIR || !overLiquid) {
+        // Jesus en cualquier modo (solido o "rebote"): los pies se sostienen en/sobre la superficie
+        // mientras avanza. Nadando legit se flota con los pies ~0.6 por debajo de la superficie.
+        // Paquete repetido sin movimiento: no aporta ni corta la racha.
+        if (Math.abs(nx - s.lastX) < 1e-4 && Math.abs(nz - s.lastZ) < 1e-4 && Math.abs(ny - s.lastY) < 1e-4) return;
+        // Superficie real de la columna: el bloque de agua mas alto en los pies (o justo debajo).
+        // Nadando arriba en vanilla se flota con los pies ~0.4 bajo la superficie; con Jesus quedan encima.
+        org.bukkit.World w = player.getWorld();
+        int bx = NumberConversions.floor(nx), bz = NumberConversions.floor(nz), fy = NumberConversions.floor(ny);
+        int by = isLiquid(w.getBlockAt(bx, fy, bz).getType()) ? fy : fy - 1;
+        while (isLiquid(w.getBlockAt(bx, by + 1, bz).getType())) by++;
+        Material liquid = w.getBlockAt(bx, by, bz).getType();
+        Material at = w.getBlockAt(bx, fy, bz).getType();
+        boolean overLiquid = isLiquid(liquid);
+        boolean surface = ny >= by + 0.85 && ny <= by + 1.35;
+        // Nadar (tambien flotando en la superficie con cliente 1.8) va a ~0.11/tick; Jesus camina/corre.
+        boolean moving = Math.hypot(nx - s.lastX, nz - s.lastZ) > 0.15;
+        if (!overLiquid || !surface || !moving || (at != Material.AIR && at != Material.WATER && at != Material.LAVA)
+            || Math.abs(ny - s.lastY) > 0.25) {
             s.liquidJesusConsec = 0;
             return;
         }
-
-        double dy = ny - s.lastY;
-        if (Math.abs(dy) > maxAbsDy) {
-            s.liquidJesusConsec = 0;
-            return;
-        }
+        Material below = liquid;
 
         if (hasFrostWalker(player)) {
             s.liquidJesusConsec = 0;
@@ -73,6 +71,10 @@ public final class LiquidJesusCheck {
                 ViolationLevel.MID,
                 "sobre " + below.name() + " x" + s.liquidJesusConsec));
         }
+    }
+
+    private static boolean isLiquid(Material m) {
+        return m == Material.WATER || m == Material.LAVA;
     }
 
     private static boolean hasFrostWalker(Player p) {

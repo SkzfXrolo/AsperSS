@@ -122,7 +122,7 @@ public class LagCompensatorWiringTest {
         ArgusPlugin plugin = pluginSuppressing("antikb");
         ViolationSink sink = mock(ViolationSink.class);
         new AntiKnockbackCheck(plugin).handlePositionPacket(
-            player(), new PacketDataStore.State(), 0, 0, 0L, sink);
+            player(), new PacketDataStore.State(), 0, 0, 0, 0L, sink);
         verify(plugin.getLagCompensator()).shouldSuppress(any(), eq("antikb"));
         verifyNoInteractions(sink);
     }

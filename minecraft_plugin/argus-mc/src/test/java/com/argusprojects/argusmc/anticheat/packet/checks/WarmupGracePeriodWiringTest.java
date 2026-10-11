@@ -121,7 +121,7 @@ public class WarmupGracePeriodWiringTest {
         ArgusPlugin plugin = pluginInGrace("antikb");
         ViolationSink sink = mock(ViolationSink.class);
         new AntiKnockbackCheck(plugin).handlePositionPacket(
-            player(), new PacketDataStore.State(), 0, 0, 0L, sink);
+            player(), new PacketDataStore.State(), 0, 0, 0, 0L, sink);
         verify(plugin.getWarmupGracePeriod()).inGrace(any(), eq("antikb"));
         verifyNoInteractions(sink);
     }

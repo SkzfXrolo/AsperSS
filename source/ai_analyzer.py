@@ -9,6 +9,8 @@ import os
 import sqlite3
 from typing import Dict, List, Tuple
 
+from learning_db_schema import ensure_learning_tables
+
 class AIAnalyzer:
     """Analizador de IA para resultados de escaneo con aprendizaje progresivo"""
     
@@ -92,8 +94,9 @@ class AIAnalyzer:
                 return
             
             conn = sqlite3.connect(self.database_path)
+            ensure_learning_tables(conn)
             cursor = conn.cursor()
-            
+
             cursor.execute('''
                 SELECT pattern_value, pattern_category
                 FROM learned_patterns
@@ -117,8 +120,9 @@ class AIAnalyzer:
                 return
             
             conn = sqlite3.connect(self.database_path)
+            ensure_learning_tables(conn)
             cursor = conn.cursor()
-            
+
             cursor.execute('''
                 SELECT file_hash FROM learned_hashes WHERE is_hack = 1
             ''')

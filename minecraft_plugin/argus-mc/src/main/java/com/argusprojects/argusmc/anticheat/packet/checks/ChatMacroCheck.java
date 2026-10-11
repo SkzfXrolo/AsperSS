@@ -8,19 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round2 — ChatMacroCheck (anti-bot).
- *
- * <p>Bots de chat / spam farms tienden a:
- * <ul>
- *   <li>Mandar mensajes IDENTICOS multiple veces (vs jugadores que reformulan).</li>
- *   <li>Con intervalos REGULARES (varianza temporal &lt; 50ms).</li>
- * </ul>
- *
- * <p>Heuristica: contar en los ultimos N mensajes cuantos repetidos hay, y
- * medir la varianza de intervalos. Si {@code repeats >= min_repeats} y
- * {@code variance < max_variance_ms}, flag.
- */
 public final class ChatMacroCheck {
 
     private final ArgusPlugin plugin;
@@ -33,7 +20,7 @@ public final class ChatMacroCheck {
                            ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("chat_macro")) return;
         if (message == null || message.length() < 2) return;
-        // No analizar comandos
+
         if (message.startsWith("/")) return;
 
         s.pushChat(message, now);

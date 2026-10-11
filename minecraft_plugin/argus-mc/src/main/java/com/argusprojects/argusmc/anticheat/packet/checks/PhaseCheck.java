@@ -9,20 +9,6 @@ import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 47 — Phase / NoClip.
- *
- * <p>Detecta cuando el cliente envia un PlayerPosition que cruza un bloque
- * solido entre packet anterior y actual. Bukkit no expone esto: el server
- * "corrige" la posicion antes de que PlayerMoveEvent dispare, ocultando el
- * intento. A nivel packet vemos el movimiento RAW.
- *
- * <p>Algoritmo: si el delta XYZ atraviesa una celda cuyo bloque es
- * {@code !isPassable()} y NO esta en gamemode SPECTATOR/CREATIVE flying,
- * disparamos HIGH. Para minimizar FPs con escaleras / slabs / glass panes,
- * usamos una whitelist conservadora de bloques "atravesables imposibles":
- * stone, obsidian, bedrock, planks, cobblestone, wool. El resto no flagea.
- */
 public final class PhaseCheck {
 
     private final ArgusPlugin plugin;
@@ -39,29 +25,28 @@ public final class PhaseCheck {
         if (player.getAllowFlight() && player.isFlying()) return;
         if (player.getGameMode() == org.bukkit.GameMode.SPECTATOR) return;
         if (player.getGameMode() == org.bukkit.GameMode.CREATIVE) return;
-        if (s.lastX == 0 && s.lastY == 0 && s.lastZ == 0) return; // sin baseline aun
+        if (s.lastX == 0 && s.lastY == 0 && s.lastZ == 0) return;
 
         double dx = nx - s.lastX;
         double dy = ny - s.lastY;
         double dz = nz - s.lastZ;
         double dist2 = dx * dx + dy * dy + dz * dz;
-        // Movimiento < 1 bloque/packet no tiene riesgo de phase.
+
         if (dist2 < 1.0) return;
-        // > 12 bloques en un packet ya lo detecta otra check (speed/teleport).
+
         if (dist2 > 144.0) return;
 
         ConfigurationSection sec = plugin.getAnticheatConfig().checkSection("phase");
         int minBlockedSamples = sec != null ? sec.getInt("min_blocked_samples", 2) : 2;
         int samplesPerBlock   = sec != null ? sec.getInt("samples_per_block",   2) : 2;
 
-        // Sampleamos puntos intermedios entre last y new (raycast simple).
         int steps = Math.max(2, (int) Math.ceil(Math.sqrt(dist2) * samplesPerBlock));
         org.bukkit.World w = player.getWorld();
         int blockedSteps = 0;
         for (int i = 1; i < steps; i++) {
             double t = (double) i / steps;
             double sx = s.lastX + dx * t;
-            double sy = s.lastY + dy * t + 1.0; // ~ a la altura del torso
+            double sy = s.lastY + dy * t + 1.0;
             double sz = s.lastZ + dz * t;
             Material m = w.getBlockAt((int) Math.floor(sx), (int) Math.floor(sy), (int) Math.floor(sz)).getType();
             if (isHardSolid(m)) blockedSteps++;

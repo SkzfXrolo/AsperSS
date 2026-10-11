@@ -12,17 +12,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 
-/**
- * Pack 48 round 3 — Reach3DCheck.
- *
- * <p>Variante "3D-aware" de {@link ReachPacketCheck}. Mientras el
- * Reach clásico mide distancia centro-a-centro, este check considera
- * la BoundingBox completa del target (cuerpo + cabeza) y la del
- * atacante.
- *
- * <p>Distancia real entre BoundingBox = 0 si tocan, &gt; 0 si separan.
- * Sumándole 0.5 (al ojo) tenemos un reach mejor calibrado.
- */
 public final class Reach3DCheck {
 
     private final ArgusPlugin plugin;
@@ -32,7 +21,7 @@ public final class Reach3DCheck {
     }
 
     public void handleAttack(Player player, Entity target, PacketDataStore.State s,
-                             ViolationSink sink) {
+                             double lagAllowance, ViolationSink sink) {
         if (!plugin.getAnticheatConfig().isCheckEnabled("reach3d")) return;
         if (target == null) return;
 
@@ -44,16 +33,17 @@ public final class Reach3DCheck {
 
         BoundingBox bb;
         try { bb = target.getBoundingBox(); } catch (Throwable ignored) { return; }
-        Vector eye = player.getEyeLocation().toVector();
+        // Posicion de los paquetes: la de Bukkit va atrasada respecto de lo que el cliente ya mando.
+        Vector eye = (s.lastX == 0 && s.lastY == 0 && s.lastZ == 0) ? player.getEyeLocation().toVector()
+            : new Vector(s.lastX, s.lastY + (player.isSneaking() ? 1.27 : 1.62), s.lastZ);
 
-        // Distancia minima desde el ojo al AABB del target.
         double cx = clamp(eye.getX(), bb.getMinX(), bb.getMaxX());
         double cy = clamp(eye.getY(), bb.getMinY(), bb.getMaxY());
         double cz = clamp(eye.getZ(), bb.getMinZ(), bb.getMaxZ());
         double dx = eye.getX() - cx;
         double dy = eye.getY() - cy;
         double dz = eye.getZ() - cz;
-        double dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        double dist = Math.sqrt(dx*dx + dy*dy + dz*dz) - lagAllowance;
 
         double cap = player.getGameMode() == GameMode.CREATIVE ? maxCreative : maxSurvival;
         if (dist > extreme) {

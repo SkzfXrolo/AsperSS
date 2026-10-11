@@ -104,16 +104,11 @@ def open_beta_settings(parent, colors=None):
     _section('SS Forensics (28)', by_cat.get('forensic', []))
     _section('Superficies nuevas (30)', by_cat.get('custom', []))
 
-    tk.Label(tab_ui, text='Tema', font=('Segoe UI', 10, 'bold'),
-             bg=C['bg_primary'], fg=C['text_primary']).pack(anchor='w', padx=16, pady=(16, 6))
-    theme_var = tk.StringVar(value=ui_state.get('theme', 'cosmic'))
-    for t in ('cosmic', 'classic', 'minimal'):
-        tk.Radiobutton(tab_ui, text=t.capitalize(), variable=theme_var, value=t,
-                       bg=C['bg_primary'], fg=C['text_secondary']).pack(anchor='w', padx=24)
+    # ponytail: sin selector de tema, solo existe el cosmico; agregarlo cuando haya un segundo tema.
     splash_var = tk.BooleanVar(value=ui_state.get('show_splash', True))
     wordmark_var = tk.BooleanVar(value=ui_state.get('show_wordmark', True))
     tk.Checkbutton(tab_ui, text='Mostrar splash al iniciar', variable=splash_var,
-                   bg=C['bg_primary'], fg=C['text_secondary']).pack(anchor='w', padx=16, pady=8)
+                   bg=C['bg_primary'], fg=C['text_secondary']).pack(anchor='w', padx=16, pady=(16, 8))
     tk.Checkbutton(tab_ui, text='Mostrar wordmark ARGUS', variable=wordmark_var,
                    bg=C['bg_primary'], fg=C['text_secondary']).pack(anchor='w', padx=16)
 
@@ -130,7 +125,7 @@ def open_beta_settings(parent, colors=None):
             'version': '1.7.0',
             'modules': new_mods,
             'ui': {
-                'theme': theme_var.get(),
+                'theme': ui_state.get('theme', 'cosmic'),
                 'show_splash': splash_var.get(),
                 'show_wordmark': wordmark_var.get(),
             },

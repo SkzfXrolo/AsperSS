@@ -5,26 +5,6 @@ import org.bukkit.Bukkit;
 
 import java.util.logging.Level;
 
-/**
- * Pack 47 — Bootstrap del modulo packet-based.
- *
- * <p>PacketEvents es soft-dependency: si el plugin no esta instalado en el
- * server, ArgusMC sigue funcionando con su {@code AnticheatListener} Bukkit-based.
- * Si esta instalado, este bootstrap engancha el {@link PacketAnticheatListener}
- * que se suscribe a packets crudos (movement, combat, click, timing) y
- * desbloquea checks imposibles desde Bukkit events (TimerHack, Phase, PingSpoof,
- * Reach exacto a nivel packet, Killaura swing por timestamp, etc.).
- *
- * <p>Diseño defensivo: TODA interaccion con PacketEvents pasa por reflection
- * y try/catch generoso. Si el server tiene una version incompatible o si la
- * API cambia, ArgusMC NO crashea — solo loguea WARNING y opera con el
- * fallback Bukkit-based.
- *
- * <p>El bootstrap NO importa clases de PacketEvents en sus campos para que la
- * JVM no falle con ClassNotFoundException al cargar este archivo cuando
- * PacketEvents no esta presente. Las clases se cargan lazy via la JVM dentro
- * de los metodos cuando ya verificamos que la dependencia existe.
- */
 public final class PacketEventsBootstrap {
 
     private final ArgusPlugin plugin;
@@ -37,7 +17,6 @@ public final class PacketEventsBootstrap {
         this.plugin = plugin;
     }
 
-    /** Detecta si el plugin PacketEvents esta cargado en el server. */
     public boolean detect() {
         try {
             if (Bukkit.getPluginManager().getPlugin("packetevents") == null) {
@@ -48,7 +27,7 @@ public final class PacketEventsBootstrap {
                 this.available = false;
                 return false;
             }
-            // Verificamos via reflection que la clase API existe (por si la version es muy vieja).
+
             Class.forName("com.github.retrooper.packetevents.PacketEvents");
             this.available = true;
             plugin.getLogger().info("[Argus/Packet] PacketEvents detectado. Inicializando anti-cheat packet-based...");
@@ -62,10 +41,6 @@ public final class PacketEventsBootstrap {
         }
     }
 
-    /**
-     * Inicializa PacketEvents API y registra el {@link PacketAnticheatListener}.
-     * Solo se llama si {@link #detect()} devolvio true. Idempotente.
-     */
     public boolean init() {
         if (!available) return false;
         if (initialized) return true;
@@ -76,12 +51,12 @@ public final class PacketEventsBootstrap {
                 return false;
             }
             this.dataStore = new PacketDataStore();
-            this.listener  = new PacketAnticheatListener(plugin, dataStore);
+            EntitySnapshot entities = new EntitySnapshot();
+            Bukkit.getScheduler().runTaskTimer(plugin, entities, 1L, 1L);
+            this.listener  = new PacketAnticheatListener(plugin, dataStore, entities);
 
-            // Imports duros via clase auxiliar — mismo classloader que PacketEvents.
             PacketEventsRegistrar.register(listener);
 
-            // Listener Bukkit auxiliar (join/quit/velocity assignments).
             Bukkit.getPluginManager().registerEvents(
                 new PacketAnticheatBukkitBridge(plugin, dataStore, listener), plugin);
 
@@ -104,7 +79,7 @@ public final class PacketEventsBootstrap {
             try {
                 PacketEventsRegistrar.unregister(listener);
             } catch (Throwable ignored) {
-                // best-effort
+
             }
         }
         initialized = false;

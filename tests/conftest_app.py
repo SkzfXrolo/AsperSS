@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from web_app.app import app
+from web_app.app import app, limiter
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    if limiter is not None:
+        limiter.storage.reset()
+    yield
 
 
 @pytest.fixture

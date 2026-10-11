@@ -39,7 +39,7 @@ jobs:
       - name: Build onefile Linux binary
         run: |
           set -euo pipefail
-          pyinstaller --clean --noconfirm --onefile ArgusScanner.spec
+          pyinstaller --clean --noconfirm ArgusScanner.spec
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4

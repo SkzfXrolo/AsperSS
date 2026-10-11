@@ -10,16 +10,6 @@ import org.bukkit.Location;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round2 — BlockReachCheck.
- *
- * <p>Detecta cuando un jugador interactua con un bloque (place/break/use)
- * a una distancia mayor que la maxima de vanilla (~5.0 supervivencia,
- * 6.0 creative). El cheat "BlockReach" extiende esto a 7-8 bloques.
- *
- * <p>Usado por checks de placement/digging que ya tienen el Material y
- * BlockPosition. Se invoca con la posicion del bloque tocado.
- */
 public final class BlockReachCheck {
 
     private final ArgusPlugin plugin;
@@ -41,9 +31,8 @@ public final class BlockReachCheck {
 
         double cap = (player.getGameMode() == GameMode.CREATIVE) ? maxCreative : maxSurvival;
 
-        // Usamos los ojos del player (eye height = 1.62 estandar).
         Location eye = player.getEyeLocation();
-        // Centramos el bloque en (bx+0.5, by+0.5, bz+0.5) — distancia conservadora.
+
         double dx = eye.getX() - (bx + 0.5);
         double dy = eye.getY() - (by + 0.5);
         double dz = eye.getZ() - (bz + 0.5);

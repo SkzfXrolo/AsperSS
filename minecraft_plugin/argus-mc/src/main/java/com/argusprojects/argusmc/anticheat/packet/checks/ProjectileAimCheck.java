@@ -12,20 +12,6 @@ import org.bukkit.entity.Projectile;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 
-/**
- * Pack 48 round2 — ProjectileAimCheck.
- *
- * <p>Cuando un proyectil (arrow, snowball, trident) impacta a un jugador
- * desde una distancia grande con un angulo "perfecto" (delta entre la
- * direccion del proyectil al target y la direccion de viaje del proyectil
- * es minimo), es bot-aim.
- *
- * <p>Se invoca desde {@link ProjectileHitEvent} y desde
- * {@link EntityDamageByEntityEvent} en el bridge Bukkit. La logica usa
- * la velocidad del proyectil al momento del hit para inferir el aim
- * inicial — si el shooter tenia gran skill (alta distancia, target en
- * movimiento) flagea.
- */
 public final class ProjectileAimCheck {
 
     private final ArgusPlugin plugin;
@@ -49,11 +35,9 @@ public final class ProjectileAimCheck {
         double dist = origin.distance(hit);
         if (dist < minDistFlag) return;
 
-        // Vector velocidad del proyectil al hit (gravity-affected pero indicativa).
         org.bukkit.util.Vector vel = projectile.getVelocity();
         if (vel.lengthSquared() < 0.01) return;
 
-        // Vector linea recta origen->target.
         org.bukkit.util.Vector toTarget = hit.toVector().subtract(origin.toVector()).normalize();
         org.bukkit.util.Vector velN = vel.clone().normalize();
         double dot = Math.max(-1.0, Math.min(1.0, velN.dot(toTarget)));

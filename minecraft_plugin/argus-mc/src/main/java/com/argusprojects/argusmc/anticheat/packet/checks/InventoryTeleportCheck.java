@@ -8,17 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round2 — InventoryTeleportCheck.
- *
- * <p>Variante de InvMove ya existente, pero invertida: el cheat "InventoryMove"
- * permite mover el inventario mientras te mueves. Aca detectamos el patron
- * de teleport: click rapido en inventory mientras la posicion cambia muy
- * bruscamente entre dos packets (un "blink").
- *
- * <p>Heuristica: si {@code lastClickWindowMs} y posicion cambia &gt; threshold
- * en &lt; 50ms entre los packets, flag.
- */
 public final class InventoryTeleportCheck {
 
     private final ArgusPlugin plugin;

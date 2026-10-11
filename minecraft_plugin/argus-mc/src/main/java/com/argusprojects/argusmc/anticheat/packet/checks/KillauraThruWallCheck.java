@@ -12,16 +12,6 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 
-/**
- * Pack 48 round 3 — KillauraThruWallCheck.
- *
- * <p>Raycast desde el ojo del atacante hacia el centro de la entidad
- * target. Si el rayo atraviesa un bloque sólido antes de llegar al
- * target, el hit es ilegal.
- *
- * <p>Tolerancia: se permite 1 step de margin para no flagear hits a
- * través de esquinas en escaleras / slabs.
- */
 public final class KillauraThruWallCheck {
 
     private final ArgusPlugin plugin;

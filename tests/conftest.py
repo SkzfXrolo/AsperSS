@@ -20,6 +20,15 @@ def _deterministic_random():
     random.seed(12345)
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    from web_app.app import limiter
+
+    if limiter is not None:
+        limiter.storage.reset()
+    yield
+
+
 @pytest.fixture
 def flask_app():
     from web_app.app import app

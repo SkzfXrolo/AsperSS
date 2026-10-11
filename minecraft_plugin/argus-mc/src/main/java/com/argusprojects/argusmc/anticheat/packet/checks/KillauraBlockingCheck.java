@@ -8,19 +8,6 @@ import com.argusprojects.argusmc.anticheat.packet.PacketDataStore;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
-/**
- * Pack 48 round2 — KillauraBlockingCheck.
- *
- * <p>Detecta cuando un jugador ataca a otra entidad mientras esta bloqueando
- * con un escudo (1.9+) o sword (pre-1.9 — handled by isBlocking()). En
- * vanilla NO se puede dar un swing/ataque mientras tenes el shield activo
- * (block consume el primer slot de input). Los killauras "fake-block" reciben
- * el daño compensado por el bloqueo sin perder DPS.
- *
- * <p>Bukkit expone {@link Player#isBlocking()} que devuelve true para shield
- * activo o sword raised (legacy). Si esto es true en el momento del attack
- * packet, es trampa.
- */
 public final class KillauraBlockingCheck {
 
     private final ArgusPlugin plugin;
