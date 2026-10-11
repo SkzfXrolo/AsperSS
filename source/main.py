@@ -2127,7 +2127,8 @@ class ArgusApp:
         def _start_scan_after_splash():
             self.root.after(400, self.full_scan_with_discord)
 
-        if UI_STYLE_AVAILABLE and ModernUI:
+        show_splash = (self._pack_custom_config().get('ui') or {}).get('show_splash', True)
+        if UI_STYLE_AVAILABLE and ModernUI and show_splash:
             try:
                 ModernUI.show_splash(self.root, SCANNER_VERSION, on_done=_start_scan_after_splash)
             except Exception:
@@ -8747,7 +8748,11 @@ class ArgusApp:
 
             _canvas_image_refs = []  # evita que el GC se lleve los PhotoImage del canvas
 
+            show_wordmark = (self._pack_custom_config().get('ui') or {}).get('show_wordmark', True)
+
             def _wordmark(step, x, y, height=52, anchor='n'):
+                if not show_wordmark:
+                    return
                 # canvas.create_image compone el alpha real del PNG contra lo
                 # que ya está dibujado abajo (la nebulosa) — a diferencia de
                 # tk.Label, que siempre pinta su bg (flat) detrás del logo.
