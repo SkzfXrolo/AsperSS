@@ -103,6 +103,9 @@ except Exception as _ai_maint_err:
     print(f'[boot] ai_maintenance no disponible: {_ai_maint_err}')
 
 app = Flask(__name__)
+# Registrado primero para que corra el último entre los after_request.
+from compression import init_compression as _init_compression
+_init_compression(app)
 app.secret_key = os.environ.get('SECRET_KEY', 'aspers-secret-key-change-in-production')
 app.config['WTF_CSRF_CHECK_DEFAULT'] = False
 _SOCKETIO_CORS = os.environ.get('SOCKETIO_CORS_ALLOWED_ORIGINS', '*')

@@ -356,9 +356,16 @@ async function startScanPolling() {
     setInterval(pollForNewScans, POLL_INTERVAL);
     // Intervalo rápido para vigilar running scans que terminan antes del poll normal
     setInterval(_checkPendingRunning, POLL_RUNNING_INTERVAL);
+    // Con la pestaña oculta los polls se saltan; al volver, ponerse al día al instante.
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) pollForNewScans();
+    });
 }
 
+let _pollInFlight = false;
 async function pollForNewScans() {
+    if (document.hidden || _pollInFlight) return;
+    _pollInFlight = true;
     try {
         const res  = await fetch('/api/scans?limit=10');
         const data = await res.json();
@@ -408,11 +415,14 @@ async function pollForNewScans() {
 
         _checkPendingRunningWithData(data.scans);
         _lastKnownScanId = latest.id;
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+        _pollInFlight = false;
+    }
 }
 
 async function _checkPendingRunning() {
-    if (_pendingRunning.size === 0) return;
+    if (_pendingRunning.size === 0 || document.hidden) return;
     try {
         const res  = await fetch(`/api/scans?limit=20`);
         const data = await res.json();
@@ -4863,7 +4873,7 @@ async function viewScanDetails(scanId) {
             // Auto-refresh cada 8s mientras siga en running (evita pantalla "limpia" con 0 hallazgos)
             if (window._scanPollTimer) clearInterval(window._scanPollTimer);
             window._scanPollTimer = setInterval(() => {
-                if (currentScanId === scanId) viewScanDetails(scanId);
+                if (currentScanId === scanId && !document.hidden) viewScanDetails(scanId);
             }, 8000);
             return;
         }
@@ -7954,12 +7964,18 @@ window.toggleSidebarCollapse = toggleSidebarCollapse;
 // V39: SCROLL TO TOP
 // ============================================================
 (function _initScrollToTop() {
-    window.addEventListener('scroll', () => {
-        const btn = document.getElementById('scroll-to-top');
-        const header = document.querySelector('.panel-header');
+    let btn = null, header = null, ticking = false;
+    function update() {
+        ticking = false;
+        if (!btn || !btn.isConnected) btn = document.getElementById('scroll-to-top');
         if (!btn) return;
-        btn.classList.toggle('visible', window.scrollY > 300);
-        if (header) header.classList.toggle('is-scrolled', window.scrollY > 8);
+        if (!header || !header.isConnected) header = document.querySelector('.panel-header');
+        const y = window.scrollY;
+        btn.classList.toggle('visible', y > 300);
+        if (header) header.classList.toggle('is-scrolled', y > 8);
+    }
+    window.addEventListener('scroll', () => {
+        if (!ticking) { ticking = true; requestAnimationFrame(update); }
     }, { passive: true });
 })();
 
@@ -8705,14 +8721,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    let raf;
+    let raf = 0;
+    let col = accent, colFrame = 0;
+    const LINK_DIST = 120, LINK_DIST2 = LINK_DIST * LINK_DIST;
     function draw() {
         ctx.clearRect(0, 0, W, H);
-        const col = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8b7bff';
+        // El acento solo cambia con el tema: releerlo ~1 vez por segundo basta.
+        if (++colFrame >= 60) {
+            colFrame = 0;
+            col = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#8b7bff';
+        }
+        ctx.fillStyle = col;
         particles.forEach(p => {
             ctx.beginPath();
             ctx.arc(p.x % W, p.y % H, p.r, 0, Math.PI * 2);
-            ctx.fillStyle = col;
             ctx.globalAlpha = p.o;
             ctx.fill();
             p.x += p.vx;
@@ -8725,31 +8747,33 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.globalAlpha = 1;
 
         // Draw faint connection lines between nearby particles
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 0.6;
         for (let i = 0; i < particles.length; i++) {
+            const pi = particles[i];
             for (let j = i + 1; j < particles.length; j++) {
-                const dx = particles[i].x - particles[j].x;
-                const dy = particles[i].y - particles[j].y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                if (dist < 120) {
+                const pj = particles[j];
+                const dx = pi.x - pj.x;
+                const dy = pi.y - pj.y;
+                const d2 = dx*dx + dy*dy;
+                if (d2 < LINK_DIST2) {
                     ctx.beginPath();
-                    ctx.moveTo(particles[i].x % W, particles[i].y % H);
-                    ctx.lineTo(particles[j].x % W, particles[j].y % H);
-                    ctx.strokeStyle = col;
-                    ctx.globalAlpha = (1 - dist / 120) * 0.08;
-                    ctx.lineWidth = 0.6;
+                    ctx.moveTo(pi.x % W, pi.y % H);
+                    ctx.lineTo(pj.x % W, pj.y % H);
+                    ctx.globalAlpha = (1 - Math.sqrt(d2) / LINK_DIST) * 0.08;
                     ctx.stroke();
-                    ctx.globalAlpha = 1;
                 }
             }
         }
+        ctx.globalAlpha = 1;
         raf = requestAnimationFrame(draw);
     }
     draw();
 
     // Pause when tab hidden to save resources
     document.addEventListener('visibilitychange', () => {
-        if (document.hidden) cancelAnimationFrame(raf);
-        else draw();
+        cancelAnimationFrame(raf);
+        if (!document.hidden) draw();
     });
 })();
 
